@@ -15,7 +15,7 @@ void Stress_Func::stress_loc(ModuleBase::matrix& sigma, const bool is_pw)
 
     dvloc = new double[GlobalC::pw.ngmc];
 
-	std::complex<double> *Porter = GlobalC::UFFT.porter;
+	std::complex<double> *Porter = Use_FFT::get_porter(0, GlobalC::pw.nrxx);
 
 	ModuleBase::GlobalFunc::ZEROS( Porter, GlobalC::pw.nrxx );
 	for(int is=0; is<GlobalV::NSPIN; is++)

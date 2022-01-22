@@ -206,7 +206,7 @@ void Potential::write_elecstat_pot(const std::string &fn, const std::string &fn_
     v_elecstat = new double[GlobalC::pw.nrxx];
     ModuleBase::GlobalFunc::ZEROS(v_elecstat, GlobalC::pw.nrxx);
 
-    std::complex<double> *Porter = GlobalC::UFFT.porter;
+    std::complex<double> *Porter = Use_FFT::get_porter(0, GlobalC::pw.nrxx);
     ModuleBase::GlobalFunc::ZEROS( Porter, GlobalC::pw.nrxx );
     
     int nspin0 = 1;

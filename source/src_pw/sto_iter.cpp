@@ -390,7 +390,7 @@ void Stochastic_Iter::sum_stoband()
     ModuleBase::GlobalFunc::ZEROS(sto_rho, nrxx);
 
     std::complex<double> * pchi;
-    std::complex<double>* porter = GlobalC::UFFT.porter;
+    std::complex<double>* porter = Use_FFT::get_porter(0, GlobalC::pw.nrxx);
     int* GRA_index = stohchi.GRA_index;
     double out2;
 
@@ -426,7 +426,7 @@ void Stochastic_Iter::sum_stoband()
                 {
                     porter[ GRA_index[ig] ] = tmpout[ig];
                 }
-                GlobalC::pw.FFT_wfc.FFT3D(GlobalC::UFFT.porter, 1);
+                GlobalC::pw.FFT_wfc.FFT3D(porter, 1);
                 for(int ir = 0 ; ir < nrxx ; ++ir)
                 {
                     GlobalC::CHR.rho[0][ir] += norm(porter[ir]);

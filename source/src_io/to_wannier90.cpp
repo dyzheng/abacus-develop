@@ -371,7 +371,7 @@ void toWannier90::writeUNK(const ModuleBase::ComplexMatrix *wfc_pw)
 		for(int ib = 0; ib < GlobalV::NBANDS; ib++)
 		{
 			if(!tag_cal_band[ib]) continue;
-			//std::complex<double> *porter = GlobalC::UFFT.porter;
+			//std::complex<double> *porter = Use_FFT::get_porter(0, GlobalC::pw.nrxx);
 			//  u_k in real space
 			ModuleBase::GlobalFunc::ZEROS(porter, GlobalC::pw.nrxx);
 			for (int ig = 0; ig < GlobalC::kv.ngk[ik]; ig++)
@@ -1470,7 +1470,7 @@ void toWannier90::integral(const int meshr, const double *psir, const double *r,
 void toWannier90::ToRealSpace(const int &ik, const int &ib, const ModuleBase::ComplexMatrix *evc, std::complex<double> *psir, const ModuleBase::Vector3<double> G)
 {
 	// (1) set value
-	std::complex<double> *phase = GlobalC::UFFT.porter;
+	std::complex<double> *phase = Use_FFT::get_porter(0, GlobalC::pw.nrxx);
     ModuleBase::GlobalFunc::ZEROS( psir, GlobalC::pw.nrxx );
 	ModuleBase::GlobalFunc::ZEROS( phase, GlobalC::pw.nrxx);
 
@@ -1506,7 +1506,7 @@ std::complex<double> toWannier90::unkdotb(const std::complex<double> *psir, cons
 {
 	std::complex<double> result(0.0,0.0);
 	int knumber = GlobalC::kv.ngk[ikb];
-	std::complex<double> *porter = GlobalC::UFFT.porter;
+	std::complex<double> *porter = Use_FFT::get_porter(0, GlobalC::pw.nrxx);
 	ModuleBase::GlobalFunc::ZEROS( porter, GlobalC::pw.nrxx);
 	for (int ir = 0; ir < GlobalC::pw.nrxx; ir++)
 	{
@@ -1528,7 +1528,7 @@ std::complex<double> toWannier90::unkdotkb(const int &ik, const int &ikb, const 
 	// (1) set value
 	std::complex<double> result(0.0,0.0);
 	std::complex<double> *psir = new std::complex<double>[GlobalC::pw.nrxx];
-	std::complex<double> *phase = GlobalC::UFFT.porter;
+	std::complex<double> *phase = Use_FFT::get_porter(0, GlobalC::pw.nrxx);
     ModuleBase::GlobalFunc::ZEROS( psir, GlobalC::pw.nrxx );
 	ModuleBase::GlobalFunc::ZEROS( phase, GlobalC::pw.nrxx);
 

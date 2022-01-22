@@ -2,27 +2,33 @@
 #include "global.h"
 #include "../module_base/memory.h"
 
+std::vector<std::complex<double>> Use_FFT::porter;
 
 Use_FFT::Use_FFT()
 {
-	porter = new std::complex<double>[1]; //qianrui fix a bug
 }
 
 Use_FFT::~Use_FFT()
 {
-	delete[] porter;
 #ifdef __CUDA
     cudaFree(d_porter);
     cufftDestroy(fft_handle);
 #endif
 }
 
+std::complex<double>* Use_FFT::get_porter(const int &begin, const int &end)
+{
+    assert(begin >= 0);
+    assert(end >= begin);
+    assert(porter.size() >= end);
+	return &(porter[begin]);
+}
+
 void Use_FFT::allocate(void)
 {
     ModuleBase::TITLE("Use_FFT","allocate");
 
-    delete[] porter;
-    porter = new std::complex<double>[GlobalC::pw.nrxx];
+	this->porter.resize(GlobalC::pw.nrxx * GlobalV::NPOL);
 #ifdef __CUDA
     cufftPlan3d(&fft_handle, GlobalC::pw.nx, GlobalC::pw.ny, GlobalC::pw.nz, CUFFT_Z2Z);
     cudaMalloc((void**)&d_porter, GlobalC::pw.nrxx * sizeof(double2));
@@ -35,17 +41,19 @@ void Use_FFT::RoundTrip(
     const std::complex<double> *psi,
     const double *vr,
     const int *fft_index,
+    const int &max_g,
+    const int &max_r,
     std::complex<double> *psic)
 {
 	// (1) set value
-    for (int ig=0; ig< GlobalC::wf.npw; ig++)
+	for (int ig=0; ig< max_g; ig++)
     {
         psic[ fft_index[ig]  ] = psi[ig];
     }
 
 	// (2) fft to real space and doing things.
     GlobalC::pw.FFT_wfc.FFT3D( psic, 1);
-    for (int ir=0; ir< GlobalC::pw.nrxx; ir++)
+    for (int ir=0; ir< max_r; ir++)
     {
         psic[ir] *= vr[ir];
     }
@@ -58,14 +66,14 @@ void Use_FFT::RoundTrip(
 void Use_FFT::ToRealSpace(const int &is, const ModuleBase::ComplexMatrix &vg, double *vr)
 {
 	// (1) set value
-    ModuleBase::GlobalFunc::ZEROS( porter, GlobalC::pw.nrxx );
+    ModuleBase::GlobalFunc::ZEROS( porter.data(), GlobalC::pw.nrxx );
     for (int ig=0; ig<GlobalC::pw.ngmc; ig++)
     {
         porter[ GlobalC::pw.ig2fftc[ig] ] = vg(is, ig);
     }
 
 	// (2) fft and get value
-    GlobalC::pw.FFT_chg.FFT3D(porter, 1);
+    GlobalC::pw.FFT_chg.FFT3D(porter.data(), 1);
     for (int ir = 0; ir < GlobalC::pw.nrxx; ir++)
     {
         vr[ir] = porter[ir].real();
@@ -106,14 +114,14 @@ void Use_FFT::ToRealSpace_psi(const int &ik, const int &ib, const ModuleBase::Co
 void Use_FFT::ToRealSpace(const int &is, const ModuleBase::ComplexMatrix &vg, ModuleBase::matrix &vr)
 {
 	// (1) set value
-    ModuleBase::GlobalFunc::ZEROS( porter, GlobalC::pw.nrxx);
+    ModuleBase::GlobalFunc::ZEROS( porter.data(), GlobalC::pw.nrxx);
     for (int ig=0; ig<GlobalC::pw.ngmc; ig++)
     {
         porter [GlobalC::pw.ig2fftc[ig]] = vg(is,ig);
     }
 
 	// (2) fft and get value
-    GlobalC::pw.FFT_chg.FFT3D(porter, 1);
+    GlobalC::pw.FFT_chg.FFT3D(porter.data(), 1);
     for (int ir = 0; ir < GlobalC::pw.nrxx; ir++)
     {
         vr(is,ir) = porter[ir].real();
@@ -126,12 +134,12 @@ void Use_FFT::ToRealSpace(const int &is, const ModuleBase::ComplexMatrix &vg, Mo
 // then put vg into vr.
 void Use_FFT::ToRealSpace(const std::complex<double> *vg, double *vr)
 {
-    ModuleBase::GlobalFunc::ZEROS( porter, GlobalC::pw.nrxx);
+    ModuleBase::GlobalFunc::ZEROS( porter.data(), GlobalC::pw.nrxx);
     for (int ig=0; ig<GlobalC::pw.ngmc; ig++)
     {
         porter[GlobalC::pw.ig2fftc[ig]] = vg[ig];
     }
-    GlobalC::pw.FFT_chg.FFT3D(porter, 1);
+    GlobalC::pw.FFT_chg.FFT3D(porter.data(), 1);
     for (int ir = 0; ir < GlobalC::pw.nrxx; ir++)
     {
         vr[ir] = porter[ir].real();
@@ -141,12 +149,12 @@ void Use_FFT::ToRealSpace(const std::complex<double> *vg, double *vr)
 
 void Use_FFT::ToReciSpace(const double* vr, std::complex<double> *vg)
 {
-	ModuleBase::GlobalFunc::ZEROS( porter, GlobalC::pw.nrxx);
+	ModuleBase::GlobalFunc::ZEROS( porter.data(), GlobalC::pw.nrxx);
 	for (int ir=0; ir<GlobalC::pw.nrxx; ir++)
 	{
 		porter[ir] = std::complex<double>(vr[ir], 0.0);
 	}
-	GlobalC::pw.FFT_chg.FFT3D( porter, -1);
+	GlobalC::pw.FFT_chg.FFT3D( porter.data(), -1);
 	for (int ig=0; ig<GlobalC::pw.ngmc; ig++)
 	{
 		vg[ig] = porter[ GlobalC::pw.ig2fftc[ig] ];

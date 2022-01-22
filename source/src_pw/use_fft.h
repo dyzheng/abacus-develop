@@ -5,6 +5,7 @@
 #include "../module_base/global_variable.h"
 #include "../module_base/matrix.h"
 #include "../module_base/complexmatrix.h"
+#include <vector>
 
 #ifdef __CUDA
 #include "cufft.h"
@@ -23,7 +24,11 @@ class Use_FFT
 	Use_FFT();
 	~Use_FFT();
 
-	std::complex<double> *porter;
+/// This is a memory space for FFT operation
+private:
+	static std::vector<std::complex<double>> porter;
+public:
+	static std::complex<double>* get_porter(const int &begin, const int &end);
 
 	void allocate(void);
 
@@ -54,30 +59,36 @@ class Use_FFT
 	    const std::complex<double> *psi,
 		const double *vr,
 		const int *_index,
+		const int &max_g,
+    	const int &max_r,
 		std::complex<double> *psic);
 
 #ifdef __CUDA
 	double2 *d_porter;
 	cufftHandle fft_handle;
-	void RoundTrip(const float2 *psi, const float *vr, const int *fft_index, float2 *psic)
+	void RoundTrip(const float2 *psi, const float *vr, const int *fft_index, const int &max_g,
+    	const int &max_r, float2 *psic)
 	{
-		RoundTrip_kernel(psi, vr, fft_index, psic);
+		RoundTrip_kernel(psi, vr, fft_index, max_g, max_r, psic);
 	}
-	void RoundTrip(const double2 *psi, const double *vr, const int *fft_index, double2 *psic)
+	void RoundTrip(const double2 *psi, const double *vr, const int *fft_index, const int &max_g,
+    	const int &max_r, double2 *psic)
 	{
-		RoundTrip_kernel(psi, vr, fft_index, psic);
+		RoundTrip_kernel(psi, vr, fft_index, max_g, max_r, psic);
 	}
 #endif
 
 #ifdef __ROCM
 	hipfftHandle fft_handle;
-	void RoundTrip(const hipblasComplex *psi, const float *vr, const int *fft_index, hipblasComplex *psic)
+	void RoundTrip(const hipblasComplex *psi, const float *vr, const int *fft_index, const int &max_g,
+    	const int &max_r, hipblasComplex *psic)
 	{
-		RoundTrip_kernel(psi, vr, fft_index, psic);
+		RoundTrip_kernel(psi, vr, fft_index, max_g, max_r, psic);
 	}
-	void RoundTrip(const hipblasDoubleComplex *psi, const double *vr, const int *fft_index, hipblasDoubleComplex *psic)
+	void RoundTrip(const hipblasDoubleComplex *psi, const double *vr, const int *fft_index, const int &max_g,
+    	const int &max_r, hipblasDoubleComplex *psic)
 	{
-		RoundTrip_kernel(psi, vr, fft_index, psic);
+		RoundTrip_kernel(psi, vr, fft_index, max_g, max_r, psic);
 	}
 #endif
 

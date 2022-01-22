@@ -458,12 +458,13 @@ void Charge::atomic_rho(const int spin_number_need, double** rho_in)const		// Pe
         double rea = 0.0;
         double ima = 0.0;
 		double sumrea = 0.0;
+		std::complex<double>* porter = Use_FFT::get_porter(0, GlobalC::pw.nrxx);
         for (int ir=0;ir < GlobalC::pw.nrxx; ir++)
         {
-            rea = GlobalC::UFFT.porter[ir].real();
+            rea = porter[ir].real();
 			sumrea += rea;
             neg += std::min(0.0, rea);
-            ima += abs(GlobalC::UFFT.porter[ir].imag());
+            ima += abs(porter[ir].imag());
         }
 
 		Parallel_Reduce::reduce_double_pool( neg );	
@@ -619,10 +620,11 @@ void Charge::set_rho_core(
     // test on the charge and computation of the core energy
     double rhoima = 0.0;
     double rhoneg = 0.0;
+	std::complex<double>* porter = Use_FFT::get_porter(0, GlobalC::pw.nrxx);
     for (int ir = 0; ir < GlobalC::pw.nrxx; ir++)
     {
-        rhoneg += min(0.0, GlobalC::UFFT.porter[ir].real());
-        rhoima += abs(GlobalC::UFFT.porter[ir].imag());
+        rhoneg += min(0.0, porter[ir].real());
+        rhoima += abs(porter[ir].imag());
         // NOTE: Core charge is computed in reciprocal space and brought to real
         // space by FFT. For non smooth core charges (or insufficient cut-off)
         // this may result in negative values in some grid points.
@@ -743,9 +745,9 @@ void Charge::sum_band_k(void)
 	ModuleBase::TITLE("Charge","sum_band_k");
 	GlobalC::en.eband = 0.0;
 
-	std::complex<double>* porter = GlobalC::UFFT.porter;
+	std::complex<double>* porter = Use_FFT::get_porter(0, GlobalC::pw.nrxx);
 	std::complex<double>* porter1 = nullptr;
-	if(GlobalV::NSPIN==4) porter1 = new std::complex<double>[GlobalC::pw.nrxx];//added by zhengdy-soc
+	if(GlobalV::NSPIN==4) porter1 = Use_FFT::get_porter(GlobalC::pw.nrxx, GlobalC::pw.nrxx * GlobalV::NPOL);
 
 	for (int ik = 0;ik < GlobalC::kv.nks;ik++)
 	{
@@ -767,7 +769,7 @@ void Charge::sum_band_k(void)
  				{
 					porter[ GlobalC::pw.ig2fftw[GlobalC::wf.igk(ik, ig)] ] = GlobalC::wf.evc[ik](ibnd, ig);
 				}
-				GlobalC::pw.FFT_wfc.FFT3D(GlobalC::UFFT.porter, 1);
+				GlobalC::pw.FFT_wfc.FFT3D(porter, 1);
 				if(GlobalV::NPOL ==2)
 				{
 					ModuleBase::GlobalFunc::ZEROS( porter1, GlobalC::pw.nrxx );
@@ -827,7 +829,7 @@ void Charge::sum_band_k(void)
 			{
 				porter[ GlobalC::pw.ig2fftw[GlobalC::wf.igk(ik, ig)] ] = GlobalC::wf.evc[ik](ibnd, ig);
 			}
-			GlobalC::pw.FFT_wfc.FFT3D(GlobalC::UFFT.porter, 1);
+			GlobalC::pw.FFT_wfc.FFT3D(porter, 1);
 
 			const double w1 = GlobalC::wf.wg(ik, ibnd) / GlobalC::ucell.omega;
 
@@ -850,7 +852,7 @@ void Charge::sum_band_k(void)
 						double fact = GlobalC::pw.get_GPlusK_cartesian_projection(ik,GlobalC::wf.igk(ik,ig),j) * GlobalC::ucell.tpiba;
 						porter[ GlobalC::pw.ig2fftw[GlobalC::wf.igk(ik, ig)] ] = GlobalC::wf.evc[ik](ibnd, ig) * complex<double>(0.0,fact);
 					}
-					GlobalC::pw.FFT_wfc.FFT3D(GlobalC::UFFT.porter, 1);
+					GlobalC::pw.FFT_wfc.FFT3D(porter, 1);
 					for (int ir=0; ir<GlobalC::pw.nrxx; ir++) 
 					{
 						kin_r[GlobalV::CURRENT_SPIN][ir]+=w1* norm( porter[ir] );
@@ -859,7 +861,6 @@ void Charge::sum_band_k(void)
 			}
 		}
 	} // END DO k_loop
-	if(GlobalV::NSPIN==4) delete[] porter1;
 
 #ifdef __MPI
 	this->rho_mpi();

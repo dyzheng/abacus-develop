@@ -67,7 +67,7 @@ std::complex<double> unkOverlap_pw::unkdotp_G0(const int ik_L, const int ik_R, c
 {
 	// (1) set value
 	std::complex<double> result(0.0,0.0);
-	std::complex<double> *phase = GlobalC::UFFT.porter;
+	std::complex<double> *phase = Use_FFT::get_porter(0, GlobalC::pw.nrxx);
 	std::complex<double> *psi_r = new std::complex<double>[GlobalC::pw.nrxx]; // 实空间的波函数
 
 	ModuleBase::GlobalFunc::ZEROS( phase, GlobalC::pw.nrxx);
@@ -182,7 +182,7 @@ std::complex<double> unkOverlap_pw::unkdotp_soc_G0(const int ik_L, const int ik_
 {
 	// (1) set value
 	std::complex<double> result(0.0,0.0);
-	std::complex<double> *phase = GlobalC::UFFT.porter;
+	std::complex<double> *phase = Use_FFT::get_porter(0, GlobalC::pw.nrxx);
 	std::complex<double> *psi_up = new std::complex<double>[GlobalC::pw.nrxx];
 	std::complex<double> *psi_down = new std::complex<double>[GlobalC::pw.nrxx];
 	ModuleBase::GlobalFunc::ZEROS( phase, GlobalC::pw.nrxx);

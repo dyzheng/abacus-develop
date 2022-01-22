@@ -329,12 +329,14 @@ void Exx_Lip::wf_wg_cal()
 
 void Exx_Lip::phi_cal(k_package *kq_pack, int ikq)
 {
+	//Rent a memory space for FFT operations
+	std::complex<double> *porter = UFFT_ptr->get_porter(0, GlobalC::pw.nrxx);
 	for( int iw=0; iw< GlobalV::NLOCAL; ++iw)
 	{
-		ModuleBase::GlobalFunc::ZEROS( UFFT_ptr->porter, pw_ptr->nrxx );
+		ModuleBase::GlobalFunc::ZEROS( porter, pw_ptr->nrxx );
 		for( int ig=0; ig<kq_pack->kv_ptr->ngk[ikq]; ++ig)
-			UFFT_ptr->porter[ pw_ptr->ig2fftw[kq_pack->wf_ptr->igk(ikq,ig)] ] = kq_pack->wf_ptr->wanf2[ikq](iw,ig);
-		pw_ptr->FFT_wfc.FFT3D(UFFT_ptr->porter,1);
+			porter[ pw_ptr->ig2fftw[kq_pack->wf_ptr->igk(ikq,ig)] ] = kq_pack->wf_ptr->wanf2[ikq](iw,ig);
+		pw_ptr->FFT_wfc.FFT3D(porter,1);
 		int ir(0);
 		for( int ix=0; ix<pw_ptr->ncx; ++ix)
 		{
@@ -346,7 +348,7 @@ void Exx_Lip::phi_cal(k_package *kq_pack, int ikq)
 				{
 					const double phase_xyz = phase_xy + kq_pack->kv_ptr->kvec_d[ikq].z * iz / pw_ptr->ncz;
 					const std::complex<double> exp_tmp = exp(phase_xyz*ModuleBase::TWO_PI*ModuleBase::IMAG_UNIT);
-					phi[iw][ir] = UFFT_ptr->porter[ir]*exp_tmp;
+					phi[iw][ir] = porter[ir]*exp_tmp;
 					++ir;
 				}
 			}
@@ -359,16 +361,18 @@ void Exx_Lip::psi_cal()
 	ModuleBase::TITLE("Exx_Lip","psi_cal");
 	if (GlobalC::pot.start_pot=="atomic")
 	{
+		//Rent a memory space for FFT operations
+		std::complex<double> *porter = UFFT_ptr->get_porter(0, GlobalC::pw.nrxx);
 		for( int iq = 0; iq < q_pack->kv_ptr->nks; ++iq)
 		{
 			for( int ib = 0; ib < GlobalV::NBANDS; ++ib)
 			{
-				ModuleBase::GlobalFunc::ZEROS( UFFT_ptr->porter, pw_ptr->nrxx );
+				ModuleBase::GlobalFunc::ZEROS( porter, pw_ptr->nrxx );
 				for( int ig = 0; ig < q_pack->kv_ptr->ngk[iq] ; ++ig)
 				{
-					UFFT_ptr->porter[ pw_ptr->ig2fftw[q_pack->wf_ptr->igk(iq,ig)] ] = q_pack->wf_ptr->evc[iq](ib,ig);
+					porter[ pw_ptr->ig2fftw[q_pack->wf_ptr->igk(iq,ig)] ] = q_pack->wf_ptr->evc[iq](ib,ig);
 				}
-				pw_ptr->FFT_wfc.FFT3D(UFFT_ptr->porter,1);
+				pw_ptr->FFT_wfc.FFT3D(porter,1);
 				int ir(0);
 				for( int ix=0; ix<pw_ptr->ncx; ++ix)
 				{
@@ -380,7 +384,7 @@ void Exx_Lip::psi_cal()
 						{
 							const double phase_xyz = phase_xy + q_pack->kv_ptr->kvec_d[iq].z * iz / pw_ptr->ncz;
 							const std::complex<double> exp_tmp = exp(phase_xyz*ModuleBase::TWO_PI*ModuleBase::IMAG_UNIT);
-							psi[iq][ib][ir] = UFFT_ptr->porter[ir]*exp_tmp;
+							psi[iq][ib][ir] = porter[ir]*exp_tmp;
 							++ir;
 						}
 					}
@@ -478,7 +482,7 @@ void Exx_Lip::b_cal( int ik, int iq, int ib)
 		}
 	}
 
-	std::complex<double> * const porter = UFFT_ptr->porter;
+	std::complex<double> * const porter = UFFT_ptr->get_porter(0, GlobalC::pw.nrxx);
 	const int * const ig2fftc = pw_ptr->ig2fftc;
 	for(size_t iw=0; iw< GlobalV::NLOCAL; ++iw)
 	{

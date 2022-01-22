@@ -75,13 +75,15 @@ namespace Write_Wfc_Realspace
 	std::vector<std::complex<double>> cal_wfc_r(const ModuleBase::ComplexMatrix &wfc_g, const int ik, const int ib)
 	{
 		ModuleBase::timer::tick("Write_Wfc_Realspace", "cal_wfc_r");
-		ModuleBase::GlobalFunc::ZEROS(GlobalC::UFFT.porter, GlobalC::pw.nrxx);
+		//Rent a memory space for FFT operations
+		std::complex<double> *porter = Use_FFT::get_porter(0, GlobalC::pw.nrxx);
+		ModuleBase::GlobalFunc::ZEROS(porter, GlobalC::pw.nrxx);
 		std::vector<std::complex<double>> wfc_r(GlobalC::pw.nrxx);
 		for(int ig=0; ig<GlobalC::kv.ngk[ik]; ++ig)
-			GlobalC::UFFT.porter[ GlobalC::pw.ig2fftw[GlobalC::wf.igk(ik,ig)] ] = wfc_g(ib,ig);
-		GlobalC::pw.FFT_wfc.FFT3D(GlobalC::UFFT.porter,1);
+			porter[ GlobalC::pw.ig2fftw[GlobalC::wf.igk(ik,ig)] ] = wfc_g(ib,ig);
+		GlobalC::pw.FFT_wfc.FFT3D(porter,1);
 		for(int ir=0; ir<GlobalC::pw.nrxx; ++ir)
-			wfc_r[ir] = GlobalC::UFFT.porter[ir];
+			wfc_r[ir] = porter[ir];
 		ModuleBase::timer::tick("Write_Wfc_Realspace", "cal_wfc_r");
 		return wfc_r;
 	}

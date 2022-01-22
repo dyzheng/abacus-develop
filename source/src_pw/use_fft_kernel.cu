@@ -47,46 +47,48 @@ __global__ void kernel_reorder(double2 *dst, double2 *src, int size)
     }
 }
 
-void RoundTrip_kernel(const float2 *psi, const float *vr, const int *fft_index, float2 *psic)
+void RoundTrip_kernel(const float2 *psi, const float *vr, const int *fft_index, const int &max_g,
+    	const int &max_r, float2 *psic)
 {
     // (1) set value
     int thread = 512;
-    int block = (GlobalC::wf.npw + thread - 1) / thread;
-    int block2 = (GlobalC::pw.nrxx + thread - 1) / thread;
-    kernel_set<float2><<<block, thread>>>(GlobalC::wf.npw, psic, psi, fft_index);
+    int block = (max_g + thread - 1) / thread;
+    int block2 = (max_r + thread - 1) / thread;
+    kernel_set<float2><<<block, thread>>>(max_g, psic, psi, fft_index);
 
     CHECK_CUFFT(cufftExecC2C(GlobalC::UFFT.fft_handle, psic, psic, CUFFT_INVERSE));
     cudaDeviceSynchronize();
 
-    kernel_roundtrip<float, float2><<<block2, thread>>>(GlobalC::pw.nrxx, psic, vr);
+    kernel_roundtrip<float, float2><<<block2, thread>>>(max_r, psic, vr);
 
     CHECK_CUFFT(cufftExecC2C(GlobalC::UFFT.fft_handle, psic, psic, CUFFT_FORWARD));
     cudaDeviceSynchronize();
 
-    int block3 = (GlobalC::pw.nrxx + thread - 1) / thread;
-    kernel_normalization<float, float2><<<block3, thread>>>(GlobalC::pw.nrxx, psic, (double)(GlobalC::pw.nrxx));
+    int block3 = (max_r + thread - 1) / thread;
+    kernel_normalization<float, float2><<<block3, thread>>>(max_r, psic, (double)(max_r));
 
     return;
 }
 
-void RoundTrip_kernel(const double2 *psi, const double *vr, const int *fft_index, double2 *psic)
+void RoundTrip_kernel(const double2 *psi, const double *vr, const int *fft_index, const int &max_g,
+    	const int &max_r, double2 *psic)
 {
     // (1) set value
     int thread = 512;
-    int block = (GlobalC::wf.npw + thread - 1) / thread;
-    int block2 = (GlobalC::pw.nrxx + thread - 1) / thread;
-    kernel_set<double2><<<block, thread>>>(GlobalC::wf.npw, psic, psi, fft_index);
+    int block = (max_g + thread - 1) / thread;
+    int block2 = (max_r + thread - 1) / thread;
+    kernel_set<double2><<<block, thread>>>(max_g, psic, psi, fft_index);
 
     CHECK_CUFFT(cufftExecZ2Z(GlobalC::UFFT.fft_handle, psic, psic, CUFFT_INVERSE));
     cudaDeviceSynchronize();
 
-    kernel_roundtrip<double, double2><<<block2, thread>>>(GlobalC::pw.nrxx, psic, vr);
+    kernel_roundtrip<double, double2><<<block2, thread>>>(max_r, psic, vr);
 
     CHECK_CUFFT(cufftExecZ2Z(GlobalC::UFFT.fft_handle, psic, psic, CUFFT_FORWARD));
     cudaDeviceSynchronize();
 
-    int block3 = (GlobalC::pw.nrxx + thread - 1) / thread;
-    kernel_normalization<double, double2><<<block3, thread>>>(GlobalC::pw.nrxx, psic, (double)(GlobalC::pw.nrxx));
+    int block3 = (max_r + thread - 1) / thread;
+    kernel_normalization<double, double2><<<block3, thread>>>(max_r, psic, (double)(max_r));
 
     return;
 }

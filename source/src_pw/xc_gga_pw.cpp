@@ -365,7 +365,7 @@ void GGA_PW::grad_wfc( const std::complex<double> *rhog, const int ik, std::comp
 	kplusg = new double[npw];
 	ModuleBase::GlobalFunc::ZEROS(kplusg, npw);
 
-	std::complex<double> *Porter = GlobalC::UFFT.porter;
+	std::complex<double> *Porter = Use_FFT::get_porter(0, GlobalC::pw.nrxx);
 
 	for(int ipol=0; ipol<3; ipol++)
 	{
@@ -394,7 +394,7 @@ void GGA_PW::grad_rho( const std::complex<double> *rhog, ModuleBase::Vector3<dou
 	std::complex<double> *gdrtmpg = new std::complex<double>[GlobalC::pw.ngmc];
 	ModuleBase::GlobalFunc::ZEROS(gdrtmpg, GlobalC::pw.ngmc);
 
-	std::complex<double> *Porter = GlobalC::UFFT.porter;
+	std::complex<double> *Porter = Use_FFT::get_porter(0, GlobalC::pw.nrxx);
 
 	// the formula is : rho(r)^prime = \int iG * rho(G)e^{iGr} dG
 	for(int ig=0; ig<GlobalC::pw.ngmc; ig++)

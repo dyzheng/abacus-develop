@@ -468,13 +468,20 @@ void Stochastic_hchi:: hchi_reciprocal(std::complex<double> *chig, std::complex<
 	{
 		chibg = chig;
 		hchibg = hchig;
+		//Rent a memory space for FFT operations
+		std::complex<double> *porter = Use_FFT::get_porter(0, GlobalC::pw.nrxx);
 		for(int ib = 0 ; ib < m ; ++ib)
 		{
-			ModuleBase::GlobalFunc::ZEROS( GlobalC::UFFT.porter, GlobalC::pw.nrxx);
-			GlobalC::UFFT.RoundTrip( chibg, GlobalC::pot.vr_eff1, GRA_index, GlobalC::UFFT.porter );
+			ModuleBase::GlobalFunc::ZEROS( porter, GlobalC::pw.nrxx);
+			GlobalC::UFFT.RoundTrip(chibg,
+									GlobalC::pot.vr_eff1,
+									GRA_index,
+									npw,
+									GlobalC::pw.nrxx,
+									porter);
 			for (int ig = 0; ig < npw; ++ig)
 			{
-				hchibg[ig] += GlobalC::UFFT.porter[ GRA_index[ig] ];
+				hchibg[ig] += porter[ GRA_index[ig] ];
 			}
 			chibg += npw;
 			hchibg += npw;

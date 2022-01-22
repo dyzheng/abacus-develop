@@ -9,7 +9,7 @@ void Stress_Func::stress_har(ModuleBase::matrix& sigma, const bool is_pw)
 	ModuleBase::timer::tick("Stress_Func","stress_har");
 	double shart;
 
-	std::complex<double> *Porter = GlobalC::UFFT.porter;
+	std::complex<double> *Porter = Use_FFT::get_porter(0, GlobalC::pw.nrxx);
 
 	//  Hartree potential VH(r) from n(r)
 	ModuleBase::GlobalFunc::ZEROS( Porter, GlobalC::pw.nrxx );

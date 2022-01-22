@@ -223,18 +223,20 @@ void Epsilon0_vasp:: Delete()
 
 void Epsilon0_vasp:: Cal_psi(int ik)      // pengfei Li 2018-11-13
 {
+	//Rent a memory space for FFT operations
+	std::complex<double> *porter = Use_FFT::get_porter(0, GlobalC::pw.nrxx);
 	for(int ib=0; ib<GlobalV::NBANDS; ib++)
 	{
-		ModuleBase::GlobalFunc::ZEROS( GlobalC::UFFT.porter, (GlobalC::pw.nrxx) );
+		ModuleBase::GlobalFunc::ZEROS( porter, (GlobalC::pw.nrxx) );
 		for(int ig = 0; ig < GlobalC::kv.ngk[ik] ; ig++)
 		{
-			GlobalC::UFFT.porter[ GlobalC::pw.ig2fftw[GlobalC::wf.igk(ik,ig)] ] = GlobalC::wf.evc[ik](ib,ig);
+			porter[ GlobalC::pw.ig2fftw[GlobalC::wf.igk(ik,ig)] ] = GlobalC::wf.evc[ik](ib,ig);
 		}
-		GlobalC::pw.FFT_wfc.FFT3D(GlobalC::UFFT.porter,1);
+		GlobalC::pw.FFT_wfc.FFT3D(porter,1);
 
 		for(int ir=0; ir<GlobalC::pw.nrxx; ir++)
 		{
-			psi[ib][ir] = GlobalC::UFFT.porter[ir];
+			psi[ib][ir] = porter[ir];
 		}
 	}
 
@@ -243,41 +245,43 @@ void Epsilon0_vasp:: Cal_psi(int ik)      // pengfei Li 2018-11-13
 
 void Epsilon0_vasp:: Cal_psi_nabla(int ik)      // pengfei Li 2018-11-13
 {
+	//Rent a memory space for FFT operations
+	std::complex<double> *porter = Use_FFT::get_porter(0, GlobalC::pw.nrxx);
 	for(int ib=0; ib<GlobalV::NBANDS; ib++)
 	{
-		ModuleBase::GlobalFunc::ZEROS( GlobalC::UFFT.porter, (GlobalC::pw.nrxx) );
+		ModuleBase::GlobalFunc::ZEROS( porter, (GlobalC::pw.nrxx) );
 		for(int ig = 0; ig < GlobalC::kv.ngk[ik] ; ig++)
 		{
-			GlobalC::UFFT.porter[ GlobalC::pw.ig2fftw[GlobalC::wf.igk(ik,ig)] ] = GlobalC::wf.evc[ik](ib,ig) * (GlobalC::pw.get_GPlusK_cartesian_projection(ik, ig, 0) * (ModuleBase::TWO_PI/GlobalC::ucell.lat0));
+			porter[ GlobalC::pw.ig2fftw[GlobalC::wf.igk(ik,ig)] ] = GlobalC::wf.evc[ik](ib,ig) * (GlobalC::pw.get_GPlusK_cartesian_projection(ik, ig, 0) * (ModuleBase::TWO_PI/GlobalC::ucell.lat0));
 		}
-		GlobalC::pw.FFT_wfc.FFT3D(GlobalC::UFFT.porter,1);
+		GlobalC::pw.FFT_wfc.FFT3D(porter,1);
 
 		for(int ir=0; ir<GlobalC::pw.nrxx; ir++)
 		{
-			psi_nabla[ib][ir][0] = GlobalC::UFFT.porter[ir];
+			psi_nabla[ib][ir][0] = porter[ir];
 		}
 		
-		ModuleBase::GlobalFunc::ZEROS( GlobalC::UFFT.porter, (GlobalC::pw.nrxx) );
+		ModuleBase::GlobalFunc::ZEROS( porter, (GlobalC::pw.nrxx) );
 		for(int ig = 0; ig < GlobalC::kv.ngk[ik] ; ig++)
 		{
-			GlobalC::UFFT.porter[GlobalC::pw.ig2fftw[GlobalC::wf.igk(ik, ig)]] = GlobalC::wf.evc[ik](ib, ig) * (GlobalC::pw.get_GPlusK_cartesian_projection(ik, ig, 1) * (ModuleBase::TWO_PI / GlobalC::ucell.lat0));
+			porter[GlobalC::pw.ig2fftw[GlobalC::wf.igk(ik, ig)]] = GlobalC::wf.evc[ik](ib, ig) * (GlobalC::pw.get_GPlusK_cartesian_projection(ik, ig, 1) * (ModuleBase::TWO_PI / GlobalC::ucell.lat0));
 		}
-		GlobalC::pw.FFT_wfc.FFT3D(GlobalC::UFFT.porter,1);
+		GlobalC::pw.FFT_wfc.FFT3D(porter,1);
 
 		for(int ir=0; ir<GlobalC::pw.nrxx; ir++)
 		{
-			psi_nabla[ib][ir][1] = GlobalC::UFFT.porter[ir];
+			psi_nabla[ib][ir][1] = porter[ir];
 		}
-		ModuleBase::GlobalFunc::ZEROS( GlobalC::UFFT.porter, (GlobalC::pw.nrxx) );
+		ModuleBase::GlobalFunc::ZEROS( porter, (GlobalC::pw.nrxx) );
 		for(int ig = 0; ig < GlobalC::kv.ngk[ik] ; ig++)
 		{
-			GlobalC::UFFT.porter[GlobalC::pw.ig2fftw[GlobalC::wf.igk(ik, ig)]] = GlobalC::wf.evc[ik](ib, ig) * (GlobalC::pw.get_GPlusK_cartesian_projection(ik, ig, 2) * (ModuleBase::TWO_PI / GlobalC::ucell.lat0));
+			porter[GlobalC::pw.ig2fftw[GlobalC::wf.igk(ik, ig)]] = GlobalC::wf.evc[ik](ib, ig) * (GlobalC::pw.get_GPlusK_cartesian_projection(ik, ig, 2) * (ModuleBase::TWO_PI / GlobalC::ucell.lat0));
 		}
-		GlobalC::pw.FFT_wfc.FFT3D(GlobalC::UFFT.porter,1);
+		GlobalC::pw.FFT_wfc.FFT3D(porter,1);
 
 		for(int ir=0; ir<GlobalC::pw.nrxx; ir++)
 		{
-			psi_nabla[ib][ir][2] = GlobalC::UFFT.porter[ir];
+			psi_nabla[ib][ir][2] = porter[ir];
 		}
 	}
 
