@@ -16,7 +16,7 @@ basis_type			lcao
 symmetry			0	
 #Parameters (Accuracy)
 ecutwfc				50
-dr2				1.0e-7	// about iteration
+scf_thr				1.0e-7	// about iteration
 
 nstep				50
 force_thr_ev			1.0e-3

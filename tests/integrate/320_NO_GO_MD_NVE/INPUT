@@ -10,7 +10,7 @@ calculation     md
 ecutwfc			20
 niter			20
 
-dr2         1E-7
+scf_thr         1E-7
 basis_type		lcao
 nstep           1
 

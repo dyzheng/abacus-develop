@@ -18,6 +18,7 @@ write_input.o\
 input_conv.o\
 run_pw.o\
 run_lcao.o\
+abacus_parameters.o\
 
 OBJS_PW=xc_type.o \
 xc_functional.o\
@@ -257,7 +258,21 @@ read_txt_input_list.o\
 read_txt_input_process.o\
 read_txt_input_process_global.o\
 read_txt_input-general.o\
+read_txt_input-ipath.o\
 read_txt_input-pw.o\
+read_txt_input-lcao.o\
+read_txt_input-scf.o\
+read_txt_input-relax.o\
+read_txt_input-print.o\
+read_txt_input-efield.o\
+read_txt_input-exx.o\
+read_txt_input-md.o\
+read_txt_input-dftu.o\
+read_txt_input-vdw.o\
+read_txt_input-berry.o\
+read_txt_input-tddft.o\
+read_txt_input-deepks.o\
+read_txt_input-test.o\
 read_txt_input-spectrum.o\
 write_pot.o\
 write_rho.o\

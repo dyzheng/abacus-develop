@@ -5,7 +5,7 @@ ntype          2
 
 calculation    scf
 ecutwfc        20
-dr2            1.0e-8
+scf_thr            1.0e-8
 niter          50
 out_charge     0
 

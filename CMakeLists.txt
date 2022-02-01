@@ -260,9 +260,9 @@ target_link_libraries(${ABACUS_BIN_NAME}
     cell
     symmetry
     md
-    symmetry
     neighbor
     orb
+    input
     io
     ions
     lcao

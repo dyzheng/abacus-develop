@@ -16,7 +16,7 @@ sigma               0.02
 
 #Parameters (3.PW)
 ecutwfc             20
-dr2                 1e-8
+scf_thr                 1e-8
 niter               100
 
 #Parameters (LCAO)

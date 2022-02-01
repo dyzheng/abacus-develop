@@ -74,8 +74,6 @@ void Stress_Func::printstress_total(const ModuleBase::matrix& scs, bool ry)
     std::cout << " TOTAL-STRESS (KBAR):" << std::endl;
     std::cout << " ><><><><><><><><><><><><><><><><><><><><><><" << std::endl;
 
-//        if(INPUT.stress_set == 1)
-//        int GlobalV::TEST_STRESS = 1;
 
     
 	for (int i=0; i<3; i++)

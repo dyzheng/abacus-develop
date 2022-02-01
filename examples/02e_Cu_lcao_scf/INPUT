@@ -4,7 +4,7 @@ nbands		10
 
 calculation	scf
 ecutwfc		100
-dr2		1.0e-8
+scf_thr		1.0e-8
 niter		100
 
 smearing	gaussian

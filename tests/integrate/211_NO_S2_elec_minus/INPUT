@@ -13,7 +13,7 @@ nspin           2
 
 #Parameters (2.Iteration)
 ecutwfc			20
-dr2				1e-9
+scf_thr				1e-9
 niter			100
 
 

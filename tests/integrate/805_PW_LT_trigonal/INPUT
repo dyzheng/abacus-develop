@@ -12,7 +12,7 @@ latname			trigonal
 ecutwfc			25.0              # Rydberg
 #Parameters (electronic)
 basis_type		pw 	
-dr2			1e-10
+scf_thr			1e-10
 
 force			1
 stress			1

@@ -4,7 +4,7 @@
 //=======================
 
 #include "read_txt_input_list.h"
-#include "module_base/tool_title.h"
+#include "../module_base/tool_title.h"
 
 namespace Read_Txt_Input
 {
@@ -36,7 +36,21 @@ namespace Read_Txt_Input
 	{
 		ModuleBase::TITLE("Input_List","set_items");
 		this->set_items_general();
+		this->set_items_ipath();
 		this->set_items_pw();
+		this->set_items_lcao();
+		this->set_items_scf();
+		this->set_items_relax();
+		this->set_items_print();
+		this->set_items_efield();
+		this->set_items_exx();
+		this->set_items_md();
+		this->set_items_dftu();
+		this->set_items_vdw();
+		this->set_items_berry();
+		this->set_items_tddft();
+		this->set_items_deepks();
+		this->set_items_test();
 		this->set_items_spectrum();
 	}
 

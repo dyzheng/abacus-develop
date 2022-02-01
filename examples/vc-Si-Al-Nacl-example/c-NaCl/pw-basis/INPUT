@@ -11,7 +11,7 @@ calculation         relax
 
 #Parameters (3.PW)
 ecutwfc             200
-dr2                 1e-8
+scf_thr                 1e-8
 niter		    100
 
 #Parameters (5.LCAO)

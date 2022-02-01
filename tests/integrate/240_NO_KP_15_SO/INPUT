@@ -24,7 +24,7 @@ smearing            gaussian
 sigma             0.001
 #Parameters (3.PW)
 ecutwfc             20
-dr2                 1e-6
+scf_thr                 1e-6
 niter               100
 
 

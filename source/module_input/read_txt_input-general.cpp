@@ -5,18 +5,18 @@
 
 #include "read_txt_input_list.h"
 
-#include "src_io/read_txt_tools.h"
+#include "read_txt_tools.h"
 #include <stdexcept>
 
 // for convert
-#include "module_base/global_variable.h"
-#include "src_pw/global.h"
+#include "../module_base/global_variable.h"
+#include "../src_pw/global.h"
 
 namespace Read_Txt_Input
 {
 	void Input_List::set_items_general()
 	{
-		this->output_labels.push_back("Parameters (1.General)");
+		this->output_labels.push_back("Parameters (01.General)");
 
 		/*{	// LDA ; LSDA ; non-linear spin
 			Input_Item item("nspin");
@@ -32,9 +32,9 @@ namespace Read_Txt_Input
 				GlobalV::NSPIN = self.values[0].geti();
 			};
 			this->add_item(item);
-		}*/
+		}
 
-		/*{	// number of atom types
+		{	// number of atom types
 			Input_Item item("ntype");
 			item.default_1(0);
 			item.annotation = "atom species number";
@@ -48,9 +48,9 @@ namespace Read_Txt_Input
 				GlobalC::ucell.ntype = self.values[0].geti();
 			};
 			this->add_item(item);
-		}*/
+		}
 
-		/*{	// turn on symmetry or not
+		{	// turn on symmetry or not
 			Input_Item item("symmetry");
 			item.default_1(false);
 			item.annotation = "turn symmetry on or off";

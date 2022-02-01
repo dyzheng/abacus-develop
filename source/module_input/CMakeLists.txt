@@ -1,0 +1,32 @@
+add_library(
+    input
+    OBJECT
+    read_txt_tools.cpp
+    read_txt_stru.cpp
+    read_txt_input_value.cpp
+    read_txt_input_item.cpp
+    read_txt_input_list.cpp
+    read_txt_input_process.cpp
+    read_txt_input_process_global.cpp
+    read_txt_input-general.cpp
+    read_txt_input-ipath.cpp
+    read_txt_input-pw.cpp
+    read_txt_input-lcao.cpp
+    read_txt_input-scf.cpp
+    read_txt_input-relax.cpp
+    read_txt_input-print.cpp
+    read_txt_input-efield.cpp
+    read_txt_input-exx.cpp
+    read_txt_input-md.cpp
+    read_txt_input-dftu.cpp
+    read_txt_input-vdw.cpp
+    read_txt_input-berry.cpp
+    read_txt_input-tddft.cpp
+    read_txt_input-deepks.cpp
+    read_txt_input-test.cpp
+    read_txt_input-spectrum.cpp
+)
+
+IF (BUILD_TESTING)
+  add_subdirectory(test)
+endif()

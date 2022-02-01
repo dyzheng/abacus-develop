@@ -6,7 +6,7 @@ ntype     1
 calculation   scf
 nspin         2
 ecutwfc       15
-dr2           1.0e-8
+scf_thr           1.0e-8
 niter         50
 out_charge    0
 

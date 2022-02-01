@@ -5,6 +5,7 @@ add_subdirectory(module_neighbor)
 add_subdirectory(module_orbital)
 add_subdirectory(module_md)
 add_subdirectory(module_deepks)
+add_subdirectory(module_input)
 add_subdirectory(src_io)
 add_subdirectory(src_ions)
 add_subdirectory(src_lcao)
@@ -22,4 +23,5 @@ add_library(
     input_update.cpp
     run_lcao.cpp
     run_pw.cpp
+    abacus_parameters.cpp
 )

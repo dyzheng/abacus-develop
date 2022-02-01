@@ -5,7 +5,7 @@ nbands    40
 
 calculation    scf
 ecutwfc    20
-dr2    1.0e-4
+scf_thr    1.0e-4
 niter    2
 out_charge    0
 

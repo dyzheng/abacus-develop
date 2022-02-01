@@ -6,7 +6,7 @@ nbands          	4
 calculation     	nscf
 niter			40
 ethr                    1.0e-12
-dr2             	1.0e-15
+scf_thr             	1.0e-15
 start_charge            file
 out_band                1
 towannier90             1

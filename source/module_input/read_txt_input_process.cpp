@@ -5,12 +5,12 @@
 
 #include "read_txt_input_process.h"
 
-#include "src_io/read_txt_tools.h"
-#include "module_base/global_variable.h"
-#include "module_base/tool_title.h"
+#include "read_txt_tools.h"
+#include "../module_base/global_variable.h"
+#include "../module_base/tool_title.h"
 
 #ifdef USE_CEREAL_SERIALIZATION
-#include "src_lcao/serialization_cereal.h"
+#include "../src_lcao/serialization_cereal.h"
 #endif
 
 namespace Read_Txt_Input

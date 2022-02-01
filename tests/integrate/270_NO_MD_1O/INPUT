@@ -8,7 +8,7 @@ calculation 	md
 #Parameters (Accuracy)
 ecutwfc			20
 niter			50
-dr2             1.0e-6
+scf_thr             1.0e-6
 
 basis_type		lcao
 nstep           3
