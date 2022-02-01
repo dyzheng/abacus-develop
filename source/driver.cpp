@@ -11,6 +11,7 @@
 #include "src_io/winput.h"
 #include "src_io/print_info.h"
 #include "module_base/timer.h"
+#include "module_base/memory.h"
 
 #include "src_io/read_txt_input_list.h"
 #include "src_io/read_txt_input_process.h"
