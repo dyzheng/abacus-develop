@@ -13,6 +13,7 @@
 #include "epsilon0_vasp.h"
 #include <iostream>
 #include <math.h>
+#include "../module_base/constants.h"
 
 using namespace std;
 

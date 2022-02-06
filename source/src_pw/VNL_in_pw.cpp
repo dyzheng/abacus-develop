@@ -10,6 +10,7 @@
 #include "../module_base/math_ylmreal.h"
 #include "soc.h"
 #include "../module_base/timer.h"
+#include "../module_base/constants.h"
 
 pseudopot_cell_vnl::pseudopot_cell_vnl()
 {

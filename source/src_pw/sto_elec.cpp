@@ -7,6 +7,7 @@
 #include "../src_io/wf_io.h"
 #include "H_Ewald_pw.h"
 #include "../module_base/timer.h"
+#include "../module_base/constants.h"
 
 double Stochastic_Elec::avg_iter = 0;
 

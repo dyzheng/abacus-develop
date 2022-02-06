@@ -3,6 +3,7 @@
 #include "global.h"
 #include "../src_parallel/parallel_reduce.h"
 #include "../module_base/timer.h"
+#include "../module_base/constants.h"
 
 Diago_David::Diago_David()
 {

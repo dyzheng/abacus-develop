@@ -3,6 +3,7 @@
 #include "global.h"
 #include "../module_base/memory.h"
 #include "../module_base/timer.h"
+#include "../module_base/constants.h"
 
 WF_igk::WF_igk()
 {

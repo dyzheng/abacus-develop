@@ -4,6 +4,7 @@
 #include "sto_hchi.h" 
 #include "../src_parallel/parallel_reduce.h"
 #include "../module_base/timer.h"
+#include "../module_base/constants.h"
 
 int Stochastic_hchi::nrxx;
 int Stochastic_hchi::nx;

@@ -3,6 +3,7 @@
 #include "../src_parallel/parallel_reduce.h"
 #include "../module_base/blas_connector.h"
 #include "../module_base/timer.h"
+#include "../module_base/constants.h"
 #include "../src_lcao/LCAO_nnr.h" // mohan add 2021-03-07
 
 //-------------------------------------------------

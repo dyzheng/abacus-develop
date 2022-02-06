@@ -22,6 +22,7 @@
 #include "../module_md/NVT_ADS.h"
 #include "../module_md/NVT_NHC.h"
 #include "../module_md/Langevin.h"
+#include "../module_base/constants.h"
 
 Run_MD_LCAO::Run_MD_LCAO()
 {

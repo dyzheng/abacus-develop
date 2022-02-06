@@ -18,6 +18,7 @@
 #include "../module_base/scalapack_connector.h"
 #include "../module_base/matrix.h"
 #include "../module_base/complexmatrix.h"
+#include "../module_base/constants.h"
 #include "../src_parallel/parallel_reduce.h"
 #include <vector>
 #ifdef __MPI

@@ -2,6 +2,7 @@
 #include "occupy.h"
 #include "../module_base/mymath.h"
 #include "../src_parallel/parallel_reduce.h"
+#include "../module_base/constants.h"
 
 Occupy::Occupy(){}
 Occupy::~Occupy(){}

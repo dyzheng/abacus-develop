@@ -9,6 +9,7 @@
 #include "potential_libxc.h"
 #include "../src_parallel/parallel_reduce.h"
 #include "../module_base/timer.h"
+#include "../module_base/constants.h"
 
 double Forces::output_acc = 1.0e-8; // (Ryd/angstrom).	
 

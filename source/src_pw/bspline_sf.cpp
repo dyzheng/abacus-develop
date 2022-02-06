@@ -2,6 +2,7 @@
 #include "global.h"
 #include "unistd.h"
 #include "../module_base/math_bspline.h"
+#include "../module_base/constants.h"
 
 //
 //DESCRIPTION:

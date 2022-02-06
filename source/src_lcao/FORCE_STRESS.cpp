@@ -7,6 +7,7 @@
 #include "../src_pw/vdwd2.h"
 #include "../src_pw/vdwd3.h"
 #include "../module_base/timer.h"
+#include "../module_base/constants.h"
 #ifdef __DEEPKS
 #include "../module_deepks/LCAO_deepks.h"	//caoyu add for deepks 2021-06-03
 #endif

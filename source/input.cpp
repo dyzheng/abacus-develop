@@ -17,6 +17,7 @@
 #include <sstream>
 #include "module_base/global_file.h"
 #include "module_base/timer.h"
+#include "module_base/constants.h"
 Input INPUT;
 
 void Input::Init(const std::string &fn)

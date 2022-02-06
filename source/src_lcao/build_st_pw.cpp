@@ -1,6 +1,7 @@
 #include "build_st_pw.h"
 #include "../src_pw/global.h"
 #include "../module_base/timer.h"
+#include "../module_base/constants.h"
 
 #include "global_fp.h" // mohan add 2021-01-30
 

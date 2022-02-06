@@ -2,6 +2,7 @@
 #include "MD_func.h"
 #include "../src_parallel/parallel_common.h"
 #include "../module_base/timer.h"
+#include "../module_base/constants.h"
 
 Langevin::Langevin(MD_parameters& MD_para_in, UnitCell_pseudo &unit_in) : Verlet(MD_para_in, unit_in)
 {

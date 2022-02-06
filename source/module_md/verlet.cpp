@@ -4,6 +4,7 @@
 #include "mpi.h"
 #endif
 #include "../module_base/timer.h"
+#include "../module_base/constants.h"
 
 Verlet::Verlet(MD_parameters& MD_para_in, UnitCell_pseudo &unit_in):
     mdp(MD_para_in),

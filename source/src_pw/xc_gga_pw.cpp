@@ -2,6 +2,7 @@
 #include "global.h"
 #include "xc_functional.h"
 #include "myfunc.h"
+#include "module_base/constants.h"
 
 // from gradcorr.f90
 void GGA_PW::gradcorr(double &etxc, double &vtxc, ModuleBase::matrix &v)

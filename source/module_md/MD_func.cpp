@@ -7,6 +7,7 @@
 #include "../module_neighbor/sltk_grid_driver.h"
 #include "../module_base/global_variable.h"
 #include "../module_base/timer.h"
+#include "../module_base/constants.h"
 
 #ifndef __CMD
 #include "../src_pw/run_md_pw.h"

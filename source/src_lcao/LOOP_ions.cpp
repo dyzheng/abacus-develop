@@ -5,6 +5,7 @@
 #include "LCAO_nnr.h"
 #include "FORCE_STRESS.h"
 #include "../module_base/global_function.h"
+#include "../module_base/constants.h"
 #include "../src_io/write_HS.h"
 #include "../src_io/print_info.h"
 #include "../src_io/cal_r_overlap_R.h"

@@ -3,6 +3,7 @@
 // DATE : 2008-11-5
 //==========================================================
 #include "../src_pw/global.h"
+#include "../module_base/constants.h"
 #include "eximport.h"
 
 eximport::eximport()

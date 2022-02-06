@@ -1,6 +1,7 @@
 #include "cal_r_overlap_R.h"
 #include "../src_parallel/parallel_reduce.h"
 #include "../module_base/timer.h"
+#include "../module_base/constants.h"
 
 cal_r_overlap_R::cal_r_overlap_R(){}
 

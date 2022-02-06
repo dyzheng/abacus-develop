@@ -2,7 +2,8 @@
 #include "xc_type.h"
 #include "global.h"
 #include "myfunc.h"
-#include "../module_base/global_function.h"
+#include "module_base/global_function.h"
+#include "module_base/constants.h"
 #include <stdexcept>
 
 XC_Functional::XC_Functional(){}

@@ -4,6 +4,7 @@
 #include "exx_abfs-parallel-communicate-hexx.h"
 #include "../src_pw/global.h"
 #include "../src_lcao/global_fp.h"
+#include "../module_base/constants.h"
 #include <cassert>
 
 /*

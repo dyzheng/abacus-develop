@@ -7,6 +7,7 @@
 #include "soc.h"
 #include <complex>
 #include "../module_base/timer.h"
+#include "../module_base/constants.h"
 
 WF_atomic::WF_atomic()
 {

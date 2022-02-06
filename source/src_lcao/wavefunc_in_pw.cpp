@@ -4,6 +4,7 @@
 #include "../module_base/math_sphbes.h"
 #include "../module_base/math_polyint.h"
 #include "../module_base/math_ylmreal.h"
+#include "../module_base/constants.h"
 #include "../src_pw/soc.h"
 
 void Wavefunc_in_pw::make_table_q(

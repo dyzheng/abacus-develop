@@ -2,6 +2,7 @@
 #include "../src_pw/global.h"
 #include "record_adj.h" //mohan add 2012-07-06
 #include "../module_base/timer.h"
+#include "../module_base/constants.h"
 #ifdef __DEEPKS
 #include "../module_deepks/LCAO_deepks.h"
 #endif

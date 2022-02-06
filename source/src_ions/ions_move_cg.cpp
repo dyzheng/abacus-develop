@@ -1,6 +1,7 @@
 #include "ions_move_cg.h"
 #include "../src_pw/global.h"
 #include "ions_move_basic.h"
+#include "module_base/constants.h"
 using namespace Ions_Move_Basic;
 
 double Ions_Move_CG::CG_THRESHOLD =-1.0;  //default is 0.5

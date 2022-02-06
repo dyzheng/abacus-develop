@@ -2,6 +2,7 @@
 
 #include "../src_pw/klist.h"
 #include "../module_base/global_variable.h"
+#include "../module_base/constants.h"
 #include "../src_pw/global.h"
 #include "../src_io/write_HS.h"
 

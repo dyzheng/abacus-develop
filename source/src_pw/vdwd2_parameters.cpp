@@ -5,6 +5,8 @@
 
 #include "vdwd2_parameters.h"
 
+#include "../module_base/constants.h"
+
 Vdwd2_Parameters::Vdwd2_Parameters()
 {
 	init_C6();

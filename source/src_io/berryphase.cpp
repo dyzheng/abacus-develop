@@ -1,4 +1,5 @@
 ﻿#include "berryphase.h"
+#include "module_base/constants.h"
 
 bool berryphase::berry_phase_flag=false;
 

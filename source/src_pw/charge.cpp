@@ -28,6 +28,7 @@
 #include "../module_base/math_sphbes.h"
 #include <vector>
 #include "../module_base/timer.h"
+#include "../module_base/constants.h"
 
 Charge::Charge()
 {

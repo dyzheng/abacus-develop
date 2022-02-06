@@ -4,6 +4,7 @@
 #include "../src_pw/global.h"
 #include "../src_parallel/parallel_reduce.h"
 #include "../module_base/timer.h"
+#include "../module_base/constants.h"
 
 bool Optical::opt_epsilon2 = false;
 int  Optical::opt_nbands = 0;

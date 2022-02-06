@@ -5,6 +5,7 @@
 #include "../src_io/chi0_hilbert.h"
 #include "../module_base/memory.h"
 #include "../module_base/timer.h"
+#include "../module_base/constants.h"
 
 wavefunc::wavefunc()
 {

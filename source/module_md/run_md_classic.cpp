@@ -9,6 +9,7 @@
 #include "../input.h"
 #include "../src_io/print_info.h"
 #include "../module_base/timer.h"
+#include "../module_base/constants.h"
 
 Run_MD_CLASSIC::Run_MD_CLASSIC(){}
 

@@ -3,6 +3,7 @@
 #include "../module_base/global_variable.h"
 #include "global.h"
 #include "../src_parallel/parallel_reduce.h"
+#include "../module_base/constants.h"
 
 Efield::Efield(){}
 Efield::~Efield(){}

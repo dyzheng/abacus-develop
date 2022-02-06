@@ -1,4 +1,5 @@
 #include"stress_func.h"
+#include "../module_base/constants.h"
 
 //calculate the kinetic stress in PW base
 void Stress_Func::stress_kin(ModuleBase::matrix& sigma)

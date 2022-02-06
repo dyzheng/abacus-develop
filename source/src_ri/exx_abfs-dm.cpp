@@ -4,6 +4,7 @@
 #include "../module_base/mathzone.h"
 #include "../src_pw/charge_pulay.h"
 #include "../module_base/container_operator.h"
+#include "../module_base/constants.h"
 
 #include "../src_external/src_test/src_global/matrix-test.h"
 #include "../src_external/src_test/src_global/complexmatrix-test.h"

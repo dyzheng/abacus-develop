@@ -2,6 +2,7 @@
 #include "./H_XC_pw.h"
 #include "../module_base/math_integral.h"
 #include "../module_base/timer.h"
+#include "../module_base/constants.h"
 
 //NLCC term, need to be tested
 void Stress_Func::stress_cc(ModuleBase::matrix& sigma, const bool is_pw)

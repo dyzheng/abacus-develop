@@ -11,6 +11,7 @@
 #include "../src_io/print_info.h"
 #include "variable_cell.h" // mohan add 2021-02-01
 #include "src_io/write_wfc_realspace.h"
+#include "module_base/constants.h"
 
 void Ions::opt_ions_pw(void)
 {

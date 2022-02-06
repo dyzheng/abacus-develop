@@ -11,6 +11,7 @@
 #include "../src_pw/wavefunc.h"
 #include "wavefunc_in_pw.h"
 #include "../module_base/lapack_connector.h"
+#include "../module_base/constants.h"
 #include <limits>
 #include "../src_parallel/parallel_global.h"
 

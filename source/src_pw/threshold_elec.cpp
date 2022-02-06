@@ -1,5 +1,6 @@
 #include "global.h"
 #include "threshold_elec.h"
+#include "../module_base/constants.h"
 
 Threshold_Elec::Threshold_Elec()
 {

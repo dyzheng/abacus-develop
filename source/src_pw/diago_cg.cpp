@@ -2,6 +2,7 @@
 #include "global.h"
 #include "../src_parallel/parallel_reduce.h"
 #include "../module_base/timer.h"
+#include "../module_base/constants.h"
 
 int Diago_CG::moved = 0;
 

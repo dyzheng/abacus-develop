@@ -5,6 +5,7 @@
 #include <map>
 #include "../module_base/memory.h"
 #include "../module_base/timer.h"
+#include "../module_base/constants.h"
 
 #ifdef __DEEPKS
 #include "../module_deepks/LCAO_deepks.h"

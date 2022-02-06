@@ -6,6 +6,7 @@
 #include "../module_base/math_sphbes.h"
 #include "../module_base/math_polyint.h" 
 #include "../module_base/math_ylmreal.h" 
+#include "../module_base/constants.h"
 
 toWannier90::toWannier90(int num_kpts, ModuleBase::Matrix3 recip_lattice)
 {

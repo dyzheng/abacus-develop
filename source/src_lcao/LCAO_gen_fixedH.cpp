@@ -7,6 +7,7 @@
 #include <unordered_map>
 #include <map>
 #include "../module_base/timer.h"
+#include "../module_base/constants.h"
 
 LCAO_gen_fixedH::LCAO_gen_fixedH()
 {}

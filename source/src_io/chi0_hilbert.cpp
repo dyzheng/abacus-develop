@@ -14,6 +14,7 @@
 #include "optical.h"
 #include "../src_pw/klist.h"
 #include <iostream>
+#include "../module_base/constants.h"
 #ifdef __LCAO
 #include "../src_lcao/global_fp.h"
 #endif

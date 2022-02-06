@@ -3,6 +3,7 @@
 #include "../src_pw/global.h"
 #include "../module_base/global_function.h"
 #include "exx_abfs-io.h"
+#include "../module_base/constants.h"
 
 #if EXX_H_COMM==1
 #include "exx_abfs-parallel-communicate-allreduce-template.h"

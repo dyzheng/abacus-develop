@@ -1,5 +1,6 @@
 #include "sto_wf.h"
 #include "global.h"
+#include "../module_base/constants.h"
 
 Stochastic_WF::Stochastic_WF()
 {

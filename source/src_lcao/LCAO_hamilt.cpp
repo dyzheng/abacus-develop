@@ -9,6 +9,7 @@
 #include "../module_deepks/LCAO_deepks.h"	//caoyu add 2021-07-26
 #endif
 #include "../module_base/timer.h"
+#include "../module_base/constants.h"
 
 LCAO_Hamilt::LCAO_Hamilt()
 { 

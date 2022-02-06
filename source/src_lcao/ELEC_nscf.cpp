@@ -7,6 +7,7 @@
 #include "ELEC_cbands_k.h"
 #include "../src_io/berryphase.h"
 #include "../src_io/to_wannier90.h"
+#include "../module_base/constants.h"
 
 ELEC_nscf::ELEC_nscf(){}
 ELEC_nscf::~ELEC_nscf(){}

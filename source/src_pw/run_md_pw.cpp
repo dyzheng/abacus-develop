@@ -17,6 +17,7 @@
 #include "../module_md/NVT_NHC.h"
 #include "../module_md/Langevin.h"
 #include "../src_io/print_info.h"
+#include "../module_base/constants.h"
 
 Run_MD_PW::Run_MD_PW()
 {
