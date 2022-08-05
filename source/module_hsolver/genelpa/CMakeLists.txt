@@ -10,11 +10,8 @@ list(GET ELPA_INC_STR -1 ELPA_VER)
 string(REPLACE "elpa-" "" ELPA_VER ${ELPA_VER})
 message(STATUS "elpa version is: " ${ELPA_VER})
 
-if(${ELPA_VER} VERSION_GREATER "2016.05.004")
-    execute_process(COMMAND /bin/sh ${CMAKE_CURRENT_SOURCE_DIR}/translate_elpa_generic.sh ${ELPA_INCLUDE_DIR})
-    add_library(genelpa OBJECT elpa_new.cpp elpa_new_real.cpp elpa_new_complex.cpp utils.cpp)
-else()
-    execute_process(COMMAND /bin/sh ${CMAKE_CURRENT_SOURCE_DIR}/translate_elpa_generated.sh ${ELPA_INCLUDE_DIR})
-    add_library(genelpa OBJECT elpa_legacy.cpp elpa_legacy_real.cpp elpa_legacy_complex.cpp utils.cpp)
-endif()
+
+execute_process(COMMAND /bin/sh ${CMAKE_CURRENT_SOURCE_DIR}/translate_elpa_generic.sh ${ELPA_INCLUDE_DIR})
+add_library(genelpa OBJECT elpa_new.cpp elpa_new_real.cpp elpa_new_complex.cpp utils.cpp)
+
 
