@@ -146,6 +146,12 @@ namespace ModuleESolver
 
         //temporary
         this->Init_GlobalC(inp,ucell);
+
+        //Fix pelec->wg by ocp_kb
+        if(GlobalV::ocp)
+        {
+            this->pelec->fixed_weights(GlobalV::ocp_kb.data());
+        }
     }
 
     void ESolver_KS_PW::beforescf(int istep)

@@ -3,8 +3,8 @@ C	12.011	C_ONCV_PBE-1.0.upf
 N	14.007	N_ONCV_PBE-1.0.upf
 
 NUMERICAL_ORBITAL
-dpsi_C.dat
-dpsi_N.dat
+C_gga_6au_100Ry_2s2p1d.orb
+N_gga_6au_100Ry_2s2p1d.orb
 
 LATTICE_CONSTANT
 1.89035917
