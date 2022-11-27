@@ -1,7 +1,5 @@
 #include "global.h"
 #include "hamilt.h"
-#include "diago_david.h"
-#include "diago_cg.cuh"
 #include "cufft.h"
 #include "../module_base/timer.h"
 
