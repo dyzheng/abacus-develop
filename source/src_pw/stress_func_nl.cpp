@@ -248,7 +248,7 @@ void Stress_Func::stress_nl(ModuleBase::matrix& sigma, const ModuleBase::matrix&
 		}
 	}
 	//do symmetry
-	if(ModuleSymmetry::Symmetry::symm_flag)
+	if(ModuleSymmetry::Symmetry::symm_flag == 1)
 	{
 		GlobalC::symm.stress_symmetry(sigma, GlobalC::ucell);
 	}//end symmetry
