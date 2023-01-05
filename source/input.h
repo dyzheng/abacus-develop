@@ -336,7 +336,7 @@ class Input
 
     bool ocp;
     std::string ocp_set;
-    int out_mul; // qifeng add 2019-9-10
+    bool out_mul; // qifeng add 2019-9-10
     // added by zhengdy-soc
     bool noncolin;
     bool lspinorb;
@@ -470,6 +470,10 @@ class Input
     //    device control denghui added on 2022-11-15
     //==========================================================
     std::string device;
+    //==========================================================
+    //    precision control denghui added on 2023-01-01
+    //==========================================================
+    std::string precision;
 
     //==========================================================
     // variables for test only
