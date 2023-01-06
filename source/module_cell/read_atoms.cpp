@@ -606,7 +606,9 @@ bool UnitCell::read_atom_positions(std::ifstream &ifpos, std::ofstream &ofs_runn
                                                 }
 												else if ( tmpid == "mag" || tmpid == "magmom")
 												{
+#ifndef __CMD
 													set_element_mag_zero = true;
+#endif
 													double tmpamg=0;
 													ifpos >> tmpamg;
 													tmp=ifpos.get();
@@ -790,10 +792,12 @@ bool UnitCell::read_atom_positions(std::ifstream &ifpos, std::ofstream &ofs_runn
 				}//endj
 			}// end na
 			//reset some useless parameters
+#ifndef __CMD
 			if(set_element_mag_zero)
 			{
 				magnet.start_magnetization[it] = 0.0;
 			}
+#endif
 		}//end for ntype
 	}// end scan_begin
 
