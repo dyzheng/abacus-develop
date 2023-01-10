@@ -189,6 +189,7 @@ void Input_Conv::Convert(void)
         GlobalC::dftu.Yukawa = INPUT.yukawa_potential;
         GlobalC::dftu.omc = INPUT.omc;
         GlobalC::dftu.orbital_corr = INPUT.orbital_corr;
+        GlobalC::dftu.mixing_dftu = INPUT.mixing_dftu;
         if (!INPUT.yukawa_potential)
         {
             // Duradev's rotational invariant formulation is implemented
@@ -275,18 +276,15 @@ void Input_Conv::Convert(void)
 // Fuxiang He add 2016-10-26
 //----------------------------------------------------------
 #ifdef __LCAO
-    ELEC_evolve::td_scf_thr = INPUT.td_scf_thr;
-    ELEC_evolve::td_dt = INPUT.td_dt;
     ELEC_evolve::td_force_dt = INPUT.td_force_dt;
     ELEC_evolve::td_val_elec_01 = INPUT.td_val_elec_01;
     ELEC_evolve::td_val_elec_02 = INPUT.td_val_elec_02;
     ELEC_evolve::td_val_elec_03 = INPUT.td_val_elec_03;
     ELEC_evolve::td_vext = INPUT.td_vext;
     ELEC_evolve::td_vext_dire = INPUT.td_vext_dire;
-    ELEC_evolve::td_timescale = INPUT.td_timescale;
-    ELEC_evolve::td_vexttype = INPUT.td_vexttype;
-    ELEC_evolve::td_vextout = INPUT.td_vextout;
-    ELEC_evolve::td_dipoleout = INPUT.td_dipoleout;
+    ELEC_evolve::out_dipole = INPUT.out_dipole;
+    ELEC_evolve::td_print_eij = INPUT.td_print_eij;
+    ELEC_evolve::td_edm = INPUT.td_edm;
 #endif
 
     // setting for constrained DFT, jiyy add 2020.10.11
