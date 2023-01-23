@@ -1,10 +1,10 @@
-#include "global.h"
+#include "src_pw/global.h"
 #include "klist.h"
-#include "../src_parallel/parallel_global.h"
-#include "../module_symmetry/symmetry.h"
-#include "../src_parallel/parallel_reduce.h"
-#include "../src_parallel/parallel_common.h"
-#include "../module_base/memory.h"
+#include "src_parallel/parallel_global.h"
+#include "module_symmetry/symmetry.h"
+#include "src_parallel/parallel_reduce.h"
+#include "src_parallel/parallel_common.h"
+#include "module_base/memory.h"
 #include "module_io/berryphase.h"
 
 K_Vectors::K_Vectors()

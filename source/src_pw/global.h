@@ -12,7 +12,7 @@
 #include "../src_ri/exx_lip.h"
 #include "../module_xc/exx_info.h"
 #endif
-#include "klist.h"
+#include "module_cell/klist.h"
 #include "magnetism.h"
 #include "structure_factor.h"
 #include "../module_pw/pw_basis_k.h"

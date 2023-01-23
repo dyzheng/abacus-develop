@@ -56,7 +56,7 @@ namespace GlobalC
  */
 
 #define private public
-#include "src_pw/klist.h"
+#include "module_cell/klist.h"
 
 class KlistTest : public testing::Test
 {

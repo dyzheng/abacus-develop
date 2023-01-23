@@ -138,6 +138,7 @@ OBJS_CELL=atom_pseudo.o\
     read_atoms.o\
     read_cell_pseudopots.o\
     setup_nonlocal.o\
+    klist.o\
 
 OBJS_DEEPKS=LCAO_deepks.o\
         LCAO_deepks_fdelta.o\
@@ -445,7 +446,6 @@ OBJS_SRCPW=H_Ewald_pw.o\
     wf_op.o\
     vnl_op.o\
     global.o\
-    klist.o\
     magnetism.o\
     occupy.o\
     structure_factor.o\
