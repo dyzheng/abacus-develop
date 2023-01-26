@@ -16,7 +16,7 @@
 //---------------------------------------------------
 #include "module_hsolver/hsolver_pw.h"
 #include "module_elecstate/elecstate_pw.h"
-#include "module_hamilt/hamilt_pw.h"
+#include "hamilt_pwdft/hamilt_pw.h"
 #include "module_hsolver/diago_iter_assist.h"
 #include "module_vdw/vdw.h"
 #include "module_base/memory.h"

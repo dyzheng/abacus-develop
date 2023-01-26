@@ -483,7 +483,10 @@ target_link_libraries(${ABACUS_BIN_NAME}
     xc_
     hsolver
     elecstate
-    hamilt
+    hamilt_general
+    hamilt_pwdft
+    hamilt_lcao
+    hamilt_ofdft
     psi
     esolver
     vdw

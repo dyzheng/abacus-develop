@@ -5,7 +5,7 @@
 #include "../module_io/write_HS.h"
 #include "../src_pw/global.h"
 #include "ELEC_evolve.h"
-#include "module_hamilt/hamilt_lcao.h"
+#include "hamilt_lcao/hamilt_lcao.h"
 
 #include <complex>
 // fuxiang add 2016-10-28

@@ -20,7 +20,7 @@
 #include "../src_pw/of_stress_pw.h"
 //---------------------------------------------------
 #include "module_elecstate/elecstate_pw.h"
-#include "module_hamilt/hamilt_pw.h"
+#include "hamilt_pwdft/hamilt_pw.h"
 #include "module_relax/relax_old/variable_cell.h"    // liuyu 2022-11-07
 
 namespace ModuleESolver

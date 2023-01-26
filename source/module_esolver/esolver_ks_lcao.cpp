@@ -25,9 +25,9 @@
 
 //-----HSolver ElecState Hamilt--------
 #include "module_elecstate/elecstate_lcao.h"
-#include "module_hamilt/hamilt_lcao.h"
+#include "hamilt_lcao/hamilt_lcao.h"
 #include "module_hsolver/hsolver_lcao.h"
-#include "module_hamilt/ks_lcao/op_exx_lcao.h"
+#include "hamilt_lcao/ks_lcao/op_exx_lcao.h"
 // function used by deepks
 #include "module_elecstate/cal_dm.h"
 //---------------------------------------------------

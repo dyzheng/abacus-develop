@@ -4,7 +4,10 @@ add_subdirectory(module_symmetry)
 add_subdirectory(module_neighbor)
 add_subdirectory(module_psi)
 add_subdirectory(module_elecstate)
-add_subdirectory(module_hamilt)
+add_subdirectory(hamilt_general)
+add_subdirectory(hamilt_pwdft)
+add_subdirectory(hamilt_ofdft)
+add_subdirectory(hamilt_lcao)
 add_subdirectory(module_hsolver)
 add_subdirectory(module_orbital)
 add_subdirectory(module_md)
@@ -33,10 +36,10 @@ add_library(
 )
 
 list(APPEND device_srcs
-  module_hamilt/kernels/nonlocal_op.cpp
-  module_hamilt/kernels/veff_op.cpp
-  module_hamilt/kernels/ekinetic_op.cpp
-  module_hamilt/kernels/meta_op.cpp
+  hamilt_pwdft/kernels/nonlocal_op.cpp
+  hamilt_pwdft/kernels/veff_op.cpp
+  hamilt_pwdft/kernels/ekinetic_op.cpp
+  hamilt_pwdft/kernels/meta_op.cpp
   module_pw/kernels/pw_op.cpp
   module_hsolver/kernels/dngvd_op.cpp
   module_hsolver/kernels/math_kernel_op.cpp
@@ -52,10 +55,10 @@ list(APPEND device_srcs
 
 if(USE_CUDA)
   list(APPEND device_srcs
-    module_hamilt/kernels/cuda/nonlocal_op.cu
-    module_hamilt/kernels/cuda/veff_op.cu
-    module_hamilt/kernels/cuda/ekinetic_op.cu
-    module_hamilt/kernels/cuda/meta_op.cu
+    hamilt_pwdft/kernels/cuda/nonlocal_op.cu
+    hamilt_pwdft/kernels/cuda/veff_op.cu
+    hamilt_pwdft/kernels/cuda/ekinetic_op.cu
+    hamilt_pwdft/kernels/cuda/meta_op.cu
     module_pw/kernels/cuda/pw_op.cu
     module_hsolver/kernels/cuda/dngvd_op.cu
     module_hsolver/kernels/cuda/math_kernel_op.cu
@@ -71,10 +74,10 @@ endif()
 
 if(USE_ROCM)
   hip_add_library(device_rocm STATIC
-    module_hamilt/kernels/rocm/nonlocal_op.hip.cu
-    module_hamilt/kernels/rocm/veff_op.hip.cu
-    module_hamilt/kernels/rocm/ekinetic_op.hip.cu
-    module_hamilt/kernels/rocm/meta_op.hip.cu
+    hamilt_pwdft/kernels/rocm/nonlocal_op.hip.cu
+    hamilt_pwdft/kernels/rocm/veff_op.hip.cu
+    hamilt_pwdft/kernels/rocm/ekinetic_op.hip.cu
+    hamilt_pwdft/kernels/rocm/meta_op.hip.cu
     module_pw/kernels/rocm/pw_op.hip.cu
     module_hsolver/kernels/rocm/dngvd_op.hip.cu
     module_hsolver/kernels/rocm/math_kernel_op.hip.cu

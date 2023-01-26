@@ -4,7 +4,7 @@
 #include "string.h"
 #include "fstream"
 #include "module_hsolver/hsolver.h"
-#include "module_hamilt/hamilt.h"
+#include "hamilt_general/hamilt.h"
 #include "module_pw/pw_basis_k.h"
 #include "module_io/cal_test.h"
 #include "../src_pw/charge_extra.h"

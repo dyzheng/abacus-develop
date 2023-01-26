@@ -4,7 +4,7 @@
 #include "../module_base/complexmatrix.h"
 #include "../module_base/global_function.h"
 #include "../module_base/global_variable.h"
-#include "module_hamilt/hamilt_lcao.h"
+#include "hamilt_lcao/hamilt_lcao.h"
 #include "module_psi/psi.h"
 #include "src_lcao/LCAO_matrix.h"
 #include "src_lcao/local_orbital_wfc.h"

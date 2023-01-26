@@ -2,13 +2,13 @@
 #define ESOLVER_OF_H
 
 #include "esolver_fp.h"
-#include "../module_base/opt_TN.hpp"
-#include "../module_base/opt_DCsrch.h"
-#include "../module_psi/psi.h"
-#include "../src_pw/charge_extra.h"    // liuyu add 2022-11-07
-#include "../module_hamilt/of_pw/kedf_tf.h"
-#include "../module_hamilt/of_pw/kedf_vw.h"
-#include "../module_hamilt/of_pw/kedf_wt.h"
+#include "module_base/opt_TN.hpp"
+#include "module_base/opt_DCsrch.h"
+#include "module_psi/psi.h"
+#include "src_pw/charge_extra.h"    // liuyu add 2022-11-07
+#include "hamilt_ofdft/kedf_tf.h"
+#include "hamilt_ofdft/kedf_vw.h"
+#include "hamilt_ofdft/kedf_wt.h"
 #include "src_pw/charge.h"
 
 namespace ModuleESolver
