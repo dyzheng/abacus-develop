@@ -13,14 +13,15 @@ if(ENABLE_LCAO)
         operator_lcao/deepks_lcao.cpp
         operator_lcao/op_exx_lcao.cpp
     )
-endif()
 
-add_library(
-    hamilt_lcao
-    OBJECT
-    ${objects}
-)
+    add_library(
+        hamilt_lcao
+        OBJECT
+        ${objects}
+    )
 
-if(ENABLE_COVERAGE)
-  add_coverage(hamilt_lcao)
+    if(ENABLE_COVERAGE)
+    add_coverage(hamilt_lcao)
+    endif()
+
 endif()
