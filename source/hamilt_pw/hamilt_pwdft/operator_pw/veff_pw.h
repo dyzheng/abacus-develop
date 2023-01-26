@@ -4,7 +4,7 @@
 #include "operator_pw.h"
 #include "module_base/matrix.h"
 #include "module_pw/pw_basis_k.h"
-#include "hamilt_pwdft/kernels/veff_op.h"
+#include "hamilt_pw/hamilt_pwdft/kernels/veff_op.h"
 
 namespace hamilt {
 

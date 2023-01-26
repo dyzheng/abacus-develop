@@ -2,7 +2,7 @@
 #include <complex>
 #include <gtest/gtest.h>
 #include "module_psi/kernels/memory_op.h"
-#include "hamilt_pwdft/kernels/meta_op.h"
+#include "hamilt_pw/hamilt_pwdft/kernels/meta_op.h"
 
 class TestModuleHamiltMeta : public ::testing::Test
 {

@@ -5,10 +5,10 @@
 #include "module_base/global_variable.h"
 #include "src_pw/global.h"
 
-#include "ks_pw/veff_pw.h"
-#include "ks_pw/ekinetic_pw.h"
-#include "ks_pw/meta_pw.h"
-#include "ks_pw/nonlocal_pw.h"
+#include "operator_pw/veff_pw.h"
+#include "operator_pw/ekinetic_pw.h"
+#include "operator_pw/meta_pw.h"
+#include "operator_pw/nonlocal_pw.h"
 
 namespace hamilt
 {

@@ -7,18 +7,18 @@
 #include "src_pw/global.h"
 #ifdef __DEEPKS
 #include "module_deepks/LCAO_deepks.h"
-#include "ks_lcao/deepks_lcao.h"
+#include "operator_lcao/deepks_lcao.h"
 #endif
 #ifdef __ELPA
 #include "module_hsolver/diago_elpa.h"
 #endif
-#include "ks_lcao/op_dftu_lcao.h"
-#include "ks_lcao/ekinetic_lcao.h"
-#include "ks_lcao/meta_lcao.h"
-#include "ks_lcao/nonlocal_lcao.h"
-#include "ks_lcao/op_exx_lcao.h"
-#include "ks_lcao/overlap_lcao.h"
-#include "ks_lcao/veff_lcao.h"
+#include "operator_lcao/op_dftu_lcao.h"
+#include "operator_lcao/ekinetic_lcao.h"
+#include "operator_lcao/meta_lcao.h"
+#include "operator_lcao/nonlocal_lcao.h"
+#include "operator_lcao/op_exx_lcao.h"
+#include "operator_lcao/overlap_lcao.h"
+#include "operator_lcao/veff_lcao.h"
 #include "module_hsolver/hsolver_lcao.h"
 #include "module_xc/xc_functional.h"
 

@@ -2,7 +2,7 @@
 #include <complex>
 #include <gtest/gtest.h>
 #include "module_psi/kernels/memory_op.h"
-#include "hamilt_pwdft/kernels/veff_op.h"
+#include "hamilt_pw/hamilt_pwdft/kernels/veff_op.h"
 
 class TestModuleHamiltVeff : public ::testing::Test
 {

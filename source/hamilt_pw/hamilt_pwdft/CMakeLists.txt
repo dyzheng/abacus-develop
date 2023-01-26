@@ -1,13 +1,13 @@
-add_subdirectory(ks_pw)
+add_subdirectory(operator_pw)
 
 list(APPEND objects
     hamilt_pw.cpp
-    ks_pw/ekinetic_pw.cpp
-    ks_pw/veff_pw.cpp
-    ks_pw/nonlocal_pw.cpp
-    ks_pw/meta_pw.cpp
-    ks_pw/velocity_pw.cpp
-    ks_pw/operator_pw.cpp
+    operator_pw/ekinetic_pw.cpp
+    operator_pw/veff_pw.cpp
+    operator_pw/nonlocal_pw.cpp
+    operator_pw/meta_pw.cpp
+    operator_pw/velocity_pw.cpp
+    operator_pw/operator_pw.cpp
 )
 
 add_library(

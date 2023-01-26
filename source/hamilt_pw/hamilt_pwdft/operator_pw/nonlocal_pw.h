@@ -4,7 +4,7 @@
 #include "operator_pw.h"
 
 #include "module_cell/unitcell.h"
-#include "hamilt_pwdft/kernels/nonlocal_op.h"
+#include "hamilt_pw/hamilt_pwdft/kernels/nonlocal_op.h"
 #include "module_hsolver/kernels/math_kernel_op.h"
 
 #include "src_pw/VNL_in_pw.h"

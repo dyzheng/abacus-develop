@@ -1,17 +1,17 @@
-add_subdirectory(ks_lcao)
+add_subdirectory(operator_lcao)
 
 if(ENABLE_LCAO)
     list(APPEND objects
         hamilt_lcao.cpp
-        ks_lcao/operator_lcao.cpp
-        ks_lcao/ekinetic_lcao.cpp
-        ks_lcao/nonlocal_lcao.cpp
-        ks_lcao/overlap_lcao.cpp
-        ks_lcao/veff_lcao.cpp
-        ks_lcao/meta_lcao.cpp
-        ks_lcao/op_dftu_lcao.cpp
-        ks_lcao/deepks_lcao.cpp
-        ks_lcao/op_exx_lcao.cpp
+        operator_lcao/operator_lcao.cpp
+        operator_lcao/ekinetic_lcao.cpp
+        operator_lcao/nonlocal_lcao.cpp
+        operator_lcao/overlap_lcao.cpp
+        operator_lcao/veff_lcao.cpp
+        operator_lcao/meta_lcao.cpp
+        operator_lcao/op_dftu_lcao.cpp
+        operator_lcao/deepks_lcao.cpp
+        operator_lcao/op_exx_lcao.cpp
     )
 endif()
 

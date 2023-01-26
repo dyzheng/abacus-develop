@@ -3,7 +3,7 @@
 #include "../../src_pw/structure_factor.h"
 #include "../../module_psi/psi.h"
 #include "../../hamilt_general/hamilt.h"
-#include "../../hamilt_pwdft/hamilt_pw.h"
+#include "../../hamilt_pw/hamilt_pwdft/hamilt_pw.h"
 #include "../diago_cg.h"
 #include "../diago_iter_assist.h"
 #include "diago_mock.h"

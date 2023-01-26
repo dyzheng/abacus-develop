@@ -3,7 +3,7 @@
 #include <iostream>
 #include <gtest/gtest.h>
 #include "module_psi/kernels/memory_op.h"
-#include "hamilt_pwdft/kernels/nonlocal_op.h"
+#include "hamilt_pw/hamilt_pwdft/kernels/nonlocal_op.h"
 
 class TestModuleHamiltNonlocal : public ::testing::Test
 {

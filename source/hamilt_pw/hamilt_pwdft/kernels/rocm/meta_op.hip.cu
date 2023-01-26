@@ -1,9 +1,9 @@
-#include "hamilt_pwdft/kernels/meta_op.h"
+#include "hamilt_pw/hamilt_pwdft/kernels/meta_op.h"
 
 #include <complex>
 
 #include <thrust/complex.h>
-#include <cuda_runtime.h>
+#include <hip/hip_runtime.h>
 
 namespace hamilt {
 
@@ -51,7 +51,7 @@ void meta_pw_op<FPTYPE, psi::DEVICE_GPU>::operator() (
         const bool add)
 {
     const int block = (npw + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
-    meta_pw<FPTYPE><<<block, THREADS_PER_BLOCK>>>(
+    hipLaunchKernelGGL(HIP_KERNEL_NAME(meta_pw<FPTYPE>), dim3(block), dim3(THREADS_PER_BLOCK), 0, 0, 
         ik, pol, npw, npwx,
         tpiba,
         gcar, kvec_c,

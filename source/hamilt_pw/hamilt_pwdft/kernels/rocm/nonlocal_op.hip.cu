@@ -1,11 +1,11 @@
-#include "hamilt_pwdft/kernels/nonlocal_op.h"
+#include "hamilt_pw/hamilt_pwdft/kernels/nonlocal_op.h"
 
 #include <complex>
-
-#include <cuda_runtime.h>
 #include <thrust/complex.h>
 
-namespace hamilt {
+#include <hip/hip_runtime.h>
+
+using namespace hamilt; 
 
 #define THREADS_PER_BLOCK 256
 
@@ -92,7 +92,7 @@ void hamilt::nonlocal_pw_op<FPTYPE, psi::DEVICE_GPU>::operator() (
 {
   // denghui implement 20221019
   // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-  nonlocal_pw<FPTYPE><<<l1 * l2, THREADS_PER_BLOCK>>>(
+  hipLaunchKernelGGL(HIP_KERNEL_NAME(nonlocal_pw<FPTYPE>), dim3(l1 * l2), dim3(THREADS_PER_BLOCK), 0, 0, 
     l1, l2, l3, // loop size
     sum, iat, spin, nkb,   // control params
     deeq_x, deeq_y, deeq_z, deeq,  // deeq realArray operator()
@@ -100,6 +100,20 @@ void hamilt::nonlocal_pw_op<FPTYPE, psi::DEVICE_GPU>::operator() (
     reinterpret_cast<const thrust::complex<FPTYPE>*>(becp)); // array of data
   iat += l1;
   sum += l1 * l3;
+  // for (int ii = 0; ii < l1; ii++) {
+  //   // each atom has nproj, means this is with structure factor;
+  //   // each projector (each atom) must multiply coefficient
+  //   // with all the other projectors.
+  //   for (int jj = 0; jj < l2; ++jj) 
+  //     for (int kk = 0; kk < l3; kk++) 
+  //       for (int xx = 0; xx < l3; xx++) 
+  //         ps[(sum + kk) * l2 + jj]
+  //             += deeq[((current_spin * deeq_x + iat) * deeq_y + xx) * deeq_z + kk] 
+  //             *  becp[jj * nkb + sum + xx];
+  //   sum += l3;
+  //   ++iat;
+  // }
+  // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 }
 
 template <typename FPTYPE> 
@@ -120,7 +134,7 @@ void hamilt::nonlocal_pw_op<FPTYPE, psi::DEVICE_GPU>::operator() (
 {
   // denghui implement 20221109
   // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-  nonlocal_pw<FPTYPE><<<l1 * l2, THREADS_PER_BLOCK>>>(
+  hipLaunchKernelGGL(HIP_KERNEL_NAME(nonlocal_pw<FPTYPE>), dim3(l1 * l2), dim3(THREADS_PER_BLOCK), 0, 0, 
     l1, l2, l3, // loop size
     sum, iat, nkb,   // control params
     deeq_x, deeq_y, deeq_z, 
@@ -132,7 +146,7 @@ void hamilt::nonlocal_pw_op<FPTYPE, psi::DEVICE_GPU>::operator() (
   // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 }
 
+namespace hamilt{
 template struct nonlocal_pw_op<float, psi::DEVICE_GPU>;
 template struct nonlocal_pw_op<double, psi::DEVICE_GPU>;
-
-}  // namespace hamilt
+}

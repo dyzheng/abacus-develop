@@ -1,7 +1,7 @@
 #ifndef ESOLVER_KS_PW_H
 #define ESOLVER_KS_PW_H
 #include "./esolver_ks.h"
-#include "hamilt_pwdft/ks_pw/velocity_pw.h"
+#include "hamilt_pw/hamilt_pwdft/operator_pw/velocity_pw.h"
 // #include "Basis_PW.h"
 // #include "Estate_PW.h"
 // #include "Hamilton_PW.h"

@@ -2,7 +2,7 @@
 #define EKINETICPW_H
 
 #include "operator_pw.h"
-#include "hamilt_pwdft/kernels/ekinetic_op.h"
+#include "hamilt_pw/hamilt_pwdft/kernels/ekinetic_op.h"
 
 namespace hamilt {
 

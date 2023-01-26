@@ -4,7 +4,7 @@
 #include "elecstate.h"
 #include "module_pw/pw_basis_k.h"
 #include "module_elecstate/kernels/elecstate_op.h"
-#include "hamilt_pwdft/kernels/meta_op.h"
+#include "hamilt_pw/hamilt_pwdft/kernels/meta_op.h"
 
 namespace elecstate
 {

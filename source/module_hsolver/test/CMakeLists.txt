@@ -7,7 +7,7 @@ AddTest(
           ../../src_parallel/parallel_reduce.cpp
           ../../src_parallel/parallel_global.cpp ../../module_pw/test/test_tool.cpp
           ../../hamilt_general/operator.cpp
-          ../../hamilt_pwdft/ks_pw/operator_pw.cpp
+          ../../hamilt_pw/hamilt_pwdft/operator_pw/operator_pw.cpp
 )
 AddTest(
   TARGET HSolver_dav
@@ -16,7 +16,7 @@ AddTest(
           ../../src_parallel/parallel_reduce.cpp ../../src_parallel/parallel_global.cpp  ../../src_parallel/parallel_common.cpp
           ../../module_pw/test/test_tool.cpp
           ../../hamilt_general/operator.cpp
-          ../../hamilt_pwdft/ks_pw/operator_pw.cpp
+          ../../hamilt_pw/hamilt_pwdft/operator_pw/operator_pw.cpp
 )
 
 if(ENABLE_LCAO)
