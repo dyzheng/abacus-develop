@@ -4,7 +4,6 @@ list(APPEND objects
     VNL_in_pw.cpp
     VNL_grad_pw.cpp
     energy.cpp
-    forces.cpp
     global.cpp
     magnetism.cpp
     occupy.cpp
@@ -17,16 +16,6 @@ list(APPEND objects
     sto_func.cpp
     sto_forces.cpp
     sto_stress_pw.cpp
-    stress_func_cc.cpp
-    stress_func_ewa.cpp
-    stress_func_gga.cpp
-    stress_func_mgga.cpp
-    stress_func_har.cpp
-    stress_func_kin.cpp
-    stress_func_loc.cpp
-    stress_func_nl.cpp
-    stress_func_print.cpp
-    stress_pw.cpp
     of_stress_pw.cpp
     symmetry_rho.cpp
     threshold_elec.cpp

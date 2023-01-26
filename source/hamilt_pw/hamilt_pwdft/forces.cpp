@@ -1,7 +1,7 @@
 #include "forces.h"
 
-#include "../module_symmetry/symmetry.h"
-#include "global.h"
+#include "module_symmetry/symmetry.h"
+#include "src_pw/global.h"
 // new
 #include "module_base/math_integral.h"
 #include "module_base/timer.h"
@@ -15,7 +15,7 @@
 #include "module_vdw/vdw.h"
 #include "module_psi/kernels/device.h"
 
-#include "H_Ewald_pw.h"
+#include "src_pw/H_Ewald_pw.h"
 #ifdef _OPENMP
 #include <omp.h>
 #endif

@@ -1,9 +1,9 @@
 #include "stress_func.h"
-#include "../module_base/math_integral.h"
-#include "../module_base/tool_threading.h"
-#include "../module_base/timer.h"
-#include "../module_base/libm/libm.h"
-#include "global.h"
+#include "module_base/math_integral.h"
+#include "module_base/tool_threading.h"
+#include "module_base/timer.h"
+#include "module_base/libm/libm.h"
+#include "src_pw/global.h"
 
 //calculate local pseudopotential stress in PW or VL_dVL stress in LCAO
 template<typename FPTYPE, typename Device>

@@ -8,6 +8,17 @@ list(APPEND objects
     operator_pw/meta_pw.cpp
     operator_pw/velocity_pw.cpp
     operator_pw/operator_pw.cpp
+    forces.cpp
+    stress_func_cc.cpp
+    stress_func_ewa.cpp
+    stress_func_gga.cpp
+    stress_func_mgga.cpp
+    stress_func_har.cpp
+    stress_func_kin.cpp
+    stress_func_loc.cpp
+    stress_func_nl.cpp
+    stress_func_print.cpp
+    stress_pw.cpp
 )
 
 add_library(

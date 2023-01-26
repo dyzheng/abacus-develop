@@ -1,7 +1,7 @@
 #ifndef OF_STRESS_PW_H
 #define OF_STRESS_PW_H
 
-#include "stress_func.h"
+#include "hamilt_pw/hamilt_pwdft/stress_func.h"
 #include "module_elecstate/elecstate.h"
 
 class OF_Stress_PW: public Stress_Func<double>

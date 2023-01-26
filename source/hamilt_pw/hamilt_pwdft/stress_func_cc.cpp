@@ -1,8 +1,8 @@
-#include "./stress_func.h"
-#include "../module_xc/xc_functional.h"
-#include "../module_base/math_integral.h"
-#include "../module_base/timer.h"
-#include "global.h"
+#include "stress_func.h"
+#include "module_xc/xc_functional.h"
+#include "module_base/math_integral.h"
+#include "module_base/timer.h"
+#include "src_pw/global.h"
 
 //NLCC term, need to be tested
 template<typename FPTYPE, typename Device>

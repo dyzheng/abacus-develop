@@ -1,9 +1,9 @@
-#include "./stress_func.h"
-#include "./H_Ewald_pw.h"
-#include "../module_base/timer.h"
-#include "../module_base/tool_threading.h"
-#include "../module_base/libm/libm.h"
-#include "global.h"
+#include "stress_func.h"
+#include "src_pw/H_Ewald_pw.h"
+#include "module_base/timer.h"
+#include "module_base/tool_threading.h"
+#include "module_base/libm/libm.h"
+#include "src_pw/global.h"
 
 #ifdef _OPENMP
 #include <omp.h>
