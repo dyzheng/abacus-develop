@@ -30,6 +30,7 @@ VPATH=./src_global:\
 ./module_elecstate:\
 ./module_elecstate/kernels:\
 ./module_elecstate/potentials:\
+./module_elecstate/module_charge:\
 ./module_psi:\
 ./module_psi/kernels:\
 ./hamilt_general:\

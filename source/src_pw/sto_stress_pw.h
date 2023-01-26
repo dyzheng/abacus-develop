@@ -2,8 +2,8 @@
 #define STO_STRESS_PW_H
 
 #include "stress_func.h"
-#include "./sto_wf.h"
-#include "charge.h"
+#include "sto_wf.h"
+#include "module_elecstate/module_charge/charge.h"
 //qianrui create 2021-6-4
 
 class Sto_Stress_PW:public Stress_Func<double>

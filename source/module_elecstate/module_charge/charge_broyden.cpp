@@ -1,10 +1,10 @@
 #include "charge_mixing.h"
-#include "global.h"
-#include "../module_base/global_variable.h"
-#include "../module_base/inverse_matrix.h"
-#include "../src_parallel/parallel_reduce.h"
-#include "../module_base/memory.h"
-#include "../module_base/timer.h"
+#include "src_pw/global.h"
+#include "module_base/global_variable.h"
+#include "module_base/inverse_matrix.h"
+#include "src_parallel/parallel_reduce.h"
+#include "module_base/memory.h"
+#include "module_base/timer.h"
 
 void Charge_Mixing::Simplified_Broyden_mixing(const int &iter,
 	Charge* chr)

@@ -2,7 +2,7 @@
 #define ELECSTATE_H
 
 #include "module_psi/psi.h"
-#include "src_pw/charge.h"
+#include "module_elecstate/module_charge/charge.h"
 #include "module_cell/klist.h"
 #include "potentials/potential_new.h"
 

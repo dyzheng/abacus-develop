@@ -3,11 +3,6 @@ list(APPEND objects
     VL_in_pw.cpp
     VNL_in_pw.cpp
     VNL_grad_pw.cpp
-    charge.cpp
-    charge_broyden.cpp
-    charge_extra.cpp
-    charge_mixing.cpp
-    charge_pulay.cpp
     energy.cpp
     forces.cpp
     global.cpp

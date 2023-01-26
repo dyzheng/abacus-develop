@@ -5,8 +5,8 @@
 #define GINT_TOOLS_H
 #include "grid_technique.h"
 #include <cstdlib>
-#include "../src_pw/charge.h"
-#include "../src_lcao/LCAO_matrix.h"
+#include "module_elecstate/module_charge/charge.h"
+#include "src_lcao/LCAO_matrix.h"
 
 namespace Gint_Tools
 {

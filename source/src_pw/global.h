@@ -6,7 +6,7 @@
 #include "../module_io/restart.h"
 #include "../module_relax/relax_driver.h"
 #include "VNL_in_pw.h"
-#include "charge_mixing.h"
+#include "module_elecstate/module_charge/charge_mixing.h"
 #include "energy.h"
 #ifdef __EXX
 #include "../src_ri/exx_lip.h"

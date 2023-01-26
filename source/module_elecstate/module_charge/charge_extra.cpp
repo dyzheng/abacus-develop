@@ -1,7 +1,7 @@
 #include "charge_extra.h"
-#include "../module_base/global_function.h"
-#include "../module_base/global_variable.h"
-#include "global.h"
+#include "module_base/global_function.h"
+#include "module_base/global_variable.h"
+#include "src_pw/global.h"
 
 Charge_Extra::Charge_Extra()
 {

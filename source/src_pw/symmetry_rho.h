@@ -1,10 +1,10 @@
 #ifndef SYMMETRY_RHO_H
 #define SYMMETRY_RHO_H
-#include "../src_pw/charge.h"
-#include "../module_pw/pw_basis.h"
-#include "../src_parallel/parallel_grid.h"
+#include "module_elecstate/module_charge/charge.h"
+#include "module_pw/pw_basis.h"
+#include "src_parallel/parallel_grid.h"
 
-#include "../module_symmetry/symmetry.h"
+#include "module_symmetry/symmetry.h"
 
 class Symmetry_rho
 {

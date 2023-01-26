@@ -1,8 +1,8 @@
 #include "charge_mixing.h"
-#include "global.h"
-#include "../module_base/inverse_matrix.h"
-#include "../src_parallel/parallel_reduce.h"
-#include "../module_base/memory.h"
+#include "src_pw/global.h"
+#include "module_base/inverse_matrix.h"
+#include "src_parallel/parallel_reduce.h"
+#include "module_base/memory.h"
 
 void Charge_Mixing::Pulay_mixing(Charge* chr)
 {
@@ -379,7 +379,7 @@ void Charge_Mixing::generate_Abar(ModuleBase::matrix &A)const
 	return;
 }
 
-#include "../module_base/complexmatrix.h"
+#include "module_base/complexmatrix.h"
 void Charge_Mixing::inverse_preA(const int &dim, ModuleBase::matrix &preA)const
 {
 	ModuleBase::ComplexMatrix B(dim, dim);

@@ -1,7 +1,7 @@
 #ifndef CHARGE_EXTRA_H
 #define CHARGE_EXTRA_H
 
-#include "../module_cell/unitcell.h"
+#include "module_cell/unitcell.h"
 #include "charge.h"
 
 using namespace std;

@@ -16,19 +16,19 @@
 // (as in update) the total charge only could be needed,
 // even in a LSDA calculation.
 //----------------------------------------------------------
-#include "../module_base/global_function.h"
-#include "../module_base/global_variable.h"
-#include "../module_base/memory.h"
-#include "../src_parallel/parallel_reduce.h"
-#include "global.h"
+#include "module_base/global_function.h"
+#include "module_base/global_variable.h"
+#include "module_base/memory.h"
+#include "src_parallel/parallel_reduce.h"
+#include "src_pw/global.h"
 #include "charge.h"
-#include "magnetism.h"
-#include "../src_parallel/parallel_grid.h"
-#include "../module_base/math_integral.h"
-#include "../module_base/math_sphbes.h"
+#include "src_pw/magnetism.h"
+#include "src_parallel/parallel_grid.h"
+#include "module_base/math_integral.h"
+#include "module_base/math_sphbes.h"
 #include <vector>
-#include "../module_base/timer.h"
-#include "../module_base/tool_threading.h"
+#include "module_base/timer.h"
+#include "module_base/tool_threading.h"
 
 Charge::Charge()
 {
@@ -1121,7 +1121,7 @@ void Charge::init_final_scf()
 // calculate total number of electrons (GlobalV::nelec) and default
 // number of bands (GlobalV::NBANDS).
 //=========================================================
-#include "occupy.h"
+#include "src_pw/occupy.h"
 void Charge::cal_nelec(void)
 {
 	ModuleBase::TITLE("UnitCell","cal_nelec");

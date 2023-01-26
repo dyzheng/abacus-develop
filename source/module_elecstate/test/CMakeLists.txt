@@ -10,7 +10,7 @@ if(ENABLE_LCAO)
     LIBS ${math_libs} planewave_serial base_serial psi device
     SOURCES updaterhok_pw_test.cpp
             ../elecstate_pw.cpp ../elecstate.cpp
-            ../../src_pw/charge.cpp ../../src_parallel/parallel_reduce.cpp
+            ../../module_elecstate/module_charge/charge.cpp ../../src_parallel/parallel_reduce.cpp
             ../../src_pw/structure_factor.cpp ../../src_pw/pw_complement.cpp
             ../../module_cell/klist.cpp ../../src_parallel/parallel_kpoints.cpp ../../src_pw/occupy.cpp
             ../kernels/elecstate_op.cpp ../../module_io/rwstream.cpp ../../module_io/wf_io.cpp

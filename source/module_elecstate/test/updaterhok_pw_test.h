@@ -5,7 +5,7 @@
 #include "src_pw/magnetism.h"
 #include "src_pw/wf_atomic.h"
 #include "src_pw/wavefunc.h"
-#include "src_pw/charge_mixing.h"
+#include "module_elecstate/module_charge/charge_mixing.h"
 #include "module_elecstate/potentials/potential_new.h"
 #include "module_cell/atom_pseudo.h"
 #include "module_cell/atom_spec.h"
