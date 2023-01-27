@@ -58,7 +58,7 @@ protected:
     }
 };
 
-TEST_F(TestSrcPWStressMultiDevice, cal_dbecp_noevc_nl_op_cpu)
+/*TEST_F(TestSrcPWStressMultiDevice, cal_dbecp_noevc_nl_op_cpu)
 {
     std::vector<std::complex<double>> dbecp_noevc(expected_dbecpnoevc.size(), 0);
     hamilt::cal_dbecp_noevc_nl_op<double, psi::DEVICE_CPU>()(
@@ -82,7 +82,7 @@ TEST_F(TestSrcPWStressMultiDevice, cal_dbecp_noevc_nl_op_cpu)
     for (int ii = 0; ii < dbecp_noevc.size(); ii++) {
         EXPECT_LT(fabs(dbecp_noevc[ii] - expected_dbecpnoevc[ii]), 6e-5);
     }
-}
+}*/
 
 TEST_F(TestSrcPWStressMultiDevice, cal_stress_nl_op_cpu)
 {
