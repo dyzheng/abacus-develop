@@ -2,7 +2,6 @@ list(APPEND objects
     global.cpp
     symmetry_rho.cpp
     threshold_elec.cpp
-    xc_3.cpp
 )
 
 add_library(

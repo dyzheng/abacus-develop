@@ -192,7 +192,6 @@ void DiagoCG<FPTYPE, Device>::diag_mock(hamilt::Hamilt<FPTYPE, Device> *phm_in, 
                 }
 
                 eigenvalue[i] = e0;
-                // dcopy(pphi, phi, i);
                 std::complex<FPTYPE>* phi_pointer = &phi(i, 0);
                 // ModuleBase::GlobalFunc::COPYARRAY(pphi, phi_pointer, this->dim);
                 syncmem_complex_op()(this->ctx, this->ctx, phi_pointer, pphi, this->dim);

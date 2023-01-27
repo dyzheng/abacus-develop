@@ -1,5 +1,4 @@
 #include "stress_func.h"
-#include "src_pw/myfunc.h"
 #include "module_elecstate/potentials/H_Hartree_pw.h"
 #include "module_base/timer.h"
 #include "src_pw/global.h"

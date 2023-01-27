@@ -1,6 +1,6 @@
 #include "H_Ewald_pw.h"
 #include "module_base/mymath.h" // use heapsort
-#include "src_pw/myfunc.h" // use dnrm2
+#include "dnrm2.h"
 #include "src_parallel/parallel_reduce.h"
 #include "module_base/constants.h"
 #include "module_base/timer.h"
@@ -255,7 +255,7 @@ void H_Ewald_pw::rgen(
     // buffer cotains the modulus of actual r
     // used for swapping
     // function to find the norm of a std::vector
-    // external dnrm2, see myfunc
+    // external dnrm2
 
     nrm = 0;
 

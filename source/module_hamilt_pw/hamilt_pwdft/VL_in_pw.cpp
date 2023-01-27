@@ -1,7 +1,6 @@
 #include "src_pw/global.h"
 #include "module_base/global_function.h"
 #include "module_base/global_variable.h"
-#include "src_pw/myfunc.h"
 #include "VL_in_pw.h"
 #include "module_base/math_integral.h"
 #include "module_base/timer.h"
@@ -57,7 +56,10 @@ void pseudopot_cell_vl::init_vloc(ModuleBase::matrix &vloc_in, ModulePW::PW_Basi
 			ModuleBase::WARNING_QUIT("init_vloc","not available now.");
 		}
 
-		dcopy(vloc1d, vloc_in, it);
+		if(it>=0 && it<vloc_in.nr && vloc_in.nc>=0)
+		{
+			ModuleBase::GlobalFunc::COPYARRAY(vloc1d, &vloc_in(it, 0), rho_basis->ngg);
+		}
 	} 
 
 

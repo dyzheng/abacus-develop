@@ -13,7 +13,6 @@
 #ifdef __LCAO
 #include "module_dftu/dftu.h"  //Quxin adds for DFT+U on 20201029
 #endif
-#include "src_pw/myfunc.h"
 //new
 #include "module_hamilt_general/module_ewald/H_Ewald_pw.h"
 #include "module_elecstate/potentials/H_Hartree_pw.h"
