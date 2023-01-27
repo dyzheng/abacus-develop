@@ -5,7 +5,7 @@
 #include "../module_base/memory.h"
 #include "../module_base/timer.h"
 #include "module_hsolver/diago_iter_assist.h"
-#include "hamilt_pw/hamilt_pwdft/hamilt_pw.h"
+#include "module_hamilt_pw/hamilt_pwdft/hamilt_pw.h"
 #include "module_hsolver/kernels/math_kernel_op.h"
 
 wavefunc::wavefunc()

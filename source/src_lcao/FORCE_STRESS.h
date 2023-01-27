@@ -6,9 +6,9 @@
 #include "../module_base/matrix.h"
 #include "FORCE_k.h"
 //#include "./force_lcao_gamma.h"
-#include "hamilt_pw/hamilt_pwdft/stress_func.h"
+#include "module_hamilt_pw/hamilt_pwdft/stress_func.h"
 #include "module_io/input_conv.h"
-#include "hamilt_pw/hamilt_pwdft/forces.h"
+#include "module_hamilt_pw/hamilt_pwdft/forces.h"
 #include "module_psi/psi.h"
 
 class Force_Stress_LCAO  

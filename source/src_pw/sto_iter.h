@@ -6,7 +6,7 @@
 #include "sto_func.h"
 #include "module_psi/psi.h"
 #include "module_elecstate/elecstate.h"
-#include "hamilt_general/hamilt.h"
+#include "module_hamilt_general/hamilt.h"
 
 //----------------------------------------------
 // Solve for the new electron density and iterate 

@@ -15,12 +15,12 @@
 #include "module_io/print_info.h"
 #include "src_pw/H_Ewald_pw.h"
 //-----force-------------------
-#include "hamilt_pw/hamilt_pwdft/forces.h"
+#include "module_hamilt_pw/hamilt_pwdft/forces.h"
 //-----stress------------------
 #include "src_pw/of_stress_pw.h"
 //---------------------------------------------------
 #include "module_elecstate/elecstate_pw.h"
-#include "hamilt_pw/hamilt_pwdft/hamilt_pw.h"
+#include "module_hamilt_pw/hamilt_pwdft/hamilt_pw.h"
 #include "module_relax/relax_old/variable_cell.h"    // liuyu 2022-11-07
 
 namespace ModuleESolver

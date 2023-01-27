@@ -6,9 +6,9 @@
 #include "module_base/opt_DCsrch.h"
 #include "module_psi/psi.h"
 #include "module_elecstate/module_charge/charge_extra.h"    // liuyu add 2022-11-07
-#include "hamilt_pw/hamilt_ofdft/kedf_tf.h"
-#include "hamilt_pw/hamilt_ofdft/kedf_vw.h"
-#include "hamilt_pw/hamilt_ofdft/kedf_wt.h"
+#include "module_hamilt_pw/hamilt_ofdft/kedf_tf.h"
+#include "module_hamilt_pw/hamilt_ofdft/kedf_vw.h"
+#include "module_hamilt_pw/hamilt_ofdft/kedf_wt.h"
 #include "module_elecstate/module_charge/charge.h"
 
 namespace ModuleESolver

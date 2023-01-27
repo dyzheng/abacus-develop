@@ -1,7 +1,7 @@
 #ifndef STO_FORCES_H
 #define STO_FORCES_H
 
-#include "hamilt_pw/hamilt_pwdft/forces.h"
+#include "module_hamilt_pw/hamilt_pwdft/forces.h"
 #include "sto_wf.h"
 #include "module_psi/psi.h"
 

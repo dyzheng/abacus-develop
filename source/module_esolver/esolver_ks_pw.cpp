@@ -10,13 +10,13 @@
 #include "src_pw/occupy.h"
 #include "module_relax/relax_old/variable_cell.h"    // liuyu 2022-11-07
 //-----force-------------------
-#include "hamilt_pw/hamilt_pwdft/forces.h"
+#include "module_hamilt_pw/hamilt_pwdft/forces.h"
 //-----stress------------------
-#include "hamilt_pw/hamilt_pwdft/stress_pw.h"
+#include "module_hamilt_pw/hamilt_pwdft/stress_pw.h"
 //---------------------------------------------------
 #include "module_hsolver/hsolver_pw.h"
 #include "module_elecstate/elecstate_pw.h"
-#include "hamilt_pw/hamilt_pwdft/hamilt_pw.h"
+#include "module_hamilt_pw/hamilt_pwdft/hamilt_pw.h"
 #include "module_hsolver/diago_iter_assist.h"
 #include "module_vdw/vdw.h"
 #include "module_base/memory.h"

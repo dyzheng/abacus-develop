@@ -3,7 +3,7 @@
 
 #include "diagh.h"
 #include "module_elecstate/elecstate.h"
-#include "hamilt_general/hamilt.h"
+#include "module_hamilt_general/hamilt.h"
 #include "module_psi/psi.h"
 #include "src_pw/sto_wf.h"
 

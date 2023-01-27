@@ -5,8 +5,8 @@
 #include "module_base/global_variable.h"
 #include "module_cell/unitcell.h"
 #include "module_pw/pw_basis.h"
-#include "hamilt_pw/hamilt_pwdft/forces.h"
-#include "hamilt_pw/hamilt_pwdft/stress_func.h"
+#include "module_hamilt_pw/hamilt_pwdft/forces.h"
+#include "module_hamilt_pw/hamilt_pwdft/stress_func.h"
 
 class H_Ewald_pw 
 {

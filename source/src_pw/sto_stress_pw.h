@@ -1,7 +1,7 @@
 #ifndef STO_STRESS_PW_H
 #define STO_STRESS_PW_H
 
-#include "hamilt_pw/hamilt_pwdft/stress_func.h"
+#include "module_hamilt_pw/hamilt_pwdft/stress_func.h"
 #include "sto_wf.h"
 #include "module_elecstate/module_charge/charge.h"
 //qianrui create 2021-6-4

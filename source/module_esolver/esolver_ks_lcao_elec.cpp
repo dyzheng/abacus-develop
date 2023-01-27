@@ -21,7 +21,7 @@
 #include "module_vdw/vdw.h"
 #include "../module_relax/relax_old/variable_cell.h"    // liuyu 2022-11-07
 
-#include "hamilt_lcao/operator_lcao/op_exx_lcao.h"
+#include "module_hamilt_lcao/operator_lcao/op_exx_lcao.h"
 #include "module_io/density_matrix.h"
 
 namespace ModuleESolver

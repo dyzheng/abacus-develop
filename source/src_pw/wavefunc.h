@@ -6,7 +6,7 @@
 #include "../module_base/matrix.h"
 #include "../module_base/complexmatrix.h"
 #include "wf_atomic.h"
-#include "hamilt_general/hamilt.h"
+#include "module_hamilt_general/hamilt.h"
 
 class wavefunc : public WF_atomic
 {
