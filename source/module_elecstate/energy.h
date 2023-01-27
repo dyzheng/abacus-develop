@@ -14,7 +14,6 @@ class energy
 	public:
 	friend class Electrons_Stochastic;//mohan add 2021-01-31
 	friend class LOOP_elec;
-	friend class Threshold_Elec;
 	friend class Forces<double>;
 	friend class Charge;
 	friend class Potential;

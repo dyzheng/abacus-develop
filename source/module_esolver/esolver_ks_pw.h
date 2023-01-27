@@ -47,9 +47,6 @@ namespace ModuleESolver
 
 
     private:
-        // It copies the function in Threshold_Elec class.
-        // After all ESolver, HSolver are constructed, Class Electrons and Threshold_Elec should be deleted.
-        void print_eigenvalue(std::ofstream& ofs);
         
         Device * ctx = {};
         psi::AbacusDevice_t device = {};

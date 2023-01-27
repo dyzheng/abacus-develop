@@ -11,7 +11,6 @@
 #include "src_lcao/dmft.h"
 #include "module_elecstate/occupy.h"
 #include "src_pw/symmetry_rho.h"
-#include "src_pw/threshold_elec.h"
 #ifdef __EXX
 // #include "module_rpa/rpa.h"
 #include "module_ri/RPA_LRI.h"
@@ -695,7 +694,7 @@ void ESolver_KS_LCAO::afterscf(const int istep)
 
     if (GlobalV::OUT_LEVEL != "m")
     {
-        Threshold_Elec::print_eigenvalue(GlobalV::ofs_running, this->pelec);
+        this->pelec->print_eigenvalue(GlobalV::ofs_running);
     }
 
     if (this->conv_elec)

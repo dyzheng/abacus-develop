@@ -102,6 +102,9 @@ class ElecState
     // print and check for band energy and occupations
     void print_band(const int &ik, const int &printe, const int &iter);
 
+    // function for printing eigenvalues : ekb
+    void print_eigenvalue(std::ofstream& ofs);
+
   protected:
     // calculate ebands for all k points and all occupied bands
     void calEBand();

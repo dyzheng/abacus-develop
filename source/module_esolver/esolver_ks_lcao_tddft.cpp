@@ -12,7 +12,6 @@
 #include "src_lcao/ELEC_evolve.h"
 #include "module_elecstate/occupy.h"
 #include "src_pw/symmetry_rho.h"
-#include "src_pw/threshold_elec.h"
 
 //-----HSolver ElecState Hamilt--------
 #include "module_elecstate/elecstate_lcao.h"
@@ -385,7 +384,7 @@ void ESolver_KS_LCAO_TDDFT::afterscf(const int istep)
 
     if (GlobalV::OUT_LEVEL != "m")
     {
-        // Threshold_Elec::print_eigenvalue(GlobalV::ofs_running);
+        // this->pelec->print_eigenvalue(GlobalV::ofs_running);
     }
 
     if (this->conv_elec)
