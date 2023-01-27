@@ -2,7 +2,7 @@
 #include <complex>
 #include <gtest/gtest.h>
 #include "module_psi/kernels/memory_op.h"
-#include "src_pw/kernels/vnl_op.h"
+#include "module_hamilt_pw/hamilt_pwdft/kernels/vnl_op.h"
 
 class TestSrcPWVnlMultiDevice : public ::testing::Test
 {
@@ -57,7 +57,7 @@ TEST_F(TestSrcPWVnlMultiDevice, cal_vnl_op_cpu)
 {
     std::vector<std::complex<double>> vkb(expected_vkb.size(), 0);
 
-    src_pw::cal_vnl_op<double, psi::DEVICE_CPU>()(
+    hamilt::cal_vnl_op<double, psi::DEVICE_CPU>()(
         cpu_ctx,
         ntype, npw, npwx, nhm, NQX,
         tab_2, tab_3,
@@ -109,7 +109,7 @@ TEST_F(TestSrcPWVnlMultiDevice, cal_vnl_op_gpu)
     syncmem_complex_h2d_op()(gpu_ctx, cpu_ctx, d_sk, sk.data(), sk.size());
     syncmem_complex_h2d_op()(gpu_ctx, cpu_ctx, d_vkb, vkb.data(), vkb.size());
 
-    src_pw::cal_vnl_op<double, psi::DEVICE_GPU>()(
+    hamilt::cal_vnl_op<double, psi::DEVICE_GPU>()(
             gpu_ctx,
             ntype, npw, npwx, nhm, NQX,
             tab_2, tab_3,

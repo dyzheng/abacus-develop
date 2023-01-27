@@ -1,10 +1,10 @@
 #include "wf_igk.h"
 
-#include "../src_pw/global.h"
-#include "../module_base/memory.h"
-#include "../module_base/timer.h"
+#include "src_pw/global.h"
+#include "module_base/memory.h"
+#include "module_base/timer.h"
 #include "module_psi/kernels/device.h"
-#include "src_pw/kernels/wf_op.h"
+#include "module_hamilt_pw/hamilt_pwdft/kernels/wf_op.h"
 
 WF_igk::WF_igk()
 {
@@ -87,7 +87,7 @@ void WF_igk::get_sk(Device * ctx, const int ik, ModulePW::PW_Basis_K* wfc_basis,
 
     psi::DEVICE_CPU * cpu_ctx = {};
     psi::AbacusDevice_t device = psi::device::get_device_type<Device>(ctx);
-    using cal_sk_op = src_pw::cal_sk_op<FPTYPE, Device>;
+    using cal_sk_op = hamilt::cal_sk_op<FPTYPE, Device>;
     using resmem_int_op = psi::memory::resize_memory_op<int, Device>;
     using delmem_int_op = psi::memory::delete_memory_op<int, Device>;
     using syncmem_int_op = psi::memory::synchronize_memory_op<int, Device, psi::DEVICE_CPU>;

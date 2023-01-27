@@ -2,7 +2,7 @@
 #include <complex>
 #include <gtest/gtest.h>
 #include "module_psi/kernels/memory_op.h"
-#include "src_pw/kernels/wf_op.h"
+#include "module_hamilt_pw/hamilt_pwdft/kernels/wf_op.h"
 
 class TestSrcPWWfMultiDevice : public ::testing::Test
 {
@@ -52,7 +52,7 @@ protected:
 TEST_F(TestSrcPWWfMultiDevice, cal_sk_op_cpu)
 {
     std::vector<std::complex<double>> sk(expected_sk.size(), 0);
-    src_pw::cal_sk_op<double, psi::DEVICE_CPU>()(
+    hamilt::cal_sk_op<double, psi::DEVICE_CPU>()(
          cpu_ctx,
          ik, ntype,
          nx, ny, nz,
@@ -101,7 +101,7 @@ TEST_F(TestSrcPWWfMultiDevice, cal_sk_op_gpu)
     syncmem_complex_h2d_op()(gpu_ctx, cpu_ctx, d_eigts2, eigts2.data(), eigts2.size());
     syncmem_complex_h2d_op()(gpu_ctx, cpu_ctx, d_eigts3, eigts3.data(), eigts3.size());
 
-    src_pw::cal_sk_op<double, psi::DEVICE_GPU>()(
+    hamilt::cal_sk_op<double, psi::DEVICE_GPU>()(
             gpu_ctx,
             ik, ntype,
             nx, ny, nz,

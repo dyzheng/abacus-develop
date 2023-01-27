@@ -22,6 +22,9 @@ list(APPEND objects
     VL_in_pw.cpp
     VNL_in_pw.cpp
     VNL_grad_pw.cpp
+    wavefunc.cpp
+    wf_atomic.cpp
+    wf_igk.cpp
 )
 
 add_library(

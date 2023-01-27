@@ -2,7 +2,7 @@
 #include "VNL_in_pw.h"
 #include "module_base/global_function.h"
 #include "module_base/global_variable.h"
-#include "src_pw/wavefunc.h"
+#include "module_hamilt_pw/hamilt_pwdft/wavefunc.h"
 #include "module_orbital/ORB_gen_tables.h"
 #include "module_base/math_integral.h"
 #include "module_base/math_sphbes.h"
@@ -12,7 +12,7 @@
 #include "module_base/timer.h"
 #include "module_base/memory.h"
 #include "module_psi/kernels/device.h"
-#include "src_pw/kernels/vnl_op.h"
+#include "module_hamilt_pw/hamilt_pwdft/kernels/vnl_op.h"
 
 
 pseudopot_cell_vnl::pseudopot_cell_vnl()
@@ -336,7 +336,7 @@ void pseudopot_cell_vnl::getvnl(Device * ctx, const int &ik, std::complex<FPTYPE
     if(GlobalV::test_pp) ModuleBase::TITLE("pseudopot_cell_vnl","getvnl");
     ModuleBase::timer::tick("pp_cell_vnl","getvnl");
 
-    using cal_vnl_op = src_pw::cal_vnl_op<FPTYPE, Device>;
+    using cal_vnl_op = hamilt::cal_vnl_op<FPTYPE, Device>;
     using resmem_int_op = psi::memory::resize_memory_op<int, Device>;
     using delmem_int_op = psi::memory::delete_memory_op<int, Device>;
     using syncmem_int_op = psi::memory::synchronize_memory_op<int, Device, psi::DEVICE_CPU>;

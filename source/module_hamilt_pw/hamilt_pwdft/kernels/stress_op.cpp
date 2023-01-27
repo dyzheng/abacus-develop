@@ -1,6 +1,6 @@
-#include "src_pw/kernels/stress_op.h"
+#include "module_hamilt_pw/hamilt_pwdft/kernels/stress_op.h"
 
-namespace src_pw{
+namespace hamilt{
 
 template <typename FPTYPE>
 struct cal_dbecp_noevc_nl_op<FPTYPE, psi::DEVICE_CPU> {

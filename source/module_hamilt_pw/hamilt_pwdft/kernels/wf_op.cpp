@@ -1,6 +1,6 @@
-#include "src_pw/kernels/wf_op.h"
+#include "module_hamilt_pw/hamilt_pwdft/kernels/wf_op.h"
 
-namespace src_pw{
+namespace hamilt{
 
 template <typename FPTYPE>
 struct cal_sk_op<FPTYPE, psi::DEVICE_CPU> {

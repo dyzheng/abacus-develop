@@ -1,9 +1,9 @@
-#include "src_pw/kernels/vnl_op.h"
+#include "module_hamilt_pw/hamilt_pwdft/kernels/vnl_op.h"
 
 #include <complex>
 
 #include <thrust/complex.h>
-#include <cuda_runtime.h>
+#include <hip/hip_runtime.h>
 
 #define THREADS_PER_BLOCK 256
 
@@ -126,7 +126,7 @@ void cal_vnl_op<FPTYPE, psi::DEVICE_GPU>::operator() (
     std::complex<FPTYPE> *vkb_in)
 {
     int block = (npw + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
-    cal_vnl<FPTYPE><<<block, THREADS_PER_BLOCK>>>(
+    hipLaunchKernelGGL(HIP_KERNEL_NAME(cal_vnl<FPTYPE>), dim3(block), dim3(THREADS_PER_BLOCK), 0, 0, 
             ntype, npw, npwx, nhm, NQX, tab_2, tab_3,
             atom_na, atom_nb, atom_nh,
             DQ, tpiba,

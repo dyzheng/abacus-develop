@@ -9,9 +9,6 @@ list(APPEND objects
     soc.cpp
     symmetry_rho.cpp
     threshold_elec.cpp
-    wavefunc.cpp
-    wf_atomic.cpp
-    wf_igk.cpp
     xc_3.cpp
 )
 
@@ -23,9 +20,5 @@ add_library(
 
 if(ENABLE_COVERAGE)
   add_coverage(pw)
-endif()
-
-if(BUILD_TESTING)
-  add_subdirectory(kernels/test)
 endif()
 

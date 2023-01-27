@@ -1,13 +1,14 @@
-#include "src_pw/kernels/force_op.h"
+#include "module_hamilt_pw/hamilt_pwdft/kernels/force_op.h"
 
 #include <complex>
 
 #include <thrust/complex.h>
-#include <hip/hip_runtime.h>
+#include <cuda_runtime.h>
 
 #define THREADS_PER_BLOCK 256
 
 namespace src_pw {
+
 
 template <typename FPTYPE>
 __global__ void cal_vkb1_nl(
@@ -61,16 +62,16 @@ __global__ void cal_force_nl(
     }
 
     int Nprojs = atom_nh[it];
-    double fac = d_wg[ik * wg_nc + ib] * 2.0 * tpiba;
+    FPTYPE fac = d_wg[ik * wg_nc + ib] * 2.0 * tpiba;
     for (int ia = 0; ia < atom_na[it]; ia++) {
         for (int ip = threadIdx.x; ip < Nprojs; ip += blockDim.x) {
-            // double ps = GlobalC::ppcell.deeq[GlobalV::CURRENT_SPIN, iat, ip, ip];
-            double ps = deeq[((spin * deeq_2 + iat) * deeq_3 + ip) * deeq_4 + ip];
+            // FPTYPE ps = GlobalC::ppcell.deeq[GlobalV::CURRENT_SPIN, iat, ip, ip];
+            FPTYPE ps = deeq[((spin * deeq_2 + iat) * deeq_3 + ip) * deeq_4 + ip];
             const int inkb = sum + ip;
             //out<<"\n ps = "<<ps;
 
             for (int ipol = 0; ipol < 3; ipol++) {
-                const double dbb = (conj(dbecp[ipol * nbands * nkb + ib * nkb + inkb]) *
+                const FPTYPE dbb = (conj(dbecp[ipol * nbands * nkb + ib * nkb + inkb]) *
                                     becp[ib * nkb + inkb]).real();
                 // force[iat * forcenl_nc + ipol] -= ps * fac * dbb;
                 atomicAdd(force + iat * forcenl_nc + ipol, -ps * fac * dbb);
@@ -84,7 +85,7 @@ __global__ void cal_force_nl(
                         const int jnkb = sum + ip2;
                         ps = deeq[((spin * deeq_2 + iat) * deeq_3 + ip) * deeq_4 + ip2];
                         for (int ipol = 0; ipol < 3; ipol++) {
-                            const double dbb = (conj(dbecp[ipol * nbands * nkb + ib * nkb + inkb]) *
+                            const FPTYPE dbb = (conj(dbecp[ipol * nbands * nkb + ib * nkb + inkb]) *
                                                 becp[ib * nkb + jnkb]).real();
                             atomicAdd(force + iat * forcenl_nc + ipol, -ps * fac * dbb);
                         }
@@ -112,7 +113,7 @@ void cal_vkb1_nl_op<FPTYPE, psi::DEVICE_GPU>::operator() (
         const FPTYPE *gcar,
         std::complex<FPTYPE> *vkb1)
 {
-    hipLaunchKernelGGL(HIP_KERNEL_NAME(cal_vkb1_nl<FPTYPE>), dim3(nkb), dim3(THREADS_PER_BLOCK), 0, 0, 
+    cal_vkb1_nl<FPTYPE><<<nkb, THREADS_PER_BLOCK>>>(
             npwx,
             npwk_max,
             vkb_nc,
@@ -149,7 +150,7 @@ void cal_force_nl_op<FPTYPE, psi::DEVICE_GPU>::operator() (
         const std::complex<FPTYPE> *dbecp,
         FPTYPE *force)
 {
-    hipLaunchKernelGGL(HIP_KERNEL_NAME(cal_force_nl<FPTYPE>), dim3(nbands_occ * ntype), dim3(THREADS_PER_BLOCK), 0, 0, 
+    cal_force_nl<FPTYPE><<<nbands_occ * ntype, THREADS_PER_BLOCK>>>(
             multi_proj,
             wg_nc, ntype, spin,
             deeq_2, deeq_3, deeq_4,

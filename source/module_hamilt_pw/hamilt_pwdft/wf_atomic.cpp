@@ -1,12 +1,12 @@
 #include "wf_atomic.h"
-#include "global.h"
-#include "../module_base/math_integral.h"
-#include "../module_base/math_sphbes.h"
-#include "../module_base/math_polyint.h"
-#include "../module_base/math_ylmreal.h"
-#include "soc.h"
+#include "src_pw/global.h"
+#include "module_base/math_integral.h"
+#include "module_base/math_sphbes.h"
+#include "module_base/math_polyint.h"
+#include "module_base/math_ylmreal.h"
+#include "src_pw/soc.h"
 #include <complex>
-#include "../module_base/timer.h"
+#include "module_base/timer.h"
 #include "module_base/tool_quit.h"
 
 WF_atomic::WF_atomic()

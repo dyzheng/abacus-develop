@@ -12,7 +12,7 @@
 #include "module_psi/psi.h"
 #include "module_elecstate/module_charge/charge.h"
 #include "module_hsolver/kernels/math_kernel_op.h"
-#include "src_pw/kernels/stress_op.h"
+#include "module_hamilt_pw/hamilt_pwdft/kernels/stress_op.h"
 
 
 //-------------------------------------------------------------------
@@ -135,8 +135,8 @@ private:
     psi::DEVICE_CPU * cpu_ctx = {};
     psi::AbacusDevice_t device = {};
     using gemm_op = hsolver::gemm_op<FPTYPE, Device>;
-    using cal_stress_nl_op = src_pw::cal_stress_nl_op<FPTYPE, Device>;
-    using cal_dbecp_noevc_nl_op = src_pw::cal_dbecp_noevc_nl_op<FPTYPE, Device>;
+    using cal_stress_nl_op = hamilt::cal_stress_nl_op<FPTYPE, Device>;
+    using cal_dbecp_noevc_nl_op = hamilt::cal_dbecp_noevc_nl_op<FPTYPE, Device>;
 
     using resmem_complex_op = psi::memory::resize_memory_op<std::complex<FPTYPE>, Device>;
     using resmem_complex_h_op = psi::memory::resize_memory_op<std::complex<FPTYPE>, psi::DEVICE_CPU>;

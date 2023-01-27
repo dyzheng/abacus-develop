@@ -2,7 +2,7 @@
 #include <complex>
 #include <gtest/gtest.h>
 #include "module_psi/kernels/memory_op.h"
-#include "src_pw/kernels/force_op.h"
+#include "module_hamilt_pw/hamilt_pwdft/kernels/force_op.h"
 
 class TestSrcPWForceMultiDevice : public ::testing::Test
 {
@@ -55,7 +55,7 @@ protected:
 TEST_F(TestSrcPWForceMultiDevice, cal_vkb1_nl_op_cpu)
 {
     std::vector<std::complex<double>> res = vkb1;
-    src_pw::cal_vkb1_nl_op<double, psi::DEVICE_CPU>()(
+    hamilt::cal_vkb1_nl_op<double, psi::DEVICE_CPU>()(
         cpu_ctx,
         nkb,
         npwx,
@@ -77,7 +77,7 @@ TEST_F(TestSrcPWForceMultiDevice, cal_vkb1_nl_op_cpu)
 TEST_F(TestSrcPWForceMultiDevice, cal_force_nl_op_cpu)
 {
     std::vector<double> res(expected_force.size(), 0.0);
-    src_pw::cal_force_nl_op<double, psi::DEVICE_CPU>()(
+    hamilt::cal_force_nl_op<double, psi::DEVICE_CPU>()(
         cpu_ctx,
         multi_proj,
         nbands_occ,
@@ -118,7 +118,7 @@ TEST_F(TestSrcPWForceMultiDevice, cal_vkb1_nl_op_gpu)
     syncmem_complex_h2d_op()(gpu_ctx, cpu_ctx, d_vkb, vkb.data(), vkb.size());
     syncmem_var_h2d_op()(gpu_ctx, cpu_ctx, d_gcar, gcar.data(), gcar.size());
 
-    src_pw::cal_vkb1_nl_op<double, psi::DEVICE_GPU>()(
+    hamilt::cal_vkb1_nl_op<double, psi::DEVICE_GPU>()(
         gpu_ctx,
         nkb,
         npwx,
@@ -166,7 +166,7 @@ TEST_F(TestSrcPWForceMultiDevice, cal_force_nl_op_gpu)
     syncmem_complex_h2d_op()(gpu_ctx, cpu_ctx, d_becp, becp.data(), becp.size());
     syncmem_complex_h2d_op()(gpu_ctx, cpu_ctx, d_dbecp, dbecp.data(), dbecp.size());
 
-    src_pw::cal_force_nl_op<double, psi::DEVICE_GPU>()(
+    hamilt::cal_force_nl_op<double, psi::DEVICE_GPU>()(
         gpu_ctx,
         multi_proj,
         nbands_occ,

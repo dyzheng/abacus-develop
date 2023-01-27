@@ -1,10 +1,10 @@
 #ifndef WAVEFUNC_H
 #define WAVEFUNC_H
 
-#include "../module_base/global_function.h"
-#include "../module_base/global_variable.h"
-#include "../module_base/matrix.h"
-#include "../module_base/complexmatrix.h"
+#include "module_base/global_function.h"
+#include "module_base/global_variable.h"
+#include "module_base/matrix.h"
+#include "module_base/complexmatrix.h"
 #include "wf_atomic.h"
 #include "module_hamilt_general/hamilt.h"
 

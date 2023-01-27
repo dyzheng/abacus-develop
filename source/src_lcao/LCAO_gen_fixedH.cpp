@@ -1,11 +1,11 @@
 #include "LCAO_gen_fixedH.h"
-#include "../src_pw/global.h"
-#include "../src_pw/wavefunc.h"
+#include "src_pw/global.h"
+#include "module_hamilt_pw/hamilt_pwdft/wavefunc.h"
 #include "global_fp.h"
 #include <vector>
 #include <unordered_map>
 #include <map>
-#include "../module_base/timer.h"
+#include "module_base/timer.h"
 
 #ifdef __MKL
 #include <mkl_service.h>

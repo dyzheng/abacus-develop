@@ -2,7 +2,7 @@
 #include <complex>
 #include <gtest/gtest.h>
 #include "module_psi/kernels/memory_op.h"
-#include "src_pw/kernels/stress_op.h"
+#include "module_hamilt_pw/hamilt_pwdft/kernels/stress_op.h"
 
 class TestSrcPWStressMultiDevice : public ::testing::Test
 {
@@ -61,7 +61,7 @@ protected:
 TEST_F(TestSrcPWStressMultiDevice, cal_dbecp_noevc_nl_op_cpu)
 {
     std::vector<std::complex<double>> dbecp_noevc(expected_dbecpnoevc.size(), 0);
-    src_pw::cal_dbecp_noevc_nl_op<double, psi::DEVICE_CPU>()(
+    hamilt::cal_dbecp_noevc_nl_op<double, psi::DEVICE_CPU>()(
             this->cpu_ctx,
             ipol,
             jpol,
@@ -87,7 +87,7 @@ TEST_F(TestSrcPWStressMultiDevice, cal_dbecp_noevc_nl_op_cpu)
 TEST_F(TestSrcPWStressMultiDevice, cal_stress_nl_op_cpu)
 {
     std::vector<double> stress(expected_stress.size(), 0);
-    src_pw::cal_stress_nl_op<double, psi::DEVICE_CPU>()(
+    hamilt::cal_stress_nl_op<double, psi::DEVICE_CPU>()(
             this->cpu_ctx,
             multi_proj,
             ipol,
@@ -140,7 +140,7 @@ TEST_F(TestSrcPWStressMultiDevice, cal_dbecp_noevc_nl_op_gpu)
     syncmem_var_h2d_op()(gpu_ctx, cpu_ctx, d_gcar, gcar.data(), gcar.size());
     syncmem_var_h2d_op()(gpu_ctx, cpu_ctx, d_kvec_c, kvec_c.data(), kvec_c.size());
 
-    src_pw::cal_dbecp_noevc_nl_op<double, psi::DEVICE_GPU>()(
+    hamilt::cal_dbecp_noevc_nl_op<double, psi::DEVICE_GPU>()(
             this->gpu_ctx,
             ipol,
             jpol,
@@ -198,7 +198,7 @@ TEST_F(TestSrcPWStressMultiDevice, cal_stress_nl_op_gpu)
     syncmem_int_h2d_op()(gpu_ctx, cpu_ctx, d_atom_nh, atom_nh.data(), atom_nh.size());
     syncmem_int_h2d_op()(gpu_ctx, cpu_ctx, d_atom_na, atom_na.data(), atom_na.size());
 
-    src_pw::cal_stress_nl_op<double, psi::DEVICE_GPU>()(
+    hamilt::cal_stress_nl_op<double, psi::DEVICE_GPU>()(
             this->gpu_ctx,
             multi_proj,
             ipol,

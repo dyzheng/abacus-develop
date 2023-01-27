@@ -1,6 +1,6 @@
-#include "src_pw/kernels/vnl_op.h"
+#include "module_hamilt_pw/hamilt_pwdft/kernels/vnl_op.h"
 
-namespace src_pw {
+namespace hamilt {
 
 template <typename FPTYPE>
 FPTYPE _polynomial_interpolation(

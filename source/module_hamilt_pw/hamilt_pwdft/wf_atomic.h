@@ -1,9 +1,9 @@
 #ifndef WF_ATOMIC_H
 #define WF_ATOMIC_H
 
-#include "../module_base/global_function.h"
-#include "../module_base/global_variable.h"
-#include "../module_base/complexmatrix.h"
+#include "module_base/global_function.h"
+#include "module_base/global_variable.h"
+#include "module_base/complexmatrix.h"
 #include "wf_igk.h"
 #include "module_psi/psi.h"
 #include "module_pw/pw_basis_k.h"

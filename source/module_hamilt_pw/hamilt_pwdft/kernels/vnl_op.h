@@ -4,7 +4,7 @@
 #include "module_psi/psi.h"
 #include <complex>
 
-namespace src_pw {
+namespace hamilt {
 
 template <typename FPTYPE, typename Device>
 struct cal_vnl_op {

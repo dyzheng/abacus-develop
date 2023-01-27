@@ -1,6 +1,6 @@
-#include "src_pw/kernels/force_op.h"
+#include "module_hamilt_pw/hamilt_pwdft/kernels/force_op.h"
 
-namespace src_pw{
+namespace hamilt{
 
 template <typename FPTYPE>
 struct cal_vkb1_nl_op<FPTYPE, psi::DEVICE_CPU> {
