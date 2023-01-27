@@ -15,7 +15,7 @@
 #endif
 #include "myfunc.h"
 //new
-#include "H_Ewald_pw.h"
+#include "module_hamilt_general/module_ewald/H_Ewald_pw.h"
 #include "module_elecstate/potentials/H_Hartree_pw.h"
 #include "module_elecstate/potentials/efield.h"    // liuyu add 2022-05-06
 #include "module_elecstate/potentials/gatefield.h"    // liuyu add 2022-09-13

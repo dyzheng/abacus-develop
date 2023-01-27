@@ -1,5 +1,6 @@
 list(APPEND objects
     operator.cpp
+    module_ewald/H_Ewald_pw.cpp
 )
 
 add_library(

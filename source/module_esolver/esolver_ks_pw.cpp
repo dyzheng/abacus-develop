@@ -6,7 +6,7 @@
 #include "src_pw/global.h"
 #include "src_pw/symmetry_rho.h"
 #include "module_io/print_info.h"
-#include "src_pw/H_Ewald_pw.h"
+#include "module_hamilt_general/module_ewald/H_Ewald_pw.h"
 #include "src_pw/occupy.h"
 #include "module_relax/relax_old/variable_cell.h"    // liuyu 2022-11-07
 //-----force-------------------

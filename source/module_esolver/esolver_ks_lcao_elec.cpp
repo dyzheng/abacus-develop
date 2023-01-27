@@ -17,7 +17,7 @@
 #ifdef __DEEPKS
 #include "../module_deepks/LCAO_deepks.h"
 #endif
-#include "../src_pw/H_Ewald_pw.h"
+#include "module_hamilt_general/module_ewald/H_Ewald_pw.h"
 #include "module_vdw/vdw.h"
 #include "../module_relax/relax_old/variable_cell.h"    // liuyu 2022-11-07
 

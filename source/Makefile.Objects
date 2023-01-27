@@ -34,6 +34,7 @@ VPATH=./src_global:\
 ./module_psi:\
 ./module_psi/kernels:\
 ./module_hamilt_general:\
+./module_hamilt_general/module_ewald:\
 ./module_hamilt_pw/hamilt_pwdft:\
 ./module_hamilt_lcao:\
 ./module_hamilt_pw/hamilt_ofdft:\

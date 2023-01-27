@@ -1,5 +1,4 @@
 list(APPEND objects
-    H_Ewald_pw.cpp
     energy.cpp
     global.cpp
     magnetism.cpp

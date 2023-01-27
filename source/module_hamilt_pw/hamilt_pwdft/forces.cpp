@@ -15,7 +15,7 @@
 #include "module_vdw/vdw.h"
 #include "module_psi/kernels/device.h"
 
-#include "src_pw/H_Ewald_pw.h"
+#include "module_hamilt_general/module_ewald/H_Ewald_pw.h"
 #ifdef _OPENMP
 #include <omp.h>
 #endif

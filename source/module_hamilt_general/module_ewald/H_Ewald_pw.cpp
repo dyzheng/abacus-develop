@@ -1,10 +1,10 @@
 #include "H_Ewald_pw.h"
-#include "../module_base/mymath.h" // use heapsort
-#include "myfunc.h" // use dnrm2
-#include "../src_parallel/parallel_reduce.h"
-#include "../module_base/constants.h"
-#include "../module_base/timer.h"
-#include "../src_pw/global.h"
+#include "module_base/mymath.h" // use heapsort
+#include "src_pw/myfunc.h" // use dnrm2
+#include "src_parallel/parallel_reduce.h"
+#include "module_base/constants.h"
+#include "module_base/timer.h"
+#include "src_pw/global.h"
 
 double H_Ewald_pw::alpha=0.0;
 int H_Ewald_pw::mxr = 200;
