@@ -1,8 +1,5 @@
 list(APPEND objects
     H_Ewald_pw.cpp
-    VL_in_pw.cpp
-    VNL_in_pw.cpp
-    VNL_grad_pw.cpp
     energy.cpp
     global.cpp
     magnetism.cpp

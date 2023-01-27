@@ -1,23 +1,23 @@
 #ifndef GLOBAL_H
 #define GLOBAL_H
 
-#include "../module_base/global_function.h"
-#include "../module_base/global_variable.h"
-#include "../module_io/restart.h"
-#include "../module_relax/relax_driver.h"
-#include "VNL_in_pw.h"
+#include "module_base/global_function.h"
+#include "module_base/global_variable.h"
+#include "module_io/restart.h"
+#include "module_relax/relax_driver.h"
+#include "module_hamilt_pw/hamilt_pwdft/VNL_in_pw.h"
 #include "module_elecstate/module_charge/charge_mixing.h"
 #include "energy.h"
 #ifdef __EXX
-#include "../src_ri/exx_lip.h"
-#include "../module_xc/exx_info.h"
+#include "src_ri/exx_lip.h"
+#include "module_xc/exx_info.h"
 #endif
 #include "module_cell/klist.h"
 #include "magnetism.h"
 #include "structure_factor.h"
-#include "../module_pw/pw_basis_k.h"
+#include "module_pw/pw_basis_k.h"
 #include "wavefunc.h"
-#include "../module_xc/xc_functional.h"
+#include "module_xc/xc_functional.h"
 
 #ifdef __CUDA
 namespace CudaCheck

@@ -1,14 +1,14 @@
 #ifndef VNL_IN_PW_H
 #define VNL_IN_PW_H
 
-#include "../module_base/global_function.h"
-#include "../module_base/global_variable.h"
-#include "../module_base/matrix.h"
-#include "../module_base/complexarray.h"
-#include "../module_base/complexmatrix.h"
+#include "module_base/global_function.h"
+#include "module_base/global_variable.h"
+#include "module_base/matrix.h"
+#include "module_base/complexarray.h"
+#include "module_base/complexmatrix.h"
 #include "VL_in_pw.h"
 #ifdef __LCAO
-#include "../module_orbital/ORB_gen_tables.h"
+#include "module_orbital/ORB_gen_tables.h"
 #endif
 #include "src_lcao/wavefunc_in_pw.h"
 #include "module_cell/unitcell.h"

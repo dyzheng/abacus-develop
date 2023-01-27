@@ -17,7 +17,7 @@
 #include "src_parallel/parallel_kpoints.h"
 #include "src_pw/pw_complement.h"
 #include "src_pw/structure_factor.h"
-#include "src_pw/VNL_in_pw.h"
+#include "module_hamilt_pw/hamilt_pwdft/VNL_in_pw.h"
 #include "module_io/input.h"
 #include "src_pw/energy.h"
 #include "module_xc/xc_functional.h"

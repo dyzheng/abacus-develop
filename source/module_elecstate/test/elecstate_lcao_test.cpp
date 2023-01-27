@@ -20,7 +20,7 @@
 
 #include "src_parallel/parallel_grid.h"
 #include "src_pw/wavefunc.h"
-#include "src_pw/VNL_in_pw.h"
+#include "module_hamilt_pw/hamilt_pwdft/VNL_in_pw.h"
 #include "src_pw/energy.h"
 #include "src_pw/structure_factor.h"
 #include "module_neighbor/sltk_atom_arrange.h"
