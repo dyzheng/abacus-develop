@@ -10,7 +10,6 @@ list(APPEND objects
     structure_factor.cpp
     pw_complement.cpp
     soc.cpp
-    of_stress_pw.cpp
     symmetry_rho.cpp
     threshold_elec.cpp
     wavefunc.cpp

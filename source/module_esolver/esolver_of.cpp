@@ -17,7 +17,7 @@
 //-----force-------------------
 #include "module_hamilt_pw/hamilt_pwdft/forces.h"
 //-----stress------------------
-#include "src_pw/of_stress_pw.h"
+#include "module_hamilt_pw/hamilt_ofdft/of_stress_pw.h"
 //---------------------------------------------------
 #include "module_elecstate/elecstate_pw.h"
 #include "module_hamilt_pw/hamilt_pwdft/hamilt_pw.h"
