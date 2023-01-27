@@ -1,7 +1,6 @@
 list(APPEND objects
     global.cpp
     structure_factor.cpp
-    pw_complement.cpp
     soc.cpp
     symmetry_rho.cpp
     threshold_elec.cpp

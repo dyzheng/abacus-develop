@@ -14,7 +14,6 @@
 #include "module_symmetry/symmetry.h"
 #include "src_parallel/parallel_grid.h"
 #include "src_parallel/parallel_kpoints.h"
-#include "src_pw/pw_complement.h"
 #include "src_pw/structure_factor.h"
 #include "module_hamilt_pw/hamilt_pwdft/VNL_in_pw.h"
 #include "module_io/input.h"

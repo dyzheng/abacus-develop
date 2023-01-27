@@ -454,7 +454,6 @@ OBJS_SRCPW=H_Ewald_pw.o\
     magnetism.o\
     occupy.o\
     structure_factor.o\
-    pw_complement.o\
     soc.o\
     sto_iter.o\
     sto_hchi.o\
