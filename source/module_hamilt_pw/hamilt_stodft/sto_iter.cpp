@@ -1,12 +1,12 @@
 #include "sto_iter.h"
-#include "../module_base/blas_connector.h"
-#include "../module_base/timer.h"
-#include "../module_base/tool_quit.h"
-#include "../module_base/tool_title.h"
-#include "../src_parallel/parallel_reduce.h"
-#include "../module_base/blas_connector.h"
-#include "global.h"
-#include "occupy.h"
+#include "module_base/blas_connector.h"
+#include "module_base/timer.h"
+#include "module_base/tool_quit.h"
+#include "module_base/tool_title.h"
+#include "src_parallel/parallel_reduce.h"
+#include "module_base/blas_connector.h"
+#include "src_pw/global.h"
+#include "src_pw/occupy.h"
 
 double Stochastic_Iter::vTMv(const double *v, const double * M, const int n)
 {

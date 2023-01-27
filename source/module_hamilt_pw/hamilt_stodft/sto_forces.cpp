@@ -1,5 +1,5 @@
 #include "sto_forces.h"
-#include "global.h"
+#include "src_pw/global.h"
 #include "module_symmetry/symmetry.h"
 #include "module_elecstate/potentials/efield.h"
 #include "module_elecstate/potentials/gatefield.h"

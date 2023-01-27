@@ -1,7 +1,7 @@
 #ifndef STO_ITER_H
 #define STO_ITER_H
 #include "sto_wf.h"
-#include "../module_base/math_chebyshev.h"
+#include "module_base/math_chebyshev.h"
 #include "sto_hchi.h"
 #include "sto_func.h"
 #include "module_psi/psi.h"

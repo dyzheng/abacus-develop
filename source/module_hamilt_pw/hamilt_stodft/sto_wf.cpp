@@ -3,9 +3,9 @@
 #include "time.h"
 
 //---------Temporary------------------------------------
-#include "../module_base/complexmatrix.h"
-#include "../module_base/global_function.h"
-#include "global.h"
+#include "module_base/complexmatrix.h"
+#include "module_base/global_function.h"
+#include "src_pw/global.h"
 //------------------------------------------------------
 
 Stochastic_WF::Stochastic_WF()

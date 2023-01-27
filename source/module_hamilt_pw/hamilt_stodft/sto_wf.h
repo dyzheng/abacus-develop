@@ -2,7 +2,7 @@
 #define STOCHASTIC_WF_H
 
 #include "module_cell/klist.h"
-#include "../module_base/complexmatrix.h"
+#include "module_base/complexmatrix.h"
 
 //----------------------------------------------
 // Generate stochastic wave functions 

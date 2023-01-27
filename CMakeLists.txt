@@ -486,6 +486,7 @@ target_link_libraries(${ABACUS_BIN_NAME}
     hamilt_general
     hamilt_pwdft
     hamilt_ofdft
+    hamilt_stodft
     psi
     esolver
     vdw

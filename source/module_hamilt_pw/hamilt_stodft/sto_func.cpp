@@ -1,5 +1,5 @@
 #include "sto_func.h"
-#include "occupy.h"
+#include "src_pw/occupy.h"
 #define TWOPI 6.283185307179586
 
 template<typename REAL>

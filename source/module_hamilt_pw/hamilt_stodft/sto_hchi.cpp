@@ -1,8 +1,8 @@
-#include "global.h"
+#include "src_pw/global.h"
 #include "sto_hchi.h" 
-#include "../module_base/tool_title.h"
-#include "../module_base/timer.h"
-#include "../src_parallel/parallel_reduce.h"
+#include "module_base/tool_title.h"
+#include "module_base/timer.h"
+#include "src_parallel/parallel_reduce.h"
 #include "module_esolver/esolver_sdft_pw.h"
 
 

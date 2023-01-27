@@ -12,7 +12,7 @@ target_link_libraries(
     test_deepks
     base cell symmetry md surchem xc_
     neighbor orb io relax gint lcao parallel pw driver esolver hsolver psi elecstate 
-    hamilt_general hamilt_pwdft hamilt_lcao hamilt_ofdft planewave
+    hamilt_general hamilt_pwdft hamilt_lcao hamilt_ofdft hamilt_stodft planewave
     pthread vdw dftu
     deepks device
     ${ABACUS_LINK_LIBRARIES}

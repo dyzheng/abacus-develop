@@ -10,12 +10,6 @@ list(APPEND objects
     structure_factor.cpp
     pw_complement.cpp
     soc.cpp
-    sto_iter.cpp
-    sto_hchi.cpp
-    sto_wf.cpp
-    sto_func.cpp
-    sto_forces.cpp
-    sto_stress_pw.cpp
     of_stress_pw.cpp
     symmetry_rho.cpp
     threshold_elec.cpp

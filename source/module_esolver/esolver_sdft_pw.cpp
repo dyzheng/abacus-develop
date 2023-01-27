@@ -1,21 +1,21 @@
 #include <fstream>
 #include <algorithm>
 
-#include "./esolver_sdft_pw.h"
-#include "../module_base/timer.h"
+#include "esolver_sdft_pw.h"
+#include "module_base/timer.h"
 #include "module_hsolver/hsolver_pw_sdft.h"
 #include "module_elecstate/elecstate_pw_sdft.h"
 #include "module_hsolver/diago_iter_assist.h"
 
 //-------------------Temporary------------------
-#include "../module_base/global_variable.h"
-#include "../src_pw/global.h"
-#include "../src_pw/symmetry_rho.h"
+#include "module_base/global_variable.h"
+#include "src_pw/global.h"
+#include "src_pw/symmetry_rho.h"
 //----------------------------------------------
 //-----force-------------------
-#include "../src_pw/sto_forces.h"
+#include "module_hamilt_pw/hamilt_stodft/sto_forces.h"
 //-----stress------------------
-#include "../src_pw/sto_stress_pw.h"
+#include "module_hamilt_pw/hamilt_stodft/sto_stress_pw.h"
 //---------------------------------------------------
 
 namespace ModuleESolver
