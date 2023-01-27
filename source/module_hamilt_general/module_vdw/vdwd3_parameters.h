@@ -8,7 +8,7 @@
 #define VDWD3_PARAMETERS_H
 
 #include "module_io/input.h"
-#include "module_vdw/vdw_parameters.h"
+#include "vdw_parameters.h"
 
 namespace vdw
 {

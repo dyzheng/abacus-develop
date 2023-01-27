@@ -12,7 +12,7 @@
 #include "module_elecstate/potentials/efield.h"
 #include "module_surchem/surchem.h"
 #include "module_elecstate/potentials/gatefield.h"
-#include "module_vdw/vdw.h"
+#include "module_hamilt_general/module_vdw/vdw.h"
 #include "module_psi/kernels/device.h"
 
 #include "module_hamilt_general/module_ewald/H_Ewald_pw.h"

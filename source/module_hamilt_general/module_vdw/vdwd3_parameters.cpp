@@ -4,7 +4,7 @@
 // UPDATE : 2021-4-19
 //==========================================================
 
-#include "module_vdw/vdwd3_parameters.h"
+#include "vdwd3_parameters.h"
 
 namespace vdw
 {

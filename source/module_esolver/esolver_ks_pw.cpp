@@ -18,7 +18,7 @@
 #include "module_elecstate/elecstate_pw.h"
 #include "module_hamilt_pw/hamilt_pwdft/hamilt_pw.h"
 #include "module_hsolver/diago_iter_assist.h"
-#include "module_vdw/vdw.h"
+#include "module_hamilt_general/module_vdw/vdw.h"
 #include "module_base/memory.h"
 
 #include "module_io/write_wfc_realspace.h"

@@ -4,7 +4,7 @@
 // UPDATE : 2021-4-19
 //==========================================================
 
-#include "module_vdw/vdwd3.h"
+#include "vdwd3.h"
 
 #include "module_base/constants.h"
 #include "module_base/element_name.h"

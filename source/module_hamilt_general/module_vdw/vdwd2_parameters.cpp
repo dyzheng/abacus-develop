@@ -4,7 +4,7 @@
 // UPDATE : 2019-04-26
 //==========================================================
 
-#include "module_vdw/vdwd2_parameters.h"
+#include "vdwd2_parameters.h"
 
 namespace vdw
 {

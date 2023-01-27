@@ -4,7 +4,7 @@
 // UPDATE : 2019-04-26
 //==========================================================
 
-#include "module_vdw/vdwd2.h"
+#include "vdwd2.h"
 #include "module_base/timer.h"
 
 namespace vdw

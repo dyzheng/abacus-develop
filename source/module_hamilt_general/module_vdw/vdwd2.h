@@ -7,7 +7,7 @@
 #ifndef VDWD2_H
 #define VDWD2_H
 
-#include "module_vdw/vdw.h"
+#include "vdw.h"
 
 namespace vdw
 {

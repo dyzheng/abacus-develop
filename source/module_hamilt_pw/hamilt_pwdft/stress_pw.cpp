@@ -1,7 +1,7 @@
 #include "stress_pw.h"
 #include "module_base/timer.h"
 #include "src_pw/global.h"
-#include "module_vdw/vdw.h"
+#include "module_hamilt_general/module_vdw/vdw.h"
 
 template <typename FPTYPE, typename Device>
 void Stress_PW<FPTYPE, Device>::cal_stress(ModuleBase::matrix& sigmatot, const psi::Psi<complex<FPTYPE>>* psi_in, const psi::Psi<complex<FPTYPE>, Device>* d_psi_in)

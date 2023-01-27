@@ -26,7 +26,7 @@ add_subdirectory(src_parallel)
 add_subdirectory(src_pdiag)
 add_subdirectory(src_pw)
 add_subdirectory(src_ri)
-add_subdirectory(module_vdw)
+add_subdirectory(module_hamilt_general/module_vdw)
 add_subdirectory(module_ri)
 
 add_library(

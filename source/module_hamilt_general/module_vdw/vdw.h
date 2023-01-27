@@ -4,9 +4,9 @@
 #include <memory>
 #include <vector>
 #include "module_cell/unitcell.h"
-#include "module_vdw/vdw_parameters.h"
-#include "module_vdw/vdwd2_parameters.h"
-#include "module_vdw/vdwd3_parameters.h"
+#include "vdw_parameters.h"
+#include "vdwd2_parameters.h"
+#include "vdwd3_parameters.h"
 
 namespace vdw
 {
