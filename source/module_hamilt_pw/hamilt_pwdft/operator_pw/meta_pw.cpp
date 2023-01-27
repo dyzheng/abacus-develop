@@ -2,7 +2,7 @@
 
 #include "module_base/timer.h"
 #include "src_pw/global.h"
-#include "module_xc/xc_functional.h"
+#include "module_hamilt_general/module_xc/xc_functional.h"
 #include "module_base/tool_quit.h"
 
 using hamilt::Meta;

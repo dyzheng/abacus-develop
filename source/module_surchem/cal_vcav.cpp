@@ -1,5 +1,5 @@
-#include "../module_base/timer.h"
-#include "../module_xc/xc_functional.h"
+#include "module_base/timer.h"
+#include "module_hamilt_general/module_xc/xc_functional.h"
 #include "surchem.h"
 
 void lapl_rho(const std::complex<double> *rhog, double *lapn, ModulePW::PW_Basis *rho_basis)

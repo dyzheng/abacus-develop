@@ -1,6 +1,6 @@
 #include "xc_functional.h"
-#include "../src_pw/global.h"
-#include "../module_base/global_function.h"
+#include "src_pw/global.h"
+#include "module_base/global_function.h"
 
 XC_Functional::XC_Functional(){}
 

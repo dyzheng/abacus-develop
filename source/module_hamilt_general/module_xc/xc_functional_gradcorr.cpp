@@ -8,7 +8,7 @@
 // 5. noncolin_rho, which diagonalizes the spin density matrix
 //  and gives the spin up and spin down components of the charge.
 
-#include "../src_pw/global.h"
+#include "src_pw/global.h"
 #include "xc_functional.h"
 #include "module_pw/pw_basis_k.h"
 

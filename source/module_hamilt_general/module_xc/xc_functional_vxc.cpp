@@ -5,10 +5,10 @@
 // 3. v_xc_meta : which takes rho and tau as input, and v_xc as output
 
 #include "xc_functional.h"
-#include "../src_parallel/parallel_reduce.h"
-#include "../module_base/timer.h"
-#include "./xc_functional.h"
-#include "../src_pw/global.h"
+#include "src_parallel/parallel_reduce.h"
+#include "module_base/timer.h"
+#include "xc_functional.h"
+#include "src_pw/global.h"
 
 // [etxc, vtxc, v] = XC_Functional::v_xc(...)
 std::tuple<double,double,ModuleBase::matrix> XC_Functional::v_xc(

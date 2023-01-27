@@ -1,5 +1,5 @@
-#include "../module_base/timer.h"
-#include "../module_xc/xc_functional.h"
+#include "module_base/timer.h"
+#include "module_hamilt_general/module_xc/xc_functional.h"
 #include "surchem.h"
 
 void shape_gradn(const double *PS_TOTN_real, ModulePW::PW_Basis* rho_basis, double *eprime)

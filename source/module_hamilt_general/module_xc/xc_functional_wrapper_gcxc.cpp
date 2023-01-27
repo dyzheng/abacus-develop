@@ -8,8 +8,8 @@
 
 #include "xc_functional.h"
 #include <stdexcept>
-#include "../src_pw/global.h"
-#include "../module_base/global_function.h"
+#include "src_pw/global.h"
+#include "module_base/global_function.h"
 
 void XC_Functional::gcxc(const double &rho, const double &grho, double &sxc,
           double &v1xc, double &v2xc)

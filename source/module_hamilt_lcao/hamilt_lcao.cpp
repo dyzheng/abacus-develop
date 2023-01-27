@@ -20,7 +20,7 @@
 #include "operator_lcao/overlap_lcao.h"
 #include "operator_lcao/veff_lcao.h"
 #include "module_hsolver/hsolver_lcao.h"
-#include "module_xc/xc_functional.h"
+#include "module_hamilt_general/module_xc/xc_functional.h"
 
 namespace hamilt
 {

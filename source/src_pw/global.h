@@ -10,14 +10,14 @@
 #include "energy.h"
 #ifdef __EXX
 #include "src_ri/exx_lip.h"
-#include "module_xc/exx_info.h"
+#include "module_hamilt_general/module_xc/exx_info.h"
 #endif
 #include "module_cell/klist.h"
 #include "magnetism.h"
 #include "structure_factor.h"
 #include "module_pw/pw_basis_k.h"
 #include "module_hamilt_pw/hamilt_pwdft/wavefunc.h"
-#include "module_xc/xc_functional.h"
+#include "module_hamilt_general/module_xc/xc_functional.h"
 
 #ifdef __CUDA
 namespace CudaCheck

@@ -6,7 +6,7 @@
 #include "module_base/mathzone.h"
 
 // new
-#include "module_xc/xc_functional.h"
+#include "module_hamilt_general/module_xc/xc_functional.h"
 #include "module_base/math_integral.h"
 #include "src_parallel/parallel_reduce.h"
 #include "module_base/timer.h"

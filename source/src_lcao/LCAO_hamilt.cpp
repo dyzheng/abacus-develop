@@ -1,15 +1,15 @@
-#include "../src_pw/global.h"
+#include "src_pw/global.h"
 #include "LCAO_hamilt.h"
 #include "build_st_pw.h"
-#include "../module_neighbor/sltk_atom_arrange.h"
+#include "module_neighbor/sltk_atom_arrange.h"
 #include "global_fp.h" // mohan add 2021-01-30
 #include "module_dftu/dftu.h"
-#include "../src_parallel/parallel_reduce.h"
-#include "../module_xc/xc_functional.h"
+#include "src_parallel/parallel_reduce.h"
+#include "module_hamilt_general/module_xc/xc_functional.h"
 #ifdef __DEEPKS
-#include "../module_deepks/LCAO_deepks.h"	//caoyu add 2021-07-26
+#include "module_deepks/LCAO_deepks.h"	//caoyu add 2021-07-26
 #endif
-#include "../module_base/timer.h"
+#include "module_base/timer.h"
 
 #ifdef __EXX
 #include "LCAO_hamilt.hpp"
