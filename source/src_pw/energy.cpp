@@ -19,9 +19,9 @@
 #include "module_elecstate/potentials/H_Hartree_pw.h"
 #include "module_elecstate/potentials/efield.h"    // liuyu add 2022-05-06
 #include "module_elecstate/potentials/gatefield.h"    // liuyu add 2022-09-13
-#include "module_surchem/surchem.h"
+#include "module_hamilt_general/module_surchem/surchem.h"
 #ifdef __DEEPKS
-#include "../module_deepks/LCAO_deepks.h"
+#include "module_deepks/LCAO_deepks.h"
 #endif
 
 

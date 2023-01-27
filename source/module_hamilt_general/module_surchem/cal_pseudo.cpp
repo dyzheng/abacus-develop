@@ -1,5 +1,5 @@
 #include "surchem.h"
-#include "../src_pw/global.h"
+#include "src_pw/global.h"
 
 // atom_in surchem::GetAtom;
 

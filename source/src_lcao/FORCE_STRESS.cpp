@@ -4,7 +4,7 @@
 // new
 #include "module_base/timer.h"
 #include "module_elecstate/potentials/efield.h"        // liuyu add 2022-05-18
-#include "module_surchem/surchem.h"		 //sunml add 2022-08-10
+#include "module_hamilt_general/module_surchem/surchem.h"		 //sunml add 2022-08-10
 #include "module_elecstate/potentials/gatefield.h"        // liuyu add 2022-09-13
 #include "module_hamilt_general/module_vdw/vdw.h"
 #ifdef __DEEPKS

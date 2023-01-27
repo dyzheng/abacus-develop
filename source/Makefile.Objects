@@ -20,7 +20,7 @@ VPATH=./src_global:\
 ./module_base/kernels:\
 ./module_md:\
 ./module_pw:\
-./module_surchem:\
+./module_hamilt_general/module_surchem:\
 ./module_deepks:\
 ./module_hamilt_general/module_xc:\
 ./module_esolver:\

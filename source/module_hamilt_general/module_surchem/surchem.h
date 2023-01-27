@@ -1,14 +1,14 @@
 #ifndef SURCHEM_H
 #define SURCHEM_H
 
-#include "../module_base/global_function.h"
-#include "../module_base/global_variable.h"
-#include "../module_base/matrix.h"
-#include "../module_cell/unitcell.h"
-#include "../module_pw/pw_basis.h"
-#include "../src_parallel/parallel_reduce.h"
-#include "../src_pw/global.h"
-#include "../src_pw/structure_factor.h"
+#include "module_base/global_function.h"
+#include "module_base/global_variable.h"
+#include "module_base/matrix.h"
+#include "module_cell/unitcell.h"
+#include "module_pw/pw_basis.h"
+#include "src_parallel/parallel_reduce.h"
+#include "src_pw/global.h"
+#include "src_pw/structure_factor.h"
 #include "atom_in.h"
 
 class surchem

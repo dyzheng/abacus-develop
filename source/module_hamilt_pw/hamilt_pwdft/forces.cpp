@@ -10,7 +10,7 @@
 #include "module_base/tool_threading.h"
 #include "module_base/libm/libm.h"
 #include "module_elecstate/potentials/efield.h"
-#include "module_surchem/surchem.h"
+#include "module_hamilt_general/module_surchem/surchem.h"
 #include "module_elecstate/potentials/gatefield.h"
 #include "module_hamilt_general/module_vdw/vdw.h"
 #include "module_psi/kernels/device.h"
