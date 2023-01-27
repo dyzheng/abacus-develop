@@ -9,7 +9,7 @@
 #define FULL_MASK 0xffffffff
 #define WARP_SIZE 64
 
-namespace src_pw {
+namespace hamilt {
 
 template <typename FPTYPE>
 __forceinline__ 

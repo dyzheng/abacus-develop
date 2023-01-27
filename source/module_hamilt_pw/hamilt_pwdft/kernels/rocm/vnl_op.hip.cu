@@ -7,7 +7,7 @@
 
 #define THREADS_PER_BLOCK 256
 
-namespace src_pw {
+namespace hamilt {
 
 template <typename FPTYPE>
 __device__ FPTYPE _polynomial_interpolation(

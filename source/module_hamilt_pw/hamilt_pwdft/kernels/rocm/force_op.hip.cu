@@ -7,7 +7,7 @@
 
 #define THREADS_PER_BLOCK 256
 
-namespace src_pw {
+namespace hamilt {
 
 template <typename FPTYPE>
 __global__ void cal_vkb1_nl(
