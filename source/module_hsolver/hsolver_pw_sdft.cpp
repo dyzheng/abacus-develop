@@ -1,7 +1,7 @@
 #include "hsolver_pw_sdft.h"
 #include "module_base/timer.h"
 #include "module_base/global_function.h"
-#include "src_pw/symmetry_rho.h"
+#include "module_symmetry/symmetry_rho.h"
 #include "module_base/timer.h"
 #include "module_base/tool_title.h"
 #include <algorithm>

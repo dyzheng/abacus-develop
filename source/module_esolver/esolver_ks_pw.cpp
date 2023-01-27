@@ -4,7 +4,7 @@
 
 //--------------temporary----------------------------
 #include "src_pw/global.h"
-#include "src_pw/symmetry_rho.h"
+#include "module_symmetry/symmetry_rho.h"
 #include "module_io/print_info.h"
 #include "module_hamilt_general/module_ewald/H_Ewald_pw.h"
 #include "module_elecstate/occupy.h"

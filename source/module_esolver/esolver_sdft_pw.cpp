@@ -10,7 +10,7 @@
 //-------------------Temporary------------------
 #include "module_base/global_variable.h"
 #include "src_pw/global.h"
-#include "src_pw/symmetry_rho.h"
+#include "module_symmetry/symmetry_rho.h"
 //----------------------------------------------
 //-----force-------------------
 #include "module_hamilt_pw/hamilt_stodft/sto_forces.h"

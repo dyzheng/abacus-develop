@@ -1,6 +1,5 @@
 list(APPEND objects
     global.cpp
-    symmetry_rho.cpp
 )
 
 add_library(

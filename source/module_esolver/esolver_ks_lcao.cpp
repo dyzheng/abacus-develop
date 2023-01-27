@@ -10,7 +10,7 @@
 #include "module_dftu/dftu.h"
 #include "src_lcao/dmft.h"
 #include "module_elecstate/occupy.h"
-#include "src_pw/symmetry_rho.h"
+#include "module_symmetry/symmetry_rho.h"
 #ifdef __EXX
 // #include "module_rpa/rpa.h"
 #include "module_ri/RPA_LRI.h"
