@@ -25,6 +25,8 @@ list(APPEND objects
     wavefunc.cpp
     wf_atomic.cpp
     wf_igk.cpp
+    structure_factor.cpp
+    soc.cpp
 )
 
 add_library(

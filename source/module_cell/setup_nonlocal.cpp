@@ -3,7 +3,7 @@
 
 #ifdef __LCAO
 //#include "../src_pw/global.h"
-#include "../src_pw/soc.h"
+#include "module_hamilt_pw/hamilt_pwdft/soc.h"
 // mohan add 2013-08-02
 // In order to get rid of the read in file .NONLOCAL.
 

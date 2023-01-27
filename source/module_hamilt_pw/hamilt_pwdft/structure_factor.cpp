@@ -1,12 +1,12 @@
-#include "../module_base/global_function.h"
-#include "../module_base/global_variable.h"
+#include "module_base/global_function.h"
+#include "module_base/global_variable.h"
 #include "structure_factor.h"
-#include "../module_base/constants.h"
-#include "global.h"
-#include "../module_base/math_bspline.h"
-#include "../module_base/memory.h"
-#include "../module_base/timer.h"
-#include "../module_base/libm/libm.h"
+#include "module_base/constants.h"
+#include "src_pw/global.h"
+#include "module_base/math_bspline.h"
+#include "module_base/memory.h"
+#include "module_base/timer.h"
+#include "module_base/libm/libm.h"
 
 
 #ifdef _OPENMP

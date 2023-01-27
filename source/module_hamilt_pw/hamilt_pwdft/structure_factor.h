@@ -1,9 +1,9 @@
 #ifndef PLANEWAVE_H
 #define PLANEWAVE_H
 
-#include "../module_cell/unitcell.h"
-#include "../module_base/complexmatrix.h"
-#include "../module_pw/pw_basis.h"
+#include "module_cell/unitcell.h"
+#include "module_base/complexmatrix.h"
+#include "module_pw/pw_basis.h"
 #include "module_psi/psi.h"
 
 using namespace std;
@@ -27,7 +27,7 @@ public:
     ModuleBase::ComplexMatrix strucFac;
     void setup_structure_factor(UnitCell* Ucell,ModulePW::PW_Basis* rho_basis); 		// Calculate structure factors
     void bspline_sf(const int,UnitCell* Ucell,ModulePW::PW_Basis* rho_basis); //calculate structure factors through Cardinal B-spline interpolation
-    void bsplinecoef(complex<double> *b1, complex<double> *b2, complex<double> *b3, 
+    void bsplinecoef(std::complex<double> *b1, std::complex<double> *b2, std::complex<double> *b3, 
                     const int nx, const int ny, const int nz, const int norder);
 
 

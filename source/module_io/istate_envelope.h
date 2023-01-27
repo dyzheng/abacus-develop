@@ -3,7 +3,7 @@
 #include "src_lcao/local_orbital_wfc.h"
 #include "module_gint/gint_gamma.h"
 #include "module_gint/gint_k.h"
-#include "src_pw/structure_factor.h"
+#include "module_hamilt_pw/hamilt_pwdft/structure_factor.h"
 #include "module_psi/psi.h"
 #include "module_pw/pw_basis_k.h"
 #include "module_elecstate/elecstate.h"

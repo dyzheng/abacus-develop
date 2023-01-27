@@ -4,7 +4,7 @@
 #include "module_base/math_sphbes.h"
 #include "module_base/math_polyint.h"
 #include "module_base/math_ylmreal.h"
-#include "src_pw/soc.h"
+#include "module_hamilt_pw/hamilt_pwdft/soc.h"
 #include <complex>
 #include "module_base/timer.h"
 #include "module_base/tool_quit.h"

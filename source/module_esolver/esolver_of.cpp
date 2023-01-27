@@ -9,7 +9,7 @@
 // #include "../src_pw/vdwd3.h"
 // #include "../src_pw/vdwd2_parameters.h"
 // #include "../src_pw/vdwd3_parameters.h"
-#include "src_pw/structure_factor.h"
+#include "module_hamilt_pw/hamilt_pwdft/structure_factor.h"
 #include "src_pw/symmetry_rho.h"
 #include "module_io/print_info.h"
 #include "module_hamilt_general/module_ewald/H_Ewald_pw.h"
