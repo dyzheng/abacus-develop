@@ -1,7 +1,7 @@
 #ifndef ENERGY_H
 #define ENERGY_H
-#include "../module_base/global_function.h"
-#include "../module_base/global_variable.h"
+#include "module_base/global_function.h"
+#include "module_base/global_variable.h"
 #include "module_elecstate/elecstate.h"
 #include "src_lcao/local_orbital_wfc.h"
 #include "module_psi/psi.h"

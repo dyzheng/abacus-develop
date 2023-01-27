@@ -2,7 +2,7 @@
 #include "module_base/global_function.h"
 #include "module_base/global_variable.h"
 #include "src_pw/global.h"
-#include "src_pw/occupy.h"
+#include "module_elecstate/occupy.h"
 
 namespace ModuleESolver
 {

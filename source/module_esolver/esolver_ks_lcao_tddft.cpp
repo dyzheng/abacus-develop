@@ -4,13 +4,13 @@
 #include "module_io/density_matrix.h"
 
 //--------------temporary----------------------------
-#include "../module_base/blas_connector.h"
-#include "../module_base/global_function.h"
-#include "../module_base/scalapack_connector.h"
-#include "../module_io/print_info.h"
-#include "../src_pw/global.h"
+#include "module_base/blas_connector.h"
+#include "module_base/global_function.h"
+#include "module_base/scalapack_connector.h"
+#include "module_io/print_info.h"
+#include "src_pw/global.h"
 #include "src_lcao/ELEC_evolve.h"
-#include "src_pw/occupy.h"
+#include "module_elecstate/occupy.h"
 #include "src_pw/symmetry_rho.h"
 #include "src_pw/threshold_elec.h"
 

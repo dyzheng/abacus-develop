@@ -13,7 +13,7 @@
 #include "src_lcao/global_fp.h"
 #include "module_elecstate/module_charge/charge.h"
 #include "src_pw/global.h"
-#include "src_pw/magnetism.h"
+#include "module_elecstate/magnetism.h"
 #include "src_lcao/LCAO_matrix.h"
 #include "module_base/scalapack_connector.h"
 

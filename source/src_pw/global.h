@@ -7,13 +7,13 @@
 #include "module_relax/relax_driver.h"
 #include "module_hamilt_pw/hamilt_pwdft/VNL_in_pw.h"
 #include "module_elecstate/module_charge/charge_mixing.h"
-#include "energy.h"
+#include "module_elecstate/energy.h"
 #ifdef __EXX
 #include "src_ri/exx_lip.h"
 #include "module_hamilt_general/module_xc/exx_info.h"
 #endif
 #include "module_cell/klist.h"
-#include "magnetism.h"
+#include "module_elecstate/magnetism.h"
 #include "structure_factor.h"
 #include "module_pw/pw_basis_k.h"
 #include "module_hamilt_pw/hamilt_pwdft/wavefunc.h"

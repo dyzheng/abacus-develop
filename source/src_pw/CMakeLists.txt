@@ -1,8 +1,5 @@
 list(APPEND objects
-    energy.cpp
     global.cpp
-    magnetism.cpp
-    occupy.cpp
     structure_factor.cpp
     pw_complement.cpp
     soc.cpp

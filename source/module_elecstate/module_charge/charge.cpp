@@ -22,7 +22,7 @@
 #include "src_parallel/parallel_reduce.h"
 #include "src_pw/global.h"
 #include "charge.h"
-#include "src_pw/magnetism.h"
+#include "module_elecstate/magnetism.h"
 #include "src_parallel/parallel_grid.h"
 #include "module_base/math_integral.h"
 #include "module_base/math_sphbes.h"
@@ -1121,7 +1121,7 @@ void Charge::init_final_scf()
 // calculate total number of electrons (GlobalV::nelec) and default
 // number of bands (GlobalV::NBANDS).
 //=========================================================
-#include "src_pw/occupy.h"
+#include "module_elecstate/occupy.h"
 void Charge::cal_nelec(void)
 {
 	ModuleBase::TITLE("UnitCell","cal_nelec");

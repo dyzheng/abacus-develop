@@ -14,6 +14,9 @@ list(APPEND objects
     module_charge/charge_extra.cpp
     module_charge/charge_mixing.cpp
     module_charge/charge_pulay.cpp
+    energy.cpp
+    magnetism.cpp
+    occupy.cpp
 )
 
 if(ENABLE_LCAO)

@@ -9,7 +9,7 @@
 #include "src_lcao/ELEC_evolve.h"
 #include "module_dftu/dftu.h"
 #include "src_lcao/dmft.h"
-#include "src_pw/occupy.h"
+#include "module_elecstate/occupy.h"
 #include "src_pw/symmetry_rho.h"
 #include "src_pw/threshold_elec.h"
 #ifdef __EXX

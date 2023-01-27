@@ -1,5 +1,5 @@
 #include "gtest/gtest.h"
-#include "src_pw/magnetism.h"
+#include "module_elecstate/magnetism.h"
 #include "module_hamilt_pw/hamilt_pwdft/VNL_in_pw.h"
 #include "module_cell/atom_pseudo.h"
 #include "module_cell/atom_spec.h"

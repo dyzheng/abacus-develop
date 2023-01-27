@@ -6,7 +6,7 @@
 #include "src_parallel/parallel_reduce.h"
 #include "module_base/blas_connector.h"
 #include "src_pw/global.h"
-#include "src_pw/occupy.h"
+#include "module_elecstate/occupy.h"
 
 double Stochastic_Iter::vTMv(const double *v, const double * M, const int n)
 {

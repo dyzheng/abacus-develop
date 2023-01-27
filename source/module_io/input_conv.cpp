@@ -8,7 +8,7 @@
 #include "module_io/berryphase.h"
 #include "module_relax/relax_old/ions_move_basic.h"
 #include "src_pw/global.h"
-#include "src_pw/occupy.h"
+#include "module_elecstate/occupy.h"
 #ifdef __EXX
 #include "src_ri/exx_abfs-jle.h"
 #endif

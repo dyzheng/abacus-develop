@@ -1,8 +1,8 @@
 #include "magnetism.h"
 #ifndef __CELL
-#include "global.h"
+#include "src_pw/global.h"
 #endif
-#include "../src_parallel/parallel_reduce.h"
+#include "src_parallel/parallel_reduce.h"
 
 Magnetism::Magnetism()
 {

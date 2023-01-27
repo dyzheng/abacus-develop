@@ -5,7 +5,7 @@
 #include "module_base/memory.h"
 #include "src_parallel/parallel_reduce.h"
 #include "src_pw/global.h"
-#include "src_pw/occupy.h"
+#include "occupy.h"
 
 namespace elecstate
 {

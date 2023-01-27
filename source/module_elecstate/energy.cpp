@@ -1,19 +1,19 @@
-#include "../module_base/global_function.h"
-#include "../module_base/global_variable.h"
-#include "../src_parallel/parallel_reduce.h"
-#include "global.h"
+#include "module_base/global_function.h"
+#include "module_base/global_variable.h"
+#include "src_parallel/parallel_reduce.h"
+#include "src_pw/global.h"
 #include "energy.h"
-#include "../module_base/mymath.h"
-#include "../src_lcao/LCAO_hamilt.h"
+#include "module_base/mymath.h"
+#include "src_lcao/LCAO_hamilt.h"
 #include <vector>
 #ifdef __MPI
 #include "mpi.h"
 #endif
 #include <sys/time.h>
 #ifdef __LCAO
-#include "../module_dftu/dftu.h"  //Quxin adds for DFT+U on 20201029
+#include "module_dftu/dftu.h"  //Quxin adds for DFT+U on 20201029
 #endif
-#include "myfunc.h"
+#include "src_pw/myfunc.h"
 //new
 #include "module_hamilt_general/module_ewald/H_Ewald_pw.h"
 #include "module_elecstate/potentials/H_Hartree_pw.h"
