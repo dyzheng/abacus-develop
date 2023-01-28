@@ -7,7 +7,7 @@
 #include "module_esolver/esolver_ks_lcao.h"
 #include "module_esolver/esolver_ks_lcao_tddft.h"
 #include "module_psi/psi.h"
-#include "module_hamilt_lcao/hamilt_lcao.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/hamilt_lcao.h"
 
 //-----------------------------------------------------------
 // mohan add 2021-02-09

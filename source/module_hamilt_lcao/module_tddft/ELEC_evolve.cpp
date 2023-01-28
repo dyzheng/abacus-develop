@@ -6,7 +6,7 @@
 #include "module_symmetry/symmetry_rho.h"
 #include "LCAO_evolve.h"
 #include "module_dftu/dftu.h"
-#include "module_hamilt_lcao/hamilt_lcao.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/hamilt_lcao.h"
 
 ELEC_evolve::ELEC_evolve(){};
 ELEC_evolve::~ELEC_evolve(){};

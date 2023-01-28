@@ -19,13 +19,13 @@
 #include "../module_deepks/LCAO_deepks.h"
 #endif
 //-----force& stress-------------------
-#include "module_hamilt_lcao/FORCE_STRESS.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/FORCE_STRESS.h"
 
 //-----HSolver ElecState Hamilt--------
 #include "module_elecstate/elecstate_lcao.h"
-#include "module_hamilt_lcao/hamilt_lcao.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/hamilt_lcao.h"
 #include "module_hsolver/hsolver_lcao.h"
-#include "module_hamilt_lcao/operator_lcao/op_exx_lcao.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/operator_lcao/op_exx_lcao.h"
 // function used by deepks
 #include "module_elecstate/cal_dm.h"
 //---------------------------------------------------

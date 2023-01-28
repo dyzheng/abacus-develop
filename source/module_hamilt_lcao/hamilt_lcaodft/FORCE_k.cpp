@@ -11,7 +11,7 @@
 #include <unordered_map>
 
 #ifdef __DEEPKS
-#include "../module_deepks/LCAO_deepks.h"
+#include "module_deepks/LCAO_deepks.h"
 #endif
 
 #ifdef _OPENMP

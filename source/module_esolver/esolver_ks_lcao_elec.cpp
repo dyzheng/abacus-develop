@@ -1,7 +1,7 @@
 #include "module_esolver/esolver_ks_lcao.h"
 #include "src_pw/global.h"
 #include "module_symmetry/symmetry_rho.h"
-#include "module_hamilt_lcao/hamilt_lcao.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/hamilt_lcao.h"
 #include "module_dftu/dftu.h"
 //
 #include "module_neighbor/sltk_atom_arrange.h"
@@ -20,7 +20,7 @@
 #include "module_hamilt_general/module_vdw/vdw.h"
 #include "module_relax/relax_old/variable_cell.h"    // liuyu 2022-11-07
 
-#include "module_hamilt_lcao/operator_lcao/op_exx_lcao.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/operator_lcao/op_exx_lcao.h"
 #include "module_io/density_matrix.h"
 
 namespace ModuleESolver
