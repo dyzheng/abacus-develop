@@ -6,7 +6,7 @@
 #include "module_base/global_variable.h"
 #include "module_hamilt_lcao/hamilt_lcaodft/hamilt_lcao.h"
 #include "module_psi/psi.h"
-#include "src_lcao/LCAO_matrix.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/LCAO_matrix.h"
 #include "src_lcao/local_orbital_wfc.h"
 
 class Evolve_LCAO_Matrix

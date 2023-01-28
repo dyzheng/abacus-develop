@@ -3,7 +3,7 @@
 
 #include "module_base/global_function.h"
 #include "module_base/global_variable.h"
-#include "src_lcao/LCAO_hamilt.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/LCAO_hamilt.h"
 #include "module_esolver/esolver_ks_lcao.h"
 #include "module_esolver/esolver_ks_lcao_tddft.h"
 #include "module_psi/psi.h"

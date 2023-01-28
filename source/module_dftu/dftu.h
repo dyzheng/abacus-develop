@@ -7,7 +7,7 @@
 
 #include "module_cell/unitcell.h"
 #include "module_orbital/parallel_orbitals.h"
-#include "src_lcao/LCAO_matrix.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/LCAO_matrix.h"
 #include "module_elecstate/module_charge/charge_mixing.h"
 
 #include <string>

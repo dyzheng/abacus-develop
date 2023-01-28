@@ -2,9 +2,9 @@
 #define HAMILTLCAO_H
 
 #include "module_hamilt_general/hamilt.h"
-#include "src_lcao/LCAO_gen_fixedH.h"
-#include "src_lcao/LCAO_matrix.h"
-#include "src_lcao/LCAO_hamilt.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/LCAO_gen_fixedH.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/LCAO_matrix.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/LCAO_hamilt.h"
 #include "module_gint/gint_gamma.h"
 #include "module_gint/gint_k.h"
 #include "src_lcao/local_orbital_charge.h"

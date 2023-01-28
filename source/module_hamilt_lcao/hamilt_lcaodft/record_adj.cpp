@@ -1,7 +1,7 @@
 #include "record_adj.h"
-#include "../src_pw/global.h"
-#include "../module_base/timer.h"
-#include "../module_neighbor/sltk_grid_driver.h"
+#include "src_pw/global.h"
+#include "module_base/timer.h"
+#include "module_neighbor/sltk_grid_driver.h"
 
 Record_adj::Record_adj() : iat2ca(nullptr) {}
 Record_adj::~Record_adj(){}

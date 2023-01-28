@@ -14,8 +14,8 @@
 #include "module_hamilt_pw/hamilt_pwdft/wavefunc.h"
 #ifdef __LCAO
 #include "src_lcao/local_orbital_charge.h"
-#include "src_lcao/LCAO_gen_fixedH.h"
-#include "src_lcao/LCAO_matrix.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/LCAO_gen_fixedH.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/LCAO_matrix.h"
 #include "src_lcao/global_fp.h"
 #endif
 #include "module_base/lapack_connector.h"

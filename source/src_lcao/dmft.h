@@ -6,9 +6,9 @@
 #define DFT_DMFT_INTERFACE
 
 #include "module_io/input.h"
-#include "../module_cell/unitcell.h"
-#include "../module_base/complexmatrix.h"
-#include "src_lcao/LCAO_matrix.h"
+#include "module_cell/unitcell.h"
+#include "module_base/complexmatrix.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/LCAO_matrix.h"
 #include "src_lcao/local_orbital_charge.h"
 
 #include <string>

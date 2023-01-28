@@ -1,9 +1,9 @@
 #include "LCAO_matrix.h"
-#include "global_fp.h"
-#include "../src_pw/global.h"
-#include "../module_base/tool_threading.h"
+#include "src_lcao/global_fp.h"
+#include "src_pw/global.h"
+#include "module_base/tool_threading.h"
 #ifdef __DEEPKS
-#include "../module_deepks/LCAO_deepks.h"
+#include "module_deepks/LCAO_deepks.h"
 #endif
 
 LCAO_Matrix::LCAO_Matrix()

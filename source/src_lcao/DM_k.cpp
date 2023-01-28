@@ -59,7 +59,7 @@ void Local_Orbital_Charge::allocate_DM_k(void)
     return;
 }
 
-#include "record_adj.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/record_adj.h"
 inline void cal_DM_ATOM(const Grid_Technique &gt,
                         const std::complex<double> fac,
                         Record_adj RA,

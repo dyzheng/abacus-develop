@@ -1,7 +1,7 @@
 #ifndef OPERATORLCAO_H
 #define OPERATORLCAO_H
 #include"module_hamilt_general/operator.h"
-#include "src_lcao/LCAO_matrix.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/LCAO_matrix.h"
 #include "module_hamilt_general/matrixblock.h"
 
 namespace hamilt

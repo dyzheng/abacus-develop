@@ -1,15 +1,15 @@
 #ifndef LOCAL_ORBITAL_CHARGE
 #define LOCAL_ORBITAL_CHARGE
 
-#include "../module_base/global_function.h"
-#include "../module_base/global_variable.h"
-#include "../module_base/matrix.h"
-#include "../module_base/complexmatrix.h"
-#include "../src_parallel/parallel_common.h"
-#include "../module_gint/grid_technique.h"
-#include "src_lcao/record_adj.h"
+#include "module_base/global_function.h"
+#include "module_base/global_variable.h"
+#include "module_base/matrix.h"
+#include "module_base/complexmatrix.h"
+#include "src_parallel/parallel_common.h"
+#include "module_gint/grid_technique.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/record_adj.h"
 #include "src_lcao/local_orbital_wfc.h"
-#include "src_lcao/LCAO_hamilt.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/LCAO_hamilt.h"
 #include "module_psi/psi.h"
 #include "module_elecstate/elecstate.h"
 

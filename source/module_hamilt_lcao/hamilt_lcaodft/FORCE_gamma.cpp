@@ -6,7 +6,7 @@
 #ifdef __DEEPKS
 #include "module_deepks/LCAO_deepks.h"//caoyu add for deepks on 20210813
 #endif
-#include "src_lcao/LCAO_hamilt.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/LCAO_hamilt.h"
 
 Force_LCAO_gamma::Force_LCAO_gamma()
 {}

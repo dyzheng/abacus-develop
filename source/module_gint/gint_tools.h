@@ -6,7 +6,7 @@
 #include "grid_technique.h"
 #include <cstdlib>
 #include "module_elecstate/module_charge/charge.h"
-#include "src_lcao/LCAO_matrix.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/LCAO_matrix.h"
 
 namespace Gint_Tools
 {

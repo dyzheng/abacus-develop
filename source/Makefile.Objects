@@ -384,7 +384,6 @@ OBJS_LCAO=DM_gamma.o\
       LCAO_hamilt.o\
       LCAO_matrix.o\
       LCAO_nnr.o\
-      build_st_pw.o\
       center2_orb-orb11.o\
       center2_orb-orb21.o\
       center2_orb-orb22.o\

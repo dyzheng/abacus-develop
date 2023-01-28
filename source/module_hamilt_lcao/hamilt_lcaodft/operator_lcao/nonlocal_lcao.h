@@ -1,7 +1,7 @@
 #ifndef NONLOCALLCAO_H
 #define NONLOCALLCAO_H
 #include "operator_lcao.h"
-#include "src_lcao/LCAO_gen_fixedH.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/LCAO_gen_fixedH.h"
 
 namespace hamilt
 {

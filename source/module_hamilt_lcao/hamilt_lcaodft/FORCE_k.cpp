@@ -298,7 +298,7 @@ void Force_LCAO_k::finish_k(void)
     return;
 }
 
-#include "src_lcao/record_adj.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/record_adj.h"
 void Force_LCAO_k::cal_foverlap_k(const bool isforce,
                                   const bool isstress,
                                   Record_adj& ra,

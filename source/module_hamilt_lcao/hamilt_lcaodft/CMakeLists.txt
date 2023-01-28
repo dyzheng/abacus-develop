@@ -18,6 +18,11 @@ if(ENABLE_LCAO)
         FORCE_gamma_tvnl.cpp
         FORCE_gamma_vl.cpp
         FORCE_k.cpp
+        LCAO_gen_fixedH.cpp
+        LCAO_hamilt.cpp
+        LCAO_matrix.cpp
+        LCAO_nnr.cpp
+        record_adj.cpp
     )
 
     add_library(

@@ -1,11 +1,11 @@
 #ifndef LCAO_HAMILT_H
 #define LCAO_HAMILT_H
 
-#include "../module_base/global_function.h"
-#include "../module_base/global_variable.h"
+#include "module_base/global_function.h"
+#include "module_base/global_variable.h"
 #include "LCAO_gen_fixedH.h"
-#include "../module_gint/gint_gamma.h"
-#include "../module_gint/gint_k.h"
+#include "module_gint/gint_gamma.h"
+#include "module_gint/gint_k.h"
 
 #ifdef __EXX
 #include <RI/global/Tensor.h>

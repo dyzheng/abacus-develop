@@ -3,7 +3,7 @@
 
 #include "module_orbital/ORB_atomic_lm.h"
 #include "grid_technique.h"
-#include "src_lcao/LCAO_matrix.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/LCAO_matrix.h"
 #include "module_elecstate/module_charge/charge.h"
 #include "gint.h"
 

@@ -1,14 +1,14 @@
 #ifndef LCAO_MATRIX_H
 #define LCAO_MATRIX_H
 
-#include "../module_base/global_function.h"
-#include "../module_base/global_variable.h"
-#include "../module_base/vector3.h"
-#include "../module_base/complexmatrix.h"
-#include "../module_orbital/parallel_orbitals.h"
+#include "module_base/global_function.h"
+#include "module_base/global_variable.h"
+#include "module_base/vector3.h"
+#include "module_base/complexmatrix.h"
+#include "module_orbital/parallel_orbitals.h"
 
 // add by jingan for map<> in 2021-12-2, will be deleted in the future
-#include "../module_base/abfs-vector3_order.h"
+#include "module_base/abfs-vector3_order.h"
 
 class LCAO_Matrix
 {

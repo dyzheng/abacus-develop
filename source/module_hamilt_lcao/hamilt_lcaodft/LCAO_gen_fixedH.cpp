@@ -1,7 +1,7 @@
 #include "LCAO_gen_fixedH.h"
 #include "src_pw/global.h"
 #include "module_hamilt_pw/hamilt_pwdft/wavefunc.h"
-#include "global_fp.h"
+#include "src_lcao/global_fp.h"
 #include <vector>
 #include <unordered_map>
 #include <map>
