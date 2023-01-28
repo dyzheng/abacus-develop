@@ -1,13 +1,12 @@
 #include "module_esolver/esolver_ks_lcao.h"
 #include "src_pw/global.h"
 #include "module_symmetry/symmetry_rho.h"
-#include "src_lcao/LCAO_evolve.h"
+#include "module_hamilt_lcao/hamilt_lcao.h"
 #include "module_dftu/dftu.h"
 //
 #include "module_neighbor/sltk_atom_arrange.h"
 #include "module_io/istate_charge.h"
 #include "module_io/istate_envelope.h"
-#include "src_lcao/ELEC_evolve.h"
 //
 #include "src_ri/exx_abfs-jle.h"
 #include "src_ri/exx_opt_orb.h"

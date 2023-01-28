@@ -2,8 +2,6 @@ if(ENABLE_LCAO)
   list(APPEND objects
       DM_gamma.cpp
       DM_k.cpp
-      ELEC_evolve.cpp
-      LCAO_evolve.cpp
       LCAO_gen_fixedH.cpp
       LCAO_hamilt.cpp
       LCAO_matrix.cpp

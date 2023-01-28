@@ -18,6 +18,8 @@ if(ENABLE_LCAO)
         FORCE_gamma_tvnl.cpp
         FORCE_gamma_vl.cpp
         FORCE_k.cpp
+        module_tddft/ELEC_evolve.cpp
+        module_tddft/LCAO_evolve.cpp
     )
 
     add_library(

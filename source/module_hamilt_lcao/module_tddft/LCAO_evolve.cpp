@@ -1,9 +1,9 @@
 #include "LCAO_evolve.h"
 
 #include "module_io/input.h"
-#include "../module_base/scalapack_connector.h"
-#include "../module_io/write_HS.h"
-#include "../src_pw/global.h"
+#include "module_base/scalapack_connector.h"
+#include "module_io/write_HS.h"
+#include "src_pw/global.h"
 #include "ELEC_evolve.h"
 #include "module_hamilt_lcao/hamilt_lcao.h"
 

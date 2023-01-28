@@ -6,7 +6,6 @@
 #include "../module_base/global_function.h"
 #include "../module_io/print_info.h"
 #include "../src_pw/global.h"
-#include "src_lcao/ELEC_evolve.h"
 #include "module_dftu/dftu.h"
 #include "src_lcao/dmft.h"
 #include "module_elecstate/occupy.h"
