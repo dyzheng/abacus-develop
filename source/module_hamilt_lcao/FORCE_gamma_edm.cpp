@@ -1,7 +1,7 @@
 #include "FORCE_gamma.h"
-#include "../src_pw/global.h"
-#include "../src_parallel/parallel_reduce.h"
-#include "../module_base/timer.h"
+#include "src_pw/global.h"
+#include "src_parallel/parallel_reduce.h"
+#include "module_base/timer.h"
 #include "module_psi/psi.h"
 #include "module_elecstate/cal_dm.h"
 

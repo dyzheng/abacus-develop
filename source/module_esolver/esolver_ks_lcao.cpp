@@ -20,7 +20,7 @@
 #include "../module_deepks/LCAO_deepks.h"
 #endif
 //-----force& stress-------------------
-#include "src_lcao/FORCE_STRESS.h"
+#include "module_hamilt_lcao/FORCE_STRESS.h"
 
 //-----HSolver ElecState Hamilt--------
 #include "module_elecstate/elecstate_lcao.h"

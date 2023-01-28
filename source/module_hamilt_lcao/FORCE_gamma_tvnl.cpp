@@ -1,7 +1,7 @@
 #include "FORCE_gamma.h"
-#include "../src_pw/global.h"
+#include "src_pw/global.h"
 #include <unordered_map>
-#include "../module_base/timer.h"
+#include "module_base/timer.h"
 
 void Force_LCAO_gamma::cal_fvnl_dbeta_new(
 	const std::vector<ModuleBase::matrix> &dm2d, 

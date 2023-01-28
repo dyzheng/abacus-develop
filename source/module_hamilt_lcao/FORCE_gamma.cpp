@@ -1,10 +1,10 @@
 #include "FORCE_gamma.h"
-#include "../src_pw/global.h"
-#include "../src_parallel/parallel_reduce.h"
-#include "../module_base/memory.h"
-#include "../module_base/timer.h"
+#include "src_pw/global.h"
+#include "src_parallel/parallel_reduce.h"
+#include "module_base/memory.h"
+#include "module_base/timer.h"
 #ifdef __DEEPKS
-#include "../module_deepks/LCAO_deepks.h"//caoyu add for deepks on 20210813
+#include "module_deepks/LCAO_deepks.h"//caoyu add for deepks on 20210813
 #endif
 #include "src_lcao/LCAO_hamilt.h"
 

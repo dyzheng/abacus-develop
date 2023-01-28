@@ -12,6 +12,12 @@ if(ENABLE_LCAO)
         operator_lcao/op_dftu_lcao.cpp
         operator_lcao/deepks_lcao.cpp
         operator_lcao/op_exx_lcao.cpp
+        FORCE_STRESS.cpp
+        FORCE_gamma.cpp
+        FORCE_gamma_edm.cpp
+        FORCE_gamma_tvnl.cpp
+        FORCE_gamma_vl.cpp
+        FORCE_k.cpp
     )
 
     add_library(

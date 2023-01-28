@@ -15,7 +15,7 @@
 #ifdef __LCAO
 #include "module_orbital/ORB_read.h"
 #include "src_lcao/ELEC_evolve.h"
-#include "src_lcao/FORCE_STRESS.h"
+#include "module_hamilt_lcao/FORCE_STRESS.h"
 #include "module_dftu/dftu.h"
 #include "src_lcao/global_fp.h"
 #include "src_lcao/local_orbital_charge.h"

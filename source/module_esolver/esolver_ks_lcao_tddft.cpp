@@ -21,7 +21,7 @@
 #include "module_psi/psi.h"
 
 //-----force& stress-------------------
-#include "src_lcao/FORCE_STRESS.h"
+#include "module_hamilt_lcao/FORCE_STRESS.h"
 
 //---------------------------------------------------
 

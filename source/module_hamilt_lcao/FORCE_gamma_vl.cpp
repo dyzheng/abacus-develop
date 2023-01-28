@@ -1,6 +1,6 @@
 #include "FORCE_gamma.h"
-#include "../src_pw/global.h"
-#include "../module_base/timer.h"
+#include "src_pw/global.h"
+#include "module_base/timer.h"
 
 void Force_LCAO_gamma::cal_fvl_dphi(
 	double*** DM_in,

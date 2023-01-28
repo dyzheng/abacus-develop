@@ -1,5 +1,5 @@
 #include "FORCE_STRESS.h"
-#include "../src_pw/global.h"
+#include "src_pw/global.h"
 #include "module_dftu/dftu.h"  //Quxin add for DFT+U on 20201029
 // new
 #include "module_base/timer.h"
@@ -8,7 +8,7 @@
 #include "module_elecstate/potentials/gatefield.h"        // liuyu add 2022-09-13
 #include "module_hamilt_general/module_vdw/vdw.h"
 #ifdef __DEEPKS
-#include "../module_deepks/LCAO_deepks.h"	//caoyu add for deepks 2021-06-03
+#include "module_deepks/LCAO_deepks.h"	//caoyu add for deepks 2021-06-03
 #endif
 
 double Force_Stress_LCAO::force_invalid_threshold_ev = 0.00;

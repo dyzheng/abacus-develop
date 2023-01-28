@@ -3,12 +3,6 @@ if(ENABLE_LCAO)
       DM_gamma.cpp
       DM_k.cpp
       ELEC_evolve.cpp
-      FORCE_STRESS.cpp
-      FORCE_gamma.cpp
-      FORCE_gamma_edm.cpp
-      FORCE_gamma_tvnl.cpp
-      FORCE_gamma_vl.cpp
-      FORCE_k.cpp
       LCAO_evolve.cpp
       LCAO_gen_fixedH.cpp
       LCAO_hamilt.cpp

@@ -1,9 +1,9 @@
 #include "FORCE_k.h"
 
-#include "../module_base/memory.h"
-#include "../module_base/timer.h"
-#include "../src_parallel/parallel_reduce.h"
-#include "../src_pw/global.h"
+#include "module_base/memory.h"
+#include "module_base/timer.h"
+#include "src_parallel/parallel_reduce.h"
+#include "src_pw/global.h"
 #include "module_elecstate/cal_dm.h"
 #include "module_base/tool_threading.h"
 
@@ -298,7 +298,7 @@ void Force_LCAO_k::finish_k(void)
     return;
 }
 
-#include "record_adj.h"
+#include "src_lcao/record_adj.h"
 void Force_LCAO_k::cal_foverlap_k(const bool isforce,
                                   const bool isstress,
                                   Record_adj& ra,

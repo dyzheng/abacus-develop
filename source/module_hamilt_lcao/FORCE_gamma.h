@@ -1,10 +1,10 @@
 #ifndef FORCE_LCAO_GAMMA_H
 #define FORCE_LCAO_GAMMA_H
 
-#include "../module_base/global_function.h"
-#include "../module_base/global_variable.h"
-#include "../module_base/matrix.h"
-#include "LCAO_matrix.h" 
+#include "module_base/global_function.h"
+#include "module_base/global_variable.h"
+#include "module_base/matrix.h"
+#include "src_lcao/LCAO_matrix.h" 
 #include "src_lcao/local_orbital_charge.h"
 #include "src_lcao/LCAO_hamilt.h"
 #include "module_psi/psi.h"
