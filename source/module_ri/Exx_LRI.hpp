@@ -15,7 +15,7 @@
 #include "src_ri/conv_coulomb_pot_k.h"
 #include "module_base/tool_title.h"
 #include "module_base/timer.h"
-#include "src_lcao/serialization_cereal.h"
+#include "src_ri/serialization_cereal.h"
 #include "src_lcao/local_orbital_charge.h"
 #include "module_orbital/parallel_orbitals.h"
 
