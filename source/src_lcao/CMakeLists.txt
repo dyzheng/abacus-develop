@@ -2,9 +2,6 @@ if(ENABLE_LCAO)
   list(APPEND objects
       DM_gamma.cpp
       DM_k.cpp
-      center2_orb-orb11.cpp
-      center2_orb-orb21.cpp
-      center2_orb-orb22.cpp
       global_fp.cpp
       local_orbital_charge.cpp
       local_orbital_wfc.cpp

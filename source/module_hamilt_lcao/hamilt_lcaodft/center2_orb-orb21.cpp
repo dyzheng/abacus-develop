@@ -5,8 +5,8 @@
 
 #include "center2_orb-orb21.h"
 
-#include "../module_base/constants.h"
-#include "../module_base/ylm.h"
+#include "module_base/constants.h"
+#include "module_base/ylm.h"
 
 #include <cmath>
 

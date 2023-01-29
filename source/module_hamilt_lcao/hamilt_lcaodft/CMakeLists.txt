@@ -23,6 +23,9 @@ if(ENABLE_LCAO)
         LCAO_matrix.cpp
         LCAO_nnr.cpp
         record_adj.cpp
+        center2_orb-orb11.cpp
+        center2_orb-orb21.cpp
+        center2_orb-orb22.cpp
     )
 
     add_library(
