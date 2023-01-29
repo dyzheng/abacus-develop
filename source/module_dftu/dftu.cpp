@@ -10,7 +10,7 @@
 #include "module_base/memory.h"
 #include "module_base/timer.h"
 #include "module_orbital/ORB_gen_tables.h"
-#include "src_lcao/global_fp.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/global_fp.h"
 #include "module_elecstate/module_charge/charge.h"
 #include "src_pw/global.h"
 #include "module_elecstate/magnetism.h"

@@ -8,7 +8,7 @@
 #include "module_hamilt_lcao/hamilt_lcaodft/center2_orb.h"
 #include "module_hamilt_lcao/hamilt_lcaodft/center2_orb-orb11.h"
 #include "module_hamilt_lcao/hamilt_lcaodft/center2_orb-orb21.h"
-#include "src_lcao/local_orbital_wfc.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/local_orbital_wfc.h"
 
 #include "module_orbital/ORB_table_phi.h"
 #include "module_orbital/ORB_gaunt_table.h"

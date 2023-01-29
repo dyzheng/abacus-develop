@@ -4,7 +4,7 @@
 #include "module_base/timer.h"
 #include "module_gint/gint_gamma.h"
 #include "module_gint/gint_k.h"
-#include "src_lcao/local_orbital_charge.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/local_orbital_charge.h"
 #include "module_elecstate/potentials/potential_new.h"
 
 namespace hamilt

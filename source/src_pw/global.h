@@ -296,10 +296,10 @@ extern Exx_Lip exx_lip;
 extern pseudopot_cell_vnl ppcell;
 } // namespace GlobalC
 
-#include "../module_cell/unitcell.h"
-#include "../module_symmetry/symmetry.h"
-#include "../src_parallel/parallel_grid.h"
-#include "../src_parallel/parallel_kpoints.h"
+#include "module_cell/unitcell.h"
+#include "module_symmetry/symmetry.h"
+#include "src_parallel/parallel_grid.h"
+#include "src_parallel/parallel_kpoints.h"
 namespace GlobalC
 {
 extern UnitCell ucell;
@@ -313,7 +313,7 @@ extern Restart restart; // Peize Lin add 2020.04.04
 // extern Magnetism mag;
 
 #ifdef __LCAO
-#include "../src_lcao/global_fp.h"
+#include "../module_hamilt_lcao/hamilt_lcaodft/global_fp.h"
 #endif
 
 #endif

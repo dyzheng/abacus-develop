@@ -1,5 +1,5 @@
 #include "global_fp.h"
-#include "../src_pw/global.h"
+#include "src_pw/global.h"
 
 namespace GlobalC
 {

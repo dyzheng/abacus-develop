@@ -1,6 +1,6 @@
 #ifndef ISTATE_ENVELOPE_H
 #define ISTATE_ENVELOPE_H
-#include "src_lcao/local_orbital_wfc.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/local_orbital_wfc.h"
 #include "module_gint/gint_gamma.h"
 #include "module_gint/gint_k.h"
 #include "module_hamilt_pw/hamilt_pwdft/structure_factor.h"

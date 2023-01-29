@@ -4,13 +4,13 @@
 //UPDATE : 2019-06-28 
 //=========================================================
 
-#include "../module_base/blas_connector.h"
-#include "../module_base/scalapack_connector.h"
-#include "../module_base/timer.h"
+#include "module_base/blas_connector.h"
+#include "module_base/scalapack_connector.h"
+#include "module_base/timer.h"
 #include "global_fp.h"
-#include "../src_pw/global.h"
+#include "src_pw/global.h"
 
-#include "src_lcao/local_orbital_charge.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/local_orbital_charge.h"
 
 void Local_Orbital_Charge::init_dm_2d()
 {

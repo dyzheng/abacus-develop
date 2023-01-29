@@ -1,8 +1,8 @@
 #include "local_orbital_charge.h"
 
-#include "../module_base/blas_connector.h"
-#include "../module_base/timer.h"
-#include "../src_pw/global.h"
+#include "module_base/blas_connector.h"
+#include "module_base/timer.h"
+#include "src_pw/global.h"
 
 // Shen Yu add 2019/5/9
 extern "C"

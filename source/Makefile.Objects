@@ -47,7 +47,6 @@ VPATH=./src_global:\
 ./module_dftu:\
 ./src_pw:\
 ./src_pw/kernels:\
-./src_lcao:\
 ./module_relax:\
 ./module_relax/relax_old:\
 ./module_relax/relax_new:\

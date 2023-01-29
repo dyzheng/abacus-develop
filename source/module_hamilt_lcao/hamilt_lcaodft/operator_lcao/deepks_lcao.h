@@ -2,7 +2,7 @@
 #define DEEPKSLCAO_H
 #include "operator_lcao.h"
 #include "module_base/timer.h"
-#include "src_lcao/local_orbital_charge.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/local_orbital_charge.h"
 
 namespace hamilt
 {

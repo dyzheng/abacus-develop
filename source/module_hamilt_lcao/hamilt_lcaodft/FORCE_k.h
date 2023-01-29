@@ -6,7 +6,7 @@
 #include "module_base/matrix.h"
 #include "module_hamilt_lcao/hamilt_lcaodft/LCAO_matrix.h" 
 #include "FORCE_gamma.h"
-#include "src_lcao/local_orbital_charge.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/local_orbital_charge.h"
 #include "module_hamilt_lcao/hamilt_lcaodft/LCAO_hamilt.h"
 
 class Force_LCAO_k : public Force_LCAO_gamma

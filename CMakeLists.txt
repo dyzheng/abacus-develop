@@ -496,7 +496,6 @@ target_link_libraries(${ABACUS_BIN_NAME}
 if(ENABLE_LCAO)
   target_link_libraries(${ABACUS_BIN_NAME}
       hamilt_lcao
-      lcao
       tddft
       orb
       gint

@@ -4,7 +4,7 @@
 #include "module_io/input_conv.h"
 #include "src_pw/global.h"
 #ifdef __LCAO
-#include "src_lcao/global_fp.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/global_fp.h"
 #endif
 #include "module_base/memory.h"
 #include "module_base/timer.h"

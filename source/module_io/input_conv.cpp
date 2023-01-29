@@ -17,8 +17,8 @@
 #include "module_hamilt_lcao/module_tddft/ELEC_evolve.h"
 #include "module_hamilt_lcao/hamilt_lcaodft/FORCE_STRESS.h"
 #include "module_dftu/dftu.h"
-#include "src_lcao/global_fp.h"
-#include "src_lcao/local_orbital_charge.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/global_fp.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/local_orbital_charge.h"
 #endif
 #include "module_base/timer.h"
 #include "module_elecstate/elecstate_lcao.h"
