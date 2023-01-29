@@ -1,5 +1,6 @@
 #include "module_esolver/esolver_ks_lcao.h"
 #include "src_pw/global.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/global_fp.h"
 #include "module_symmetry/symmetry_rho.h"
 #include "module_hamilt_lcao/hamilt_lcaodft/hamilt_lcao.h"
 #include "module_dftu/dftu.h"

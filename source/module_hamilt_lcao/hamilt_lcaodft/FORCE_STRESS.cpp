@@ -1,5 +1,6 @@
 #include "FORCE_STRESS.h"
 #include "src_pw/global.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/global_fp.h"
 #include "module_dftu/dftu.h"  //Quxin add for DFT+U on 20201029
 // new
 #include "module_base/timer.h"

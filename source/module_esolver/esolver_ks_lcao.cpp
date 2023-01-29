@@ -3,9 +3,10 @@
 #include "module_io/density_matrix.h"
 
 //--------------temporary----------------------------
-#include "../module_base/global_function.h"
-#include "../module_io/print_info.h"
-#include "../src_pw/global.h"
+#include "module_base/global_function.h"
+#include "module_io/print_info.h"
+#include "src_pw/global.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/global_fp.h"
 #include "module_dftu/dftu.h"
 #include "module_elecstate/occupy.h"
 #include "module_symmetry/symmetry_rho.h"
@@ -15,7 +16,7 @@
 #endif
 
 #ifdef __DEEPKS
-#include "../module_deepks/LCAO_deepks.h"
+#include "module_deepks/LCAO_deepks.h"
 #endif
 //-----force& stress-------------------
 #include "module_hamilt_lcao/hamilt_lcaodft/FORCE_STRESS.h"

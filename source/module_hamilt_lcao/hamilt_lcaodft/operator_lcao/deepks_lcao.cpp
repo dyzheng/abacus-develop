@@ -5,6 +5,7 @@
 #include "module_deepks/LCAO_deepks.h"
 #endif
 #include "src_pw/global.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/global_fp.h"
 
 namespace hamilt
 {

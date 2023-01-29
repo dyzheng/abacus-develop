@@ -312,8 +312,4 @@ extern Restart restart; // Peize Lin add 2020.04.04
 
 // extern Magnetism mag;
 
-#ifdef __LCAO
-#include "../module_hamilt_lcao/hamilt_lcaodft/global_fp.h"
-#endif
-
 #endif

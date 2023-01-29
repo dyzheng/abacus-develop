@@ -1,5 +1,6 @@
 #include "FORCE_gamma.h"
 #include "src_pw/global.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/global_fp.h"
 #include <unordered_map>
 #include "module_base/timer.h"
 
