@@ -2,7 +2,7 @@
 #include "module_base/math_polyint.h"
 #include "module_base/math_ylmreal.h"
 #include "module_base/timer.h"
-#include "src_pw/global.h"
+#include "module_hamilt_pw/hamilt_pwdft/global.h"
 #include "module_psi/kernels/device.h"
 
 //calculate the nonlocal pseudopotential stress in PW

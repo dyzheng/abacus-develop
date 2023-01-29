@@ -1,6 +1,6 @@
 #include "exx_abfs-parallel-communicate-dm.h"
 #include "module_hamilt_lcao/hamilt_lcaodft/global_fp.h"
-#include "src_pw/global.h"
+#include "module_hamilt_pw/hamilt_pwdft/global.h"
 #include "module_hamilt_lcao/hamilt_lcaodft/record_adj.h"
 
 #include "src_external/src_test/src_ri/exx_lcao-test.h"

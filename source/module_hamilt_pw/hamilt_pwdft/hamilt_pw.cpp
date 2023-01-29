@@ -3,7 +3,7 @@
 #include "module_base/blas_connector.h"
 #include "module_base/global_function.h"
 #include "module_base/global_variable.h"
-#include "src_pw/global.h"
+#include "module_hamilt_pw/hamilt_pwdft/global.h"
 
 #include "operator_pw/veff_pw.h"
 #include "operator_pw/ekinetic_pw.h"

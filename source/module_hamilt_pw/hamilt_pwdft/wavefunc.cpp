@@ -1,5 +1,5 @@
 #include "wavefunc.h"
-#include "src_pw/global.h"
+#include "module_hamilt_pw/hamilt_pwdft/global.h"
 #include "module_hamilt_lcao/hamilt_lcaodft/wavefunc_in_pw.h"
 #include "module_io/winput.h"
 #include "module_base/memory.h"

@@ -1,14 +1,10 @@
 #include "esolver_of.h"
 
 //-----------temporary-------------------------
-#include "src_pw/global.h"
+#include "module_hamilt_pw/hamilt_pwdft/global.h"
 #include "module_base/global_function.h"
 #include "module_base/memory.h"
 #include "module_symmetry/symmetry.h"
-// #include "../src_pw/vdwd2.h"
-// #include "../src_pw/vdwd3.h"
-// #include "../src_pw/vdwd2_parameters.h"
-// #include "../src_pw/vdwd3_parameters.h"
 #include "module_hamilt_pw/hamilt_pwdft/structure_factor.h"
 #include "module_symmetry/symmetry_rho.h"
 #include "module_io/print_info.h"

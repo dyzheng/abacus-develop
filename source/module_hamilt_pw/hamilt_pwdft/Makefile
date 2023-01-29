@@ -25,7 +25,7 @@ OPENBLAS_LIB_DIR   = /home/qianrui/gnucompile/openblas/lib
 #==========================
 # Compiler information 
 #==========================
-INCLUDES = -I. -Icommands -I../
+INCLUDES = -I. -Icommands -I../../
 LIBS = -lm -lpthread
 OPTS = -Ofast -march=native -std=c++11 -m64 ${INCLUDES}
 ifeq ($(findstring mpi, $(CC)), mpi)
@@ -106,8 +106,8 @@ endif
 
 
 
-include ../Makefile.Objects
-VPATH:=$(addprefix ../, ${VPATH})
+include ../../Makefile.Objects
+VPATH:=$(addprefix ../../, ${VPATH})
 OBJ_DIR = pw_obj
 
 FP_OBJS=$(patsubst %.o, ${OBJ_DIR}/%.o, ${OBJS_ABACUS_PW})

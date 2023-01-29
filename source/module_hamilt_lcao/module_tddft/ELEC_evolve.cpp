@@ -2,7 +2,7 @@
 
 #include "module_base/timer.h"
 #include "src_parallel/parallel_reduce.h"
-#include "src_pw/global.h"
+#include "module_hamilt_pw/hamilt_pwdft/global.h"
 #include "module_symmetry/symmetry_rho.h"
 #include "LCAO_evolve.h"
 #include "module_dftu/dftu.h"

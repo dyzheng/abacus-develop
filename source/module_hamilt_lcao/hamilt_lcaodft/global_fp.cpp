@@ -1,5 +1,5 @@
 #include "global_fp.h"
-#include "src_pw/global.h"
+#include "module_hamilt_pw/hamilt_pwdft/global.h"
 
 namespace GlobalC
 {

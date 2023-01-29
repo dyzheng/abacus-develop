@@ -1,4 +1,4 @@
-#include "src_pw/global.h"
+#include "module_hamilt_pw/hamilt_pwdft/global.h"
 #include "module_hamilt_lcao/hamilt_lcaodft/global_fp.h"
 #include "record_adj.h" //mohan add 2012-07-06
 #include "module_base/timer.h"

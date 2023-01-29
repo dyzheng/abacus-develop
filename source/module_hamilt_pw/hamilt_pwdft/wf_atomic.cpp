@@ -1,5 +1,5 @@
 #include "wf_atomic.h"
-#include "src_pw/global.h"
+#include "module_hamilt_pw/hamilt_pwdft/global.h"
 #include "module_base/math_integral.h"
 #include "module_base/math_sphbes.h"
 #include "module_base/math_polyint.h"

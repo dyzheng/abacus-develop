@@ -1,6 +1,6 @@
 #include "LCAO_matrix.h"
 #include "module_hamilt_lcao/hamilt_lcaodft/global_fp.h"
-#include "src_pw/global.h"
+#include "module_hamilt_pw/hamilt_pwdft/global.h"
 #include "module_base/tool_threading.h"
 #ifdef __DEEPKS
 #include "module_deepks/LCAO_deepks.h"

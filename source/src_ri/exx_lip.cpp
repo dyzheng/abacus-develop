@@ -6,7 +6,7 @@
 #include "exx_lip.h"
 #include "module_base/global_function.h"
 #include "module_base/vector3.h"
-#include "src_pw/global.h"
+#include "module_hamilt_pw/hamilt_pwdft/global.h"
 #include "module_cell/klist.h"
 #include "module_hamilt_pw/hamilt_pwdft/wavefunc.h"
 #include "module_hamilt_lcao/hamilt_lcaodft/wavefunc_in_pw.h"

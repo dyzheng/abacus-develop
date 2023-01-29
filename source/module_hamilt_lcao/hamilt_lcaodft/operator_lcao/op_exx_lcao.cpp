@@ -3,7 +3,7 @@
 #include "module_base/tool_title.h"
 #include "module_hamilt_general/module_xc/xc_functional.h"
 #include "module_hamilt_lcao/hamilt_lcaodft/global_fp.h"
-#include "src_pw/global.h"
+#include "module_hamilt_pw/hamilt_pwdft/global.h"
 
 namespace hamilt
 {

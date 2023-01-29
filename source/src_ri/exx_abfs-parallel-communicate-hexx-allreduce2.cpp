@@ -2,7 +2,7 @@
 #include "exx_abfs-parallel-communicate-hexx.h"
 #include "exx_abfs-parallel-communicate-function.h"
 
-#include "../src_pw/global.h"
+#include "../module_hamilt_pw/hamilt_pwdft/global.h"
 #include "../module_hamilt_lcao/hamilt_lcaodft/global_fp.h"
 
 #include "mpi.h"

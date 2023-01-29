@@ -7,7 +7,7 @@
 #include <algorithm>
 
 //temporary
-#include "src_pw/global.h"
+#include "module_hamilt_pw/hamilt_pwdft/global.h"
 namespace hsolver
 {
     void HSolverPW_SDFT::solve(hamilt::Hamilt<double>* pHamilt,

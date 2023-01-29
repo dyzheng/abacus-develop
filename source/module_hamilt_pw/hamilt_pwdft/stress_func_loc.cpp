@@ -3,7 +3,7 @@
 #include "module_base/tool_threading.h"
 #include "module_base/timer.h"
 #include "module_base/libm/libm.h"
-#include "src_pw/global.h"
+#include "module_hamilt_pw/hamilt_pwdft/global.h"
 
 //calculate local pseudopotential stress in PW or VL_dVL stress in LCAO
 template<typename FPTYPE, typename Device>

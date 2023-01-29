@@ -1,5 +1,5 @@
 #include "grid_technique.h"
-#include "src_pw/global.h"
+#include "module_hamilt_pw/hamilt_pwdft/global.h"
 #include "src_parallel/parallel_reduce.h"
 
 #include "module_hamilt_lcao/hamilt_lcaodft/global_fp.h" // mohan add 2021-01-30

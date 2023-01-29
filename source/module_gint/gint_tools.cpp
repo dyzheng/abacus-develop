@@ -2,7 +2,7 @@
 //REFACTOR : Peize Lin, 2021.06.28
 //=========================================================
 #include "gint_tools.h"
-#include "src_pw/global.h"
+#include "module_hamilt_pw/hamilt_pwdft/global.h"
 #include "module_hamilt_lcao/hamilt_lcaodft/global_fp.h"
 #include "module_base/ylm.h"
 #include <cmath>

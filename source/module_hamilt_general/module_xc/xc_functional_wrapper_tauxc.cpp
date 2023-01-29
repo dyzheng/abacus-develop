@@ -3,7 +3,7 @@
 // 1. tau_xc
 
 #include "xc_functional.h"
-#include "src_pw/global.h"
+#include "module_hamilt_pw/hamilt_pwdft/global.h"
 
 //tau_xc and tau_xc_spin: interface for calling xc_mgga_exc_vxc from LIBXC
 //XC_POLARIZED, XC_UNPOLARIZED: internal flags used in LIBXC, denote the polarized(nspin=1) or unpolarized(nspin=2) calculations, definition can be found in xc.h from LIBXC

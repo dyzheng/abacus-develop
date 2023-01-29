@@ -1,6 +1,6 @@
 #include "of_stress_pw.h"
 #include "module_base/timer.h"
-#include "src_pw/global.h"
+#include "module_hamilt_pw/hamilt_pwdft/global.h"
 #include "module_hamilt_general/module_vdw/vdw.h"
 
 // Since the kinetic stress of OFDFT is calculated by kinetic functionals in esolver_of.cpp, here we regard it as an input variable.

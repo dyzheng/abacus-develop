@@ -478,7 +478,6 @@ target_link_libraries(${ABACUS_BIN_NAME}
     io
     relax
     parallel
-    pw
     driver
     xc_
     hsolver

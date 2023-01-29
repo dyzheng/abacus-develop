@@ -1762,7 +1762,7 @@ These variables are used to control vdW-corrected related parameters.
 - **Type**: String
 - **Description**: This variable is relevant if the user wants to manually set the $C_6$ parameters in D2 method. It gives the name of the file which contains the list of $C_6$ parameters for each element.
 
-  If not set, ABACUS will use the default $C_6$ Parameters stored in the program. The default values of $C_6$ for elements 1_H up to 86_Rn can be found by searching for `C6_default` in the [source code](https://github.com/deepmodeling/abacus-develop/blob/develop/source/src_pw/vdwd2_parameters.cpp). The unit is Jnm6/mol.
+  If not set, ABACUS will use the default $C_6$ Parameters stored in the program. The default values of $C_6$ for elements 1_H up to 86_Rn can be found by searching for `C6_default` in the [source code](https://github.com/deepmodeling/abacus-develop/blob/develop/source/module_hamilt_general/module_vdw/vdwd2_parameters.cpp). The unit is Jnm6/mol.
 
   Otherwise, if user wants to manually set the $C_6$ Parameters, they should provide a file containing the $C_6$ parameters to be used. An example is given by:
 
@@ -1784,7 +1784,7 @@ These variables are used to control vdW-corrected related parameters.
 
 - **Type**: String
 - **Description**: This variable is relevant if the user wants to manually set the $R_0$ parameters in D2 method.
-  If not set, ABACUS will use the default $C_6$ Parameters stored in the program. The default values of $C_6$ for elements 1_H up to 86_Rn can be found by searching for `R0_default` in the [source code](https://github.com/deepmodeling/abacus-develop/blob/develop/source/src_pw/vdwd2_parameters.cpp). The unit is Angstrom.
+  If not set, ABACUS will use the default $C_6$ Parameters stored in the program. The default values of $C_6$ for elements 1_H up to 86_Rn can be found by searching for `R0_default` in the [source code](https://github.com/deepmodeling/abacus-develop/blob/develop/source/module_hamilt_general/module_vdw/vdwd2_parameters.cpp). The unit is Angstrom.
 
   Otherwise, if the user wants to manually set the $C_6$ Parameters, they should provide a file containing the $C_6$ parameters to be used. An example is given by:
 

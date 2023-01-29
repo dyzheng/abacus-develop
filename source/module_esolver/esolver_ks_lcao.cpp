@@ -5,7 +5,7 @@
 //--------------temporary----------------------------
 #include "module_base/global_function.h"
 #include "module_io/print_info.h"
-#include "src_pw/global.h"
+#include "module_hamilt_pw/hamilt_pwdft/global.h"
 #include "module_hamilt_lcao/hamilt_lcaodft/global_fp.h"
 #include "module_dftu/dftu.h"
 #include "module_elecstate/occupy.h"

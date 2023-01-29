@@ -3,7 +3,7 @@
 #include "exx_abfs.h"
 #include "exx_abfs-abfs_index.h"
 
-#include "../src_pw/global.h"
+#include "../module_hamilt_pw/hamilt_pwdft/global.h"
 #include "../module_orbital/ORB_read.h"
 #include "../module_base/ylm.h"
 

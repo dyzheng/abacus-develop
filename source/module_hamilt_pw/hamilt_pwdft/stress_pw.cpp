@@ -1,6 +1,6 @@
 #include "stress_pw.h"
 #include "module_base/timer.h"
-#include "src_pw/global.h"
+#include "module_hamilt_pw/hamilt_pwdft/global.h"
 #include "module_hamilt_general/module_vdw/vdw.h"
 
 template <typename FPTYPE, typename Device>

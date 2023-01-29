@@ -1,7 +1,7 @@
 #include "stress_func.h"
 #include "module_elecstate/potentials/H_Hartree_pw.h"
 #include "module_base/timer.h"
-#include "src_pw/global.h"
+#include "module_hamilt_pw/hamilt_pwdft/global.h"
 
 //calculate the Hartree part in PW or LCAO base
 template<typename FPTYPE, typename Device>

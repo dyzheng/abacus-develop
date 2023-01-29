@@ -36,9 +36,9 @@ if(ENABLE_LCAO)
               ../../module_gint/gint.cpp ../../module_gint/gint_gamma.cpp
               ../../module_gint/gint_fvl.cpp ../../module_gint/gint_rho.cpp
               ../../module_gint/gint_vl.cpp
-              ../../src_pw/charge.cpp
+              ../../module_hamilt_pw/hamilt_pwdft/charge.cpp
               ../../src_pdiag/pdiag_common.cpp
-              ../../module_io/output.cpp ../../src_pw/soc.cpp ../../module_io/read_rho.cpp
+              ../../module_io/output.cpp ../../module_hamilt_pw/hamilt_pwdft/soc.cpp ../../module_io/read_rho.cpp
   )
   if(USE_CUDA)
     target_link_libraries(EState_psiToRho_lcao cufft)

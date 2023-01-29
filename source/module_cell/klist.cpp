@@ -1,4 +1,4 @@
-#include "src_pw/global.h"
+#include "module_hamilt_pw/hamilt_pwdft/global.h"
 #include "klist.h"
 #include "src_parallel/parallel_global.h"
 #include "module_symmetry/symmetry.h"

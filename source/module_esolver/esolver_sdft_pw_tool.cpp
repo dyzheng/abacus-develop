@@ -8,7 +8,7 @@
 #include "module_base/global_variable.h"
 #include "module_base/global_function.h"
 #include "module_base/memory.h"
-#include "src_pw/global.h"
+#include "module_hamilt_pw/hamilt_pwdft/global.h"
 #include "module_hamilt_pw/hamilt_pwdft/operator_pw/velocity_pw.h"
 
 #define TWOSQRT2LN2 2.354820045030949 //FWHM = 2sqrt(2ln2) * \sigma

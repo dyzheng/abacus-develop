@@ -5,7 +5,7 @@
 //---------Temporary------------------------------------
 #include "module_base/complexmatrix.h"
 #include "module_base/global_function.h"
-#include "src_pw/global.h"
+#include "module_hamilt_pw/hamilt_pwdft/global.h"
 //------------------------------------------------------
 
 Stochastic_WF::Stochastic_WF()

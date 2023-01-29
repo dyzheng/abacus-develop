@@ -27,6 +27,7 @@ list(APPEND objects
     wf_igk.cpp
     structure_factor.cpp
     soc.cpp
+    global.cpp
 )
 
 add_library(

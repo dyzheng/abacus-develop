@@ -5,7 +5,7 @@
 
 #include <algorithm>
 #include <set>
-#include "../src_pw/global.h"
+#include "../module_hamilt_pw/hamilt_pwdft/global.h"
 #include "../module_orbital/ORB_read.h"
 #include "../module_base/ylm.h"
 

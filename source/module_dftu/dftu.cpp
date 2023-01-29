@@ -12,7 +12,7 @@
 #include "module_orbital/ORB_gen_tables.h"
 #include "module_hamilt_lcao/hamilt_lcaodft/global_fp.h"
 #include "module_elecstate/module_charge/charge.h"
-#include "src_pw/global.h"
+#include "module_hamilt_pw/hamilt_pwdft/global.h"
 #include "module_elecstate/magnetism.h"
 #include "module_hamilt_lcao/hamilt_lcaodft/LCAO_matrix.h"
 #include "module_base/scalapack_connector.h"

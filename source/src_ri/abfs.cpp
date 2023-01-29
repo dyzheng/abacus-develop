@@ -2,7 +2,7 @@
 #include "abfs-template.h"
 
 #include "exx_abfs-inverse_matrix_double.h"
-#include "../src_pw/global.h"
+#include "../module_hamilt_pw/hamilt_pwdft/global.h"
 #include "../module_base/global_function.h"
 #include "../module_base/abfs-vector3_order.h"
 

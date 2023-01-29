@@ -1,6 +1,6 @@
 #include "exx_abfs.h"
 
-#include "src_pw/global.h"
+#include "module_hamilt_pw/hamilt_pwdft/global.h"
 #include "module_base/mathzone.h"
 #include "module_elecstate/module_charge/charge_mixing.h"
 #include "module_base/container_operator.h"

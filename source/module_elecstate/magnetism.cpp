@@ -1,6 +1,6 @@
 #include "magnetism.h"
 #ifndef __CELL
-#include "src_pw/global.h"
+#include "module_hamilt_pw/hamilt_pwdft/global.h"
 #endif
 #include "src_parallel/parallel_reduce.h"
 

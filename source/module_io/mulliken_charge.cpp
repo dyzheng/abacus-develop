@@ -10,7 +10,7 @@
 ***********************************************************************/
 
 #include "mulliken_charge.h"
-#include "src_pw/global.h"
+#include "module_hamilt_pw/hamilt_pwdft/global.h"
 #include "module_hamilt_pw/hamilt_pwdft/wavefunc.h"
 #ifdef __LCAO
 #include "module_hamilt_lcao/hamilt_lcaodft/local_orbital_charge.h"

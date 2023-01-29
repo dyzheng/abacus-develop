@@ -2,7 +2,7 @@
 
 #include "module_base/blas_connector.h"
 #include "module_base/timer.h"
-#include "src_pw/global.h"
+#include "module_hamilt_pw/hamilt_pwdft/global.h"
 
 // Shen Yu add 2019/5/9
 extern "C"

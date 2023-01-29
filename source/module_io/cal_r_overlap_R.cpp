@@ -1,6 +1,6 @@
 #include "cal_r_overlap_R.h"
 #include "module_hamilt_lcao/hamilt_lcaodft/global_fp.h"
-#include "src_pw/global.h"
+#include "module_hamilt_pw/hamilt_pwdft/global.h"
 #include "src_parallel/parallel_reduce.h"
 #include "module_base/timer.h"
 

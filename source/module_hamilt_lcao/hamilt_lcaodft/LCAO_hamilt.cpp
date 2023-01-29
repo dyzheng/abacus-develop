@@ -1,4 +1,4 @@
-#include "src_pw/global.h"
+#include "module_hamilt_pw/hamilt_pwdft/global.h"
 #include "LCAO_hamilt.h"
 #include "module_neighbor/sltk_atom_arrange.h"
 #include "module_hamilt_lcao/hamilt_lcaodft/global_fp.h" // mohan add 2021-01-30

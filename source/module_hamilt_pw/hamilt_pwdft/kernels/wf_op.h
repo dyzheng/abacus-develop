@@ -88,5 +88,5 @@ struct cal_sk_op<FPTYPE, psi::DEVICE_GPU> {
         std::complex<FPTYPE> *sk);
 };
 #endif // __CUDA || __UT_USE_CUDA || __ROCM || __UT_USE_ROCM
-}  // namespace src_pw
+}  // namespace hamilt
 #endif //SRC_PW_WF_MULTI_DEVICE_H

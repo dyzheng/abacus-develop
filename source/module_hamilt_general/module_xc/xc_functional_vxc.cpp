@@ -8,7 +8,7 @@
 #include "src_parallel/parallel_reduce.h"
 #include "module_base/timer.h"
 #include "xc_functional.h"
-#include "src_pw/global.h"
+#include "module_hamilt_pw/hamilt_pwdft/global.h"
 
 // [etxc, vtxc, v] = XC_Functional::v_xc(...)
 std::tuple<double,double,ModuleBase::matrix> XC_Functional::v_xc(

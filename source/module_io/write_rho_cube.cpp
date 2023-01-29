@@ -1,5 +1,5 @@
 #include "module_elecstate/module_charge/charge.h"
-#include "src_pw/global.h"
+#include "module_hamilt_pw/hamilt_pwdft/global.h"
 #include "module_base/element_name.h"
 
 void Charge::write_rho_cube(

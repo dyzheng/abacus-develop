@@ -1,6 +1,6 @@
 #include "sto_stress_pw.h"
 #include "module_base/timer.h"
-#include "src_pw/global.h"
+#include "module_hamilt_pw/hamilt_pwdft/global.h"
 
 void Sto_Stress_PW::cal_stress(ModuleBase::matrix& sigmatot, const ModuleBase::matrix& wg, const psi::Psi<complex<double>>* psi_in, Stochastic_WF& stowf, const Charge* const chr)
 {

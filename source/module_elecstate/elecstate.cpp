@@ -4,7 +4,7 @@
 #include "module_base/tool_title.h"
 #include "module_base/memory.h"
 #include "src_parallel/parallel_reduce.h"
-#include "src_pw/global.h"
+#include "module_hamilt_pw/hamilt_pwdft/global.h"
 #include "occupy.h"
 
 namespace elecstate

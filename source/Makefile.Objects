@@ -45,8 +45,6 @@ VPATH=./src_global:\
 ./module_hamilt_pw/hamilt_pwdft/kernels:\
 ./module_gint:\
 ./module_dftu:\
-./src_pw:\
-./src_pw/kernels:\
 ./module_relax:\
 ./module_relax/relax_old:\
 ./module_relax/relax_new:\

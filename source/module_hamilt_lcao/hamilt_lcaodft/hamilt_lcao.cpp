@@ -4,7 +4,7 @@
 #include "module_base/timer.h"
 #include "module_dftu/dftu.h"
 #include "module_hamilt_lcao/hamilt_lcaodft/global_fp.h"
-#include "src_pw/global.h"
+#include "module_hamilt_pw/hamilt_pwdft/global.h"
 #ifdef __DEEPKS
 #include "module_deepks/LCAO_deepks.h"
 #include "operator_lcao/deepks_lcao.h"

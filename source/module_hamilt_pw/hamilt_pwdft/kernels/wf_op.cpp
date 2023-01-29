@@ -59,5 +59,5 @@ struct cal_sk_op<FPTYPE, psi::DEVICE_CPU> {
 template struct cal_sk_op<float, psi::DEVICE_CPU>;
 template struct cal_sk_op<double, psi::DEVICE_CPU>;
 
-}  // namespace src_pw
+}  // namespace hamilt
 

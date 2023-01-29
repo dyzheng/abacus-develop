@@ -1,5 +1,5 @@
 #include "local_orbital_charge.h"
-#include "src_pw/global.h"
+#include "module_hamilt_pw/hamilt_pwdft/global.h"
 #include "module_base/blas_connector.h"
 #include "module_io/wf_local.h"
 #include "src_parallel/parallel_reduce.h"

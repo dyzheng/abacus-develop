@@ -4,7 +4,7 @@
 #include "src_parallel/parallel_reduce.h"
 #include "module_base/constants.h"
 #include "module_base/timer.h"
-#include "src_pw/global.h"
+#include "module_hamilt_pw/hamilt_pwdft/global.h"
 
 double H_Ewald_pw::alpha=0.0;
 int H_Ewald_pw::mxr = 200;

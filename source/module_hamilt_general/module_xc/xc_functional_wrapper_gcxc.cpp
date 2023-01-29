@@ -8,7 +8,7 @@
 
 #include "xc_functional.h"
 #include <stdexcept>
-#include "src_pw/global.h"
+#include "module_hamilt_pw/hamilt_pwdft/global.h"
 #include "module_base/global_function.h"
 
 void XC_Functional::gcxc(const double &rho, const double &grho, double &sxc,

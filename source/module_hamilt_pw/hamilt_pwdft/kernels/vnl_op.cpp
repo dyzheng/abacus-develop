@@ -100,5 +100,5 @@ struct cal_vnl_op<FPTYPE, psi::DEVICE_CPU> {
 template struct cal_vnl_op<float, psi::DEVICE_CPU>;
 template struct cal_vnl_op<double, psi::DEVICE_CPU>;
 
-}  // namespace src_pw
+}  // namespace hamilt
 

@@ -9,7 +9,7 @@
 
 //-------------------Temporary------------------
 #include "module_base/global_variable.h"
-#include "src_pw/global.h"
+#include "module_hamilt_pw/hamilt_pwdft/global.h"
 #include "module_symmetry/symmetry_rho.h"
 //----------------------------------------------
 //-----force-------------------

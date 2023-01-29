@@ -2,7 +2,7 @@
 #include "module_base/global_variable.h"
 #include "structure_factor.h"
 #include "module_base/constants.h"
-#include "src_pw/global.h"
+#include "module_hamilt_pw/hamilt_pwdft/global.h"
 #include "module_base/math_bspline.h"
 #include "module_base/memory.h"
 #include "module_base/timer.h"

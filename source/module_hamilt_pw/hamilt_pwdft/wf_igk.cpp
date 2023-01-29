@@ -1,6 +1,6 @@
 #include "wf_igk.h"
 
-#include "src_pw/global.h"
+#include "module_hamilt_pw/hamilt_pwdft/global.h"
 #include "module_base/memory.h"
 #include "module_base/timer.h"
 #include "module_psi/kernels/device.h"

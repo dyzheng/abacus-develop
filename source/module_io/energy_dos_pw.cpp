@@ -1,5 +1,5 @@
 #include "dos.h"
-#include "src_pw/global.h"
+#include "module_hamilt_pw/hamilt_pwdft/global.h"
 #include "module_elecstate/energy.h"
 #include "src_parallel/parallel_reduce.h"
 #include "module_elecstate/elecstate.h"

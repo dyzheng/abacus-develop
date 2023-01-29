@@ -1,6 +1,6 @@
 #include "restart.h"
 #include "module_base/global_function.h"
-#include "src_pw/global.h"
+#include "module_hamilt_pw/hamilt_pwdft/global.h"
 #ifdef __LCAO
 #include "module_hamilt_lcao/hamilt_lcaodft/global_fp.h"
 #endif

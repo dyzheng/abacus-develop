@@ -1,5 +1,5 @@
 #include "stress_func.h"
-#include "src_pw/global.h"
+#include "module_hamilt_pw/hamilt_pwdft/global.h"
 #include "module_base/timer.h"
 
 //calculate the kinetic stress in PW base

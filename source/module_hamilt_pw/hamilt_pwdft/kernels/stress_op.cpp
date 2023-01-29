@@ -124,5 +124,5 @@ template struct cal_stress_nl_op<float, psi::DEVICE_CPU>;
 template struct cal_dbecp_noevc_nl_op<double, psi::DEVICE_CPU>;
 template struct cal_stress_nl_op<double, psi::DEVICE_CPU>;
 
-}  // namespace src_pw
+}  // namespace hamilt
 

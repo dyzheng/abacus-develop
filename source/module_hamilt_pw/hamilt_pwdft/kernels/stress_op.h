@@ -146,5 +146,5 @@ struct cal_stress_nl_op<FPTYPE, psi::DEVICE_GPU> {
 };
 
 #endif // __CUDA || __UT_USE_CUDA || __ROCM || __UT_USE_ROCM
-}  // namespace src_pw
+}  // namespace hamilt
 #endif //SRC_PW_STRESS_MULTI_DEVICE_H

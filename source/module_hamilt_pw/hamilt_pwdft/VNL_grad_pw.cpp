@@ -4,7 +4,7 @@
 #include "module_base/math_ylmreal.h"
 #include "module_base/math_integral.h"
 #include "module_base/math_polyint.h"
-#include "src_pw/global.h"
+#include "module_hamilt_pw/hamilt_pwdft/global.h"
 void pseudopot_cell_vnl::initgradq_vnl(const UnitCell &cell)
 {
     const int nbrx = 10;

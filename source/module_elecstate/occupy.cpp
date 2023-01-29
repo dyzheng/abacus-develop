@@ -1,4 +1,4 @@
-#include "src_pw/global.h"
+#include "module_hamilt_pw/hamilt_pwdft/global.h"
 #include "occupy.h"
 #include "module_base/mymath.h"
 #include "src_parallel/parallel_reduce.h"
