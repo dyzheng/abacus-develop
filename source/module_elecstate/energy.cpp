@@ -2,6 +2,7 @@
 #include "module_base/global_variable.h"
 #include "src_parallel/parallel_reduce.h"
 #include "module_hamilt_pw/hamilt_pwdft/global.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/global_fp.h"
 #include "energy.h"
 #include "module_base/mymath.h"
 #include "module_hamilt_lcao/hamilt_lcaodft/LCAO_hamilt.h"
