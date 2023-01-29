@@ -7,7 +7,6 @@
 #include "../module_io/print_info.h"
 #include "../src_pw/global.h"
 #include "module_dftu/dftu.h"
-#include "src_lcao/dmft.h"
 #include "module_elecstate/occupy.h"
 #include "module_symmetry/symmetry_rho.h"
 #ifdef __EXX
