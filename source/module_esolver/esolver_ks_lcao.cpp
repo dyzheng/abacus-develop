@@ -9,7 +9,7 @@
 #include "module_hamilt_lcao/hamilt_lcaodft/global_fp.h"
 #include "module_dftu/dftu.h"
 #include "module_elecstate/occupy.h"
-#include "module_symmetry/symmetry_rho.h"
+#include "module_elecstate/module_charge/symmetry_rho.h"
 #ifdef __EXX
 // #include "module_rpa/rpa.h"
 #include "module_ri/RPA_LRI.h"

@@ -11,7 +11,7 @@
 #include "module_hamilt_pw/hamilt_pwdft/global.h"
 #include "module_hamilt_lcao/module_tddft/ELEC_evolve.h"
 #include "module_elecstate/occupy.h"
-#include "module_symmetry/symmetry_rho.h"
+#include "module_elecstate/module_charge/symmetry_rho.h"
 
 //-----HSolver ElecState Hamilt--------
 #include "module_elecstate/elecstate_lcao.h"

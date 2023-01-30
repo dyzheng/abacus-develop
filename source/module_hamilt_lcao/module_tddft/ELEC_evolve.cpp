@@ -3,7 +3,7 @@
 #include "module_base/timer.h"
 #include "src_parallel/parallel_reduce.h"
 #include "module_hamilt_pw/hamilt_pwdft/global.h"
-#include "module_symmetry/symmetry_rho.h"
+#include "module_elecstate/module_charge/symmetry_rho.h"
 #include "LCAO_evolve.h"
 #include "module_dftu/dftu.h"
 #include "module_hamilt_lcao/hamilt_lcaodft/hamilt_lcao.h"

@@ -6,7 +6,7 @@
 #include "module_base/memory.h"
 #include "module_symmetry/symmetry.h"
 #include "module_hamilt_pw/hamilt_pwdft/structure_factor.h"
-#include "module_symmetry/symmetry_rho.h"
+#include "module_elecstate/module_charge/symmetry_rho.h"
 #include "module_io/print_info.h"
 #include "module_hamilt_general/module_ewald/H_Ewald_pw.h"
 //-----force-------------------

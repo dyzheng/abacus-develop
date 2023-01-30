@@ -14,6 +14,7 @@ list(APPEND objects
     module_charge/charge_extra.cpp
     module_charge/charge_mixing.cpp
     module_charge/charge_pulay.cpp
+    module_charge/symmetry_rho.cpp
     energy.cpp
     magnetism.cpp
     occupy.cpp
