@@ -6,7 +6,7 @@
 #ifndef COMPLEXMATRIX_TEST_H
 #define COMPLEXMATRIX_TEST_H
 
-#include "../../../module_base/complexmatrix.h"
+#include "module_base/complexmatrix.h"
 #include<limits>
 
 /*

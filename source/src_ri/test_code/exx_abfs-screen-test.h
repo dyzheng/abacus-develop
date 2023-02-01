@@ -3,7 +3,7 @@
 
 #include <map>
 #include <string>
-#include "../../../src_ri/abfs.h"
+#include "src_ri/abfs.h"
 
 static void test_screen( const std::string & file_name, const std::map<size_t,std::map<size_t,std::map<Abfs::Vector3_Order<int>,double>>> & m )
 {
