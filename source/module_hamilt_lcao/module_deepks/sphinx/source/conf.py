@@ -58,7 +58,7 @@ html_static_path = ['_static']
 
 # -- Options for breathe -------------------------------------------------
 
-breathe_projects = { "ABACUS-DeePKS": "../../doxygen/xml/" }
+breathe_projects = { "ABACUS-DeePKS": "../../../doxygen/xml/" }
 breathe_default_project = "ABACUS-DeePKS"
 
 #-- Options for exhale-------------------------------------
@@ -76,7 +76,7 @@ exhale_args = {
     "exhaleExecutesDoxygen": True,
     "exhaleDoxygenStdin":    textwrap.dedent('''
 		PROJECT_NAME = module_deepks
-		INPUT = ../../../module_hamilt_lcao/hamilt_lcaodft
+		INPUT = ../../../../module_hamilt_lcao/hamilt_lcaodft
 		PROJECT_BRIEF = "DeePKS: Generate descriptors, load a model and calculate energy and force."
 		FILE_PATTERNS = LCAO_descriptor*
 		EXTRACT_ALL = YES

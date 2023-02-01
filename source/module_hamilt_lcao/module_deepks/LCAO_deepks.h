@@ -3,9 +3,9 @@
 
 #ifdef __DEEPKS
 
-#include "../module_base/intarray.h"
-#include "../module_base/complexmatrix.h"
-#include "../module_orbital/ORB_gen_tables.h"
+#include "module_base/intarray.h"
+#include "module_base/complexmatrix.h"
+#include "module_orbital/ORB_gen_tables.h"
 #include <unordered_map>
 
 #include "torch/script.h"

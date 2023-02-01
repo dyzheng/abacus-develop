@@ -35,5 +35,5 @@ endif()
 
 install(
     TARGETS test_deepks
-    DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/../../../tests
+    DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/../../../../tests
 )
