@@ -24,7 +24,7 @@ if(USE_ELPA)
   )
 endif()
 if(USE_CUSOLVER_LCAO)
-  target_link_libraries(pdiag)
+  target_link_libraries(diag_cusolver)
 endif()
 
 if (ENABLE_LIBRI)
