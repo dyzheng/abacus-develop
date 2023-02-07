@@ -51,7 +51,11 @@ public:
             {
                 int tmp = candidate_lists[i];
                 max_bz[i] = nc_size / tmp;
-                if(nc_size % tmp!=0) max_bz[i]++; 
+                if(nc_size % tmp!=0)
+                {//ignore candidates which can't be factored by nc_size
+                    max_bz[i]=0;
+                    continue;
+                } 
                 if(max_bz[i] % nproc == 0)
                 {
                     b_size = tmp;
@@ -64,6 +68,7 @@ public:
             double res_temp = 0.0;
             for(int i=0;i<4;i++)
             {
+                if(max_bz[i]==0) continue;
                 res_temp = double(max_bz[i] % nproc) / nproc;
                 if(res < res_temp)
                 {
