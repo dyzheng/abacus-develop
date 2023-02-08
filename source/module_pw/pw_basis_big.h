@@ -192,7 +192,7 @@ public:
     //autoset bx/by/bz if not set in INPUT
     if(!this->bz)
     {
-        this->autoset_big_cell_size(this->bz, ibox[2], GlobalV::NPROC_IN_POOL);
+        this->autoset_big_cell_size(this->bz, ibox[2], this->poolnproc);
     }
     if(!this->bx)
     {
