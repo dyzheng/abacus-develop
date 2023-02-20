@@ -1,10 +1,10 @@
 #ifndef PARALLEL_KPOINTS_H
 #define PARALLEL_KPOINTS_H
 
-#include "../module_base/global_function.h"
-#include "../module_base/global_variable.h"
-#include "../module_base/complexarray.h"
-#include "../module_base/realarray.h"
+#include "module_base/global_function.h"
+#include "module_base/global_variable.h"
+#include "module_base/complexarray.h"
+#include "module_base/realarray.h"
 
 class Parallel_Kpoints
 {

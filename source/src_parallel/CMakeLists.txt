@@ -1,9 +1,6 @@
 list(APPEND objects
-    parallel_common.cpp
-    parallel_global.cpp
     parallel_grid.cpp
     parallel_kpoints.cpp
-    parallel_reduce.cpp
 )
 
 add_library(

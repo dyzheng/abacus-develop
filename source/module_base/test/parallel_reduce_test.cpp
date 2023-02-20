@@ -2,8 +2,8 @@
 #include "mpi.h"
 #include "gtest/gtest.h"
 #include "module_base/global_variable.h"
-#include "src_parallel/parallel_reduce.h"
-#include "src_parallel/parallel_global.h"
+#include "module_base/parallel_reduce.h"
+#include "module_base/parallel_global.h"
 #include "src_parallel/parallel_kpoints.h"
 #include <time.h>
 #include <random>

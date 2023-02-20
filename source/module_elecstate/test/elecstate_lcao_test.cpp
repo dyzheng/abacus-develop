@@ -1,5 +1,5 @@
 #include "module_elecstate/elecstate_lcao.h"
-#include "src_parallel/parallel_reduce.h"
+#include "module_base/parallel_reduce.h"
 #include "module_hsolver/test/diago_elpa_utils.h"
 #include "gtest/gtest.h"
 #include "mpi.h"

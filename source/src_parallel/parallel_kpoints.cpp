@@ -1,6 +1,6 @@
 #include "parallel_kpoints.h"
-#include "parallel_global.h"
-#include "../src_parallel/parallel_common.h"
+#include "module_base/parallel_global.h"
+#include "module_base/parallel_common.h"
 
 Parallel_Kpoints::Parallel_Kpoints()
 {
