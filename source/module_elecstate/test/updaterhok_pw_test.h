@@ -12,7 +12,7 @@
 #include "module_cell/pseudo_nc.h"
 #include "module_cell/module_symmetry/symmetry_basic.h"
 #include "module_cell/module_symmetry/symmetry.h"
-#include "src_parallel/parallel_grid.h"
+#include "module_hamilt_pw/hamilt_pwdft/parallel_grid.h"
 #include "src_parallel/parallel_kpoints.h"
 #include "module_hamilt_pw/hamilt_pwdft/structure_factor.h"
 #include "module_hamilt_pw/hamilt_pwdft/VNL_in_pw.h"

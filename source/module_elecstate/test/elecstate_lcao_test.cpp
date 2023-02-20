@@ -18,7 +18,7 @@
  * 
  */
 
-#include "src_parallel/parallel_grid.h"
+#include "module_hamilt_pw/hamilt_pwdft/parallel_grid.h"
 #include "module_hamilt_pw/hamilt_pwdft/wavefunc.h"
 #include "module_hamilt_pw/hamilt_pwdft/VNL_in_pw.h"
 #include "module_elecstate/energy.h"

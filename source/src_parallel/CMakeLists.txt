@@ -1,5 +1,4 @@
 list(APPEND objects
-    parallel_grid.cpp
     parallel_kpoints.cpp
 )
 
