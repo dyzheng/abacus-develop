@@ -13,7 +13,7 @@ AddTest(
 AddTest(
   TARGET ParaReduce
   LIBS MPI::MPI_CXX
-  SOURCES parallel_reduce_test.cpp ../global_variable.cpp ../parallel_global.cpp ../parallel_common.cpp ../../src_parallel/parallel_kpoints.cpp ../parallel_reduce.cpp
+  SOURCES parallel_reduce_test.cpp ../global_variable.cpp ../parallel_global.cpp ../parallel_common.cpp ../parallel_reduce.cpp
 )
 
 install(FILES parallel_common_test.sh DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
@@ -103,7 +103,7 @@ AddTest(
   TARGET base_ylmreal
   LIBS ${math_libs} device
   SOURCES math_ylmreal_test.cpp ../math_ylmreal.cpp ../complexmatrix.cpp ../global_variable.cpp ../ylm.cpp ../realarray.cpp ../timer.cpp ../matrix.cpp ../vector3.h
-          ../../module_base/parallel_reduce.cpp ../../src_parallel/parallel_kpoints.cpp ../../module_base/parallel_global.cpp ../../module_base/parallel_common.cpp
+          ../../module_base/parallel_reduce.cpp ../../module_base/parallel_global.cpp ../../module_base/parallel_common.cpp
           ../memory.cpp
 )
 AddTest(

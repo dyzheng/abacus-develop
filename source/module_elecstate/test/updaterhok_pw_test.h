@@ -13,7 +13,7 @@
 #include "module_cell/module_symmetry/symmetry_basic.h"
 #include "module_cell/module_symmetry/symmetry.h"
 #include "module_hamilt_pw/hamilt_pwdft/parallel_grid.h"
-#include "src_parallel/parallel_kpoints.h"
+#include "module_cell/parallel_kpoints.h"
 #include "module_hamilt_pw/hamilt_pwdft/structure_factor.h"
 #include "module_hamilt_pw/hamilt_pwdft/VNL_in_pw.h"
 #include "module_io/input.h"

@@ -6,13 +6,13 @@ remove_definitions(-D__ROCM)
 AddTest(
   TARGET cell_read_pp
   LIBS ${math_libs} base device
-  SOURCES read_pp_test.cpp ../read_pp.cpp ../read_pp_upf201.cpp ../read_pp_upf100.cpp ../read_pp_vwr.cpp ../read_pp_blps.cpp ../../src_parallel/parallel_kpoints.cpp ../../module_io/output.cpp
+  SOURCES read_pp_test.cpp ../read_pp.cpp ../read_pp_upf201.cpp ../read_pp_upf100.cpp ../read_pp_vwr.cpp ../read_pp_blps.cpp ../../module_io/output.cpp
 )
 
 AddTest(
   TARGET cell_pseudo_nc
   LIBS ${math_libs} base device
-  SOURCES pseudo_nc_test.cpp ../pseudo_nc.cpp ../read_pp.cpp ../read_pp_upf201.cpp ../read_pp_upf100.cpp ../read_pp_vwr.cpp ../read_pp_blps.cpp ../../src_parallel/parallel_kpoints.cpp ../../module_io/output.cpp
+  SOURCES pseudo_nc_test.cpp ../pseudo_nc.cpp ../read_pp.cpp ../read_pp_upf201.cpp ../read_pp_upf100.cpp ../read_pp_vwr.cpp ../read_pp_blps.cpp ../../module_io/output.cpp
 
 )
 
@@ -20,10 +20,25 @@ AddTest(
   TARGET klist_test
   LIBS ${math_libs} base device
   SOURCES klist_test.cpp ../klist.cpp 
-  ../../src_parallel/parallel_kpoints.cpp 
+  ../parallel_kpoints.cpp 
   ../../module_io/output.cpp ../module_symmetry/symm_other.cpp
   ../module_symmetry/symmetry_basic.cpp ../module_symmetry/symmetry.cpp
 )
 
 install(DIRECTORY support DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+
+AddTest(
+  TARGET ParaKpoints
+  LIBS MPI::MPI_CXX
+  SOURCES parallel_kpoints_test.cpp ../../module_base/global_variable.cpp ../../module_base/parallel_global.cpp ../../module_base/parallel_common.cpp ../parallel_kpoints.cpp
+)
+
+install(FILES parallel_kpoints_test.sh DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+
+find_program(BASH bash)
+
+add_test(NAME parallel_kpoints_test
+      COMMAND ${BASH} parallel_kpoints_test.sh
+      WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+)
 

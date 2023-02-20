@@ -11,9 +11,7 @@ class Parallel_Kpoints
 	public:
 	
 	Parallel_Kpoints();
-	~Parallel_Kpoints();	
-
-	void init_pools();
+	~Parallel_Kpoints();
 
 	void kinfo(int &nkstot);
 	
@@ -36,7 +34,6 @@ class Parallel_Kpoints
 	private:
 
 #ifdef __MPI
-	void divide_pools(void);
 	void get_nks_pool(const int &nkstot);
 	void get_startk_pool(const int &nkstot);
 	void get_whichpool(const int &nkstot);

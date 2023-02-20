@@ -12,7 +12,7 @@ if(ENABLE_LCAO)
             ../elecstate_pw.cpp ../elecstate.cpp
             ../module_charge/charge.cpp ../../module_base/parallel_reduce.cpp
             ../../module_hamilt_pw/hamilt_pwdft/structure_factor.cpp
-            ../../module_cell/klist.cpp ../../src_parallel/parallel_kpoints.cpp ../occupy.cpp
+            ../../module_cell/klist.cpp ../../module_cell/parallel_kpoints.cpp ../occupy.cpp
             ../kernels/elecstate_op.cpp ../../module_io/rwstream.cpp ../../module_io/write_wfc_pw.cpp
   )
 
