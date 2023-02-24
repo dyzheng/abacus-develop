@@ -581,7 +581,7 @@ void WF_atomic::random_t(std::complex<FPTYPE> *psi, const int iw_start,const int
         FPTYPE *tmparg = new FPTYPE[nstnz];
         for (int iw = iw_start ;iw < iw_end;iw++)
         {
-            std::complex<FPTYPE>* ppsi = &(psi[iw * this->npwx]);
+            std::complex<FPTYPE>* ppsi = &(psi[iw * this->npwx * GlobalV::NPOL]);
             int startig = 0;
             for(int ipol = 0 ; ipol < GlobalV::NPOL ; ++ipol)
             {
@@ -627,7 +627,7 @@ void WF_atomic::random_t(std::complex<FPTYPE> *psi, const int iw_start,const int
 #endif // __MPI
         for (int iw = iw_start ;iw < iw_end;iw++)
         {
-            std::complex<FPTYPE>* ppsi = &(psi[iw * this->npwx]);
+            std::complex<FPTYPE>* ppsi = &(psi[iw * this->npwx * GlobalV::NPOL]);
             for (int ig = 0;ig < ng;ig++)
             {
                 const FPTYPE rr = std::rand()/FPTYPE(RAND_MAX); //qianrui add RAND_MAX
