@@ -606,7 +606,7 @@ void WF_atomic::random_t(std::complex<FPTYPE> *psi, const int iw_start,const int
                     const FPTYPE rr = tmprr[wfc_basis->getigl2isz(ik,ig)];
                     const FPTYPE arg= ModuleBase::TWO_PI * tmparg[wfc_basis->getigl2isz(ik,ig)];
                     const FPTYPE gk2 = GlobalC::wfcpw->getgk2(ik,ig);
-                    ppsi[ig+startig] = std::complex<FPTYPE>(rr * cos(arg), rr * sin(arg)) / (gk2 + 1.0);
+                    ppsi[ig+startig] = std::complex<FPTYPE>(rr * cos(arg), rr * sin(arg)) / FPTYPE(gk2 + 1.0);
                 }
                 startig += npwx;
             }
@@ -633,14 +633,14 @@ void WF_atomic::random_t(std::complex<FPTYPE> *psi, const int iw_start,const int
                 const FPTYPE rr = std::rand()/FPTYPE(RAND_MAX); //qianrui add RAND_MAX
                 const FPTYPE arg= ModuleBase::TWO_PI * std::rand()/FPTYPE(RAND_MAX);
                 const FPTYPE gk2 = GlobalC::wfcpw->getgk2(ik,ig);
-                ppsi[ig] = std::complex<FPTYPE>(rr * cos(arg), rr * sin(arg)) / (gk2 + 1.0);
+                ppsi[ig] = std::complex<FPTYPE>(rr * cos(arg), rr * sin(arg)) / FPTYPE(gk2 + 1.0);
             }
             if(GlobalV::NPOL==2)for (int ig = this->npwx;ig < this->npwx + ng;ig++)
             {
                 const FPTYPE rr = std::rand()/FPTYPE(RAND_MAX);
                 const FPTYPE arg= ModuleBase::TWO_PI * std::rand()/FPTYPE(RAND_MAX);
                 const FPTYPE gk2 = GlobalC::wfcpw->getgk2(ik,ig-this->npwx);
-                ppsi[ig] = std::complex<FPTYPE>(rr * cos(arg), rr * sin(arg)) / (gk2 + 1.0);
+                ppsi[ig] = std::complex<FPTYPE>(rr * cos(arg), rr * sin(arg)) / FPTYPE(gk2 + 1.0);
             }
         }
 #ifdef __MPI
