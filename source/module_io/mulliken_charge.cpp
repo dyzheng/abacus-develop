@@ -6,6 +6,7 @@
   Log of Mulliken_Charge.cpp:
 
      12/Oct/2018  Released by Feng Qi
+     03/2023/     Refactored by Yuyang Ji
 
 ***********************************************************************/
 
@@ -215,24 +216,28 @@ ModuleBase::matrix Mulliken_Charge::cal_mulliken_k(const std::vector<ModuleBase:
                         const int ir = uhm.LM->ParaV->trace_loc_row[k1];
                         const int ic = uhm.LM->ParaV->trace_loc_col[k1];
                         MecMulP(0, j) += mud(ir, ic).real();
+                        MecMulP(3, j) += mud(ir, ic).real();
                     }
                     if(uhm.LM->ParaV->in_this_processor(k1, k2))
                     {
                         const int ir = uhm.LM->ParaV->trace_loc_row[k1];
                         const int ic = uhm.LM->ParaV->trace_loc_col[k2];
                         MecMulP(1, j) += mud(ir, ic).real();
+                        MecMulP(2, j) += mud(ir, ic).imag();
                     }
                     if(uhm.LM->ParaV->in_this_processor(k2, k1))
                     {
                         const int ir = uhm.LM->ParaV->trace_loc_row[k2];
                         const int ic = uhm.LM->ParaV->trace_loc_col[k1];
-                        MecMulP(2, j) += mud(ir, ic).real();
+                        MecMulP(1, j) += mud(ir, ic).real();
+                        MecMulP(2, j) -= mud(ir, ic).imag();
                     }
                     if(uhm.LM->ParaV->in_this_processor(k2, k2))
                     {
                         const int ir = uhm.LM->ParaV->trace_loc_row[k2];
                         const int ic = uhm.LM->ParaV->trace_loc_col[k2];
-                        MecMulP(3, j) += mud(ir, ic).real();
+                        MecMulP(0, j) += mud(ir, ic).real();
+                        MecMulP(3, j) -= mud(ir, ic).real();
                     }
                 }
             }
@@ -441,8 +446,10 @@ void Mulliken_Charge::out_mulliken(LCAO_Hamilt &uhm, Local_Orbital_Charge &loc)
                 double spin2 = total_charge_soc[1];
                 double spin3 = total_charge_soc[2];
                 double spin4 = total_charge_soc[3];
-                os << "Total Charge on atom in four components: " << GlobalC::ucell.atoms[t].label <<  std::setw(20) 
-                << "(" << spin1 << ", " << spin2 << ", " << spin3 << ", " << spin4 << ")" 
+                os << "Total Charge on atom:  " << GlobalC::ucell.atoms[t].label <<  std::setw(20) 
+                << spin1 <<std::endl;
+                os << "Total Magnetism on atom:  " << GlobalC::ucell.atoms[t].label <<  std::setw(20) 
+                << "("  << spin2 << ", " << spin3 << ", " << spin4 << ")" 
                 <<std::endl;
             }
             os << std::endl <<std::endl;
