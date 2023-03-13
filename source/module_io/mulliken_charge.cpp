@@ -44,14 +44,14 @@ ModuleBase::matrix Mulliken_Charge::cal_mulliken(const std::vector<ModuleBase::m
     for(size_t is=0; is!=nspin; ++is)
     {
         ModuleBase::matrix mud;
-        mud.create(uhm.LM->ParaV->nrow, uhm.LM->ParaV->ncol);
+        mud.create(uhm.LM->ParaV->ncol, uhm.LM->ParaV->nrow);
 #ifdef __MPI
         const char T_char = 'T';
         const char N_char = 'N';
         const int one_int = 1;
         const double one_float[2] = {1.0, 0.0}, zero_float[2] = {0.0, 0.0};        
         pdgemm_(&T_char,
-                &N_char,
+                &T_char,
                 &GlobalV::NLOCAL,
                 &GlobalV::NLOCAL,
                 &GlobalV::NLOCAL,
@@ -76,10 +76,11 @@ ModuleBase::matrix Mulliken_Charge::cal_mulliken(const std::vector<ModuleBase::m
                 {
                     const int ir = uhm.LM->ParaV->trace_loc_row[i];
                     const int ic = uhm.LM->ParaV->trace_loc_col[i];
-                    MecMulP(is, i) += mud(ir, ic);
+                    MecMulP(is, i) += mud(ic, ir);
                 }
         }
-        else if(GlobalV::NSPIN == 4)
+        //NSPIN=4 is forbidden for gamma_only case
+        /*else if(GlobalV::NSPIN == 4)
         {
             for(size_t i=0; i!=GlobalV::NLOCAL; ++i)
             {
@@ -115,7 +116,7 @@ ModuleBase::matrix Mulliken_Charge::cal_mulliken(const std::vector<ModuleBase::m
                     }
                 }
             }
-        }
+        }*/
 #endif
     }
 #ifdef __MPI 
@@ -164,7 +165,7 @@ ModuleBase::matrix Mulliken_Charge::cal_mulliken_k(const std::vector<ModuleBase:
 		uhm.LM->folding_fixedH(ik);
 
         ModuleBase::ComplexMatrix mud;
-        mud.create(uhm.LM->ParaV->nrow, uhm.LM->ParaV->ncol);
+        mud.create(uhm.LM->ParaV->ncol, uhm.LM->ParaV->nrow);
 
 #ifdef __MPI
         const char T_char = 'T';
@@ -172,7 +173,7 @@ ModuleBase::matrix Mulliken_Charge::cal_mulliken_k(const std::vector<ModuleBase:
         const int one_int = 1;
         const double one_float[2] = {1.0, 0.0}, zero_float[2] = {0.0, 0.0};        
         pzgemm_(&T_char,
-                &N_char,
+                &T_char,
                 &GlobalV::NLOCAL,
                 &GlobalV::NLOCAL,
                 &GlobalV::NLOCAL,
@@ -198,7 +199,7 @@ ModuleBase::matrix Mulliken_Charge::cal_mulliken_k(const std::vector<ModuleBase:
                 {
                     const int ir = uhm.LM->ParaV->trace_loc_row[i];
                     const int ic = uhm.LM->ParaV->trace_loc_col[i];
-                    MecMulP(spin, i) += mud(ir, ic).real();
+                    MecMulP(spin, i) += mud(ic, ir).real();
                 }
         }
         else if(GlobalV::NSPIN == 4)
@@ -215,29 +216,29 @@ ModuleBase::matrix Mulliken_Charge::cal_mulliken_k(const std::vector<ModuleBase:
                     {
                         const int ir = uhm.LM->ParaV->trace_loc_row[k1];
                         const int ic = uhm.LM->ParaV->trace_loc_col[k1];
-                        MecMulP(0, j) += mud(ir, ic).real();
-                        MecMulP(3, j) += mud(ir, ic).real();
+                        MecMulP(0, j) += mud(ic, ir).real();
+                        MecMulP(3, j) += mud(ic, ir).real();
                     }
                     if(uhm.LM->ParaV->in_this_processor(k1, k2))
                     {
                         const int ir = uhm.LM->ParaV->trace_loc_row[k1];
                         const int ic = uhm.LM->ParaV->trace_loc_col[k2];
-                        MecMulP(1, j) += mud(ir, ic).real();
-                        MecMulP(2, j) += mud(ir, ic).imag();
+                        MecMulP(1, j) += mud(ic, ir).real();
+                        MecMulP(2, j) += mud(ic, ir).imag();
                     }
                     if(uhm.LM->ParaV->in_this_processor(k2, k1))
                     {
                         const int ir = uhm.LM->ParaV->trace_loc_row[k2];
                         const int ic = uhm.LM->ParaV->trace_loc_col[k1];
-                        MecMulP(1, j) += mud(ir, ic).real();
-                        MecMulP(2, j) -= mud(ir, ic).imag();
+                        MecMulP(1, j) += mud(ic, ir).real();
+                        MecMulP(2, j) -= mud(ic, ir).imag();
                     }
                     if(uhm.LM->ParaV->in_this_processor(k2, k2))
                     {
                         const int ir = uhm.LM->ParaV->trace_loc_row[k2];
                         const int ic = uhm.LM->ParaV->trace_loc_col[k2];
-                        MecMulP(0, j) += mud(ir, ic).real();
-                        MecMulP(3, j) -= mud(ir, ic).real();
+                        MecMulP(0, j) += mud(ic, ir).real();
+                        MecMulP(3, j) -= mud(ic, ir).real();
                     }
                 }
             }
@@ -307,14 +308,18 @@ void Mulliken_Charge::out_mulliken(LCAO_Hamilt &uhm, Local_Orbital_Charge &loc)
 		os << std::setprecision(8);
 		for(size_t is=0; is!=GlobalV::NSPIN; ++is)
 		{
+            if(GlobalV::NSPIN == 4 && is>0) continue;
 			double sss = 0.0;
 			for(size_t iw=0; iw!=nlocal; ++iw)
 			{
 				sch += orbMulP(is, iw);
 				sss += orbMulP(is, iw);
 			}
-			os << " Total charge of spin " << is+1 << ":\t" << sss << std::endl;
-		}
+            if(GlobalV::NSPIN == 2)
+            {
+			    os << " Total charge of spin " << is+1 << ":\t" << sss << std::endl;
+            }
+        }
 		os << " Total charge:\t" << sch << std::endl;
 		os << "Decomposed Mulliken populations" << std::endl;
 
