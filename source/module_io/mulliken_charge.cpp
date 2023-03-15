@@ -305,7 +305,7 @@ void Mulliken_Charge::out_mulliken(LCAO_Hamilt &uhm, Local_Orbital_Charge &loc)
         os << "CALCULATE THE MULLIkEN ANALYSIS FOR EACH ATOM" << std::endl;
 
 		double sch = 0.0;
-		os << std::setprecision(8);
+		os << std::setprecision(4);
 		for(size_t is=0; is!=GlobalV::NSPIN; ++is)
 		{
             if(GlobalV::NSPIN == 4 && is>0) continue;
