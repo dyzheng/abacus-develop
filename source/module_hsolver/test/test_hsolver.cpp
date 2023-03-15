@@ -100,8 +100,8 @@ namespace hsolver
 	class DiagH_mock : public DiagH<FPTYPE, Device>
 	{
 		public:
-		DiagH_mock(){};
-		~DiagH_mock(){DiagH<FPTYPE, Device>::~DiagH();}
+		DiagH_mock(){}
+		~DiagH_mock(){}
 
 		void diag(hamilt::Hamilt<FPTYPE, Device> *phm_in, psi::Psi<std::complex<FPTYPE>, Device> &psi, FPTYPE *eigenvalue_in)
 		{
