@@ -17,7 +17,7 @@ option(USE_CUDA "Enable support to CUDA for PW." OFF)
 option(ENABLE_FLOAT_FFTW "Enable support to single precision FFTW library." OFF)
 # option(USE_CUSOLVER_LCAO "Enable support to CUSOLVER for LCAO." OFF) # broken
 option(USE_ROCM "Enable support to ROCm." OFF)
-option(USE_OPENMP " Enable OpenMP in ABACUS." ON)
+option(USE_OPENMP "Enable OpenMP in ABACUS." ON)
 option(ENABLE_ASAN "Enable AddressSanitizer" OFF)
 option(BUILD_TESTING "Build ABACUS unit tests" OFF)
 option(INFO "Enable gathering of math library information" OFF)
