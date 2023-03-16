@@ -125,7 +125,7 @@ else()
   set(ENABLE_LIBRI OFF)
 endif()
 
-if(USE_DEBUG)
+if(DEBUG_INFO)
   add_compile_definitions(__DEBUG)
 endif()
 
