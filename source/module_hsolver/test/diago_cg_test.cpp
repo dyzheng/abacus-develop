@@ -20,7 +20,7 @@
 
 /**
  * Class Diago_CG is an approach for eigenvalue problems
- * This unittest test the function Diago_CG::diag()
+ * This unittest test the function Diago_CG::diag() for FPTYPE=double, Device=cpu
  * with different examples.
  *  - the Hermite matrices (npw=500,1000) produced using random numbers and with sparsity of 0%, 60%, 80%
  *  - the Hamiltonian matrix read from "data-H", produced by using out_hs in INPUT of a LCAO calculation
