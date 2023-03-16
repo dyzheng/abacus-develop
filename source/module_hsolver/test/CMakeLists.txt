@@ -24,6 +24,14 @@ AddTest(
           ../../module_hamilt_general/operator.cpp
           ../../module_hamilt_pw/hamilt_pwdft/operator_pw/operator_pw.cpp
 )
+AddTest(
+  TARGET HSolver_dav_float
+  LIBS ${math_libs} base psi device
+  SOURCES diago_david_float_test.cpp ../diago_david.cpp  ../diago_iter_assist.cpp 
+          ../../module_pw/test/test_tool.cpp
+          ../../module_hamilt_general/operator.cpp
+          ../../module_hamilt_pw/hamilt_pwdft/operator_pw/operator_pw.cpp
+)
 
 AddTest(
   TARGET HSolver_base
