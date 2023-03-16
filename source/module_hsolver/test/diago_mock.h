@@ -36,6 +36,26 @@ namespace DIAGOTEST
         }
     }
 
+    void readh(std::ifstream &inf, std::vector<std::complex<float>> &hm)
+    {
+        int npw_;
+        inf >> npw_;
+        DIAGOTEST::npw = npw_;
+        hm.resize(npw * npw);
+        h_nr = npw;
+        h_nc = npw;
+        for(int i=0;i<npw;i++)
+        {
+            for(int j=i;j<npw;j++)
+            {
+                inf >> hm[i * npw + j];
+                if (i != j) {hm[j * npw + i] = conj(hm[i * npw + j]);}                
+            }
+            float real = hm[i * npw + i].real();
+            hm[i * npw + i] = std::complex<float> {real,0.0};
+        }
+    }
+
     template<class T>
     void divide_psi(T *psi, T *psi_local)
     {
@@ -66,6 +86,40 @@ namespace DIAGOTEST
                 MPI_Recv(psi_local, npw_local[mypnum],MPI_DOUBLE,0,0,MPI_COMM_WORLD, MPI_STATUS_IGNORE);
             else if(std::is_same<T, std::complex<double>>::value)
                 MPI_Recv(psi_local, npw_local[mypnum],MPI_DOUBLE_COMPLEX,0,0,MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+#endif                 
+        }     
+    }
+
+    template<class T>
+    void divide_psi_f(T *psi, T *psi_local)
+    {
+        int nprocs=1, mypnum=0;
+#ifdef __MPI        
+        MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
+        MPI_Comm_rank(MPI_COMM_WORLD, &mypnum);
+#endif                
+
+        if(mypnum == 0)
+        {                
+            for(int j=0;j<npw_local[0];j++) psi_local[j] = psi[j];
+#ifdef __MPI                                        
+            int start_point = npw_local[0];
+            for(int j=1;j<nprocs;j++)
+            {
+                if (std::is_same<T, float>::value) 
+                    MPI_Send(&(psi[start_point]),npw_local[j],MPI_FLOAT,j,0,MPI_COMM_WORLD);
+                else if(std::is_same<T, std::complex<float>>::value) 
+                    MPI_Send(&(psi[start_point]),npw_local[j],MPI_C_FLOAT_COMPLEX,j,0,MPI_COMM_WORLD);
+                start_point += npw_local[j];
+            }  
+        }
+        else
+        {
+            int recv_len = mypnum < (npw%nprocs) ? npw/nprocs + 1  : npw/nprocs;
+            if (std::is_same<T, float>::value) 
+                MPI_Recv(psi_local, npw_local[mypnum],MPI_FLOAT,0,0,MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            else if(std::is_same<T, std::complex<float>>::value)
+                MPI_Recv(psi_local, npw_local[mypnum],MPI_C_FLOAT_COMPLEX,0,0,MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 #endif                 
         }     
     }
@@ -112,6 +166,35 @@ namespace DIAGOTEST
             }
         }
     } 
+
+    void divide_hpsi_f(psi::Psi<std::complex<float>> &psi, psi::Psi<std::complex<float>> &psi_local)
+    {
+        int nprocs, mypnum;
+        MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
+        MPI_Comm_rank(MPI_COMM_WORLD, &mypnum);
+
+        int npw = psi.get_nbasis();
+        int nbands = psi.get_nbands();
+        int nk = psi.get_nk();
+
+        hmatrix_local_f.resize(npw * npw_local[mypnum]);
+        h_nc = npw_local[mypnum];
+        h_nr = npw;
+        psi_local.resize(nk,nbands,npw_local[mypnum]);
+        for(int i=0;i<npw;i++)
+        {
+            divide_psi_f<std::complex<float>>(&(hmatrix_f[i*npw]),&(hmatrix_local_f[i*npw_local[mypnum]]));
+            if(i<nbands) 
+            {
+                for(int k=0;k<nk;k++)
+                {
+                    psi.fix_k(k);
+                    psi_local.fix_k(k);
+                    divide_psi_f<std::complex<float>>(psi.get_pointer(i),psi_local.get_pointer(i));
+                }
+            }
+        }
+    } 
 #endif
 
 }
@@ -133,8 +216,7 @@ class HPsi
      *                  (0 means no sparsity, 10 means a diagonal matrix)
      * 
      * After instantiation a HPsi, one can use below functions:
-     *  - hamilt(): return the Hermite matrix (type: ModuleBase::ComplexMatrix)
-     *  - psi(): return the wavefunction (type: ModuleBase::ComplexMatrix) 
+     *  - hamilt(): return the Hermite matrix (type: std::vector<std::complex<double>>)
      *  - precond(): return the precondition (type: double Pointer) 
      * 
      */
@@ -242,6 +324,129 @@ class HPsi
     int sparsity;
 };
 
+class HPsi_f
+{
+    /**
+     * This calss used to produce the Hermite matrix, the initial 
+     * guess wave function, and the precondition by the random 
+     * number. The elements of Hermite matrix and wave function are
+     * between -1.0 to 1.0, and the preconddition is between 1.0 to 2.0.
+     * 
+     * The parameters in construct function or function create()
+     * are same:
+     *  - int nband/nbd: number of calculated bands
+     *  - int npw: number of plane wave
+     *  - int sparsity: the sparsity of Halmit matrix, between 0 and 10. 
+     *                  (0 means no sparsity, 10 means a diagonal matrix)
+     * 
+     * After instantiation a HPsi, one can use below functions:
+     *  - hamilt(): return the Hermite matrix (type: std::vector<std::complex<float>>)
+     *  - precond(): return the precondition (type: float Pointer) 
+     * 
+     */
+
+    public:
+    HPsi_f(int nband,int npw, int sparsity=7):
+        nband(nband),npw(npw),sparsity(sparsity) {genhmatrix();genpsi();genprecondition();}
+    HPsi_f(){};
+    ~HPsi_f() {delete [] precondition;}
+
+    void create(int nbd,int npw, int sparsity=7)
+    {
+        this->nband = nbd;
+        this->npw = npw;
+        this->sparsity = sparsity;
+        genhmatrix();genpsi();genprecondition();
+    }
+
+    //return the matrix
+    float* precond() {return precondition;}
+    std::vector<std::complex<float>> hamilt() {return hmatrix;}
+    psi::Psi<std::complex<float>> psi()
+    {
+        Structure_Factor* sf;
+        int* ngk = nullptr;
+        psi::Psi<std::complex<float>> psitmp(1,nband,npw,ngk);
+        for(int i=0;i<nband;i++)
+	    {
+		    for(int j=0;j<npw;j++) psitmp(0,i,j) = psimatrix[i * npw + j];
+	    }   
+        return psitmp;
+    };
+
+    //generate the Hermite matrix
+    void genhmatrix()
+    {
+        hmatrix.resize(npw * npw);
+        DIAGOTEST::h_nr = npw;
+        DIAGOTEST::h_nc = npw;
+        std::default_random_engine e(100);
+        std::uniform_int_distribution<unsigned> u(min,max);
+        if (sparsity < 0) sparsity = 0;
+        if (sparsity > 10) sparsity = 10;
+        for(int i=0;i<npw;i++)
+        {
+            for(int j=0;j<=i;j++)
+            {
+                float mincoef = 0.0;
+                float realp= pow(-1.0,u(e)%2) * static_cast<float>(u(e))/max;
+                //float imagp= pow(-1.0,u(e)%2) * static_cast<float>(u(e))/max;
+                if (int (u(e) % 10) > int (sparsity-1)) mincoef = 1.0;
+                if(i==j)
+                {
+                    hmatrix[i * npw + j] = std::complex<float>{realp,0.0};
+                }
+                else
+                {
+                    //hmatrix(i,j) = mincoef*std::complex<float>{realp,imagp};
+                    hmatrix[i * npw + j] = mincoef*std::complex<float>{realp,0.0};
+                    hmatrix[j * npw + i] = conj(hmatrix[i * npw + j]);
+                }
+            }
+        }
+    }
+
+    //generate the psi matrix
+    void genpsi()
+    {
+        psimatrix.resize(nband * npw);
+        std::default_random_engine e(10);
+        std::uniform_int_distribution<unsigned> u(min,max);
+        for(int i=0;i<nband;i++)
+        {
+            for(int j=0;j<npw;j++)
+            {
+                float realp=pow(-1.0,u(e)%2) * static_cast<float>(u(e))/max;
+                //float imagp=pow(-1.0,u(e)%2) * static_cast<float>(u(e))/max;
+                float imagp = 0.0;
+                psimatrix[i * npw + j] = std::complex<float>{realp,imagp};
+            }
+        }
+    }
+
+    //generate precondition
+    void genprecondition()
+    {
+        precondition = new float [npw];
+        std::default_random_engine e(1000);
+        std::uniform_int_distribution<unsigned> u(min,max);
+        for(int i=0;i<npw;i++) 
+        {
+            precondition[i] = 1.0 + static_cast<float>(u(e))/max;
+        }
+    }
+
+    private:
+    int npw;
+    int nband;
+    std::vector<std::complex<float>> hmatrix;
+    std::vector<std::complex<float>> psimatrix;
+    float* precondition;
+    int min=0;
+    int max=9999;
+    int sparsity;
+};
+
 //totally same as the original function
 template<> void hamilt::HamiltPW<double>::sPsi
 (
@@ -276,6 +481,14 @@ template<> void hamilt::HamiltPW<float>::sPsi
 #include "module_hamilt_pw/hamilt_pwdft/operator_pw/operator_pw.h"
 class OperatorMock_d : public hamilt::OperatorPW<double>
 {
+    ~OperatorMock_d()
+    {
+        if(this->hpsi != nullptr) 
+        {
+            delete this->hpsi;
+            this->hpsi = nullptr;
+        }
+    }
     virtual void act
     (
         const psi::Psi<std::complex<double>> *psi_in, 
@@ -312,6 +525,14 @@ class OperatorMock_d : public hamilt::OperatorPW<double>
 
 class OperatorMock_f : public hamilt::OperatorPW<float>
 {
+    ~OperatorMock_f()
+    {
+        if(this->hpsi != nullptr) 
+        {
+            delete this->hpsi;
+            this->hpsi = nullptr;
+        }
+    }
     virtual void act
     (
         const psi::Psi<std::complex<float>> *psi_in, 
@@ -337,8 +558,10 @@ class OperatorMock_f : public hamilt::OperatorPW<float>
                     hpsi0[i] += DIAGOTEST::hmatrix_local_f[i * DIAGOTEST::h_nc + j] * tmpsi_in[j];
                 }
             }
-            Parallel_Reduce::reduce_complex_double_pool(hpsi0, DIAGOTEST::npw);
-            DIAGOTEST::divide_psi<std::complex<float>>(hpsi0, tmhpsi);
+#ifdef __MPI
+	        MPI_Allreduce(MPI_IN_PLACE, hpsi0, DIAGOTEST::npw, MPI_C_FLOAT_COMPLEX, MPI_SUM, MPI_COMM_WORLD);
+#endif
+            DIAGOTEST::divide_psi_f<std::complex<float>>(hpsi0, tmhpsi);	
             tmhpsi += psi_in->get_nbasis();
             tmpsi_in += psi_in->get_nbasis();
         }
