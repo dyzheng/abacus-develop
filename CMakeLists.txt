@@ -26,7 +26,7 @@ option(ENABLE_LIBRI "Enable EXX with LibRI." OFF)
 option(USE_ELPA "Enable ELPA" ON)
 option(USE_ABACUS_LIBM "Build libmath from source to speed up." ON)
 option(GIT_SUBMODULE "Check submodules during build" ON)
-option(USE_DEBUG " Use macro __DEBUG in ABACUS." OFF)
+option(DEBUG_INFO "Use macro __DEBUG in ABACUS." OFF)
 # Do not enable it if generated code will run on different CPUs
 option(ENABLE_NATIVE_OPTIMIZATION "Enable compilation optimization for the native machine's CPU type" OFF)
 
