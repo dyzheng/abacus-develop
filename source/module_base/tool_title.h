@@ -19,7 +19,7 @@ void TITLE(
     const std::string &class_function_name,
 #ifndef __DEBUG
     const bool disable=true
-#elif
+#else
     const bool disable=false
 #endif
 );
