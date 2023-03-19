@@ -12,14 +12,14 @@ VERSION = ABACUS
 HEADERS = *.h
 
 VPATH=./src_global:\
-./module_orbital:\
+./module_basis/module_ao:\
 ./module_neighbor:\
 ./module_symmetry:\
 ./module_cell:\
 ./module_base:\
 ./module_base/kernels:\
 ./module_md:\
-./module_pw:\
+./module_basis/module_pw:\
 ./module_hamilt_general/module_surchem:\
 ./module_deepks:\
 ./module_hamilt_general/module_xc:\

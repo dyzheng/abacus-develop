@@ -94,16 +94,16 @@ add_library(
 )
 
 list(APPEND planewave_serial_srcs
-  ../../module_pw/fft.cpp
-  ../../module_pw/pw_basis.cpp
-  ../../module_pw/pw_basis_k.cpp
-  ../../module_pw/pw_distributeg.cpp
-  ../../module_pw/pw_distributeg_method1.cpp
-  ../../module_pw/pw_distributeg_method2.cpp
-  ../../module_pw/pw_distributer.cpp
-  ../../module_pw/pw_init.cpp
-  ../../module_pw/pw_transform.cpp
-  ../../module_pw/pw_transform_k.cpp
+  ../../module_basis/module_pw/fft.cpp
+  ../../module_basis/module_pw/pw_basis.cpp
+  ../../module_basis/module_pw/pw_basis_k.cpp
+  ../../module_basis/module_pw/pw_distributeg.cpp
+  ../../module_basis/module_pw/pw_distributeg_method1.cpp
+  ../../module_basis/module_pw/pw_distributeg_method2.cpp
+  ../../module_basis/module_pw/pw_distributer.cpp
+  ../../module_basis/module_pw/pw_init.cpp
+  ../../module_basis/module_pw/pw_transform.cpp
+  ../../module_basis/module_pw/pw_transform_k.cpp
 )
 
 list(APPEND symmetry

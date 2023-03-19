@@ -4,7 +4,7 @@
 #include "module_gint/grid_technique.h"
 #include "module_base/global_function.h"
 #include "module_base/global_variable.h"
-#include "module_orbital/ORB_control.h" // mohan add 2021-05-24
+#include "module_basis/module_ao/ORB_control.h" // mohan add 2021-05-24
 #include "module_psi/psi.h"
 #include "module_elecstate/elecstate.h"
 

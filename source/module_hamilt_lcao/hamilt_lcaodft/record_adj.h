@@ -2,7 +2,7 @@
 #define RECORD_ADJ_H
 
 #include "module_gint/grid_technique.h"
-#include "module_orbital/parallel_orbitals.h"
+#include "module_basis/module_ao/parallel_orbitals.h"
 
 
 //---------------------------------------------------

@@ -3,7 +3,7 @@
 
 #include "grid_meshball.h"
 #include "grid_index.h"
-#include "module_orbital/parallel_orbitals.h"
+#include "module_basis/module_ao/parallel_orbitals.h"
 
 // Author: mohan
 // Date: 2009-10-17
