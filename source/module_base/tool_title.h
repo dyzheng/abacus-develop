@@ -28,7 +28,7 @@ void TITLE(
     const std::string &function_name,
 #ifndef __DEBUG
     const bool disable=true
-#elif
+#else
     const bool disable=false
 #endif
 );
@@ -38,7 +38,7 @@ void TITLE(
     const std::string &function_name,
 #ifndef __DEBUG
     const bool disable=true
-#elif
+#else
     const bool disable=false
 #endif
 );
