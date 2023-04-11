@@ -1,0 +1,88 @@
+#include "atom_pair.h"
+
+namespace hamilt
+{
+
+//----------------------------------------------------
+//atom pair class
+//----------------------------------------------------
+template<typename T>
+BaseMatrix<T>& AtomPair<T>::get_R_values(int rx_in, int ry_in, int rz_in)const
+{
+    for (int i = 0; i < R_index.size(); i+=3) {
+        if (R_index[i] == rx_in && R_index[i+1] == ry_in && R_index[i+2] == rz_in) {
+            current_R = i/3;
+            return values[current_R];
+        }
+    }
+    throw std::out_of_range("Invalid cell index");
+    //add a new BaseMatrix for this R index
+    /*R_index.push_back(rx_in);
+    R_index.push_back(ry_in);
+    R_index.push_back(rz_in);
+    values.emplace_back(BaseMatrix<T>());
+    current_R = values.size()-1;
+    values.back().num_orb_i = element_i->num_orbitals;
+    values.back().num_orb_j = element_j->num_orbitals;
+    return values.back();*/
+}
+
+template<typename T>
+void AtomPair<T>::convert_add(const BaseMatrix<T>& target, int rx_in, int ry_in, int rz_in){
+    BaseMatrix<T>& matrix = get_R_values(rx_in, ry_in, rz_in);
+    if (matrix.memory_type == 1) {
+        matrix.add_array(target.get_pointer());
+    }
+    else {
+        for (int i = 0; i < matrix.num_orb_i; i++) {
+            for (int j = 0; j < matrix.num_orb_j; j++) {
+                matrix.add_element(i, j, target.get_value(i, j));
+            }
+        }
+    }
+}
+template<typename T>
+void AtomPair<T>::convert_save(const BaseMatrix<T>& target, int rx_in, int ry_in, int rz_in){
+    BaseMatrix<T>& matrix = get_R_values(rx_in, ry_in, rz_in);
+    if (matrix.memory_type == 1) {
+        matrix.save_array(target.get_pointer());
+    }
+    else {
+        for (int i = 0; i < matrix.num_orb_i; i++) {
+            for (int j = 0; j < matrix.num_orb_j; j++) {
+                matrix.save_element(i, j, target.get_value(i, j));
+            }
+        }
+    }
+}
+
+template<typename T>
+void AtomPair<T>::add_to_matrix(std::complex<T>* hk, const int ncol_hk, const std::complex<T> &kphase) const{
+    /*for (int i = 0; i < R_index.size(); i+=3) {
+        int rx = R_index[i];
+        int ry = R_index[i+1];
+        int rz = R_index[i+2];
+        const BaseMatrix<T>& matrix = get_R_values(rx, ry, rz);*/
+    assert(ncol_hk == this->ldc);
+    const BaseMatrix<T>& matrix = values[current_R];
+    std::complex<T>* hk_tmp = hk + this->row_ap * ncol_hk + this->col_ap;
+    for (int mu = 0; mu < matrix.num_orb_i; mu++) {
+        hk += ncol_hk;
+        for (int nu = 0; nu < matrix.num_orb_j; nu++) {
+            hk[nu] += matrix.get_value(mu, nu, this->ldc) * kphase;
+        }
+    }
+}
+
+template<typename T>
+T& AtomPair<T>::get_matrix_value(const size_t &i_row_global, const size_t &j_col_global) const
+{
+    size_t i_row_local = this->ParaV->trace_loc_row(i_row_global);
+    size_t j_col_local = this->paraV->trace_loc_col(j_col_global);
+    //assert(i_row_local != -1 && i_col_local != -1)
+    size_t i_row_in = i_row_local - row_ap;
+    size_t j_col_in = j_col_local - col_ap;
+    return this->values[current_R].get_value(i_row_in, j_col_in, this->ldc);
+}
+
+}
