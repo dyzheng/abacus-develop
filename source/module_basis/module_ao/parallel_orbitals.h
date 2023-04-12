@@ -91,9 +91,16 @@ struct Parallel_Orbitals
     // test parameter
     int testpb;
 
+    // orbital index for each atom
+    std::vector<int> atom_begin_row;
+    std::vector<int> atom_begin_col;
+
     /// check whether a basis element is in this processor
     /// (check whether local-index > 0 )
     bool in_this_processor(const int& iw1_all, const int& iw2_all) const;
+
+    // set row and col begin index for each atom
+    void set_atomic_trace(const int* iat2iwt, const int &nat, const int &nlocal);
 
 };
 

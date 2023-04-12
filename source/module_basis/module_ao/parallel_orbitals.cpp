@@ -293,3 +293,37 @@ void ORB_control::divide_HS_2d(
         ModuleBase::GlobalFunc::OUT(ofs_running, "nloc", pv->nloc);
     return;
 }
+
+void Parallel_Orbitals::set_atomic_trace(const int* iat2iwt, const int &nat, const int &nlocal)
+{
+    this->atom_begin_col.resize(nat);
+    this->atom_begin_row.resize(nat);
+    for(int iat=0;iat<nat-1;iat++)
+    {
+        this->atom_begin_col[iat] = -1;
+        this->atom_begin_row[iat] = -1;
+        int irow = iat2iwt[iat];
+        int icol = iat2iwt[iat];
+        const int max = (iat == nat-1) ? (nlocal - irow): (iat2iwt[iat+1] - irow);
+        //find the first row index of atom iat
+        for(int i=0;i<max;i++)
+        {
+            if(this->trace_loc_row[irow]!=-1)
+            {
+                this->atom_begin_row[iat] = irow;
+                break;
+            }
+            irow++;
+        }
+        //find the first col index of atom iat
+        for(int i=0;i<max;i++)
+        {
+            if(this->trace_loc_col[icol]!=-1)
+            {
+                this->atom_begin_col[iat] = icol;
+                break;
+            }
+            icol++;
+        }
+    }
+}
