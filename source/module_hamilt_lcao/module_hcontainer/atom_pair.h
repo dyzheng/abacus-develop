@@ -46,18 +46,18 @@ class AtomPair
     //Constructor of class AtomPair
     //2d-block matrix version
     AtomPair(
-        const int& atom_i,
-        const int& atom_j,
-        const Parallel_Orbitals* ParaV_,
+        const int& atom_i_,
+        const int& atom_j_,
+        const Parallel_Orbitals* paraV_,
         const T* existed_matrix = nullptr
     );
     AtomPair(
-        const int& atom_i,
-        const int& atom_j,
+        const int& atom_i_,
+        const int& atom_j_,
         const int& rx,
         const int& ry,
         const int& rz,
-        const Parallel_Orbitals* ParaV_,
+        const Parallel_Orbitals* paraV_,
         const T* existed_matrix = nullptr
     );
     //direct save whole matrix of atom-pair
@@ -103,16 +103,19 @@ class AtomPair
     const Atom* element_j = nullptr;*/
 
     //only for 2d-block
-    const Parallel_Orbitals* ParaV = nullptr;
+    const Parallel_Orbitals* paraV = nullptr;
 
     //the default R index is (0, 0, 0)
     int current_R = 0;
 
+    //index for identifying atom I and J for this atom-pair
+    int atom_i = -1;
+    int atom_j = -1;
     //start index of row for this Atom-Pair
-    int row_ap = 0;
+    int row_ap = -1;
     //start index of col for this Atom-pair
-    int col_ap = 0;
-    int ldc = 0; //leading_dimention_colomn
+    int col_ap = -1;
+    int ldc = -1; //leading_dimention_colomn
 
 };
 

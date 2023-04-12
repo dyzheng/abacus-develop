@@ -6,6 +6,61 @@ namespace hamilt
 //----------------------------------------------------
 //atom pair class
 //----------------------------------------------------
+
+template<typename T>
+AtomPair<T>::AtomPair(
+    const int& atom_i_,
+    const int& atom_j_,
+    const Parallel_Orbitals* paraV_,
+    const T* existed_matrix
+):atom_i(atom_i_), atom_j(atom_j_), paraV(paraV_) 
+{
+    
+}
+
+template<typename T>
+AtomPair<T>::AtomPair(
+    const int& atom_i,
+    const int& atom_j,
+    const int& rx,
+    const int& ry,
+    const int& rz,
+    const Parallel_Orbitals* ParaV_,
+    const T* existed_matrix
+):atom_i(atom_i_), atom_j(atom_j_), paraV(paraV_)
+{
+
+}
+//direct save whole matrix of atom-pair
+template<typename T>
+AtomPair<T>::AtomPair(
+    const int& atom_i_,
+    const int& atom_j_,
+    const int* row_atom_begin,
+    const int* col_atom_begin
+):atom_i(atom_i_), atom_j(atom_j_)
+{
+    assert(row_atom_begin != nullptr && col_atom_begin != nullptr);
+    this->row_ap = row_atom_begin[atom_i];
+    this->col_ap = col_atom_begin[atom_j];
+}
+//
+template<typename T>
+AtomPair<T>::AtomPair(
+    const int& atom_i,
+    const int& atom_j,
+    const int& rx,
+    const int& ry,
+    const int& rz,
+    const int* row_atom_begin,
+    const int* col_atom_begin
+):atom_i(atom_i_), atom_j(atom_j_)
+{
+    assert(row_atom_begin != nullptr && col_atom_begin != nullptr);
+    this->row_ap = row_atom_begin[atom_i];
+    this->col_ap = col_atom_begin[atom_j];
+}
+
 template<typename T>
 BaseMatrix<T>& AtomPair<T>::get_R_values(int rx_in, int ry_in, int rz_in)const
 {
