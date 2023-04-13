@@ -15,7 +15,29 @@ AtomPair<T>::AtomPair(
     const T* existed_matrix
 ):atom_i(atom_i_), atom_j(atom_j_), paraV(paraV_) 
 {
-    
+    assert(this->paraV != nullptr);
+    this->row_ap = this->paraV->atom_begin_row[atom_i];
+    this->col_ap = this->paraV->atom_begin_col[atom_j];
+    if(this->row_ap == -1 || this->col_ap == -1)
+    {
+        throw std::string("Atom-pair not belong this process");
+    }
+    this->row_size = this->paraV->get_row_size(atom_i);
+    this->col_size = this->paraV->get_col_size(atom_j);
+    this->ldc = this->paraV->get_col_size();
+    this->R_index.resize(3, 0);
+    this->current_R = 0;
+    if(existed_matrix != nullptr)
+    {
+        BaseMatrix<T> tmp(row_size, col_size, (existed_matrix + row_ap * ldc + col_ap));
+        this->values.push_back(tmp);
+    }
+    else
+    {
+        BaseMatrix<T> tmp(row_size, col_size);
+        this->values.push_back(tmp);
+        this->ldc = col_size;
+    }
 }
 
 template<typename T>
@@ -29,7 +51,32 @@ AtomPair<T>::AtomPair(
     const T* existed_matrix
 ):atom_i(atom_i_), atom_j(atom_j_), paraV(paraV_)
 {
-
+    assert(this->paraV != nullptr);
+    this->row_ap = this->paraV->atom_begin_row[atom_i];
+    this->col_ap = this->paraV->atom_begin_col[atom_j];
+    if(this->row_ap == -1 || this->col_ap == -1)
+    {
+        throw std::string("Atom-pair not belong this process");
+    }
+    this->row_size = this->paraV->get_row_size(atom_i);
+    this->col_size = this->paraV->get_col_size(atom_j);
+    this->ldc = this->paraV->get_col_size();
+    this->R_index.resize(3, 0);
+    this->current_R = 0;
+    this->R_index[0] = rx;
+    this->R_index[1] = ry;
+    this->R_index[2] = rz;
+    if(existed_matrix != nullptr)
+    {
+        BaseMatrix<T> tmp(row_size, col_size, (existed_matrix + row_ap * ldc + col_ap));
+        this->values.push_back(tmp);
+    }
+    else
+    {
+        BaseMatrix<T> tmp(row_size, col_size);
+        this->values.push_back(tmp);
+        this->ldc = col_size;
+    }
 }
 //direct save whole matrix of atom-pair
 template<typename T>
@@ -37,12 +84,30 @@ AtomPair<T>::AtomPair(
     const int& atom_i_,
     const int& atom_j_,
     const int* row_atom_begin,
-    const int* col_atom_begin
+    const int* col_atom_begin,
+    const int& natom,
+    const T* existed_matrix
 ):atom_i(atom_i_), atom_j(atom_j_)
 {
     assert(row_atom_begin != nullptr && col_atom_begin != nullptr);
     this->row_ap = row_atom_begin[atom_i];
     this->col_ap = col_atom_begin[atom_j];
+    this->row_size = row_atom_begin[atom_i+1] - row_atom_begin[atom_i];
+    this->col_size = col_atom_begin[atom_j+1] - col_atom_begin[atom_j];
+    this->R_index.resize(3, 0);
+    this->current_R = 0;
+    if(existed_matrix != nullptr)
+    {
+        this->ldc = row_atom_begin[natom] - row_atom_begin[0];
+        BaseMatrix<T> tmp(row_size, col_size, (existed_matrix + row_ap * ldc + col_ap));
+        this->values.push_back(tmp);
+    }
+    else
+    {
+        BaseMatrix<T> tmp(row_size, col_size);
+        this->values.push_back(tmp);
+        this->ldc = col_size;
+    }
 }
 //
 template<typename T>
@@ -53,12 +118,30 @@ AtomPair<T>::AtomPair(
     const int& ry,
     const int& rz,
     const int* row_atom_begin,
-    const int* col_atom_begin
+    const int* col_atom_begin,
+    const int& natom,
+    const T* existed_matrix
 ):atom_i(atom_i_), atom_j(atom_j_)
 {
     assert(row_atom_begin != nullptr && col_atom_begin != nullptr);
     this->row_ap = row_atom_begin[atom_i];
     this->col_ap = col_atom_begin[atom_j];
+    this->row_size = row_atom_begin[atom_i+1] - row_atom_begin[atom_i];
+    this->col_size = col_atom_begin[atom_j+1] - col_atom_begin[atom_j];
+    this->R_index.resize(3, 0);
+    this->current_R = 0;
+    if(existed_matrix != nullptr)
+    {
+        this->ldc = row_atom_begin[natom] - row_atom_begin[0];
+        BaseMatrix<T> tmp(row_size, col_size, (existed_matrix + row_ap * ldc + col_ap));
+        this->values.push_back(tmp);
+    }
+    else
+    {
+        BaseMatrix<T> tmp(row_size, col_size);
+        this->values.push_back(tmp);
+        this->ldc = col_size;
+    }
 }
 
 template<typename T>

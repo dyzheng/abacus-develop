@@ -102,6 +102,11 @@ struct Parallel_Orbitals
     // set row and col begin index for each atom
     void set_atomic_trace(const int* iat2iwt, const int &nat, const int &nlocal);
 
+    int get_col_size()const;
+    int get_row_size()const;
+    int get_col_size(int iat) const;
+    int get_row_size(int iat) const;
+
 };
 
 
