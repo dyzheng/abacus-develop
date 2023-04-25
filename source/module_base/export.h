@@ -14,6 +14,7 @@
 #include "mpi.h"
 #include "parallel_reduce.h"
 #endif
+#include "global_function.h"
 
 namespace ModuleBase
 {
@@ -22,7 +23,8 @@ extern bool out_alllog;
 extern bool out_mat_hs;
 extern bool out_mat_hsR;
 
-//used for output matrix info in header of output file
+// used for output matrix info in header of output file
+// it will used in binary format, will be update later
 struct MatrixHeader {
     int size; // total size of matrix
     int rows; // number of row of matrix
@@ -31,6 +33,8 @@ struct MatrixHeader {
 	int data_bits;
 };
 
+// used for output array info in header of output file
+// it will used in binary format, will be update later
 struct ArrayHeader {
 	int size;
 	int data_bits;
@@ -39,6 +43,10 @@ struct ArrayHeader {
 template<typename T>
 bool if_not_zero(const T& data);
 
+/** This function writes the non-zero elements of an matrix to a file, 
+ along with its size and element size, and can handle multiple 
+ processes by modifying the filename (out_alllog).
+*/
 template<typename T>
 void dump_matrix(const T* mat, const int& row, const int& col, const int& size, const std::string& filename) {
     MatrixHeader header;
@@ -90,6 +98,10 @@ void dump_matrix(const T* mat, const int& row, const int& col, const int& size, 
     fout.close();
 }
 
+/*This function writes the non-zero elements of an matrix to a file, 
+ along with its size and element size, and can reduce multiple 
+ processes to one file.
+*/
 template<typename T>
 void dump_reduced_matrix(
     const T* mat, 
@@ -170,6 +182,10 @@ void dump_reduced_matrix(
 #endif
 }
 
+/*This function writes the non-zero elements of an array to a file, 
+ along with its size and element size, and can handle multiple 
+ processes by modifying the filename (out_alllog).
+*/
 template<typename T>
 void dump_array(const T* array, const int& size, const std::string& filename) {
     ArrayHeader header;
