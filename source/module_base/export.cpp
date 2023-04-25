@@ -1,33 +1,76 @@
-// =============================================================================
-//                          C++ Header File
-// Project:         
-// File:            export.h 
-// Author:          mohan
-// Comment:         
-// Warning:         
-// Start time:      2008-9-3
-// Last modified:   
-// =============================================================================
-
+// this class used for dump data in DEBUG mode
 #include "export.h"
-/*
-void ModuleBase::IF_MATCH(const std::string &name,const std::string &name2)
+
+#ifdef __DEBUG
+namespace ModuleBase
 {
-	if(name!=name2)
-	{
-		if(GlobalV::MY_RANK == 0)
-		{
-			std::cout<<"\n Can not match : "<<name<<"  "<<name2<<std::endl;
-		}
-#ifdef __MPI
-		MPI_Finalize();
+bool out_alllog = false;
+
+template<>
+bool if_not_zero(const int& data)
+{
+    if(data == 0)
+    {
+        return false;
+    }
+    else
+    {
+        return true;
+    }
+}
+
+template<>
+bool if_not_zero(const double& data)
+{
+    if(std::abs(data) > 1e-15)
+    {
+        return true;
+    }
+    else 
+    {
+        return false;
+    }
+}
+
+template<>
+bool if_not_zero(const float& data)
+{
+    if(std::abs(data) > 1e-10)
+    {
+        return true;
+    }
+    else 
+    {
+        return false;
+    }
+}
+
+template<>
+bool if_not_zero(const std::complex<double>& data)
+{
+    if(std::abs(data.real()) > 1e-15 || std::abs(data.imag()) > 1e-15)
+    {
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+}
+
+template<>
+bool if_not_zero(const std::complex<float>& data)
+{
+    if(std::abs(data.real()) > 1e-15 || std::abs(data.imag()) > 1e-15)
+    {
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+}
+
+}
+
 #endif
-		exit(0);
-	}
-	
-//	std::cout<<std::setw(12)<<name<<std::endl;
-	return;
-}*/
-
-
-

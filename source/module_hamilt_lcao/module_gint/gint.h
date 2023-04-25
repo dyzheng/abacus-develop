@@ -26,6 +26,8 @@ class Gint
         const int &nbz_start_in,
         const int& ncxyz_in);
 
+    double* get_pointer_pvpR(const int& spin) const;
+
     protected:
     // variables related to FFT grid
  	int nbx;

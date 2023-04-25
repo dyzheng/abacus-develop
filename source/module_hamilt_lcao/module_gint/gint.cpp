@@ -315,3 +315,8 @@ void Gint::prep_grid(
 
 	return;
 }
+
+double* Gint::get_pointer_pvpR(const int& spin) const 
+{
+	return this->pvpR_reduced[spin];
+}

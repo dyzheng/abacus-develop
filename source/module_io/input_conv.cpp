@@ -95,6 +95,10 @@ template <typename T> void Input_Conv::parse_expression(const std::string &fn, s
     }
 }
 
+#ifdef __DEBUG
+#include "module_base/export.h"
+#endif
+
 void Input_Conv::Convert(void)
 {
     ModuleBase::TITLE("Input_Conv", "Convert");
@@ -110,6 +114,9 @@ void Input_Conv::Convert(void)
     {
         GlobalV::global_readin_dir = INPUT.read_file_dir + '/';
     }
+#ifdef __DEBUG
+    ModuleBase::out_alllog = INPUT.out_alllog;
+#endif
     //----------------------------------------------------------
     // main parameters / electrons / spin ( 10/16 )
     //----------------------------------------------------------
