@@ -12,12 +12,15 @@
 #include <complex>
 #ifdef __MPI
 #include "mpi.h"
+#include "parallel_reduce.h"
 #endif
 
 namespace ModuleBase
 {
 
 extern bool out_alllog;
+extern bool out_mat_hs;
+extern bool out_mat_hsR;
 
 //used for output matrix info in header of output file
 struct MatrixHeader {
@@ -85,6 +88,86 @@ void dump_matrix(const T* mat, const int& row, const int& col, const int& size, 
     }
     */
     fout.close();
+}
+
+template<typename T>
+void dump_reduced_matrix(
+    const T* mat, 
+    const int& row, 
+    const int& col, 
+    const int* trace_loc_row, 
+    const int* trace_loc_col, 
+    const int& target_dim, 
+    const std::string& filename)
+{
+#ifdef __MPI
+    std::ofstream g1;
+
+    std::stringstream ss;
+    ss << GlobalV::global_out_dir << filename;
+    bool error = false;
+    if (GlobalV::MY_RANK == 0)
+    {
+        g1.open(ss.str());
+        if (!g1) {
+            std::cerr << "Error: failed to open file " << filename << " for writing" << std::endl;
+            error = true;
+        }
+        g1 << target_dim<<std::endl;
+    }
+    if(error)
+    {
+        return;
+    }
+
+    int ir, ic;
+    std::vector<T> lineH(target_dim);
+    for (int i = 0; i < target_dim; i++)
+    {
+        ModuleBase::GlobalFunc::ZEROS(lineH.data(), target_dim);
+
+        ir = trace_loc_row[i];
+        if (ir >= 0)
+        {
+            // data collection
+            for (int j = 0; j < target_dim; j++)
+            {
+                ic = trace_loc_col[j];
+                if (ic >= 0)
+                {
+                    int iic;
+                    if (ModuleBase::GlobalFunc::IS_COLUMN_MAJOR_KS_SOLVER())
+                    {
+                        iic = ir + ic * row;
+                    }
+                    else
+                    {
+                        iic = ir * col + ic;
+                    }
+                    lineH[j] = mat[iic];
+                }
+            }
+        }
+
+        Parallel_Reduce::reduce_complex_double_pool(lineH.data(), target_dim);
+
+        if (GlobalV::MY_RANK == 0)
+        {
+            for (int j = 0; j < target_dim; j++)
+            {
+                if(if_not_zero(lineH[j])) 
+                {
+                    g1 << i<<" "<<j<<" " << lineH[j] << std::endl;
+                }
+            }
+        }
+    }
+
+    if (GlobalV::MY_RANK == 0)
+    {
+        g1.close();
+    }
+#endif
 }
 
 template<typename T>

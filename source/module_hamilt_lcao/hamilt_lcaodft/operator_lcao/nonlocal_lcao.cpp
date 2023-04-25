@@ -23,8 +23,11 @@ void Nonlocal<OperatorLCAO<T>>::contributeHR()
         ModuleBase::timer::tick("Nonlocal<LCAO>", "contributeHR");
         this->genH->calculate_NL_no(this->HR_pointer->data());
 #ifdef __DEBUG
-        if(GlobalV::NSPIN !=4 ) ModuleBase::dump_array(this->HR_pointer->data(), this->LM->Hloc_fixedR.size(), "HR_Nonlocal.txt");
-        else ModuleBase::dump_array(this->LM->Hloc_fixedR_soc.data(), this->LM->Hloc_fixedR_soc.size(), "HR_Nonlocal.txt");
+        if(ModuleBase::out_mat_hsR)
+        {
+            if(GlobalV::NSPIN !=4 ) ModuleBase::dump_array(this->HR_pointer->data(), this->LM->Hloc_fixedR.size(), "HR_Nonlocal.txt");
+            else ModuleBase::dump_array(this->LM->Hloc_fixedR_soc.data(), this->LM->Hloc_fixedR_soc.size(), "HR_Nonlocal.txt");
+        }
 #endif
         ModuleBase::timer::tick("Nonlocal<LCAO>", "contributeHR");
         this->HR_fixed_done = true;

@@ -5,6 +5,8 @@
 namespace ModuleBase
 {
 bool out_alllog = false;
+bool out_mat_hs = false;
+bool out_mat_hsR = false;
 
 template<>
 bool if_not_zero(const int& data)

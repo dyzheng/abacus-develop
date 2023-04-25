@@ -142,28 +142,49 @@ void Veff<OperatorLCAO<std::complex<double>>>::contributeHk(int ik)
             }
         }
 #ifdef __DEBUG
-        std::stringstream tmp_file_name;
-        if(GlobalV::NSPIN !=4 ) 
+        if(ModuleBase::out_mat_hsR)
         {
-            tmp_file_name << "HR_veff_spin" << (GlobalV::CURRENT_SPIN + 1);
-            ModuleBase::dump_array(this->GK->get_pointer_pvpR(GlobalV::CURRENT_SPIN), GlobalC::GridT.nnrg, tmp_file_name.str());
+            std::stringstream tmp_file_name;
+            if(GlobalV::NSPIN !=4 ) 
+            {
+                tmp_file_name << "HR_veff_spin" << (GlobalV::CURRENT_SPIN + 1);
+                ModuleBase::dump_array(this->GK->get_pointer_pvpR(GlobalV::CURRENT_SPIN), GlobalC::GridT.nnrg, tmp_file_name.str());
+            }
+            else
+            {
+                ModuleBase::dump_array(this->GK->get_pointer_pvpR(0), GlobalC::GridT.nnrg, "HR_veff_spin1");
+                ModuleBase::dump_array(this->GK->get_pointer_pvpR(1), GlobalC::GridT.nnrg, "HR_veff_spin2");
+                ModuleBase::dump_array(this->GK->get_pointer_pvpR(2), GlobalC::GridT.nnrg, "HR_veff_spin3");
+                ModuleBase::dump_array(this->GK->get_pointer_pvpR(3), GlobalC::GridT.nnrg, "HR_veff_spin4");
+            } 
         }
-        else
-        {
-            ModuleBase::dump_array(this->GK->get_pointer_pvpR(0), GlobalC::GridT.nnrg, "HR_veff_spin1");
-            ModuleBase::dump_array(this->GK->get_pointer_pvpR(1), GlobalC::GridT.nnrg, "HR_veff_spin2");
-            ModuleBase::dump_array(this->GK->get_pointer_pvpR(2), GlobalC::GridT.nnrg, "HR_veff_spin3");
-            ModuleBase::dump_array(this->GK->get_pointer_pvpR(3), GlobalC::GridT.nnrg, "HR_veff_spin4");
-        } 
 #endif
     }
 
     this->GK->folding_vl_k(ik, this->LM);
 
 #ifdef __DEBUG
-    std::stringstream tmp_file_name;
-    tmp_file_name<<"HK_veff"<<ik;
-    ModuleBase::dump_matrix(this->LM->Hloc2.data(), this->LM->ParaV->ncol, this->LM->ParaV->nrow, this->LM->ParaV->nloc, tmp_file_name.str());
+    if(ModuleBase::out_mat_hs)
+    {
+        std::stringstream tmp_file_name;
+        tmp_file_name<<"HK_veff"<<ik;
+        if(ModuleBase::out_alllog)
+        {
+            ModuleBase::dump_matrix(this->LM->Hloc2.data(), this->LM->ParaV->ncol, this->LM->ParaV->nrow, this->LM->ParaV->nloc, tmp_file_name.str());
+        }
+        else
+        {
+            ModuleBase::dump_reduced_matrix(
+                this->LM->Hloc2.data(), 
+                this->LM->ParaV->nrow, 
+                this->LM->ParaV->ncol, 
+                this->LM->ParaV->trace_loc_row, 
+                this->LM->ParaV->trace_loc_col, 
+                GlobalV::NLOCAL, 
+                tmp_file_name.str()
+            );
+        }
+    }
 #endif
 
     ModuleBase::timer::tick("Veff", "contributeHk");

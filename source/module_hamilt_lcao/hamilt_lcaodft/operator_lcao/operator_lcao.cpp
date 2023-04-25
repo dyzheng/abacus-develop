@@ -81,9 +81,27 @@ void OperatorLCAO<std::complex<double>>::folding_fixed(const int ik)
     this->LM->zeros_HSk('T');
     this->LM->folding_fixedH(ik);
 #ifdef __DEBUG
-    std::stringstream tmp_file_name;
-    tmp_file_name << "HK_fixed" << ik;
-    ModuleBase::dump_matrix(this->LM->Hloc_fixed2.data(), this->LM->ParaV->ncol, this->LM->ParaV->nrow, this->LM->ParaV->nloc, tmp_file_name.str());
+    if(ModuleBase::out_mat_hs)
+    {
+        std::stringstream tmp_file_name;
+        tmp_file_name << "HK_fixed" << ik;
+        if(ModuleBase::out_alllog)
+        {
+            ModuleBase::dump_matrix(this->LM->Hloc_fixed2.data(), this->LM->ParaV->ncol, this->LM->ParaV->nrow, this->LM->ParaV->nloc, tmp_file_name.str());
+        }
+        else
+        {
+            ModuleBase::dump_reduced_matrix(
+                this->LM->Hloc_fixed2.data(), 
+                this->LM->ParaV->nrow, 
+                this->LM->ParaV->ncol, 
+                this->LM->ParaV->trace_loc_row, 
+                this->LM->ParaV->trace_loc_col, 
+                GlobalV::NLOCAL, 
+                tmp_file_name.str()
+            );
+        }
+    }
 #endif
 
     //------------------------------------------
@@ -92,9 +110,27 @@ void OperatorLCAO<std::complex<double>>::folding_fixed(const int ik)
     //------------------------------------------
 	this->LM->update_Hloc2(ik);
 #ifdef __DEBUG
-    std::stringstream tmp_file_name1;
-    tmp_file_name1 << "HK_add_fixed" << ik;
-    ModuleBase::dump_matrix(this->LM->Hloc2.data(), this->LM->ParaV->ncol, this->LM->ParaV->nrow, this->LM->ParaV->nloc, tmp_file_name1.str());
+    if(ModuleBase::out_mat_hs)
+    {
+        std::stringstream tmp_file_name1;
+        tmp_file_name1 << "HK_add_fixed" << ik;
+        if(ModuleBase::out_alllog)
+        {
+            ModuleBase::dump_matrix(this->LM->Hloc2.data(), this->LM->ParaV->ncol, this->LM->ParaV->nrow, this->LM->ParaV->nloc, tmp_file_name1.str());
+        }
+        else
+        {
+            ModuleBase::dump_reduced_matrix(
+                this->LM->Hloc2.data(), 
+                this->LM->ParaV->nrow, 
+                this->LM->ParaV->ncol, 
+                this->LM->ParaV->trace_loc_row, 
+                this->LM->ParaV->trace_loc_col, 
+                GlobalV::NLOCAL, 
+                tmp_file_name1.str()
+            );
+        }
+    }
 #endif
     ModuleBase::timer::tick("OperatorLCAO", "folding_fixed");
 }

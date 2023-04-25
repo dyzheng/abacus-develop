@@ -116,6 +116,8 @@ void Input_Conv::Convert(void)
     }
 #ifdef __DEBUG
     ModuleBase::out_alllog = INPUT.out_alllog;
+    ModuleBase::out_mat_hs = INPUT.out_mat_hs;
+    ModuleBase::out_mat_hsR = INPUT.out_mat_hs2;
 #endif
     //----------------------------------------------------------
     // main parameters / electrons / spin ( 10/16 )
