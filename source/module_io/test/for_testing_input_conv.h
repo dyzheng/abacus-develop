@@ -23,7 +23,7 @@
 #include "module_hsolver/hsolver_lcao.h"
 #include "module_elecstate/elecstate_lcao.h"
 #include "module_io/berryphase.h"
-#include "module_md/MD_func.h"
+#include "module_md/md_func.h"
 
 bool berryphase::berry_phase_flag=false;
 int elecstate::ElecStateLCAO::out_wfc_lcao = 0;
@@ -35,9 +35,6 @@ int hsolver::HSolverLCAO::out_mat_dh = 0;
 int Local_Orbital_Charge::out_dm = 0;
 int Local_Orbital_Charge::out_dm1 = 0;
 double ELEC_evolve::td_force_dt;
-int ELEC_evolve::td_val_elec_01;
-int ELEC_evolve::td_val_elec_02;
-int ELEC_evolve::td_val_elec_03;
 bool ELEC_evolve::td_vext;
 std::vector<int> ELEC_evolve::td_vext_dire_case;
 bool ELEC_evolve::out_dipole;
@@ -62,6 +59,7 @@ double Ions_Move_Basic::relax_bfgs_rmin = -1.0;
 double Ions_Move_Basic::relax_bfgs_init = -1.0;
 int Ions_Move_Basic::out_stru=0;
 double Ions_Move_CG::RELAX_CG_THR =-1.0;
+std::string Lattice_Change_Basic::fixed_axes = "None";
 int ModuleSymmetry::Symmetry::symm_flag=0;
 
 Charge_Mixing::Charge_Mixing(){}
