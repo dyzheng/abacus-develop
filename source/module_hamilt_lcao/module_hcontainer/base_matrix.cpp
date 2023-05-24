@@ -4,11 +4,11 @@ namespace hamilt
 {
 
 template<typename T>
-BaseMatrix<T>::BaseMatrix(){
+BaseMatrix<T>::BaseMatrix(const int &nrow_, const int &ncol_, T* data_existed = nullptr){
     value_begin.clear();
     current_multiple = 0;
-    num_orb_i = 0;
-    num_orb_j = 0;
+    num_orb_i = nrow_;
+    num_orb_j = ncol_;
     memory_type = 1;
 }
 template<typename T>

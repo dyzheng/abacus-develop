@@ -42,48 +42,52 @@ add_to_matrix(container::Tensor& hk, const std::complex<T> &kphase) const: Adds 
 template<typename T>
 class AtomPair
 {
-    public:
-    //Constructor of class AtomPair
-    //2d-block matrix version
+  public:
+    // Constructor of class AtomPair
+    // Only for 2d-block MPI parallel case
+    // This constructor used for initialize a atom-pair local Hamiltonian with only center cell
+    // which is used for constructing HK (k space Hamiltonian) objects, (gamma_only case)
     AtomPair(
-        const int& atom_i_,
-        const int& atom_j_,
-        const Parallel_Orbitals* paraV_,
-        const T* existed_matrix = nullptr
+        const int& atom_i_,        // atomic index of atom i, used to identify atom
+        const int& atom_j_,        // atomic index of atom j, used to identify atom
+        const Parallel_Orbitals* paraV_,  // information for 2d-block parallel
+        const T* existed_matrix = nullptr // if nullptr, new memory will be allocated, otherwise this class is a data wrapper
     );
+    // Constructor of class AtomPair
+    // Only for 2d-block MPI parallel case
+    // This constructor used for initialize a atom-pair local Hamiltonian with non-zero cell indexes, 
+    // which is used for constructing HR (real space Hamiltonian) objects.  
     AtomPair(
-        const int& atom_i_,
-        const int& atom_j_,
-        const int& rx,
-        const int& ry,
-        const int& rz,
-        const Parallel_Orbitals* paraV_,
-        const T* existed_matrix = nullptr
+        const int& atom_i_,        // atomic index of atom i, used to identify atom
+        const int& atom_j_,        // atomic index of atom j, used to identify atom
+        const int& rx,             // x coordinate of cell
+        const int& ry,             // y coordinate of cell
+        const int& rz,             // z coordinate of cell
+        const Parallel_Orbitals* paraV_,  // information for 2d-block parallel
+        const T* existed_array = nullptr  // if nullptr, new memory will be allocated, otherwise this class is a data wrapper
     );
-    //direct save whole matrix of atom-pair
+    // This constructor used for initialize a atom-pair local Hamiltonian with only center cell
+    // which is used for constructing HK (k space Hamiltonian) objects, (gamma_only case)
     AtomPair(
-        const int& atom_i,
-        const int& atom_j,
-        const int* row_atom_begin,
-        const int* col_atom_begin
+        const int& atom_i,         // atomic index of atom i, used to identify atom
+        const int& atom_j,         // atomic index of atom j, used to identify atom
+        const int* row_atom_begin, // array, contains starting indexes in Hamiltonian matrix of atom i
+        const int* col_atom_begin  // array, contains starting indexes in Hamiltonian matrix of atom j
     );
-    //
+
+    // This constructor used for initialize a atom-pair local Hamiltonian with non-zero cell indexes, 
+    // which is used for constructing HR (real space Hamiltonian) objects.  
     AtomPair(
-        const int& atom_i,
-        const int& atom_j,
-        const int& rx,
-        const int& ry,
-        const int& rz,
-        const int* row_atom_begin,
-        const int* col_atom_begin
+        const int& atom_i,         // atomic index of atom i, used to identify atom
+        const int& atom_j,         // atomic index of atom j, used to identify atom
+        const int& rx,             // x coordinate of cell
+        const int& ry,             // y coordinate of cell
+        const int& rz,             // z coordinate of cell
+        const int* row_atom_begin, // array, contains starting indexes in Hamiltonian matrix of atom i
+        const int* col_atom_begin  // array, contains starting indexes in Hamiltonian matrix of atom j
     );
     //Destructor of class AtomPair
     ~AtomPair(){};
-
-    //it contains 3 index of cell, size of R_index is three times of values.
-    std::vector<int> R_index;
-    //it contains containers for accessing matrix of this atom-pair 
-    std::vector<BaseMatrix<T>> values;
 
     //interface for get target matrix of target cell
     BaseMatrix<T> &get_R_values(int rx_in, int ry_in, int rz_in) const;
@@ -101,6 +105,14 @@ class AtomPair
 
     /*const Atom* element_i = nullptr;
     const Atom* element_j = nullptr;*/
+
+  private:
+  
+    //it contains 3 index of cell, size of R_index is three times of values.
+    std::vector<int> R_index;
+
+    //it contains containers for accessing matrix of this atom-pair 
+    std::vector<BaseMatrix<T>> values;
 
     //only for 2d-block
     const Parallel_Orbitals* paraV = nullptr;
