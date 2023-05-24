@@ -72,7 +72,9 @@ class AtomPair
         const int& atom_i,         // atomic index of atom i, used to identify atom
         const int& atom_j,         // atomic index of atom j, used to identify atom
         const int* row_atom_begin, // array, contains starting indexes in Hamiltonian matrix of atom i
-        const int* col_atom_begin  // array, contains starting indexes in Hamiltonian matrix of atom j
+        const int* col_atom_begin,  // array, contains starting indexes in Hamiltonian matrix of atom j
+        const int& natom,
+        const T* existed_matrix = nullptr
     );
 
     // This constructor used for initialize a atom-pair local Hamiltonian with non-zero cell indexes, 
@@ -84,7 +86,9 @@ class AtomPair
         const int& ry,             // y coordinate of cell
         const int& rz,             // z coordinate of cell
         const int* row_atom_begin, // array, contains starting indexes in Hamiltonian matrix of atom i
-        const int* col_atom_begin  // array, contains starting indexes in Hamiltonian matrix of atom j
+        const int* col_atom_begin,  // array, contains starting indexes in Hamiltonian matrix of atom j
+        const int& natom,
+        const T* existed_matrix = nullptr
     );
     //Destructor of class AtomPair
     ~AtomPair(){};
@@ -127,6 +131,8 @@ class AtomPair
     int row_ap = -1;
     //start index of col for this Atom-pair
     int col_ap = -1;
+    int row_size = 0;
+    int col_size = 0;
     int ldc = -1; //leading_dimention_colomn
 
 };

@@ -327,3 +327,58 @@ void Parallel_Orbitals::set_atomic_trace(const int* iat2iwt, const int &nat, con
         }
     }
 }
+
+// Get the number of columns of the parallel orbital matrix
+int Parallel_Orbitals::get_col_size()const
+{
+    return this->ncol;
+}
+// Get the number of rows of the parallel orbital matrix
+int Parallel_Orbitals::get_row_size()const
+{
+    return this->nrow;
+}
+// Get the number of columns of the orbital matrix of the iat-th atom
+int Parallel_Orbitals::get_col_size(int iat) const
+{
+    int size = this->atom_begin_col[iat];
+    // If the iat-th atom does not have an orbital matrix, return 0
+    if(size == -1)
+    {
+        return 0;
+    }
+    iat += 1;
+    // Traverse the orbital matrices of the atom and calculate the number of columns
+    while(this->atom_begin_col[iat] <= this->ncol)
+    {
+        if(this->atom_begin_col[iat] != -1)
+        {
+            size = this->atom_begin_col[iat] - size;
+            return size;
+        }
+        iat++;
+    }
+    // If the orbital matrix is not found after all atoms are traversed, throw an exception
+    throw std::string("error in get_col_size(iat)");
+}
+// Get the number of rows of the orbital matrix of the iat-th atom
+int Parallel_Orbitals::get_row_size(int iat) const
+{
+    int size = this->atom_begin_row[iat];
+    if(size == -1)
+    {
+        return 0;
+    }
+    iat += 1;
+    while(this->atom_begin_row[iat] <= this->ncol)
+    {
+        if(this->atom_begin_row[iat] != -1)
+        {
+            size = this->atom_begin_row[iat] - size;
+            return size;
+        }
+        iat++;
+    }
+    // If the orbital matrix is not found after all atoms are traversed, throw an exception
+    throw std::string("error in get_col_size(iat)");
+}
