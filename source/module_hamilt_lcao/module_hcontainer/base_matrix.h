@@ -44,16 +44,57 @@ class BaseMatrix
     public:
     //Constructor of class BaseMatrix
     BaseMatrix(const int &nrow_, const int &ncol_, T* data_existed = nullptr);
+    //copy constructor
+    BaseMatrix(const BaseMatrix<T>& matrix);
+    //move constructor
+    BaseMatrix(BaseMatrix<T>&& matrix);
     //Destructor of class BaseMatrix
-    ~BaseMatrix(){};
+    ~BaseMatrix();
+
+    /**
+     * @brief save an array to the matrix
+     * 
+     * @param array array to be saved
+    */
+    void add_array(T* array);
+    /**
+     * @brief add a single element to the matrix
+     * 
+     * @param mu row index
+     * @param nu column index
+     * @param value value to be added
+    */
+    void add_element(int mu, int nu, const T& value);
+    //for inside matrix
+    /**
+     * @brief get value from a whole matrix
+     * for memory_type = 0 or 1, ncol_local will be used to calculate the index
+     * for memory_type = 2, ldc will be used to calculate the index
+     * 
+     * @param i_row row index
+     * @param j_col column index
+     * @return T&
+    */
+    T& get_value(const size_t &i_row, const size_t &j_col) const;
+    /**
+     * @brief get pointer of value from a submatrix
+    */
+    T* get_pointer() const;
+
+    void set_memory_type(const int &memory_type_in);
+
+    private:
+    bool allocated = false;
 
     //pointer for accessing data
     //two ways to arrange data:
     //1. allocate data itself
     //2. only access data but be arranged by RealSparseHamiltonian
-    std::vector<T*> value_begin;
-    int current_multiple = 0;
+    T* value_begin = nullptr;
+    
+    //int current_multiple = 0;
 
+    //number of rows and columns
     int nrow_local = 0;
     int ncol_local = 0;
 
@@ -61,18 +102,11 @@ class BaseMatrix
     //0 is whole matrix
     //1 is 2d-block
     //2 is submatrix in whole matrix
-    //3 is sparse matrix in whole matrix
+    //3 is sparse matrix in whole matrix , not implemented yet
     int memory_type = 1;
 
-    void save_array(T* array);
-    void add_array(T* array);
-    void save_element(int mu, int nu, const T& value);
-    void add_element(int mu, int nu, const T& value);
-    //for inside matrix
-    T& get_value(const size_t &i_row, const size_t &j_col) const;
-    //for block matrix
-    T& get_value(const size_t &i_row, const size_t &j_col, const size_t &ldc) const;
-    T* get_pointer() const;
+    //leading dimension of matrix, used with memory_type = 2
+    int ldc = 0;
 
 };
 

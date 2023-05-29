@@ -90,26 +90,66 @@ class AtomPair
         const int& natom,
         const T* existed_matrix = nullptr
     );
+
+    // copy constructor
+    AtomPair(const AtomPair<T>& other);
+    // move constructor
+    AtomPair(AtomPair&& other) noexcept;
+
+    //simple constructor, only set atom_i and atom_j
+    AtomPair(
+        const int& atom_i_,        // atomic index of atom i, used to identify atom
+        const int& atom_j_        // atomic index of atom j, used to identify atom
+    );
     //Destructor of class AtomPair
     ~AtomPair(){};
 
     //interface for get target matrix of target cell
-    BaseMatrix<T> &get_R_values(int rx_in, int ry_in, int rz_in) const;
+    BaseMatrix<T> &get_HR_values(int rx_in, int ry_in, int rz_in) const;
+    //interface for get (rx, ry, rz) of index-th R-index in this->R_index, the return should be int[3]
+    int* get_R_index(const int& index) const;
     
     //this interface will call get_value in this->values
     T& get_value(const int& i) const;
     T& get_value(const int& row, const int& col) const;
     T& get_matrix_value(const size_t &i_row_global, const size_t &j_col_global) const;
+    T* get_pointer() const;
 
-    // add another BaseMatrix<T> to 
+    // add another BaseMatrix<T> to this->values with specific R index.
     void convert_add(const BaseMatrix<T>& target, int rx_in, int ry_in, int rz_in);
-    void convert_save(const BaseMatrix<T>& target, int rx_in, int ry_in, int rz_in);
+    /**
+     * @brief merge another AtomPair to this AtomPair
+     * 
+     * @param other Another AtomPair
+    */
+    void merge(const AtomPair<T>& other);
+
+    /**
+     * @brief merge all values in this AtomPair to one BaseMatrix with R-index (0, 0, 0)
+     * 
+    */
+    void merge_to_gamma();
     
-    void add_to_matrix(std::complex<T>* hk, const int ncol_hk, const std::complex<T> &kphase)const;
+    /**
+     * @brief Add this->value[current_R] * kphase as a block matrix of hk.
+     * 
+     * For row major (hk_type == 0): value[current_R][i*col_size+j] -> hk[(row_ap+i) * ld_hk + col_ap + j]
+     * For column major (hk_type == 1): value[current_R][i*col_size+j] -> hk[row_ap + i + (col_ap+j) * ld_hk]
+     * 
+     * @param hk Pointer to the target matrix.
+     * @param ld_hk Leading dimension of the target matrix.
+     * @param kphase Complex scalar to be multiplied with the block matrix.
+     * @param hk_type The type of matrix layout (0 for row major, 1 for column major).
+     */
+    void add_to_matrix(std::complex<T>* hk, const int ld_hk, const std::complex<T> &kphase, const int hk_type = 0)const;
 
-    /*const Atom* element_i = nullptr;
-    const Atom* element_j = nullptr;*/
+    //comparation function, used for sorting
+    bool operator<(const AtomPair& other) const ;
 
+    // The copy assignment operator
+    AtomPair& operator=(const AtomPair& other);
+    // move assignment operator
+    AtomPair& operator=(AtomPair&& other) noexcept;
   private:
   
     //it contains 3 index of cell, size of R_index is three times of values.
@@ -122,7 +162,10 @@ class AtomPair
     const Parallel_Orbitals* paraV = nullptr;
 
     //the default R index is (0, 0, 0)
-    int current_R = 0;
+    //if current_R > 0, it means R index has been fixed
+    //if current_R == 0, it means R index has been fixed and it is the center cell, 
+    //if current_R == -1, it means R index has not been fixed
+    int current_R = -1;
 
     //index for identifying atom I and J for this atom-pair
     int atom_i = -1;

@@ -145,69 +145,163 @@ AtomPair<T>::AtomPair(
 }
 
 template<typename T>
-BaseMatrix<T>& AtomPair<T>::get_R_values(int rx_in, int ry_in, int rz_in)const
+AtomPair<T>::AtomPair(
+    const int& atom_i_,
+    const int& atom_j_
+):atom_i(atom_i_), atom_j(atom_j_)
+{}
+
+// copy constructor
+template<typename T>
+AtomPair<T>::AtomPair(const AtomPair<T>& other)
+    : R_index(other.R_index), values(other.values), paraV(other.paraV),
+        current_R(other.current_R), atom_i(other.atom_i), atom_j(other.atom_j),
+        row_ap(other.row_ap), col_ap(other.col_ap), row_size(other.row_size),
+        col_size(other.col_size), ldc(other.ldc) 
+{}
+
+// The copy assignment operator
+template<typename T>
+AtomPair<T>& AtomPair<T>::operator=(const AtomPair<T>& other) {
+    if (this != &other) {
+        R_index = other.R_index;
+        values = other.values;
+        paraV = other.paraV;
+        current_R = other.current_R;
+        atom_i = other.atom_i;
+        atom_j = other.atom_j;
+        row_ap = other.row_ap;
+        col_ap = other.col_ap;
+        row_size = other.row_size;
+        col_size = other.col_size;
+        ldc = other.ldc;
+    }
+    return *this;
+}
+
+// move constructor
+template<typename T>
+AtomPair<T>::AtomPair(AtomPair<T>&& other) noexcept
+    : R_index(std::move(other.R_index)), values(std::move(other.values)), paraV(other.paraV),
+        current_R(other.current_R), atom_i(other.atom_i), atom_j(other.atom_j),
+        row_ap(other.row_ap), col_ap(other.col_ap), row_size(other.row_size),
+        col_size(other.col_size), ldc(other.ldc) 
 {
-    for (int i = 0; i < R_index.size(); i+=3) {
-        if (R_index[i] == rx_in && R_index[i+1] == ry_in && R_index[i+2] == rz_in) {
-            current_R = i/3;
-            return values[current_R];
+    other.paraV = nullptr;
+}
+
+// move assignment operator
+template<typename T>
+AtomPair<T>& AtomPair<T>::operator=(AtomPair<T>&& other) noexcept 
+{
+    if (this != &other) {
+        R_index = std::move(other.R_index);
+        values = std::move(other.values);
+        paraV = other.paraV;
+        other.paraV = nullptr;
+        current_R = other.current_R;
+        atom_i = other.atom_i;
+        atom_j = other.atom_j;
+        row_ap = other.row_ap;
+        col_ap = other.col_ap;
+        row_size = other.row_size;
+        col_size = other.col_size;
+        ldc = other.ldc;
+    }
+    return *this;
+}
+
+template<typename T>
+bool AtomPair<T>::operator<(const AtomPair<T>& other) const
+{
+    if (atom_i < other.atom_i) {
+        return true;
+    } else if (atom_i == other.atom_i) {
+        return atom_j < other.atom_j;
+    } else {
+        return false;
+    }
+}
+
+template<typename T>
+BaseMatrix<T>& AtomPair<T>::get_HR_values(int rx_in, int ry_in, int rz_in)const
+{
+    if(this->current_R > -1)
+    {
+        //if current_R is not -1, R index has been fixed, just return this->values[current_R]
+        return this->values[current_R];
+    }
+    //if current_R is -1, R index has not been fixed, find existed R index
+    for (int i = 0; i < this->R_index.size(); i+=3) 
+    {
+        if (R_index[i] == rx_in && R_index[i+1] == ry_in && R_index[i+2] == rz_in) 
+        {
+            return values[i/3];
         }
     }
-    throw std::out_of_range("Invalid cell index");
-    //add a new BaseMatrix for this R index
-    /*R_index.push_back(rx_in);
+    // no existed value with this R index found
+    // add a new BaseMatrix for this R index
+    R_index.push_back(rx_in);
     R_index.push_back(ry_in);
     R_index.push_back(rz_in);
-    values.emplace_back(BaseMatrix<T>());
-    current_R = values.size()-1;
-    values.back().num_orb_i = element_i->num_orbitals;
-    values.back().num_orb_j = element_j->num_orbitals;
-    return values.back();*/
+    values.push_back(BaseMatrix<T>(this->row_size, this->col_size));
+    return values.back();
 }
 
 template<typename T>
 void AtomPair<T>::convert_add(const BaseMatrix<T>& target, int rx_in, int ry_in, int rz_in){
-    BaseMatrix<T>& matrix = get_R_values(rx_in, ry_in, rz_in);
-    if (matrix.memory_type == 1) {
-        matrix.add_array(target.get_pointer());
-    }
-    else {
-        for (int i = 0; i < matrix.num_orb_i; i++) {
-            for (int j = 0; j < matrix.num_orb_j; j++) {
-                matrix.add_element(i, j, target.get_value(i, j));
-            }
-        }
-    }
+    BaseMatrix<T>& matrix = this->get_HR_values(rx_in, ry_in, rz_in);
+    //memory type is 2d-block
+    //for 2d-block memory type, the data of input matrix is expected storing in a linear array
+    //so we can use pointer to access data, and will be separate to 2d-block in this function
+    matrix.add_array(target.get_pointer());
 }
+
+//function merge
 template<typename T>
-void AtomPair<T>::convert_save(const BaseMatrix<T>& target, int rx_in, int ry_in, int rz_in){
-    BaseMatrix<T>& matrix = get_R_values(rx_in, ry_in, rz_in);
-    if (matrix.memory_type == 1) {
-        matrix.save_array(target.get_pointer());
+void AtomPair<T>::merge(const AtomPair<T>& other)
+{
+    if (other.atom_i != atom_i || other.atom_j != atom_j) {
+        throw std::string("AtomPair::merge: atom pair not match");
     }
-    else {
-        for (int i = 0; i < matrix.num_orb_i; i++) {
-            for (int j = 0; j < matrix.num_orb_j; j++) {
-                matrix.save_element(i, j, target.get_value(i, j));
-            }
-        }
+    for (int i = 0; i < other.R_index.size(); i+=3) {
+        int rx = other.R_index[i];
+        int ry = other.R_index[i+1];
+        int rz = other.R_index[i+2];
+        const BaseMatrix<T>& matrix = other.get_HR_values(rx, ry, rz);
+        convert_add(matrix, rx, ry, rz);
     }
 }
 
 template<typename T>
-void AtomPair<T>::add_to_matrix(std::complex<T>* hk, const int ncol_hk, const std::complex<T> &kphase) const{
+void AtomPair<T>::add_to_matrix(std::complex<T>* hk, const int ld_hk, const std::complex<T> &kphase, const int hk_type) const{
     /*for (int i = 0; i < R_index.size(); i+=3) {
         int rx = R_index[i];
         int ry = R_index[i+1];
         int rz = R_index[i+2];
-        const BaseMatrix<T>& matrix = get_R_values(rx, ry, rz);*/
-    assert(ncol_hk == this->ldc);
+        const BaseMatrix<T>& matrix = get_HR_values(rx, ry, rz);*/
     const BaseMatrix<T>& matrix = values[current_R];
-    std::complex<T>* hk_tmp = hk + this->row_ap * ncol_hk + this->col_ap;
-    for (int mu = 0; mu < matrix.num_orb_i; mu++) {
-        hk += ncol_hk;
-        for (int nu = 0; nu < matrix.num_orb_j; nu++) {
-            hk[nu] += matrix.get_value(mu, nu, this->ldc) * kphase;
+    std::complex<T>* hk_tmp = hk + this->row_ap * ld_hk + this->col_ap;
+    if(hk_type == 0)
+    {
+        for (int mu = 0; mu < this->row_size; mu++) 
+        {
+            for (int nu = 0; nu < this->col_size; nu++) 
+            {
+                hk_tmp[nu] += matrix.get_value(mu, nu, this->ldc) * kphase;
+            }
+            hk_tmp += ld_hk;
+        }
+    }
+    else if(hk_type == 1)
+    {
+        for (int nu = 0; nu < this->col_size; nu++) 
+        {
+            for (int mu = 0; mu < this->row_size; mu++) 
+            {
+                hk_tmp[mu] += matrix.get_value(mu, nu, this->ldc) * kphase;
+            }
+            hk_tmp += ld_hk;
         }
     }
 }
@@ -221,6 +315,13 @@ T& AtomPair<T>::get_matrix_value(const size_t &i_row_global, const size_t &j_col
     size_t i_row_in = i_row_local - row_ap;
     size_t j_col_in = j_col_local - col_ap;
     return this->values[current_R].get_value(i_row_in, j_col_in, this->ldc);
+}
+
+//interface for get (rx, ry, rz) of index-th R-index in this->R_index, the return should be int[3]
+template<typename T>
+int* AtomPair<T>::get_R_index(const int& index) const
+{
+    return &(R_index[index*3]);
 }
 
 }
