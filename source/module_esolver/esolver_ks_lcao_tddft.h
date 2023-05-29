@@ -22,12 +22,13 @@ class ESolver_KS_LCAO_TDDFT : public ESolver_KS_LCAO
     void Init(Input& inp, UnitCell& cell) override;
 
     psi::Psi<std::complex<double>>* psi_laststep = nullptr;
+    std::complex<double>** Hk_laststep = nullptr;
     //same as pelec
     elecstate::ElecStateLCAO_TDDFT* pelec_td = nullptr;
+    int td_htype = 1;
 
   protected:
     virtual void hamilt2density(const int istep, const int iter, const double ethr) override;
-    virtual void eachiterinit(const int istep, const int iter) override;
     virtual void updatepot(const int istep, const int iter) override;
     virtual void afterscf(const int istep) override;
     void cal_edm_tddft();

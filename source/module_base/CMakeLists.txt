@@ -46,8 +46,13 @@ add_library(
     parallel_common.cpp
     parallel_global.cpp
     parallel_reduce.cpp
+    spherical_bessel_transformer.cpp
     ${LIBM_SRC}
 )
+
+if(ENABLE_CONTAINER)
+  add_subdirectory(module_container)
+endif()
 
 if(ENABLE_COVERAGE)
   add_coverage(base)

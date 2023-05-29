@@ -150,14 +150,20 @@ OBJS_DEEPKS=LCAO_deepks.o\
         LCAO_deepks_psialpha.o\
         LCAO_deepks_torch.o\
         LCAO_deepks_vdelta.o\
+        LCAO_deepks_interface.o\
 
 OBJS_ELECSTAT=elecstate.o\
+    elecstate_energy.o\
+    elecstate_energy_terms.o\
+    elecstate_exx.o\
+    elecstate_print.o\
     elecstate_pw.o\
     elecstate_pw_sdft.o\
     elecstate_op.o\
     efield.o\
     gatefield.o\
     potential_new.o\
+    potential_types.o\
     pot_local.o\
     H_Hartree_pw.o\
     H_TDDFT_pw.o\
@@ -218,6 +224,7 @@ OBJS_HAMILT=hamilt_pw.o\
 OBJS_HAMILT_OF=kedf_tf.o\
     kedf_vw.o\
     kedf_wt.o\
+    kedf_lkt.o\
 
 OBJS_HAMILT_LCAO=hamilt_lcao.o\
     operator_lcao.o\
@@ -246,14 +253,14 @@ OBJS_HSOLVER_LCAO=hsolver_lcao.o\
       elpa_new_complex.o\
       utils.o\
 
-OBJS_MD=MD_func.o\
+OBJS_MD=fire.o\
+    langevin.o\
+    md_base.o\
+    md_func.o\
+    msst.o\
+    nhchain.o\
     run_md.o\
-	mdrun.o\
-	verlet.o\
-    MSST.o\
-    Nose_Hoover.o\
-    FIRE.o\
-    Langevin.o\
+    verlet.o\
 
 OBJS_NEIGHBOR=sltk_adjacent_set.o\
     sltk_atom.o\
@@ -338,11 +345,13 @@ OBJS_IO=input.o\
     cal_test.o\
     write_dos_pw.o\
     nscf_band.o\
-    dos.o\
+    cal_dos.o\
+    dos_nao.o\
     numerical_descriptor.o\
     numerical_basis.o\
     output.o\
     print_info.o\
+    read_cube.o\
     read_rho.o\
     restart.o\
     binstream.o\
@@ -351,6 +360,7 @@ OBJS_IO=input.o\
     write_wfc_pw.o\
     winput.o\
     write_input.o\
+    write_cube.o\
     write_rho.o\
     write_dipole.o\
     write_wfc_r.o\
@@ -370,20 +380,26 @@ OBJS_IO_LCAO=cal_r_overlap_R.o\
       write_wfc_nao.o\
       write_HS.o\
       write_HS_sparse.o\
+      single_R_io.o\
       write_HS_R.o\
       write_dm.o\
       write_dm_sparse.o\
 
 OBJS_LCAO=DM_gamma.o\
       DM_k.o\
-      ELEC_evolve.o\
+      evolve_elec.o\
+      evolve_psi.o\
+      bandenergy.o\
+      middle_hamilt.o\
+      norm_psi.o\
+      propagator.o\
+      upsi.o\
       FORCE_STRESS.o\
       FORCE_gamma.o\
       FORCE_gamma_edm.o\
       FORCE_gamma_tvnl.o\
       FORCE_gamma_vl.o\
       FORCE_k.o\
-      LCAO_evolve.o\
       LCAO_gen_fixedH.o\
       LCAO_hamilt.o\
       LCAO_matrix.o\
@@ -398,41 +414,20 @@ OBJS_LCAO=DM_gamma.o\
       dm_2d.o\
       wavefunc_in_pw.o\
 
-OBJS_SRC_RI=abfs.o\
-      conv_coulomb_pot.o\
-      conv_coulomb_pot_k.o\
-      exx_abfs.o \
+OBJS_MODULE_RI=conv_coulomb_pot_k.o\
       exx_abfs-abfs_index.o \
-      exx_abfs-dm.o \
-      exx_abfs-inverse_matrix_double.o \
       exx_abfs-jle.o \
       exx_abfs-io.o \
       exx_abfs-construct_orbs.o \
-      exx_abfs-matrix_orbs11.o \
-      exx_abfs-matrix_orbs21.o \
-      exx_abfs-matrix_orbs22.o \
-      exx_abfs-matrix_lcaoslcaos_lcaoslcaos.o \
       exx_abfs-pca.o \
-      exx_abfs-parallel-communicate-function.o \
-      exx_abfs-parallel-communicate-dm3.o \
-      exx_abfs-parallel-communicate-dm3-allreduce.o \
-      exx_abfs-parallel-communicate-hexx.o \
-      exx_abfs-parallel-communicate-hexx-allreduce2.o \
-      exx_abfs-parallel-distribute-htime.o \
-      exx_abfs-parallel-distribute-kmeans.o \
-      exx_abfs-parallel-distribute-order.o \
-      exx_abfs-util.o \
-      exx_abfs-screen-schwarz.o \
-      exx_abfs-screen-cauchy.o \
-      exx_lcao.o \
       exx_opt_orb.o \
       exx_opt_orb-print.o \
       exx_lip.o\
-
-OBJS_MODULE_RI=Matrix_Orbs11.o\
+      Matrix_Orbs11.o\
       Matrix_Orbs21.o\
       Matrix_Orbs22.o\
-      RI_2D_Comm.o
+      RI_2D_Comm.o\
+      Mix_DMk_2D.o
 
 OBJS_PARALLEL=parallel_common.o\
     parallel_global.o\
@@ -446,11 +441,13 @@ OBJS_SRCPW=H_Ewald_pw.o\
     VNL_in_pw.o\
     VNL_grad_pw.o\
     charge.o\
+    charge_init.o\
+    charge_mpi.o\
     charge_broyden.o\
     charge_extra.o\
     charge_mixing.o\
     charge_pulay.o\
-    energy.o\
+    fp_energy.o\
     forces.o\
     force_op.o\
     stress_op.o\
@@ -458,8 +455,10 @@ OBJS_SRCPW=H_Ewald_pw.o\
     vnl_op.o\
     global.o\
     magnetism.o\
+    elecstate_getters.o\
     occupy.o\
     structure_factor.o\
+    structure_factor_k.o\
     soc.o\
     sto_iter.o\
     sto_hchi.o\
@@ -482,7 +481,6 @@ OBJS_SRCPW=H_Ewald_pw.o\
     symmetry_rhog.o\
     wavefunc.o\
     wf_atomic.o\
-    wf_igk.o\
 
 OBJS_VDW=vdw.o\
     vdwd2_parameters.o\

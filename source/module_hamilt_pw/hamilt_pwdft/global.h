@@ -3,23 +3,18 @@
 
 #include "module_base/global_function.h"
 #include "module_base/global_variable.h"
+#include "module_elecstate/module_charge/charge_mixing.h"
+#include "module_hamilt_pw/hamilt_pwdft/VNL_in_pw.h"
 #include "module_io/restart.h"
 #include "module_relax/relax_driver.h"
-#include "module_hamilt_pw/hamilt_pwdft/VNL_in_pw.h"
-#include "module_elecstate/module_charge/charge_mixing.h"
-#include "module_elecstate/energy.h"
 #ifdef __EXX
-#include "src_ri/exx_lip.h"
+#include "module_ri/exx_lip.h"
 #include "module_hamilt_general/module_xc/exx_info.h"
 #endif
-#include "module_cell/klist.h"
 #include "module_elecstate/magnetism.h"
-#include "module_hamilt_pw/hamilt_pwdft/structure_factor.h"
-#include "module_basis/module_pw/pw_basis_k.h"
-#include "module_hamilt_pw/hamilt_pwdft/wavefunc.h"
 #include "module_hamilt_general/module_xc/xc_functional.h"
-
 #ifdef __CUDA
+#include "cublas_v2.h"
 namespace CudaCheck
 {
 static const char *_cublasGetErrorString(cublasStatus_t error)
@@ -282,13 +277,6 @@ static const char *_hipfftGetErrorString(hipfftResult_t error)
 //==========================================================
 namespace GlobalC
 {
-extern K_Vectors kv;
-extern Structure_Factor sf;
-extern ModulePW::PW_Basis* rhopw;
-extern ModulePW::PW_Basis_Big* bigpw;
-extern ModulePW::PW_Basis_K* wfcpw;
-extern energy en;
-extern wavefunc wf;
 #ifdef __EXX
 extern Exx_Info exx_info;
 extern Exx_Lip exx_lip;
@@ -296,15 +284,12 @@ extern Exx_Lip exx_lip;
 extern pseudopot_cell_vnl ppcell;
 } // namespace GlobalC
 
-#include "module_cell/unitcell.h"
-#include "module_cell/module_symmetry/symmetry.h"
-#include "module_hamilt_pw/hamilt_pwdft/parallel_grid.h"
 #include "module_cell/parallel_kpoints.h"
+#include "module_cell/unitcell.h"
+#include "module_hamilt_pw/hamilt_pwdft/parallel_grid.h"
 namespace GlobalC
 {
 extern UnitCell ucell;
-extern Charge_Mixing CHR_MIX;
-extern ModuleSymmetry::Symmetry symm;
 extern Parallel_Grid Pgrid;
 extern Parallel_Kpoints Pkpoints;
 extern Restart restart; // Peize Lin add 2020.04.04

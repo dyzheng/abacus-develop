@@ -1,18 +1,24 @@
 #ifndef INPUT_H
 #define INPUT_H
 
-#include "module_base/vector3.h"
-#include "module_md/MD_parameters.h"
-
 #include <fstream>
+#include <sstream>
 #include <string>
 #include <vector>
+
+#include "module_base/vector3.h"
+#include "module_md/md_para.h"
 
 using namespace std;
 
 class Input
 {
   public:
+    ~Input()
+    {
+        delete[] hubbard_u;
+        delete[] orbital_corr;
+    }
     void Init(const std::string &fn);
 
     void Print(const std::string &fn) const;
@@ -42,24 +48,23 @@ class Input
     bool pseudo_mesh; // 0: use msh to normalize radial wave functions;  1: use mesh, which is used in QE.
     int ntype; // number of atom types
     int nbands; // number of bands
-    int nbands_istate; // number of bands around fermi level for istate calculation.
+    int nbands_istate; // number of bands around fermi level for get_pchg calculation.
     int pw_seed; // random seed for initializing wave functions qianrui 2021-8-12
 
-    bool init_vel; // read velocity from STRU or not  liuyu 2021-07-14
-    bool dump_vel;    // output atomic velocities into the file MD_dump or not. liuyu 2023-03-01
+    bool init_vel;             // read velocity from STRU or not  liuyu 2021-07-14
     double ref_cell_factor;    // construct a reference cell bigger than the initial cell  liuyu 2023-03-21
 
     /* symmetry level: 
       -1, no symmetry at all; 
       0, only basic time reversal would be considered; 
       1, point group symmetry would be considered*/
-    int symmetry; 
+    string symmetry; 
     double symmetry_prec; // LiuXh add 2021-08-12, accuracy for symmetry
     int kpar; // ecch pool is for one k point
 
     bool berry_phase; // berry phase calculation
     int gdir; // berry phase calculation
-    double kspacing;
+    double kspacing[3];
     double min_dist_coef;
     //==========================================================
     // Wannier functions
@@ -73,6 +78,7 @@ class Input
     //==========================================================
     int nche_sto; // number of orders for Chebyshev expansion in stochastic DFT //qinarui 2021-2-5
     int nbands_sto;			// number of stochastic bands //qianrui 2021-2-5
+    std::string nbndsto_str; // string parameter for stochastic bands
     int seed_sto; // random seed for sDFT
     double emax_sto; // Emax & Emin to normalize H
     double emin_sto;
@@ -109,7 +115,6 @@ class Input
     // Forces
     //==========================================================
     bool cal_force;
-    bool dump_force;    // output atomic forces into the file MD_dump or not. liuyu 2023-03-01
     double force_thr; // threshold of force in unit (Ry/Bohr)
     double force_thr_ev2; // invalid force threshold, mohan add 2011-04-17
 
@@ -121,7 +126,6 @@ class Input
     double press2;
     double press3;
     bool cal_stress; // calculate the stress
-    bool dump_virial;    // output lattice virial into the file MD_dump or not. liuyu 2023-03-01
 
     std::string fixed_axes; // which axes are fixed
     bool fixed_ibrav; //whether to keep type of lattice; must be used along with latname
@@ -190,6 +194,7 @@ class Input
     // iteration
     //==========================================================
     double scf_thr; // \sum |rhog_out - rhog_in |^2
+    int scf_thr_type; // type of the criterion of scf_thr, 1: reci drho, 2: real drho
     int scf_nmax; // number of max elec iter
     int relax_nmax; // number of max ionic iter
     bool out_stru; // outut stru file each ion step
@@ -245,7 +250,7 @@ class Input
     double dmax; // maximum displacement of all atoms in one step (bohr)
     bool out_mat_hs2; // LiuXh add 2019-07-16, output H(R) matrix and S(R) matrix in local basis.
     bool out_mat_dh;
-    int out_hs2_interval;
+    int out_interval;
     bool out_app_flag;    // whether output r(R), H(R), S(R), T(R), and dH(R) matrices in an append manner during MD  liuyu 2023-03-20
     bool out_mat_t;
     bool out_mat_r; // jingan add 2019-8-14, output r(R) matrix.
@@ -280,24 +285,7 @@ class Input
     // molecular dynamics
     // added by Daye Zheng
     //==========================================================
-    /*    int md_type;                   //choose ensemble
-        double md_tauthermo;
-        double md_taubaro;
-        double md_dt;                    //time step
-        int md_nresn;                     //parameter during integrater
-        int md_nyosh;                      //parameter during integrater
-        double md_qmass;                   //mass of thermostat
-        double md_tfirst;                    //temperature begin
-        double md_tlast;                    //temperature end
-        int md_dumpfred;                  //The period to dump MD information for monitoring and restarting MD
-        std::string md_mdoutpath;                //output path for md
-        bool md_domsd;                   //whether compute <r(t)-r(0)>
-        bool md_domsdatom;                //whether compute msd for each atom
-        int md_restart;                    //whether restart;
-        int md_outputstressperiod;      //period to output stress
-        int md_fixtemperature;          //period to change temperature
-        int md_msdstartTime;            //choose which step that msd be calculated */
-    MD_parameters mdp;
+    MD_para mdp;
 
     //==========================================================
     // efield and dipole correction
@@ -361,6 +349,7 @@ class Input
 
     bool exx_separate_loop; // 0 or 1
     int exx_hybrid_step;
+    double exx_mixing_beta; // only for exx_separate_loop=1
 
     double exx_lambda;
 
@@ -389,9 +378,6 @@ class Input
     // Fuxiang He add 2016-10-26
     //==========================================================
     double td_force_dt; //"fs"
-    int td_val_elec_01; // valence electron 01
-    int td_val_elec_02; // valence electron 02
-    int td_val_elec_03; // valence electron 03
     bool td_vext; // add extern potential or not
     std::string td_vext_dire; // vext direction
     bool out_dipole; // output the dipole or not
@@ -399,6 +385,8 @@ class Input
 
     double td_print_eij; // threshold to output Eij elements
     int td_edm; //0: new edm method   1: old edm method
+
+    int propagator; // method of propagator
 
     int td_stype ; //type of space domain  0 : length gauge  1: velocity gauge
 
@@ -469,12 +457,12 @@ class Input
     //==========================================================
     //    DFT+U       Xin Qu added on 2020-10-29
     //==========================================================
-    bool dft_plus_u; // true:DFT+U correction; false: standard DFT calculation(default)
-    int *orbital_corr; // which correlated orbitals need corrected ; d:2 ,f:3, do not need correction:-1
-    double *hubbard_u; // Hubbard Coulomb interaction parameter U(ev)
-    int omc; // whether turn on occupation matrix control method or not
-    bool yukawa_potential; // default:false
-    double yukawa_lambda; // default:-1.0, which means we calculate lambda
+    bool dft_plus_u;             ///< true:DFT+U correction; false: standard DFT calculation(default)
+    int* orbital_corr = nullptr; ///< which correlated orbitals need corrected ; d:2 ,f:3, do not need correction:-1
+    double* hubbard_u = nullptr; ///< Hubbard Coulomb interaction parameter U(ev)
+    int omc;                     ///< whether turn on occupation matrix control method or not
+    bool yukawa_potential;       ///< default:false
+    double yukawa_lambda;        ///< default:-1.0, which means we calculate lambda
 
     //==========================================================
     //    DFT+DMFT       Xin Qu added on 2021-08
@@ -522,6 +510,7 @@ class Input
     double of_wt_beta;    // parameter beta of WT KEDF
     double of_wt_rho0;    // set the average density of system, in Bohr^-3
     bool of_hold_rho0;  // If set to 1, the rho0 will be fixed even if the volume of system has changed, it will be set to 1 automaticly if of_wt_rho0 is not zero.
+    double of_lkt_a;    // parameter a of LKT KEDF
     bool of_full_pw;    // If set to 1, ecut will be ignored while collecting planewaves, so that all planewaves will be used.
     int of_full_pw_dim; // If of_full_pw = 1, the dimention of FFT will be testricted to be (0) either odd or even; (1) odd only; (2) even only.
     bool of_read_kernel; // If set to 1, the kernel of WT KEDF will be filled from file of_kernel_file, not from formula. Only usable for WT KEDF.
@@ -591,6 +580,32 @@ class Input
         ifs.ignore(150, '\n');
         return;
     }
+    void read_kspacing(std::ifstream &ifs)
+    {
+        std::string s;
+        std::getline(ifs, s);
+        std::stringstream ss(s);
+        // read 3 values
+        int count = 0;
+        while ((ss >> kspacing[count]) && count < 3)
+        {
+            count++;
+        }
+        // if not read even one value, or read two values, the input is invalid.
+        if (count == 0 || count == 2)
+        {
+            std::cout << "kspacing can only accept one or three double values." << std::endl;
+            ifs.setstate(std::ios::failbit);
+        }
+        // if only read one value, set all to kspacing[0]
+        if (count == 1)
+        {
+            kspacing[1] = kspacing[0];
+            kspacing[2] = kspacing[0];
+        }
+        // std::cout << "count: " << count << " kspacing: " << kspacing[0] << " " << kspacing[1] << " " << kspacing[2]
+        // << std::endl;
+    };
 
     void strtolower(char *sa, char *sb);
     void read_bool(std::ifstream &ifs, bool &var);

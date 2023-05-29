@@ -6,6 +6,7 @@
 #ifndef RPA_LRI_H
 #define RPA_LRI_H
 
+#include "module_esolver/esolver_ks_lcao.h"
 #include "LRI_CV.h"
 // #include "module_xc/exx_info.h"
 // #include "module_basis/module_ao/ORB_atomic_lm.h"
@@ -20,6 +21,7 @@
 
 class Local_Orbital_Charge;
 class Parallel_Orbitals;
+class K_Vectors;
 
 template <typename Tdata> class RPA_LRI
 {
@@ -36,12 +38,14 @@ template <typename Tdata> class RPA_LRI
     {
     }
     ~RPA_LRI(){};
-    void init(const MPI_Comm &mpi_comm_in);
+    void init(const MPI_Comm &mpi_comm_in, const K_Vectors &kv_in);
     void cal_rpa_cv();
-    void cal_postSCF_exx(const MPI_Comm &mpi_comm_in, const Local_Orbital_Charge &loc, const Parallel_Orbitals &pv);
-    void out_for_RPA(const Parallel_Orbitals &parav,
+    void cal_postSCF_exx(const Local_Orbital_Charge& loc,
+                    const MPI_Comm& mpi_comm_in,
+                    const K_Vectors& kv,
+                    const Parallel_Orbitals& pv);
+    void out_for_RPA(const Parallel_Orbitals& parav,
                      const psi::Psi<std::complex<double>> &psi,
-                     Local_Orbital_Charge &loc,
                      const elecstate::ElecState *pelec);
     void out_eigen_vector(const Parallel_Orbitals &parav, const psi::Psi<std::complex<double>> &psi);
     void out_struc();
@@ -59,6 +63,7 @@ template <typename Tdata> class RPA_LRI
 
   private:
     const Exx_Info::Exx_Info_RI &info;
+    const K_Vectors *p_kv=nullptr;
     MPI_Comm mpi_comm;
     std::vector<std::vector<std::vector<Numerical_Orbital_Lm>>> lcaos;
     std::vector<std::vector<std::vector<Numerical_Orbital_Lm>>> abfs;

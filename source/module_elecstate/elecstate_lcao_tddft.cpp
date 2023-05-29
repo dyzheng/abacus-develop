@@ -37,7 +37,7 @@ void ElecStateLCAO_TDDFT::psiToRho_td(const psi::Psi<std::complex<double>>& psi)
         }
     }
 
-    this->loc->cal_dk_k(GlobalC::GridT, this->wg);
+    this->loc->cal_dk_k(*this->lowf->gridt, this->wg, *(this->klist));
     for (int is = 0; is < GlobalV::NSPIN; is++)
     {
         ModuleBase::GlobalFunc::ZEROS(this->charge->rho[is], this->charge->nrxx); // mohan 2009-11-10
@@ -64,7 +64,7 @@ void ElecStateLCAO_TDDFT::calculate_weights_td()
     if (GlobalV::ocp == 1)
     {
         int num = 0;
-        num = GlobalC::kv.nks * GlobalV::NBANDS;
+        num = this->klist->nks * GlobalV::NBANDS;
         if (num != GlobalV::ocp_kb.size())
         {
             ModuleBase::WARNING_QUIT("ElecStateLCAO_TDDFT::calculate_weights_td",
@@ -82,7 +82,7 @@ void ElecStateLCAO_TDDFT::calculate_weights_td()
                                      "total number of occupations is wrong , please check ocp_set");
         }
 
-        for (int ik = 0; ik < GlobalC::kv.nks; ik++)
+        for (int ik = 0; ik < this->klist->nks; ik++)
         {
             for (int ib = 0; ib < GlobalV::NBANDS; ib++)
             {

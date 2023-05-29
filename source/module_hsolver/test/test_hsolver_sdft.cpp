@@ -35,7 +35,7 @@ Stochastic_Iter::~Stochastic_Iter()
     delete[] chiallorder;
 }
 
-void Stochastic_Iter::init(const int dim, int* nchip_in, const int method_in, Stochastic_WF& stowf)
+void Stochastic_Iter::init(int *nchip_in, const int method_in, K_Vectors* pkv, ModulePW::PW_Basis_K *wfc_basis, Stochastic_WF &stowf)
 {
     this->nchip = nchip_in;
     this->targetne = 1;
@@ -85,7 +85,7 @@ void Stochastic_Iter::itermu(
 )
 {
     //do something to verify this function has been called
-    pes->eband += 1.2;
+    pes->f_en.eband += 1.2;
     return;
 }
 
@@ -99,7 +99,8 @@ void Stochastic_Iter::calHsqrtchi(Stochastic_WF &stowf)
 void Stochastic_Iter::sum_stoband(
     Stochastic_WF &stowf, 
     elecstate::ElecState *pes, 
-    hamilt::Hamilt<double, psi::DEVICE_CPU> *pHamilt
+    hamilt::Hamilt<double, psi::DEVICE_CPU> *pHamilt,
+    ModulePW::PW_Basis_K* wfc_basis
 )
 {
     //do something to verify this function has been called
@@ -129,9 +130,11 @@ class TestHSolverPW_SDFT : public ::testing::Test
 	public:
     ModulePW::PW_Basis_K pwbk;
     Stochastic_WF stowf;
-	hsolver::HSolverPW_SDFT hs_d = hsolver::HSolverPW_SDFT(&pwbk, stowf, 0);
+    K_Vectors kv;
+    wavefunc wf;
+    hsolver::HSolverPW_SDFT hs_d = hsolver::HSolverPW_SDFT(&kv, &pwbk, &wf, stowf, 0);
 
-	hamilt::Hamilt<double> hamilt_test_d;
+    hamilt::Hamilt<double> hamilt_test_d;
 
 	psi::Psi<std::complex<double>> psi_test_cd;
     psi::Psi<std::complex<double>> psi_test_no;
@@ -147,7 +150,7 @@ TEST_F(TestHSolverPW_SDFT, solve)
 {
 	//initial memory and data
 	elecstate_test.ekb.create(1,2);
-    elecstate_test.eband = 0.0;
+    elecstate_test.f_en.eband = 0.0;
     stowf.nbands_diag = 0;
     stowf.nbands_total = 0;
     stowf.nchi = 0;
@@ -166,7 +169,8 @@ TEST_F(TestHSolverPW_SDFT, solve)
 	this->hs_d.solve(
         &hamilt_test_d, 
         psi_test_cd, 
-        &elecstate_test, 
+        &elecstate_test,
+        &pwbk, 
         stowf, 
         istep, 
         iter, 
@@ -186,14 +190,14 @@ TEST_F(TestHSolverPW_SDFT, solve)
     EXPECT_EQ(stowf.nbands_total, 1);
     EXPECT_EQ(stowf.nchi, 1);
     EXPECT_EQ(stowf.nchip_max, 1);
-    EXPECT_DOUBLE_EQ(elecstate_test.eband, 1.2);
+    EXPECT_DOUBLE_EQ(elecstate_test.f_en.eband, 1.2);
     /*std::cout<<__FILE__<<__LINE__<<" "<<stowf.nbands_diag<<std::endl;
     std::cout<<__FILE__<<__LINE__<<" "<<stowf.nbands_total<<std::endl;
     std::cout<<__FILE__<<__LINE__<<" "<<stowf.nchi<<std::endl;
     std::cout<<__FILE__<<__LINE__<<" "<<stowf.nchip_max<<std::endl;
-    std::cout<<__FILE__<<__LINE__<<" "<<elecstate_test.eband<<std::endl;*/
+    std::cout<<__FILE__<<__LINE__<<" "<<elecstate_test.f_en.eband<<std::endl;*/
 
-	//check diago_ethr
+    //check diago_ethr
 	GlobalV::init_chg = "atomic";
 	GlobalV::PW_DIAG_THR = 1e-7;
 	GlobalV::CALCULATION = "scf";
@@ -222,7 +226,7 @@ TEST_F(TestHSolverPW_SDFT, solve_noband_skipcharge)
 {
 	//initial memory and data
 	elecstate_test.ekb.create(1,2);
-    elecstate_test.eband = 0.0;
+    elecstate_test.f_en.eband = 0.0;
     stowf.nbands_diag = 0;
     stowf.nbands_total = 0;
     stowf.nchi = 0;
@@ -249,6 +253,7 @@ TEST_F(TestHSolverPW_SDFT, solve_noband_skipcharge)
         &hamilt_test_d, 
         psi_test_no, 
         &elecstate_test, 
+        &pwbk,
         stowf, 
         istep, 
         iter, 
@@ -260,18 +265,19 @@ TEST_F(TestHSolverPW_SDFT, solve_noband_skipcharge)
     EXPECT_EQ(stowf.nbands_total, 1);
     EXPECT_EQ(stowf.nchi, 2);
     EXPECT_EQ(stowf.nchip_max, 1);
-    EXPECT_DOUBLE_EQ(elecstate_test.eband, 1.2);
+    EXPECT_DOUBLE_EQ(elecstate_test.f_en.eband, 1.2);
     /*std::cout<<__FILE__<<__LINE__<<" "<<stowf.nbands_diag<<std::endl;
     std::cout<<__FILE__<<__LINE__<<" "<<stowf.nbands_total<<std::endl;
     std::cout<<__FILE__<<__LINE__<<" "<<stowf.nchi<<std::endl;
     std::cout<<__FILE__<<__LINE__<<" "<<stowf.nchip_max<<std::endl;
-    std::cout<<__FILE__<<__LINE__<<" "<<elecstate_test.eband<<std::endl;*/
+    std::cout<<__FILE__<<__LINE__<<" "<<elecstate_test.f_en.eband<<std::endl;*/
 
     //test for skip charge
     this->hs_d.solve(
         &hamilt_test_d, 
         psi_test_no, 
         &elecstate_test, 
+        &pwbk,
         stowf, 
         istep, 
         iter, 
@@ -282,7 +288,7 @@ TEST_F(TestHSolverPW_SDFT, solve_noband_skipcharge)
     EXPECT_EQ(stowf.nbands_total, 1);
     EXPECT_EQ(stowf.nchi, 4);
     EXPECT_EQ(stowf.nchip_max, 2);
-    EXPECT_DOUBLE_EQ(elecstate_test.eband, 2.4);
+    EXPECT_DOUBLE_EQ(elecstate_test.f_en.eband, 2.4);
 
     delete[] elecstate_test.charge->rho[0];
     delete[] elecstate_test.charge->rho;

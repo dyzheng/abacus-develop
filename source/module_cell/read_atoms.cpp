@@ -31,46 +31,44 @@ int UnitCell::read_atom_species(std::ifstream &ifa, std::ofstream &ofs_running)
 	//==========================================
 	if( ModuleBase::GlobalFunc::SCAN_BEGIN(ifa, "ATOMIC_SPECIES") )
 	{	
+        ifa.ignore(300, '\n');
 		ModuleBase::GlobalFunc::OUT(ofs_running,"ntype",ntype);
 		for (int i = 0;i < ntype;i++)
 		{
-			ifa >> atom_label[i] >> atom_mass[i];
-			
-			std::stringstream ss;
-			ss << "atom label for species " << i+1;
-			ModuleBase::GlobalFunc::OUT(ofs_running,ss.str(),atom_label[i]);	
-			// ModuleBase::GlobalFunc::READ_VALUE(ifa, pseudo_fn[i]);
-			ifa >> this->pseudo_fn[i];
+            std::string one_line, one_string;
+            std::getline(ifa, one_line);
+            std::stringstream ss;
+            ss << one_line;
+            ss >> atom_label[i] >> atom_mass[i];
+            pseudo_fn[i] = "auto";
+            pseudo_type[i] = "auto";
 
-			this->pseudo_type[i] = "auto";
-			string temp;
-			temp = ifa.get();
-			while ((temp != "\n") && (ifa.eof() == false) && (temp[0] != '#'))
-			{
-				temp = ifa.get();
-				char tmp = (char)temp[0];
-				if (tmp >= 'a' && tmp <= 'z')
-				{
-					ifa.putback(tmp);
-					ModuleBase::GlobalFunc::READ_VALUE(ifa, temp);
-					if (temp=="auto" || temp=="upf" || temp=="vwr" || temp=="upf201" || temp=="blps")
-					{
-						this->pseudo_type[i] = temp;
-					}
-					else
-					{
-						GlobalV::ofs_warning << "unrecongnized pseudopotential type '" << temp << "', check your STRU file." << endl;
-						ModuleBase::WARNING_QUIT("read_atoms", "unrecongnized pseudo type.");
-					}
-					break;
-				}
-				else if (temp == "#")
-				{
-					ifa.ignore(300, '\n');
-					break;
-				}
-			} 
-			
+            bool end = false;
+            if (ss >> one_string)
+            {
+                if (one_string[0] != '#')
+                {
+                    pseudo_fn[i] = one_string;
+                }
+                else
+                {
+                    end = true;
+                }
+            }
+
+            if (!end && ss >> one_string && one_string[0] != '#')
+            {
+                if (one_string == "auto" || one_string == "upf" || one_string == "vwr" || one_string == "upf201" || one_string == "blps")
+                {
+                    pseudo_type[i] = one_string;
+                }
+                else
+                {
+                    GlobalV::ofs_warning << "unrecongnized pseudopotential type: " << one_string << ", check your STRU file." << endl;
+                    ModuleBase::WARNING_QUIT("read_atom_species", "unrecongnized pseudo type.");
+                }
+            }
+
 			if(GlobalV::test_pseudo_cell==2) 
 			{
 				ofs_running << "\n" << std::setw(6) << atom_label[i] 
@@ -484,19 +482,26 @@ bool UnitCell::read_atom_positions(std::ifstream &ifpos, std::ofstream &ofs_runn
 			ModuleBase::GlobalFunc::OUT(ofs_running,"number of atom for this type",na);
 
 			this->nat += na;
-			if (na <= 0) 
-			{
-				ModuleBase::WARNING("read_atom_positions"," atom number < 0.");
-				return 0;
-			}
-			if (na > 0)
-			{
-       			delete[] atoms[it].tau;
-				delete[] atoms[it].dis;
-				delete[] atoms[it].taud;
-				delete[] atoms[it].vel;
-       			delete[] atoms[it].mbl;
-				delete[] atoms[it].mag;
+
+            /**
+             * liuyu update 2023-05-11
+             * In order to employ the DP model as esolver,
+             * all atom types must be specified in the `STRU` in the order consistent with that of the DP model,
+             * even if the number of atoms is zero!
+             */
+            if (na < 0)
+            {
+                ModuleBase::WARNING("read_atom_positions", " atom number < 0.");
+                return 0;
+            }
+            if (na > 0)
+            {
+                delete[] atoms[it].tau;
+                delete[] atoms[it].dis;
+                delete[] atoms[it].taud;
+                delete[] atoms[it].vel;
+                delete[] atoms[it].mbl;
+                delete[] atoms[it].mag;
                 delete[] atoms[it].angle1;
                 delete[] atoms[it].angle2;
                 delete[] atoms[it].m_loc_;
@@ -751,14 +756,14 @@ bool UnitCell::read_atom_positions(std::ifstream &ifpos, std::ofstream &ofs_runn
 					}
                     atoms[it].dis[ia].set(0, 0, 0);
 				}//endj
-			}// end na
-			//reset some useless parameters
-			if(set_element_mag_zero)
-			{
-				magnet.start_magnetization[it] = 0.0;
-			}
-		}//end for ntype
-	}// end scan_begin
+            }    // end na
+            // reset some useless parameters
+            if (set_element_mag_zero)
+            {
+                magnet.start_magnetization[it] = 0.0;
+            }
+        } // end for ntype
+    }     // end scan_begin
 
 //check if any atom can move in MD
 	if(!this->if_atoms_can_move() && GlobalV::CALCULATION=="md" && GlobalV::ESOLVER_TYPE!="tddft")

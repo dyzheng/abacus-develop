@@ -21,8 +21,10 @@ cal_force           1
 ks_solver       scalapack_gvx
 mixing_type     pulay
 mixing_beta     0.7
+smearing_method    gauss
+smearing_sigma     0.001
 
-md_type          4
+md_type          msst
 md_tfirst        10
 md_dt            1
 md_restart         0

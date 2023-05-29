@@ -3,7 +3,7 @@ list(APPEND objects
     input_conv.cpp
     bessel_basis.cpp
     cal_test.cpp
-    dos.cpp
+    cal_dos.cpp
     write_dos_pw.cpp
     nscf_band.cpp
     write_istate_info.cpp
@@ -11,11 +11,13 @@ list(APPEND objects
     numerical_descriptor.cpp
     output.cpp
     print_info.cpp
+    read_cube.cpp
     read_rho.cpp
     restart.cpp
     binstream.cpp
     write_wfc_pw.cpp
     write_input.cpp
+    write_cube.cpp
     write_rho.cpp
     write_dipole.cpp
     write_wfc_r.cpp
@@ -41,12 +43,14 @@ if(ENABLE_LCAO)
       write_wfc_nao.cpp
       write_HS.cpp
       write_dm.cpp
+      dos_nao.cpp
   )
   list(APPEND objects_advanced
       unk_overlap_lcao.cpp
       mulliken_charge.cpp
       write_HS_R.cpp
       write_HS_sparse.cpp
+      single_R_io.cpp
       write_dm_sparse.cpp
       cal_r_overlap_R.cpp
   )

@@ -7,6 +7,10 @@
 #include "module_hamilt_lcao/hamilt_lcaodft/local_orbital_wfc.h"
 #include "module_hamilt_lcao/hamilt_lcaodft/LCAO_hamilt.h"
 #include "module_basis/module_ao/ORB_control.h"
+#ifdef __EXX
+#include "module_ri/Mix_DMk_2D.h"
+#include "module_ri/Exx_LRI_interface.h"
+#endif
 
 namespace ModuleESolver
 {
@@ -20,7 +24,7 @@ namespace ModuleESolver
         void Init(Input& inp, UnitCell& cell) override;
         void init_after_vc(Input& inp, UnitCell& cell) override;
 
-        void cal_Energy(double& etot) override;
+        double cal_Energy() override;
         void cal_Force(ModuleBase::matrix& force) override;
         void cal_Stress(ModuleBase::matrix& stress) override;
         void postprocess() override;
@@ -35,7 +39,6 @@ namespace ModuleESolver
         virtual void eachiterfinish(const int iter) override;
         virtual void afterscf(const int istep) override;
         virtual bool do_after_converge(int& iter) override;
-        int two_level_step = 0;
 
         virtual void othercalculation(const int istep)override;
         ORB_control orb_con;    //Basis_LCAO
@@ -44,7 +47,7 @@ namespace ModuleESolver
         Local_Orbital_Charge LOC;
         LCAO_Hamilt UHM;
         LCAO_Matrix LM;
-
+        Grid_Technique GridT;
 
         // Temporarily store the stress to unify the interface with PW,
         // because it's hard to seperate force and stress calculation in LCAO.
@@ -60,6 +63,12 @@ namespace ModuleESolver
         void set_matrix_grid(Record_adj& ra);
         void beforesolver(const int istep);
         //----------------------------------------------------------------------
+#ifdef __EXX
+        std::shared_ptr<Exx_LRI_Interface<double>> exd = nullptr;
+        std::shared_ptr<Exx_LRI_Interface<std::complex<double>>> exc = nullptr;
+        std::shared_ptr<Exx_LRI<double>> exx_lri_double = nullptr;
+        std::shared_ptr<Exx_LRI<std::complex<double>>> exx_lri_complex = nullptr;
+#endif
     };
 
 

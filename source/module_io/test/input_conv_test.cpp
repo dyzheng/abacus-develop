@@ -39,11 +39,12 @@ TEST_F(InputConvTest, Conv)
 	EXPECT_EQ(GlobalC::ucell.lc[0],1);
 	EXPECT_EQ(GlobalC::ucell.lc[1],1);
 	EXPECT_EQ(GlobalC::ucell.lc[2],1);
-	EXPECT_EQ(GlobalV::KSPACING,0.0);
+	EXPECT_EQ(GlobalV::KSPACING[0],0.0);
+	EXPECT_EQ(GlobalV::KSPACING[1],0.0);
+	EXPECT_EQ(GlobalV::KSPACING[2],0.0);
 	EXPECT_DOUBLE_EQ(GlobalV::MIN_DIST_COEF,0.2);
-	EXPECT_EQ(GlobalV::NBANDS,8);
-	EXPECT_EQ(GlobalC::wf.pw_seed,1);
-	EXPECT_EQ(GlobalV::NBANDS_ISTATE,5);
+    EXPECT_EQ(GlobalV::NBANDS, 8);
+    EXPECT_EQ(GlobalV::NBANDS_ISTATE,5);
 	EXPECT_EQ(GlobalV::device_flag,"cpu");
 	EXPECT_EQ(GlobalV::KPAR,1);
 	EXPECT_EQ(GlobalV::NSTOGROUP,1);
@@ -58,8 +59,8 @@ TEST_F(InputConvTest, Conv)
 	EXPECT_EQ(GlobalV::CURRENT_SPIN,0);
 	EXPECT_EQ(GlobalV::CAL_FORCE,0);
 	EXPECT_NEAR(GlobalV::FORCE_THR,0.001,0.0000001);
-	EXPECT_DOUBLE_EQ(GlobalV::STRESS_THR,0.01);
-	EXPECT_EQ(GlobalV::PRESS1,0);
+    EXPECT_DOUBLE_EQ(GlobalV::STRESS_THR, 0.01);
+    EXPECT_EQ(GlobalV::PRESS1,0);
 	EXPECT_EQ(GlobalV::PRESS2,0);
 	EXPECT_EQ(GlobalV::PRESS3,0);
 	EXPECT_EQ(GlobalV::out_element_info,0);
@@ -70,17 +71,16 @@ TEST_F(InputConvTest, Conv)
 	EXPECT_DOUBLE_EQ(Ions_Move_Basic::relax_bfgs_rmin,0.00001);
 	EXPECT_EQ(Ions_Move_Basic::relax_bfgs_init,0.5);
 	EXPECT_EQ(Ions_Move_Basic::out_stru,0);
-	EXPECT_EQ(Lattice_Change_Basic::out_stru,0);
+    EXPECT_EQ(Lattice_Change_Basic::fixed_axes,"None");
 	EXPECT_EQ(GlobalV::CAL_STRESS,0);
 	EXPECT_EQ(GlobalV::RELAX_METHOD,"cg");
 	EXPECT_DOUBLE_EQ(GlobalV::relax_scale_force,0.5);
 	EXPECT_EQ(GlobalV::relax_new,true);
 	EXPECT_EQ(GlobalV::OUT_LEVEL,"ie");
 	EXPECT_DOUBLE_EQ(Ions_Move_CG::RELAX_CG_THR,0.5);
-	EXPECT_EQ(ModuleSymmetry::Symmetry::symm_flag,1);
-	EXPECT_DOUBLE_EQ(GlobalC::symm.epsilon,0.00001);
-	EXPECT_EQ(GlobalV::BASIS_TYPE,"lcao");
-	EXPECT_EQ(GlobalV::KS_SOLVER,"genelpa");
+    EXPECT_EQ(ModuleSymmetry::Symmetry::symm_flag, 1);
+    EXPECT_EQ(GlobalV::BASIS_TYPE, "lcao");
+    EXPECT_EQ(GlobalV::KS_SOLVER,"genelpa");
 	EXPECT_EQ(GlobalV::SEARCH_RADIUS,-1);
 	EXPECT_EQ(GlobalV::SEARCH_PBC,1);
 	EXPECT_EQ(GlobalV::GAMMA_ONLY_LOCAL,true);
@@ -101,10 +101,8 @@ TEST_F(InputConvTest, Conv)
 	EXPECT_EQ(GlobalV::TEST_STRESS,0);
 	EXPECT_EQ(GlobalV::test_skip_ewald,0);
 	EXPECT_DOUBLE_EQ(GlobalV::SCF_THR,0.00000001);
-	EXPECT_EQ(GlobalC::wf.init_wfc,"atomic");
-	EXPECT_EQ(GlobalC::wf.mem_saver,0);
-	EXPECT_EQ(GlobalC::en.printe,100);
-	EXPECT_EQ(GlobalV::LSPINORB,false);
+    EXPECT_EQ(GlobalV::SCF_THR_TYPE, 2);
+    EXPECT_EQ(GlobalV::LSPINORB,false);
 	EXPECT_EQ(GlobalV::NONCOLIN,false);
 	EXPECT_EQ(GlobalV::DOMAG,false);
 	EXPECT_EQ(GlobalV::DOMAG_Z,false);
@@ -123,52 +121,37 @@ TEST_F(InputConvTest, Conv)
 	EXPECT_DOUBLE_EQ(elecstate::Gatefield::block_down,0.45);
 	EXPECT_DOUBLE_EQ(elecstate::Gatefield::block_up,0.55);
 	EXPECT_DOUBLE_EQ(elecstate::Gatefield::block_height,0.1);
-
-	EXPECT_EQ(ELEC_evolve::td_force_dt,0.02);
-	EXPECT_EQ(ELEC_evolve::td_val_elec_01,1);
-	EXPECT_EQ(ELEC_evolve::td_val_elec_02,1);
-	EXPECT_EQ(ELEC_evolve::td_val_elec_03,1);
-	EXPECT_EQ(ELEC_evolve::td_vext,false);
-	EXPECT_EQ(ELEC_evolve::out_dipole,false);
-	EXPECT_EQ(ELEC_evolve::out_efield,false);
-	EXPECT_EQ(ELEC_evolve::td_print_eij,-1.0);
-	EXPECT_EQ(ELEC_evolve::td_edm,0);
-	EXPECT_EQ(GlobalV::ocp,false);
+    EXPECT_EQ(module_tddft::Evolve_elec::td_force_dt, 0.02);
+    EXPECT_EQ(module_tddft::Evolve_elec::td_vext, false);
+    EXPECT_EQ(module_tddft::Evolve_elec::out_dipole, false);
+    EXPECT_EQ(module_tddft::Evolve_elec::out_efield, false);
+    EXPECT_EQ(module_tddft::Evolve_elec::td_print_eij, -1.0);
+    EXPECT_EQ(module_tddft::Evolve_elec::td_edm, 0);
+    EXPECT_EQ(GlobalV::ocp,false);
 	EXPECT_EQ(GlobalV::ocp_set,INPUT.ocp_set);
 	EXPECT_EQ(GlobalV::out_mul,0);
 	EXPECT_EQ(GlobalC::ppcell.cell_factor,1.2);
 	EXPECT_EQ(GlobalV::SCF_NMAX,50);
-	EXPECT_EQ(GlobalV::RELAX_NMAX,1);
-	EXPECT_EQ(GlobalV::MD_NSTEP,10);
-	EXPECT_EQ(GlobalV::OUT_FREQ_ELEC,0);
+    EXPECT_EQ(GlobalV::RELAX_NMAX, 1);
+    EXPECT_EQ(GlobalV::OUT_FREQ_ELEC,0);
 	EXPECT_EQ(GlobalV::OUT_FREQ_ION,0);
 	EXPECT_EQ(GlobalV::init_chg,"atomic");
 	EXPECT_EQ(GlobalV::chg_extrap,"atomic");
 	EXPECT_EQ(GlobalV::out_chg,false);
 	EXPECT_EQ(GlobalV::nelec,0.0);
-	EXPECT_EQ(GlobalV::out_pot,2);
-	EXPECT_EQ(GlobalC::wf.out_wfc_pw,0);
-	EXPECT_EQ(GlobalC::wf.out_wfc_r,false);
-	EXPECT_EQ(GlobalC::en.out_dos,0);
-	EXPECT_EQ(GlobalC::en.out_band,false);
-	EXPECT_EQ(GlobalC::en.out_proj_band,false);
-	EXPECT_EQ(GlobalV::out_app_flag,false);
-	EXPECT_EQ(GlobalV::out_bandgap,false);
-	EXPECT_EQ(Local_Orbital_Charge::out_dm,false);
+    EXPECT_EQ(GlobalV::out_pot, 2);
+    EXPECT_EQ(GlobalV::out_app_flag, false);
+    EXPECT_EQ(GlobalV::out_bandgap, false);
+    EXPECT_EQ(Local_Orbital_Charge::out_dm,false);
 	EXPECT_EQ(Local_Orbital_Charge::out_dm1,false);
 	EXPECT_EQ(hsolver::HSolverLCAO::out_mat_hs,false);
 	EXPECT_EQ( hsolver::HSolverLCAO::out_mat_hsR,false);
 	EXPECT_EQ(hsolver::HSolverLCAO::out_mat_t,false);
 	EXPECT_EQ(hsolver::HSolverLCAO::out_mat_dh,INPUT.out_mat_dh);
-	EXPECT_EQ(hsolver::HSolverLCAO::out_hsR_interval,1);
-	EXPECT_EQ(elecstate::ElecStateLCAO::out_wfc_lcao,false);
-	EXPECT_EQ(GlobalC::en.dos_emin_ev,-15);
-	EXPECT_EQ(GlobalC::en.dos_emax_ev,15);
-	EXPECT_EQ(GlobalC::en.dos_edelta_ev,0.01);
-	EXPECT_EQ(GlobalC::en.dos_scale,0.01);
-	EXPECT_EQ(GlobalC::en.bcoeff,0.07);
-	EXPECT_EQ(berryphase::berry_phase_flag,false);
-	EXPECT_EQ(GlobalV::imp_sol,false);
+	EXPECT_EQ(GlobalV::out_interval,1);
+    EXPECT_EQ(elecstate::ElecStateLCAO::out_wfc_lcao, false);
+    EXPECT_EQ(berryphase::berry_phase_flag, false);
+    EXPECT_EQ(GlobalV::imp_sol,false);
 	EXPECT_EQ(GlobalV::eb_k,80);
 	EXPECT_EQ(GlobalV::tau,INPUT.tau);
 	EXPECT_EQ(GlobalV::sigma_k,0.6);
@@ -185,6 +168,7 @@ TEST_F(InputConvTest, Conv)
 	EXPECT_EQ(GlobalV::of_wt_beta,0.833333);
 	EXPECT_EQ(GlobalV::of_wt_rho0,1.0);
 	EXPECT_EQ(GlobalV::of_hold_rho0,false);
+	EXPECT_EQ(GlobalV::of_lkt_a,1.3);
     EXPECT_EQ(GlobalV::of_full_pw,false);
 	EXPECT_EQ(GlobalV::of_full_pw_dim,0);
 	EXPECT_EQ(GlobalV::of_read_kernel,false);
@@ -212,7 +196,6 @@ TEST_F(InputConvTest, ConvRelax)
 		" !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n\n  |CLASS_NAME---------|NAME---------------|TIME(Sec)-----|CALLS----|AVG------|PER%-------\n -------"
 		"---------------------------------------------------------------------------------\n See output information in : \n"
 		));
-
 	INPUT.Read(input_file);
 	INPUT.calculation="relax";
 	INPUT.latname="none";
@@ -228,7 +211,6 @@ TEST_F(InputConvTest, ConvRelax)
 		" !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n\n  |CLASS_NAME---------|NAME---------------|TIME(Sec)-----|CALLS----|AVG------|PER%-------\n -------"
 		"---------------------------------------------------------------------------------\n See output information in : \n"
 		));
-
 	INPUT.Read(input_file);
 	INPUT.calculation="relax";
 	INPUT.fixed_atoms=1;
@@ -243,7 +225,6 @@ TEST_F(InputConvTest, ConvRelax)
 		" !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n\n  |CLASS_NAME---------|NAME---------------|TIME(Sec)-----|CALLS----|AVG------|PER%-------\n -------"
 		"---------------------------------------------------------------------------------\n See output information in : \n"
 		));
-
 	INPUT.Read(input_file);
 	INPUT.calculation="relax";
 	INPUT.relax_new=false;
@@ -259,7 +240,6 @@ TEST_F(InputConvTest, ConvRelax)
 		" !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n\n  |CLASS_NAME---------|NAME---------------|TIME(Sec)-----|CALLS----|AVG------|PER%-------\n -------"
 		"---------------------------------------------------------------------------------\n See output information in : \n"
 		));
-
 	INPUT.Default();
 	INPUT.Read(input_file);
 	INPUT.calculation="relax";
@@ -322,18 +302,19 @@ TEST_F(InputConvTest, dftplus)
 
 TEST_F(InputConvTest, nspin)
 {
-	INPUT.Default();
-	std::string input_file = "./support/INPUT";
-	INPUT.Read(input_file);
-	INPUT.noncolin=true;
-	Input_Conv::Convert();
-	EXPECT_EQ(GlobalV::NSPIN,4);
-	EXPECT_EQ(GlobalV::NONCOLIN,true);
-	EXPECT_EQ(GlobalV::NPOL,2);
-	EXPECT_EQ(GlobalV::DOMAG,false);
-	EXPECT_EQ(GlobalV::DOMAG_Z,true);
-	EXPECT_EQ(GlobalV::LSPINORB,false);
-	EXPECT_EQ(GlobalV::soc_lambda,INPUT.soc_lambda);
+    INPUT.Default();
+    std::string input_file = "./support/INPUT";
+    INPUT.Read(input_file);
+    INPUT.noncolin = true;
+    INPUT.gamma_only_local = false;
+    Input_Conv::Convert();
+    EXPECT_EQ(GlobalV::NSPIN, 4);
+    EXPECT_EQ(GlobalV::NONCOLIN, true);
+    EXPECT_EQ(GlobalV::NPOL, 2);
+    EXPECT_EQ(GlobalV::DOMAG, false);
+    EXPECT_EQ(GlobalV::DOMAG_Z, true);
+    EXPECT_EQ(GlobalV::LSPINORB, false);
+    EXPECT_EQ(GlobalV::soc_lambda, INPUT.soc_lambda);
 }
 
 TEST_F(InputConvTest, nspinbeta)
@@ -430,29 +411,6 @@ TEST_F(InputConvTest,cell_factor  )
 	EXPECT_EQ(INPUT.cell_factor,2.0);
 }
 
-TEST_F(InputConvTest,mixing_beta2 )
-{
-	INPUT.Default();
-	std::string input_file = "./support/INPUT";
-	INPUT.Read(input_file);
-	INPUT.mixing_beta=2.0;
-	std::string output2;
-	testing::internal::CaptureStdout();
-	Input_Conv::Convert();
-	output2 = testing::internal::GetCapturedStdout();
-	EXPECT_EQ(GlobalC::CHR_MIX.autoset,false);
-}
-
-TEST_F(InputConvTest,mixing_beta )
-{
-	INPUT.Default();
-	std::string input_file = "./support/INPUT";
-	INPUT.Read(input_file);
-	INPUT.mixing_beta=-10.0;
-	Input_Conv::Convert();
-	EXPECT_EQ(GlobalC::CHR_MIX.autoset,true);
-}
-
 TEST_F(InputConvTest,neighbour  )
 {
 	INPUT.Default();
@@ -521,9 +479,9 @@ TEST_F(InputConvTest,parse )
 	INPUT.Default();
 	std::string input_file = "./support/INPUT";
 	INPUT.Read(input_file);
-	ELEC_evolve::td_vext=true;
-	Input_Conv::Convert();
-	EXPECT_EQ(ELEC_evolve::td_vext_dire_case.size(),0);
+    module_tddft::Evolve_elec::td_vext = true;
+    Input_Conv::Convert();
+    EXPECT_EQ(module_tddft::Evolve_elec::td_vext_dire_case.size(), 0);
 }
 
 TEST_F(InputConvTest,parse2 )
@@ -547,5 +505,64 @@ TEST_F(InputConvTest,ParseExpressionDouble)
 	EXPECT_DOUBLE_EQ(vec[2],1.2);
 	EXPECT_DOUBLE_EQ(vec[3],0.5);
 }
+
+#ifdef __LCAO
+TEST_F(InputConvTest, ConvertUnitsWithEmptyParams)
+{
+    std::string params = "";
+    double c = 2.0;
+    std::vector<double> expected = {};
+    std::vector<double> result = Input_Conv::convert_units(params, c);
+    EXPECT_EQ(result, expected);
+}
+
+TEST_F(InputConvTest, ConvertUnitsWithSingleParam)
+{
+    std::string params = "1.23";
+    double c = 2.0;
+    std::vector<double> expected = {2.46};
+    std::vector<double> result = Input_Conv::convert_units(params, c);
+    EXPECT_EQ(result, expected);
+}
+
+TEST_F(InputConvTest, ConvertUnitsWithMultipleParams)
+{
+    std::string params = "1.23 4.56 7.89";
+    double c = 0.5;
+    std::vector<double> expected = {0.615, 2.28, 3.945};
+    std::vector<double> result = Input_Conv::convert_units(params, c);
+    EXPECT_EQ(result, expected);
+}
+
+TEST_F(InputConvTest, ReadTdEfieldTest)
+{
+    Input_Conv::read_td_efield();
+
+    EXPECT_EQ(elecstate::H_TDDFT_pw::stype, 0);
+    EXPECT_EQ(elecstate::H_TDDFT_pw::ttype[0], 0);
+    EXPECT_EQ(elecstate::H_TDDFT_pw::tstart, 1);
+    EXPECT_EQ(elecstate::H_TDDFT_pw::tend, 1000);
+    EXPECT_EQ(elecstate::H_TDDFT_pw::lcut1, 0.05);
+    EXPECT_EQ(elecstate::H_TDDFT_pw::lcut2, 0.95);
+    EXPECT_NEAR(elecstate::H_TDDFT_pw::gauss_omega[0], 22.13 * 2 * ModuleBase::PI * ModuleBase::AU_to_FS, 1e-8);
+    EXPECT_EQ(elecstate::H_TDDFT_pw::gauss_phase[0], 0.0);
+    EXPECT_NEAR(elecstate::H_TDDFT_pw::gauss_sigma[0], 30.0 / ModuleBase::AU_to_FS, 1e-8);
+    EXPECT_EQ(elecstate::H_TDDFT_pw::gauss_t0[0], 100.0);
+    EXPECT_NEAR(elecstate::H_TDDFT_pw::gauss_amp[0], 0.25 * ModuleBase::BOHR_TO_A / ModuleBase::Ry_to_eV, 1e-8);
+    EXPECT_NEAR(elecstate::H_TDDFT_pw::trape_omega[0], 1.60 * 2 * ModuleBase::PI * ModuleBase::AU_to_FS, 1e-8);
+    EXPECT_EQ(elecstate::H_TDDFT_pw::trape_phase[0], 0.0);
+    EXPECT_EQ(elecstate::H_TDDFT_pw::trape_t1[0], 1875);
+    EXPECT_EQ(elecstate::H_TDDFT_pw::trape_t2[0], 5625);
+    EXPECT_EQ(elecstate::H_TDDFT_pw::trape_t3[0], 7500);
+    EXPECT_NEAR(elecstate::H_TDDFT_pw::trape_amp[0], 2.74 * ModuleBase::BOHR_TO_A / ModuleBase::Ry_to_eV, 1e-8);
+    EXPECT_NEAR(elecstate::H_TDDFT_pw::trigo_omega1[0], 1.164656 * 2 * ModuleBase::PI * ModuleBase::AU_to_FS, 1e-8);
+    EXPECT_NEAR(elecstate::H_TDDFT_pw::trigo_omega2[0], 0.029116 * 2 * ModuleBase::PI * ModuleBase::AU_to_FS, 1e-8);
+    EXPECT_EQ(elecstate::H_TDDFT_pw::trigo_phase1[0], 0.0);
+    EXPECT_EQ(elecstate::H_TDDFT_pw::trigo_phase2[0], 0.0);
+    EXPECT_NEAR(elecstate::H_TDDFT_pw::trigo_amp[0], 2.74 * ModuleBase::BOHR_TO_A / ModuleBase::Ry_to_eV, 1e-8);
+    EXPECT_EQ(elecstate::H_TDDFT_pw::heavi_t0[0], 100);
+    EXPECT_NEAR(elecstate::H_TDDFT_pw::heavi_amp[0], 1.00 * ModuleBase::BOHR_TO_A / ModuleBase::Ry_to_eV, 1e-8);
+}
+#endif
 
 #undef private

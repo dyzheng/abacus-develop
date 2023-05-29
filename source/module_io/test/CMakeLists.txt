@@ -54,31 +54,60 @@ AddTest(
 )
 
 AddTest(
-  TARGET io_dos_test
+  TARGET io_cal_dos
   LIBS ${math_libs} base device
-  SOURCES dos_test.cpp ../dos.cpp
+  SOURCES cal_dos_test.cpp ../cal_dos.cpp
 )
 
 AddTest(
   TARGET io_write_dos_pw
   LIBS ${math_libs} base device symmetry
-  SOURCES write_dos_pw_test.cpp ../dos.cpp ../write_dos_pw.cpp ../output.cpp ../../module_cell/parallel_kpoints.cpp ../../module_cell/klist.cpp
+  SOURCES write_dos_pw_test.cpp ../cal_dos.cpp ../write_dos_pw.cpp ../output.cpp ../../module_cell/parallel_kpoints.cpp ../../module_cell/klist.cpp
 )
 
 AddTest(
   TARGET io_print_info
-  LIBS ${math_libs} base device
+  LIBS ${math_libs} base device symmetry
   SOURCES print_info_test.cpp ../print_info.cpp ../input.cpp ../output.cpp ../../module_cell/unitcell.cpp
-  	../../module_cell/read_atoms.cpp ../../module_cell/read_cell_pseudopots.cpp ../../module_cell/atom_spec.cpp
-	../../module_cell/atom_pseudo.cpp ../../module_cell/pseudo_nc.cpp ../../module_cell/read_pp.cpp
-	../../module_cell/read_pp_upf201.cpp ../../module_cell/read_pp_upf100.cpp ../../module_cell/read_pp_vwr.cpp
-	../../module_cell/read_pp_blps.cpp ../../module_cell/klist.cpp ../../module_cell/parallel_kpoints.cpp 
-	../../module_cell/module_symmetry/symm_other.cpp ../../module_cell/module_symmetry/symmetry_basic.cpp
-	../../module_cell/module_symmetry/symmetry.cpp
+  ../../module_cell/read_atoms.cpp ../../module_cell/read_cell_pseudopots.cpp ../../module_cell/atom_spec.cpp
+  ../../module_cell/atom_pseudo.cpp ../../module_cell/pseudo_nc.cpp ../../module_cell/read_pp.cpp
+  ../../module_cell/read_pp_upf201.cpp ../../module_cell/read_pp_upf100.cpp ../../module_cell/read_pp_vwr.cpp
+  ../../module_cell/read_pp_blps.cpp ../../module_cell/klist.cpp ../../module_cell/parallel_kpoints.cpp
 )
 
- AddTest(
+AddTest(
   TARGET io_write_input_test
   LIBS ${math_libs} base device
   SOURCES write_input_test.cpp ../write_input.cpp ../input.cpp
+)
+
+AddTest(
+  TARGET io_single_R_test
+  LIBS ${math_libs}
+  SOURCES single_R_io_test.cpp ../single_R_io.cpp
+  	../../module_base/global_variable.cpp
+	../../module_base/parallel_reduce.cpp
+	../../module_base/parallel_common.cpp
+	../../module_base/parallel_global.cpp
+)
+
+AddTest(
+  TARGET io_write_wfc_nao
+  LIBS ${math_libs} base device
+  SOURCES write_wfc_nao_test.cpp ../write_wfc_nao.cpp
+)
+
+AddTest(
+  TARGET io_write_orb_info
+  LIBS ${math_libs} base device
+  SOURCES write_orb_info_test.cpp ../write_orb_info.cpp ../output.cpp ../../module_cell/unitcell.cpp
+	../../module_cell/read_atoms.cpp ../../module_cell/read_cell_pseudopots.cpp ../../module_cell/atom_spec.cpp
+	../../module_cell/atom_pseudo.cpp ../../module_cell/pseudo_nc.cpp ../../module_cell/read_pp.cpp
+	../../module_cell/read_pp_upf201.cpp ../../module_cell/read_pp_upf100.cpp ../../module_cell/read_pp_vwr.cpp
+	../../module_cell/read_pp_blps.cpp
+)
+
+AddTest(
+  TARGET io_parse_args
+  SOURCES parse_args_test.cpp
 )
