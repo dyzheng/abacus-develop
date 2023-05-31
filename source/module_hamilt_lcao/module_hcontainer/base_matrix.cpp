@@ -3,11 +3,13 @@
 
 namespace hamilt
 {
+//T of BaseMatrix can be double or complex<double>
+template class BaseMatrix<double>;
+template class BaseMatrix<std::complex<double>>;
 
 template<typename T>
-BaseMatrix<T>::BaseMatrix(const int &nrow_, const int &ncol_, T* data_existed = nullptr)
+BaseMatrix<T>::BaseMatrix(const int &nrow_, const int &ncol_, T* data_existed)
 {
-    value_begin.clear();
     nrow_local = nrow_;
     ncol_local = ncol_;
     //the default memory_type is 1 (2d-block format), it doesn't matter for initialization
@@ -93,14 +95,14 @@ void BaseMatrix<T>::add_array(T* array)
         }
     }
     else
-    {//if not allocated, then it is a wrapper
+    {//if not allocated, then it is a wrapper of block submatrix 
         if(this->memory_type == 2 )
         {
-            for (int i = 0; i < matrix.nrow_local; i++) 
+            for (int i = 0; i < this->nrow_local; i++) 
             {
-                for (int j = 0; j < matrix.ncol_local; j++) 
+                for (int j = 0; j < this->ncol_local; j++) 
                 {
-                    matrix.add_element(i, j, *array);
+                    this->add_element(i, j, *array);
                     array++;
                 }
             }
@@ -126,6 +128,54 @@ T& BaseMatrix<T>::get_value(const size_t &i_row, const size_t &j_col) const{
 template<typename T>
 T* BaseMatrix<T>::get_pointer() const{
     return value_begin;
+}
+
+//operator= for copy assignment
+template<typename T>
+BaseMatrix<T>& BaseMatrix<T>::operator=(const BaseMatrix<T>& other)
+{
+    if(this != &other)
+    {
+        this->nrow_local = other.nrow_local;
+        this->ncol_local = other.ncol_local;
+        this->memory_type = other.memory_type;
+        this->ldc = other.ldc;
+        if(other.allocated)
+        {
+            this->value_begin = new T[nrow_local * ncol_local];
+            ModuleBase::GlobalFunc::ZEROS(this->value_begin, nrow_local * ncol_local);
+            this->allocated = true;
+            for(int i = 0; i < nrow_local * ncol_local; i++)
+            {
+                this->value_begin[i] = other.value_begin[i];
+            }
+        }
+        else
+        {
+            this->value_begin = other.value_begin;
+            this->allocated = false;
+        }
+    }
+    return *this;
+}
+
+//operator= for move assignment
+template<typename T>
+BaseMatrix<T>& BaseMatrix<T>::operator=(BaseMatrix<T>&& other) noexcept
+{
+    if(this != &other)
+    {
+        this->nrow_local = other.nrow_local;
+        this->ncol_local = other.ncol_local;
+        this->value_begin = other.value_begin;
+        this->allocated = other.allocated;
+        if(other.allocated)
+        {
+            other.allocated = false;
+        }
+        other.value_begin = nullptr;
+    }
+    return *this;
 }
 
 

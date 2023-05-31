@@ -1,5 +1,8 @@
+#ifndef HCONTAINER_H
+#define HCONTAINER_H
+
 #include<complex>
-#include<map>
+#include<unordered_map>
 #include<vector>
 #include "atom_pair.h"
 #include "module_cell/unitcell.h"
@@ -14,25 +17,18 @@ class HContainer
     //Destructor of class HContainer
     ~HContainer(){};
 
-    //Constructor of class HContainer
+    //copy constructor
+    HContainer(const HContainer<T>& HR_in);
+
+    //move constructor
+    HContainer(HContainer<T>&& HR_in);
+
+    //simple constructor
+    HContainer();
+
+    //use unitcell to initialize atom_pairs
     HContainer(
-        const UnitCell& ucell_,
-        const int strategy
-    );
-    HContainer(
-        const UnitCell& ucell_,
-        const int strategy,
-        const Parallel_Orbitals* paraV
-    );
-    HContainer(
-        const UnitCell& ucell_,
-        const int strategy,
-        const Parallel_Orbitals* paraV,
-        const T* whole_matrix
-    );
-    HContainer(
-        const HContainer<T>& HR_in,
-        const int strategy
+        const UnitCell& ucell_
     );
 
     /**
@@ -41,11 +37,9 @@ class HContainer
      * 2.1, if found, add to exist AtomPair, 
      * 2.2, if not found, insert new one and sort.
      * 
-     * @param i atom index of atom i
-     * @param j atom index of atom j
      * @param atom_ij AtomPair object
      */
-    void insert_pair(int i, int j, const AtomPair<T>& atom_ij);
+    void insert_pair(const AtomPair<T>& atom_ij);
     
     /**
      * @brief find AtomPair with atom index atom_i and atom_j
@@ -60,39 +54,18 @@ class HContainer
     AtomPair<T>* find_pair(int i, int j) const;
 
     /**
-     * @brief add AtomPair with atom index atom_i and atom_j
-     * This interface can be used to add AtomPair,
-     * if found, add to exist one,
-     * if not found, insert new one and sort.
-     * used for calculate H(K) in H(K) += H(R) * kphase for non-soc case (T -> complex<T>)
+     * @brief return a reference of AtomPair with index of atom I and J in atom_pairs
      * 
-     * @param i atom index of atom i
-     * @param j atom index of atom j
-     * @param atom_ij AtomPair object
-     */
-    void add_atom_pair(int i, int j, const AtomPair<std::complex<T>>& atom_ij, std::complex<T> alpha);
-    /**
-     * @brief add AtomPair with atom index atom_i and atom_j
-     * This interface can be used to add AtomPair,
-     * if found, add to exist one,
-     * if not found, insert new one and sort.
-     * used for calculate H(K) in H(K) += H(R) * kphase for soc case (complex<T> -> complex<T>)
-     * 
-     * @param i atom index of atom i
-     * @param j atom index of atom j
-     * @param atom_ij AtomPair object
-     */
-    void add_atom_pair(int i, int j, const AtomPair<T>& atom_ij, T alpha);
-    /**
-     * return a reference of AtomPair with index of atom I and J in
-     * atom_pairs (R is not fixed)
-     * tmp_atom_pairs (R is fixed)
+     * @param i index of atom i
+     * @param j index of atom j
      */
     AtomPair<T>& get_atom_pair(int i, int j) const;
     /**
-     * return a reference of AtomPair with index in 
+     * @brief return a reference of AtomPair with index in 
      * atom_pairs (R is not fixed)
      * tmp_atom_pairs (R is fixed)
+     * 
+     * @param index index of atom-pair
      */
     AtomPair<T>& get_atom_pair(int index) const;
 
@@ -110,13 +83,8 @@ class HContainer
     */
     T &operator()(int atom_i, int atom_j, int rx_in, int ry_in, int rz_in, int mu, int nu) const
     {
-        return this->get_atom_pair(atom_i, atom_j).get_R_values(rx_in, ry_in, rz_in).get_value(mu, nu);
+        return this->get_atom_pair(atom_i, atom_j).get_HR_values(rx_in, ry_in, rz_in).get_value(mu, nu);
     }
-
-    //used for choosing spin for Hamiltonian
-    //used for choosing x/y/z for DH/Dtau matrix
-    //used for choosing 11/12/13/22/23/33 for DH/strain matrix
-    //void fix_index(int multiple_in);
 
     //save atom-pair pointers into this->tmp_atom_pairs for selected R index
     /**
@@ -127,10 +95,27 @@ class HContainer
      * @param rz_in index of R in z direction
      * @return true if success
     */
-    bool fix_R(int rx_in, int ry_in, int rz_in);
+    bool fix_R(int rx_in, int ry_in, int rz_in) const;
+
+    /**
+     * @brief set current_R to -1, which means R is not fixed
+     * clear this->tmp_atom_pairs
+    */
+    void unfix_R() const;
+
     /**
      * @brief restrict R indexes of all atom-pair to 0, 0, 0
      * add BaseMatrix<T> with non-zero R index to this->atom_pairs[i].values[0]
+     * set gamma_only = true
+     * in this mode:
+     *   1. fix_R() can not be used
+     *   2. there is no interface to set gamma_only = false, user should create a new HContainer if needed
+     *   3. get_size_for_loop_R() and loop_R() can not be used
+     *   4. get_AP_size() can be used 
+     *   5. data(i, j) can be used to get pointer of target atom-pair with R = 0, 0, 0 , data(i,j,R) can not be used
+     *   6. insert_pair() can be used, but the R index will be ignored
+     *   7. get_atom_pair(), find_atom_pair() can be used
+     *   8. operator() can be used, but the R index will be ignored
     */
     void fix_gamma();
     
@@ -152,12 +137,12 @@ class HContainer
     /**
      * @brief calculate number of R index which has counted AtomPairs
     */
-    size_t get_size_for_loop_R();
+    size_t size_R_loop() const;
 
     /**
      * @brief calculate number of AtomPairs for current R index
     */
-    size_t get_AP_size();
+    size_t size_atom_pairs() const;
 
     /**
      * @brief get data pointer of AtomPair with index of I, J
@@ -166,7 +151,7 @@ class HContainer
      * @param j index of atom j
      * @return T* pointer of data
     */
-    T* get_ap_data(int i, int j){return get_atom_pair(i,j).get_pointer();}
+    T* data(int i, int j) const;
 
     /**
      * @brief get data pointer of AtomPair with index of I, J, Rx, Ry, Rz
@@ -176,20 +161,32 @@ class HContainer
      * @param R int[3] of R index
      * @return T* pointer of data
     */
-    T* get_ap_data(int i, int j, int* R){return get_atom_pair(i,j).get_R_value(R[0], R[1], R[2]).get_pointer();}
+    T* data(int i, int j, int* R) const;
+
 
   private:
     //i-j atom pairs, sorted by matrix of (i, j)
     std::vector<AtomPair<T>> atom_pairs;
 
-    //temporary atom-pair lists to loop selected R index 
-    std::vector<AtomPair<T>*> tmp_atom_pairs;
+    /**
+     * @brief temporary atom-pair lists to loop selected R index
+    */
+    mutable std::vector<const AtomPair<T> const*> tmp_atom_pairs;
     //it contains 3 index of cell, size of R_index is three times of values.
-    std::vector<int> tmp_R_index;
+    mutable std::vector<int> tmp_R_index;
     //current index of R in tmp_atom_pairs, -1 means not initialized
-    int current_R = -1;
-    //it contains a map of (rx, ry, rz) to int* in tmp_R_index
-    std::unordered_map<std::tuple<int, int, int>, int> tmp_R_index_map;
+    mutable int current_R = -1;
+    /**
+     * @brief find index of R in tmp_R_index, used when current_R is fixed
+     * 
+     * @param rx_in index of R in x direction
+     * @param ry_in index of R in y direction
+     * @param rz_in index of R in z direction
+     * @return int index of R in tmp_R_index
+    */
+    int find_R(const int& rx_in, const int& ry_in, const int& rz_in) const;
+
+    bool gamma_only = false;
 
     //int multiple = 1;
     //int current_multiple = 0;
@@ -197,3 +194,5 @@ class HContainer
 };
 
 }
+
+#endif
