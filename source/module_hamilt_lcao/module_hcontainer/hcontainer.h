@@ -11,6 +11,136 @@
 namespace hamilt
 {
 
+/**
+ * class HContainer
+ * used to store a matrix for atom-pair local Hamiltonian with specific R-index
+ * ----------------------------------------
+ *   <Psi_{mu_I,R}|H|Psi_{nu_J,0}>
+ * ----------------------------------------
+ * template T can be double or complex<double>
+ * 
+ * examples for using this class:
+ * 1. initialize a HContainer
+ *    a. use unitcell to initialize atom_pairs
+ *     ```
+ *       // ucell is a UnitCell object
+ *       // in this method, all empty atom-pairs will be initialized in HR
+ *       // atom-pairs are sorted by matrix of (i, j)
+ *       HContainer<double> HR(ucell);
+ *     ```
+ *    b. use insert_pair() to insert atom-pair
+ *     ```
+ *       // HR is a HContainer object, from simple constructor
+ *       HContainer<double> HR;
+ *       // there are many methods to init AtomPair, this case is step by step method
+ *       AtomPair<double> atom_ij(0, 1);
+ *       // set size of AtomPair by set_size() 
+ *       atom_ij.set_size(2, 2);
+ *       // allocate local matrix memory with R-index in AtomPair
+ *       auto local_matrix = atom_ij.get_HR_values(0, 0, 0);
+ *       // save array to local_matrix
+ *       std::vector<double> local_matrix_ij = ...;
+ *       local_matrix.add_array(local_matrix_ij.data());
+ *       // insert atom_ij into HR
+ *       HR.insert_pair(atom_ij);
+ *     ```
+ * 2. get target AtomPair with index of atom I and J, or with index in atom_pairs
+ *    a. use interface find_pair() to get pointer of target AtomPair
+ *     ```
+ *       // HR is a HContainer object
+ *       AtomPair<double>* atom_ij = HR.find_pair(0, 1);
+ *       // check if atom_ij is found
+ *       if (atom_ij != nullptr)
+ *       {
+ *          // do something
+ *       }
+ *     ```
+ *    b. use interface get_atom_pair() to get reference of target AtomPair
+ *     ```
+ *       // HR is a HContainer object
+ *       AtomPair<double>& atom_ij_1 = HR.get_atom_pair(0, 1);
+ *       AtomPair<double>& atom_ij_2 = HR.get_atom_pair(1);//suppose 0,1 is the second atom-pair in atom_pairs
+ *       // check if atom_ij_1 and atom_ij_2 are the same
+ *       if(atom_ij_1.identify(atom_ij_2)) 
+ *       {
+ *           std::cout<<"atom_ij_1 and atom_ij_2 are the same"<<std::endl;
+ *       }
+ *     ```
+ * 3. get data pointer of target local matrix <Psi_{mu_I,R}|H|Psi_{nu_J,0}>
+ *    a. use interface data() with atom_i and atom_j and R index
+ *     ```
+ *       // HR is a HContainer object
+ *       // suppose atom_i = 0, atom_j = 1, int[3] target_R = {0, 0, 0}
+ *       double* target_data = HR.data(0, 1, target_R);
+ *     ```
+ *    b. fix_R and use data() with atom_i and atom_j without R index
+ *     ```
+ *       HR.fix_R(0, 0, 0);
+ *       double* target_data = HR.data(0, 1);
+ *       HR.unfix_R();
+ *     ```
+ * 4. use for-loop to do something with atom-pairs with specific R index
+ *    a. loop R-index first and then loop atom-pairs
+ *     ```
+ *       // HR is a const HContainer object, which has been initialized
+ *       int rx, ry, rz;
+ *       // call size_R_loop() to get number of different R indexes, 
+ *       // be careful, it will cost some time to loop all atom-pairs to gather R indexes
+ *       int size_for_loop_R = HR.size_R_loop();
+ *       for (int iR = 0; iR < size_for_loop_R ; iR++)
+ *       {
+ *           // call loop_R() to get R coordinates (rx, ry, rz)
+ *           HR.loop_R(iR, rx, ry, rz);
+ *           // call fix_R() to save atom-pairs with R index (rx, ry, rz) into tmp_atom_pairs
+ *           HR.fix_R(rx, ry, rz);
+ *           // loop fixed atom-pairs
+ *           for (int i = 0; i < HR.size_atom_pairs(); i++)
+ *           {
+ *              // get pointer of target atom-pair
+ *              double* data_pointer = HR.data(i);
+ *              // or get reference of target atom-pair
+ *              AtomPair<double>& atom_ijR = HR.get_atom_pair(i);
+ *              // do something with atom_ijR or data_pointer
+ *              ...
+ *           }
+ *       }
+ *       // call unfix_R() to clear tmp_atom_pairs
+ *       HR.unfix_R();
+ *     ```
+ *    b. loop atom-pairs first and then loop R-index
+ *     ```
+ *       // HR is a const HContainer object, which has been initialized
+ *       // loop atom-pairs
+ *       for (int i = 0; i < HR.size_atom_pairs(); i++)
+ *       {
+ *           // get reference of target atom-pair
+ *           AtomPair<double>& atom_ij = HR.get_atom_pair(i);
+ *           // loop R-index
+ *           for (int iR = 0; iR < atom_ij.size_R(); iR++)
+ *           {
+ *               const int* r_index = atom_ij.get_R_index(iR);
+ *               auto tmp_matrix = atom_ij.get_HR_values(r_index[0], r_index[1], r_index[2]);              
+ *               // do something with tmp_matrix
+ *               ...
+ *           }
+ *       }
+ *     ```
+ *    c. loop atom-pairs with gamma_only case
+ *     ```
+ *       ...
+ *       HR.fix_gamma();
+ *       // HR is a const HContainer object, which has been initialized and fixed to gamma       
+ *       // loop atom-pairs directly without R index
+ *       for (int i = 0; i < HR.size_atom_pairs(); i++)
+ *       {
+ *           // get data pointer of target atom-pair
+ *           double* data_pointer = HR.get_pointer(i);
+ *           // do something with data_pointer
+ *           ...
+ *       }
+ *     ```
+ * 
+*/
 template <typename T>
 class HContainer
 {
