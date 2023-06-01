@@ -102,6 +102,13 @@ struct Parallel_Orbitals
     // set row and col begin index for each atom
     void set_atomic_trace(const int* iat2iwt, const int &nat, const int &nlocal);
 
+    /**
+     * @brief dimension getters for 2D-block-cyclic division of Hamiltonian matrix
+     * get_col_size() : total number of columns of Hamiltonian matrix in this processor
+     * get_row_size() : total number of rows of Hamiltonian matrix in this processor
+     * get_col_size(iat) : number of columns of Hamiltonian matrix in atom iat
+     * get_row_size(iat) : number of rows of Hamiltonian matrix in atom iat
+    */
     int get_col_size()const;
     int get_row_size()const;
     int get_col_size(int iat) const;
