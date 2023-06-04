@@ -1435,7 +1435,8 @@ These variables are used to control the calculation of DOS. [Detail introduce](h
 ### dos_edelta_ev
 
 - **Type**: Real
-- **Description**: Controls the step size in writing Density of States (DOS) (in eV).
+**Description**: The step size for printing Density of States (DOS) (in eV).
+
 - **Default**: 0.01
 - **Unit**: eV
 
