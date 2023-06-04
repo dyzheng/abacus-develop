@@ -595,7 +595,8 @@ These variables are used to control parameters related to input files.
 ### kpoint_file
 
 - **Type**: String
-- **Description**: Specifies the name of the k-points file. Note that if you use atomic orbitals as basis and only use the gamma point, you don't need a k-point file in your directory. ABACUS will automatically generate a `KPT` file. However, if you use more than one k-point, please remember that the algorithm in ABACUS is different for gamma-only and various k-point dependent simulations. First, turn off the k-point algorithm by setting `gamma_only = 0` in `INPUT`, and then set up your own k-points file.
+- **Description**: The name of the k-points file.
+- **Note**: In atomic orbitals basis and gamma only calculation, the `KPT` file is unnecessary, because a `KPT` file will be generated automatically. When more than one k-points are required, an explicit `KPT` file is mandatory.
 - **Default**: KPT
 
 ### pseudo_dir
