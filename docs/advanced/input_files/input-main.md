@@ -622,7 +622,7 @@ These variables are used to control parameters related to input files.
 ### read_file_dir
 
 - **Type**: String
-- **Description**: Indicates the location of files, such as electron density (`SPIN1_CHG.cube`), required as a starting point. For example, './' implies the file is located in the working directory.
+**Description**: The location of files required for restarting running of ABACUS, such as electron density (`SPIN1_CHG.cube`). For example, './' implies the file is located in the working directory.
 - **Default**: OUT.$suffix
 
 ### wannier_card
