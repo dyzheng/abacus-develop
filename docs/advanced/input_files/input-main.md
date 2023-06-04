@@ -628,7 +628,8 @@ These variables are used to control parameters related to input files.
 ### wannier_card
 
 - **Type**: String
-- **Description**: Relevant when using ABACUS with Wannier90. Specifies the name of the input file related to Wannier90.
+- **Availability**: Using ABACUS with Wannier90.
+- **Description**: The name of the input file related to Wannier90.
 - **Default**: "none"
 
 [back to top](#full-list-of-input-keywords)
