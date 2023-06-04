@@ -1431,7 +1431,7 @@ These variables are used to control the output of properties.
 
 ## Density of states
 
-These variables are used to control the calculation of DOS. [Detail introduce](https://github.com/deepmodeling/abacus-develop/blob/develop/docs/advanced/elec_properties/dos.md)
+These variables are used to control the calculation of DOS. [Detailed introduction](https://github.com/deepmodeling/abacus-develop/blob/develop/docs/advanced/elec_properties/dos.md)
 
 ### dos_edelta_ev
 
