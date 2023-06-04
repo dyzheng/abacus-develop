@@ -586,6 +586,14 @@ If only one value is set (such as `kspacing 0.5`), then kspacing values of a/b/c
 
 These variables are used to control parameters related to input files.
 
+- **Note**: Relative paths and absolute paths:
+
+  - Relative paths are paths that do not start from the root directory, but from the current working directory. They are dependent on the current location in the file system. For example, if the current working directory is "/home/user", a relative path like "documents/report.txt" would refer to the file located at "/home/user/documents/report.txt". To navigate using relative paths, you may use "." to represent the current directory and ".." to represent the parent directory.
+
+  - Absolute paths, on the other hand, are paths that start from the root directory, which is represented by "/". They are independent of the current location in the file system. An absolute path always begins with a forward slash, and it specifies the exact location of a file or directory. For example, an absolute path like "/home/user/documents/report.txt" will always refer to the same file, regardless of the current working directory.
+
+  - In summary, relative paths depend on the current working directory, while absolute paths are independent of it, specifying the exact location of files and directories in the Linux file system.
+
 ### stru_file
 
 - **Type**: String
