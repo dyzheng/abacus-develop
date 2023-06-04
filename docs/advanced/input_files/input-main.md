@@ -1811,7 +1811,7 @@ These variables are relevant to electric field and dipole correction
 
 ## Gate field (compensating charge)
 
-These variables are relevant to gate field (compensating charge) [Detail introduce](https://github.com/deepmodeling/abacus-develop/blob/develop/docs/advanced/scf/advanced.md#compensating-charge)
+These variables are relevant to gate field (compensating charge) [Detailed introduction](https://github.com/deepmodeling/abacus-develop/blob/develop/docs/advanced/scf/advanced.md#compensating-charge)
 
 ### gate_flag
 
