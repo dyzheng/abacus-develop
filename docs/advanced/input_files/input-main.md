@@ -2539,7 +2539,7 @@ These variables are used to control berry phase and wannier90 interface paramete
 ### gdir
 
 - **Type**: Integer
-- **Description**: Specifies the direction of the polarization in the lattice vector for Berry phase calculation
+- **Description**: The direction of the polarization in the lattice vector for Berry phase calculation.
   - 1: Calculate the polarization in the direction of the lattice vector a_1 defined in the STRU file.
   - 2: Calculate the polarization in the direction of the lattice vector a_2 defined in the STRU file.
   - 3: Calculate the polarization in the direction of the lattice vector a_3 defined in the STRU file.
