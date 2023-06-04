@@ -589,7 +589,7 @@ These variables are used to control parameters related to input files.
 ### stru_file
 
 - **Type**: String
-- **Description**: Specifies the name of the structure file containing various information about atom species, including pseudopotential files, local orbitals files, cell information, atom positions, and whether atoms should be allowed to move.
+- **Description**: The name of the structure file containing various information about atom species, including pseudopotential files, local orbitals files, cell information, atom positions, and whether atoms should be allowed to move.
 - **Default**: STRU
 
 ### kpoint_file
