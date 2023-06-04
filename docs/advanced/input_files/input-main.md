@@ -1470,7 +1470,7 @@ These variables are used to control the calculation of DOS. [Detail introduce](h
 ### dos_nche
 
 - **Type**: Integer
-- **Description**: Defines the order of Chebyshev expansions when using Stochastic Density Functional Theory (SDFT) to calculate DOS.
+The order of Chebyshev expansions when using Stochastic Density Functional Theory (SDFT) to calculate DOS.
 - **Default**: 100
 
 [back to top](#full-list-of-input-keywords)
