@@ -1443,7 +1443,7 @@ These variables are used to control the calculation of DOS. [Detail introduce](h
 ### dos_sigma
 
 - **Type**: Real
-- **Description**: Controls the width of the Gaussian factor when obtaining smeared Density of States (DOS) (in eV).
+- **Description**: The width of the Gaussian factor when obtaining smeared Density of States (DOS) (in eV).
 - **Default**: 0.07
 - **Unit**: eV
 
