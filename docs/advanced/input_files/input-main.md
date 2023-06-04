@@ -610,7 +610,7 @@ These variables are used to control parameters related to input files.
 ### pseudo_dir
 
 - **Type**: String
-- **Description**: Specifies the pseudopotential directory.
+- **Description**: The pseudopotential directory.
 - **Default**: / , which refer to the absolute path.
 
 ### orbital_dir
