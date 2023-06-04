@@ -2562,7 +2562,7 @@ These variables are used to control berry phase and wannier90 interface paramete
 ### wannier_spin
 
 - **Type**: String
-- **Description**: Specifies the spin direction for the Wannier function calculation when nspin is set to 2.
+- **Description**: The spin direction for the Wannier function calculation when nspin is set to 2.
   - "up": Calculate spin up for the Wannier function.
   - "down": Calculate spin down for the Wannier function.
 - **Default**: "up"
