@@ -52,11 +52,31 @@ HContainer<T>::HContainer(const UnitCell& ucell_)
             int it1 = ucell_.iat2it[i];
             int it2 = ucell_.iat2it[j];
             atom_ij.set_size(ucell_.atoms[it1].nw, ucell_.atoms[it2].nw);
+            ModuleBase::GlobalFunc::ZEROS(atom_ij.get_HR_values(0, 0, 0).get_pointer(), atom_ij.get_size());
             this->atom_pairs.push_back(atom_ij);
         }
     }
     // sort atom_pairs
     std::sort(this->atom_pairs.begin(), this->atom_pairs.end());
+}
+
+//HContainer(const Parallel_Orbitals* paraV, T* data_pointer = nullptr);
+template <typename T>
+HContainer<T>::HContainer(const Parallel_Orbitals* paraV_in, T* data_pointer)
+{
+    this->current_R = -1;
+    // use HContainer as a wrapper
+    if(data_pointer != nullptr)
+    {
+        this->gamma_only = true;
+        this->wrapper_pointer = data_pointer;
+    }
+    else // use HContainer as a container
+    {
+        this->gamma_only = false;
+    }
+    // save Parallel_Orbitals pointer
+    this->paraV = paraV_in;
 }
 
 template <typename T>
@@ -146,10 +166,13 @@ bool HContainer<T>::fix_R(int rx_in, int ry_in, int rz_in) const
     if (this->tmp_atom_pairs.size() == 0)
     {
         std::cout << "Error: no atom pair found in fix_R" << std::endl;
+        this->current_R = -1;
         return false;
     }
     else
     {
+        //set current_R
+        this->current_R = this->find_R(rx_in, ry_in, rz_in);
         return true;
     }
 }
@@ -188,7 +211,7 @@ template <typename T>
 int HContainer<T>::find_R(const int& rx_in, const int& ry_in, const int& rz_in) const
 {
     // search (rx, ry, rz) in this->tmp_R_index
-    if (this->tmp_atom_pairs.empty())
+    if (this->tmp_R_index.empty())
     {
         return -1;
     }
@@ -315,7 +338,15 @@ void HContainer<T>::insert_pair(const AtomPair<T>& atom_ij)
     // if not found, insert
     else
     {
-        this->atom_pairs.insert(it, atom_ij);
+        //check paraV pointer
+        if (this->paraV != atom_ij.get_paraV())
+        {
+            ModuleBase::WARNING_QUIT("HContainer::insert_pair", "atom_ij has different paraV pointer as HContainer");
+        }
+        else
+        {//insert atom_ij, and set paraV pointer for HContainer if atom_ij has paraV pointer
+            this->atom_pairs.insert(it, atom_ij);
+        }
     }
 }
 

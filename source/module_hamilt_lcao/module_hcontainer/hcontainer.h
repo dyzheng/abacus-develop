@@ -44,6 +44,24 @@ namespace hamilt
  *       // insert atom_ij into HR
  *       HR.insert_pair(atom_ij);
  *     ```
+ *   c. use Parallel_Orbital to initialize atom_pairs and HContainer
+ *     ```
+ *       // paraV is a Parallel_Orbital object, 2d-block-recycle parallel case
+ *       HCotainer<double> HR(paraV);
+ *       // initialize a new AtomPair with atom paraV
+ *       AtomPair<double> atom_ij(0, 1, paraV);
+ *       // insert atom_ij into HR
+ *       HR.insert_pair(atom_ij);
+ *     ```
+ *   d. use data_pointer of existed matrix to initialize HContainer, which means HContainer is a wrapper
+ *     ```
+ *       // data_pointer is a pointer of existed matrix
+ *       HContainer<double> HR(paraV, data_pointer);
+ *       // initialize a new AtomPair with data_pointer
+ *       AtomPair<double> atom_ij(0, 1, paraV, data_pointer);
+ *       // insert atom_ij into HR
+ *       HR.insert_pair(atom_ij);
+ *     ```
  * 2. get target AtomPair with index of atom I and J, or with index in atom_pairs
  *    a. use interface find_pair() to get pointer of target AtomPair
  *     ```
@@ -159,6 +177,15 @@ class HContainer
 
     // use unitcell to initialize atom_pairs
     HContainer(const UnitCell& ucell_);
+
+    /**
+     * @brief use data pointer to initialize atom_pairs
+     * pass a data pointer to HContainer, which means HContainer is a wrapper
+     * it will not allocate memory for atom_pairs
+     * this case will forbit inserting empty atom_pair
+    */
+    HContainer(const Parallel_Orbitals* paraV, T* data_pointer = nullptr);
+
 
     /**
      * @brief a AtomPair object can be inserted into HContainer, two steps:
@@ -315,6 +342,16 @@ class HContainer
     int find_R(const int& rx_in, const int& ry_in, const int& rz_in) const;
 
     bool gamma_only = false;
+
+    /**
+     * @brief if wrapper_pointer is not nullptr, this HContainer is a wrapper
+    */
+    T* wrapper_pointer = nullptr;
+
+    /**
+     * @brief pointer of Parallel_Orbitals, which is used to get atom-pair information
+    */
+    const Parallel_Orbitals* paraV = nullptr;
 
     // int multiple = 1;
     // int current_multiple = 0;

@@ -91,21 +91,39 @@ class AtomPair
     // Destructor of class AtomPair
     ~AtomPair(){};
 
-    // get col_size
+    /**
+     * @brief get col_size for this AtomPair
+    */
     int get_col_size() const;
-    // get row_size
+    /**
+     * @brief get row_size for this AtomPair
+    */
     int get_row_size() const;
-    // get atom_i and atom_j
+    /**
+     * @brief get atom_i and atom_j for this AtomPair
+    */
     int get_atom_i() const;
     int get_atom_j() const;
-    // set col_size and row_size
+    /**
+     * @brief set col_size and row_size
+    */
     void set_size(const int& col_size_in, const int& row_size_in);
+    /**
+     * @brief get size = col_size * row_size
+     * @return int
+    */
+    int get_size() const;
 
-    // use atom_i and atom_j to identify the atom-pair
+    /**
+     * @brief get Parallel_Orbitals pointer of this AtomPair for checking 2d-block parallel
+     * @return const Parallel_Orbitals*
+    */
+    const Parallel_Orbitals* get_paraV() const;
+
+    /// use atom_i and atom_j to identify the atom-pair
     bool identify(const AtomPair<T>& other) const;
     bool identify(const int& atom_i_, const int& atom_j_) const;
 
-    // interface for get target matrix of target cell
     /**
      * @brief get target matrix of target cell
      * for const AtomPair, it will return a const BaseMatrix<T> object,
@@ -118,6 +136,8 @@ class AtomPair
 
     // interface for get (rx, ry, rz) of index-th R-index in this->R_index, the return should be int[3]
     int* get_R_index(const int& index) const;
+    // interface for get (rx, ry, rz) of current_R, the return should be int[3]
+    int* get_R_index() const;
     // interface for search (rx, ry, rz) in this->R_index, if found, current_R would be set to index
     bool find_R(const int& rx_in, const int& ry_in, const int& rz_in) const;
 
@@ -202,9 +222,9 @@ class AtomPair
 
     // the default R index is (0, 0, 0)
     // if current_R > 0, it means R index has been fixed
-    // if current_R == 0, it means R index has been fixed and it is the center cell,
-    // if current_R == -1, it means R index has not been fixed
-    mutable int current_R = -1;
+    // if current_R == 0, it means R index refers to the first cell
+    // if current_R == 0 with gamma_only, it means R index refers to the center cell
+    mutable int current_R = 0;
 
     // index for identifying atom I and J for this atom-pair
     int atom_i = -1;

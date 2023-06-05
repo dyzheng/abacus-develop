@@ -277,6 +277,20 @@ void AtomPair<T>::set_size(const int& col_size_in, const int& row_size_in)
     this->row_size = row_size_in;
 }
 
+// get size
+template <typename T>
+int AtomPair<T>::get_size() const
+{
+    return this->col_size * this->row_size;
+}
+
+// get paraV for check
+template <typename T>
+const Parallel_Orbitals* AtomPair<T>::get_paraV() const
+{
+    return this->paraV;
+}
+
 // identify
 template <typename T>
 bool AtomPair<T>::identify(const AtomPair<T>& other) const
@@ -309,7 +323,7 @@ bool AtomPair<T>::identify(const int& atom_i_, const int& atom_j_) const
 template <typename T>
 BaseMatrix<T>& AtomPair<T>::get_HR_values(int rx_in, int ry_in, int rz_in)
 {
-    // if current_R is -1, R index has not been fixed, find existed R index
+    // find existed R index
     if (this->find_R(rx_in, ry_in, rz_in))
     {
         // if found, return this->values[current_R]
@@ -530,6 +544,14 @@ int* AtomPair<T>::get_R_index(const int& index) const
         int* ptr = const_cast<int*>(&(R_index[index * 3]));
         return ptr;
     }
+}
+
+template <typename T>
+int* AtomPair<T>::get_R_index() const
+{
+    // return the (int*) pointer of R_index[index*3]
+    int* ptr = const_cast<int*>(&(R_index[current_R * 3]));
+    return ptr;
 }
 
 // get_value
