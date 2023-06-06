@@ -629,7 +629,8 @@ These variables are used to control parameters related to input files.
 ### wannier_card
 
 - **Type**: String
-- **Description**: Relevant when using ABACUS with Wannier90. Specifies the name of the input file related to Wannier90.
+- **Availability**: Using ABACUS with Wannier90.
+- **Description**: The name of the input file related to Wannier90.
 - **Default**: "none"
 
 [back to top](#full-list-of-input-keywords)
@@ -1431,7 +1432,7 @@ These variables are used to control the output of properties.
 
 ## Density of states
 
-These variables are used to control the calculation of DOS. [Detail introduction](https://github.com/deepmodeling/abacus-develop/blob/develop/docs/advanced/elec_properties/dos.md)
+These variables are used to control the calculation of DOS. [Detailed introduction](https://github.com/deepmodeling/abacus-develop/blob/develop/docs/advanced/elec_properties/dos.md)
 
 ### dos_edelta_ev
 
@@ -1473,7 +1474,7 @@ These variables are used to control the calculation of DOS. [Detail introduction
 ### dos_nche
 
 - **Type**: Integer
-- **Description**: Defines the order of Chebyshev expansions when using Stochastic Density Functional Theory (SDFT) to calculate DOS.
+The order of Chebyshev expansions when using Stochastic Density Functional Theory (SDFT) to calculate DOS.
 - **Default**: 100
 
 [back to top](#full-list-of-input-keywords)
@@ -1815,7 +1816,7 @@ These variables are relevant to electric field and dipole correction
 
 ## Gate field (compensating charge)
 
-These variables are relevant to gate field (compensating charge) [Detail introduce](https://github.com/deepmodeling/abacus-develop/blob/develop/docs/advanced/scf/advanced.md#compensating-charge)
+These variables are relevant to gate field (compensating charge) [Detailed introduction](https://github.com/deepmodeling/abacus-develop/blob/develop/docs/advanced/scf/advanced.md#compensating-charge)
 
 ### gate_flag
 
@@ -2543,7 +2544,7 @@ These variables are used to control berry phase and wannier90 interface paramete
 ### gdir
 
 - **Type**: Integer
-- **Description**: Specifies the direction of the polarization in the lattice vector for Berry phase calculation.
+- **Description**: the direction of the polarization in the lattice vector for Berry phase calculation
   - 1: Calculate the polarization in the direction of the lattice vector a_1 defined in the STRU file.
   - 2: Calculate the polarization in the direction of the lattice vector a_2 defined in the STRU file.
   - 3: Calculate the polarization in the direction of the lattice vector a_3 defined in the STRU file.
