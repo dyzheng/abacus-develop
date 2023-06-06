@@ -586,43 +586,44 @@ If only one value is set (such as `kspacing 0.5`), then kspacing values of a/b/c
 
 These variables are used to control parameters related to input files.
 
-- **Note**: Relative paths and absolute paths:
-
-  - Relative paths are paths that do not start from the root directory, but from the current working directory. They are dependent on the current location in the file system. For example, if the current working directory is "/home/user", a relative path like "documents/report.txt" would refer to the file located at "/home/user/documents/report.txt". To navigate using relative paths, you may use "." to represent the current directory and ".." to represent the parent directory.
-
-  - Absolute paths, on the other hand, are paths that start from the root directory, which is represented by "/". They are independent of the current location in the file system. An absolute path always begins with a forward slash, and it specifies the exact location of a file or directory. For example, an absolute path like "/home/user/documents/report.txt" will always refer to the same file, regardless of the current working directory.
-
-  - In summary, relative paths depend on the current working directory, while absolute paths are independent of it, specifying the exact location of files and directories in the Linux file system.
-
 ### stru_file
 
 - **Type**: String
-- **Description**: The name of the structure file containing various information about atom species, including pseudopotential files, local orbitals files, cell information, atom positions, and whether atoms should be allowed to move.
+- **Description**: the name of the structure file
+  - Containing various information about atom species, including pseudopotential files, local orbitals files, cell information, atom positions, and whether atoms should be allowed to move.
+  - Refer to [Doc](https://github.com/deepmodeling/abacus-develop/blob/develop/docs/advanced/input_files/stru.md)
 - **Default**: STRU
 
 ### kpoint_file
 
 - **Type**: String
-- **Description**: The name of the k-points file.
-- **Note**: In atomic orbitals basis and gamma only calculation, the `KPT` file is unnecessary, because a `KPT` file will be generated automatically. When more than one k-points are required, an explicit `KPT` file is mandatory.
+- **Description**: the name of the k-points file
+  - In atomic orbitals basis with `gamma_only` set to true, the `KPT` file is unnecessary, because a `KPT` file will be generated automatically. 
+  - When more than one k-points are required, an explicit `KPT` file is mandatory.
+  - Refer to [Doc](https://github.com/deepmodeling/abacus-develop/blob/develop/docs/advanced/input_files/kpt.md)
 - **Default**: KPT
 
 ### pseudo_dir
 
 - **Type**: String
-- **Description**: Specifies the pseudopotential directory.
-- **Default**: / , which refer to the absolute path.
+- **Description**: the pseudopotential file directory
+  - This parameter is combined with the pseudopotential filenames in the STRU file to form the complete pseudopotential file paths.
+  - Example: set pseudo_dir to "../" with "Si.upf" which specified under "ATOMIC_SPECIES" in STRU file, ABACUS will open the pseudopotential file in path "../Si.upf".
+- **Default**: ""
 
 ### orbital_dir
 
 - **Type**: String
-- **Description**: Specifies the orbital file directory.
-- **Default**: / , which refer to the absolute path.
+- **Description**: the orbital file directory
+  - This parameter is combined with orbital filenames in the STRU file to form the complete orbital file paths.
+  - Example: set orbital_dir to "../" with "Si.orb" which specified under "NUMERICAL_ORBITAL" in STRU file, ABACUS will open the orbital file in path "../Si.orb".
+- **Default**: ""
 
 ### read_file_dir
 
 - **Type**: String
-- **Description**: Indicates the location of files, such as electron density (`SPIN1_CHG.cube`), required as a starting point. For example, './' implies the file is located in the working directory.
+- **Description**: Indicates the location of files, such as electron density (`SPIN1_CHG.cube`), required as a starting point. 
+  - Example: './' implies the files to be read are located in the working directory.
 - **Default**: OUT.$suffix
 
 ### wannier_card
@@ -1430,19 +1431,19 @@ These variables are used to control the output of properties.
 
 ## Density of states
 
-These variables are used to control the calculation of DOS. [Detail introduce](https://github.com/deepmodeling/abacus-develop/blob/develop/docs/advanced/elec_properties/dos.md)
+These variables are used to control the calculation of DOS. [Detail introduction](https://github.com/deepmodeling/abacus-develop/blob/develop/docs/advanced/elec_properties/dos.md)
 
 ### dos_edelta_ev
 
 - **Type**: Real
-- **Description**: Controls the step size in writing Density of States (DOS) (in eV).
+- **Description**: the step size in writing Density of States (DOS) 
 - **Default**: 0.01
 - **Unit**: eV
 
 ### dos_sigma
 
 - **Type**: Real
-- **Description**: Controls the width of the Gaussian factor when obtaining smeared Density of States (DOS) (in eV).
+- **Description**: the width of the Gaussian factor when obtaining smeared Density of States (DOS)
 - **Default**: 0.07
 - **Unit**: eV
 
@@ -1451,18 +1452,21 @@ These variables are used to control the calculation of DOS. [Detail introduce](h
 - **Type**: Real
 - **Description**: Defines the energy range of DOS output as (emax-emin)*(1+dos_scale), centered at (emax+emin)/2. This parameter will be used when dos_emin and dos_emax are not set.
 - **Default**: 0.01
+- **Unit**: eV
 
 ### dos_emin_ev
 
 - **Type**: Real
-- **Description**: Specifies the minimal range for Density of States (DOS) (in eV). If set, "dos_scale" will be ignored.
+- **Description**: the minimal range for Density of States (DOS)
+  - If set, "dos_scale" will be ignored.
 - **Default**: Minimal eigenenergy of $\hat{H}$
 - **Unit**: eV
 
 ### dos_emax_ev
 
 - **Type**: Real
-- **Description**: Specifies the maximal range for Density of States (DOS) (in eV). If set, "dos_scale" will be ignored.
+- **Description**: the maximal range for Density of States (DOS)
+  - If set, "dos_scale" will be ignored.
 - **Default**: Maximal eigenenergy of $\hat{H}$
 - **Unit**: eV
 
@@ -1824,7 +1828,7 @@ These variables are relevant to gate field (compensating charge) [Detail introdu
 ### zgate
 
 - **Type**: Real
-- **Description**: Position of the charged plate in the unit cell.
+- **Description**: position of the charged plate in the unit cell
 - **Unit**: Unit cell size
 - **Default**: 0.5
 - **Constraints**: 0 <= **zgate** < 1
@@ -1840,7 +1844,7 @@ These variables are relevant to gate field (compensating charge) [Detail introdu
 ### block_down
 
 - **Type**: Real
-- **Description**: Lower beginning of the potential barrier.
+- **Description**: lower beginning of the potential barrier
 - **Unit**: Unit cell size
 - **Default**: 0.45
 - **Constraints**: 0 <= **block_down** < **block_up** < 1
@@ -1848,7 +1852,7 @@ These variables are relevant to gate field (compensating charge) [Detail introdu
 ### block_up
 
 - **Type**: Real
-- **Description**: Upper beginning of the potential barrier.
+- **Description**: upper beginning of the potential barrier
 - **Unit**: Unit cell size
 - **Default**: 0.55
 - **Constraints**: 0 <= **block_down** < **block_up** < 1
@@ -1856,7 +1860,7 @@ These variables are relevant to gate field (compensating charge) [Detail introdu
 ### block_height
 
 - **Type**: Real
-- **Description**: Height of the potential barrier.
+- **Description**: height of the potential barrier
 - **Unit**: Rydberg
 - **Default**: 0.1
 
@@ -2531,7 +2535,7 @@ These variables are used to control berry phase and wannier90 interface paramete
 ### berry_phase
 
 - **Type**: Boolean
-- **Description**: Controls the calculation of Berry phase
+- **Description**: controls the calculation of Berry phase
   - true: Calculate Berry phase.
   - false: Do not calculate Berry phase.
 - **Default**: false
@@ -2539,7 +2543,7 @@ These variables are used to control berry phase and wannier90 interface paramete
 ### gdir
 
 - **Type**: Integer
-- **Description**: Specifies the direction of the polarization in the lattice vector for Berry phase calculation
+- **Description**: Specifies the direction of the polarization in the lattice vector for Berry phase calculation.
   - 1: Calculate the polarization in the direction of the lattice vector a_1 defined in the STRU file.
   - 2: Calculate the polarization in the direction of the lattice vector a_2 defined in the STRU file.
   - 3: Calculate the polarization in the direction of the lattice vector a_3 defined in the STRU file.
@@ -2548,7 +2552,7 @@ These variables are used to control berry phase and wannier90 interface paramete
 ### towannier90
 
 - **Type**: Integer
-- **Description**: Controls the generation of files for the Wannier90 code
+- **Description**: Controls the generation of files for the Wannier90 code.
   - 1: Generate files for the Wannier90 code.
   - 0: Do not generate files for the Wannier90 code.
 - **Default**: 0
@@ -2556,13 +2560,13 @@ These variables are used to control berry phase and wannier90 interface paramete
 ### nnkpfile
 
 - **Type**: String
-- **Description**: The file name generated when running "wannier90 -pp ..." command.
+- **Description**: the file name generated when running "wannier90 -pp ..." command
 - **Default**: seedname.nnkp
 
 ### wannier_spin
 
 - **Type**: String
-- **Description**: Specifies the spin direction for the Wannier function calculation when nspin is set to 2.
+- **Description**: the spin direction for the Wannier function calculation when nspin is set to 2
   - "up": Calculate spin up for the Wannier function.
   - "down": Calculate spin down for the Wannier function.
 - **Default**: "up"
