@@ -5,9 +5,13 @@ namespace hamilt
 
 // class HContainer
 
-// T of HContainer can be double or complex<double>
-template class HContainer<double>;
-template class HContainer<std::complex<double>>;
+
+// destructor
+template <typename T>
+HContainer<T>::~HContainer()
+{
+    // do nothing
+}
 
 // copy constructor
 template <typename T>
@@ -349,5 +353,30 @@ void HContainer<T>::insert_pair(const AtomPair<T>& atom_ij)
         }
     }
 }
+
+//operator()
+template <typename T>
+T& HContainer<T>::operator()(int atom_i, int atom_j, int rx_in, int ry_in, int rz_in, int mu, int nu) const
+{
+        return this->get_atom_pair(atom_i, atom_j).get_HR_values(rx_in, ry_in, rz_in).get_value(mu, nu);
+}
+
+//get_current_R
+template <typename T>
+int HContainer<T>::get_current_R() const
+{
+    return this->current_R;
+}
+
+//is_gamma_only
+template <typename T>
+bool HContainer<T>::is_gamma_only() const
+{
+    return this->gamma_only;
+}
+
+// T of HContainer can be double or complex<double>
+template class HContainer<double>;
+template class HContainer<std::complex<double>>;
 
 } // end namespace hamilt

@@ -91,7 +91,7 @@ class AtomPair
              const int& atom_j_  // atomic index of atom j, used to identify atom
     );
     // Destructor of class AtomPair
-    ~AtomPair(){};
+    ~AtomPair();
 
     /**
      * @brief get col_size for this AtomPair

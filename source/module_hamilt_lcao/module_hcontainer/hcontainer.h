@@ -162,7 +162,7 @@ class HContainer
 {
   public:
     // Destructor of class HContainer
-    ~HContainer(){};
+    ~HContainer();
 
     // copy constructor
     HContainer(const HContainer<T>& HR_in);
@@ -235,10 +235,7 @@ class HContainer
      * @param nu index of orbital nu
      * @return T&
      */
-    T& operator()(int atom_i, int atom_j, int rx_in, int ry_in, int rz_in, int mu, int nu) const
-    {
-        return this->get_atom_pair(atom_i, atom_j).get_HR_values(rx_in, ry_in, rz_in).get_value(mu, nu);
-    }
+    T& operator()(int atom_i, int atom_j, int rx_in, int ry_in, int rz_in, int mu, int nu) const;
 
     // save atom-pair pointers into this->tmp_atom_pairs for selected R index
     /**
@@ -316,6 +313,16 @@ class HContainer
      * @return T* pointer of data
      */
     T* data(int i, int j, int* R) const;
+
+    /**
+     * @brief get current_R
+    */
+    int get_current_R() const;
+
+    /**
+     * @brief judge if gamma_only
+    */
+    bool is_gamma_only() const;
 
   private:
     // i-j atom pairs, sorted by matrix of (i, j)

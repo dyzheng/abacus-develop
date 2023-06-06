@@ -6,9 +6,6 @@
 
 namespace hamilt
 {
-// T of BaseMatrix can be double or complex<double>
-template class BaseMatrix<double>;
-template class BaseMatrix<std::complex<double>>;
 
 template <typename T>
 BaseMatrix<T>::BaseMatrix(const int& nrow_, const int& ncol_, T* data_existed)
@@ -182,5 +179,9 @@ BaseMatrix<T>& BaseMatrix<T>::operator=(BaseMatrix<T>&& other) noexcept
     }
     return *this;
 }
+
+// T of BaseMatrix can be double or complex<double>
+template class BaseMatrix<double>;
+template class BaseMatrix<std::complex<double>>;
 
 } // namespace hamilt

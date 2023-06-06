@@ -8,9 +8,11 @@ namespace hamilt
 // atom pair class
 //----------------------------------------------------
 
-// T of AtomPair can be double or complex<double>
-template class AtomPair<double>;
-template class AtomPair<std::complex<double>>;
+// destructor
+template <typename T>
+AtomPair<T>::~AtomPair()
+{
+}
 
 template <typename T>
 AtomPair<T>::AtomPair(const int& atom_i_, const int& atom_j_, const Parallel_Orbitals* paraV_, T* existed_matrix)
@@ -605,5 +607,9 @@ size_t AtomPair<T>::get_values_size() const
 {
     return this->values.size();
 }
+
+// T of AtomPair can be double or complex<double>
+template class AtomPair<double>;
+template class AtomPair<std::complex<double>>;
 
 } // namespace hamilt
