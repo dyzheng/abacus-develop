@@ -1,4 +1,6 @@
 #include "base_matrix.h"
+#include <complex>
+#include <vector>
 
 #include "module_base/global_function.h"
 

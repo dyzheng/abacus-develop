@@ -1,6 +1,6 @@
+#include "gtest/gtest.h"
 #define private public
 #include "../hcontainer.h"
-#include "gtest/gtest.h"
 #include "tmp_mocks.h"
 
 using namespace hamilt;

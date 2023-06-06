@@ -159,7 +159,7 @@ bool HContainer<T>::fix_R(int rx_in, int ry_in, int rz_in) const
         if (it->find_R(rx_in, ry_in, rz_in))
         {
             // push bach the pointer of AtomPair to this->tmp_atom_pairs
-            const AtomPair<T> const* tmp_pointer = &(*it);
+            const AtomPair<T>* tmp_pointer = &(*it);
             this->tmp_atom_pairs.push_back(tmp_pointer);
         }
     }

@@ -5,6 +5,8 @@
 #include "base_matrix.h"
 #include "module_basis/module_ao/parallel_orbitals.h"
 
+#include <vector>
+
 namespace hamilt
 {
 /**

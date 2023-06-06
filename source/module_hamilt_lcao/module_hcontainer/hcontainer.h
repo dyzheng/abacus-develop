@@ -1,8 +1,6 @@
 #ifndef HCONTAINER_H
 #define HCONTAINER_H
 
-#include <complex>
-#include <unordered_map>
 #include <vector>
 
 #include "atom_pair.h"
@@ -326,7 +324,7 @@ class HContainer
     /**
      * @brief temporary atom-pair lists to loop selected R index
      */
-    mutable std::vector<const AtomPair<T> const*> tmp_atom_pairs;
+    mutable std::vector<const AtomPair<T>*> tmp_atom_pairs;
     // it contains 3 index of cell, size of R_index is three times of values.
     mutable std::vector<int> tmp_R_index;
     // current index of R in tmp_atom_pairs, -1 means not initialized

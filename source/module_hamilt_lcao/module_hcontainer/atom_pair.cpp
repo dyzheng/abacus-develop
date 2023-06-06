@@ -1,4 +1,5 @@
 #include "atom_pair.h"
+#include <complex>
 
 namespace hamilt
 {
