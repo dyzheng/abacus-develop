@@ -2,6 +2,7 @@
 #define HCONTAINER_H
 
 #include <vector>
+#include <set>
 
 #include "atom_pair.h"
 #include "module_cell/unitcell.h"
@@ -171,7 +172,7 @@ class HContainer
     HContainer(HContainer<T>&& HR_in);
 
     // simple constructor
-    HContainer();
+    HContainer(int natom);
 
     // use unitcell to initialize atom_pairs
     HContainer(const UnitCell& ucell_);
@@ -325,8 +326,12 @@ class HContainer
     bool is_gamma_only() const;
 
   private:
-    // i-j atom pairs, sorted by matrix of (i, j)
+    // i-j atom pairs, sorted by matrix of (atom_i, atom_j)
     std::vector<AtomPair<T>> atom_pairs;
+
+    // sparse table for (atom_i, atom_j)->index of atom_pairs
+    std::vector<std::vector<int>> sparse_ap;
+    std::vector<std::vector<int>> sparse_ap_index;
 
     /**
      * @brief temporary atom-pair lists to loop selected R index

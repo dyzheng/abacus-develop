@@ -18,6 +18,8 @@ template <typename T>
 HContainer<T>::HContainer(const HContainer<T>& HR_in)
 {
     this->atom_pairs = HR_in.atom_pairs;
+    this->sparse_ap = HR_in.sparse_ap;
+    this->sparse_ap_index = HR_in.sparse_ap_index;
     this->gamma_only = HR_in.gamma_only;
     this->current_R = -1;
     // tmp terms not copied
@@ -28,6 +30,8 @@ template <typename T>
 HContainer<T>::HContainer(HContainer<T>&& HR_in)
 {
     this->atom_pairs = std::move(HR_in.atom_pairs);
+    this->sparse_ap = std::move(HR_in.sparse_ap);
+    this->sparse_ap_index = std::move(HR_in.sparse_ap_index);
     this->gamma_only = HR_in.gamma_only;
     this->current_R = -1;
     // tmp terms not moved
@@ -35,10 +39,12 @@ HContainer<T>::HContainer(HContainer<T>&& HR_in)
 
 // simple constructor
 template <typename T>
-HContainer<T>::HContainer()
+HContainer<T>::HContainer(int natom)
 {
     this->gamma_only = false;
     this->current_R = -1;
+    this->sparse_ap.resize(natom);
+    this->sparse_ap_index.resize(natom);
 }
 
 // use unitcell to initialize atom_pairs
@@ -47,9 +53,14 @@ HContainer<T>::HContainer(const UnitCell& ucell_)
 {
     this->gamma_only = false;
     this->current_R = -1;
-    // initialize atom_pairs
+    // initialize atom_pairs and sparse_ap
+    this->atom_pairs.reserve(ucell_.nat * ucell_.nat);
+    this->sparse_ap.resize(ucell_.nat);
+    this->sparse_ap_index.resize(ucell_.nat);
     for (int i = 0; i < ucell_.nat; i++)
     {
+        this->sparse_ap[i].resize(ucell_.nat);
+        this->sparse_ap_index[i].resize(ucell_.nat);
         for (int j = 0; j < ucell_.nat; j++)
         {
             AtomPair<T> atom_ij(i, j);
@@ -58,10 +69,10 @@ HContainer<T>::HContainer(const UnitCell& ucell_)
             atom_ij.set_size(ucell_.atoms[it1].nw, ucell_.atoms[it2].nw);
             ModuleBase::GlobalFunc::ZEROS(atom_ij.get_HR_values(0, 0, 0).get_pointer(), atom_ij.get_size());
             this->atom_pairs.push_back(atom_ij);
+            this->sparse_ap[i][j] = j;
+            this->sparse_ap_index[i][j] = this->atom_pairs.size() - 1;
         }
     }
-    // sort atom_pairs
-    std::sort(this->atom_pairs.begin(), this->atom_pairs.end());
 }
 
 //HContainer(const Parallel_Orbitals* paraV, T* data_pointer = nullptr);
@@ -81,16 +92,24 @@ HContainer<T>::HContainer(const Parallel_Orbitals* paraV_in, T* data_pointer)
     }
     // save Parallel_Orbitals pointer
     this->paraV = paraV_in;
+    // initialize sparse_ap
+    int natom = paraV->atom_begin_row.size();
+    this->sparse_ap.resize(natom);
+    this->sparse_ap_index.resize(natom);
 }
 
 template <typename T>
 AtomPair<T>* HContainer<T>::find_pair(int atom_i, int atom_j) const
 {
-    AtomPair<T> target(atom_i, atom_j);
-    auto it = std::lower_bound(this->atom_pairs.begin(), this->atom_pairs.end(), target);
-    if (it != this->atom_pairs.end() && it->identify(atom_i, atom_j))
+    if(atom_i >= this->sparse_ap.size())
     {
-        AtomPair<T>* tmp_pointer = const_cast<AtomPair<T>*>(&(*it));
+        ModuleBase::WARNING_QUIT("HContainer::insert_pair", "atom_i out of range");
+    }
+    // search atom_i and atom_j in sparse_ap
+    auto it = std::lower_bound(this->sparse_ap[atom_i].begin(), this->sparse_ap[atom_i].end(), atom_j);
+    if (it != this->sparse_ap[atom_i].end() && *it == atom_j)
+    {
+        AtomPair<T>* tmp_pointer = const_cast<AtomPair<T>*>(&this->atom_pairs[this->sparse_ap_index[atom_i][it-this->sparse_ap[atom_i].begin()]]);
         return tmp_pointer;
     }
     else
@@ -103,17 +122,20 @@ AtomPair<T>* HContainer<T>::find_pair(int atom_i, int atom_j) const
 template <typename T>
 AtomPair<T>& HContainer<T>::get_atom_pair(int atom_i, int atom_j) const
 {
-    AtomPair<T> target(atom_i, atom_j);
-    auto it = std::lower_bound(this->atom_pairs.begin(), this->atom_pairs.end(), target);
-    if (it != this->atom_pairs.end() && it->identify(atom_i, atom_j))
+    if(atom_i >= this->sparse_ap.size())
     {
-        AtomPair<T>* tmp = const_cast<AtomPair<T>*>(&(*it));
+        ModuleBase::WARNING_QUIT("HContainer::insert_pair", "atom_i out of range");
+    }
+    // search atom_i and atom_j in sparse_ap
+    auto it = std::lower_bound(this->sparse_ap[atom_i].begin(), this->sparse_ap[atom_i].end(), atom_j);
+    if (it != this->sparse_ap[atom_i].end() && *it == atom_j)
+    {
+        AtomPair<T>* tmp = const_cast<AtomPair<T>*>(&this->atom_pairs[this->sparse_ap_index[atom_i][it-this->sparse_ap[atom_i].begin()]]);
         return *tmp;
     }
     else
     {
-        std::cout << "Error: atom pair not found in get_atom_pair" << std::endl;
-        exit(1);
+        ModuleBase::WARNING_QUIT("HContainer", "atom pair not found in get_atom_pair");
     }
 }
 
@@ -332,24 +354,35 @@ T* HContainer<T>::data(int atom_i, int atom_j, int* R_pointer) const
 template <typename T>
 void HContainer<T>::insert_pair(const AtomPair<T>& atom_ij)
 {
-    // find atom_ij in this->atom_pairs
-    auto it = std::lower_bound(this->atom_pairs.begin(), this->atom_pairs.end(), atom_ij);
-    // if found, merge
-    if (it != this->atom_pairs.end() && it->identify(atom_ij))
+    int atom_i = atom_ij.get_atom_i();
+    if(atom_i >= this->sparse_ap.size())
     {
-        it->merge(atom_ij, this->gamma_only);
+        ModuleBase::WARNING_QUIT("HContainer::insert_pair", "atom_i out of range");
     }
-    // if not found, insert
+    int atom_j = atom_ij.get_atom_j();
+    // find atom_ij in this->atom_pairs
+    // 1. find the index of atom_j in sparse_ap[atom_i]
+    auto it = std::lower_bound(this->sparse_ap[atom_i].begin(),
+                               this->sparse_ap[atom_i].end(), atom_j);
+    if (it != this->sparse_ap[atom_i].end() && *it == atom_j)
+    {
+        // 2. merge atom_ij
+        this->atom_pairs[this->sparse_ap_index[atom_i][it-this->sparse_ap[atom_i].begin()]].merge(atom_ij, this->gamma_only);
+    }
     else
     {
-        //check paraV pointer
+        // 3. insert atom_ij
+        // check paraV pointer
         if (this->paraV != atom_ij.get_paraV())
         {
             ModuleBase::WARNING_QUIT("HContainer::insert_pair", "atom_ij has different paraV pointer as HContainer");
         }
         else
-        {//insert atom_ij, and set paraV pointer for HContainer if atom_ij has paraV pointer
-            this->atom_pairs.insert(it, atom_ij);
+        { //insert atom_ij, and set paraV pointer for HContainer if atom_ij has paraV pointer
+            this->atom_pairs.push_back(atom_ij);
+            // update sparse_ap
+            this->sparse_ap[atom_i].push_back(atom_j);
+            this->sparse_ap_index[atom_i].push_back(this->atom_pairs.size() - 1);
         }
     }
 }
