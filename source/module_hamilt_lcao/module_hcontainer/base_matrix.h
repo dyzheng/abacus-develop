@@ -69,6 +69,11 @@ class BaseMatrix
     // operator= for move assignment
     BaseMatrix& operator=(BaseMatrix&& other) noexcept;
 
+    /**
+     * @brief get total memory size of BaseMatrix
+    */
+    size_t get_memory_size() const;
+
   private:
     bool allocated = false;
 

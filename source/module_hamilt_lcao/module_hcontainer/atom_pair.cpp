@@ -608,6 +608,18 @@ size_t AtomPair<T>::get_values_size() const
     return this->values.size();
 }
 
+// get_memory_size
+template <typename T>
+size_t AtomPair<T>::get_memory_size() const
+{
+    size_t memory_size = sizeof(*this);
+    for (int i = 0; i < this->values.size(); i++)
+    {
+        memory_size += this->values[i].get_memory_size();
+    }
+    return memory_size;
+}
+
 // T of AtomPair can be double or complex<double>
 template class AtomPair<double>;
 template class AtomPair<std::complex<double>>;

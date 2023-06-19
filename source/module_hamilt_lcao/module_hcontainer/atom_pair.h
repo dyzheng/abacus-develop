@@ -212,6 +212,11 @@ class AtomPair
     // interface for getting the size of this->values
     size_t get_values_size() const;
 
+    /**
+     * @brief get total memory size of AtomPair
+    */
+    size_t get_memory_size() const;
+
   private:
     // it contains 3 index of cell, size of R_index is three times of values.
     std::vector<int> R_index;

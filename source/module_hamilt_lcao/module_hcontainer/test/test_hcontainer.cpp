@@ -1,5 +1,4 @@
 #include "gtest/gtest.h"
-//#define private public
 #include "module_hamilt_lcao/module_hcontainer/hcontainer.h"
 
 /**
@@ -13,8 +12,8 @@
  * 6. loop_R
  * 7. size_atom_pairs
  * 8. data
- * 
-*/
+ *
+ */
 
 // Unit test of HContainer with gtest framework
 class HContainerTest : public ::testing::Test
@@ -51,12 +50,12 @@ class HContainerTest : public ::testing::Test
 // using TEST_F to test HContainer::insert_pair
 TEST_F(HContainerTest, insert_pair)
 {
-    //check HR
+    // check HR
     EXPECT_EQ(HR->size_atom_pairs(), 9);
-    EXPECT_EQ(HR->get_atom_pair(8).get_atom_i(), 2);
-    EXPECT_EQ(HR->get_atom_pair(8).get_atom_j(), 2);
-    EXPECT_EQ(HR->get_atom_pair(8).get_row_size(), 2);
-    EXPECT_EQ(HR->get_atom_pair(8).get_col_size(), 2);
+    EXPECT_EQ(HR->get_atom_pair(2, 2).get_atom_i(), 2);
+    EXPECT_EQ(HR->get_atom_pair(2, 2).get_atom_j(), 2);
+    EXPECT_EQ(HR->get_atom_pair(2, 2).get_row_size(), 2);
+    EXPECT_EQ(HR->get_atom_pair(2, 2).get_col_size(), 2);
     // set up a hamilt::AtomPair
     hamilt::AtomPair<double> atom_ij(0, 3);
     atom_ij.set_size(2, 2);
@@ -64,33 +63,45 @@ TEST_F(HContainerTest, insert_pair)
     HR->insert_pair(atom_ij);
     // check if atom_ij is inserted into HR
     EXPECT_EQ(HR->size_atom_pairs(), 10);
-    EXPECT_EQ(HR->get_atom_pair(9).get_atom_i(), 2);
-    EXPECT_EQ(HR->get_atom_pair(9).get_atom_j(), 2);
-    EXPECT_EQ(HR->get_atom_pair(9).get_row_size(), 2);
-    EXPECT_EQ(HR->get_atom_pair(9).get_col_size(), 2);
+    EXPECT_EQ(HR->get_atom_pair(2, 2).get_atom_i(), 2);
+    EXPECT_EQ(HR->get_atom_pair(2, 2).get_atom_j(), 2);
+    EXPECT_EQ(HR->get_atom_pair(2, 2).get_row_size(), 2);
+    EXPECT_EQ(HR->get_atom_pair(2, 2).get_col_size(), 2);
+    EXPECT_EQ(HR->get_atom_pair(0, 3).get_atom_i(), 0);
+    EXPECT_EQ(HR->get_atom_pair(0, 3).get_atom_j(), 3);
+    EXPECT_EQ(HR->get_atom_pair(0, 3).get_row_size(), 2);
+    EXPECT_EQ(HR->get_atom_pair(0, 3).get_col_size(), 2);
     // insert atom_ij again
     HR->insert_pair(atom_ij);
     // check if atom_ij is inserted into HR
     EXPECT_EQ(HR->size_atom_pairs(), 10);
-    EXPECT_EQ(HR->get_atom_pair(9).get_atom_i(), 2);
-    EXPECT_EQ(HR->get_atom_pair(9).get_atom_j(), 2);
-    EXPECT_EQ(HR->get_atom_pair(9).get_row_size(), 2);
-    EXPECT_EQ(HR->get_atom_pair(9).get_col_size(), 2);
+    EXPECT_EQ(HR->get_atom_pair(0, 3).get_atom_i(), 0);
+    EXPECT_EQ(HR->get_atom_pair(0, 3).get_atom_j(), 3);
+    EXPECT_EQ(HR->get_atom_pair(0, 3).get_row_size(), 2);
+    EXPECT_EQ(HR->get_atom_pair(0, 3).get_col_size(), 2);
     // set up another hamilt::AtomPair
-    hamilt::AtomPair<double> atom_kl(3, 0);
+    hamilt::AtomPair<double> atom_kl(1, 0);
     atom_kl.set_size(2, 2);
+    double tmp_array[4] = {1, 2, 3, 4};
+    atom_kl.get_HR_values(1, 0, 0).add_array(&tmp_array[0]);
     // insert atom_kl into HR
     HR->insert_pair(atom_kl);
     // check if atom_kl is inserted into HR
-    EXPECT_EQ(HR->size_atom_pairs(), 11);
-    EXPECT_EQ(HR->get_atom_pair(9).get_atom_i(), 2);
-    EXPECT_EQ(HR->get_atom_pair(9).get_atom_j(), 2);
-    EXPECT_EQ(HR->get_atom_pair(9).get_row_size(), 2);
-    EXPECT_EQ(HR->get_atom_pair(9).get_col_size(), 2);
-    EXPECT_EQ(HR->get_atom_pair(10).get_atom_i(), 3);
-    EXPECT_EQ(HR->get_atom_pair(10).get_atom_j(), 0);
-    EXPECT_EQ(HR->get_atom_pair(10).get_row_size(), 2);
-    EXPECT_EQ(HR->get_atom_pair(10).get_col_size(), 2);
+    EXPECT_EQ(HR->size_atom_pairs(), 10);
+    EXPECT_EQ(HR->get_atom_pair(2, 2).get_atom_i(), 2);
+    EXPECT_EQ(HR->get_atom_pair(2, 2).get_atom_j(), 2);
+    EXPECT_EQ(HR->get_atom_pair(2, 2).get_row_size(), 2);
+    EXPECT_EQ(HR->get_atom_pair(2, 2).get_col_size(), 2);
+    EXPECT_EQ(HR->get_atom_pair(1, 0).get_atom_i(), 1);
+    EXPECT_EQ(HR->get_atom_pair(1, 0).get_atom_j(), 0);
+    EXPECT_EQ(HR->get_atom_pair(1, 0).get_row_size(), 2);
+    EXPECT_EQ(HR->get_atom_pair(1, 0).get_col_size(), 2);
+    // check if data is correct
+    double* data_ptr = HR->get_atom_pair(1, 0).get_HR_values(1, 0, 0).get_pointer();
+    EXPECT_EQ(data_ptr[0], 1);
+    EXPECT_EQ(data_ptr[1], 2);
+    EXPECT_EQ(data_ptr[2], 3);
+    EXPECT_EQ(data_ptr[3], 4);
 }
 
 // using TEST_F to test HContainer::find_pair
@@ -251,7 +262,7 @@ TEST_F(HContainerTest, loop_R)
 // 2. test with R unfixed
 TEST_F(HContainerTest, size_atom_pairs)
 {
-    //get size_R_loop
+    // get size_R_loop
     int size_R_loop = HR->size_R_loop();
     EXPECT_EQ(size_R_loop, 1);
     // 1. test with R fixed
@@ -264,7 +275,7 @@ TEST_F(HContainerTest, size_atom_pairs)
     // get AP size
     int AP_size = HR->size_atom_pairs();
     EXPECT_EQ(AP_size, 9);
-    //fix to another R
+    // fix to another R
     hamilt::AtomPair<double> atom_ij(0, 1);
     atom_ij.set_size(2, 2);
     hamilt::BaseMatrix<double>& tmp = atom_ij.get_HR_values(1, 0, 0);

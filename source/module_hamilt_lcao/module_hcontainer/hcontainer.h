@@ -325,6 +325,11 @@ class HContainer
     */
     bool is_gamma_only() const;
 
+    /**
+     * @brief get total memory bites of HContainer
+    */
+    size_t get_memory_size() const;
+
   private:
     // i-j atom pairs, sorted by matrix of (atom_i, atom_j)
     std::vector<AtomPair<T>> atom_pairs;

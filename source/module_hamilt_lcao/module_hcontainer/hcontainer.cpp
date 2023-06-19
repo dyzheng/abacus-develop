@@ -381,8 +381,17 @@ void HContainer<T>::insert_pair(const AtomPair<T>& atom_ij)
         { //insert atom_ij, and set paraV pointer for HContainer if atom_ij has paraV pointer
             this->atom_pairs.push_back(atom_ij);
             // update sparse_ap
-            this->sparse_ap[atom_i].push_back(atom_j);
-            this->sparse_ap_index[atom_i].push_back(this->atom_pairs.size() - 1);
+            int index = it - this->sparse_ap[atom_i].begin();
+            if(it != this->sparse_ap[atom_i].end())
+            {
+                this->sparse_ap[atom_i].insert(this->sparse_ap[atom_i].begin() + index, atom_j);
+                this->sparse_ap_index[atom_i].insert(this->sparse_ap_index[atom_i].begin() + index, this->atom_pairs.size() - 1);
+            }
+            else
+            {
+                this->sparse_ap[atom_i].push_back(atom_j);
+                this->sparse_ap_index[atom_i].push_back(this->atom_pairs.size() - 1);
+            }
         }
     }
 }
@@ -406,6 +415,28 @@ template <typename T>
 bool HContainer<T>::is_gamma_only() const
 {
     return this->gamma_only;
+}
+
+//get_memory_size
+template <typename T>
+size_t HContainer<T>::get_memory_size() const
+{
+    size_t memory = sizeof(*this);
+    memory += this->atom_pairs.capacity() * sizeof(AtomPair<T>);
+    memory += this->sparse_ap.capacity() * sizeof(std::vector<int>);
+    memory += this->sparse_ap_index.capacity() * sizeof(std::vector<int>);
+    for(int i=0;i<this->atom_pairs.size();++i)
+    {
+        memory += this->atom_pairs[i].get_memory_size();
+    }
+    for(int i=0;i<this->sparse_ap.size();++i)
+    {
+        memory += this->sparse_ap[i].capacity() * sizeof(int);
+        memory += this->sparse_ap_index[i].capacity() * sizeof(int);
+    }
+    memory += this->tmp_atom_pairs.capacity() * sizeof(AtomPair<T>*);
+    memory += this->tmp_R_index.capacity() * sizeof(int);
+    return memory;
 }
 
 // T of HContainer can be double or complex<double>

@@ -180,6 +180,18 @@ BaseMatrix<T>& BaseMatrix<T>::operator=(BaseMatrix<T>&& other) noexcept
     return *this;
 }
 
+// get_memory_size
+template <typename T>
+size_t BaseMatrix<T>::get_memory_size() const
+{
+    size_t memory_size = sizeof(*this);
+    if(this->allocated)
+    {
+        memory_size += nrow_local * ncol_local * sizeof(T);
+    }
+    return memory_size;
+}
+
 // T of BaseMatrix can be double or complex<double>
 template class BaseMatrix<double>;
 template class BaseMatrix<std::complex<double>>;
