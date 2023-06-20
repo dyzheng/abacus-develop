@@ -33,6 +33,7 @@ AtomPair<T>::AtomPair(const int& atom_i_, const int& atom_j_, const Parallel_Orb
     if (existed_matrix != nullptr)
     {
         BaseMatrix<T> tmp(row_size, col_size, (existed_matrix + row_ap * ldc + col_ap));
+        tmp.set_ldc(this->ldc);
         this->values.push_back(tmp);
     }
     else
@@ -71,6 +72,7 @@ AtomPair<T>::AtomPair(const int& atom_i_,
     if (existed_matrix != nullptr)
     {
         BaseMatrix<T> tmp(row_size, col_size, (existed_matrix + row_ap * ldc + col_ap));
+        tmp.set_ldc(this->ldc);
         this->values.push_back(tmp);
     }
     else

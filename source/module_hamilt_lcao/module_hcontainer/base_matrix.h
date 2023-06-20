@@ -61,7 +61,7 @@ class BaseMatrix
      */
     T* get_pointer() const;
 
-    void set_memory_type(const int& memory_type_in);
+    void set_ldc(const int& ldc_in);
 
     // operator= for copy assignment
     BaseMatrix& operator=(const BaseMatrix& other);
@@ -90,8 +90,7 @@ class BaseMatrix
     int ncol_local = 0;
 
     // memory type, choose how to access value via pointer of array
-    // 0 is whole matrix
-    // 1 is 2d-block
+    // 1 is dense matrix
     // 2 is submatrix in whole matrix
     // 3 is sparse matrix in whole matrix , not implemented yet
     int memory_type = 1;

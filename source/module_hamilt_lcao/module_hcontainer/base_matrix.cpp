@@ -12,7 +12,7 @@ BaseMatrix<T>::BaseMatrix(const int& nrow_, const int& ncol_, T* data_existed)
 {
     nrow_local = nrow_;
     ncol_local = ncol_;
-    // the default memory_type is 1 (2d-block format), it doesn't matter for initialization
+    // the default memory_type is 1 (dense matrix), it doesn't matter for initialization
     if (data_existed == nullptr)
     {
         value_begin = new T[nrow_local * ncol_local];
@@ -22,6 +22,9 @@ BaseMatrix<T>::BaseMatrix(const int& nrow_, const int& ncol_, T* data_existed)
     else
     {
         value_begin = data_existed;
+        this->allocated = false;
+        this->ldc = ncol_local;
+        this->memory_type = 2;
     }
 }
 
@@ -76,9 +79,9 @@ BaseMatrix<T>::~BaseMatrix()
 
 // set_memory_type
 template <typename T>
-void BaseMatrix<T>::set_memory_type(const int& memory_type_in)
+void BaseMatrix<T>::set_ldc(const int& ldc_in)
 {
-    this->memory_type = memory_type_in;
+    this->ldc = ldc_in;
 }
 
 // add_array

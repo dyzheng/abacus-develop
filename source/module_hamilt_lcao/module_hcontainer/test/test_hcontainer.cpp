@@ -351,6 +351,101 @@ TEST_F(HContainerTest, data)
     EXPECT_EQ(data_ptr[3], 4);
 }
 
+// using TEST_F to test functions in BaseMatrix
+// 1. test constructor with existed data
+// 2. test set_ldc
+// 3. test add_array with memory_type = 2
+// 4. test add_element
+// 5. test get_value
+TEST_F(HContainerTest, basematrix_funcs)
+{
+    // 1. test constructor with existed data
+    double data_ptr[4] = {1, 2, 3, 4};
+    hamilt::BaseMatrix<double> BM(2, 2, &data_ptr[0]);
+    // check if data is correct
+    EXPECT_EQ(BM.get_value(0, 0), 1);
+    EXPECT_EQ(BM.get_value(0, 1), 2);
+    EXPECT_EQ(BM.get_value(1, 0), 3);
+    EXPECT_EQ(BM.get_value(1, 1), 4);
+    // copy BM to check copy constructor
+    hamilt::BaseMatrix<double> BM_copy(BM);
+    auto BM_copy1 = BM_copy;
+    auto BM_copy2 = hamilt::BaseMatrix<double>(BM_copy);
+    // check if data is correct
+    EXPECT_EQ(BM_copy.get_value(0, 0), 1);
+    EXPECT_EQ(BM_copy.get_value(0, 1), 2);
+    EXPECT_EQ(BM_copy.get_value(1, 0), 3);
+    EXPECT_EQ(BM_copy.get_value(1, 1), 4);
+    EXPECT_EQ(BM_copy1.get_value(0, 0), 1);
+    EXPECT_EQ(BM_copy2.get_value(0, 1), 2);
+    // 2. test set_ldc
+    BM.set_ldc(3);
+    EXPECT_EQ(BM.get_value(0, 0), 1);
+    EXPECT_EQ(BM.get_value(1, 0), 4);
+    BM.set_ldc(2);
+    EXPECT_EQ(BM.get_value(1, 0), 3);
+    // 3. test add_array with memory_type = 2
+    double data_ptr2[4] = {5, 6, 7, 8};
+    BM.add_array(&data_ptr2[0]);
+    // check if data is correct
+    EXPECT_EQ(BM.get_value(0, 0), 6);
+    EXPECT_EQ(data_ptr[0], 6);
+    EXPECT_EQ(BM.get_value(0, 1), 8);
+    EXPECT_EQ(BM.get_value(1, 0), 10);
+    EXPECT_EQ(BM.get_value(1, 1), 12);
+    // 4. test add_element
+    BM.add_element(0, 0, 1);
+    BM.add_element(0, 1, 2);
+    BM.add_element(1, 0, 3);
+    BM.add_element(1, 1, 4);
+    // check if data is correct
+    EXPECT_EQ(BM.get_value(0, 0), 7);
+    EXPECT_EQ(BM.get_value(0, 1), 10);
+    EXPECT_EQ(BM.get_value(1, 0), 13);
+    EXPECT_EQ(BM.get_value(1, 1), 16);
+    // 5. test get_value
+    hamilt::BaseMatrix<double> BM2(2, 2);
+    BM2.add_element(0, 0, 1);
+    BM2.add_element(0, 1, 2);
+    EXPECT_EQ(BM2.get_value(0, 0), 1);
+    EXPECT_EQ(BM2.get_value(0, 1), 2);
+} 
+
+// using TEST_F to test functions in AtomPair
+// 1. constructor
+// 2. copy assignment
+// 3. move assignment
+// 4. identify
+// 5. add_to_matrix
+// 6. add_to_array
+// 7. get_matrix_value
+// 8. get_R_index with out of range
+// 9. get_value
+// 10. get_value_size
+TEST_F(HContainerTest, atompair_funcs)
+{
+    // 1. constructor
+    Parallel_Orbitals PO;
+    PO.atom_begin_row.resize(4);
+    PO.atom_begin_col.resize(4);
+    for(int i=0;i<4;i++)
+    {
+        PO.atom_begin_row[i] = i;
+        PO.atom_begin_col[i] = i;
+    }
+    PO.nrow = 4;
+    PO.ncol = 4;
+    hamilt::AtomPair<double> atom_ij(0, 1, &PO, nullptr);
+    hamilt::AtomPair<double> atom_ij2(0, 1, 1, 1, 1, &PO, nullptr);
+    hamilt::AtomPair<double> atom_ij3(0, 1, PO.atom_begin_row.data(), PO.atom_begin_col.data(), 2, nullptr);
+    hamilt::AtomPair<double> atom_ij33(0, 1, 1, 1, 1, PO.atom_begin_row.data(), PO.atom_begin_col.data(), 2, nullptr);
+    auto atom_ij4 = atom_ij;
+    auto atom_ij5 = hamilt::AtomPair<double>(atom_ij);
+    EXPECT_EQ(atom_ij.identify(atom_ij4), true);
+    EXPECT_EQ(atom_ij.identify(atom_ij5.get_atom_i(), atom_ij5.get_atom_j()), true);
+}
+
+
 int main(int argc, char** argv)
 {
 #ifdef __MPI
