@@ -103,6 +103,7 @@ AtomPair<T>::AtomPair(const int& atom_i_,
     {
         this->ldc = row_atom_begin[natom] - row_atom_begin[0];
         BaseMatrix<T> tmp(row_size, col_size, (existed_matrix + row_ap * ldc + col_ap));
+        tmp.set_ldc(this->ldc);
         this->values.push_back(tmp);
     }
     else
@@ -136,6 +137,7 @@ AtomPair<T>::AtomPair(const int& atom_i_,
     {
         this->ldc = row_atom_begin[natom] - row_atom_begin[0];
         BaseMatrix<T> tmp(row_size, col_size, (existed_matrix + row_ap * ldc + col_ap));
+        tmp.set_ldc(this->ldc);
         this->values.push_back(tmp);
     }
     else
@@ -435,10 +437,11 @@ void AtomPair<T>::add_to_matrix(std::complex<T>* hk,
                                 const int hk_type) const
 {
     const BaseMatrix<T>& matrix = values[current_R];
-    std::complex<T>* hk_tmp = hk + this->row_ap * ld_hk + this->col_ap;
+    std::complex<T>* hk_tmp = hk;
     // row major
     if (hk_type == 0)
     {
+        hk_tmp += this->row_ap * ld_hk + this->col_ap;
         for (int mu = 0; mu < this->row_size; mu++)
         {
             for (int nu = 0; nu < this->col_size; nu++)
@@ -451,6 +454,7 @@ void AtomPair<T>::add_to_matrix(std::complex<T>* hk,
     // column major
     else if (hk_type == 1)
     {
+        hk_tmp += this->col_ap * ld_hk + this->row_ap;
         for (int nu = 0; nu < this->col_size; nu++)
         {
             for (int mu = 0; mu < this->row_size; mu++)
@@ -467,10 +471,11 @@ template <typename T>
 void AtomPair<T>::add_to_matrix(T* hk, const int ld_hk, const T& kphase, const int hk_type) const
 {
     const BaseMatrix<T>& matrix = values[current_R];
-    T* hk_tmp = hk + this->row_ap * ld_hk + this->col_ap;
+    T* hk_tmp = hk;
     // row major
     if (hk_type == 0)
     {
+        hk_tmp += this->row_ap * ld_hk + this->col_ap;
         for (int mu = 0; mu < this->row_size; mu++)
         {
             for (int nu = 0; nu < this->col_size; nu++)
@@ -483,6 +488,7 @@ void AtomPair<T>::add_to_matrix(T* hk, const int ld_hk, const T& kphase, const i
     // column major
     else if (hk_type == 1)
     {
+        hk_tmp += this->col_ap * ld_hk + this->row_ap;
         for (int nu = 0; nu < this->col_size; nu++)
         {
             for (int mu = 0; mu < this->row_size; mu++)
@@ -519,11 +525,8 @@ void AtomPair<T>::add_to_array(std::complex<T>* array, const std::complex<T>& kp
 template <typename T>
 T& AtomPair<T>::get_matrix_value(const size_t& i_row_global, const size_t& j_col_global) const
 {
-#ifdef __DEBUG
-    assert(this->paraV != nullptr);
-#endif
-    int i_row_local = this->paraV->trace_loc_row[i_row_global];
-    int j_col_local = this->paraV->trace_loc_col[j_col_global];
+    int i_row_local = this->paraV == nullptr? i_row_global : this->paraV->trace_loc_row[i_row_global];
+    int j_col_local = this->paraV == nullptr? j_col_global : this->paraV->trace_loc_col[j_col_global];
 #ifdef __DEBUG
     assert(i_row_local != -1 && j_col_local != -1);
     assert(current_R < this->values.size());
@@ -600,14 +603,11 @@ T* AtomPair<T>::get_pointer() const
 template <typename T>
 size_t AtomPair<T>::get_R_size() const
 {
+#ifdef __DEBUG
+    assert(this->R_index.size() / 3 == this->values.size());
+    assert(this->R_index.size() % 3 == 0);
+#endif
     return this->R_index.size() / 3;
-}
-
-// get_values_size
-template <typename T>
-size_t AtomPair<T>::get_values_size() const
-{
-    return this->values.size();
 }
 
 // get_memory_size

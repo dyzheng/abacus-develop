@@ -209,8 +209,6 @@ class AtomPair
 
     // interface for getting the size of this->R_index
     size_t get_R_size() const;
-    // interface for getting the size of this->values
-    size_t get_values_size() const;
 
     /**
      * @brief get total memory size of AtomPair

@@ -178,7 +178,7 @@ class HContainer
     HContainer(const UnitCell& ucell_);
 
     /**
-     * @brief use data pointer to initialize atom_pairs
+     * @brief use 2d-block-recycle parallel case to initialize atom_pairs, mainly used now.
      * pass a data pointer to HContainer, which means HContainer is a wrapper
      * it will not allocate memory for atom_pairs
      * this case will forbit inserting empty atom_pair
@@ -226,6 +226,7 @@ class HContainer
 
     /**
      * @brief operator() for accessing value with indexes
+     * this interface is not implemented now, because it is too expensive to access data
      *
      * @param atom_i index of atom i
      * @param atom_j index of atom j
@@ -236,7 +237,7 @@ class HContainer
      * @param nu index of orbital nu
      * @return T&
      */
-    T& operator()(int atom_i, int atom_j, int rx_in, int ry_in, int rz_in, int mu, int nu) const;
+    //T& operator()(int atom_i, int atom_j, int rx_in, int ry_in, int rz_in, int mu, int nu) const;
 
     // save atom-pair pointers into this->tmp_atom_pairs for selected R index
     /**

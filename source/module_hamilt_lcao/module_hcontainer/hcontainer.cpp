@@ -256,6 +256,11 @@ int HContainer<T>::find_R(const int& rx_in, const int& ry_in, const int& rz_in) 
 template <typename T>
 size_t HContainer<T>::size_R_loop() const
 {
+    // R index is fixed
+    if (this->current_R > -1 && this->tmp_R_index.size() > 2)
+    {
+        return this->tmp_R_index.size()/3;
+    }
     /**
      * start a new iteration of loop_R
      * there is different R-index in this->atom_pairs[i].R_values
@@ -329,8 +334,8 @@ T* HContainer<T>::data(int atom_i, int atom_j) const
     }
     else
     {
-        std::cout << "Error: atom pair not found in data" << std::endl;
-        exit(1);
+        std::cout << "Error: atom pair not found in data()" << std::endl;
+        return nullptr;
     }
 }
 
@@ -345,8 +350,8 @@ T* HContainer<T>::data(int atom_i, int atom_j, int* R_pointer) const
     }
     else
     {
-        std::cout << "Error: atom pair not found in data" << std::endl;
-        exit(1);
+        std::cout << "Error: atom pair not found in data()" << std::endl;
+        return nullptr;
     }
 }
 
@@ -396,12 +401,12 @@ void HContainer<T>::insert_pair(const AtomPair<T>& atom_ij)
     }
 }
 
-//operator()
-template <typename T>
+//operator() is not implemented now, this interface is too expensive to access data
+/*template <typename T>
 T& HContainer<T>::operator()(int atom_i, int atom_j, int rx_in, int ry_in, int rz_in, int mu, int nu) const
 {
         return this->get_atom_pair(atom_i, atom_j).get_HR_values(rx_in, ry_in, rz_in).get_value(mu, nu);
-}
+}*/
 
 //get_current_R
 template <typename T>
