@@ -1,0 +1,28 @@
+ATOMIC_SPECIES
+N 14.007 ../../PP_ORB/N_FR.upf upf201
+Fe 55.845 ../../PP_ORB/Fe_FR.upf upf201
+
+NUMERICAL_ORBITAL
+../../PP_ORB/N_pbe_6.0au_50Ry_2s2p1d
+../../PP_ORB/Fe_gga_9au_100Ry_4s2p2d1f.orb
+
+LATTICE_CONSTANT
+1.88972612584
+
+LATTICE_VECTORS
+3.02402190344 0 0 #latvec1
+-1.51201095172 2.61887997779 0 #latvec2
+0 0 20 #latvec3
+
+ATOMIC_POSITIONS
+Direct
+
+N #label
+0 #magnetism
+1 #number of atoms
+0.666667  0.333333  0.25  m  1  1  1
+
+Fe #label
+3 #magnetism
+1 #number of atoms
+0.333333  0.666667  0.25  m  1  1  1

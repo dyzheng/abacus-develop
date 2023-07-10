@@ -1,0 +1,44 @@
+INPUT_PARAMETERS
+#System variables
+suffix           autotest
+calculation      nscf 
+init_chg         file
+dft_functional   pbe 
+#pseudo_type     upf201
+
+#Input & Output variables
+stru_file        STRU
+kpoint_file      KPT
+out_level        ie  
+out_band         1      
+read_file_dir   ./
+
+#Plane wave related variables
+ecutwfc          50 
+pw_diag_thr      1e-4
+
+#Electronic structure
+basis_type       lcao
+ks_solver        genelpa
+#nbands          40 
+nspin            2   
+smearing_method  gauss
+smearing_sigma   5e-3
+mixing_type      pulay
+mixing_beta      0.4 
+# mixing_gg0       1.5 
+gamma_only       0   
+scf_nmax         200 
+scf_thr          1e-8    
+
+#soc
+lspinorb         1
+nspin            4
+noncolin   	 0
+
+#vdW correction
+# vdw_method	  d3_0
+
+
+symmetry -1
+
