@@ -123,3 +123,4 @@ int Parallel_Orbitals::get_row_size(int iat) const
     // If the orbital matrix is not found after all atoms are traversed, throw an exception
     throw std::string("error in get_col_size(iat)");
 }
+

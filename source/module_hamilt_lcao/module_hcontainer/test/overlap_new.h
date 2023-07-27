@@ -12,21 +12,33 @@ namespace hamilt
 #ifndef __OVERLAPNEWTEMPLATE
 #define __OVERLAPNEWTEMPLATE
 
-template <class T>
+/// The OverlapNew class template inherits from class T
+/// it is used to calculate the overlap of wavefunction basis 
+/// Template parameters:
+/// - T: base class, it would be OperatorLCAO<TK> or OperatorPW<TK>
+/// - TR: data type of real space Hamiltonian, it would be double or std::complex<double>
+template <class T, typename TR>
 class OverlapNew : public T
 {
 };
 
 #endif
 
-template <typename T>
-class OverlapNew<OperatorLCAO<T>> : public OperatorLCAO<T>
+/// OverlapNew class template specialization for OperatorLCAO<TK> base class
+/// It is used to calculate the overlap matrix in real space and fold it to k-space
+/// SR = <psi_{mu, 0}|psi_{nu, R}>
+/// SK = <psi_{mu, k}|psi_{nu, k}> = \sum_{R} e^{ikR} SR
+/// Template parameters:
+/// - TK: data type of k-space Hamiltonian
+/// - TR: data type of real space Hamiltonian
+template <typename TK, typename TR>
+class OverlapNew<OperatorLCAO<TK>, TR> : public OperatorLCAO<TK>
 {
   public:
-    OverlapNew<OperatorLCAO<T>>(LCAO_Matrix* LM_in,
+    OverlapNew<OperatorLCAO<TK>, TR>(LCAO_Matrix* LM_in,
                                 const std::vector<ModuleBase::Vector3<double>>& kvec_d_in,
-                                hamilt::HContainer<T>* SR_in,
-                                std::vector<T>* SK_pointer_in,
+                                hamilt::HContainer<TR>* SR_in,
+                                TK* SK_pointer_in,
                                 const UnitCell* ucell_in,
                                 Grid_Driver* GridD_in,
                                 const Parallel_Orbitals* paraV);
@@ -38,9 +50,9 @@ class OverlapNew<OperatorLCAO<T>> : public OperatorLCAO<T>
   private:
     const UnitCell* ucell = nullptr;
 
-    hamilt::HContainer<T>* SR = nullptr;
+    hamilt::HContainer<TR>* SR = nullptr;
 
-    std::vector<T>* SK_pointer = nullptr;
+    TK* SK_pointer = nullptr;
 
     bool SR_fixed_done = false;
 
@@ -66,7 +78,7 @@ class OverlapNew<OperatorLCAO<T>> : public OperatorLCAO<T>
         const int& iat2, 
         const Parallel_Orbitals* paraV,
         const ModuleBase::Vector3<double>& dtau,
-        T* data_pointer);
+        TR* data_pointer);
 };
 
 } // namespace hamilt
