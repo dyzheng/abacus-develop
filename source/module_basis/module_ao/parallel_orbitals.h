@@ -52,7 +52,15 @@ public:
     int* loc_sizes;
     int loc_size;
 
-    // set row and col begin index for each atom
+    /**
+     * @brief set row and col begin index for each atom
+     * it should be called after:
+     * 1. nrow and ncol are set;
+     * 2. global2local_row_ and global2local_col_ are set;
+     * @param iat2iwt : the map from atom index to global oribtal indexes
+     * @param nat : number of atoms
+     * @param nlocal : number of global orbitals
+     */
     void set_atomic_trace(const int* iat2iwt, const int &nat, const int &nlocal);
 
     /**

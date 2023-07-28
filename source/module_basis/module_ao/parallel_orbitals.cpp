@@ -29,36 +29,39 @@ Parallel_Orbitals::~Parallel_Orbitals()
 
 void Parallel_Orbitals::set_atomic_trace(const int* iat2iwt, const int &nat, const int &nlocal)
 {
-    this->atom_begin_col.resize(nat);
-    this->atom_begin_row.resize(nat);
-    for(int iat=0;iat<nat-1;iat++)
+    int nat_plus_1 = nat + 1;
+    this->atom_begin_col.resize(nat_plus_1);
+    this->atom_begin_row.resize(nat_plus_1);
+    for(int iat=0;iat<nat;iat++)
     {
         this->atom_begin_col[iat] = -1;
         this->atom_begin_row[iat] = -1;
         int irow = iat2iwt[iat];
         int icol = iat2iwt[iat];
-        const int max = (iat == nat-1) ? (nlocal - irow): (iat2iwt[iat+1] - irow);
-        //find the first row index of atom iat
-        for(int i=0;i<max;i++)
+        const int nw_global = (iat == nat-1) ? (nlocal - irow): (iat2iwt[iat+1] - irow);
+        //find the first local row index of atom iat
+        for(int i=0;i<nw_global;i++)
         {
             if (this->global2local_row_[irow] != -1)
             {
-                this->atom_begin_row[iat] = irow;
+                this->atom_begin_row[iat] = this->global2local_row_[irow];
                 break;
             }
             irow++;
         }
-        //find the first col index of atom iat
-        for(int i=0;i<max;i++)
+        //find the first local col index of atom iat
+        for(int i=0;i<nw_global;i++)
         {
             if (this->global2local_col_[icol] != -1)
             {
-                this->atom_begin_col[iat] = icol;
+                this->atom_begin_col[iat] = this->global2local_col_[icol];
                 break;
             }
             icol++;
         }
     }
+    this->atom_begin_row[nat] = this->nrow;
+    this->atom_begin_col[nat] = this->ncol;
 }
 
 // Get the number of columns of the parallel orbital matrix
@@ -103,7 +106,7 @@ int Parallel_Orbitals::get_row_size(int iat) const
         return 0;
     }
     iat += 1;
-    while(this->atom_begin_row[iat] <= this->ncol)
+    while(this->atom_begin_row[iat] <= this->nrow)
     {
         if(this->atom_begin_row[iat] != -1)
         {
