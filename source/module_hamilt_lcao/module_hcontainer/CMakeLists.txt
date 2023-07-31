@@ -3,6 +3,8 @@ list(APPEND objects
     atom_pair.cpp
     hcontainer.cpp
     output_hcontainer.cpp
+    test/demo1_SR.cpp
+    func_folding.cpp
 )
 
 add_library(

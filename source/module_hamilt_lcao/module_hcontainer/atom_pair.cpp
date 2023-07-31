@@ -12,6 +12,7 @@ namespace hamilt
 template <typename T>
 AtomPair<T>::~AtomPair()
 {
+    this->values.clear();
 }
 
 template <typename T>

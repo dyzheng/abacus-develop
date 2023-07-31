@@ -1,4 +1,4 @@
-#include "hcontainer_funcs.h"
+#include "../hcontainer_funcs.h"
 #include "module_basis/module_ao/ORB_gen_tables.h"
 #include "module_cell/module_neighbor/sltk_grid_driver.h"
 #include "module_hamilt_lcao/hamilt_lcaodft/operator_lcao/operator_lcao.h"
@@ -12,7 +12,7 @@ hamilt::OverlapNew<hamilt::OperatorLCAO<TK>, TR>::OverlapNew(LCAO_Matrix* LM_in,
                                                         const UnitCell* ucell_in,
                                                         Grid_Driver* GridD_in,
                                                         const Parallel_Orbitals* paraV)
-    : OperatorLCAO<TK>(LM_in, kvec_d_in)
+    : hamilt::OperatorLCAO<TK>(LM_in, kvec_d_in)
 {
     this->ucell = ucell_in;
     this->SR = SR_in;
@@ -112,18 +112,17 @@ void hamilt::OverlapNew<hamilt::OperatorLCAO<TK>, TR>::cal_SR_IJR(
     // calculate the overlap matrix for each pair of orbitals
     // ---------------------------------------------
     double olm[3] = {0, 0, 0};
-    for (int iw1 = 0; iw1 < nw1; ++iw1)
+    auto row_indexes = paraV->get_indexes_row(iat1);
+    auto col_indexes = paraV->get_indexes_col(iat2);
+    for (int iw1l = 0; iw1l < row_indexes.size(); ++iw1l)
     {
-        if (paraV->skip_row(iat1, iw1))
-            continue;
-        int iw1 = paraV->step_row();
+        const int iw1 = row_indexes[iw1l];
         const int L1 = iw2l1[iw1];
         const int N1 = iw2n1[iw1];
         const int m1 = iw2m1[iw1];
-        for (int iw2 = 0; iw2 < nw2; ++iw2)
+        for (int iw2l = 0; iw2l < col_indexes.size(); ++iw2l)
         {
-            if (paraV->skip_col(iat2, iw2))
-                continue;
+            const int iw2 = col_indexes[iw2l];
             const int L2 = iw2l2[iw2];
             const int N2 = iw2n2[iw2];
             const int m2 = iw2m2[iw2];
