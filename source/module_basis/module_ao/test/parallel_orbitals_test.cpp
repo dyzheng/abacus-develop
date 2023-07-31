@@ -119,12 +119,34 @@ TEST_F(TestParaO, Divide2D)
                         iat2iwt[i] = i * nw;
                     }
                     po.set_atomic_trace(iat2iwt.data(), nat0, gr);
+                    auto global_row_array = po.get_indexes_row();
+                    auto global_col_array = po.get_indexes_col();
+                    int local_index_trace_row = 0;
+                    int local_index_trace_col = 0;
                     // check get_col_size(iat) and get_row_size(iat)
                     for (int i = 0; i < nat0; ++i)
                     {
-                        //std::cout<<__FILE__<<__LINE__<<" i = "<<i<<" size = "<<po.get_row_size(i)<<" "<<po.get_col_size(i)<<std::endl;
-                        //EXPECT_EQ(po.get_col_size(i), nw);
-                        //EXPECT_EQ(po.get_row_size(i), nw);
+                        auto atomic_row_array = po.get_indexes_row(i);
+                        auto atomic_col_array = po.get_indexes_col(i);
+                        EXPECT_EQ(po.get_col_size(i), atomic_col_array.size());
+                        EXPECT_EQ(po.get_row_size(i), atomic_row_array.size());
+                        for (int j = 0; j < atomic_row_array.size(); ++j)
+                        {
+                            //check global_index == global_index
+                            EXPECT_EQ(atomic_row_array[j]+iat2iwt[i], global_row_array[local_index_trace_row]);
+                            //check local_index == local_index
+                            EXPECT_EQ(local_index_trace_row, po.global2local_row(atomic_row_array[j]+iat2iwt[i]));
+                            local_index_trace_row++;
+                        }
+                        for (int j = 0; j < atomic_col_array.size(); ++j)
+                        {
+                            //check global_index == global_index
+                            EXPECT_EQ(atomic_col_array[j]+iat2iwt[i], global_col_array[local_index_trace_col]);
+                            //check local_index == local_index
+                            EXPECT_EQ(local_index_trace_col, po.global2local_col(atomic_col_array[j]+iat2iwt[i]));
+                            local_index_trace_col++;
+                        }
+                        
                     }
                 }
             }

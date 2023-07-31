@@ -75,10 +75,24 @@ public:
     int get_col_size(int iat) const;
     int get_row_size(int iat) const;
 
+    /**
+     * @brief gather global indexes of orbitals in this processor
+     * get_indexes_row() : global indexes (~NLOCAL) of rows of Hamiltonian matrix in this processor
+     * get_indexes_col() : global indexes (~NLOCAL) of columns of Hamiltonian matrix in this processor
+     * get_indexes_row(iat) : global indexes (~nw) of rows of Hamiltonian matrix in atom iat
+     * get_indexes_col(iat) : global indexes (~nw) of columns of Hamiltonian matrix in atom iat
+    */
+    std::vector<int> get_indexes_row() const;
+    std::vector<int> get_indexes_col() const;
+    std::vector<int> get_indexes_row(int iat) const;
+    std::vector<int> get_indexes_col(int iat) const;
+
     // private:
         // orbital index for each atom
     std::vector<int> atom_begin_row;
     std::vector<int> atom_begin_col;
+
+    const int* iat2iwt_ = nullptr;
 
 };
 #endif
