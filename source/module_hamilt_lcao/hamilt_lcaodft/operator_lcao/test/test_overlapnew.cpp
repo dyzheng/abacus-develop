@@ -2,54 +2,53 @@
 #include "../overlap_new.h"
 
 // mock of OperatorLCAO
-using namespace hamilt;
 
 template<typename FPTYPE, typename Device>
-Operator<FPTYPE, Device>::Operator(){}
+hamilt::Operator<FPTYPE, Device>::Operator(){}
 
 template<typename FPTYPE, typename Device>
-Operator<FPTYPE, Device>::~Operator(){}
+hamilt::Operator<FPTYPE, Device>::~Operator(){}
 
 template<typename FPTYPE, typename Device>
-typename Operator<FPTYPE, Device>::hpsi_info Operator<FPTYPE, Device>::hPsi(hpsi_info&) const 
+typename hamilt::Operator<FPTYPE, Device>::hpsi_info hamilt::Operator<FPTYPE, Device>::hPsi(hpsi_info&) const 
 {
     return hpsi_info(nullptr, 0, nullptr);
 }
 
 template<typename FPTYPE, typename Device>
-void Operator<FPTYPE, Device>::init(const int ik_in) 
+void hamilt::Operator<FPTYPE, Device>::init(const int ik_in) 
 {
     return;
 }
 
 template<typename FPTYPE, typename Device>
-void Operator<FPTYPE, Device>::add(Operator* next) 
+void hamilt::Operator<FPTYPE, Device>::add(Operator* next) 
 {
     return;
 }
 
 template<typename FPTYPE, typename Device>
-FPTYPE* Operator<FPTYPE, Device>::get_hpsi(const hpsi_info& info) const
+FPTYPE* hamilt::Operator<FPTYPE, Device>::get_hpsi(const hpsi_info& info) const
 {
     return nullptr;
 }
 
-template class Operator<double, psi::DEVICE_CPU>;
-template class Operator<std::complex<double>, psi::DEVICE_CPU>;
+template class hamilt::Operator<double, psi::DEVICE_CPU>;
+template class hamilt::Operator<std::complex<double>, psi::DEVICE_CPU>;
 
 // mock of OperatorLCAO
 template<typename TK>
-void OperatorLCAO<TK>::init(const int ik_in)
+void hamilt::OperatorLCAO<TK>::init(const int ik_in)
 {
     return;
 }
 template<typename TK>
-void OperatorLCAO<TK>::get_hs_pointers()
+void hamilt::OperatorLCAO<TK>::get_hs_pointers()
 {
     return;
 }
-template class OperatorLCAO<double>;
-template class OperatorLCAO<std::complex<double>>;
+template class hamilt::OperatorLCAO<double>;
+template class hamilt::OperatorLCAO<std::complex<double>>;
 
 // mock of ORB_gen_tables and LCAO_Orbitals
 #include "module_basis/module_ao/ORB_gen_tables.h"
@@ -224,7 +223,7 @@ TEST_F(OverlapNewTest, constructHR)
     std::vector<ModuleBase::Vector3<double>> kvec_d_in(1, ModuleBase::Vector3<double>(0.0, 0.0, 0.0));
     std::vector<double> hk(paraV->get_row_size() * paraV->get_col_size(), 0.0);
     Grid_Driver gd(0,0,0);
-    OverlapNew<OperatorLCAO<double>, double> op(
+    hamilt::OverlapNew<hamilt::OperatorLCAO<double>, double> op(
         nullptr, 
         kvec_d_in, 
         SR, 
