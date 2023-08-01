@@ -1,4 +1,4 @@
-#include "../hcontainer_funcs.h"
+#include "module_hamilt_lcao/module_hcontainer/hcontainer_funcs.h"
 #include "module_basis/module_ao/ORB_gen_tables.h"
 #include "module_cell/module_neighbor/sltk_grid_driver.h"
 #include "module_hamilt_lcao/hamilt_lcaodft/operator_lcao/operator_lcao.h"
@@ -43,8 +43,9 @@ void hamilt::OverlapNew<hamilt::OperatorLCAO<TK>, TR>::initialize_SR(Grid_Driver
 			const int I2 = adjs.natom[ad];
             int iat2 = ucell->itia2iat(T2, I2);
             ModuleBase::Vector3<int>& R_index = adjs.box[ad];
-            hamilt::AtomPair<double> tmp(iat1, iat2, paraV);
+            hamilt::AtomPair<TR> tmp(iat1, iat2, paraV);
             tmp.get_HR_values(R_index.x, R_index.y, R_index.z);
+            SR->insert_pair(tmp);
         }
     }
 }
@@ -152,7 +153,7 @@ void hamilt::OverlapNew<hamilt::OperatorLCAO<TK>, TR>::contributeHR()
 template <typename TK, typename TR>
 void hamilt::OverlapNew<hamilt::OperatorLCAO<TK>, TR>::contributeHk(int ik)
 {
-    const int ncol = this->LM->ParaV->ncol;
+    const int ncol = this->SR->get_atom_pair(0).get_paraV()->get_col_size();
     hamilt::folding_HR(*this->SR, this->SK_pointer, this->kvec_d[ik], ncol, 0);
 }
 

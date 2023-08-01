@@ -11,6 +11,10 @@
  * - get_row_size
  * - get_col_size(iat)
  * - get_row_size(iat)
+ * - get_indexes_row
+ * - get_indexes_col
+ * - get_indexes_row(iat)
+ * - get_indexes_col(iat)
  * 
  * the test framework is based on parallel_2d_test.cpp
 */
