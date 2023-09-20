@@ -12,11 +12,11 @@ if(ENABLE_LCAO)
         operator_lcao/ekinetic_new.cpp
         operator_lcao/nonlocal_new.cpp
         FORCE_STRESS.cpp
-        FORCE_gamma.cpp
-        FORCE_gamma_edm.cpp
-        FORCE_gamma_tvnl.cpp
-        FORCE_gamma_vl.cpp
-        FORCE_k.cpp
+        #FORCE_gamma.cpp
+        #FORCE_gamma_edm.cpp
+        #FORCE_gamma_tvnl.cpp
+        #FORCE_gamma_vl.cpp
+        #FORCE_k.cpp
         LCAO_gen_fixedH.cpp
         LCAO_hamilt.cpp
         LCAO_matrix.cpp

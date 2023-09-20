@@ -58,6 +58,12 @@ class DensityMatrix
     void init_DMR(const hamilt::HContainer<std::complex<double>>& _DMR_in);
 
     /**
+     * @brief initialize density matrix DMR from another HContainer
+     * @param _DMR_in pointer of another HContainer object
+     */
+    void init_DMR_grid(const hamilt::HContainer<TR>& _DMR_in);
+
+    /**
      * @brief set _DMK element directly
      * @param ispin spin index (1 - spin up (support SOC) or 2 - spin down)
      * @param ik k-point index
@@ -98,6 +104,7 @@ class DensityMatrix
      * @return HContainer<TR>* pointer of DMR
      */
     hamilt::HContainer<TR>* get_DMR_pointer(const int ispin) const;
+    std::vector<hamilt::HContainer<TR>*> get_DMR_vector() const;
 
     /**
      * @brief get pointer of DMK
@@ -119,6 +126,7 @@ class DensityMatrix
      */
     void cal_DMR();
     void cal_DMR_test(); // for reference during development
+    void cal_DMR_wo_transpose(); // calculate DMR from DMK without transpose
 
     /**
      * @brief merge density matrix DMR with different spin
@@ -145,11 +153,18 @@ class DensityMatrix
 
   private:
     /**
-     * @brief HContainer for density matrix in real space
+     * @brief HContainer for density matrix in real space for 2D parallelization
      * vector.size() = 1 for non-polarization and SOC
      * vector.size() = 2 for spin-polarization
      */
     std::vector<hamilt::HContainer<TR>*> _DMR;
+
+    /**
+     * @brief HContainer for density matrix in real space for gird parallelization
+     * vector.size() = 1 for non-polarization and SOC
+     * vector.size() = 2 for spin-polarization
+     */
+    std::vector<hamilt::HContainer<TR>*> _DMR_grid;
 
     /**
      * @brief density matrix in k space, which is a vector[ik]

@@ -10,6 +10,8 @@
 #include "module_basis/module_ao/ORB_read.h"
 #include "module_hamilt_lcao/hamilt_lcaodft/local_orbital_wfc.h"
 #include "module_hamilt_pw/hamilt_pwdft/global.h"
+#include "module_hamilt_lcao/module_hcontainer/hcontainer_funcs.h"
+
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -311,4 +313,34 @@ void Gint_Gamma::transfer_pvpR(hamilt::HContainer<double>* hR)
 #endif
 
     ModuleBase::timer::tick("Gint_Gamma","transfer_pvpR");
+}
+
+void Gint_Gamma::transfer_DM2DtoGrid(std::vector<hamilt::HContainer<double>*> DM2D)
+{
+    ModuleBase::TITLE("Gint_Gamma","transfer_DMR");
+    ModuleBase::timer::tick("Gint_Gamma","transfer_DMR");
+    if (this->DMRGint.size() == 0)
+    {
+        this->DMRGint.resize(GlobalV::NSPIN);
+    }
+#ifdef __MPI
+    for (int is = 0; is < GlobalV::NSPIN; is++)
+    {
+        if (this->DMRGint[is] == nullptr)
+        {
+            this->DMRGint[is] = new hamilt::HContainer<double>(*this->hRGint);
+        }
+        hamilt::transferParallels2Serials(*DM2D[is], DMRGint[is]);
+    }
+#else
+    for (int is = 0; is < GlobalV::NSPIN; is++)
+    {
+        if (this->DMRGint[is] == nullptr)
+        {
+            this->DMRGint[is]->set_zero();
+            this->DMRGint[is]->add(*DM2D[is]);
+        }
+    }
+#endif
+    ModuleBase::timer::tick("Gint_Gamma","transfer_DMR");
 }

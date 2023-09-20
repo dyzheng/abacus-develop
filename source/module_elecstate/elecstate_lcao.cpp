@@ -177,7 +177,7 @@ void ElecStateLCAO<double>::psiToRho(const psi::Psi<double>& psi)
         //cal_dm(this->loc->ParaV, this->wg, psi, this->loc->dm_gamma);
         //
         elecstate::cal_dm_psi(this->DM->get_paraV_pointer(), this->wg, psi, *(this->DM));
-        this->DM->cal_DMR();
+        this->DM->cal_DMR_wo_transpose();
         // get loc.dm_gamma from DM temporarily, and will delete this after Gint Refactor
         this->loc->dm_gamma.resize(GlobalV::NSPIN);
         for (int is = 0; is < GlobalV::NSPIN; ++is)
@@ -220,6 +220,7 @@ void ElecStateLCAO<double>::psiToRho(const psi::Psi<double>& psi)
     // calculate the charge density on real space grid.
     //------------------------------------------------------------
     ModuleBase::GlobalFunc::NOTE("Calculate the charge on real space grid!");
+    this->uhm->GG.transfer_DM2DtoGrid(this->DM->get_DMR_vector()); // transfer DM2D to DM_grid in gint_gamma
     Gint_inout inout(this->loc->DM, this->charge->rho, Gint_Tools::job_type::rho);
     this->uhm->GG.cal_gint(&inout);
     if (XC_Functional::get_func_type() == 3 || XC_Functional::get_func_type() == 5)

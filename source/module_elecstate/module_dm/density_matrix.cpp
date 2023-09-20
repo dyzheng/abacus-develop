@@ -253,6 +253,27 @@ void DensityMatrix<TK, TR>::init_DMR(const hamilt::HContainer<std::complex<doubl
     ModuleBase::Memory::record("DensityMatrix::DMR", this->_DMR.size() * this->_DMR[0]->get_memory_size());
 }
 
+// initialize density matrix DMR from another HContainer (mainly used)
+template <typename TK, typename TR>
+void DensityMatrix<TK, TR>::init_DMR_grid(const hamilt::HContainer<TR>& DMR_in)
+{
+    // ensure _DMR is empty
+    for (auto& it: this->_DMR_grid)
+    {
+        delete it;
+    }
+    this->_DMR_grid.clear();
+    // set up a HContainer using another one
+    for (int is = 0; is < this->_nspin; ++is) // loop over spin
+    {
+        hamilt::HContainer<TR>* tmp_DMR;
+        tmp_DMR = new hamilt::HContainer<TR>(DMR_in);
+        // zero.out
+        tmp_DMR->set_zero();
+        this->_DMR_grid.push_back(tmp_DMR);
+    }
+}
+
 // get _DMR pointer
 template <typename TK, typename TR>
 hamilt::HContainer<TR>* DensityMatrix<TK, TR>::get_DMR_pointer(const int ispin) const
@@ -261,6 +282,13 @@ hamilt::HContainer<TR>* DensityMatrix<TK, TR>::get_DMR_pointer(const int ispin) 
     assert(ispin > 0 && ispin <= this->_nspin);
 #endif
     return this->_DMR[ispin - 1];
+}
+
+// get _DMR pointer vector
+template <typename TK, typename TR>
+std::vector<hamilt::HContainer<TR>*> DensityMatrix<TK, TR>::get_DMR_vector() const
+{
+    return this->_DMR;
 }
 
 // get _DMK[ik] pointer
@@ -567,6 +595,152 @@ void DensityMatrix<double, double>::cal_DMR()
         }
     }
     ModuleBase::timer::tick("DensityMatrix", "cal_DMR");
+}
+
+// calculate DMR from DMK using blas for multi-k calculation
+template <>
+void DensityMatrix<std::complex<double>, double>::cal_DMR_wo_transpose()
+{
+    int ld_hk = this->_paraV->get_col_size();
+    for (int is = 1; is <= this->_nspin; ++is)
+    {
+        int ik_begin = this->_nks * (is - 1); // jump this->_nks for spin_down if nspin==2
+        hamilt::HContainer<double>* tmp_DMR = this->_DMR[is - 1];
+        // set zero since this function is called in every scf step
+        tmp_DMR->set_zero();
+        // #ifdef _OPENMP
+        // #pragma omp parallel for
+        // #endif
+        for (int i = 0; i < tmp_DMR->size_atom_pairs(); ++i)
+        {
+            hamilt::AtomPair<double>& tmp_ap = tmp_DMR->get_atom_pair(i);
+            int iat1 = tmp_ap.get_atom_i();
+            int iat2 = tmp_ap.get_atom_j();
+            // get global indexes of whole matrix for each atom in this process
+            int row_ap = this->_paraV->atom_begin_row[iat1];
+            int col_ap = this->_paraV->atom_begin_col[iat2];
+            if (row_ap == -1 || col_ap == -1)
+            {
+                throw std::string("Atom-pair not belong this process");
+            }
+            for (int ir = 0; ir < tmp_ap.get_R_size(); ++ir)
+            {
+                const int* r_index = tmp_ap.get_R_index(ir);
+                hamilt::BaseMatrix<double>* tmp_matrix = tmp_ap.find_matrix(r_index[0], r_index[1], r_index[2]);
+#ifdef __DEBUG
+                if (tmp_matrix == nullptr)
+                {
+                    std::cout << "tmp_matrix is nullptr" << std::endl;
+                    continue;
+                }
+#endif
+                // loop over k-points
+                for (int ik = 0; ik < this->_nks; ++ik)
+                {
+                    // cal k_phase
+                    // if TK==std::complex<double>, kphase is e^{ikR}
+                    const ModuleBase::Vector3<double> dR(r_index[0], r_index[1], r_index[2]);
+                    const double arg = (this->_kv->kvec_d[ik] * dR) * ModuleBase::TWO_PI;
+                    double sinp, cosp;
+                    ModuleBase::libm::sincos(arg, &sinp, &cosp);
+                    std::complex<double> kphase = std::complex<double>(cosp, sinp);
+                    // set DMR element
+                    double* tmp_DMR_pointer = tmp_matrix->get_pointer();
+                    std::complex<double>* tmp_DMK_pointer = this->_DMK[ik + ik_begin].data();
+                    double* DMK_real_pointer = nullptr;
+                    double* DMK_imag_pointer = nullptr;
+                    // jump DMK to fill DMR
+                    // DMR is row-major, DMK is column-major, but here do not consider transpose
+                    //tmp_DMK_pointer += col_ap * this->_paraV->nrow + row_ap;
+                    tmp_DMK_pointer += row_ap * ld_hk + col_ap;
+                    for (int mu = 0; mu < this->_paraV->get_row_size(iat1); ++mu)
+                    {
+                        DMK_real_pointer = (double*)tmp_DMK_pointer;
+                        DMK_imag_pointer = DMK_real_pointer + 1;
+                        BlasConnector::axpy(this->_paraV->get_col_size(iat2),
+                                            kphase.real(),
+                                            DMK_real_pointer,
+                                            2,
+                                            tmp_DMR_pointer,
+                                            1);
+                        // "-" since i^2 = -1
+                        BlasConnector::axpy(this->_paraV->get_col_size(iat2),
+                                            -kphase.imag(),
+                                            DMK_imag_pointer,
+                                            2,
+                                            tmp_DMR_pointer,
+                                            1);
+                        tmp_DMK_pointer += ld_hk;
+                        tmp_DMR_pointer += this->_paraV->get_col_size(iat2);
+                    }
+                }
+            }
+        }
+    }
+}
+
+// calculate DMR from DMK using blas for gamma-only calculation
+template <>
+void DensityMatrix<double, double>::cal_DMR_wo_transpose()
+{
+    int ld_hk = this->_paraV->get_col_size();
+    for (int is = 1; is <= this->_nspin; ++is)
+    {
+        int ik_begin = this->_nks * (is - 1); // jump this->_nks for spin_down if nspin==2
+        hamilt::HContainer<double>* tmp_DMR = this->_DMR[is - 1];
+        tmp_DMR->fix_gamma();
+        // set zero since this function is called in every scf step
+        tmp_DMR->set_zero();
+        
+#ifdef __DEBUG
+        //assert(tmp_DMR->is_gamma_only() == true);
+        assert(this->_nks == 1);
+#endif
+        // #ifdef _OPENMP
+        // #pragma omp parallel for
+        // #endif
+        for (int i = 0; i < tmp_DMR->size_atom_pairs(); ++i)
+        {
+            hamilt::AtomPair<double>& tmp_ap = tmp_DMR->get_atom_pair(i);
+            int iat1 = tmp_ap.get_atom_i();
+            int iat2 = tmp_ap.get_atom_j();
+            // get global indexes of whole matrix for each atom in this process
+            int row_ap = this->_paraV->atom_begin_row[iat1];
+            int col_ap = this->_paraV->atom_begin_col[iat2];
+            if (row_ap == -1 || col_ap == -1)
+            {
+                throw std::string("Atom-pair not belong this process");
+            }
+            // R index
+            const int* r_index = tmp_ap.get_R_index(0);
+#ifdef __DEBUG
+            assert(tmp_ap.get_R_size() == 1);
+            assert(r_index[0] == 0 && r_index[1] == 0 && r_index[2] == 0);
+#endif
+            hamilt::BaseMatrix<double>* tmp_matrix = tmp_ap.find_matrix(r_index[0], r_index[1], r_index[2]);
+#ifdef __DEBUG
+            if (tmp_matrix == nullptr)
+            {
+                std::cout << "tmp_matrix is nullptr" << std::endl;
+                continue;
+            }
+#endif
+            // k index
+            double kphase = 1;
+            // set DMR element
+            double* tmp_DMR_pointer = tmp_matrix->get_pointer();
+            double* tmp_DMK_pointer = this->_DMK[0 + ik_begin].data();
+            // do not transpose DMK col=>row
+            // tmp_DMK_pointer += col_ap * this->_paraV->nrow + row_ap;
+            tmp_DMK_pointer += row_ap * ld_hk + col_ap;
+            for (int mu = 0; mu < this->_paraV->get_row_size(iat1); ++mu)
+            {
+                BlasConnector::axpy(this->_paraV->get_col_size(iat2), kphase, tmp_DMK_pointer, 1, tmp_DMR_pointer, 1);
+                tmp_DMK_pointer += ld_hk;
+                tmp_DMR_pointer += this->_paraV->get_col_size(iat2);
+            }
+        }
+    }
 }
 
 // merge density matrix DMR with different spin

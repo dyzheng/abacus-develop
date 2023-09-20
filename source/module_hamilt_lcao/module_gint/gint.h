@@ -130,7 +130,8 @@ class Gint
         const double delta_r,
         double* vldr3,
         const int LD_pool,
-        double**DM_R,
+        double** DM_R,
+        const int is,
         const bool isforce,
         const bool isstress,
         ModuleBase::matrix* fvl_dphi,
@@ -144,6 +145,7 @@ class Gint
         double* vkdr3,
         const int LD_pool,
         double** DM_in,
+        const int is,
         const bool isforce,
         const bool isstress,
         ModuleBase::matrix* fvl_dphi,
@@ -218,6 +220,7 @@ class Gint
     double** pvpR_reduced = nullptr; //stores Hamiltonian in reduced format, for multi-l
     hamilt::HContainer<double>* hRGint = nullptr; //stores Hamiltonian in sparse format
     hamilt::HContainer<std::complex<double>>* hRGintCd = nullptr; //stores Hamiltonian in sparse format
+    std::vector<hamilt::HContainer<double>*> DMRGint; //stores DMR in sparse format
     double** pvdpRx_reduced = nullptr;
     double** pvdpRy_reduced = nullptr;
     double** pvdpRz_reduced = nullptr;

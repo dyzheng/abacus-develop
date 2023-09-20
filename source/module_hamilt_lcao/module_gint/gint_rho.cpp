@@ -36,13 +36,22 @@ void Gint::gint_kernel_rho(
 		ModuleBase::GlobalFunc::ZEROS(psir_DM.ptr_1D, this->bxyz*LD_pool);
 		if(GlobalV::GAMMA_ONLY_LOCAL)
 		{
-			Gint_Tools::mult_psi_DM(
+			/*Gint_Tools::mult_psi_DM(
 				*this->gridt, this->bxyz, na_grid, LD_pool,
 				block_iw, block_size,
 				block_index, cal_flag,
 				psir_ylm.ptr_2D,
 				psir_DM.ptr_2D,
-				inout->DM[is], 1);			
+				inout->DM[is], 1);	*/
+			
+
+			Gint_Tools::mult_psi_DM_new(
+				*this->gridt, this->bxyz, grid_index, na_grid, LD_pool,
+				block_iw, block_size,
+				block_index, cal_flag,
+				psir_ylm.ptr_2D,
+				psir_DM.ptr_2D,
+				this->DMRGint[is], 1, inout->DM[is]);			
 		}
 		else
 		{

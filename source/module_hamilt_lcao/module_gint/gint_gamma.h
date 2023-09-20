@@ -46,6 +46,10 @@ class Gint_Gamma : public Gint
     //------------------------------------------------------
     /// transfer this->hRGint to Veff::hR
     void transfer_pvpR(hamilt::HContainer<double>* hR);
+    //------------------------------------------------------
+    // in elecstate_lcao.cpp
+    //------------------------------------------------------
+    void transfer_DM2DtoGrid(std::vector<hamilt::HContainer<double>*> DM2D);
 
 private:
 

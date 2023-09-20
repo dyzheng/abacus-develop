@@ -49,7 +49,7 @@ class Force_Stress_LCAO
   private:
     int nat;
     Record_adj* RA;
-    Force_LCAO_k flk;
+    //Force_LCAO_k flk;
     Force_LCAO_k_new flk_new;
     //	Force_LCAO_gamma flg;
     Stress_Func<double> sc_pw;
