@@ -18,6 +18,116 @@ int ElecStateLCAO<TK>::out_wfc_flag = 0;
 template <typename TK>
 bool ElecStateLCAO<TK>::need_psi_grid = 1;
 
+double get_norm2(const std::complex<double>& a)
+{
+    double tmp = std::real(a * std::conj(a));
+    if(tmp<1e-10)
+    {
+        return 0.0;
+    }
+    return tmp;
+}
+double get_norm2(const double& a)
+{
+    double tmp = a*a;
+    if(tmp<1e-10)
+    {
+        return 0.0;
+    }
+    return tmp;
+}
+
+void check_simularities(const psi::Psi<std::complex<double>>& psi, const ModuleBase::matrix& ekb, const ModuleBase::matrix& wg)
+{
+//-------------------------------------------------------------
+// tmp code for calculating simularities
+    static psi::Psi<double> psi_norm2(psi.get_nk(), psi.get_nbands(), psi.get_nbasis());
+    static bool first_time = true;
+    psi::Psi<double> simularities(psi.get_nk(), psi.get_nbands(), psi.get_nbands());
+    std::vector<double> tmp_norm2(psi.get_nbasis());
+    for(int ik = 0; ik<psi.get_nk(); ++ik)
+    {
+        psi.fix_k(ik);
+        for(int ib = 0; ib<psi.get_nbands(); ++ib)
+        {
+            //std::cout<<__FILE__<<__LINE__<<" k, band: "<<ik<<" "<<ib<<std::endl;
+            //std::cout<<" ekb&wg: "<<this->ekb(ik, ib)<<" "<<this->wg(ik, ib)<<std::endl;
+            for(int ibasis = 0; ibasis<psi.get_nbasis(); ++ibasis)
+            {
+                //std::cout<<std::scientific<<std::setprecision(5) <<get_norm2(psi(ib, ibasis))<<" ";
+                tmp_norm2[ibasis] = get_norm2(psi(ib, ibasis));
+            }
+            //std::cout<<std::endl;
+            if(!first_time)
+            {
+                //std::cout<<"simularities: ";
+                // calculate simularities
+                for(int ib2 = ib; ib2<psi.get_nbands();++ib2)
+                {
+                    double tmp[3];
+                    tmp[0] = 0.0; tmp[1] = 0.0; tmp[2] = 0.0;
+                    for(int ibasis = 0; ibasis<psi.get_nbasis(); ++ibasis)
+                    {
+                        tmp[0] += tmp_norm2[ibasis] * tmp_norm2[ibasis];
+                        tmp[1] += psi_norm2(ik, ib2, ibasis) * psi_norm2(ik, ib2, ibasis);
+                        tmp[2] += tmp_norm2[ibasis] * psi_norm2(ik, ib2, ibasis);
+                    }
+                    simularities(ik, ib, ib2) = tmp[2] / std::sqrt(tmp[0] * tmp[1]);
+                    simularities(ik, ib2, ib) = simularities(ik, ib, ib2);
+                }
+                for(int ib2 = 0; ib2<psi.get_nbands();++ib2)
+                {
+                    //if(ib2<ib) std::cout<<"          ";
+                    //else std::cout<<std::scientific<<std::setprecision(3) <<simularities(ik, ib, ib2)<<" ";
+                }
+                //std::cout<<std::endl;
+            }
+            // update psi_norm2
+            for(int ibasis = 0; ibasis<psi.get_nbasis(); ++ibasis)
+            {
+                psi_norm2(ik, ib, ibasis) = tmp_norm2[ibasis];
+            }
+        }
+    }
+    if(!first_time)
+    {
+        std::ofstream fout("simularities.dat", std::ios::app);
+        fout<<"CHECK_SIMULARITIES: "<<std::endl;
+        for(int ik = 0; ik<psi.get_nk(); ++ik)
+        {
+            for(int ib = 0; ib<psi.get_nbands(); ++ib)
+            {
+                // find the largest simularity of this band with other bands
+                double max_sim = 0.0;
+                int index_max = 0;
+                for(int ib2 = 0; ib2<psi.get_nbands();++ib2)
+                {
+                    if(simularities(ik, ib, ib2) > max_sim)
+                    {
+                        max_sim = simularities(ik, ib, ib2);
+                        index_max = ib2;
+                    }
+                }
+                if(index_max != ib)
+                {
+                    // max_sim > 0.9, print warning
+                    // ekb-delta > 1e-6, print warning
+                    // one of two wg is not zero, print warning
+                    if(max_sim > 0.9 
+                        && std::abs(ekb(ik, ib) - ekb(ik, index_max)) > 1e-10 
+                        && (wg(ik, ib) > 1e-10 || wg(ik, index_max) > 1e-10))
+                    {
+                        fout<<"WARNING: "<<" k: "<<ik<<" band: "<<ib<<" "<<index_max<<" "<<max_sim<<" ekb-delta: "<<ekb(ik, ib) - ekb(ik, index_max)
+                        <<" wg-delta: "<<wg(ik, ib) - wg(ik, index_max)<<std::endl;
+                    }
+                }
+            }
+        }
+    }
+
+    first_time = false;
+}
+
 template <>
 void ElecStateLCAO<double>::print_psi(const psi::Psi<double>& psi_in, const int istep)
 {
@@ -95,6 +205,7 @@ void ElecStateLCAO<std::complex<double>>::psiToRho(const psi::Psi<std::complex<d
 
     this->calculate_weights();
     this->calEBand();
+    check_simularities(psi, this->ekb, this->wg);
 
     ModuleBase::GlobalFunc::NOTE("Calculate the density matrix.");
 
