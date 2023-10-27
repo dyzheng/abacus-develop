@@ -138,7 +138,7 @@ TEST(blas_connector, zaxpy_) {
 
 TEST(blas_connector, dcopy_) {
     typedef double T;
-    long const size = 8;
+    size_t const size = 8;
     int const incx = 1;
     int const incy = 1;
     std::array<T, size> x_const, result, answer;
@@ -153,7 +153,7 @@ TEST(blas_connector, dcopy_) {
 
 TEST(blas_connector, zcopy_) {
     typedef std::complex<double> T;
-    long const size = 8;
+    size_t const size = 8;
     int const incx = 1;
     int const incy = 1;
     std::array<T, size> x_const, result, answer;
