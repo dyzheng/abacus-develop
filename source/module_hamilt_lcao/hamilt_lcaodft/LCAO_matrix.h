@@ -36,11 +36,11 @@ class LCAO_Matrix
     std::vector< std::map<int, std::map<TAC, RI::Tensor<std::complex<double>>>>> *Hexxc;
 #endif
 
-    void allocate_HS_k(const long &nloc);
+    void allocate_HS_k(const size_t &nloc);
 
 private:
 
-    void allocate_HS_gamma(const long &nloc);
+    void allocate_HS_gamma(const size_t &nloc);
 
 
     public:

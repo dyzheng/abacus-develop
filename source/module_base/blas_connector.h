@@ -19,8 +19,8 @@ extern "C"
 	void caxpy_(const int *N, const std::complex<float> *alpha, const std::complex<float> *X, const int *incX, std::complex<float> *Y, const int *incY);
 	void zaxpy_(const int *N, const std::complex<double> *alpha, const std::complex<double> *X, const int *incX, std::complex<double> *Y, const int *incY);
 
-	void dcopy_(long const *n, const double *a, int const *incx, double *b, int const *incy);
-	void zcopy_(long const *n, const std::complex<double> *a, int const *incx, std::complex<double> *b, int const *incy);
+	void dcopy_(size_t const *n, const double *a, int const *incx, double *b, int const *incy);
+	void zcopy_(size_t const *n, const std::complex<double> *a, int const *incx, std::complex<double> *b, int const *incy);
 
 	//reason for passing results as argument instead of returning it:
 	//see https://www.numbercrunch.de/blog/2014/07/lost-in-translation/
@@ -236,12 +236,12 @@ public:
 
 	// copies a into b
 	static inline
-	void copy(const long n, const double *a, const int incx, double *b, const int incy)
+	void copy(const size_t n, const double *a, const int incx, double *b, const int incy)
 	{
 		dcopy_(&n, a, &incx, b, &incy);
 	}
 	static inline
-	void copy(const long n, const std::complex<double> *a, const int incx, std::complex<double> *b, const int incy)
+	void copy(const size_t n, const std::complex<double> *a, const int incx, std::complex<double> *b, const int incy)
 	{
 		zcopy_(&n, a, &incx, b, &incy);
 	}

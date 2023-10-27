@@ -67,7 +67,7 @@ void LCAO_Matrix::divide_HS_in_frag(const bool isGamma, Parallel_Orbitals &pv, c
 }
 
 
-void LCAO_Matrix::allocate_HS_gamma(const long &nloc)
+void LCAO_Matrix::allocate_HS_gamma(const size_t &nloc)
 {
     ModuleBase::TITLE("LCAO_Matrix","allocate_HS_gamma");
 
@@ -90,7 +90,7 @@ void LCAO_Matrix::allocate_HS_gamma(const long &nloc)
 }
 
 
-void LCAO_Matrix::allocate_HS_k(const long &nloc)
+void LCAO_Matrix::allocate_HS_k(const size_t &nloc)
 {
     ModuleBase::TITLE("LCAO_Matrix","allocate_HS_k");
 

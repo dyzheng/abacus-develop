@@ -18,7 +18,7 @@ public:
     /// local size (nloc = nrow * ncol)
     int nrow;
     int ncol;
-    long nloc;
+    size_t nloc;
 
     /// block size,
     /// the default value of nb is 1,
