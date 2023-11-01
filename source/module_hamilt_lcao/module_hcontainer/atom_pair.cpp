@@ -34,8 +34,7 @@ AtomPair<T>::AtomPair(const int& atom_i_, const int& atom_j_, const Parallel_Orb
     this->current_R = 0;
     if (existed_matrix != nullptr)
     {
-        BaseMatrix<T> tmp(row_size, col_size, (existed_matrix + row_ap * ldc + col_ap));
-        tmp.set_ldc(this->ldc);
+        BaseMatrix<T> tmp(row_size, col_size, existed_matrix);
         this->values.push_back(tmp);
     }
     else
@@ -73,8 +72,7 @@ AtomPair<T>::AtomPair(const int& atom_i_,
     this->R_index[2] = rz;
     if (existed_matrix != nullptr)
     {
-        BaseMatrix<T> tmp(row_size, col_size, (existed_matrix + row_ap * ldc + col_ap));
-        tmp.set_ldc(this->ldc);
+        BaseMatrix<T> tmp(row_size, col_size, existed_matrix);
         this->values.push_back(tmp);
     }
     else
@@ -104,8 +102,7 @@ AtomPair<T>::AtomPair(const int& atom_i_,
     if (existed_matrix != nullptr)
     {
         this->ldc = row_atom_begin[natom] - row_atom_begin[0];
-        BaseMatrix<T> tmp(row_size, col_size, (existed_matrix + row_ap * ldc + col_ap));
-        tmp.set_ldc(this->ldc);
+        BaseMatrix<T> tmp(row_size, col_size, existed_matrix);
         this->values.push_back(tmp);
     }
     else
@@ -141,8 +138,7 @@ AtomPair<T>::AtomPair(const int& atom_i_,
     if (existed_matrix != nullptr)
     {
         this->ldc = row_atom_begin[natom] - row_atom_begin[0];
-        BaseMatrix<T> tmp(row_size, col_size, (existed_matrix + row_ap * ldc + col_ap));
-        tmp.set_ldc(this->ldc);
+        BaseMatrix<T> tmp(row_size, col_size, existed_matrix);
         this->values.push_back(tmp);
     }
     else
@@ -639,18 +635,10 @@ void AtomPair<T>::add_to_array(std::complex<T>* array, const std::complex<T>& kp
 }
 
 template <typename T>
-T& AtomPair<T>::get_matrix_value(const size_t& i_row_global, const size_t& j_col_global) const
+std::tuple<std::vector<int>, T*> AtomPair<T>::get_matrix_values(int ir) const
 {
-    int i_row_local = this->paraV == nullptr ? i_row_global : this->paraV->global2local_row(i_row_global);
-    int j_col_local = this->paraV == nullptr ? j_col_global : this->paraV->global2local_col(j_col_global);
-#ifdef __DEBUG
-    assert(i_row_local != -1 && j_col_local != -1);
-    assert(current_R < this->values.size());
-    assert(current_R >= 0);
-#endif
-    size_t i_row_in = i_row_local - row_ap;
-    size_t j_col_in = j_col_local - col_ap;
-    return this->values[current_R].get_value(i_row_in, j_col_in);
+    if(ir<0) ir = this->current_R;
+    return std::tuple<std::vector<int>, T*>({this->row_ap, this->row_size, this->col_ap, this->col_size}, this->values[ir].get_pointer());
 }
 
 // interface for get (rx, ry, rz) of index-th R-index in this->R_index, the return should be int[3]

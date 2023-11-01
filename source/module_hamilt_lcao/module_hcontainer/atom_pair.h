@@ -176,7 +176,19 @@ class AtomPair
     // these four interface can be used only when R-index has been choosed (current_R >= 0)
     T& get_value(const int& i) const;
     T& get_value(const int& row, const int& col) const;
-    T& get_matrix_value(const size_t& i_row_global, const size_t& j_col_global) const;
+
+    /**
+     * @brief get values of this->values[ir] for a whole matrix
+     * @param ir index of this->values
+     * @return std::tuple<std::vector<int>, T*>
+     * std::vector<int>(4) contains (row_begin_index, row_size, col_begin_index, col_size)
+     * T* is pointer of values[ir].value_begin, legal index is [0, row_size*col_size)
+    */
+    std::tuple<std::vector<int>, T*> get_matrix_values(int ir = -1) const;
+
+    /**
+     * @brief get pointer of value from a submatrix
+    */
     T* get_pointer(int ir=-1) const;
 
     // add another BaseMatrix<T> to this->values with specific R index.
