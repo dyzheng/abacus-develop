@@ -65,19 +65,33 @@ BaseMatrix<T>::~BaseMatrix()
 
 // allocate
 template <typename T>
-void BaseMatrix<T>::allocate(bool if_zero)
+void BaseMatrix<T>::allocate(T* data_array, bool if_zero)
 {
 #ifdef __DEBUG
 assert(nrow_local*ncol_local>0);
 #endif
-    if(this->value_begin == nullptr)
+    if(data_array != nullptr && !this->allocated)
+    {
+        this->value_begin = data_array;
+    }
+    else if(data_array != nullptr && this->allocated)
+    {
+        delete[] this->value_begin;
+        this->value_begin = data_array;
+        this->allocated = false;
+    }
+    else if(data_array == nullptr && !this->allocated)
     {
         this->value_begin = new T[nrow_local * ncol_local];
-        if(if_zero) 
-        {
-            this->set_zero();
-        }
         this->allocated = true;
+    }
+    else
+    {
+        // do nothing
+    }
+    if(if_zero) 
+    {
+        this->set_zero();
     }
 }
 

@@ -31,7 +31,7 @@ class BaseMatrix
      * if this->value_begin is not nullptr, it will be neglected
      * if this->value_begin is nullptr, it will allocate memory with size nrow_local * ncol_local
     */
-    void allocate(bool if_zero = false);
+    void allocate(T* data_array = nullptr, bool if_zero = false);
 
     /**
      * @brief set value in the matrix to zero

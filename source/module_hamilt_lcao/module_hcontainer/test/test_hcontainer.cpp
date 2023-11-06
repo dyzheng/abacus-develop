@@ -458,7 +458,7 @@ TEST_F(HContainerTest, atompair_funcs)
         for(int atom_j = 0; atom_j<2; ++atom_j)
         {
             hamilt::AtomPair<double> tmp(atom_i, atom_j, 0, 0, 0, PO.atom_begin_row.data(), PO.atom_begin_col.data(), 2, nullptr);
-            tmp.allocate(false);
+            tmp.allocate(nullptr, false);
             double* tmp_data = tmp.get_HR_values(0, 0, 0).get_pointer();
             for(int i=0;i<4;++i)
             {
@@ -522,7 +522,6 @@ TEST_F(HContainerTest, atompair_funcs)
             EXPECT_EQ(hk_data3[j*4+i], hk_data2_correct[i*4+j]);
         }
     }
-
     // 6. add_to_array
     std::vector<std::complex<double>> hr_array(16, 0.0);
     std::vector<double> hr_array2(16, 0.0);
@@ -607,6 +606,54 @@ TEST_F(HContainerTest, atompair_funcs)
     EXPECT_EQ(HR_no_wrapper.size_R_loop(), 1);
 }
 
+// Test for Wrapper mode in HContainer
+// 1. test constructor of wrapper mode BaseMatrix
+// 2. test constructor of wrapper mode AtomPair
+// 3. test constructor of wrapper mode HContainer
+// 4. test allocate() for wrapper mode
+// 5. test get_nnr() for HContainer
+// 6. test data_access correctnesss for wrapper mode
+TEST_F(HContainerTest, wrapper_mode)
+{
+    EXPECT_EQ(HR->get_nnr(), 36);
+    // test HR_wrapper constructed by HR and vector
+    std::vector<double> hr_data(HR->get_nnr());
+    hamilt::HContainer<double> HR_wrapper(*HR, hr_data.data());
+    EXPECT_EQ(HR_wrapper.get_nnr(), 36);
+    EXPECT_EQ(HR_wrapper.size_atom_pairs(), 9);
+    EXPECT_EQ(HR_wrapper.get_atom_pair(0).get_atom_i(), 0);
+    EXPECT_EQ(HR_wrapper.get_atom_pair(0).get_atom_j(), 0);
+    EXPECT_EQ(HR_wrapper.get_atom_pair(0).get_row_size(), 2);
+    EXPECT_EQ(HR_wrapper.get_atom_pair(0).get_col_size(), 2);
+    EXPECT_EQ(HR_wrapper.get_wrapper(), hr_data.data());
+    EXPECT_EQ(HR_wrapper.get_atom_pair(0).get_pointer(), hr_data.data());
+    for (size_t i = 0; i < hr_data.size(); i++)
+    {
+        hr_data[i] = i;
+    }
+    EXPECT_EQ(HR_wrapper.get_atom_pair(0).get_value(0, 0), 0.0);
+    EXPECT_EQ(HR_wrapper.get_atom_pair(0).get_value(0, 1), 1.0);
+    EXPECT_EQ(HR_wrapper.get_atom_pair(0).get_value(1, 0), 2.0);
+    EXPECT_EQ(HR_wrapper.get_atom_pair(0).get_value(1, 1), 3.0);
+    EXPECT_EQ(HR_wrapper.get_atom_pair(1).get_value(0, 0), 4.0);
+    EXPECT_EQ(HR_wrapper.get_atom_pair(1).get_value(0, 1), 5.0);
+    EXPECT_EQ(HR_wrapper.get_atom_pair(1).get_value(1, 0), 6.0);
+    EXPECT_EQ(HR_wrapper.get_atom_pair(1).get_value(1, 1), 7.0);
+    hamilt::AtomPair<double> atom_ij(HR->get_atom_pair(0), hr_data.data());
+    hamilt::BaseMatrix<double> matrix_test = hamilt::BaseMatrix<double>(atom_ij.get_row_size(), atom_ij.get_col_size(), hr_data.data());
+    EXPECT_EQ(atom_ij.get_value(1, 1), 3.0);
+    EXPECT_EQ(matrix_test.get_value(1, 1), 3.0);
+    HR->allocate(hr_data.data(), false);
+    EXPECT_EQ(HR->get_atom_pair(0).get_value(1, 1), 3.0);
+    EXPECT_EQ(HR->get_atom_pair(1).get_value(1, 1), 7.0);
+    EXPECT_EQ(HR->get_atom_pair(2).get_value(1, 1), 11.0);
+    EXPECT_EQ(HR->get_atom_pair(3).get_value(1, 1), 15.0);
+    HR->allocate(hr_data.data(), true);
+    EXPECT_EQ(HR->get_atom_pair(0).get_value(1, 1), 0.0);
+    EXPECT_EQ(HR->get_atom_pair(1).get_value(1, 1), 0.0);
+    EXPECT_EQ(HR->get_atom_pair(2).get_value(1, 1), 0.0);
+    EXPECT_EQ(HR->get_atom_pair(3).get_value(1, 1), 0.0);
+}
 
 int main(int argc, char** argv)
 {

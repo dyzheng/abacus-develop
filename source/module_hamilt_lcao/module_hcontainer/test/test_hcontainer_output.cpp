@@ -96,7 +96,6 @@ TEST_F(OutputHContainerTest, Write)
     hamilt::AtomPair<double> ap2(1, 1, 0, 0, 0, &ParaV, &test_data[4]);
     HR.insert_pair(ap1);
     HR.insert_pair(ap2);
-    HR.allocate(true);
     for (int ir = 0; ir < HR.size_R_loop(); ++ir)
     {
         int rx, ry, rz;

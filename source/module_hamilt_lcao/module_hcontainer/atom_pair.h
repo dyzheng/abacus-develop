@@ -82,7 +82,7 @@ class AtomPair
              T* existed_matrix = nullptr);
 
     // copy constructor
-    AtomPair(const AtomPair<T>& other);
+    AtomPair(const AtomPair<T>& other, T* data_pointer = nullptr);
     // move constructor
     AtomPair(AtomPair&& other) noexcept;
 
@@ -96,7 +96,7 @@ class AtomPair
     /**
      * @brief allocate memory for all the BaseMatrix
     */
-    void allocate(bool if_zero = false);
+    void allocate(T* data_array = nullptr, bool if_zero = false);
 
     /**
      * @brief set values in every BaseMatrix to zero
@@ -282,7 +282,6 @@ class AtomPair
     int col_ap = -1;
     int row_size = 0;
     int col_size = 0;
-    int ldc = -1; // leading_dimention_colomn
 };
 
 } // namespace hamilt
