@@ -179,10 +179,20 @@ AtomPair<T>::AtomPair(const AtomPair<T>& other, T* data_pointer)
 template <typename T>
 void AtomPair<T>::allocate(T* data_array, bool is_zero)
 {
-    for(int value=0;value<this->values.size();++value)
+    if(data_array == nullptr)
     {
-        this->values[value].allocate(data_array, is_zero);
-        data_array += this->get_size();
+        for(int value=0;value<this->values.size();++value)
+        {
+            this->values[value].allocate(nullptr, is_zero);
+        }
+    }
+    else
+    {
+        for(int value=0;value<this->values.size();++value)
+        {
+            this->values[value].allocate(data_array, is_zero);
+            data_array += this->get_size();
+        }
     }
 }
 
