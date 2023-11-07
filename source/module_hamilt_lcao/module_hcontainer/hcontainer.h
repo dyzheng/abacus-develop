@@ -379,7 +379,15 @@ class HContainer
      * @brief get infomation of IJR pairs in HContainer
      * the return vector format is {size_I, I1, size_J, J1, size_R, R1x, R1y, R1z, ..., J2, ...}
     */
-    std::vector<int> get_IJR_info() const;
+    std::vector<int> get_ijr_info() const;
+
+    /**
+     * @brief use infomation of IJ pairs to expand HContainer
+     * the input vector format is {size_IJ_pairs, I1, J1, size_R, R1x, R1y, R1z, ..., I2, J2, ...}
+     * HContainer has not been allocated after this function, 
+     * user should call allocate(...) to allocate memory.
+    */
+    void insert_ijrs(const std::vector<int>* ijrs);
 
     /**
      * @brief return the wrapper_pointer

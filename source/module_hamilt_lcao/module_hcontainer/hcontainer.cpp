@@ -146,34 +146,7 @@ HContainer<T>::HContainer(const Parallel_Orbitals* paraV_in, T* data_pointer, co
     this->sparse_ap_index.resize(natom);
     if(ijr_info != nullptr)
     {
-        std::cout<<__FILE__<<__LINE__<<std::endl;
-        const T alpha(1.0);
-        const int number_atom = (*ijr_info)[0];
-        // loop AtomPairs and unpack values
-        const int* ijr_p = ijr_info->data() + 1;
-
-        for (int i = 0; i < number_atom; ++i)
-        {
-            const int atom_i = *ijr_p++;
-            const int size_row = this->paraV->get_row_size(atom_i);
-            const int size_j = *ijr_p++;
-            for (int j = 0; j < size_j; ++j)
-            {
-                const int atom_j = *ijr_p++;
-                const int size_col = this->paraV->get_col_size(atom_j);
-                const int number_R = *ijr_p++;
-                for (int k = 0; k < number_R; ++k)
-                {
-                    int r_index[3];
-                    r_index[0] = *ijr_p++;
-                    r_index[1] = *ijr_p++;
-                    r_index[2] = *ijr_p++;
-                    //insert this IJ AtomPair
-                    AtomPair<T> tmp_ap(atom_i, atom_j, r_index[0], r_index[1], r_index[2], this->paraV);
-                    this->insert_pair(tmp_ap);
-                }
-            }
-        }
+        this->insert_ijrs(ijr_info);
         // allocate memory
         this->allocate(data_pointer, false);
     }
@@ -681,6 +654,69 @@ void HContainer<T>::shape_synchron( const HContainer<T>& other)
                     tmp_pointer->get_HR_values(R_pointer[0], R_pointer[1], R_pointer[2]);
                 }
             }
+        }
+    }
+}
+
+// get_IJR_info
+template <typename T>
+std::vector<int> HContainer<T>::get_ijr_info() const
+{
+    // get number of atom pairs
+    std::vector<int> ijr_info;
+    ijr_info.push_back(this->atom_pairs.size());
+    // loop atom pairs
+    for (int i = 0; i < this->atom_pairs.size(); ++i)
+    {
+        // get atom_i and atom_j
+        const int atom_i = this->atom_pairs[i].get_atom_i();
+        const int atom_j = this->atom_pairs[i].get_atom_j();
+        // push back atom_i, atom_j
+        ijr_info.push_back(atom_i);
+        ijr_info.push_back(atom_j);
+        // get number of R
+        const int number_R = this->atom_pairs[i].get_R_size();
+        ijr_info.push_back(number_R);
+        // loop R
+        for (int ir = 0; ir < number_R; ++ir)
+        {
+            int* R_pointer = this->atom_pairs[i].get_R_index(ir);
+            ijr_info.push_back(R_pointer[0]);
+            ijr_info.push_back(R_pointer[1]);
+            ijr_info.push_back(R_pointer[2]);
+        }
+    }
+    return ijr_info;
+}
+
+template<typename T>
+void HContainer<T>::insert_ijrs(const std::vector<int>* ijrs)
+{
+    if (this->paraV == nullptr)
+    {
+        ModuleBase::WARNING_QUIT("HContainer::insert_ijrs", "paraV pointer can not be nullptr!");
+    }
+    // get number of atom pairs
+    const int number_ap = (*ijrs)[0];
+    // loop AtomPairs and unpack values
+    const int* ijr_p = ijrs->data() + 1;
+    for (int i = 0; i < number_ap; ++i)
+    {
+        // get atom_i and atom_j
+        const int atom_i = *ijr_p++;
+        const int atom_j = *ijr_p++;
+        // get number of R
+        const int number_R = *ijr_p++;
+        for (int k = 0; k < number_R; ++k)
+        {
+            int r_index[3];
+            // get R index
+            r_index[0] = *ijr_p++;
+            r_index[1] = *ijr_p++;
+            r_index[2] = *ijr_p++;
+            //insert this IJ AtomPair
+            AtomPair<T> tmp_ap(atom_i, atom_j, r_index[0], r_index[1], r_index[2], this->paraV);
+            this->insert_pair(tmp_ap);
         }
     }
 }
