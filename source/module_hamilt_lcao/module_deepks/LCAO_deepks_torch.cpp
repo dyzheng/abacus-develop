@@ -31,6 +31,7 @@
 void LCAO_Deepks::cal_descriptor(void)
 {
     ModuleBase::TITLE("LCAO_Deepks", "cal_descriptor");
+    ModuleBase::timer::tick("LCAO_Deepks", "cal_descriptor");
 
     //init pdm_tensor and d_tensor
     torch::Tensor tmp;
@@ -71,6 +72,7 @@ void LCAO_Deepks::cal_descriptor(void)
         d_v = torch::linalg::eigh(pdm_tensor[inl], /*uplo*/"U");
         d_tensor[inl] = std::get<0>(d_v);
     }
+    ModuleBase::timer::tick("LCAO_Deepks", "cal_descriptor");
     return;
 }
 
@@ -590,11 +592,14 @@ void LCAO_Deepks::cal_orbital_precalc_k(const std::vector<std::vector<ModuleBase
     Grid_Driver& GridD)
 {
     ModuleBase::TITLE("LCAO_Deepks", "calc_orbital_precalc_k");
+    ModuleBase::timer::tick("LCAO_Deepks", "calc_orbital_precalc_k");
     
     this->cal_gvdm(nat);
     const double Rcut_Alpha = orb.Alpha[0].getRcut();
     this->init_orbital_pdm_shell(nks);
    
+    for(int ik=0;ik<nks;ik++)
+    {
     for (int T0 = 0; T0 < ucell.ntype; T0++)
     {
 		Atom* atom0 = &ucell.atoms[T0]; 
@@ -610,7 +615,6 @@ void LCAO_Deepks::cal_orbital_precalc_k(const std::vector<std::vector<ModuleBase
                 const int T1 = GridD.getType(ad1);
                 const int I1 = GridD.getNatom(ad1);
                 const int ibt1 = ucell.itia2iat(T1,I1);
-                const int start1 = ucell.itiaiw2iwt(T1, I1, 0);
                 const ModuleBase::Vector3<double> tau1 = GridD.getAdjacentTau(ad1);
 
 				const Atom* atom1 = &ucell.atoms[T1];
@@ -624,7 +628,6 @@ void LCAO_Deepks::cal_orbital_precalc_k(const std::vector<std::vector<ModuleBase
 					const int T2 = GridD.getType(ad2);
 					const int I2 = GridD.getNatom(ad2);
                     const int ibt2 = ucell.itia2iat(T2,I2);
-					const int start2 = ucell.itiaiw2iwt(T2, I2, 0);
 					const ModuleBase::Vector3<double> tau2 = GridD.getAdjacentTau(ad2);
 					const Atom* atom2 = &ucell.atoms[T2];
 					const int nw2_tot = atom2->nw*GlobalV::NPOL;
@@ -639,54 +642,51 @@ void LCAO_Deepks::cal_orbital_precalc_k(const std::vector<std::vector<ModuleBase
 						continue;
 					}
 
-					for (int iw1=0; iw1<nw1_tot; ++iw1)
-					{
-						const int iw1_all = start1 + iw1; // this is \mu
-                        const int iw1_local = pv->global2local_col(iw1_all);
-						if(iw1_local < 0)continue;
-						
-						for (int iw2=0; iw2<nw2_tot; ++iw2)
-						{
-							const int iw2_all = start2 + iw2; // this is \nu
-                            const int iw2_local = pv->global2local_row(iw2_all);
-							if(iw2_local < 0)continue;
-                            for(int ik=0;ik<nks;ik++)
+                    int nrow_local = pv->get_row_size(ibt1);
+                    int ncol_local = pv->get_col_size(ibt2);
+                    if(nrow_local * ncol_local == 0) continue;
+
+                    const int start1 = pv->get_row_start(ibt1);
+
+                    std::vector<double> dm_current(nrow_local * ncol_local);
+                    std::complex<double> tmp = 0.0;
+                    const double arg = - (kvec_d[ik] * (dR2-dR1) ) * ModuleBase::TWO_PI;
+                    const std::complex<double> kphase = std::complex <double> ( cos(arg),  sin(arg) );
+                    tmp = dm_hl_k[0][ik](iw1_local, iw2_local) * kphase;
+                    dm_current=tmp.real();
+
+                    key_tuple key_1(ibt1,dR1.x,dR1.y,dR1.z);
+                    key_tuple key_2(ibt2,dR2.x,dR2.y,dR2.z);
+
+                    auto row_indexes = pv->get_row_indexes(ibt1);
+                    auto col_indexes = pv->get_col_indexes(ibt2);
+					for (int iw1l = 0; iw1l < row_indexes.size(); ++iw1l)
+                    {
+                        std::vector<double> nlm1 = this->nlm_save_k[iat][key_1][row_indexes[iw1l]][0];
+                        for (int iw2l = 0; iw2l < col_indexes.size(); ++iw2l)
+                        {
+                            std::vector<double> nlm2 = this->nlm_save_k[iat][key_2][col_indexes[iw2l]][0];
+#ifdef __DEBUG
+                            assert(nlm1.size()==nlm2.size());
+#endif
+                            int ib=0;
+                            for (int L0 = 0; L0 <= orb.Alpha[0].getLmax();++L0)
                             {
-                                for (int hl=0; hl<1; hl++)
+                                for (int N0 = 0;N0 < orb.Alpha[0].getNchi(L0);++N0)
                                 {
-                                    double dm_current;
-                                    std::complex<double> tmp = 0.0;
-                                    const double arg = - (kvec_d[ik] * (dR2-dR1) ) * ModuleBase::TWO_PI;
-                                    const std::complex<double> kphase = std::complex <double> ( cos(arg),  sin(arg) );
-                                    tmp = dm_hl_k[hl][ik](iw1_local, iw2_local) * kphase;
-                                    dm_current=tmp.real();
-
-                                    key_tuple key_1(ibt1,dR1.x,dR1.y,dR1.z);
-                                    key_tuple key_2(ibt2,dR2.x,dR2.y,dR2.z);
-                                    std::vector<double> nlm1 = this->nlm_save_k[iat][key_1][iw1_all][0];
-                                    std::vector<double> nlm2 = this->nlm_save_k[iat][key_2][iw2_all][0];
-                                    assert(nlm1.size()==nlm2.size());
-
-                                    int ib=0;
-                                    for (int L0 = 0; L0 <= orb.Alpha[0].getLmax();++L0)
+                                    const int inl = this->inl_index[T0](I0, L0, N0);
+                                    const int nm = 2*L0+1;
+                            
+                                    for (int m1=0; m1<nm; ++m1) // m1 = 1 for s, 3 for p, 5 for d
                                     {
-                                        for (int N0 = 0;N0 < orb.Alpha[0].getNchi(L0);++N0)
+                                        for (int m2=0; m2<nm; ++m2) // m1 = 1 for s, 3 for p, 5 for d
                                         {
-                                            const int inl = this->inl_index[T0](I0, L0, N0);
-                                            const int nm = 2*L0+1;
-                                    
-                                            for (int m1=0; m1<nm; ++m1) // m1 = 1 for s, 3 for p, 5 for d
-                                            {
-                                                for (int m2=0; m2<nm; ++m2) // m1 = 1 for s, 3 for p, 5 for d
-                                                {
-                                                    orbital_pdm_shell[ik][hl][inl][m1*nm+m2] += dm_current*nlm1[ib+m1]*nlm2[ib+m2];
-                                                }
-                                            }
-                                            ib+=nm;
+                                            orbital_pdm_shell[ik][hl][inl][m1*nm+m2] += dm_current*nlm1[ib+m1]*nlm2[ib+m2];
                                         }
                                     }
-                                } //hl
-                            } //iks                           
+                                    ib+=nm;
+                                }
+                            }                          
 						}//iw2
 					}//iw1
 				}//ad2
@@ -694,6 +694,9 @@ void LCAO_Deepks::cal_orbital_precalc_k(const std::vector<std::vector<ModuleBase
             
         }
     }
+    } //iks 
+    ModuleBase::timer::tick("LCAO_Deepks", "calc_orbital_precalc_k");
+    ModuleBase::timer::tick("LCAO_Deepks", "calc_orbital_precalc_k_reduce");
 #ifdef __MPI
     for (int iks = 0; iks < nks; iks++)
     {
@@ -706,7 +709,9 @@ void LCAO_Deepks::cal_orbital_precalc_k(const std::vector<std::vector<ModuleBase
         }
     }
 #endif    
-    
+    ModuleBase::timer::tick("LCAO_Deepks", "calc_orbital_precalc_k_reduce");
+    ModuleBase::timer::tick("LCAO_Deepks", "calc_orbital_precalc_k_torch");
+
     // transfer orbital_pdm_shell to orbital_pdm_shell_vector
     
 
@@ -763,6 +768,7 @@ void LCAO_Deepks::cal_orbital_precalc_k(const std::vector<std::vector<ModuleBase
     this->orbital_precalc_tensor = torch::cat(orbital_precalc_vector, -1);
        
     this->del_orbital_pdm_shell(nks);
+    ModuleBase::timer::tick("LCAO_Deepks", "calc_orbital_precalc_k_torch");
 	return;
 }
 

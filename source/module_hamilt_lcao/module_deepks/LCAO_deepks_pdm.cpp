@@ -246,36 +246,31 @@ void LCAO_Deepks::cal_projected_DM_k(const std::vector<std::vector<std::complex<
 						continue;
 					}
 
-					for (int iw1=0; iw1<nw1_tot; ++iw1)
-					{
-						const int iw1_all = start1 + iw1;
-                        const int iw1_local = pv->global2local_col(iw1_all);
-						if(iw1_local < 0)continue;
-						const int iw1_0 = iw1/GlobalV::NPOL;
-						for (int iw2=0; iw2<nw2_tot; ++iw2)
-						{
-							const int iw2_all = start2 + iw2;
-                            const int iw2_local = pv->global2local_row(iw2_all);
-							if(iw2_local < 0)continue;
-							const int iw2_0 = iw2/GlobalV::NPOL;
- 
-                            double dm_current;
-                            std::complex<double> tmp = 0.0;
-                            for(int ik=0;ik<nks;ik++)
-                            {
-                                const double arg = ( kvec_d[ik] * (dR1-dR2) ) * ModuleBase::TWO_PI;
-                                const std::complex<double> kphase = std::complex <double> ( cos(arg),  sin(arg) );
-                                //tmp += dm[ik](iw1_local,iw2_local)*kphase;
-                                tmp += dm[ik][iw1_local * nrow + iw2_local]*kphase;
-                            }
-                            dm_current=tmp.real();
+                    double dm_current;
+                    std::complex<double> tmp = 0.0;
+                    for(int ik=0;ik<nks;ik++)
+                    {
+                        const double arg = ( kvec_d[ik] * (dR1-dR2) ) * ModuleBase::TWO_PI;
+                        const std::complex<double> kphase = std::complex <double> ( cos(arg),  sin(arg) );
+                        //tmp += dm[ik](iw1_local,iw2_local)*kphase;
+                        tmp += dm[ik][iw1_local * nrow + iw2_local]*kphase;
+                    }
+                    dm_current=tmp.real();
 
-                            key_tuple key_1(ibt1,dR1.x,dR1.y,dR1.z);
-                            key_tuple key_2(ibt2,dR2.x,dR2.y,dR2.z);
-                            std::vector<double> nlm1 = this->nlm_save_k[iat][key_1][iw1_all][0];
-                            std::vector<double> nlm2 = this->nlm_save_k[iat][key_2][iw2_all][0];
+                    key_tuple key_1(ibt1,dR1.x,dR1.y,dR1.z);
+                    key_tuple key_2(ibt2,dR2.x,dR2.y,dR2.z);
+
+                    auto row_indexes = pv->get_row_indexes(ibt1);
+                    auto col_indexes = pv->get_col_indexes(ibt2);
+					for (int iw1l = 0; iw1l < row_indexes.size(); ++iw1l)
+                    {
+                        std::vector<double> nlm1 = this->nlm_save_k[iat][key_1][row_indexes[iw1l]][0];
+                        for (int iw2l = 0; iw2l < col_indexes.size(); ++iw2l)
+                        {
+                            std::vector<double> nlm2 = this->nlm_save_k[iat][key_2][col_indexes[iw2l]][0];
+#ifdef __DEBUG
                             assert(nlm1.size()==nlm2.size());
-
+#endif
                             int ib=0;
                             for (int L0 = 0; L0 <= orb.Alpha[0].getLmax();++L0)
                             {
@@ -294,7 +289,9 @@ void LCAO_Deepks::cal_projected_DM_k(const std::vector<std::vector<std::complex<
                                     ib+=nm;
                                 }
                             }
+#ifdef __DEBUG
                             assert(ib==nlm1.size());               
+#endif
 						}//iw2
 					}//iw1
 				}//ad2
@@ -637,35 +634,28 @@ void LCAO_Deepks::cal_gdmx_k(const std::vector<std::vector<std::complex<double>>
                         r0[2] = ( tau2.z - tau0.z) ;
                     }
 
+                    double dm_current;
+                    std::complex<double> tmp = 0.0;
+                    for(int ik=0;ik<nks;ik++)
+                    {
+                        const double arg = - ( kvec_d[ik] * (dR2-dR1) ) * ModuleBase::TWO_PI;
+                        const std::complex<double> kphase = std::complex <double> ( cos(arg),  sin(arg) );
+                        //tmp += dm[ik](iw1_local,iw2_local)*kphase;
+                        tmp += dm[ik][iw1_local*nrow+iw2_local]*kphase;
+                    }
+                    dm_current=tmp.real();
 
-					for (int iw1=0; iw1<nw1_tot; ++iw1)
-					{
-						const int iw1_all = start1 + iw1;
-                        const int iw1_local = pv->global2local_col(iw1_all);
-						if(iw1_local < 0)continue;
-						const int iw1_0 = iw1/GlobalV::NPOL;
-						for (int iw2=0; iw2<nw2_tot; ++iw2)
-						{
-							const int iw2_all = start2 + iw2;
-                            const int iw2_local = pv->global2local_row(iw2_all);
-							if(iw2_local < 0)continue;
-							const int iw2_0 = iw2/GlobalV::NPOL;
+                    key_tuple key_1(ibt1,dR1.x,dR1.y,dR1.z);
+                    key_tuple key_2(ibt2,dR2.x,dR2.y,dR2.z);
 
-                            double dm_current;
-                            std::complex<double> tmp = 0.0;
-                            for(int ik=0;ik<nks;ik++)
-                            {
-                                const double arg = - ( kvec_d[ik] * (dR2-dR1) ) * ModuleBase::TWO_PI;
-                                const std::complex<double> kphase = std::complex <double> ( cos(arg),  sin(arg) );
-                                //tmp += dm[ik](iw1_local,iw2_local)*kphase;
-                                tmp += dm[ik][iw1_local*nrow+iw2_local]*kphase;
-                            }
-                            dm_current=tmp.real();
-
-                            key_tuple key_1(ibt1,dR1.x,dR1.y,dR1.z);
-                            key_tuple key_2(ibt2,dR2.x,dR2.y,dR2.z);
-                            std::vector<double> nlm1 = this->nlm_save_k[iat][key_1][iw1_all][0];
-                            std::vector<std::vector<double>> nlm2 = this->nlm_save_k[iat][key_2][iw2_all];
+					auto row_indexes = pv->get_row_indexes(ibt1);
+                    auto col_indexes = pv->get_col_indexes(ibt2);
+					for (int iw1l = 0; iw1l < row_indexes.size(); ++iw1l)
+                    {
+                        std::vector<double> nlm1 = this->nlm_save_k[iat][key_1][row_indexes[iw1l]][0];
+                        for (int iw2l = 0; iw2l < col_indexes.size(); ++iw2l)
+                        {
+                            std::vector<std::vector<double>> nlm2 = this->nlm_save_k[iat][key_2][col_indexes[iw2l]];
 
                             assert(nlm1.size()==nlm2[0].size());
 
@@ -723,8 +713,8 @@ void LCAO_Deepks::cal_gdmx_k(const std::vector<std::vector<std::complex<double>>
 
                             if  (isstress)
                             {
-                                nlm1 = this->nlm_save_k[iat][key_2][iw2_all][0];
-                                nlm2 = this->nlm_save_k[iat][key_1][iw1_all];
+                                nlm1 = this->nlm_save_k[iat][key_2][col_indexes[iw2l]][0];
+                                nlm2 = this->nlm_save_k[iat][key_1][row_indexes[iw1l]];
 
                                 assert(nlm1.size()==nlm2[0].size());  
                                 int ib=0;
