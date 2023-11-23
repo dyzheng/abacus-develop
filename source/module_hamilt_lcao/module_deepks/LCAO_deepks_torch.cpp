@@ -655,7 +655,7 @@ void LCAO_Deepks::cal_orbital_precalc_k(const std::vector<std::vector<ModuleBase
                 key_tuple key_1(ibt1,dR1.x,dR1.y,dR1.z);
                 if(this->nlm_save_k[iat].find(key_1) == this->nlm_save_k[iat].end()) continue;
                 std::vector<double> s_1t(trace_alpha_size * row_size);
-                std::vector<double> g_1dmt(trace_alpha_size * row_size);
+                std::vector<double> g_1dmt(nks * trace_alpha_size * row_size, 0.0);
                 for(int irow=0;irow<row_size;irow++)
                 {
                     const double* row_ptr = this->nlm_save_k[iat][key_1][row_indexes[irow]][0].data();
@@ -701,42 +701,47 @@ void LCAO_Deepks::cal_orbital_precalc_k(const std::vector<std::vector<ModuleBase
                     }
 
 
+                    std::vector<double> dm_array(row_size*nks * col_size, 0.0);
+                    const int row_size_nks = row_size * nks;
                     for(int ik=0;ik<nks;ik++)
                     {
-                    hamilt::AtomPair<double> dm_pair(ibt1, ibt2, (dR2-dR1).x, (dR2-dR1).y, (dR2-dR1).z, pv);
-                    dm_pair.allocate(nullptr, 1);
-                    const double arg = - (kvec_d[ik] * (dR2-dR1) ) * ModuleBase::TWO_PI;
-                    double sinp, cosp;
-                    ModuleBase::libm::sincos(arg, &sinp, &cosp);
-                    const std::complex<double> kphase = std::complex<double>(cosp, sinp);
-                    if(ModuleBase::GlobalFunc::IS_COLUMN_MAJOR_KS_SOLVER())
-                    {
-                        dm_pair.add_from_matrix(dm_hl_k[0][ik].c, pv->get_row_size(), kphase, 1);
-                    }
-                    else
-                    {
-                        dm_pair.add_from_matrix(dm_hl_k[0][ik].c, pv->get_col_size(), kphase, 0);
-                    }
-                    const double* dm_current = dm_pair.get_pointer();
+                        hamilt::AtomPair<double> dm_pair(ibt1, ibt2, (dR2-dR1).x, (dR2-dR1).y, (dR2-dR1).z, pv);
+                        dm_pair.allocate(&dm_array[ik * row_size * col_size], 0);
+                        const double arg = - (kvec_d[ik] * (dR2-dR1) ) * ModuleBase::TWO_PI;
+                        double sinp, cosp;
+                        ModuleBase::libm::sincos(arg, &sinp, &cosp);
+                        const std::complex<double> kphase = std::complex<double>(cosp, sinp);
+                        if(ModuleBase::GlobalFunc::IS_COLUMN_MAJOR_KS_SOLVER())
+                        {
+                            dm_pair.add_from_matrix(dm_hl_k[0][ik].c, pv->get_row_size(), kphase, 1);
+                        }
+                        else
+                        {
+                            dm_pair.add_from_matrix(dm_hl_k[0][ik].c, pv->get_col_size(), kphase, 0);
+                        }
+                    }// ik
 
-                    g_1dmt.assign(trace_alpha_size * row_size, 0.0);
-                    //dgemm for s_2t and dm_current to get g_1dmt
+                    //dgemm for s_2t and dm_array to get g_1dmt
                     constexpr char transa='T', transb='N';
                     const double gemm_alpha = 1.0, gemm_beta = 0.0;
                     dgemm_(
                         &transa, &transb, 
-                        &row_size, 
+                        &row_size_nks, 
                         &trace_alpha_size, 
                         &col_size, 
                         &gemm_alpha, 
-                        dm_current, 
+                        dm_array.data(), 
                         &col_size,
                         s_2t.data(),  
                         &col_size,     
                         &gemm_beta,      
                         g_1dmt.data(),    
-                        &row_size);
+                        &row_size_nks);
+				}//ad2
+                for(int ik=0;ik<nks;ik++)
+                {
                     // do dot of g_1dmt and s_1t to get orbital_pdm_shell
+                    const double* p_g1dmt = g_1dmt.data() + ik * trace_alpha_size * row_size;
                     int ib=0, index=0, inc=1;
                     for (int L0 = 0; L0 <= orb.Alpha[0].getLmax();++L0)
                     {
@@ -750,15 +755,14 @@ void LCAO_Deepks::cal_orbital_precalc_k(const std::vector<std::vector<ModuleBase
                                 for (int m2=0; m2<nm; ++m2) // m1 = 1 for s, 3 for p, 5 for d
                                 {
                                     orbital_pdm_shell[ik][0][inl][m1*nm+m2] += 
-                                        ddot_(&row_size, g_1dmt.data()+index*row_size, &inc, s_1t.data()+index*row_size, &inc);
+                                        ddot_(&row_size, p_g1dmt+index*row_size, &inc, s_1t.data()+index*row_size, &inc);
                                     index++;
                                 }
                             }
                             ib+=nm;
                         }
                     }
-                    } //iks 
-				}//ad2
+                }
 			}//ad1   
             
         }

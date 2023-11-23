@@ -257,7 +257,7 @@ void LCAO_Deepks::cal_projected_DM_k(const std::vector<std::vector<std::complex<
                 key_tuple key_1(ibt1,dR1.x,dR1.y,dR1.z);
                 if(this->nlm_save_k[iat].find(key_1) == this->nlm_save_k[iat].end()) continue;
                 std::vector<double> s_1t(trace_alpha_size * row_size);
-                std::vector<double> g_1dmt(trace_alpha_size * row_size);
+                std::vector<double> g_1dmt(trace_alpha_size * row_size, 0.0);
                 for(int irow=0;irow<row_size;irow++)
                 {
                     const double* row_ptr = this->nlm_save_k[iat][key_1][row_indexes[irow]][0].data();
@@ -320,11 +320,9 @@ void LCAO_Deepks::cal_projected_DM_k(const std::vector<std::vector<std::complex<
                         }
                     }
                     const double* dm_current = dm_pair.get_pointer();
-
-                    g_1dmt.assign(trace_alpha_size * row_size, 0.0);
                     //dgemm for s_2t and dm_current to get g_1dmt
                     constexpr char transa='T', transb='N';
-                    const double gemm_alpha = 1.0, gemm_beta = 0.0;
+                    const double gemm_alpha = 1.0, gemm_beta = 1.0;
                     dgemm_(
                         &transa, &transb, 
                         &row_size, 
@@ -338,29 +336,29 @@ void LCAO_Deepks::cal_projected_DM_k(const std::vector<std::vector<std::complex<
                         &gemm_beta,      
                         g_1dmt.data(),    
                         &row_size);
-                    // do dot of g_1dmt and s_1t to get orbital_pdm_shell
-                    int ib=0, index=0, inc=1;
-                    for (int L0 = 0; L0 <= orb.Alpha[0].getLmax();++L0)
-                    {
-                        for (int N0 = 0;N0 < orb.Alpha[0].getNchi(L0);++N0)
-                        {
-                            const int inl = this->inl_index[T0](I0, L0, N0);
-                            const int nm = 2*L0+1;
-                    
-                            for (int m1=0; m1<nm; ++m1) // m1 = 1 for s, 3 for p, 5 for d
-                            {
-                                for (int m2=0; m2<nm; ++m2) // m1 = 1 for s, 3 for p, 5 for d
-                                {
-                                    int ind = m1*nm + m2;
-                                    pdm[inl][ind] += 
-                                        ddot_(&row_size, g_1dmt.data()+index*row_size, &inc, s_1t.data()+index*row_size, &inc);
-                                    index++;
-                                }
-                            }
-                            ib+=nm;
-                        }
-                    }
 				}//ad2
+                // do dot of g_1dmt and s_1t to get orbital_pdm_shell
+                int ib=0, index=0, inc=1;
+                for (int L0 = 0; L0 <= orb.Alpha[0].getLmax();++L0)
+                {
+                    for (int N0 = 0;N0 < orb.Alpha[0].getNchi(L0);++N0)
+                    {
+                        const int inl = this->inl_index[T0](I0, L0, N0);
+                        const int nm = 2*L0+1;
+                
+                        for (int m1=0; m1<nm; ++m1) // m1 = 1 for s, 3 for p, 5 for d
+                        {
+                            for (int m2=0; m2<nm; ++m2) // m1 = 1 for s, 3 for p, 5 for d
+                            {
+                                int ind = m1*nm + m2;
+                                pdm[inl][ind] += 
+                                    ddot_(&row_size, g_1dmt.data()+index*row_size, &inc, s_1t.data()+index*row_size, &inc);
+                                index++;
+                            }
+                        }
+                        ib+=nm;
+                    }
+                }
 			}//ad1
         }//I0
     }//T0
