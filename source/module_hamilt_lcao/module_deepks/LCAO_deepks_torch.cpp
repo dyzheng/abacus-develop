@@ -723,7 +723,7 @@ void LCAO_Deepks::cal_orbital_precalc_k(const std::vector<std::vector<ModuleBase
 
                     //dgemm for s_2t and dm_array to get g_1dmt
                     constexpr char transa='T', transb='N';
-                    const double gemm_alpha = 1.0, gemm_beta = 0.0;
+                    const double gemm_alpha = 1.0, gemm_beta = 1.0;
                     dgemm_(
                         &transa, &transb, 
                         &row_size_nks, 
@@ -741,7 +741,7 @@ void LCAO_Deepks::cal_orbital_precalc_k(const std::vector<std::vector<ModuleBase
                 for(int ik=0;ik<nks;ik++)
                 {
                     // do dot of g_1dmt and s_1t to get orbital_pdm_shell
-                    const double* p_g1dmt = g_1dmt.data() + ik * trace_alpha_size * row_size;
+                    const double* p_g1dmt = g_1dmt.data() + ik * row_size;
                     int ib=0, index=0, inc=1;
                     for (int L0 = 0; L0 <= orb.Alpha[0].getLmax();++L0)
                     {
@@ -755,7 +755,7 @@ void LCAO_Deepks::cal_orbital_precalc_k(const std::vector<std::vector<ModuleBase
                                 for (int m2=0; m2<nm; ++m2) // m1 = 1 for s, 3 for p, 5 for d
                                 {
                                     orbital_pdm_shell[ik][0][inl][m1*nm+m2] += 
-                                        ddot_(&row_size, p_g1dmt+index*row_size, &inc, s_1t.data()+index*row_size, &inc);
+                                        ddot_(&row_size, p_g1dmt+index*row_size*nks, &inc, s_1t.data()+index*row_size, &inc);
                                     index++;
                                 }
                             }
