@@ -26,6 +26,9 @@
 #include "LCAO_deepks.h"
 #include "module_base/parallel_reduce.h"
 #include "module_base/constants.h"
+#include "module_hamilt_lcao/module_hcontainer/atom_pair.h"
+#include "module_base/libm/libm.h"
+#include "module_base/blas_connector.h"
 
 //calculates descriptors from projected density matrices
 void LCAO_Deepks::cal_descriptor(void)
@@ -598,8 +601,6 @@ void LCAO_Deepks::cal_orbital_precalc_k(const std::vector<std::vector<ModuleBase
     const double Rcut_Alpha = orb.Alpha[0].getRcut();
     this->init_orbital_pdm_shell(nks);
    
-    for(int ik=0;ik<nks;ik++)
-    {
     for (int T0 = 0; T0 < ucell.ntype; T0++)
     {
 		Atom* atom0 = &ucell.atoms[T0]; 
@@ -609,6 +610,30 @@ void LCAO_Deepks::cal_orbital_precalc_k(const std::vector<std::vector<ModuleBase
             const int iat = ucell.itia2iat(T0,I0);
             const ModuleBase::Vector3<double> tau0 = atom0->tau[I0];
             GridD.Find_atom(ucell, atom0->tau[I0] ,T0, I0);
+
+            //trace alpha orbital
+            std::vector<int> trace_alpha_row;
+            std::vector<int> trace_alpha_col;
+            int ib=0;
+            for (int L0 = 0; L0 <= orb.Alpha[0].getLmax();++L0)
+            {
+                for (int N0 = 0;N0 < orb.Alpha[0].getNchi(L0);++N0)
+                {
+                    const int inl = this->inl_index[T0](I0, L0, N0);
+                    const int nm = 2*L0+1;
+            
+                    for (int m1=0; m1<nm; ++m1) // m1 = 1 for s, 3 for p, 5 for d
+                    {
+                        for (int m2=0; m2<nm; ++m2) // m1 = 1 for s, 3 for p, 5 for d
+                        {
+                            trace_alpha_row.push_back(ib+m1);
+                            trace_alpha_col.push_back(ib+m2);
+                        }
+                    }
+                    ib+=nm;
+                }
+            }
+            const int trace_alpha_size = trace_alpha_row.size();
 
             for (int ad1=0; ad1<GridD.getAdjacentNum()+1 ; ++ad1)
             {
@@ -622,6 +647,23 @@ void LCAO_Deepks::cal_orbital_precalc_k(const std::vector<std::vector<ModuleBase
 				const double Rcut_AO1 = orb.Phi[T1].getRcut(); 
 
                 ModuleBase::Vector3<double> dR1(GridD.getBox(ad1).x, GridD.getBox(ad1).y, GridD.getBox(ad1).z);
+
+                auto row_indexes = pv->get_indexes_row(ibt1);
+                const int row_size = row_indexes.size();
+                if(row_size == 0) continue;
+
+                key_tuple key_1(ibt1,dR1.x,dR1.y,dR1.z);
+                if(this->nlm_save_k[iat].find(key_1) == this->nlm_save_k[iat].end()) continue;
+                std::vector<double> s_1t(trace_alpha_size * row_size);
+                std::vector<double> g_1dmt(trace_alpha_size * row_size);
+                for(int irow=0;irow<row_size;irow++)
+                {
+                    const double* row_ptr = this->nlm_save_k[iat][key_1][row_indexes[irow]][0].data();
+                    for(int i=0;i<trace_alpha_size;i++)
+                    {
+                        s_1t[i * row_size + irow] = row_ptr[trace_alpha_row[i]];
+                    }
+                }
 
 				for (int ad2=0; ad2 < GridD.getAdjacentNum()+1 ; ad2++)
 				{
@@ -642,59 +684,85 @@ void LCAO_Deepks::cal_orbital_precalc_k(const std::vector<std::vector<ModuleBase
 						continue;
 					}
 
-                    int nrow_local = pv->get_row_size(ibt1);
-                    int ncol_local = pv->get_col_size(ibt2);
-                    if(nrow_local * ncol_local == 0) continue;
+                    auto col_indexes = pv->get_indexes_col(ibt2);
+                    const int col_size = col_indexes.size();
+                    if(col_size == 0) continue;
 
-                    const int start1 = pv->get_row_start(ibt1);
-
-                    std::vector<double> dm_current(nrow_local * ncol_local);
-                    std::complex<double> tmp = 0.0;
-                    const double arg = - (kvec_d[ik] * (dR2-dR1) ) * ModuleBase::TWO_PI;
-                    const std::complex<double> kphase = std::complex <double> ( cos(arg),  sin(arg) );
-                    tmp = dm_hl_k[0][ik](iw1_local, iw2_local) * kphase;
-                    dm_current=tmp.real();
-
-                    key_tuple key_1(ibt1,dR1.x,dR1.y,dR1.z);
+                    std::vector<double> s_2t(trace_alpha_size * col_size);
                     key_tuple key_2(ibt2,dR2.x,dR2.y,dR2.z);
-
-                    auto row_indexes = pv->get_row_indexes(ibt1);
-                    auto col_indexes = pv->get_col_indexes(ibt2);
-					for (int iw1l = 0; iw1l < row_indexes.size(); ++iw1l)
+                    if(this->nlm_save_k[iat].find(key_2) == this->nlm_save_k[iat].end()) continue;
+                    for(int icol=0;icol<col_size;icol++)
                     {
-                        std::vector<double> nlm1 = this->nlm_save_k[iat][key_1][row_indexes[iw1l]][0];
-                        for (int iw2l = 0; iw2l < col_indexes.size(); ++iw2l)
+                        const double* col_ptr = this->nlm_save_k[iat][key_2][col_indexes[icol]][0].data();
+                        for(int i=0;i<trace_alpha_size;i++)
                         {
-                            std::vector<double> nlm2 = this->nlm_save_k[iat][key_2][col_indexes[iw2l]][0];
-#ifdef __DEBUG
-                            assert(nlm1.size()==nlm2.size());
-#endif
-                            int ib=0;
-                            for (int L0 = 0; L0 <= orb.Alpha[0].getLmax();++L0)
+                            s_2t[i * col_size + icol] = col_ptr[trace_alpha_col[i]];
+                        }
+                    }
+
+
+                    for(int ik=0;ik<nks;ik++)
+                    {
+                    hamilt::AtomPair<double> dm_pair(ibt1, ibt2, (dR2-dR1).x, (dR2-dR1).y, (dR2-dR1).z, pv);
+                    dm_pair.allocate(nullptr, 1);
+                    const double arg = - (kvec_d[ik] * (dR2-dR1) ) * ModuleBase::TWO_PI;
+                    double sinp, cosp;
+                    ModuleBase::libm::sincos(arg, &sinp, &cosp);
+                    const std::complex<double> kphase = std::complex<double>(cosp, sinp);
+                    if(ModuleBase::GlobalFunc::IS_COLUMN_MAJOR_KS_SOLVER())
+                    {
+                        dm_pair.add_from_matrix(dm_hl_k[0][ik].c, pv->get_row_size(), kphase, 1);
+                    }
+                    else
+                    {
+                        dm_pair.add_from_matrix(dm_hl_k[0][ik].c, pv->get_col_size(), kphase, 0);
+                    }
+                    const double* dm_current = dm_pair.get_pointer();
+
+                    g_1dmt.assign(trace_alpha_size * row_size, 0.0);
+                    //dgemm for s_2t and dm_current to get g_1dmt
+                    constexpr char transa='T', transb='N';
+                    const double gemm_alpha = 1.0, gemm_beta = 0.0;
+                    dgemm_(
+                        &transa, &transb, 
+                        &row_size, 
+                        &trace_alpha_size, 
+                        &col_size, 
+                        &gemm_alpha, 
+                        dm_current, 
+                        &col_size,
+                        s_2t.data(),  
+                        &col_size,     
+                        &gemm_beta,      
+                        g_1dmt.data(),    
+                        &row_size);
+                    // do dot of g_1dmt and s_1t to get orbital_pdm_shell
+                    int ib=0, index=0, inc=1;
+                    for (int L0 = 0; L0 <= orb.Alpha[0].getLmax();++L0)
+                    {
+                        for (int N0 = 0;N0 < orb.Alpha[0].getNchi(L0);++N0)
+                        {
+                            const int inl = this->inl_index[T0](I0, L0, N0);
+                            const int nm = 2*L0+1;
+                    
+                            for (int m1=0; m1<nm; ++m1) // m1 = 1 for s, 3 for p, 5 for d
                             {
-                                for (int N0 = 0;N0 < orb.Alpha[0].getNchi(L0);++N0)
+                                for (int m2=0; m2<nm; ++m2) // m1 = 1 for s, 3 for p, 5 for d
                                 {
-                                    const int inl = this->inl_index[T0](I0, L0, N0);
-                                    const int nm = 2*L0+1;
-                            
-                                    for (int m1=0; m1<nm; ++m1) // m1 = 1 for s, 3 for p, 5 for d
-                                    {
-                                        for (int m2=0; m2<nm; ++m2) // m1 = 1 for s, 3 for p, 5 for d
-                                        {
-                                            orbital_pdm_shell[ik][hl][inl][m1*nm+m2] += dm_current*nlm1[ib+m1]*nlm2[ib+m2];
-                                        }
-                                    }
-                                    ib+=nm;
+                                    orbital_pdm_shell[ik][0][inl][m1*nm+m2] += 
+                                        ddot_(&row_size, g_1dmt.data()+index*row_size, &inc, s_1t.data()+index*row_size, &inc);
+                                    index++;
                                 }
-                            }                          
-						}//iw2
-					}//iw1
+                            }
+                            ib+=nm;
+                        }
+                    }
+                    } //iks 
 				}//ad2
 			}//ad1   
             
         }
     }
-    } //iks 
     ModuleBase::timer::tick("LCAO_Deepks", "calc_orbital_precalc_k");
     ModuleBase::timer::tick("LCAO_Deepks", "calc_orbital_precalc_k_reduce");
 #ifdef __MPI

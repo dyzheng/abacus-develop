@@ -53,12 +53,11 @@ void LCAO_Deepks::build_psialpha(const bool& calc_deri,
             {
                 const int T1 = GridD.getType(ad);
                 const int I1 = GridD.getNatom(ad);
-                const int start1 = ucell.itiaiw2iwt(T1, I1, 0);
+                const int ibt=ucell.itia2iat(T1, I1);
 				const double Rcut_AO1 = orb.Phi[T1].getRcut();
 
                 const ModuleBase::Vector3<double> tau1 = GridD.getAdjacentTau(ad);
 				const Atom* atom1 = &ucell.atoms[T1];
-				const int nw1_tot = atom1->nw*GlobalV::NPOL;
 
                 std::unordered_map<int,std::vector<std::vector<double>>> nlm_cur;
                 if(GlobalV::GAMMA_ONLY_LOCAL)
@@ -77,8 +76,8 @@ void LCAO_Deepks::build_psialpha(const bool& calc_deri,
 					continue;
 				}
 
-                auto all_indexes = paraV->get_indexes_row(iat);
-                auto col_indexes = paraV->get_indexes_col(iat);
+                auto all_indexes = pv->get_indexes_row(ibt);
+                auto col_indexes = pv->get_indexes_col(ibt);
                 // insert col_indexes into all_indexes to get universal set with no repeat elements
                 all_indexes.insert(all_indexes.end(), col_indexes.begin(), col_indexes.end());
                 std::sort(all_indexes.begin(), all_indexes.end());
@@ -87,7 +86,7 @@ void LCAO_Deepks::build_psialpha(const bool& calc_deri,
                 //middle loop : all atomic basis on the adjacent atom ad
 				for (int iw1l=0; iw1l<all_indexes.size(); iw1l+=GlobalV::NPOL)
 				{
-                    const int iw1 = all_indexes[iw1l] / npol;
+                    const int iw1 = all_indexes[iw1l] / GlobalV::NPOL;
 					std::vector<std::vector<double>> nlm;
 					//2D, dim 0 contains the overlap <psi|alpha>
                     //dim 1-3 contains the gradient of overlap
@@ -133,7 +132,6 @@ void LCAO_Deepks::build_psialpha(const bool& calc_deri,
 
                 if(!GlobalV::GAMMA_ONLY_LOCAL)
                 {
-                    const int ibt=ucell.itia2iat(T1, I1);
                     const int rx=GridD.getBox(ad).x;
                     const int ry=GridD.getBox(ad).y;
                     const int rz=GridD.getBox(ad).z;
