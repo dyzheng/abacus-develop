@@ -542,22 +542,28 @@ void LCAO_Deepks::cal_gdmx(const std::vector<double>& dm,
                         r0[1] = ( tau2.y - tau0.y) ;
                         r0[2] = ( tau2.z - tau0.z) ;
                     }
+                    auto row_indexes = pv->get_indexes_row(ibt1);
+                    auto col_indexes = pv->get_indexes_col(ibt2);
+                    if(row_indexes.size() * col_indexes.size() == 0) continue;
 
-					for (int iw1=0; iw1<nw1_tot; ++iw1)
-					{
-						const int iw1_all = start1 + iw1;
-                        const int iw1_local = pv->global2local_col(iw1_all);
-						if(iw1_local < 0)continue;
-						const int iw1_0 = iw1/GlobalV::NPOL;
-						for (int iw2=0; iw2<nw2_tot; ++iw2)
-						{
-							const int iw2_all = start2 + iw2;
-                            const int iw2_local = pv->global2local_row(iw2_all);
-							if(iw2_local < 0)continue;
-							const int iw2_0 = iw2/GlobalV::NPOL;
-                            
-                            std::vector<double> nlm1 = this->nlm_save[iat][ad1][iw1_all][0];
-                            std::vector<std::vector<double>> nlm2 = this->nlm_save[iat][ad2][iw2_all];
+                    hamilt::AtomPair<double> dm_pair(ibt1, ibt2, 0, 0, 0, pv);
+                    dm_pair.allocate(nullptr, 1);
+                    if(ModuleBase::GlobalFunc::IS_COLUMN_MAJOR_KS_SOLVER())
+                    {
+                        dm_pair.add_from_matrix(dm.data(), pv->get_row_size(), 1.0, 1);
+                    }
+                    else
+                    {
+                        dm_pair.add_from_matrix(dm.data(), pv->get_col_size(), 1.0, 0);
+                    }
+                    const double* dm_current = dm_pair.get_pointer();
+
+					for (int iw1=0; iw1<row_indexes.size(); ++iw1)
+                    {
+                        for (int iw2=0; iw2<col_indexes.size(); ++iw2)
+                        {
+                            std::vector<double> nlm1 = this->nlm_save[iat][ad1][row_indexes[iw1]][0];
+                            std::vector<std::vector<double>> nlm2 = this->nlm_save[iat][ad2][col_indexes[iw2]];
 
                             assert(nlm1.size()==nlm2[0].size());
 
@@ -573,24 +579,24 @@ void LCAO_Deepks::cal_gdmx(const std::vector<double>& dm,
                                         for (int m2 = 0; m2 <nm; ++m2)
                                         {
                                             //(<d/dX chi_mu|alpha_m>)<chi_nu|alpha_m'>
-                                            gdmx[iat][inl][m1*nm+m2] += nlm2[1][ib+m2] * nlm1[ib+m1] * dm[iw1_local*nrow+iw2_local]; //dm(iw1_local,iw2_local);
-                                            gdmy[iat][inl][m1*nm+m2] += nlm2[2][ib+m2] * nlm1[ib+m1] * dm[iw1_local*nrow+iw2_local]; //dm(iw1_local,iw2_local);
-                                            gdmz[iat][inl][m1*nm+m2] += nlm2[3][ib+m2] * nlm1[ib+m1] * dm[iw1_local*nrow+iw2_local]; //dm(iw1_local,iw2_local);
+                                            gdmx[iat][inl][m1*nm+m2] += nlm2[1][ib+m2] * nlm1[ib+m1] * *dm_current; //dm(iw1_local,iw2_local);
+                                            gdmy[iat][inl][m1*nm+m2] += nlm2[2][ib+m2] * nlm1[ib+m1] * *dm_current; //dm(iw1_local,iw2_local);
+                                            gdmz[iat][inl][m1*nm+m2] += nlm2[3][ib+m2] * nlm1[ib+m1] * *dm_current; //dm(iw1_local,iw2_local);
 
                                             //(<d/dX chi_nu|alpha_m'>)<chi_mu|alpha_m>
-                                            gdmx[iat][inl][m2*nm+m1] += nlm2[1][ib+m2] * nlm1[ib+m1] * dm[iw1_local*nrow+iw2_local]; //dm(iw1_local,iw2_local);
-                                            gdmy[iat][inl][m2*nm+m1] += nlm2[2][ib+m2] * nlm1[ib+m1] * dm[iw1_local*nrow+iw2_local]; //dm(iw1_local,iw2_local);
-                                            gdmz[iat][inl][m2*nm+m1] += nlm2[3][ib+m2] * nlm1[ib+m1] * dm[iw1_local*nrow+iw2_local]; //dm(iw1_local,iw2_local);                                            
+                                            gdmx[iat][inl][m2*nm+m1] += nlm2[1][ib+m2] * nlm1[ib+m1] * *dm_current; //dm(iw1_local,iw2_local);
+                                            gdmy[iat][inl][m2*nm+m1] += nlm2[2][ib+m2] * nlm1[ib+m1] * *dm_current; //dm(iw1_local,iw2_local);
+                                            gdmz[iat][inl][m2*nm+m1] += nlm2[3][ib+m2] * nlm1[ib+m1] * *dm_current; //dm(iw1_local,iw2_local);                                            
 
                                             //(<chi_mu|d/dX alpha_m>)<chi_nu|alpha_m'> = -(<d/dX chi_mu|alpha_m>)<chi_nu|alpha_m'>
-                                            gdmx[ibt2][inl][m1*nm+m2] -= nlm2[1][ib+m2] * nlm1[ib+m1] * dm[iw1_local*nrow+iw2_local]; //dm(iw1_local,iw2_local);                                               
-                                            gdmy[ibt2][inl][m1*nm+m2] -= nlm2[2][ib+m2] * nlm1[ib+m1] * dm[iw1_local*nrow+iw2_local]; //dm(iw1_local,iw2_local);                                               
-                                            gdmz[ibt2][inl][m1*nm+m2] -= nlm2[3][ib+m2] * nlm1[ib+m1] * dm[iw1_local*nrow+iw2_local]; //dm(iw1_local,iw2_local);
+                                            gdmx[ibt2][inl][m1*nm+m2] -= nlm2[1][ib+m2] * nlm1[ib+m1] * *dm_current; //dm(iw1_local,iw2_local);                                               
+                                            gdmy[ibt2][inl][m1*nm+m2] -= nlm2[2][ib+m2] * nlm1[ib+m1] * *dm_current; //dm(iw1_local,iw2_local);                                               
+                                            gdmz[ibt2][inl][m1*nm+m2] -= nlm2[3][ib+m2] * nlm1[ib+m1] * *dm_current; //dm(iw1_local,iw2_local);
 
                                             //(<chi_nu|d/dX alpha_m'>)<chi_mu|alpha_m> = -(<d/dX chi_nu|alpha_m'>)<chi_mu|alpha_m>
-                                            gdmx[ibt2][inl][m2*nm+m1] -= nlm2[1][ib+m2] * nlm1[ib+m1] * dm[iw1_local*nrow+iw2_local]; //dm(iw1_local,iw2_local);                                               
-                                            gdmy[ibt2][inl][m2*nm+m1] -= nlm2[2][ib+m2] * nlm1[ib+m1] * dm[iw1_local*nrow+iw2_local]; //dm(iw1_local,iw2_local);                                               
-                                            gdmz[ibt2][inl][m2*nm+m1] -= nlm2[3][ib+m2] * nlm1[ib+m1] * dm[iw1_local*nrow+iw2_local]; //dm(iw1_local,iw2_local);                                            
+                                            gdmx[ibt2][inl][m2*nm+m1] -= nlm2[1][ib+m2] * nlm1[ib+m1] * *dm_current; //dm(iw1_local,iw2_local);                                               
+                                            gdmy[ibt2][inl][m2*nm+m1] -= nlm2[2][ib+m2] * nlm1[ib+m1] * *dm_current; //dm(iw1_local,iw2_local);                                               
+                                            gdmz[ibt2][inl][m2*nm+m1] -= nlm2[3][ib+m2] * nlm1[ib+m1] * *dm_current; //dm(iw1_local,iw2_local);                                            
 
                                             if (isstress)
                                             {
@@ -600,7 +606,7 @@ void LCAO_Deepks::cal_gdmx(const std::vector<double>& dm,
                                                     for(int jpol=ipol;jpol<3;jpol++)
                                                     {
                                                         //gdm_epsl[mm][inl][m2*nm+m1] += ucell.lat0 * dm(iw1_local, iw2_local) * (nlm2[jpol+1][ib+m2] * nlm1[ib+m1] * r0[ipol]);
-                                                        gdm_epsl[mm][inl][m2*nm+m1] += ucell.lat0 * dm[iw1_local*nrow+iw2_local] * (nlm2[jpol+1][ib+m2] * nlm1[ib+m1] * r0[ipol]);
+                                                        gdm_epsl[mm][inl][m2*nm+m1] += ucell.lat0 * *dm_current * (nlm2[jpol+1][ib+m2] * nlm1[ib+m1] * r0[ipol]);
                                                         mm++;
                                                     }
                                                 }
@@ -613,8 +619,8 @@ void LCAO_Deepks::cal_gdmx(const std::vector<double>& dm,
                             assert(ib==nlm1.size());
                             if  (isstress)
                             {
-                                nlm1 = this->nlm_save[iat][ad2][iw2_all][0];
-                                nlm2 = this->nlm_save[iat][ad1][iw1_all];
+                                nlm1 = this->nlm_save[iat][ad2][col_indexes[iw2]][0];
+                                nlm2 = this->nlm_save[iat][ad1][row_indexes[iw1]];
 
                                 assert(nlm1.size()==nlm2[0].size());  
                                 int ib=0;
@@ -633,7 +639,7 @@ void LCAO_Deepks::cal_gdmx(const std::vector<double>& dm,
                                                 {
                                                     for(int jpol=ipol;jpol<3;jpol++)
                                                     {
-                                                        gdm_epsl[mm][inl][m2*nm+m1]  += ucell.lat0 * dm[iw1_local*nrow+iw2_local] * (nlm1[ib+m1] * nlm2[jpol+1][ib+m2] * r1[ipol]);
+                                                        gdm_epsl[mm][inl][m2*nm+m1]  += ucell.lat0 * *dm_current * (nlm1[ib+m1] * nlm2[jpol+1][ib+m2] * r1[ipol]);
                                                         mm++;
                                                     }
                                                 }
@@ -643,6 +649,7 @@ void LCAO_Deepks::cal_gdmx(const std::vector<double>& dm,
                                     }
                                 }
                             }
+                            dm_current++;
 						}//iw2
 					}//iw1
 				}//ad2
