@@ -767,8 +767,7 @@ void LCAO_Deepks::cal_orbital_precalc_k(const std::vector<std::vector<ModuleBase
             
         }
     }
-    ModuleBase::timer::tick("LCAO_Deepks", "calc_orbital_precalc_k");
-    ModuleBase::timer::tick("LCAO_Deepks", "calc_orbital_precalc_k_reduce");
+
 #ifdef __MPI
     for (int iks = 0; iks < nks; iks++)
     {
@@ -781,8 +780,6 @@ void LCAO_Deepks::cal_orbital_precalc_k(const std::vector<std::vector<ModuleBase
         }
     }
 #endif    
-    ModuleBase::timer::tick("LCAO_Deepks", "calc_orbital_precalc_k_reduce");
-    ModuleBase::timer::tick("LCAO_Deepks", "calc_orbital_precalc_k_torch");
 
     // transfer orbital_pdm_shell to orbital_pdm_shell_vector
     
@@ -840,7 +837,7 @@ void LCAO_Deepks::cal_orbital_precalc_k(const std::vector<std::vector<ModuleBase
     this->orbital_precalc_tensor = torch::cat(orbital_precalc_vector, -1);
        
     this->del_orbital_pdm_shell(nks);
-    ModuleBase::timer::tick("LCAO_Deepks", "calc_orbital_precalc_k_torch");
+    ModuleBase::timer::tick("LCAO_Deepks", "calc_orbital_precalc_k");
 	return;
 }
 

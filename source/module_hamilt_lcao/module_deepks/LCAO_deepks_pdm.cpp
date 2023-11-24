@@ -33,7 +33,6 @@ void LCAO_Deepks::cal_projected_DM(const std::vector<std::vector<double>>& dm,
     Grid_Driver& GridD)
 {
     ModuleBase::TITLE("LCAO_Deepks", "cal_projected_DM");
-    ModuleBase::timer::tick("LCAO_Deepks","cal_projected_DM");
 
     const int pdm_size = (this->lmaxd * 2 + 1) * (this->lmaxd * 2 + 1);
     if (GlobalV::init_chg == "file" && !this->init_pdm) //for DeePKS NSCF calculation 
@@ -60,6 +59,7 @@ void LCAO_Deepks::cal_projected_DM(const std::vector<std::vector<double>>& dm,
     {
         return;
     }
+    ModuleBase::timer::tick("LCAO_Deepks","cal_projected_DM");
 
     for(int inl=0;inl<inlmax;inl++)
     {
@@ -77,21 +77,62 @@ void LCAO_Deepks::cal_projected_DM(const std::vector<std::vector<double>>& dm,
             const ModuleBase::Vector3<double> tau0 = atom0->tau[I0];
             GridD.Find_atom(ucell, atom0->tau[I0] ,T0, I0);
 
+            //trace alpha orbital
+            std::vector<int> trace_alpha_row;
+            std::vector<int> trace_alpha_col;
+            int ib=0;
+            for (int L0 = 0; L0 <= orb.Alpha[0].getLmax();++L0)
+            {
+                for (int N0 = 0;N0 < orb.Alpha[0].getNchi(L0);++N0)
+                {
+                    const int inl = this->inl_index[T0](I0, L0, N0);
+                    const int nm = 2*L0+1;
+            
+                    for (int m1=0; m1<nm; ++m1) // m1 = 1 for s, 3 for p, 5 for d
+                    {
+                        for (int m2=0; m2<nm; ++m2) // m1 = 1 for s, 3 for p, 5 for d
+                        {
+                            trace_alpha_row.push_back(ib+m1);
+                            trace_alpha_col.push_back(ib+m2);
+                        }
+                    }
+                    ib+=nm;
+                }
+            }
+            const int trace_alpha_size = trace_alpha_row.size();
+
             for (int ad1=0; ad1<GridD.getAdjacentNum()+1 ; ++ad1)
             {
                 const int T1 = GridD.getType(ad1);
                 const int I1 = GridD.getNatom(ad1);
-                const int start1 = ucell.itiaiw2iwt(T1, I1, 0);
+                const int ibt1 = ucell.itia2iat(T1,I1);
                 const ModuleBase::Vector3<double> tau1 = GridD.getAdjacentTau(ad1);
 				const Atom* atom1 = &ucell.atoms[T1];
 				const int nw1_tot = atom1->nw*GlobalV::NPOL;
 				const double Rcut_AO1 = orb.Phi[T1].getRcut(); 
 
+                auto row_indexes = pv->get_indexes_row(ibt1);
+                const int row_size = row_indexes.size();
+                if(row_size == 0) continue;
+
+                // no possible to unexist key
+                std::vector<double> s_1t(trace_alpha_size * row_size);
+                std::vector<double> g_1dmt(trace_alpha_size * row_size, 0.0);
+                for(int irow=0;irow<row_size;irow++)
+                {
+                    const double* row_ptr = this->nlm_save[iat][ad1][row_indexes[irow]][0].data();
+                    
+                    for(int i=0;i<trace_alpha_size;i++)
+                    {
+                        s_1t[i * row_size + irow] = row_ptr[trace_alpha_row[i]];
+                    }
+                }
+
 				for (int ad2=0; ad2 < GridD.getAdjacentNum()+1 ; ad2++)
 				{
 					const int T2 = GridD.getType(ad2);
 					const int I2 = GridD.getNatom(ad2);
-					const int start2 = ucell.itiaiw2iwt(T2, I2, 0);
+                    const int ibt2 = ucell.itia2iat(T2,I2);
 					const ModuleBase::Vector3<double> tau2 = GridD.getAdjacentTau(ad2);
 					const Atom* atom2 = &ucell.atoms[T2];
 					const int nw2_tot = atom2->nw*GlobalV::NPOL;
@@ -106,50 +147,73 @@ void LCAO_Deepks::cal_projected_DM(const std::vector<std::vector<double>>& dm,
 						continue;
 					}
 
-					for (int iw1=0; iw1<nw1_tot; ++iw1)
-					{
-						const int iw1_all = start1 + iw1;
-                        const int iw1_local = pv->global2local_col(iw1_all);
-						if(iw1_local < 0)continue;
-						const int iw1_0 = iw1/GlobalV::NPOL;
+                    auto col_indexes = pv->get_indexes_col(ibt2);
+                    const int col_size = col_indexes.size();
+                    if(col_size == 0) continue;
 
-						for (int iw2=0; iw2<nw2_tot; ++iw2)
-						{
-							const int iw2_all = start2 + iw2;
-                            const int iw2_local = pv->global2local_row(iw2_all);
-							if(iw2_local < 0)continue;
-							const int iw2_0 = iw2/GlobalV::NPOL;
-
-                            std::vector<double> nlm1 = this->nlm_save[iat][ad1][iw1_all][0];
-                            std::vector<double> nlm2 = this->nlm_save[iat][ad2][iw2_all][0];
-                            assert(nlm1.size()==nlm2.size());
-
-                            int ib=0;
-                            for (int L0 = 0; L0 <= orb.Alpha[0].getLmax();++L0)
-                            {
-                                for (int N0 = 0;N0 < orb.Alpha[0].getNchi(L0);++N0)
-                                {
-                                    const int inl = this->inl_index[T0](I0, L0, N0);
-                                    const int nm = 2*L0+1;
-                                    for (int m1 = 0;m1 < 2 * L0 + 1;++m1)
-                                    {
-                                        for (int m2 = 0; m2 < 2 * L0 + 1; ++m2)
-                                        {
-                                            int ind = m1*nm + m2;
-                                            for(int is = 0; is < dm.size(); ++is)
-                                            {
-                                                //pdm[inl][ind] += dm[is](iw1_local, iw2_local)*nlm1[ib+m1]*nlm2[ib+m2];
-                                                pdm[inl][ind] += dm[is][iw1_local * nrow + iw2_local]*nlm1[ib+m1]*nlm2[ib+m2];
-                                            }
-                                        }
-                                    }
-                                    ib+=nm;
-                                }
-                            }
-                            assert(ib==nlm1.size());               
-						}//iw2
-					}//iw1
+                    std::vector<double> s_2t(trace_alpha_size * col_size);
+                    // no possible to unexist key
+                    for(int icol=0;icol<col_size;icol++)
+                    {
+                        const double* col_ptr = this->nlm_save[iat][ad2][col_indexes[icol]][0].data();
+                        for(int i=0;i<trace_alpha_size;i++)
+                        {
+                            s_2t[i * col_size + icol] = col_ptr[trace_alpha_col[i]];
+                        }
+                    }
+                    hamilt::AtomPair<double> dm_pair(ibt1, ibt2, 0, 0, 0, pv);
+                    dm_pair.allocate(nullptr, 1);
+                    for(int is=0; is<dm.size(); is++)
+                    {
+                        if(ModuleBase::GlobalFunc::IS_COLUMN_MAJOR_KS_SOLVER())
+                        {
+                            dm_pair.add_from_matrix(dm[is].data(), pv->get_row_size(), 1.0, 1);
+                        }
+                        else
+                        {
+                            dm_pair.add_from_matrix(dm[is].data(), pv->get_col_size(), 1.0, 0);
+                        }
+                    }
+                    const double* dm_current = dm_pair.get_pointer();
+                    //dgemm for s_2t and dm_current to get g_1dmt
+                    constexpr char transa='T', transb='N';
+                    const double gemm_alpha = 1.0, gemm_beta = 1.0;
+                    dgemm_(
+                        &transa, &transb, 
+                        &row_size, 
+                        &trace_alpha_size, 
+                        &col_size, 
+                        &gemm_alpha, 
+                        dm_current, 
+                        &col_size,
+                        s_2t.data(),  
+                        &col_size,     
+                        &gemm_beta,      
+                        g_1dmt.data(),    
+                        &row_size);
 				}//ad2
+                // do dot of g_1dmt and s_1t to get orbital_pdm_shell
+                int ib=0, index=0, inc=1;
+                for (int L0 = 0; L0 <= orb.Alpha[0].getLmax();++L0)
+                {
+                    for (int N0 = 0;N0 < orb.Alpha[0].getNchi(L0);++N0)
+                    {
+                        const int inl = this->inl_index[T0](I0, L0, N0);
+                        const int nm = 2*L0+1;
+                
+                        for (int m1=0; m1<nm; ++m1) // m1 = 1 for s, 3 for p, 5 for d
+                        {
+                            for (int m2=0; m2<nm; ++m2) // m1 = 1 for s, 3 for p, 5 for d
+                            {
+                                int ind = m1*nm + m2;
+                                pdm[inl][ind] += 
+                                    ddot_(&row_size, g_1dmt.data()+index*row_size, &inc, s_1t.data()+index*row_size, &inc);
+                                index++;
+                            }
+                        }
+                        ib+=nm;
+                    }
+                }
 			}//ad1
         }//I0
     }//T0
@@ -193,7 +257,6 @@ void LCAO_Deepks::cal_projected_DM_k(const std::vector<std::vector<std::complex<
     //check for skipping
     if(dm.size() == 0 || dm[0].size() == 0)
     {
-        ModuleBase::timer::tick("LCAO_Deepks","cal_projected_DM_k");
         return;
     }
     ModuleBase::timer::tick("LCAO_Deepks","cal_projected_DM_k");
