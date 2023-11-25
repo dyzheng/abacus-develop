@@ -133,7 +133,7 @@ void DeePKS<OperatorLCAO<double, double>>::contributeHR()
     {
         ModuleBase::timer::tick("DeePKS", "contributeHR");
         const Parallel_Orbitals* pv = this->LM->ParaV;
-        GlobalC::ld.cal_projected_DM(this->DM->get_DMK_vector(),
+        GlobalC::ld.cal_projected_DM(this->DM,
             *this->ucell,
             GlobalC::ORB,
             GlobalC::GridD);
@@ -167,7 +167,7 @@ void DeePKS<OperatorLCAO<std::complex<double>, double>>::contributeHR()
     {
         ModuleBase::timer::tick("DeePKS", "contributeHR");
 
-        GlobalC::ld.cal_projected_DM_k(this->DM->get_DMK_vector(),
+        GlobalC::ld.cal_projected_DM_k(this->DM,
             *this->ucell,
             GlobalC::ORB,
             GlobalC::GridD,
@@ -208,7 +208,7 @@ void DeePKS<OperatorLCAO<std::complex<double>, std::complex<double>>>::contribut
     {
         ModuleBase::timer::tick("DeePKS", "contributeHR");
 
-        GlobalC::ld.cal_projected_DM_k(this->DM->get_DMK_vector(),
+        GlobalC::ld.cal_projected_DM_k(this->DM,
             *this->ucell,
             GlobalC::ORB,
             GlobalC::GridD,

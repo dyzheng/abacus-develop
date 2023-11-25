@@ -27,7 +27,7 @@
 
 //this subroutine performs the calculation of projected density matrices
 //pdm_m,m'=\sum_{mu,nu} rho_{mu,nu} <chi_mu|alpha_m><alpha_m'|chi_nu>
-void LCAO_Deepks::cal_projected_DM(const std::vector<std::vector<double>>& dm, 
+void LCAO_Deepks::cal_projected_DM(const elecstate::DensityMatrix<double, double>* dm, 
     const UnitCell &ucell,
     const LCAO_Orbitals &orb,
     Grid_Driver& GridD)
@@ -56,10 +56,10 @@ void LCAO_Deepks::cal_projected_DM(const std::vector<std::vector<double>>& dm,
         return;
     }
 
-    if(dm.size() == 0 || dm[0].size() == 0)
-    {
-        return;
-    }
+    //if(dm.size() == 0 || dm[0].size() == 0)
+    //{
+    //    return;
+    //}
 
     for(int inl=0;inl<inlmax;inl++)
     {
@@ -161,7 +161,7 @@ void LCAO_Deepks::cal_projected_DM(const std::vector<std::vector<double>>& dm,
     return;
 }
 
-void LCAO_Deepks::cal_projected_DM_k(const std::vector<std::vector<std::complex<double>>>& dm,
+void LCAO_Deepks::cal_projected_DM_k(const elecstate::DensityMatrix<std::complex<double>, double>* dm,
     const UnitCell &ucell,
     const LCAO_Orbitals &orb,
     Grid_Driver& GridD,
