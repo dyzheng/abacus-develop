@@ -121,11 +121,11 @@ void LCAO_Deepks_Interface::out_deepks_labels(double etot,
                                               const elecstate::DensityMatrix<std::complex<double>, double>* dm)
 {
     ModuleBase::TITLE("LCAO_Deepks_Interface", "out_deepks_labels");
+    ModuleBase::timer::tick("LCAO_Deepks_Interface", "out_deepks_labels");
     // calculating deepks correction to bandgap
     // and save the results
     if (GlobalV::deepks_out_labels) // caoyu add 2021-06-04
     {
-        ModuleBase::timer::tick("LCAO_Deepks_Interface", "out_deepks_labels1");
         ld->save_npy_e(etot, "e_tot.npy");
         if (GlobalV::deepks_scf)
         {
@@ -136,11 +136,9 @@ void LCAO_Deepks_Interface::out_deepks_labels(double etot,
         {
             ld->save_npy_e(etot, "e_base.npy"); // no scf, e_tot=e_base
         }
-        ModuleBase::timer::tick("LCAO_Deepks_Interface", "out_deepks_labels1");
 
         if (GlobalV::deepks_bandgap)
         {
-            ModuleBase::timer::tick("LCAO_Deepks_Interface", "out_deepks_labels2");
             int nocc = GlobalV::nelec / 2;
             ModuleBase::matrix deepks_bands;
             deepks_bands.create(nks, 1);
@@ -154,7 +152,6 @@ void LCAO_Deepks_Interface::out_deepks_labels(double etot,
             ld->save_npy_o(deepks_bands, "o_tot.npy", nks);
             if (GlobalV::deepks_scf)
             {
-                ModuleBase::timer::tick("LCAO_Deepks_Interface", "out_deepks_labels2-2");
                 int nocc = GlobalV::nelec / 2;
                 ModuleBase::matrix wg_hl;
                 wg_hl.create(nks, GlobalV::NBANDS);
@@ -173,35 +170,22 @@ void LCAO_Deepks_Interface::out_deepks_labels(double etot,
                     elecstate::cal_dm(ParaV, wg_hl, psi, dm_bandgap_k[ib]);
                 }
 
-                ModuleBase::timer::tick("LCAO_Deepks_Interface", "out_deepks_labels2-2");
-
-                ModuleBase::timer::tick("LCAO_Deepks_Interface", "out_deepks_labels2-3");
-
                 // ld->cal_o_delta_k(dm_bandgap_k, ParaV, nks);
                 ld->cal_orbital_precalc_k(dm_bandgap_k, nat, nks, kvec_d, ucell, orb, GridD);
-                ModuleBase::timer::tick("LCAO_Deepks_Interface", "out_deepks_labels2-3");
-                ModuleBase::timer::tick("LCAO_Deepks_Interface", "out_deepks_labels2-4");
                 ld->save_npy_orbital_precalc(nat, nks);
-                ModuleBase::timer::tick("LCAO_Deepks_Interface", "out_deepks_labels2-4");
-                ModuleBase::timer::tick("LCAO_Deepks_Interface", "out_deepks_labels2-5");
                 ld->cal_o_delta_k(dm_bandgap_k, nks);
-                ModuleBase::timer::tick("LCAO_Deepks_Interface", "out_deepks_labels2-5");
-                ModuleBase::timer::tick("LCAO_Deepks_Interface", "out_deepks_labels2-6");
                 ld->save_npy_o(deepks_bands - ld->o_delta, "o_base.npy", nks);
-                ModuleBase::timer::tick("LCAO_Deepks_Interface", "out_deepks_labels2-6");
             }     // end deepks_scf == 1
             else  // deepks_scf == 0
             {
                 ld->save_npy_o(deepks_bands, "o_base.npy", nks); // no scf, o_tot=o_base
             }                                                    // end deepks_scf == 0
-            ModuleBase::timer::tick("LCAO_Deepks_Interface", "out_deepks_labels2");
         }                                                        // end bandgap label
     }                                                            // end deepks_out_labels
 
     // DeePKS PDM and descriptor
     if (GlobalV::deepks_out_labels || GlobalV::deepks_scf)
     {
-        ModuleBase::timer::tick("LCAO_Deepks_Interface", "out_deepks_labels3");
         // this part is for integrated test of deepks
         // so it is printed no matter even if deepks_out_labels is not used
         ld->cal_projected_DM_k(dm, ucell, orb, GridD, nks, kvec_d);
@@ -211,20 +195,18 @@ void LCAO_Deepks_Interface::out_deepks_labels(double etot,
 
         if (GlobalV::deepks_out_labels)
             ld->save_npy_d(nat); // libnpy needed
-        ModuleBase::timer::tick("LCAO_Deepks_Interface", "out_deepks_labels3");
     }
     //
     if (GlobalV::deepks_scf)
     {
-        ModuleBase::timer::tick("LCAO_Deepks_Interface", "out_deepks_labels4");
         ld->cal_e_delta_band_k(dm->get_DMK_vector(), nks);
         std::cout << "E_delta_band = " << std::setprecision(8) << ld->e_delta_band << " Ry"
                   << " = " << std::setprecision(8) << ld->e_delta_band * ModuleBase::Ry_to_eV << " eV"
                   << std::endl;
         std::cout << "E_delta_NN= " << std::setprecision(8) << ld->E_delta << " Ry"
                   << " = " << std::setprecision(8) << ld->E_delta * ModuleBase::Ry_to_eV << " eV" << std::endl;
-        ModuleBase::timer::tick("LCAO_Deepks_Interface", "out_deepks_labels4");
     }
+    ModuleBase::timer::tick("LCAO_Deepks_Interface", "out_deepks_labels");
 }
 
 #endif
