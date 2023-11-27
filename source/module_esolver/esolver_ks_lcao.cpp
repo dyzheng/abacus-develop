@@ -848,8 +848,6 @@ namespace ModuleESolver
 #ifdef __DEEPKS
     std::shared_ptr<LCAO_Deepks> ld_shared_ptr(&GlobalC::ld,[](LCAO_Deepks*){});
     LCAO_Deepks_Interface LDI = LCAO_Deepks_Interface(ld_shared_ptr);
-    const std::vector<std::vector<TK>>& dm
-        = dynamic_cast<const elecstate::ElecStateLCAO<TK>*>(this->pelec)->get_DM()->get_DMK_vector();
     ModuleBase::timer::tick("ESolver_KS_LCAO", "out_deepks_labels");
     LDI.out_deepks_labels(this->pelec->f_en.etot,
             this->pelec->klist->nks,
@@ -861,7 +859,7 @@ namespace ModuleESolver
             GlobalC::GridD,
             this->LOWF.ParaV,
             *(this->psi),
-            dm);
+            dynamic_cast<const elecstate::ElecStateLCAO<TK>*>(this->pelec)->get_DM());
     ModuleBase::timer::tick("ESolver_KS_LCAO", "out_deepks_labels");
 
 #endif

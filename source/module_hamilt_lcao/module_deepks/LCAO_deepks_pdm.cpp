@@ -161,20 +161,18 @@ void LCAO_Deepks::cal_projected_DM(const elecstate::DensityMatrix<double, double
                             s_2t[i * col_size + icol] = col_ptr[trace_alpha_col[i]];
                         }
                     }
-                    hamilt::AtomPair<double> dm_pair(ibt1, ibt2, 0, 0, 0, pv);
-                    dm_pair.allocate(nullptr, 1);
-                    for(int is=0; is<dm.size(); is++)
+                    // prepare DM_gamma from DMR
+                    std::vector<double> dm_array(row_size*col_size, 0.0);
+                    const double* dm_current;
+                    for(int is=0;is<dm->get_DMR_vector().size();is++)
                     {
-                        if(ModuleBase::GlobalFunc::IS_COLUMN_MAJOR_KS_SOLVER())
+                        dm_current = dm->get_DMR_vector()[is]->find_matrix(ibt1, ibt2, 0, 0, 0)->get_pointer();
+                        for(int idm=0;idm<row_size*col_size;idm++)
                         {
-                            dm_pair.add_from_matrix(dm[is].data(), pv->get_row_size(), 1.0, 1);
-                        }
-                        else
-                        {
-                            dm_pair.add_from_matrix(dm[is].data(), pv->get_col_size(), 1.0, 0);
+                            dm_array[idm] += dm_current[idm];
                         }
                     }
-                    const double* dm_current = dm_pair.get_pointer();
+                    dm_current = dm_array.data();
                     //dgemm for s_2t and dm_current to get g_1dmt
                     constexpr char transa='T', transb='N';
                     const double gemm_alpha = 1.0, gemm_beta = 1.0;
@@ -255,10 +253,10 @@ void LCAO_Deepks::cal_projected_DM_k(const elecstate::DensityMatrix<std::complex
     }
 
     //check for skipping
-    if(dm.size() == 0 || dm[0].size() == 0)
-    {
-        return;
-    }
+    //if(dm.size() == 0 || dm[0].size() == 0)
+    //{
+    //    return;
+    //}
     ModuleBase::timer::tick("LCAO_Deepks","cal_projected_DM_k");
 
     for(int inl=0;inl<inlmax;inl++)
@@ -365,24 +363,25 @@ void LCAO_Deepks::cal_projected_DM_k(const elecstate::DensityMatrix<std::complex
                             s_2t[i * col_size + icol] = col_ptr[trace_alpha_col[i]];
                         }
                     }
-                    hamilt::AtomPair<double> dm_pair(ibt1, ibt2, (dR2-dR1).x, (dR2-dR1).y, (dR2-dR1).z, pv);
-                    dm_pair.allocate(nullptr, 1);
-                    for(int ik=0;ik<nks;ik++)
+                    // prepare DM_gamma from DMR
+                    std::vector<double> dm_array(row_size*col_size, 0.0);
+                    const double* dm_current;
+                    for(int is=0;is<dm->get_DMR_vector().size();is++)
                     {
-                        const double arg = - (kvec_d[ik] * (dR2-dR1) ) * ModuleBase::TWO_PI;
-                        double sinp, cosp;
-                        ModuleBase::libm::sincos(arg, &sinp, &cosp);
-                        const std::complex<double> kphase = std::complex<double>(cosp, sinp);
-                        if(ModuleBase::GlobalFunc::IS_COLUMN_MAJOR_KS_SOLVER())
+                        auto tmp_matrix = dm->get_DMR_vector()[is]->find_matrix(ibt1, ibt2, (dR2-dR1).x, (dR2-dR1).y, (dR2-dR1).z);
+                        if(tmp_matrix == nullptr)
                         {
-                            dm_pair.add_from_matrix(dm[ik].data(), pv->get_row_size(), kphase, 1);
+                            dm_current = nullptr;
+                            break;
                         }
-                        else
+                        dm_current = tmp_matrix->get_pointer();
+                        for(int idm=0;idm<row_size*col_size;idm++)
                         {
-                            dm_pair.add_from_matrix(dm[ik].data(), pv->get_col_size(), kphase, 0);
+                            dm_array[idm] += dm_current[idm];
                         }
                     }
-                    const double* dm_current = dm_pair.get_pointer();
+                    if(dm_current == nullptr) continue;
+                    dm_current = dm_array.data();
                     //dgemm for s_2t and dm_current to get g_1dmt
                     constexpr char transa='T', transb='N';
                     const double gemm_alpha = 1.0, gemm_beta = 1.0;
