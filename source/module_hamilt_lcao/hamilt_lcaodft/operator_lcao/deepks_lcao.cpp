@@ -270,7 +270,6 @@ void hamilt::DeePKS<hamilt::OperatorLCAO<TK, TR>>::calculate_HR()
         L0_size += orb.Alpha[0].getNchi(L0);
         L0s.insert(L0s.end(), orb.Alpha[0].getNchi(L0), L0);
     }
-    std::vector<const double*> gedms(L0_size);
 
     std::unordered_set<int> atom_row_list;
 #ifdef _OPENMP
@@ -287,18 +286,31 @@ void hamilt::DeePKS<hamilt::OperatorLCAO<TK, TR>>::calculate_HR()
         ucell->iat2iait(iat0, &I0, &T0);
         AdjacentAtomInfo& adjs = this->adjs_all[iat0];
 
-        //--------------------------------------------------
-        // prepair the vector of Loop-L0-N0
-        int index = 0;
+        //trace alpha orbital
+        std::vector<int> trace_alpha_row;
+        std::vector<int> trace_alpha_col;
+        std::vector<double> gedms;
+        int ib=0;
         for (int L0 = 0; L0 <= orb.Alpha[0].getLmax();++L0)
         {
             for (int N0 = 0;N0 < orb.Alpha[0].getNchi(L0);++N0)
             {
-                const int inl = GlobalC::ld.get_inl(T0, I0, L0, N0);
-                gedms[index] = GlobalC::ld.get_gedms(inl);
-                index++;
+                const int inl = this->inl_index[T0](I0, L0, N0);
+                const int nm = 2*L0+1;
+        
+                for (int m1=0; m1<nm; ++m1) // m1 = 1 for s, 3 for p, 5 for d
+                {
+                    for (int m2=0; m2<nm; ++m2) // m1 = 1 for s, 3 for p, 5 for d
+                    {
+                        trace_alpha_row.push_back(ib+m1);
+                        trace_alpha_col.push_back(ib+m2);
+                        gedms.push_back(GlobalC::ld.gedm[inl][m1*nm+m2]);
+                    }
+                }
+                ib+=nm;
             }
         }
+        const int trace_alpha_size = trace_alpha_row.size();
         //--------------------------------------------------
 
         std::vector<std::unordered_map<int, std::vector<double>>> nlm_tot;
@@ -372,6 +384,22 @@ void hamilt::DeePKS<hamilt::OperatorLCAO<TK, TR>>::calculate_HR()
             }
 #endif
             ModuleBase::Vector3<int>& R_index1 = adjs.box[ad1];
+            auto row_indexes = pv->get_indexes_row(iat1);
+            const int row_size = row_indexes.size();
+            if(row_size == 0) continue;
+
+            key_tuple key_1(iat1,dR1.x,dR1.y,dR1.z);
+            if(GlobalC::ld.nlm_save_k[iat0].find(key_1) == GlobalC::ld.nlm_save_k[iat0].end()) continue;
+            std::vector<double> s_1t(trace_alpha_size * row_size);
+            std::vector<double> g_1dmt(trace_alpha_size * row_size, 0.0);
+            for(int irow=0;irow<row_size;irow++)
+            {
+                const double* row_ptr = GlobalC::ld.nlm_save_k[iat0][key_1][row_indexes[irow]][0].data();
+                for(int i=0;i<trace_alpha_size;i++)
+                {
+                    s_1t[i * row_size + irow] = row_ptr[trace_alpha_row[i]] * gedms[i];
+                }
+            }
             for (int ad2 = 0; ad2 < adjs.adj_num + 1; ++ad2)
             {
                 const int T2 = adjs.ntype[ad2];
@@ -383,6 +411,18 @@ void hamilt::DeePKS<hamilt::OperatorLCAO<TK, TR>>::calculate_HR()
                                                   R_index2[2] - R_index1[2]);
                 hamilt::BaseMatrix<TR>* tmp = this->H_V_delta->find_matrix(iat1, iat2, R_vector[0], R_vector[1], R_vector[2]);
                 // if not found , skip this pair of atoms
+                if (tmp == nullptr) continue;
+                std::vector<double> s_2t(trace_alpha_size * col_size);
+                key_tuple key_2(ibt2,dR2.x,dR2.y,dR2.z);
+                if(GlobalC::ld.nlm_save_k[iat].find(key_2) == GlobalC::ld.nlm_save_k[iat].end()) continue;
+                for(int icol=0;icol<col_size;icol++)
+                {
+                    const double* col_ptr = GlobalC::ld.nlm_save_k[iat][key_2][col_indexes[icol]][0].data();
+                    for(int i=0;i<trace_alpha_size;i++)
+                    {
+                        s_2t[i * col_size + icol] = col_ptr[trace_alpha_col[i]];
+                    }
+                }
                 if (tmp != nullptr)
                 {
                     this->cal_HR_IJR(iat1, iat2, T0, paraV, nlm_tot[ad1], nlm_tot[ad2], L0s.data(), gedms.data(), L0_size, tmp->get_pointer());
