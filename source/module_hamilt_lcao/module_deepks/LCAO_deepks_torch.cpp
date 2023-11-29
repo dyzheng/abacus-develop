@@ -725,6 +725,7 @@ void LCAO_Deepks::cal_orbital_precalc_k(const std::vector<std::vector<ModuleBase
 					const int T2 = GridD.getType(ad2);
 					const int I2 = GridD.getNatom(ad2);
                     const int ibt2 = ucell.itia2iat(T2,I2);
+                    if(ibt1>ibt2) continue;
 					const ModuleBase::Vector3<double> tau2 = GridD.getAdjacentTau(ad2);
 					const Atom* atom2 = &ucell.atoms[T2];
 					const int nw2_tot = atom2->nw*GlobalV::NPOL;
@@ -778,7 +779,8 @@ void LCAO_Deepks::cal_orbital_precalc_k(const std::vector<std::vector<ModuleBase
 
                     //dgemm for s_2t and dm_array to get g_1dmt
                     constexpr char transa='T', transb='N';
-                    const double gemm_alpha = 1.0, gemm_beta = 1.0;
+                    double gemm_alpha = 1.0, gemm_beta = 1.0;
+                    if(ibt1<ibt2) gemm_alpha = 2.0;
                     dgemm_(
                         &transa, &transb, 
                         &row_size_nks, 
