@@ -346,6 +346,7 @@ HamiltLCAO<TK, TR>::HamiltLCAO(
     {
         this->hRS2.resize(this->hR->get_nnr() * 2);
         this->hR->allocate(this->hRS2.data(), 0);
+        std::cout<<__FILE__<<__LINE__<<" "<<this->hR->get_memory_size()<<" "<<this->hR->get_nnr()<<" "<<this->hRS2.size()<<std::endl;
         memory_fold = 2;
     }
 
@@ -377,11 +378,13 @@ void HamiltLCAO<TK, TR>::updateHk(const int ik)
         if(GlobalV::VL_IN_H && this->kv->isk[ik] != GlobalV::CURRENT_SPIN)
         {
             // change data pointer of HR
+            std::cout<<__FILE__<<__LINE__<<"reset HR "<<this->kv->isk[ik]<<std::endl;
             this->hR->allocate(this->hRS2.data()+this->hRS2.size()/2*this->kv->isk[ik], 0);
             if(this->refresh_times > 0)
             {
                 this->refresh_times--;
                 dynamic_cast<hamilt::OperatorLCAO<TK, TR>*>(this->ops)->set_hr_done(false);
+                std::cout<<__FILE__<<__LINE__<<"refresh HR "<<this->refresh_times<<std::endl;
             }
         }
         GlobalV::CURRENT_SPIN = this->kv->isk[ik];
@@ -393,10 +396,17 @@ void HamiltLCAO<TK, TR>::updateHk(const int ik)
 template <typename TK, typename TR>
 void HamiltLCAO<TK, TR>::refresh()
 {
+    ModuleBase::TITLE("HamiltLCAO", "refresh");
     dynamic_cast<hamilt::OperatorLCAO<TK, TR>*>(this->ops)->set_hr_done(false);
     if(GlobalV::NSPIN == 2)
     {
         this->refresh_times = 1;
+        GlobalV::CURRENT_SPIN = 0;
+        if(this->hR->get_nnr() != this->hRS2.size()/2)
+        {
+            // operator has changed, resize hRS2
+            this->hRS2.resize(this->hR->get_nnr() * 2); 
+        }
     }
 }
 
