@@ -207,7 +207,9 @@ HamiltLCAO<TK, TR>::HamiltLCAO(
                 LM_in,
                 kv->kvec_d,
                 this->hR,// no explicit call yet
+                this->sR,
                 &(this->getHk(LM_in)),
+                &GlobalC::ucell,
                 this->kv->isk
             );
             this->getOperator()->add(dftu);
@@ -323,7 +325,9 @@ HamiltLCAO<TK, TR>::HamiltLCAO(
                 LM_in,
                 kv->kvec_d,
                 this->hR,// no explicit call yet
+                this->sR,
                 &(this->getHk(LM_in)),
+                &GlobalC::ucell,
                 this->kv->isk
             );
             this->getOperator()->add(dftu);

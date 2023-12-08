@@ -12,14 +12,14 @@ void DFTU::cal_VU_pot_mat_complex(const int spin, const bool newlocale, std::com
 
     for (int it = 0; it < GlobalC::ucell.ntype; ++it)
     {
-        if (INPUT.orbital_corr[it] == -1)
+        if (this->orbital_corr[it] == -1)
             continue;
         for (int ia = 0; ia < GlobalC::ucell.atoms[it].na; ia++)
         {
             const int iat = GlobalC::ucell.itia2iat(it, ia);
             for (int L = 0; L <= GlobalC::ucell.atoms[it].nwl; L++)
             {
-                if (L != INPUT.orbital_corr[it])
+                if (L != this->orbital_corr[it])
                     continue;
 
                 for (int n = 0; n < GlobalC::ucell.atoms[it].l_nchi[L]; n++)
@@ -68,14 +68,14 @@ void DFTU::cal_VU_pot_mat_real(const int spin, const bool newlocale, double* VU)
 
     for (int it = 0; it < GlobalC::ucell.ntype; ++it)
     {
-        if (INPUT.orbital_corr[it] == -1)
+        if (this->orbital_corr[it] == -1)
             continue;
         for (int ia = 0; ia < GlobalC::ucell.atoms[it].na; ia++)
         {
             const int iat = GlobalC::ucell.itia2iat(it, ia);
             for (int L = 0; L <= GlobalC::ucell.atoms[it].nwl; L++)
             {
-                if (L != INPUT.orbital_corr[it])
+                if (L != this->orbital_corr[it])
                     continue;
 
                 for (int n = 0; n < GlobalC::ucell.atoms[it].l_nchi[L]; n++)
@@ -111,6 +111,70 @@ void DFTU::cal_VU_pot_mat_real(const int spin, const bool newlocale, double* VU)
                     } // m1
                 } // n
             } // l
+        } // ia
+    } // it
+
+    return;
+}
+
+void DFTU::cal_VU_pot_atompair(const int spin, const bool newlocale, hamilt::HContainer<double>* vu)
+{
+    ModuleBase::TITLE("DFTU", "cal_VU_pot_mat_real");
+    vu->set_zero();
+    if (!this->initialed_locale)
+    {
+        return;
+    }
+    const int npol = GlobalV::NPOL;
+
+    for (int it = 0; it < GlobalC::ucell.ntype; ++it)
+    {
+        // skip elements without plus-U
+        if (this->orbital_corr[it] == -1)
+            continue;
+        for (int ia = 0; ia < GlobalC::ucell.atoms[it].na; ia++)
+        {
+            const int iat = GlobalC::ucell.itia2iat(it, ia);
+            // choose the target L-orbital by user input
+            const int L = this->orbital_corr[it];
+            if (L > GlobalC::ucell.atoms[it].nwl || GlobalC::ucell.atoms[it].l_nchi[L]<=0)
+                continue;
+            const int n = 0;
+            /*for (int L = 0; L <= GlobalC::ucell.atoms[it].nwl; L++)
+            {
+                if (L != this->orbital_corr[it])
+                    continue;*/
+
+                /*for (int n = 0; n < GlobalC::ucell.atoms[it].l_nchi[L]; n++)
+                {
+                    if (n != 0)
+                        continue;*/
+
+            // find the target atom-pair
+            hamilt::AtomPair<double>* ap_iat = vu->find_pair(iat, iat);
+            if (ap_iat == nullptr)
+                continue;
+            const int iw_begin = this->iatlnmipol2iwt[iat][L][n][0][0] - this->iatlnmipol2iwt[iat][0][0][0][0];
+            const int iw_end = this->iatlnmipol2iwt[iat][L][n][2 * L][npol-1] - this->iatlnmipol2iwt[iat][0][0][0][0];
+            double* data_pointer = &(ap_iat->get_value(iw_begin, iw_begin));
+            const int col_size = ap_iat->get_col_size();
+            // loop for m, m'
+            int m1 = -1;
+            for (int irow = iw_begin; irow <= iw_end; irow += npol)
+            {
+                const int ipol1 = irow % npol;
+                if(!ipol1) m1++;
+                int m2 = -1;
+                int m1_all = m1 + (2 * L + 1) * ipol1;
+                for (int icol = 0; icol <= iw_end - iw_begin; icol++)
+                {
+                    int ipol2 = icol % npol;
+                    if(!ipol2) m2++;
+                    int m2_all = m2 + (2 * L + 1) * ipol2;
+                    data_pointer[icol] = this->get_onebody_eff_pot(it, iat, L, n, spin, m1_all, m2_all, newlocale);
+                }
+                data_pointer += col_size;
+            }
         } // ia
     } // it
 

@@ -12,6 +12,7 @@
 #include "module_elecstate/module_charge/charge_mixing.h"
 #include "module_hamilt_general/hamilt.h"
 #include "module_elecstate/elecstate.h"
+#include "module_hamilt_lcao/module_hcontainer/hcontainer.h"
 
 #include <string>
 
@@ -66,6 +67,8 @@ class DFTU
     void cal_eff_pot_mat_real(const int ik, double* eff_pot, const std::vector<int>& isk);
     void cal_eff_pot_mat_R_double(const int ispin, double* SR, double* HR);
     void cal_eff_pot_mat_R_complex_double(const int ispin, std::complex<double>* SR, std::complex<double>* HR);
+
+    void cal_VU_pot_atompair(const int spin, const bool newlocale, hamilt::HContainer<double>* vu);
 
     //=============================================================
     // In dftu_occup.cpp

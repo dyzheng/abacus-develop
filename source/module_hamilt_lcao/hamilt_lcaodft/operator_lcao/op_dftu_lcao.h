@@ -23,12 +23,11 @@ class OperatorDFTU<OperatorLCAO<TK, TR>> : public OperatorLCAO<TK, TR>
     OperatorDFTU<OperatorLCAO<TK, TR>>(LCAO_Matrix* LM_in,
                                   const std::vector<ModuleBase::Vector3<double>>& kvec_d_in,
                                   hamilt::HContainer<TR>* hR_in,
+                                  hamilt::HContainer<TR>* sR_in,
                                   std::vector<TK>* hK_in,
-                                  const std::vector<int>& isk_in)
-        : isk(isk_in), OperatorLCAO<TK, TR>(LM_in, kvec_d_in, hR_in, hK_in)
-    {
-        this->cal_type = lcao_dftu;
-    }
+                                  const UnitCell* ucell_in,
+                                  const std::vector<int>& isk_in);
+    ~OperatorDFTU();
 
     virtual void contributeHR() override;
 
@@ -36,7 +35,10 @@ class OperatorDFTU<OperatorLCAO<TK, TR>> : public OperatorLCAO<TK, TR>
 
   private:
 
-    bool HR_fixed_done = false;
+    void initialize(const UnitCell* ucell_in);
+
+    hamilt::HContainer<TR>* VU_ = nullptr;
+    const hamilt::HContainer<TR>* sR_ = nullptr;
 
     const std::vector<int>& isk;
 };
