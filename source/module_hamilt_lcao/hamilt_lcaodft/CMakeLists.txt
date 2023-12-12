@@ -33,6 +33,7 @@ if(ENABLE_LCAO)
         local_orbital_wfc.cpp
         dm_2d.cpp
         wavefunc_in_pw.cpp
+        hamilt_mixing.cpp
     )
 
     add_library(
