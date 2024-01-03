@@ -48,10 +48,10 @@ void hamilt::DeePKS<hamilt::OperatorLCAO<TK, TR>>::initialize_HR(Grid_Driver* Gr
     ModuleBase::TITLE("DeePKS", "initialize_HR");
     ModuleBase::timer::tick("DeePKS", "initialize_HR");
 
-    //this->H_V_delta = new HContainer<TR>(paraV);
+    this->H_V_delta = new HContainer<TR>(paraV);
     if(std::is_same<TK, double>::value)
     {
-        this->H_V_delta = new HContainer<TR>(paraV);
+        //this->H_V_delta = new HContainer<TR>(paraV);
         this->H_V_delta->fix_gamma();
     }
 
@@ -117,10 +117,10 @@ void hamilt::DeePKS<hamilt::OperatorLCAO<TK, TR>>::initialize_HR(Grid_Driver* Gr
                                          R_index2.y - R_index1.y,
                                          R_index2.z - R_index1.z,
                                          paraV);
-                if(std::is_same<TK, double>::value)
-                {
-                    this->H_V_delta->insert_pair(tmp);
-                }
+                //if(std::is_same<TK, double>::value)
+                //{
+                this->H_V_delta->insert_pair(tmp);
+                //}
             }
         }
         if(pre_cal_nlm)
@@ -129,15 +129,10 @@ void hamilt::DeePKS<hamilt::OperatorLCAO<TK, TR>>::initialize_HR(Grid_Driver* Gr
         }
     }
     // allocate the memory of BaseMatrix in HR, and set the new values to zero
-    if(std::is_same<TK, double>::value)
-    {
-        // only gamma-only has full size of Hamiltonian of DeePKS now, 
-        // multi-k keep same size of nonlocal operator, H_V_delta will be allocated by hR
-        this->H_V_delta->allocate(nullptr, true);
-        // expand hR with H_V_delta, only gamma-only case now
-        this->hR->add(*this->H_V_delta);
-        this->hR->allocate(nullptr, false);
-    }
+    //if(std::is_same<TK, double>::value)
+    //{
+    this->H_V_delta->allocate(nullptr, true);
+    //}
 
     ModuleBase::timer::tick("DeePKS", "initialize_HR");
 }
@@ -200,10 +195,10 @@ void DeePKS<OperatorLCAO<std::complex<double>, double>>::contributeHR()
         //GlobalC::ld.add_v_delta_k(*this->ucell, GlobalC::ORB, GlobalC::GridD, this->LM->ParaV->nnr);
         
         // recalculate the H_V_delta
-        if(this->H_V_delta == nullptr)
-        {
-            this->H_V_delta = new hamilt::HContainer<double>(*this->hR);
-        }
+        //if(this->H_V_delta == nullptr)
+        //{
+        //    this->H_V_delta = new hamilt::HContainer<double>(*this->hR);
+        //}
         this->H_V_delta->set_zero();
         this->calculate_HR();
 
@@ -242,10 +237,10 @@ void DeePKS<OperatorLCAO<std::complex<double>, std::complex<double>>>::contribut
         //    .add_v_delta_k(*this->ucell, GlobalC::ORB, GlobalC::GridD, this->LM->ParaV->nnr);
         
         // recalculate the H_V_delta
-        if(this->H_V_delta == nullptr)
-        {
-            this->H_V_delta = new hamilt::HContainer<std::complex<double>>(*this->hR);
-        }
+        //if(this->H_V_delta == nullptr)
+        //{
+        //    this->H_V_delta = new hamilt::HContainer<std::complex<double>>(*this->hR);
+        //}
         this->H_V_delta->set_zero();
         this->calculate_HR();
 
