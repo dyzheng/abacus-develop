@@ -47,7 +47,7 @@ void DFTU::output()
     }
 
     GlobalV::ofs_running << "Local occupation matrices" << std::endl;
-    this->write_occup_m(GlobalV::ofs_running);
+    this->write_occup_m(GlobalV::ofs_running, true);
     GlobalV::ofs_running << "//=======================================================//" << std::endl;
     
     //Write onsite.dm
@@ -67,7 +67,7 @@ void DFTU::output()
     return;
 }
 
-void DFTU::write_occup_m(std::ofstream &ofs)
+void DFTU::write_occup_m(std::ofstream &ofs, const bool diag)
 {
     ModuleBase::TITLE("DFTU", "write_occup_m");
 

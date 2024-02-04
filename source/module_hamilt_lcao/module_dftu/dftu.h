@@ -12,6 +12,7 @@
 #include "module_elecstate/module_charge/charge_mixing.h"
 #include "module_hamilt_general/hamilt.h"
 #include "module_elecstate/elecstate.h"
+#include "module_hamilt_lcao/module_hcontainer/hcontainer.h"
 
 #include <string>
 
@@ -74,8 +75,8 @@ class DFTU
     //=============================================================
   public:
     // calculate the local occupation number matrix
-    void cal_occup_m_k(const int iter, const std::vector<std::vector<std::complex<double>>>& dm_k, const K_Vectors& kv, const double& mixing_beta, hamilt::Hamilt<std::complex<double>>* p_ham);
-    void cal_occup_m_gamma(const int iter, const std::vector<std::vector<double>>& dm_gamma, const double& mixing_beta);
+    void cal_occup_m_k(const int iter, const std::vector<hamilt::HContainer<double>*>& dmr, const K_Vectors& kv, const double& mixing_beta, hamilt::Hamilt<std::complex<double>>* p_ham);
+    void cal_occup_m_gamma(const int iter, const std::vector<hamilt::HContainer<double>*>& dmr, const double& mixing_beta);
 
   private:
     // dftu can be calculated only after locale has been initialed
@@ -161,7 +162,7 @@ class DFTU
     void output();
 
   private:
-    void write_occup_m(std::ofstream& ofs);
+    void write_occup_m(std::ofstream& ofs, const bool diag = false);
     void read_occup_m(const std::string& fn);
     void local_occup_bcast();
 

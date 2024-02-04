@@ -1,6 +1,8 @@
 #include "dftu.h"
 #include "module_base/timer.h"
 #include "module_hamilt_pw/hamilt_pwdft/global.h"
+#include "module_hamilt_lcao/module_hcontainer/hcontainer_funcs.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/hamilt_lcao.h"
 
 extern "C"
 {
@@ -137,7 +139,8 @@ void DFTU::mix_locale(const double& mixing_beta)
 }
 
 void DFTU::cal_occup_m_k(const int iter, 
-                        const std::vector<std::vector<std::complex<double>>>& dm_k,
+                        //const std::vector<std::vector<std::complex<double>>>& dm_k,
+                        const std::vector<hamilt::HContainer<double>*>& dmr,
                         const K_Vectors& kv,
                         const double& mixing_beta,
                         hamilt::Hamilt<std::complex<double>>* p_ham)
@@ -152,19 +155,142 @@ void DFTU::cal_occup_m_k(const int iter,
     // call SCALAPACK routine to calculate the product of the S and density matrix
     const char transN = 'N', transT = 'T';
     const int one_int = 1;
-    const std::complex<double> beta(0.0,0.0), alpha(1.0,0.0);
+
+    if(GlobalV::NSPIN < 4)
+    {
+        hamilt::HContainer<double>* sr_tmp = dynamic_cast<hamilt::HamiltLCAO<std::complex<double>, double>*>(p_ham)->getSR();
+
+        // calculate the product of the S and density matrix
+        // loop over all <IJR> pairs
+        /*for(int iap=0;iap<sr_tmp->size_atom_pairs();iap++)
+        {
+            auto& ap_tmp = sr_tmp->get_atom_pair(iap);
+            const int atom_i = ap_tmp.get_atom_i();
+            const int atom_j = ap_tmp.get_atom_j();
+            for(int ir=0;ir<ap_tmp.get_R_size();ir++)
+            {
+                const int* R_index = ap_tmp.get_R_index(ir);
+                const hamilt::BaseMatrix<double>* dmr_tmp = dmr[0]->find_matrix(atom_i, atom_j, R_index[0], R_index[1], R_index[2]); 
+                if(dmr_tmp != nullptr)
+                {
+                    
+                }
+            }
+        }*/
+        //loop over all R cells
+        const int nR = sr_tmp->size_R_loop();
+        int nR_dm = dmr[0]->size_R_loop();
+        if(GlobalV::NSPIN == 2) nR_dm = dmr[1]->size_R_loop();
+        ModuleBase::Vector3<double> kvec = {0.0, 0.0, 0.0};
+        std::vector<double> sr_current(this->LM->ParaV->nloc);
+        std::vector<double> dm_current(this->LM->ParaV->nloc);
+        std::vector<double> srho(this->LM->ParaV->nloc);
+        for(int iR = 0;iR < nR; iR++)
+        {
+            int r_index[3];
+            sr_tmp->loop_R(iR, r_index[0], r_index[1], r_index[2]);
+            sr_tmp->fix_R(r_index[0], r_index[1], r_index[2]);
+            // do folding to get the SR and DMR in the target R cell
+            const int nrow = this->LM->ParaV->get_row_size();
+            sr_current.assign(this->LM->ParaV->nloc, 0.0);
+            hamilt::folding_HR(*sr_tmp, sr_current.data(), kvec, nrow, 1);
+            for(int is=0;is<GlobalV::NSPIN;is++)
+            {
+                dmr[is]->fix_R(r_index[0], r_index[1], r_index[2]);
+                srho.assign(this->LM->ParaV->nloc, 0.0);
+                dm_current.assign(this->LM->ParaV->nloc, 0.0);
+                hamilt::folding_HR(*(dmr[is]), dm_current.data(), kvec, nrow, 1);
+                // do pdgemm to get the product of SR and DMR
+#ifdef __MPI
+                const double alpha = 1.0;
+                const double beta = 1.0;
+                pdgemm_(&transT,
+                        &transN,
+                        &GlobalV::NLOCAL,
+                        &GlobalV::NLOCAL,
+                        &GlobalV::NLOCAL,
+                        &alpha,
+                        sr_current.data(),
+                        &one_int,
+                        &one_int,
+                        this->LM->ParaV->desc,
+                        dm_current.data(),
+                        //dm_k[ik].c,
+                        &one_int,
+                        &one_int,
+                        this->LM->ParaV->desc,
+                        &beta,
+                        srho.data(),
+                        &one_int,
+                        &one_int,
+                        this->LM->ParaV->desc);
+#endif
+                // save the result to the locale matrix
+                for (int it = 0; it < GlobalC::ucell.ntype; it++)
+                {
+                    const int NL = GlobalC::ucell.atoms[it].nwl + 1;
+                    const int LC = orbital_corr[it];
+
+                    if (LC == -1)
+                        continue;
+                    if (GlobalC::ucell.atoms[it].l_nchi[LC] == 0)
+                        continue;
+
+                    for (int ia = 0; ia < GlobalC::ucell.atoms[it].na; ia++)
+                    {
+                        const int iat = GlobalC::ucell.itia2iat(it, ia);
+
+                        int l = LC;
+
+                        int n = 0;
+                        // Calculate the local occupation number matrix
+                        for (int m0 = 0; m0 < 2 * l + 1; m0++)
+                        {
+                            const int iwt0 = this->iatlnmipol2iwt[iat][l][n][m0][0];
+                            const int mu = this->LM->ParaV->global2local_row(iwt0);
+
+                            for (int m1 = 0; m1 < 2 * l + 1; m1++)
+                            {
+                                const int iwt1 = this->iatlnmipol2iwt[iat][l][n][m1][0];
+                                const int nu = this->LM->ParaV->global2local_col(iwt1);
+                                const int irc = nu * this->LM->ParaV->nrow + mu;
+                                const int m0_all = m0;
+                                const int m1_all = m1;
+
+                                if ((nu >= 0) && (mu >= 0))
+                                    locale[iat][l][n][is](m0_all, m1_all) += srho[irc] / 2.0;
+                            } // m1
+                        } // m0
+                    } // end ia
+                } // end it
+            }//end is
+        }//end iR
+        sr_tmp->unfix_R();
+        for(int is=0;is<GlobalV::NSPIN;is++)
+        {
+            dmr[is]->unfix_R();
+        }
+    }
+    else
+    {
+    const std::complex<double> beta(0.0,0.0);
 
     std::vector<std::complex<double>> srho(this->LM->ParaV->nloc);
+    std::vector<std::complex<double>> dm_k(this->LM->ParaV->nloc);
 
     for (int ik = 0; ik < kv.nks; ik++)
     {
+        const std::complex<double> alpha(kv.wk[ik], 0.0);
         // srho(mu,nu) = \sum_{iw} S(mu,iw)*dm_k(iw,nu)
         this->folding_matrix_k_new(ik, p_ham);
         std::complex<double>* s_k_pointer = this->LM->Sloc2.data();
+        dm_k.assign(this->LM->ParaV->nloc, std::complex<double>(0.0, 0.0));
+        const int nrow = this->LM->ParaV->get_row_size();
+        hamilt::folding_HR(*(dmr[kv.isk[ik]]), dm_k.data(), kv.kvec_d[ik], nrow, 1);
 
 #ifdef __MPI
-        pzgemm_(&transN,
-                &transT,
+        pzgemm_(&transT,
+                &transN,
                 &GlobalV::NLOCAL,
                 &GlobalV::NLOCAL,
                 &GlobalV::NLOCAL,
@@ -173,7 +299,7 @@ void DFTU::cal_occup_m_k(const int iter,
                 &one_int,
                 &one_int,
                 this->LM->ParaV->desc,
-                dm_k[ik].data(),
+                dm_k.data(),
                 //dm_k[ik].c,
                 &one_int,
                 &one_int,
@@ -249,6 +375,7 @@ void DFTU::cal_occup_m_k(const int iter,
             } // end ia
         } // end it
     } // ik
+    }//end if GlobalV::NSPIN < 4
 
     for (int it = 0; it < GlobalC::ucell.ntype; it++)
     {
@@ -344,7 +471,7 @@ void DFTU::cal_occup_m_k(const int iter,
     return;
 }
 
-void DFTU::cal_occup_m_gamma(const int iter, const std::vector<std::vector<double>> &dm_gamma, const double& mixing_beta)
+void DFTU::cal_occup_m_gamma(const int iter, const std::vector<hamilt::HContainer<double>*>& dmr, const double& mixing_beta)
 {
     ModuleBase::TITLE("DFTU", "cal_occup_m_gamma");
     ModuleBase::timer::tick("DFTU", "cal_occup_m_gamma");
@@ -358,10 +485,15 @@ void DFTU::cal_occup_m_gamma(const int iter, const std::vector<std::vector<doubl
     const double alpha = 1.0, beta = 0.0;
 
     std::vector<double> srho(this->LM->ParaV->nloc);
+    std::vector<double> dm_gamma(this->LM->ParaV->nloc);
     for (int is = 0; is < GlobalV::NSPIN; is++)
     {
         // srho(mu,nu) = \sum_{iw} S(mu,iw)*dm_gamma(iw,nu)
         double* s_gamma_pointer = this->LM->Sloc.data();
+        dm_gamma.assign(this->LM->ParaV->nloc, 0.0);
+        const int nrow = this->LM->ParaV->get_row_size();
+        ModuleBase::Vector3<double> kvec = {0.0, 0.0, 0.0};
+        hamilt::folding_HR(*(dmr[is]), dm_gamma.data(), kvec, nrow, 1);
 
 #ifdef __MPI
         pdgemm_(&transN,
@@ -374,7 +506,7 @@ void DFTU::cal_occup_m_gamma(const int iter, const std::vector<std::vector<doubl
                 &one_int,
                 &one_int,
                 this->LM->ParaV->desc,
-                dm_gamma[is].data(),
+                dm_gamma.data(),
                 //dm_gamma[is].c,
                 &one_int,
                 &one_int,
