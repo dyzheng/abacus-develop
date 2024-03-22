@@ -12,6 +12,8 @@
 #include "module_elecstate/module_charge/charge_mixing.h"
 #include "module_hamilt_general/hamilt.h"
 #include "module_elecstate/elecstate.h"
+#include "module_hamilt_lcao/module_hcontainer/hcontainer.h"
+#include "module_elecstate/module_dm/density_matrix.h"
 
 #include <string>
 
@@ -186,6 +188,15 @@ private:
 
     double spherical_Bessel(const int k, const double r, const double lambda);
     double spherical_Hankel(const int k, const double r, const double lambda);
+
+  public:
+    const hamilt::HContainer<double>* get_dmr(int ispin) const;
+    void set_dmr(const elecstate::DensityMatrix<double, double>* dm_in_dftu_d);
+    void set_dmr(const elecstate::DensityMatrix<std::complex<double>, double>* dm_in_dftu_cd);
+  
+  private:
+    const elecstate::DensityMatrix<double, double>* dm_in_dftu_d = nullptr;
+    const elecstate::DensityMatrix<std::complex<double>, double>* dm_in_dftu_cd = nullptr;
 };
 } // namespace ModuleDFTU
 

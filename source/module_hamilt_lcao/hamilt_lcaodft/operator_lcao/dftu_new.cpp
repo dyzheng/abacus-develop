@@ -12,9 +12,6 @@
 #include "module_base/parallel_reduce.h"
 
 template <typename TK, typename TR>
-const elecstate::DensityMatrix<TK, double>* hamilt::DFTUNew<hamilt::OperatorLCAO<TK, TR>>::dm_in_dftu = nullptr; 
-
-template <typename TK, typename TR>
 hamilt::DFTUNew<hamilt::OperatorLCAO<TK, TR>>::DFTUNew(
     LCAO_Matrix* LM_in,
     const std::vector<ModuleBase::Vector3<double>>& kvec_d_in,
@@ -177,7 +174,7 @@ template <typename TK, typename TR>
 void hamilt::DFTUNew<hamilt::OperatorLCAO<TK, TR>>::calculate_HR()
 {
     ModuleBase::TITLE("DFTUNew", "calculate_HR");
-    if(this->dm_in_dftu == nullptr && this->dftu->initialed_locale == false)
+    if(this->dftu->get_dmr(0) == nullptr && this->dftu->initialed_locale == false)
     {// skip the calculation if dm_in_dftu is nullptr
         return;
     }
@@ -211,7 +208,7 @@ void hamilt::DFTUNew<hamilt::OperatorLCAO<TK, TR>>::calculate_HR()
         std::vector<double> occ(tlp1 * tlp1 * spin_fold, 0.0);
         if(this->dftu->initialed_locale == false)
         {
-            hamilt::HContainer<double>* dmR_current = this->dm_in_dftu->get_DMR_pointer(GlobalV::CURRENT_SPIN+1);
+            const hamilt::HContainer<double>* dmR_current = this->dftu->get_dmr(GlobalV::CURRENT_SPIN);
             for (int ad1 = 0; ad1 < adjs.adj_num + 1; ++ad1)
             {
                 const int T1 = adjs.ntype[ad1];

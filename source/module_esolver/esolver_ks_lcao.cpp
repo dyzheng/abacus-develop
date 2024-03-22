@@ -571,15 +571,9 @@ namespace ModuleESolver
 
     if (GlobalV::dft_plus_u)
     {
-        if(istep == 0 && iter == 1)
+        if(istep != 0 || iter != 1)
         {
-            hamilt::DFTUNew<hamilt::OperatorLCAO<TK, TR>>::dm_in_dftu = nullptr;
-        }
-        else
-        {
-            hamilt::DFTUNew<hamilt::OperatorLCAO<TK, TR>>::dm_in_dftu =
-            dynamic_cast<elecstate::ElecStateLCAO<TK>*>(this->pelec)
-                ->get_DM();
+            GlobalC::dftu.set_dmr( dynamic_cast<elecstate::ElecStateLCAO<TK>*>(this->pelec)->get_DM() );
         }
         GlobalC::dftu.cal_slater_UJ(this->pelec->charge->rho, this->pw_rho->nrxx); // Calculate U and J if Yukawa potential is used
     }

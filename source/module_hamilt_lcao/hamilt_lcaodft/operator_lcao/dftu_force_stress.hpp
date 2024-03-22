@@ -12,13 +12,23 @@ void DFTUNew<OperatorLCAO<TK, TR>>::cal_force_stress(
   ModuleBase::matrix& force, 
   ModuleBase::matrix& stress)
 {
-    ModuleBase::TITLE("DFTUNew", "cal_force_stress");
-#ifdef __DEBUG
-    assert(this->dm_in_dftu != nullptr);
-#endif    
+    ModuleBase::TITLE("DFTUNew", "cal_force_stress");    
+    if(this->dftu->get_dmr(0) == nullptr)
+    { 
+        ModuleBase::WARNING_QUIT("DFTUNew", "dmr is not set");
+    }
+    //try to get the density matrix, if the density matrix is empty, skip the calculation and return
+    const hamilt::HContainer<double>* dmR_tmp[GlobalV::NSPIN];
+    dmR_tmp[0] = this->dftu->get_dmr(0);
+    if(GlobalV::NSPIN==2) dmR_tmp[1] = this->dftu->get_dmr(1);
+    if(dmR_tmp[0]->size_atom_pairs() == 0)
+    {
+        return;
+    }
+    // begin the calculation of force and stress
     ModuleBase::timer::tick("DFTUNew", "cal_force_stress");
 
-    const Parallel_Orbitals* paraV = this->dm_in_dftu->get_DMR_pointer(1)->get_atom_pair(0).get_paraV();
+    const Parallel_Orbitals* paraV = dmR_tmp[0]->get_atom_pair(0).get_paraV();
     const int npol = this->ucell->get_npol();
     std::vector<double> stress_tmp(6, 0);
     if (cal_force)
@@ -112,10 +122,6 @@ void DFTUNew<OperatorLCAO<TK, TR>>::cal_force_stress(
             const int ii = i % (tlp1 * tlp1);
             occ[i] = this->dftu->locale[iat0][target_L][0][is].c[ii];
         }
-        hamilt::HContainer<double>* dmR_tmp[GlobalV::NSPIN];
-        dmR_tmp[0] = this->dm_in_dftu->get_DMR_pointer(1);
-        if(GlobalV::NSPIN==2) dmR_tmp[1] = this->dm_in_dftu->get_DMR_pointer(2);
-
         
         //calculate VU
         const double u_value = this->dftu->U[T0];

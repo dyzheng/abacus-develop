@@ -55,9 +55,6 @@ class DFTUNew<OperatorLCAO<TK, TR>> : public OperatorLCAO<TK, TR>
      */
     virtual void contributeHR() override;
 
-    /// pointer of density matrix, it is a temporary implementation
-    static const elecstate::DensityMatrix<TK, double>* dm_in_dftu;
-
     /// calculate force and stress for DFT+U 
     void cal_force_stress(
       const bool cal_force, 
