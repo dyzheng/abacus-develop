@@ -71,13 +71,15 @@ class DFTUNew<OperatorLCAO<TK, TR>> : public OperatorLCAO<TK, TR>
 
     TK* HK_pointer = nullptr;
 
+    /// @brief the number of spin components, 1 for no-spin, 2 for collinear spin case and 4 for non-collinear spin case
     int nspin = 0;
+    /// @brief the current spin index for nspin==2 to calculate spin-up and spin-down separately
     int current_spin = 0;
 
     /**
-     * @brief initialize HR, search the nearest neighbor atoms
-     * HContainer is used to store the non-local pseudopotential matrix with specific <I,J,R> atom-pairs
-     * the size of HR will be fixed after initialization
+     * @brief search the nearest neighbor atoms and save them into this->adjs_all
+     * the size of HR will not change in DFTUNew, 
+     * because I don't want to expand HR larger than Nonlocal operator caused by DFTUNew
      */
     void initialize_HR(Grid_Driver* GridD_in, const Parallel_Orbitals* paraV);
 
@@ -157,7 +159,9 @@ class DFTUNew<OperatorLCAO<TK, TR>> : public OperatorLCAO<TK, TR>
                         double* stress);
 
     std::vector<AdjacentAtomInfo> adjs_all;
+    /// @brief if the nlm_tot is calculated
     bool precal_nlm_done = false;
+    /// @brief the overlap values for all [atoms][nerghbors][orb_index(iw) in NAOs][m of target_l in Projectors]
     std::vector<std::vector<std::unordered_map<int, std::vector<double>>>> nlm_tot;
 };
 

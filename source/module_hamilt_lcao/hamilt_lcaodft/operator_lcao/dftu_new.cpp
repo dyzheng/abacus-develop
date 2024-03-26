@@ -212,7 +212,7 @@ void hamilt::DFTUNew<hamilt::OperatorLCAO<TK, TR>>::calculate_HR()
     else
     {
         //will update this->dftu->locale and this->dftu->EU
-        if(GlobalV::CURRENT_SPIN == 0) this->dftu->EU = 0.0;
+        if(this->current_spin == 0) this->dftu->EU = 0.0;
     }
     ModuleBase::timer::tick("DFTUNew", "calculate_HR");
 
@@ -239,7 +239,7 @@ void hamilt::DFTUNew<hamilt::OperatorLCAO<TK, TR>>::calculate_HR()
         std::vector<double> occ(tlp1 * tlp1 * spin_fold, 0.0);
         if(this->dftu->initialed_locale == false)
         {
-            const hamilt::HContainer<double>* dmR_current = this->dftu->get_dmr(GlobalV::CURRENT_SPIN);
+            const hamilt::HContainer<double>* dmR_current = this->dftu->get_dmr(this->current_spin);
             for (int ad1 = 0; ad1 < adjs.adj_num + 1; ++ad1)
             {
                 const int T1 = adjs.ntype[ad1];
@@ -273,14 +273,14 @@ void hamilt::DFTUNew<hamilt::OperatorLCAO<TK, TR>>::calculate_HR()
             for(int i=0;i<occ.size();i++)
             {
                 if(this->nspin==1) occ[i] *= 0.5;
-                this->dftu->locale[iat0][target_L][0][GlobalV::CURRENT_SPIN].c[i] = occ[i];
+                this->dftu->locale[iat0][target_L][0][this->current_spin].c[i] = occ[i];
             }
         }
         else // use readin locale to calculate occupation matrix
         {
             for(int i=0;i<occ.size();i++)
             {
-                occ[i] = this->dftu->locale[iat0][target_L][0][GlobalV::CURRENT_SPIN].c[i];
+                occ[i] = this->dftu->locale[iat0][target_L][0][this->current_spin].c[i];
             }
             // set initialed_locale to false to avoid using readin locale in next iteration
         }
@@ -329,7 +329,12 @@ void hamilt::DFTUNew<hamilt::OperatorLCAO<TK, TR>>::calculate_HR()
     //energy correction for NSPIN=1
     if(this->nspin==1) this->dftu->EU *= 2.0;
     // for readin onsite_dm, set initialed_locale to false to avoid using readin locale in next iteration
-    if(GlobalV::CURRENT_SPIN == this->nspin-1 || this->nspin==4) this->dftu->initialed_locale = false;
+    if(this->current_spin == this->nspin-1 || this->nspin==4) this->dftu->initialed_locale = false;
+
+    // update this->current_spin: only nspin=2 iterate change it between 0 and 1
+    // the key point is only nspin=2 calculate spin-up and spin-down separately, 
+    // and won't calculate spin-up twice without spin-down
+    if(this->nspin == 2) this->current_spin = 1 - this->current_spin;
 
     ModuleBase::timer::tick("DFTUNew", "calculate_HR");
 }

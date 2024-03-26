@@ -88,18 +88,15 @@ class DFTUNewTest : public ::testing::Test
             for(int l=0;l<3;l++)
             {
                 GlobalC::dftu.locale[iat][l].resize(1);
-                GlobalC::dftu.locale[iat][l][0].resize(1);
+                GlobalC::dftu.locale[iat][l][0].resize(2);
                 GlobalC::dftu.locale[iat][l][0][0].create(2*l+1, 2*l+1);
+                GlobalC::dftu.locale[iat][l][0][1].create(2*l+1, 2*l+1);
             }
         }
-        double U_test = 1.0;
         GlobalC::dftu.U = &U_test;
-        int orbital_c_test = 2;
         GlobalC::dftu.orbital_corr = &orbital_c_test;
 
         GlobalV::onsite_radius = 1.0;
-        GlobalV::NSPIN = 1;
-        GlobalV::CURRENT_SPIN = 0;
 
     }
 
@@ -146,11 +143,15 @@ class DFTUNewTest : public ::testing::Test
 
     int dsize;
     int my_rank = 0;
+    double U_test = 1.0;
+    int orbital_c_test = 2;
 };
 
 // using TEST_F to test DFTUNew
 TEST_F(DFTUNewTest, constructHRd2d)
 {
+    //test for nspin=1
+    GlobalV::NSPIN = 1;
     std::vector<ModuleBase::Vector3<double>> kvec_d_in(1, ModuleBase::Vector3<double>(0.0, 0.0, 0.0));
     std::vector<double> hk(paraV->get_row_size() * paraV->get_col_size(), 0.0);
     Grid_Driver gd(0,0,0);
@@ -185,7 +186,6 @@ TEST_F(DFTUNewTest, constructHRd2d)
     {
         for(int icc=0;icc<25;icc++)
         {
-            //std::cout<<"occupations: "<<icc<<" "<<GlobalC::dftu.locale[iat][2][0][0].c[icc]<<std::endl;
             EXPECT_NEAR(GlobalC::dftu.locale[iat][2][0][0].c[icc], 0.5, 1e-10);
         }
     }
@@ -201,7 +201,6 @@ TEST_F(DFTUNewTest, constructHRd2d)
         for (int i = 0; i < nwt; ++i)
         {
             EXPECT_NEAR(tmp.get_pointer(0)[i], -10.0*test_size, 1e-10);
-            //std::cout<<"HR:i "<<i<<" "<<tmp.get_pointer(0)[i]<<std::endl;
         }
     }
     // calculate SK
@@ -213,7 +212,6 @@ TEST_F(DFTUNewTest, constructHRd2d)
     for (int i = 0; i < paraV->get_row_size() * paraV->get_col_size(); ++i)
     {
         EXPECT_NEAR(hk[i], -10.0*test_size, 1e-10);
-        //std::cout<<"HK:i "<<i<<" "<<hk[i]<<std::endl;
     }
     std::cout << "Test terms:   " <<std::setw(15)<< "initialize_HR" <<std::setw(15)<< "contributeHR" <<std::setw(15)<< "contributeHk" << std::endl;
     std::cout << "Elapsed time: " <<std::setw(15)<< elapsed_time.count()<<std::setw(15)<<elapsed_time1.count()<<std::setw(15)<<elapsed_time2.count() << " seconds." << std::endl;
@@ -221,12 +219,14 @@ TEST_F(DFTUNewTest, constructHRd2d)
 
 TEST_F(DFTUNewTest, constructHRd2cd)
 {
+    // test for nspin=2
+    GlobalV::NSPIN = 2;
     std::vector<ModuleBase::Vector3<double>> kvec_d_in(2, ModuleBase::Vector3<double>(0.0, 0.0, 0.0));
     std::vector<std::complex<double>> hk(paraV->get_row_size() * paraV->get_col_size(), std::complex<double>(0.0, 0.0));
     Grid_Driver gd(0,0,0);
     EXPECT_EQ(LCAO_Orbitals::get_const_instance().Phi[0].getRcut(), 1.0);
     // reset HR and DMR
-    const double factor = 1.0 / test_nw / test_nw / test_size / test_size;
+    const double factor = 0.5 / test_nw / test_nw / test_size / test_size;
     for(int i=0;i<DMR->get_nnr();i++)
     {
         DMR->get_wrapper()[i] = factor;
@@ -243,7 +243,7 @@ TEST_F(DFTUNewTest, constructHRd2cd)
         paraV
     );
     op.contributeHR();
-    // check the occupations of dftu
+    // check the occupations of dftu for spin-up
     for(int iat=0;iat<test_size;iat++)
     {
         for(int icc=0;icc<25;icc++)
@@ -262,7 +262,6 @@ TEST_F(DFTUNewTest, constructHRd2cd)
         int nwt = indexes1.size() * indexes2.size();
         for (int i = 0; i < nwt; ++i)
         {
-            //std::cout<<"HR0:i "<<i<<" "<<tmp.get_pointer(0)[i]<<std::endl;
             EXPECT_NEAR(tmp.get_pointer(0)[i], -10.0*test_size, 1e-10);
         }
     }
@@ -271,9 +270,18 @@ TEST_F(DFTUNewTest, constructHRd2cd)
     // check the value of HK of gamma point
     for (int i = 0; i < paraV->get_row_size() * paraV->get_col_size(); ++i)
     {
-        //std::cout<<"HK0:i "<<i<<" "<<hk[i]<<std::endl;
         EXPECT_NEAR(hk[i].real(), -10.0*test_size, 1e-10);
         EXPECT_NEAR(hk[i].imag(), 0.0, 1e-10);
+    }
+    // calculate spin-down hamiltonian
+    op.contributeHR();
+    // check the occupations of dftu for spin-down
+    for(int iat=0;iat<test_size;iat++)
+    {
+        for(int icc=0;icc<25;icc++)
+        {
+            EXPECT_NEAR(GlobalC::dftu.locale[iat][2][0][1].c[icc], 0.5, 1e-10);
+        }
     }
 }
 
