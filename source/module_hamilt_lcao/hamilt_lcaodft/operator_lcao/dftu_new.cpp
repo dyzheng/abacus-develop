@@ -31,6 +31,8 @@ hamilt::DFTUNew<hamilt::OperatorLCAO<TK, TR>>::DFTUNew(
 #endif
     // initialize HR to allocate sparse Nonlocal matrix memory
     this->initialize_HR(GridD_in, paraV);
+    //set nspin
+    this->nspin = GlobalV::NSPIN;
 }
 
 // destructor
@@ -126,30 +128,28 @@ void hamilt::DFTUNew<hamilt::OperatorLCAO<TK, TR>>::cal_nlm_all(const Parallel_O
             for (int iw1l = 0; iw1l < all_indexes.size(); iw1l += npol)
             {
                 const int iw1 = all_indexes[iw1l] / npol;
+                // only first zeta orbitals in target L of atom iat0 are needed
+                std::vector<double> nlm_target(tlp1);
+                const int L1 = atom1->iw2l[ iw1 ];
+                const int N1 = atom1->iw2n[ iw1 ];
+                const int m1 = atom1->iw2m[ iw1 ];
+#ifdef USE_NEW_TWO_CENTER
                 std::vector<std::vector<double>> nlm;
                 // nlm is a vector of vectors, but size of outer vector is only 1 here
                 // If we are calculating force, we need also to store the gradient
                 // and size of outer vector is then 4
                 // inner loop : all projectors (L0,M0)
-#ifdef USE_NEW_TWO_CENTER
                 //=================================================================
                 //          new two-center integral (temporary)
                 //=================================================================
-                int L1 = atom1->iw2l[ iw1 ];
-                int N1 = atom1->iw2n[ iw1 ];
-                int m1 = atom1->iw2m[ iw1 ];
 
                 // convert m (0,1,...2l) to M (-l, -l+1, ..., l-1, l)
-                int M1 = (m1 % 2 == 0) ? -m1/2 : (m1+1)/2;
+                const int M1 = (m1 % 2 == 0) ? -m1/2 : (m1+1)/2;
 
                 ModuleBase::Vector3<double> dtau = tau0 - tau1;
                 uot.two_center_bundle->overlap_orb_onsite->snap(
                         T1, L1, N1, M1, T0, dtau * this->ucell->lat0, 0 /*cal_deri*/, nlm);
-#else
-                ModuleBase::WARNING_QUIT("DFTUNew", "old two center integral method not implemented");
-#endif
                 // select the elements of nlm with target_L
-                std::vector<double> nlm_target(tlp1);
                 for(int iw =0;iw < this->ucell->atoms[T0].nw; iw++)
                 {
                     const int L0 = this->ucell->atoms[T0].iw2l[iw];
@@ -162,6 +162,37 @@ void hamilt::DFTUNew<hamilt::OperatorLCAO<TK, TR>>::cal_nlm_all(const Parallel_O
                         break;
                     }
                 }
+#else
+                ModuleBase::WARNING("DFTUNew", "autoset onsite_radius to rcut for old two-center integral");
+                double olm[3] = {0, 0, 0};
+                for(int iw =0;iw < this->ucell->atoms[T0].nw; iw++)
+                {
+                    const int L0 = this->ucell->atoms[T0].iw2l[iw];
+                    if(L0 == target_L)
+                    {
+                        for(int m = 0; m < tlp1; m++)
+                        {
+                            uot.snap_psipsi(orb, // orbitals
+                                olm,
+                                0,
+                                'S', // olm, job of derivation, dtype of Operator
+                                tau1,
+                                T1,
+                                L1,
+                                m1,
+                                N1, // all zeta of atom1
+                                tau0,
+                                T0,
+                                L0,
+                                m,
+                                0 // choose only the first zeta
+                            );
+                            nlm_target[m] = olm[0];
+                        }
+                        break;
+                    }
+                }
+#endif
                 nlm_tot[iat0][ad].insert({all_indexes[iw1l], nlm_target});
             }
         }
@@ -204,7 +235,7 @@ void hamilt::DFTUNew<hamilt::OperatorLCAO<TK, TR>>::calculate_HR()
 
         ModuleBase::timer::tick("DFTUNew", "cal_occupations");
         //first iteration to calculate occupation matrix
-        const int spin_fold = (GlobalV::NSPIN == 4) ? 4 : 1;
+        const int spin_fold = (this->nspin == 4) ? 4 : 1;
         std::vector<double> occ(tlp1 * tlp1 * spin_fold, 0.0);
         if(this->dftu->initialed_locale == false)
         {
@@ -241,7 +272,7 @@ void hamilt::DFTUNew<hamilt::OperatorLCAO<TK, TR>>::calculate_HR()
             // save occ to dftu
             for(int i=0;i<occ.size();i++)
             {
-                if(GlobalV::NSPIN==1) occ[i] *= 0.5;
+                if(this->nspin==1) occ[i] *= 0.5;
                 this->dftu->locale[iat0][target_L][0][GlobalV::CURRENT_SPIN].c[i] = occ[i];
             }
         }
@@ -296,9 +327,9 @@ void hamilt::DFTUNew<hamilt::OperatorLCAO<TK, TR>>::calculate_HR()
     }
 
     //energy correction for NSPIN=1
-    if(GlobalV::NSPIN==1) this->dftu->EU *= 2.0;
+    if(this->nspin==1) this->dftu->EU *= 2.0;
     // for readin onsite_dm, set initialed_locale to false to avoid using readin locale in next iteration
-    if(GlobalV::CURRENT_SPIN == GlobalV::NSPIN-1 || GlobalV::NSPIN==4) this->dftu->initialed_locale = false;
+    if(GlobalV::CURRENT_SPIN == this->nspin-1 || this->nspin==4) this->dftu->initialed_locale = false;
 
     ModuleBase::timer::tick("DFTUNew", "calculate_HR");
 }

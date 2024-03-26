@@ -18,9 +18,9 @@ void DFTUNew<OperatorLCAO<TK, TR>>::cal_force_stress(
         ModuleBase::WARNING_QUIT("DFTUNew", "dmr is not set");
     }
     //try to get the density matrix, if the density matrix is empty, skip the calculation and return
-    const hamilt::HContainer<double>* dmR_tmp[GlobalV::NSPIN];
+    const hamilt::HContainer<double>* dmR_tmp[this->nspin];
     dmR_tmp[0] = this->dftu->get_dmr(0);
-    if(GlobalV::NSPIN==2) dmR_tmp[1] = this->dftu->get_dmr(1);
+    if(this->nspin==2) dmR_tmp[1] = this->dftu->get_dmr(1);
     if(dmR_tmp[0]->size_atom_pairs() == 0)
     {
         return;
@@ -115,7 +115,7 @@ void DFTUNew<OperatorLCAO<TK, TR>>::cal_force_stress(
             }
         }
         //first iteration to calculate occupation matrix
-        std::vector<double> occ(tlp1 * tlp1 * GlobalV::NSPIN, 0);
+        std::vector<double> occ(tlp1 * tlp1 * this->nspin, 0);
         for(int i=0;i<occ.size();i++)
         {
             const int is = i / (tlp1 * tlp1);
@@ -157,9 +157,9 @@ void DFTUNew<OperatorLCAO<TK, TR>>::cal_force_stress(
                 ModuleBase::Vector3<int> R_vector(R_index2[0] - R_index1[0],
                                                   R_index2[1] - R_index1[1],
                                                   R_index2[2] - R_index1[2]);
-                const hamilt::BaseMatrix<double>* tmp[GlobalV::NSPIN];
+                const hamilt::BaseMatrix<double>* tmp[this->nspin];
                 tmp[0] = dmR_tmp[0]->find_matrix(iat1, iat2, R_vector[0], R_vector[1], R_vector[2]);
-                if(GlobalV::NSPIN == 2)
+                if(this->nspin == 2)
                 {
                     tmp[1] = dmR_tmp[1]->find_matrix(iat1, iat2, R_vector[0], R_vector[1], R_vector[2]);
                 }
@@ -167,10 +167,10 @@ void DFTUNew<OperatorLCAO<TK, TR>>::cal_force_stress(
                 if (tmp[0] != nullptr)
                 {
                     // calculate force
-                    if (cal_force) this->cal_force_IJR(iat1, iat2, T0, paraV, nlm_tot[ad1], nlm_tot[ad2], VU, tmp, GlobalV::NSPIN, force_tmp1, force_tmp2);
+                    if (cal_force) this->cal_force_IJR(iat1, iat2, T0, paraV, nlm_tot[ad1], nlm_tot[ad2], VU, tmp, this->nspin, force_tmp1, force_tmp2);
 
                     // calculate stress
-                    if (cal_stress) this->cal_stress_IJR(iat1, iat2, T0, paraV, nlm_tot[ad1], nlm_tot[ad2], VU, tmp, GlobalV::NSPIN, dis1, dis2, stress_tmp.data());
+                    if (cal_stress) this->cal_stress_IJR(iat1, iat2, T0, paraV, nlm_tot[ad1], nlm_tot[ad2], VU, tmp, this->nspin, dis1, dis2, stress_tmp.data());
                 }
             }
         }

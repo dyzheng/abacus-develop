@@ -69,13 +69,10 @@ class DFTUNew<OperatorLCAO<TK, TR>> : public OperatorLCAO<TK, TR>
 
     hamilt::HContainer<TR>* HR = nullptr;
 
-    hamilt::HContainer<TR>* HR_fixed = nullptr;
-
-    bool allocated = false;
-
     TK* HK_pointer = nullptr;
 
-    bool HR_fixed_done = false;
+    int nspin = 0;
+    int current_spin = 0;
 
     /**
      * @brief initialize HR, search the nearest neighbor atoms
