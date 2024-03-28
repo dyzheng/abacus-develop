@@ -1018,6 +1018,11 @@ namespace ModuleESolver
     else
         return this->exc->exx_after_converge(*this->p_hamilt, this->LM, *dynamic_cast<const elecstate::ElecStateLCAO<TK>*>(this->pelec)->get_DM(), this->kv, iter);
 #endif // __EXX
+    if(GlobalV::dft_plus_u)
+    {
+        // use the converged occupation matrix for next MD/Relax SCF calculation
+        GlobalC::dftu.initialed_locale = true;
+    }
     return true;
 }
 
