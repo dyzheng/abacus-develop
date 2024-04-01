@@ -190,7 +190,16 @@ private:
     double spherical_Hankel(const int k, const double r, const double lambda);
 
   public:
+    /**
+     * @brief get the density matrix of target spin
+     * nspin = 1 and 4 : ispin should be 0
+     * nspin = 2 : ispin should be 0/1
+    */
     const hamilt::HContainer<double>* get_dmr(int ispin) const;
+    /**
+     * @brief set the density matrix for DFT+U calculation
+     * if the density matrix is not set or set to nullptr, the DFT+U calculation will not be performed
+    */
     void set_dmr(const elecstate::DensityMatrix<double, double>* dm_in_dftu_d);
     void set_dmr(const elecstate::DensityMatrix<std::complex<double>, double>* dm_in_dftu_cd);
   
