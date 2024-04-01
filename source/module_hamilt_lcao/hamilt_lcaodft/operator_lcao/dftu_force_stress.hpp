@@ -1,21 +1,21 @@
 #pragma once
-#include "dftu_new.h"
+#include "dftu_lcao.h"
 #include "module_base/parallel_reduce.h"
 
 namespace hamilt
 {
 
 template <typename TK, typename TR>
-void DFTUNew<OperatorLCAO<TK, TR>>::cal_force_stress(
+void DFTU<OperatorLCAO<TK, TR>>::cal_force_stress(
   const bool cal_force, 
   const bool cal_stress, 
   ModuleBase::matrix& force, 
   ModuleBase::matrix& stress)
 {
-    ModuleBase::TITLE("DFTUNew", "cal_force_stress");    
+    ModuleBase::TITLE("DFTU", "cal_force_stress");    
     if(this->dftu->get_dmr(0) == nullptr)
     { 
-        ModuleBase::WARNING_QUIT("DFTUNew", "dmr is not set");
+        ModuleBase::WARNING_QUIT("DFTU", "dmr is not set");
     }
     //try to get the density matrix, if the density matrix is empty, skip the calculation and return
     const hamilt::HContainer<double>* dmR_tmp[this->nspin];
@@ -26,7 +26,7 @@ void DFTUNew<OperatorLCAO<TK, TR>>::cal_force_stress(
         return;
     }
     // begin the calculation of force and stress
-    ModuleBase::timer::tick("DFTUNew", "cal_force_stress");
+    ModuleBase::timer::tick("DFTU", "cal_force_stress");
 
     const Parallel_Orbitals* paraV = dmR_tmp[0]->get_atom_pair(0).get_paraV();
     const int npol = this->ucell->get_npol();
@@ -91,7 +91,7 @@ void DFTUNew<OperatorLCAO<TK, TR>>::cal_force_stress(
                 uot.two_center_bundle->overlap_orb_onsite->snap(
                         T1, L1, N1, M1, T0, dtau * this->ucell->lat0, 1 /*cal_deri*/, nlm);
 #else
-                ModuleBase::WARNING_QUIT("DFTUNew", "old two center integral method not implemented");
+                ModuleBase::WARNING_QUIT("DFTU", "old two center integral method not implemented");
 #endif
                 // select the elements of nlm with target_L
                 std::vector<double> nlm_target(tlp1 * 4);
@@ -167,10 +167,10 @@ void DFTUNew<OperatorLCAO<TK, TR>>::cal_force_stress(
                 if (tmp[0] != nullptr)
                 {
                     // calculate force
-                    if (cal_force) this->cal_force_IJR(iat1, iat2, T0, paraV, nlm_tot[ad1], nlm_tot[ad2], VU, tmp, this->nspin, force_tmp1, force_tmp2);
+                    if (cal_force) this->cal_force_IJR(iat1, iat2, paraV, nlm_tot[ad1], nlm_tot[ad2], VU, tmp, this->nspin, force_tmp1, force_tmp2);
 
                     // calculate stress
-                    if (cal_stress) this->cal_stress_IJR(iat1, iat2, T0, paraV, nlm_tot[ad1], nlm_tot[ad2], VU, tmp, this->nspin, dis1, dis2, stress_tmp.data());
+                    if (cal_stress) this->cal_stress_IJR(iat1, iat2, paraV, nlm_tot[ad1], nlm_tot[ad2], VU, tmp, this->nspin, dis1, dis2, stress_tmp.data());
                 }
             }
         }
@@ -208,14 +208,13 @@ void DFTUNew<OperatorLCAO<TK, TR>>::cal_force_stress(
         stress.c[3] = stress.c[1]; // stress(1,0)
     }
 
-    ModuleBase::timer::tick("DFTUNew", "cal_force_stress");
+    ModuleBase::timer::tick("DFTU", "cal_force_stress");
 }
 
 template <typename TK, typename TR>
-void DFTUNew<OperatorLCAO<TK, TR>>::cal_force_IJR(
+void DFTU<OperatorLCAO<TK, TR>>::cal_force_IJR(
     const int& iat1,
     const int& iat2,
-    const int& T0,
     const Parallel_Orbitals* paraV,
     const std::unordered_map<int, std::vector<double>>& nlm1_all,
     const std::unordered_map<int, std::vector<double>>& nlm2_all,
@@ -278,10 +277,9 @@ void DFTUNew<OperatorLCAO<TK, TR>>::cal_force_IJR(
 }
 
 template <typename TK, typename TR>
-void DFTUNew<OperatorLCAO<TK, TR>>::cal_stress_IJR(
+void DFTU<OperatorLCAO<TK, TR>>::cal_stress_IJR(
     const int& iat1,
     const int& iat2,
-    const int& T0,
     const Parallel_Orbitals* paraV,
     const std::unordered_map<int, std::vector<double>>& nlm1_all,
     const std::unordered_map<int, std::vector<double>>& nlm2_all,

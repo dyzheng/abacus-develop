@@ -1,5 +1,5 @@
 #include "gtest/gtest.h"
-#include "../dftu_new.h"
+#include "../dftu_lcao.h"
 #include <chrono> 
 
 // mock of DFTU
@@ -19,10 +19,10 @@ const hamilt::HContainer<double>* ModuleDFTU::DFTU::get_dmr(int ispin) const
 
 
 //---------------------------------------
-// Unit test of DFTUNew class
-// DFTUNew is a derivative class of Operator, it is used to calculate the kinetic matrix
+// Unit test of DFTU class
+// DFTU is a derivative class of Operator, it is used to calculate the kinetic matrix
 // It use HContainer to store the real space HR matrix
-// In this test, we test the correctness and time consuming of 3 functions in DFTUNew class
+// In this test, we test the correctness and time consuming of 3 functions in DFTU class
 // - initialize_HR() called in constructor
 // - contributeHR()
 // - contributeHk()
@@ -34,7 +34,7 @@ const hamilt::HContainer<double>* ModuleDFTU::DFTU::get_dmr(int ispin) const
 // modify test_size to test different size of unitcell
 int test_size = 10; 
 int test_nw = 10;   // please larger than 5
-class DFTUNewTest : public ::testing::Test
+class DFTUTest : public ::testing::Test
 {
   protected:
     void SetUp() override
@@ -147,8 +147,8 @@ class DFTUNewTest : public ::testing::Test
     int orbital_c_test = 2;
 };
 
-// using TEST_F to test DFTUNew
-TEST_F(DFTUNewTest, constructHRd2d)
+// using TEST_F to test DFTU
+TEST_F(DFTUTest, constructHRd2d)
 {
     //test for nspin=1
     GlobalV::NSPIN = 1;
@@ -165,15 +165,15 @@ TEST_F(DFTUNewTest, constructHRd2d)
         HR->get_wrapper()[i] = 0.0;
     }
     std::chrono::high_resolution_clock::time_point start_time = std::chrono::high_resolution_clock::now();
-    hamilt::DFTUNew<hamilt::OperatorLCAO<double, double>> op(
+    hamilt::DFTU<hamilt::OperatorLCAO<double, double>> op(
         nullptr, 
         kvec_d_in, 
         HR, 
         &hk, 
-        &ucell, 
+        ucell, 
         &gd,
         &GlobalC::dftu,
-        paraV
+        *paraV
     );
     std::chrono::high_resolution_clock::time_point end_time = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time);
@@ -217,7 +217,7 @@ TEST_F(DFTUNewTest, constructHRd2d)
     std::cout << "Elapsed time: " <<std::setw(15)<< elapsed_time.count()<<std::setw(15)<<elapsed_time1.count()<<std::setw(15)<<elapsed_time2.count() << " seconds." << std::endl;
 }
 
-TEST_F(DFTUNewTest, constructHRd2cd)
+TEST_F(DFTUTest, constructHRd2cd)
 {
     // test for nspin=2
     GlobalV::NSPIN = 2;
@@ -232,15 +232,15 @@ TEST_F(DFTUNewTest, constructHRd2cd)
         DMR->get_wrapper()[i] = factor;
         HR->get_wrapper()[i] = 0.0;
     }
-    hamilt::DFTUNew<hamilt::OperatorLCAO<std::complex<double>, double>> op(
+    hamilt::DFTU<hamilt::OperatorLCAO<std::complex<double>, double>> op(
         nullptr, 
         kvec_d_in, 
         HR, 
         &hk, 
-        &ucell, 
+        ucell, 
         &gd,
         &GlobalC::dftu,
-        paraV
+        *paraV
     );
     op.contributeHR();
     // check the occupations of dftu for spin-up
