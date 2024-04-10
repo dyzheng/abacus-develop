@@ -186,9 +186,10 @@ void OperatorLCAO<TK, TR>::init(const int ik_in)
         }
         case lcao_sc_lambda:
         {
-            //update HK only
-            //in cal_type=lcao_sc_mag, HK only need to be updated
-            this->contributeHk(ik_in);
+            //update HR first
+            this->contributeHR();
+            //in cal_type=lcao_sc_mag, 
+            //this->contributeHk(ik_in);
             break;
         }
         case lcao_exx:

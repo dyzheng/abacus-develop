@@ -27,6 +27,8 @@
 #include "operator_lcao/nonlocal_new.h"
 #include "operator_lcao/veff_lcao.h"
 #include "operator_lcao/sc_lambda_lcao.h"
+#include "module_hamilt_lcao/module_deltaspin/spin_constrain.h"
+#include "operator_lcao/dspin_lcao.h"
 #include "module_hsolver/hsolver_lcao.h"
 #include "module_hamilt_general/module_xc/xc_functional.h"
 #include "module_hamilt_lcao/module_hcontainer/hcontainer_funcs.h"
@@ -412,13 +414,25 @@ HamiltLCAO<TK, TR>::HamiltLCAO(
         }
         if (GlobalV::sc_mag_switch)
         {
-            Operator<TK>* sc_lambda = new OperatorScLambda<OperatorLCAO<TK, TR>>(
+            Operator<TK>* sc_lambda = 
+            /*new OperatorScLambda<OperatorLCAO<TK, TR>>(
                 LM_in,
                 kv->kvec_d,
                 this->hR,// no explicit call yet
                 &(this->getHk(LM_in)),
-                this->kv->isk);
+                this->kv->isk);*/
+            new DeltaSpin<OperatorLCAO<TK, TR>>(
+                LM_in,
+                kv->kvec_d,
+                this->hR,
+                &(this->getHk(LM_in)),
+                GlobalC::ucell,
+                &GlobalC::GridD,
+                *(LM_in->ParaV)
+            );
             this->getOperator()->add(sc_lambda);
+            SpinConstrain<TK, psi::DEVICE_CPU>& sc = SpinConstrain<TK, psi::DEVICE_CPU>::getScInstance();
+            sc.set_operator(sc_lambda);
         }
     }
 

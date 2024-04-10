@@ -13,6 +13,7 @@
 #include "module_cell/unitcell.h"
 #include "module_hamilt_lcao/hamilt_lcaodft/LCAO_matrix.h"
 #include "module_hsolver/hsolver.h"
+#include "module_hamilt_general/operator.h"
 
 struct ScAtomData;
 
@@ -239,6 +240,11 @@ public:
     bool debug = false;
     double alpha_trial_; // in unit of Ry/uB^2 = 0.01 eV/uB^2
     double restrict_current_; // in unit of Ry/uB = 3 eV/uB
+
+  public:
+    void set_operator(hamilt::Operator<FPTYPE>* op_in);
+  private:
+    hamilt::Operator<FPTYPE>* p_operator = nullptr;
 };
 
 

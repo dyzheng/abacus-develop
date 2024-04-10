@@ -5,6 +5,7 @@
 #include "module_base/timer.h"
 #include "module_base/memory.h"
 #include "module_base/tool_title.h"
+#include "module_base/parallel_reduce.h"
 
 template <typename TK, typename TR>
 hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::DeltaSpin(
@@ -17,7 +18,7 @@ hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::DeltaSpin(
     const Parallel_Orbitals& paraV)
     : hamilt::OperatorLCAO<TK, TR>(LM_in, kvec_d_in, hR_in, hK_in)
 {
-    this->cal_type = lcao_dftu;
+    this->cal_type = lcao_sc_lambda;
     this->ucell = &ucell_in;
     this->gridD = gridD_in;
     this->paraV = &paraV;
@@ -65,7 +66,6 @@ void hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::contributeHR()
     // if lambda has not changed, calculate the HR^I = lambda^I\sum_{lm}<phi_mu|alpha^I_{lm}><alpha^I_{lm}|phi_{nu,R}>
     // if lambda has changed, calculate the dHR^I = dlambda^I\sum_{lm}<phi_mu|alpha^I_{lm}><alpha^I_{lm}|phi_{nu,R}> 
     // calculate Hpre^I = \sum_{lm}<phi_mu|alpha^I_{lm}><alpha^I_{lm}|phi_{nu,R}>
-
     SpinConstrain<TK, psi::DEVICE_CPU>& sc = SpinConstrain<TK, psi::DEVICE_CPU>::getScInstance();
     if(!this->initialized)
     {
@@ -159,6 +159,7 @@ void hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::contributeHR()
     {
         this->current_spin = 1 - this->current_spin;
     }
+    return;
 }
 
 // cal_lambda_hr_IJR
@@ -243,7 +244,7 @@ void hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::cal_pre_HR()
             // When equal, the theoretical value of matrix element is zero, 
             // but the calculated value is not zero due to the numerical error, which would lead to result changes.
             if (this->ucell->cal_dtau(iat, iat1, R_index1).norm() * this->ucell->lat0
-                >= orb.Phi[T1].getRcut() + GlobalV::onsite_radius)
+                < orb.Phi[T1].getRcut() + GlobalV::onsite_radius)
             {
                 is_adj[ad] = true;
             }
@@ -279,7 +280,7 @@ void hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::cal_pre_HR()
                 this->pre_hr[iat]->insert_pair(tmp);
             }
         }
-        this->pre_hr[iat]->allocate();
+        this->pre_hr[iat]->allocate(nullptr, true);
 
         // third step: calculate the <phi|alpha> overlap integrals
         const int max_l_plus_1 = this->ucell->atoms[T0].nwl + 1;
@@ -324,7 +325,7 @@ void hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::cal_pre_HR()
                 uot.two_center_bundle->overlap_orb_onsite->snap(
                         T1, L1, N1, M1, T0, dtau * this->ucell->lat0, 0 /*cal_deri*/, nlm);
                 // select the elements of nlm with target_L (0, 1, 2, 3 ...)
-                int target_L = 0;
+                int target_L = 0, index=0;
                 for(int iw =0;iw < this->ucell->atoms[T0].nw; iw++)
                 {
                     const int L0 = this->ucell->atoms[T0].iw2l[iw];
@@ -333,15 +334,16 @@ void hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::cal_pre_HR()
                     {
                         for(int m = 0; m < 2*L0+1; m++)
                         {
-                            nlm_target[m] = nlm[0][iw+m];
+                            nlm_target[index] = nlm[0][iw+m];
+                            index++;
                         }
                         target_L++;
                     }
                 }
 #else
-                ModuleBase::WARNING("DFTU", "autoset onsite_radius to rcut for old two-center integral");
+                ModuleBase::WARNING("DeltaSpin", "autoset onsite_radius to rcut for old two-center integral");
                 double olm[3] = {0, 0, 0};
-                int target_L = 0;
+                int target_L = 0, index = 0;
                 for(int iw =0;iw < this->ucell->atoms[T0].nw; iw++)
                 {
                     const int L0 = this->ucell->atoms[T0].iw2l[iw];
@@ -364,7 +366,8 @@ void hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::cal_pre_HR()
                                 m,
                                 0 // choose only the first zeta
                             );
-                            nlm_target[m] = olm[0];
+                            nlm_target[index] = olm[0];
+                            index++;
                         }
                         target_L++;
                     }
@@ -462,6 +465,10 @@ std::vector<double> hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::cal_moment(
 {
     const int mag_fold = this->nspin==4?3:1;
     std::vector<double> moment(this->ucell->nat * mag_fold, 0.0);
+    if(dmR == nullptr)
+    {
+        return moment;
+    }
     if (!this->initialized)
     {
         SpinConstrain<TK, psi::DEVICE_CPU>& sc = SpinConstrain<TK, psi::DEVICE_CPU>::getScInstance();
@@ -504,6 +511,10 @@ std::vector<double> hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::cal_moment(
             }
         }
     }
+#ifdef __MPI
+    // sum up the magnetic moments
+    Parallel_Reduce::reduce_all(moment.data(), moment.size());
+#endif 
     return moment;
 }
 

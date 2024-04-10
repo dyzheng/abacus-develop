@@ -6,6 +6,7 @@
 #include "module_base/tool_title.h"
 #include "module_elecstate/elecstate_lcao.h"
 #include "module_hamilt_lcao/hamilt_lcaodft/hamilt_lcao.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/operator_lcao/dspin_lcao.h"
 #include "spin_constrain.h"
 
 template <>
@@ -68,8 +69,46 @@ void SpinConstrain<std::complex<double>, psi::DEVICE_CPU>::cal_MW(const int& ste
                                                                   bool print)
 {
     ModuleBase::TITLE("module_deltaspin", "cal_MW");
-    const std::vector<std::vector<std::complex<double>>>& dm
-        = dynamic_cast<const elecstate::ElecStateLCAO<std::complex<double>>*>(this->pelec)->get_DM()->get_DMK_vector();
-    this->calculate_MW(this->convert(this->cal_MW_k(LM, dm)));
+    if(1)
+    {
+        this->zero_Mi();
+        const hamilt::HContainer<double>* dmr
+            = dynamic_cast<const elecstate::ElecStateLCAO<std::complex<double>>*>(this->pelec)->get_DM()->get_DMR_pointer(1);
+        std::vector<double> moments;
+        if(GlobalV::NSPIN==2)
+        {
+            moments = dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double>>*>(this->p_operator)->cal_moment(dmr);
+        }
+        else if(GlobalV::NSPIN==4)
+        {
+            moments = dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, std::complex<double>>>*>(this->p_operator)->cal_moment(dmr);
+        }
+        for(int iat=0;iat<this->Mi_.size();iat++)
+        {
+            this->Mi_[iat].x = moments[iat*3];
+            this->Mi_[iat].y = moments[iat*3+1];
+            this->Mi_[iat].z = moments[iat*3+2];
+        }
+    }
+    else
+    {
+        const std::vector<std::vector<std::complex<double>>>& dm
+            = dynamic_cast<const elecstate::ElecStateLCAO<std::complex<double>>*>(this->pelec)->get_DM()->get_DMK_vector();
+        this->calculate_MW(this->convert(this->cal_MW_k(LM, dm)));
+    }
     this->print_Mi(print);
+}
+
+template <>
+void SpinConstrain<std::complex<double>, psi::DEVICE_CPU>::set_operator(
+    hamilt::Operator<std::complex<double>>* op_in)
+{
+    this->p_operator = op_in;
+}
+
+template <>
+void SpinConstrain<double, psi::DEVICE_CPU>::set_operator(
+    hamilt::Operator<double>* op_in)
+{
+    this->p_operator = op_in;
 }

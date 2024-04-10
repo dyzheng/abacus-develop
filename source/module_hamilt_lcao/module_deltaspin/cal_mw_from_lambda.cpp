@@ -20,6 +20,7 @@ void SpinConstrain<std::complex<double>, psi::DEVICE_CPU>::cal_mw_from_lambda(in
     {
         elecstate::cal_dm_psi(this->ParaV, pelec_lcao->wg, *(this->psi), *(pelec_lcao->get_DM()));
     }
+    pelec_lcao->get_DM()->cal_DMR();
     this->cal_MW(i_step, this->LM);
     ModuleBase::timer::tick("SpinConstrain", "cal_mw_from_lambda");
 }
