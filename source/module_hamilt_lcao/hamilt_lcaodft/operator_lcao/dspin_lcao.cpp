@@ -28,6 +28,8 @@ hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::DeltaSpin(
 #endif
     //set nspin
     this->nspin = GlobalV::NSPIN;
+
+    this->lambda_save.resize(this->ucell->nat * 3, 0.0);
 }
 
 // destructor
@@ -65,18 +67,26 @@ void hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::contributeHR()
 {
     // if lambda has not changed, calculate the HR^I = lambda^I\sum_{lm}<phi_mu|alpha^I_{lm}><alpha^I_{lm}|phi_{nu,R}>
     // if lambda has changed, calculate the dHR^I = dlambda^I\sum_{lm}<phi_mu|alpha^I_{lm}><alpha^I_{lm}|phi_{nu,R}> 
-    // calculate Hpre^I = \sum_{lm}<phi_mu|alpha^I_{lm}><alpha^I_{lm}|phi_{nu,R}>
     SpinConstrain<TK, psi::DEVICE_CPU>& sc = SpinConstrain<TK, psi::DEVICE_CPU>::getScInstance();
+    const int status = sc.get_status();
+    if(status == 2)
+    {
+        // skip the calculation if lambda loop is finished
+        return;
+    }
+    else if(status == 0)
+    {
+        // set the lambda_save to zero if lambda loop is started
+        this->lambda_save.assign(this->ucell->nat * 3, 0.0);
+    }
+
+    // calculate Hpre^I = \sum_{lm}<phi_mu|alpha^I_{lm}><alpha^I_{lm}|phi_{nu,R}>
     if(!this->initialized)
     {
         auto& constrain = sc.get_constrain();
         this->cal_constraint_atom_list(constrain);
         this->cal_pre_HR();
         this->initialized = true;
-    }
-    if(this->lambda_save.size()==0)
-    {
-        this->lambda_save.resize(this->ucell->nat * 3, 0.0);
     }
     auto& lambda = sc.get_sc_lambda();
     

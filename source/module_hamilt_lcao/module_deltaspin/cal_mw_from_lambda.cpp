@@ -22,5 +22,7 @@ void SpinConstrain<std::complex<double>, psi::DEVICE_CPU>::cal_mw_from_lambda(in
     }
     pelec_lcao->get_DM()->cal_DMR();
     this->cal_MW(i_step, this->LM);
+    // during the lambda loop, the status is 1
+    this->status_ = 1;
     ModuleBase::timer::tick("SpinConstrain", "cal_mw_from_lambda");
 }
