@@ -69,12 +69,7 @@ void hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::contributeHR()
     // if lambda has changed, calculate the dHR^I = dlambda^I\sum_{lm}<phi_mu|alpha^I_{lm}><alpha^I_{lm}|phi_{nu,R}> 
     SpinConstrain<TK, psi::DEVICE_CPU>& sc = SpinConstrain<TK, psi::DEVICE_CPU>::getScInstance();
     const int status = sc.get_status();
-    if(status == 2)
-    {
-        // skip the calculation if lambda loop is finished
-        return;
-    }
-    else if(status == 0)
+    if(status == 0)
     {
         // set the lambda_save to zero if lambda loop is started
         this->lambda_save.assign(this->ucell->nat * 3, 0.0);

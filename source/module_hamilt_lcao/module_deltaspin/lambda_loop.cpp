@@ -121,8 +121,5 @@ void SpinConstrain<std::complex<double>, psi::DEVICE_CPU>::run_lambda_loop(int o
         alpha_trial = alpha_trial * pow(g, 0.7);
     }
 
-    //finish the lambda loop, set status to 2
-    this->status_ = 2;
-
     return;
 }
