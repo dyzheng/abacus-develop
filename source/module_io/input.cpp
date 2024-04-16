@@ -3077,8 +3077,8 @@ void Input::Default_2(void) // jiyy add 2019-08-04
         }
         if((dft_plus_u == 1 || sc_mag_switch == 1) && onsite_radius == 0.0)
         {
-            //autoset onsite_radius to 5.0 as default
-            onsite_radius = 5.0;
+            //autoset onsite_radius to 3.0 as default
+            onsite_radius = 3.0;
         }
     }
 
