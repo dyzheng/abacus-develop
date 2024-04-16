@@ -245,12 +245,9 @@ public:
     /// @brief save operator for spin-constrained DFT
     /// @param op_in the base pointer of operator, actual type should be DeltaSpin<OperatorLCAO<TK, TR>>*
     void set_operator(hamilt::Operator<FPTYPE>* op_in);
-    int get_status(){return status_;};
   private:
     /// operator for spin-constrained DFT, used for calculating current atomic magnetic moment
     hamilt::Operator<FPTYPE>* p_operator = nullptr;
-    /// 0: begin of lambda loop, 1: during lambda loop, 2: lambda loop finished
-    int status_ = 0;
 };
 
 

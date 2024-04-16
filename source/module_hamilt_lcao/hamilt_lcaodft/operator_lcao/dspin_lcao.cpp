@@ -28,8 +28,10 @@ hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::DeltaSpin(
 #endif
     //set nspin
     this->nspin = GlobalV::NSPIN;
+    this->spin_num = this->nspin == 2 ? 2 : 1;
 
     this->lambda_save.resize(this->ucell->nat * 3, 0.0);
+    this->update_lambda_.resize(this->nspin, false);
 }
 
 // destructor
@@ -68,11 +70,18 @@ void hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::contributeHR()
     // if lambda has not changed, calculate the HR^I = lambda^I\sum_{lm}<phi_mu|alpha^I_{lm}><alpha^I_{lm}|phi_{nu,R}>
     // if lambda has changed, calculate the dHR^I = dlambda^I\sum_{lm}<phi_mu|alpha^I_{lm}><alpha^I_{lm}|phi_{nu,R}> 
     SpinConstrain<TK, psi::DEVICE_CPU>& sc = SpinConstrain<TK, psi::DEVICE_CPU>::getScInstance();
-    const int status = sc.get_status();
-    if(status == 0)
+    // there are three case for contributeHR 
+    // 1. HR has not been calculated, reset lambda_save and calculate HR = lambda * pre_hr
+    // 2. HR has been calculated, but lambda has changed, calculate dHR = dlambda * pre_hr
+    // 3. HR has been calculated, and lambda has not changed, do nothing
+    if(!this->hr_done)
     {
         // set the lambda_save to zero if lambda loop is started
         this->lambda_save.assign(this->ucell->nat * 3, 0.0);
+    }
+    else if(this->hr_done && !this->update_lambda_[this->current_spin])
+    {
+        return;
     }
 
     // calculate Hpre^I = \sum_{lm}<phi_mu|alpha^I_{lm}><alpha^I_{lm}|phi_{nu,R}>
@@ -146,8 +155,8 @@ void hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::contributeHR()
     }
 
     // save lambda to lambda_save or update the current_spin in NSPIN=2
-    const int finish_spin = this->nspin == 4?0:1;
-    if(this->current_spin == finish_spin)
+    this->update_lambda_[this->current_spin] = false;
+    if(this->current_spin == this->spin_num - 1)
     {
         for(int i=0;i<this->ucell->nat;i++)
         {
@@ -500,17 +509,6 @@ std::vector<double> hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::cal_moment(
             {
                 const int* r_index = tmp.get_R_index(ir);
                 double* dmr_data = dmR->find_matrix(iat1, iat2, r_index[0], r_index[1], r_index[2])->get_pointer();
-                if(mag_fold == 1)
-                {
-                    //calculate the delta dmR first 
-                    const double* dmr_tmp[2] = {dmr_data, dmR[1].find_matrix(iat1, iat2, r_index[0], r_index[1], r_index[2])->get_pointer()};
-                    this->tmp_dmr_memory.resize(row_size*col_size);
-                    for(int i=0;i<row_size*col_size;i++)
-                    {
-                        tmp_dmr_memory[i] = dmr_tmp[0][i] - dmr_tmp[1][i];
-                    }
-                    dmr_data = tmp_dmr_memory.data();
-                }
                 const TR* hr_data = tmp.get_pointer(ir);
                 this->cal_moment_IJR(dmr_data, hr_data, row_size, col_size, &moment[iat*mag_fold]);
             }

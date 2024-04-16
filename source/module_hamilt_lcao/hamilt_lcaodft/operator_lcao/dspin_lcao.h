@@ -47,6 +47,11 @@ class DeltaSpin<OperatorLCAO<TK, TR>> : public OperatorLCAO<TK, TR>
     */
     std::vector<double> cal_moment(const HContainer<double>* dmR);
 
+    /**
+     * @brief set the update_lambda_ to true, which means the lambda will be updated in the next contributeHR()
+    */
+    void update_lambda(){for(int is=0;is<this->spin_num;is++){this->update_lambda_[is] = true;}}
+
   private:
     const UnitCell* ucell = nullptr;
 
@@ -106,6 +111,8 @@ class DeltaSpin<OperatorLCAO<TK, TR>> : public OperatorLCAO<TK, TR>
     std::vector<double> lambda_save;
 
     bool initialized = false;
+    int spin_num = 1;
+    std::vector<bool> update_lambda_;
 };
 
 }

@@ -31,9 +31,6 @@ void SpinConstrain<std::complex<double>, psi::DEVICE_CPU>::run_lambda_loop(int o
     const double zero = 0.0;
     const double one = 1.0;
 
-    // begin the lambda loop, set status to 0
-    this->status_ = 0;
-
     this->print_header();
     // lambda loop
     for (int i_step = 0; i_step < this->nsc_; i_step++)

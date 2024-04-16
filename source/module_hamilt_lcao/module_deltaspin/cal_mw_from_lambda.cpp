@@ -2,7 +2,7 @@
 #include "module_base/tool_title.h"
 #include "module_elecstate/elecstate_lcao.h"
 #include "module_elecstate/module_dm/cal_dm_psi.h"
-#include "module_hamilt_pw/hamilt_pwdft/global.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/operator_lcao/dspin_lcao.h"
 #include "spin_constrain.h"
 
 template <>
@@ -10,6 +10,15 @@ void SpinConstrain<std::complex<double>, psi::DEVICE_CPU>::cal_mw_from_lambda(in
 {
     ModuleBase::TITLE("SpinConstrain","cal_mw_from_lambda");
     ModuleBase::timer::tick("SpinConstrain", "cal_mw_from_lambda");
+    // lambda has been updated in the lambda loop
+    if(GlobalV::NSPIN==2)
+    {
+        dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double>>*>(this->p_operator)->update_lambda();
+    }
+    else if(GlobalV::NSPIN==4)
+    {
+        dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, std::complex<double>>>*>(this->p_operator)->update_lambda();
+    }
     // diagonalization without update charge
     this->phsol->solve(this->p_hamilt, this->psi[0], this->pelec, this->KS_SOLVER, true);
     elecstate::ElecStateLCAO<std::complex<double>>* pelec_lcao
@@ -22,7 +31,5 @@ void SpinConstrain<std::complex<double>, psi::DEVICE_CPU>::cal_mw_from_lambda(in
     }
     pelec_lcao->get_DM()->cal_DMR();
     this->cal_MW(i_step, this->LM);
-    // during the lambda loop, the status is 1
-    this->status_ = 1;
     ModuleBase::timer::tick("SpinConstrain", "cal_mw_from_lambda");
 }

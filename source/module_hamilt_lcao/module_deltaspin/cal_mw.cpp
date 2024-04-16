@@ -77,17 +77,23 @@ void SpinConstrain<std::complex<double>, psi::DEVICE_CPU>::cal_MW(const int& ste
         std::vector<double> moments;
         if(GlobalV::NSPIN==2)
         {
+            dynamic_cast<const elecstate::ElecStateLCAO<std::complex<double>>*>(this->pelec)->get_DM()->switch_dmr(2);
             moments = dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double>>*>(this->p_operator)->cal_moment(dmr);
+            dynamic_cast<const elecstate::ElecStateLCAO<std::complex<double>>*>(this->pelec)->get_DM()->switch_dmr(0);
+            for(int iat=0;iat<this->Mi_.size();iat++)
+            {
+                this->Mi_[iat].z = moments[iat];
+            }
         }
         else if(GlobalV::NSPIN==4)
         {
             moments = dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, std::complex<double>>>*>(this->p_operator)->cal_moment(dmr);
-        }
-        for(int iat=0;iat<this->Mi_.size();iat++)
-        {
-            this->Mi_[iat].x = moments[iat*3];
-            this->Mi_[iat].y = moments[iat*3+1];
-            this->Mi_[iat].z = moments[iat*3+2];
+            for(int iat=0;iat<this->Mi_.size();iat++)
+            {
+                this->Mi_[iat].x = moments[iat*3];
+                this->Mi_[iat].y = moments[iat*3+1];
+                this->Mi_[iat].z = moments[iat*3+2];
+            }
         }
     }
     else

@@ -100,6 +100,9 @@ class OperatorLCAO : public Operator<TK>
     // vector of HK matrix for current k point in reciprocal space
     std::vector<TK>* hK = nullptr;
 
+    // if HR is calculated
+    bool hr_done = false;
+
   private:
     void get_hs_pointers();
 
@@ -110,9 +113,6 @@ class OperatorLCAO : public Operator<TK>
 
     // only used for Gamma_only case
     bool allocated_smatrix = false;
-    
-    // if HR is calculated
-    bool hr_done = false;
 };
 
 } // end namespace hamilt
