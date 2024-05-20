@@ -270,6 +270,7 @@ void hamilt::DFTU<hamilt::OperatorLCAO<TK, TR>>::contributeHR()
             // sum up the occupation matrix
             Parallel_Reduce::reduce_all(occ.data(), occ.size());
     #endif
+            this->remove_degeneracy(tlp1, spin_fold, occ.data());
             // save occ to dftu
             for(int i=0;i<occ.size();i++)
             {
@@ -552,6 +553,40 @@ void hamilt::DFTU<hamilt::OperatorLCAO<TK, TR>>::cal_v_of_u(
             }
         }
     }
+}
+
+#include "module_hamilt_lcao/module_dftu/mat_symm_tools.hpp"
+// remove_degeneracy()
+template <typename TK, typename TR>
+void hamilt::DFTU<hamilt::OperatorLCAO<TK, TR>>::remove_degeneracy(int m_size, int spin_fold, double* occ_in)
+{
+    for(int is=0;is<spin_fold;++is)
+    {
+        int start = is * m_size * m_size;
+        double* a_mat = occ_in + start;
+        std::vector<double> p_mat(m_size * m_size, 0.0);
+        ModuleDFTU::decomposeSymmetricMatrix(a_mat, p_mat.data(), m_size);
+        // find the degeneracy orbitals between (0.4, 0.6) and add them to one of them
+        for(int m1=0; m1 < m_size-1; m1++)
+        {
+            double m1_val = a_mat[m1 * m_size + m1];
+            if(m1_val < 0.4 || m1_val > 0.6) continue;
+            for(int m2=m1+1; m2 < m_size; m2++)
+            {
+                double m2_val = a_mat[m2 * m_size + m2];
+                if(m2_val < 0.4 || m2_val > 0.6) continue;
+                if(std::abs(m1_val - m2_val) < 0.02)
+                {
+                    std::cout<<__FILE__<<__LINE__<<std::endl;
+                    double m1_new = m1_val+m2_val>1.0?1.0:m1_val+m2_val;
+                    a_mat[m1 * m_size + m1] = m1_new;
+                    a_mat[m2 * m_size + m2] = m1_val+m2_val-a_mat[m1 * m_size + m1];
+                }
+            }
+        }
+        ModuleDFTU::restoreSymmetricMatrix(a_mat, p_mat.data(), m_size);
+    }
+    
 }
 
 #include "dftu_force_stress.hpp"

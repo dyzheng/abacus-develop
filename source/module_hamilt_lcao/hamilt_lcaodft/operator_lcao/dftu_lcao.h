@@ -141,6 +141,9 @@ class DFTU<OperatorLCAO<TK, TR>> : public OperatorLCAO<TK, TR>
     bool precal_nlm_done = false;
     /// @brief the overlap values for all [atoms][nerghbors][orb_index(iw) in NAOs][m of target_l in Projectors]
     std::vector<std::vector<std::unordered_map<int, std::vector<double>>>> nlm_tot;
+
+    /// @brief try to remove the degeneracy between the projected orbits 
+    void remove_degeneracy(int m_size, int spin_fold, double* occ_in);
 };
 
 } // namespace hamilt
