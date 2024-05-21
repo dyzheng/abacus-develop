@@ -113,7 +113,7 @@ void restoreSymmetricMatrix(
         for (int j = 0; j < n; ++j) {
             AP[i*n+j] = 0.0;
             for (int k = 0; k < n; ++k) {
-                AP[i*n+j] += A[i*n+k] * P[k*n+j];
+                AP[i*n+j] += A[i*n+k] * P[j*n+k];
             }
         }
     }
@@ -123,7 +123,7 @@ void restoreSymmetricMatrix(
         for (int j = 0; j < n; ++j) {
             A[i*n+j] = 0.0;
             for (int k = 0; k < n; ++k) {
-                A[i*n+j] += P[k*n+i] * AP[k*n+j];
+                A[i*n+j] += P[i*n+k] * AP[k*n+j];
             }
         }
     }
