@@ -10,7 +10,7 @@
 #include "spin_constrain.h"
 
 template <>
-ModuleBase::matrix SpinConstrain<std::complex<double>, psi::DEVICE_CPU>::cal_MW_k(
+ModuleBase::matrix SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::cal_MW_k(
     LCAO_Matrix* LM,
     const std::vector<std::vector<std::complex<double>>>& dm)
 {
@@ -64,9 +64,7 @@ ModuleBase::matrix SpinConstrain<std::complex<double>, psi::DEVICE_CPU>::cal_MW_
 }
 
 template <>
-void SpinConstrain<std::complex<double>, psi::DEVICE_CPU>::cal_MW(const int& step,
-                                                                  LCAO_Matrix* LM,
-                                                                  bool print)
+void SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::cal_MW(const int& step, LCAO_Matrix* LM, bool print)
 {
     ModuleBase::TITLE("module_deltaspin", "cal_MW");
     if(1)
@@ -106,14 +104,14 @@ void SpinConstrain<std::complex<double>, psi::DEVICE_CPU>::cal_MW(const int& ste
 }
 
 template <>
-void SpinConstrain<std::complex<double>, psi::DEVICE_CPU>::set_operator(
+void SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::set_operator(
     hamilt::Operator<std::complex<double>>* op_in)
 {
     this->p_operator = op_in;
 }
 
 template <>
-void SpinConstrain<double, psi::DEVICE_CPU>::set_operator(
+void SpinConstrain<double, base_device::DEVICE_CPU>::set_operator(
     hamilt::Operator<double>* op_in)
 {
     this->p_operator = op_in;

@@ -431,7 +431,7 @@ HamiltLCAO<TK, TR>::HamiltLCAO(
                 *(LM_in->ParaV)
             );
             this->getOperator()->add(sc_lambda);
-            SpinConstrain<TK, psi::DEVICE_CPU>& sc = SpinConstrain<TK, psi::DEVICE_CPU>::getScInstance();
+            SpinConstrain<TK, base_device::DEVICE_CPU>& sc = SpinConstrain<TK, base_device::DEVICE_CPU>::getScInstance();
             sc.set_operator(sc_lambda);
         }
     }

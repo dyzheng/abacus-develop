@@ -60,8 +60,14 @@ psi::Psi<std::complex<double>>* psi_initializer<T, Device>::allocate(bool only_p
                             rotate basis, nbands_local*=4 for p, d, f,... orbitals, and nbands_local*=2 for s orbitals
                             risky when NSPIN = 4, problematic psi value, needed to be checked
                         */
-                        if(l == 0) nbands_local += this->p_ucell_->atoms[it].l_nchi[l] * GlobalV::NPOL;
-                        else nbands_local += this->p_ucell_->atoms[it].l_nchi[l]*(2*l+1) * GlobalV::NPOL;
+                        if(l == 0) 
+						{
+							nbands_local += this->p_ucell_->atoms[it].l_nchi[l] * GlobalV::NPOL;
+						}
+						else 
+						{
+							nbands_local += this->p_ucell_->atoms[it].l_nchi[l]*(2*l+1) * GlobalV::NPOL;
+						}
                     }
                 }
             }
@@ -267,15 +273,15 @@ void psi_initializer<T, Device>::stick_to_pool(Real* stick, const int& ir, Real*
 #endif
 
 // explicit instantiation
-template class psi_initializer<std::complex<double>, psi::DEVICE_CPU>;
-template class psi_initializer<std::complex<float>, psi::DEVICE_CPU>;
+template class psi_initializer<std::complex<double>, base_device::DEVICE_CPU>;
+template class psi_initializer<std::complex<float>, base_device::DEVICE_CPU>;
 // gamma point calculation
-template class psi_initializer<double, psi::DEVICE_CPU>;
-template class psi_initializer<float, psi::DEVICE_CPU>;
+template class psi_initializer<double, base_device::DEVICE_CPU>;
+template class psi_initializer<float, base_device::DEVICE_CPU>;
 #if ((defined __CUDA) || (defined __ROCM))
-template class psi_initializer<std::complex<double>, psi::DEVICE_GPU>;
-template class psi_initializer<std::complex<float>, psi::DEVICE_GPU>;
+template class psi_initializer<std::complex<double>, base_device::DEVICE_GPU>;
+template class psi_initializer<std::complex<float>, base_device::DEVICE_GPU>;
 // gamma point calculation
-template class psi_initializer<double, psi::DEVICE_GPU>;
-template class psi_initializer<float, psi::DEVICE_GPU>;
+template class psi_initializer<double, base_device::DEVICE_GPU>;
+template class psi_initializer<float, base_device::DEVICE_GPU>;
 #endif
