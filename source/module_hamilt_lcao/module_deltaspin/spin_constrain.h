@@ -248,9 +248,15 @@ public:
     /// @brief save operator for spin-constrained DFT
     /// @param op_in the base pointer of operator, actual type should be DeltaSpin<OperatorLCAO<TK, TR>>*
     void set_operator(hamilt::Operator<FPTYPE>* op_in);
+    /// @brief set is_Mi_converged
+    void set_mag_converged(bool is_Mi_converged_in){this->is_Mi_converged = is_Mi_converged_in;}
+    /// @brief get is_Mi_converged
+    bool mag_converged() const {return this->is_Mi_converged;}
   private:
     /// operator for spin-constrained DFT, used for calculating current atomic magnetic moment
     hamilt::Operator<FPTYPE>* p_operator = nullptr;
+    /// @brief if atomic magnetic moment is converged
+    bool is_Mi_converged = false;
 };
 
 

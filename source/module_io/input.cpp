@@ -640,7 +640,7 @@ void Input::Default(void)
     sc_thr = 1e-6;
     nsc = 100;
     nsc_min = 2;
-    sc_scf_nmin = 2;
+    sc_scf_thr = 1e-5;
     alpha_trial = 0.01;
     sccut = 3.0;
     sc_file = "none";
@@ -2385,9 +2385,9 @@ bool Input::Read(const std::string& fn)
         {
             read_value(ifs, nsc_min);
         }
-        else if (strcmp("sc_scf_nmin", word) == 0)
+        else if (strcmp("sc_scf_thr", word) == 0)
         {
-            read_value(ifs, sc_scf_nmin);
+            read_value(ifs, sc_scf_thr);
         }
         else if (strcmp("alpha_trial", word) == 0)
         {
@@ -3905,7 +3905,7 @@ void Input::Bcast()
     Parallel_Common::bcast_double(sc_thr);
     Parallel_Common::bcast_int(nsc);
     Parallel_Common::bcast_int(nsc_min);
-    Parallel_Common::bcast_int(sc_scf_nmin);
+    Parallel_Common::bcast_double(sc_scf_thr);
     Parallel_Common::bcast_string(sc_file);
     Parallel_Common::bcast_double(alpha_trial);
     Parallel_Common::bcast_double(sccut);
@@ -4477,13 +4477,6 @@ void Input::Check(void)
         }
     }
 
-    if (sc_mag_switch)
-    {
-        std::stringstream ss;
-        ss << "This feature is not stable yet and might lead to erroneous results.\n"
-           << " Please wait for the official release version.";
-        ModuleBase::WARNING_QUIT("Input", ss.str());
-    }
     // Deltaspin variables checking
     if (sc_mag_switch)
     {
@@ -4518,10 +4511,6 @@ void Input::Check(void)
         if (nsc_min <= 0)
         {
             ModuleBase::WARNING_QUIT("INPUT", "nsc_min must > 0");
-        }
-        if (sc_scf_nmin < 2)
-        {
-            ModuleBase::WARNING_QUIT("INPUT", "sc_scf_nmin must >= 2");
         }
         if (alpha_trial <= 0)
         {

@@ -752,10 +752,35 @@ void ESolver_KS_LCAO<TK, TR>::iter_init(const int istep, const int iter)
     }
 
     // run the inner lambda loop to contrain atomic moments with the DeltaSpin method
-    if (GlobalV::sc_mag_switch && iter > GlobalV::sc_scf_nmin)
+    if (GlobalV::sc_mag_switch)
     {
         SpinConstrain<TK, base_device::DEVICE_CPU>& sc = SpinConstrain<TK, base_device::DEVICE_CPU>::getScInstance();
-        sc.run_lambda_loop(iter-1);
+        if(!sc.mag_converged() && this->drho>0 && this->drho < GlobalV::sc_scf_thr)
+        {
+            // optimize lambda to get target magnetic moments, but the lambda is not near target
+            sc.run_lambda_loop(iter-1);
+            // calculate the near target magnetic density
+            this->hamilt2density(istep, iter, GlobalV::sc_scf_thr);
+            // update potential from the new charge density and magnetic density
+            this->update_pot(istep, iter);
+            // recalculate the Hamiltonian of real space
+            if(GlobalV::VL_IN_H)
+            {
+                this->GK.renew();
+                this->p_hamilt->refresh();
+            }
+            // optimize lambda to get target magnetic moments, and the lambda is near target
+            sc.run_lambda_loop(iter-1);
+            sc.set_mag_converged(true);
+            // init mixing for the next iteration
+            this->p_chgmix->init_mixing();
+        }
+        else if(sc.mag_converged())
+        {
+            // optimize lambda to get target magnetic moments, but the lambda is not near target
+            sc.run_lambda_loop(iter-1);
+        }
+
     }
 }
 

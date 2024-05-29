@@ -918,7 +918,7 @@ TEST_F(write_input, Deltaspin22)
     EXPECT_THAT(output,
                 testing::HasSubstr("nsc_min                        2 #Minimum number of spin-constrained iteration"));
     EXPECT_THAT(output,
-                testing::HasSubstr("sc_scf_nmin                    2 #Minimum number of outer scf loop before initializing lambda loop"));
+                testing::HasSubstr("sc_scf_thr                    1e-5 #threshold to launch initializing lambda loop"));
     EXPECT_THAT(output,
                 testing::HasSubstr("sc_file                        none #file name for parameters used in "
                                    "non-collinear spin-constrained DFT (json format)"));
