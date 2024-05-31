@@ -104,6 +104,8 @@ class Charge
 
   void init_final_scf(); //LiuXh add 20180619
 
+  void revert_rho(int ispin); /// revert rho to rho_save
+
 	public:
     /**
      * @brief init some arrays for mpi_inter_pools, rho_mpi

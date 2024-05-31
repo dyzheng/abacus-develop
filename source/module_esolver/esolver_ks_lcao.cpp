@@ -760,7 +760,9 @@ void ESolver_KS_LCAO<TK, TR>::iter_init(const int istep, const int iter)
             // optimize lambda to get target magnetic moments, but the lambda is not near target
             sc.run_lambda_loop(iter-1);
             // calculate the near target magnetic density
-            this->hamilt2density(istep, iter, GlobalV::sc_scf_thr);
+            this->hamilt2density(istep, iter, /*useless value*/0.0);
+            // revert rho to rho_save
+            this->pelec->charge->revert_rho(0);
             // update potential from the new charge density and magnetic density
             this->update_pot(istep, iter);
             // recalculate the Hamiltonian of real space

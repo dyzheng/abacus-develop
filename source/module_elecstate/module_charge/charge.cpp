@@ -796,3 +796,28 @@ void Charge::init_final_scf()
     this->allocate_rho_final_scf = true;
     return;
 }
+
+void Charge::revert_rho(int ispin)
+{
+    if(this->nspin != 2)
+    {
+        ModuleBase::GlobalFunc::DCOPY(rho_save[ispin], rho[ispin], this->rhopw->nrxx);
+    }
+    else if( ispin == 0 )
+    {
+        std::vector<double> rho_avg(this->rhopw->nrxx, 0.0);
+        std::vector<double> mag_up(this->rhopw->nrxx, 0.0);
+        double coeff[2] = {0.5, -0.5};
+        for(int ir=0;ir< this->rhopw->nrxx;ir++)
+        {
+            for(int is=0;is<2;is++)
+            {
+                rho_avg[ir] += rho_save[is][ir] * coeff[0];
+                mag_up[ir] += rho[is][ir] * coeff[is];
+            }
+            rho[0][ir] = rho_avg[ir] + mag_up[ir];
+            rho[1][ir] = rho_avg[ir] - mag_up[ir];
+        }
+    }
+    return;
+}
