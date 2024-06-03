@@ -313,7 +313,7 @@ void Gint::cal_gint(Gint_inout* inout)
                     double** DM_in;
 					if(GlobalV::GAMMA_ONLY_LOCAL)
 					{
-						DM_in = inout->DM[GlobalV::CURRENT_SPIN];
+						DM_in = inout->DM[inout->ispin];
 					}
 					else if(!GlobalV::GAMMA_ONLY_LOCAL)
 					{
@@ -408,7 +408,7 @@ void Gint::cal_gint(Gint_inout* inout)
 
 					if(GlobalV::GAMMA_ONLY_LOCAL)
 					{
-						DM_in = inout->DM[GlobalV::CURRENT_SPIN];
+						DM_in = inout->DM[inout->ispin];
 					}
 					else if(!GlobalV::GAMMA_ONLY_LOCAL)
 					{
