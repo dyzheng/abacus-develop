@@ -52,8 +52,7 @@ void DiagoIterAssist<T, Device>::diagH_subspace(
     // qianrui improve this part 2021-3-14
     const T* ppsi = psi.get_pointer();
 
-    // allocated hpsi
-    // std::vector<T> hpsi(psi.get_nbands() * psi.get_nbasis());
+    // allocated hphi
     T* hphi = nullptr;
     resmem_complex_op()(ctx, hphi, psi.get_nbands() * psi.get_nbasis(), "DiagSub::hpsi");
     setmem_complex_op()(ctx, hphi, 0, psi.get_nbands() * psi.get_nbasis());
@@ -80,7 +79,7 @@ void DiagoIterAssist<T, Device>::diagH_subspace(
     );
     delmem_complex_op()(ctx, hphi);
 
-    // allocated spsi
+    // allocated sphi
     T* sphi = nullptr;
     resmem_complex_op()(ctx, sphi, nstart * dmax, "DiagSub::spsi");
     setmem_complex_op()(ctx, sphi, 0, nstart * dmax);
@@ -232,20 +231,19 @@ void DiagoIterAssist<T, Device>::diagH_subspace_init(
 
     const T *ppsi = psi_temp.get_pointer();
 
-    // allocated hpsi
-    T* hpsi = nullptr;
-    resmem_complex_op()(ctx, hpsi, psi_temp.get_nbands() * psi_temp.get_nbasis(), "DiagSub::hpsi");
-    setmem_complex_op()(ctx, hpsi, 0, psi_temp.get_nbands() * psi_temp.get_nbasis());
-    // ================================================
-    // std::vector<T> hpsi(psi_temp.get_nbands() * psi_temp.get_nbasis());
-
-    // do hPsi for all bands
     if (base_device::get_device_type(ctx) == base_device::GpuDevice)
     {
+        // hpsi and spsi share the temp space
+        T* temp = nullptr;
+        resmem_complex_op()(ctx, temp, psi_temp.get_nbasis(), "DiagSub::temp");
+        setmem_complex_op()(ctx, temp, 0, psi_temp.get_nbasis());
+
+        T* hpsi = temp;
+        // do hPsi band by band
         for (int i = 0; i < psi_temp.get_nbands(); i++)
         {
             psi::Range band_by_band_range(1, psi_temp.get_current_k(), i, i);
-            hpsi_info hpsi_in(&psi_temp, band_by_band_range, hpsi + i * psi_temp.get_nbasis());
+            hpsi_info hpsi_in(&psi_temp, band_by_band_range, hpsi);
             if(pHamilt->ops == nullptr)
             {
                 ModuleBase::WARNING("DiagoIterAssist::diagH_subspace_init",
@@ -261,10 +259,54 @@ void DiagoIterAssist<T, Device>::diagH_subspace_init(
                 return;
             }
             pHamilt->ops->hPsi(hpsi_in);
+
+            gemv_op<T, Device>()(
+                ctx,
+                'C',
+                dmax,  
+                nstart,  
+                &one,
+                ppsi,
+                dmax,  
+                hpsi,
+                1,
+                &zero,
+                hcc + i*nstart,
+                1
+            );
         }
+
+        T* spsi = temp;
+        // do sPsi band by band
+        for(int i = 0; i < psi_temp.get_nbands(); i++){
+            pHamilt->sPsi(ppsi+i*psi_temp.get_nbasis(), spsi, psi_temp.get_nbasis(), psi_temp.get_current_nbas(), 1);
+        
+            gemv_op<T, Device>()(
+                    ctx,
+                    'C',
+                    dmax,  
+                    nstart,  
+                    &one,
+                    ppsi,
+                    dmax,  // nbasis
+                    spsi,
+                    1,
+                    &zero,
+                    scc + i*nstart,
+                    1
+                );
+        }
+        delmem_complex_op()(ctx, temp);
     }
     else if (base_device::get_device_type(ctx) == base_device::CpuDevice)
     {
+        // hpsi and spsi share the temp space
+        T* temp = nullptr;
+        resmem_complex_op()(ctx, temp, psi_temp.get_nbands() * psi_temp.get_nbasis(), "DiagSub::temp");
+        setmem_complex_op()(ctx, temp, 0, psi_temp.get_nbands() * psi_temp.get_nbasis());
+
+        T* hpsi = temp;
+        // do hPsi for all bands
         psi::Range all_bands_range(1, psi_temp.get_current_k(), 0, psi_temp.get_nbands()-1);
         hpsi_info hpsi_in(&psi_temp, all_bands_range, hpsi);
         if(pHamilt->ops == nullptr)
@@ -282,35 +324,31 @@ void DiagoIterAssist<T, Device>::diagH_subspace_init(
             return;
         }
         pHamilt->ops->hPsi(hpsi_in);
+
+        gemm_op<T, Device>()(
+            ctx,
+            'C',
+            'N',
+            nstart,
+            nstart,
+            dmin,
+            &one,
+            ppsi,
+            dmax,
+            hpsi,
+            dmax,
+            &zero,
+            hcc,
+            nstart
+        );
+        
+        T* spsi = temp;
+        // do sPsi for all bands
+        pHamilt->sPsi(ppsi, spsi, psi_temp.get_nbasis(), psi_temp.get_current_nbas(), psi_temp.get_nbands());
+
+        gemm_op<T, Device>()(ctx, 'C', 'N', nstart, nstart, dmin, &one, ppsi, dmax, spsi, dmax, &zero, scc, nstart);
+        delmem_complex_op()(ctx, spsi);    
     }
-
-    gemm_op<T, Device>()(
-        ctx,
-        'C',
-        'N',
-        nstart,
-        nstart,
-        dmin,
-        &one,
-        ppsi,
-        dmax,
-        hpsi,
-        dmax,
-        &zero,
-        hcc,
-        nstart
-    );
-    delmem_complex_op()(ctx, hpsi);
-
-    // allocated spsi
-    T* spsi = nullptr;
-    resmem_complex_op()(ctx, spsi, psi_temp.get_nbands() * psi_temp.get_nbasis(), "DiagSub::spsi");
-    setmem_complex_op()(ctx, spsi, 0, psi_temp.get_nbands() * psi_temp.get_nbasis());
-    // do sPsi for all bands
-    pHamilt->sPsi(ppsi, spsi, psi_temp.get_nbasis(), psi_temp.get_current_nbas(), psi_temp.get_nbands());
-
-    gemm_op<T, Device>()(ctx, 'C', 'N', nstart, nstart, dmin, &one, ppsi, dmax, spsi, dmax, &zero, scc, nstart);
-    delmem_complex_op()(ctx, spsi);
 
     if (GlobalV::NPROC_IN_POOL > 1)
     {
@@ -444,7 +482,6 @@ void DiagoIterAssist<T, Device>::diagH_LAPACK(
     }
 
     delmem_var_op()(ctx, eigenvalues);
-
 
     // const bool all_eigenvalues = (nstart == nbands);
     // if (all_eigenvalues) {
