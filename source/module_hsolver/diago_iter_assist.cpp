@@ -56,7 +56,6 @@ void DiagoIterAssist<T, Device>::diagH_subspace(
 
     if (base_device::get_device_type(ctx) == base_device::GpuDevice)
     {
-        std::cout << "11111 " << std::endl;
         // hphi and sphi share the temp space
         T* temp = nullptr;
         resmem_complex_op()(ctx, temp, psi.get_nbasis(), "DiagSub::temp");
