@@ -48,24 +48,23 @@ void DiagoIterAssist<T, Device>::diagH_subspace(
 
     const int dmin = psi.get_current_nbas();
     const int dmax = psi.get_nbasis();
+    const int ik = psi.get_current_k();
 
     // qianrui improve this part 2021-3-14
     const T* ppsi = psi.get_pointer();
-
-    Device* ctx = {};
 
     if (base_device::get_device_type(ctx) == base_device::GpuDevice)
     {
         // hphi and sphi share the temp space
         T* temp = nullptr;
-        resmem_complex_op()(ctx, temp, psi.get_nbasis(), "DiagSub::temp");
-        setmem_complex_op()(ctx, temp, 0, psi.get_nbasis());
+        resmem_complex_op()(ctx, temp, dmax, "DiagSub::temp");
+        setmem_complex_op()(ctx, temp, 0, dmax);
 
         T* hphi = temp;
         // do hPsi band by band
-        for (int i = 0; i < psi.get_nbands(); i++)
+        for (int i = 0; i < nstart; i++)
         {
-            psi::Range band_by_band_range(1, psi.get_current_k(), i, i);
+            psi::Range band_by_band_range(1, ik, i, i);
             hpsi_info hpsi_in(&psi, band_by_band_range, hphi);
             pHamilt->ops->hPsi(hpsi_in);
 
@@ -87,8 +86,9 @@ void DiagoIterAssist<T, Device>::diagH_subspace(
 
         T* sphi = temp;
         // do sPsi band by band
-        for(int i = 0; i < psi.get_nbands(); i++){
-            pHamilt->sPsi(ppsi+i*psi.get_nbasis(), sphi, psi.get_nbasis(), psi.get_current_nbas(), 1);
+        for(int i = 0; i < nstart; i++)
+        {
+            pHamilt->sPsi(ppsi+i*dmax, sphi, dmax, dmin, 1);
         
             gemv_op<T, Device>()(
                     ctx,
@@ -111,12 +111,12 @@ void DiagoIterAssist<T, Device>::diagH_subspace(
     {
         // hphi and sphi share the temp space
         T* temp = nullptr;
-        resmem_complex_op()(ctx, temp, psi.get_nbands() * psi.get_nbasis(), "DiagSub::temp");
-        setmem_complex_op()(ctx, temp, 0, psi.get_nbands() * psi.get_nbasis());
+        resmem_complex_op()(ctx, temp, nstart * dmax, "DiagSub::temp");
+        setmem_complex_op()(ctx, temp, 0, nstart * dmax);
 
         T* hphi = temp;
         // do hPsi for all bands
-        psi::Range all_bands_range(1, psi.get_current_k(), 0, psi.get_nbands()-1);
+        psi::Range all_bands_range(1, ik, 0, nstart - 1);
         hpsi_info hpsi_in(&psi, all_bands_range, hphi);
         pHamilt->ops->hPsi(hpsi_in);
 
@@ -139,7 +139,7 @@ void DiagoIterAssist<T, Device>::diagH_subspace(
         
         T* sphi = temp;
         // do sPsi for all bands
-        pHamilt->sPsi(ppsi, sphi, psi.get_nbasis(), psi.get_current_nbas(), psi.get_nbands());
+        pHamilt->sPsi(ppsi, sphi, dmax, dmin, nstart);
 
         gemm_op<T, Device>()(ctx, 'C', 'N', nstart, nstart, dmin, &one, ppsi, dmax, sphi, dmax, &zero, scc, nstart);
         delmem_complex_op()(ctx, temp);    
@@ -226,13 +226,6 @@ void DiagoIterAssist<T, Device>::diagH_subspace(
         );
 
         matrixSetToAnother<T, Device>()(ctx, n_band, evctemp, dmin, evc.get_pointer(), dmax);
-        // for (int ib = 0; ib < n_band; ib++)
-        // {
-        //     for (int ig = 0; ig < dmin; ig++)
-        //     {
-                // evc(ib, ig) = evctmp(ib, ig);
-        //     }
-        // }
         delmem_complex_op()(ctx, evctemp);
     }
 
@@ -261,8 +254,24 @@ void DiagoIterAssist<T, Device>::diagH_subspace_init(
 
     const int nstart = psi_nr;
     const int n_band = evc.get_nbands();
+    const int dmax = evc.get_nbasis();
+    const int dmin = evc.get_current_nbas();
 
-    Device* ctx = {};
+    // skip the diagonalization if the operators are not allocated
+    if(pHamilt->ops == nullptr)
+    {
+        ModuleBase::WARNING("DiagoIterAssist::diagH_subspace_init",
+        "Severe warning: Operators in Hamilt are not allocated yet, will return value of psi to evc directly\n");
+        for(int iband = 0; iband < n_band; iband++)
+        {
+            for(int ig = 0; ig < dmax; ig++)
+            {
+                evc(iband, ig) = psi[iband * dmax + ig];
+            }
+            en[iband] = 0.0;
+        }
+        return;
+    }
 
     // ModuleBase::ComplexMatrix hc(nstart, nstart);
     // ModuleBase::ComplexMatrix sc(nstart, nstart);
@@ -275,47 +284,28 @@ void DiagoIterAssist<T, Device>::diagH_subspace_init(
     setmem_complex_op()(ctx, scc, 0, nstart * nstart);
     setmem_complex_op()(ctx, vcc, 0, nstart * nstart);
 
-    const int dmin = evc.get_current_nbas();
-    const int dmax = evc.get_nbasis();
-
-    // qianrui improve this part 2021-3-14
-    // std::complex<double> *aux = new std::complex<double>[dmax * nstart];
-    // const std::complex<double> *paux = aux;
-    psi::Psi<T, Device> psi_temp(1, nstart, psi_nc, &evc.get_ngk(0));
-    syncmem_complex_op ()(ctx, ctx, psi_temp.get_pointer(), psi, psi_temp.size());
-    // ModuleBase::GlobalFunc::COPYARRAY(psi, psi_temp.get_pointer(), psi_temp.size());
-
-    const T *ppsi = psi_temp.get_pointer();
-
     if (base_device::get_device_type(ctx) == base_device::GpuDevice)
     {
+        psi::Psi<T, Device> psi_temp(1, 1, psi_nc, &evc.get_ngk(0));
+        T *ppsi = psi_temp.get_pointer();
         // hpsi and spsi share the temp space
         T* temp = nullptr;
-        resmem_complex_op()(ctx, temp, psi_temp.get_nbasis(), "DiagSub::temp");
-        setmem_complex_op()(ctx, temp, 0, psi_temp.get_nbasis());
+        resmem_complex_op()(ctx, temp, dmin, "DiagSub::temp");
+        setmem_complex_op()(ctx, temp, 0, dmin);
 
         T* hpsi = temp;
         // do hPsi band by band
-        for (int i = 0; i < psi_temp.get_nbands(); i++)
+        for (int i = 0; i < nstart; i++)
         {
-            psi::Range band_by_band_range(1, psi_temp.get_current_k(), i, i);
+            // psi_temp is one band psi, psi is all bands psi, the range always is 1 for the only band in psi_temp
+            syncmem_complex_op ()(ctx, ctx, ppsi, psi+i*dmax, psi_temp.size());
+            psi::Range band_by_band_range(1, 0, 0, 0);
             hpsi_info hpsi_in(&psi_temp, band_by_band_range, hpsi);
-            if(pHamilt->ops == nullptr)
-            {
-                ModuleBase::WARNING("DiagoIterAssist::diagH_subspace_init",
-                "Severe warning: Operators in Hamilt are not allocated yet, will return value of psi to evc directly\n");
-                for(int iband = 0; iband < evc.get_nbands(); iband++)
-                {
-                    for(int ig = 0; ig < evc.get_nbasis(); ig++)
-                    {
-                        evc(iband, ig) = psi[iband * evc.get_nbasis() + ig];
-                    }
-                    en[iband] = 0.0;
-                }
-                return;
-            }
+
+            // H|Psi> to get hpsi for target band
             pHamilt->ops->hPsi(hpsi_in);
 
+            // calculate the related elements in hcc <Psi|H|Psi>
             gemv_op<T, Device>()(
                 ctx,
                 'C',
@@ -334,8 +324,9 @@ void DiagoIterAssist<T, Device>::diagH_subspace_init(
 
         T* spsi = temp;
         // do sPsi band by band
-        for(int i = 0; i < psi_temp.get_nbands(); i++){
-            pHamilt->sPsi(ppsi+i*psi_temp.get_nbasis(), spsi, psi_temp.get_nbasis(), psi_temp.get_current_nbas(), 1);
+        for(int i = 0; i < nstart; i++)
+        {
+            pHamilt->sPsi(ppsi, spsi, dmin, dmin, 1);
         
             gemv_op<T, Device>()(
                     ctx,
@@ -356,29 +347,18 @@ void DiagoIterAssist<T, Device>::diagH_subspace_init(
     }
     else if (base_device::get_device_type(ctx) == base_device::CpuDevice)
     {
+        psi::Psi<T, Device> psi_temp(1, nstart, psi_nc, &evc.get_ngk(0));
+        T *ppsi = psi_temp.get_pointer();
+        syncmem_complex_op ()(ctx, ctx, ppsi, psi, psi_temp.size());
         // hpsi and spsi share the temp space
         T* temp = nullptr;
-        resmem_complex_op()(ctx, temp, psi_temp.get_nbands() * psi_temp.get_nbasis(), "DiagSub::temp");
-        setmem_complex_op()(ctx, temp, 0, psi_temp.get_nbands() * psi_temp.get_nbasis());
+        resmem_complex_op()(ctx, temp, nstart * psi_nc, "DiagSub::temp");
+        setmem_complex_op()(ctx, temp, 0, nstart * psi_nc);
 
         T* hpsi = temp;
         // do hPsi for all bands
-        psi::Range all_bands_range(1, psi_temp.get_current_k(), 0, psi_temp.get_nbands()-1);
+        psi::Range all_bands_range(1, 0, 0, nstart - 1);
         hpsi_info hpsi_in(&psi_temp, all_bands_range, hpsi);
-        if(pHamilt->ops == nullptr)
-        {
-            ModuleBase::WARNING("DiagoIterAssist::diagH_subspace_init",
-            "Severe warning: Operators in Hamilt are not allocated yet, will return value of psi to evc directly\n");
-            for(int iband = 0; iband < evc.get_nbands(); iband++)
-            {
-                for(int ig = 0; ig < evc.get_nbasis(); ig++)
-                {
-                    evc(iband, ig) = psi[iband * evc.get_nbasis() + ig];
-                }
-                en[iband] = 0.0;
-            }
-            return;
-        }
         pHamilt->ops->hPsi(hpsi_in);
 
         gemm_op<T, Device>()(
@@ -459,7 +439,7 @@ void DiagoIterAssist<T, Device>::diagH_subspace_init(
             n_band,
             nstart,
             &one,
-            ppsi, // dmax * nstart
+            psi, // dmax * nstart
             dmax,
             vcc,  // nstart * n_band
             nstart,
@@ -470,12 +450,11 @@ void DiagoIterAssist<T, Device>::diagH_subspace_init(
     }
     else
     {
-        // As the evc and psi may refer to the same matrix, we first
-        // create a temporary matrix to store the result. (by wangjp)
-        // qianrui improve this part 2021-3-13
-        T* evctemp = nullptr;
-        resmem_complex_op()(ctx, evctemp, n_band * dmin, "DiagSub::evctemp");
-        setmem_complex_op()(ctx, evctemp, 0, n_band * dmin);
+        assert(psi != evc.get_pointer());
+
+        //T* evctemp = nullptr;
+        //resmem_complex_op()(ctx, evctemp, n_band * dmin, "DiagSub::evctemp");
+        //setmem_complex_op()(ctx, evctemp, 0, n_band * dmin);
 
         gemm_op<T, Device>()(
             ctx,
@@ -485,18 +464,18 @@ void DiagoIterAssist<T, Device>::diagH_subspace_init(
             n_band,
             nstart,
             &one,
-            ppsi, // dmin * nstart
+            psi, // dmin * nstart
             dmax,
             vcc,  // nstart * n_band
             nstart,
             &zero,
-            evctemp,
-            dmin
+            evc.get_pointer(),
+            dmax
         );
 
-        matrixSetToAnother<T, Device>()(ctx, n_band, evctemp, dmin, evc.get_pointer(), dmax);
+        //matrixSetToAnother<T, Device>()(ctx, n_band, evctemp, dmin, evc.get_pointer(), dmax);
 
-        delmem_complex_op()(ctx, evctemp);
+        //delmem_complex_op()(ctx, evctemp);
     }
 
     delmem_complex_op()(ctx, hcc);
