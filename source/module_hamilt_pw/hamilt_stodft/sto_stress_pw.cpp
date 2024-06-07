@@ -257,8 +257,7 @@ void Sto_Stress_PW::sto_stress_nl(ModuleBase::matrix& sigma,
         ModuleBase::ComplexMatrix dbecp(nbandstot, nkb);
         ModuleBase::ComplexMatrix becp(nbandstot, nkb);
 
-        if (GlobalV::NSPIN == 2)
-            GlobalV::CURRENT_SPIN = p_kv->isk[ik];
+        const int current_spin = p_kv->isk[ik];
         // generate vkb
         if (this->nlpp->nkb > 0)
         {
@@ -418,7 +417,7 @@ void Sto_Stress_PW::sto_stress_nl(ModuleBase::matrix& sigma,
                         {
                             for (int ip = 0; ip < Nprojs; ++ip)
                             {
-                                double ps = this->nlpp->deeq(GlobalV::CURRENT_SPIN, iat, ip, ip);
+                                double ps = this->nlpp->deeq(current_spin, iat, ip, ip);
                                 const int inkb = sum + ip;
                                 // out<<"\n ps = "<<ps;
 
