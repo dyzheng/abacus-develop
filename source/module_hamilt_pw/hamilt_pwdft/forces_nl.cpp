@@ -58,16 +58,22 @@ std::vector<FPTYPE> cal_vq(int it, const FPTYPE* gk, int npw)
 
 
 // cal_ylm
-template <typename FPTYPE>
-std::vector<FPTYPE> cal_ylm(int lmax, int npw, const FPTYPE* gk_in)
+template <typename FPTYPE, typename Device>
+void Forces<FPTYPE, Device>::cal_ylm(int lmax, int npw, const FPTYPE* gk_in, FPTYPE* ylm)
 {
     int x1 = (lmax + 1) * (lmax + 1);
-    std::vector<FPTYPE> ylm(x1 * npw);
     ModuleBase::Memory::record("stress_nl::ylm", x1 * npw * sizeof(FPTYPE));
 
-    ModuleBase::YlmReal::Ylm_Real(cpu_ctx, x1, npw, gk_in, ylm.data());
+    if (this->device == base_device::GpuDevice)
+    {
+        std::vector<FPTYPE> ylm_cpu(x1 * npw);
+        ModuleBase::YlmReal::Ylm_Real(cpu_ctx, x1, npw, gk_in, ylm_cpu.data());
+        syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, ylm, ylm_cpu.data(), ylm_cpu.size());
+    } else {
+        ModuleBase::YlmReal::Ylm_Real(cpu_ctx, x1, npw, gk_in, ylm);
+    }
     
-    return ylm;
+    return ;
 }
 
 // cal_pref
@@ -291,7 +297,7 @@ void Forces<FPTYPE, Device>::cal_force_nl_new(ModuleBase::matrix& forcenl,
 
 
     // allocate the memory for ops.
-    FPTYPE *h_ylm = new FPTYPE[(_lmax+1)*(_lmax+1)*max_npw], *d_ylm = nullptr, // (lmax + 1) * (lmax + 1) * npw
+    FPTYPE *h_ylm = new FPTYPE[(_lmax+1)*(_lmax+1)*max_npw], *hd_ylm = nullptr, // (lmax + 1) * (lmax + 1) * npw
             *hd_vq = nullptr, *hd_vq_deri = nullptr, //this->ucell->atoms[it].ncpp.nbeta * npw
             *h_g_plus_k = new FPTYPE[max_npw * 5], *d_g_plus_k = nullptr, // npw * 5
             *h_pref = new FPTYPE[max_nh], *d_pref = nullptr, // this->ucell->atoms[it].ncpp.nh
@@ -304,6 +310,7 @@ void Forces<FPTYPE, Device>::cal_force_nl_new(ModuleBase::matrix& forcenl,
     std::complex<FPTYPE>** vkb_ptrs = new std::complex<FPTYPE>*[max_nh];
     std::complex<FPTYPE>** d_vkb_ptrs = nullptr;
     std::complex<FPTYPE>*d_sk = nullptr, *d_pref_in = nullptr ;
+    std::complex<FPTYPE>* ppcell_vkb = nullptr;
 
     resmem_var_op()(this->ctx, hd_vq, max_nbeta*max_npw);
     if (this->device == base_device::GpuDevice)
@@ -325,7 +332,7 @@ void Forces<FPTYPE, Device>::cal_force_nl_new(ModuleBase::matrix& forcenl,
         syncmem_int_h2d_op()(this->ctx, this->cpu_ctx, atom_nh, h_atom_nh, GlobalC::ucell.ntype);
         syncmem_int_h2d_op()(this->ctx, this->cpu_ctx, atom_na, h_atom_na, GlobalC::ucell.ntype);
     
-        resmem_var_op()(this->ctx, d_ylm, (_lmax+1)*(_lmax+1)*max_npw);
+        resmem_var_op()(this->ctx, hd_ylm, (_lmax+1)*(_lmax+1)*max_npw);
         resmem_var_op()(this->ctx, d_g_plus_k, max_npw * 5);
         resmem_var_op()(this->ctx, d_pref, max_nh);
         resmem_var_op()(this->ctx, d_vq_tab, GlobalC::ppcell.tab.getSize());
@@ -335,6 +342,8 @@ void Forces<FPTYPE, Device>::cal_force_nl_new(ModuleBase::matrix& forcenl,
 
         resmem_complex_op()(this->ctx, d_sk,  max_npw, "Stress::d_sk");
         resmem_complex_op()(this->ctx, d_pref_in,  max_nh, "Stress::pref_in");    
+
+        ppcell_vkb= GlobalC::ppcell.get_vkb_data<FPTYPE>();
     }
     else
     {
@@ -344,6 +353,7 @@ void Forces<FPTYPE, Device>::cal_force_nl_new(ModuleBase::matrix& forcenl,
         gcar = &wfc_basis->gcar[0][0];
         atom_nh = h_atom_nh;
         atom_na = h_atom_na;
+        ppcell_vkb = GlobalC::ppcell.vkb.c;
     }
 
 
@@ -386,17 +396,16 @@ void Forces<FPTYPE, Device>::cal_force_nl_new(ModuleBase::matrix& forcenl,
         {
             dbecp_ptr[i] = &dbecp[i * GlobalV::NBANDS * nkb];
         }
-        std::complex<FPTYPE>* ppcell_vkb = GlobalC::ppcell.vkb.c;
-        std::complex<FPTYPE>* ppcell_vkb_d= GlobalC::ppcell.get_vkb_data<FPTYPE>();
+
 
         int lmax = GlobalC::ppcell.lmaxkb;
         //prepare ylm，size: (lmax+1)^2 * npwx
-        std::vector<double> ylm =  cal_ylm(lmax, npw, g_plus_k.data());
-        if (this->device == base_device::GpuDevice)
-        {
-            syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, d_ylm, ylm.data(), ylm.size());
-        }
-
+        // std::vector<double> ylm =  cal_ylm(lmax, npw, g_plus_k.data());
+        // if (this->device == base_device::GpuDevice)
+        // {
+        //     syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, d_ylm, ylm.data(), ylm.size());
+        // }
+        cal_ylm(lmax, npw, g_plus_k.data(),hd_ylm);
 
         for(int it=0;it<GlobalC::ucell.ntype;it++)//loop all elements 
         {
@@ -406,25 +415,20 @@ void Forces<FPTYPE, Device>::cal_force_nl_new(ModuleBase::matrix& forcenl,
             int lenth_vq = GlobalC::ucell.atoms[it].ncpp.nbeta*npw;
             std::vector<double> vq(lenth_vq);
             
+            FPTYPE *gk = g_plus_k.data(), *vq_tb = GlobalC::ppcell.tab.ptr;
+
             if (this->device == base_device::GpuDevice)
             {
                 syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, d_g_plus_k, g_plus_k.data(), g_plus_k.size());
                 syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, d_vq_tab, GlobalC::ppcell.tab.ptr, GlobalC::ppcell.tab.getSize());
-                hamilt::cal_vq_op<FPTYPE, Device>()(
-                    this->ctx, d_vq_tab, it, d_g_plus_k,
-                    npw, GlobalC::ppcell.tab.getBound2(),GlobalC::ppcell.tab.getBound3(),
-                    GlobalV::DQ, GlobalC::ucell.atoms[it].ncpp.nbeta, hd_vq
-                );
-
-                syncmem_var_d2h_op()(this->cpu_ctx, this->ctx, vq.data(), hd_vq, vq.size());
-
-            }else{
-                hamilt::cal_vq_op<FPTYPE, Device>()(
-                    this->ctx, GlobalC::ppcell.tab.ptr, it, g_plus_k.data(),
-                    npw, GlobalC::ppcell.tab.getBound2(),GlobalC::ppcell.tab.getBound3(),
-                    GlobalV::DQ, GlobalC::ucell.atoms[it].ncpp.nbeta, vq.data()
-                );                
+                gk = d_g_plus_k;
+                vq_tb = d_vq_tab;
             }
+            hamilt::cal_vq_op<FPTYPE, Device>()(
+                this->ctx, vq_tb, it, gk,
+                npw, GlobalC::ppcell.tab.getBound2(),GlobalC::ppcell.tab.getBound3(),
+                GlobalV::DQ, GlobalC::ucell.atoms[it].ncpp.nbeta, hd_vq
+            );   
             //prepare（-i）^l, size: nh
 
 
@@ -445,8 +449,8 @@ void Forces<FPTYPE, Device>::cal_force_nl_new(ModuleBase::matrix& forcenl,
                     prepare_vkb_ptr<FPTYPE, Device>(
                             GlobalC::ucell.atoms[it].ncpp.nbeta, GlobalC::ppcell.nhtol.c, 
                             GlobalC::ppcell.nhtol.nc, npw, it,
-                            ppcell_vkb_d, vkb_ptrs,
-                            d_ylm, ylm_ptrs,
+                            ppcell_vkb, vkb_ptrs,
+                            hd_ylm, ylm_ptrs,
                             hd_vq, vq_ptrs
                         );
 
@@ -468,8 +472,8 @@ void Forces<FPTYPE, Device>::cal_force_nl_new(ModuleBase::matrix& forcenl,
                             GlobalC::ucell.atoms[it].ncpp.nbeta, GlobalC::ppcell.nhtol.c, 
                             GlobalC::ppcell.nhtol.nc, npw, it,
                             ppcell_vkb, vkb_ptrs,
-                            ylm.data(), ylm_ptrs,
-                            vq.data(), vq_ptrs
+                            hd_ylm, ylm_ptrs,
+                            hd_vq, vq_ptrs
                         );
 
                     hamilt::cal_vkb_op<FPTYPE, Device>()(
@@ -478,27 +482,9 @@ void Forces<FPTYPE, Device>::cal_force_nl_new(ModuleBase::matrix& forcenl,
                     );
                 }
 
-                if (this->device == base_device::GpuDevice)
-                {
-                    //syncmem_complex_h2d_op()(this->ctx, this->cpu_ctx, ppcell_vkb_d, ppcell_vkb, nh * npw);
-                    gemm_op()(this->ctx,
-                            transa,
-                            transb,
-                            nh,
-                            npm,
-                            npw,
-                            &ModuleBase::ONE,
-                            ppcell_vkb_d,
-                            npw,
-                            psi_in[0].get_pointer(),
-                            npwx,
-                            &ModuleBase::ZERO,
-                            becp_ptr,
-                            nkb);
-                    
-                }
-                else {
-                    gemm_op()(this->ctx,
+   
+                //syncmem_complex_h2d_op()(this->ctx, this->cpu_ctx, ppcell_vkb_d, ppcell_vkb, nh * npw);
+                gemm_op()(this->ctx,
                         transa,
                         transb,
                         nh,
@@ -512,40 +498,27 @@ void Forces<FPTYPE, Device>::cal_force_nl_new(ModuleBase::matrix& forcenl,
                         &ModuleBase::ZERO,
                         becp_ptr,
                         nkb);
-                }
+                    
+  
 
                 becp_ptr += nh;
 
                 for (int ipol = 0; ipol < 3; ipol++)
                 {
-                    if (this->device == base_device::GpuDevice)
-                    {
-                        cal_vkb1_nl_op()(this->ctx,
-                                        nh,
-                                        this->npwx,
-                                        wfc_basis->npwk_max,
-                                        GlobalC::ppcell.vkb.nc,
-                                        nbasis, 
-                                        ik,
-                                        ipol,
-                                        ModuleBase::NEG_IMAG_UNIT,
-                                        ppcell_vkb_d,
-                                        gcar,
-                                        vkb1);
-                    }else {
-                        cal_vkb1_nl_op()(this->ctx,
-                                        nh,
-                                        this->npwx,
-                                        wfc_basis->npwk_max,
-                                        GlobalC::ppcell.vkb.nc,
-                                        nbasis,
-                                        ik,
-                                        ipol,
-                                        ModuleBase::NEG_IMAG_UNIT,
-                                        ppcell_vkb,
-                                        gcar,
-                                        vkb1);
-                    }
+
+                    cal_vkb1_nl_op()(this->ctx,
+                                    nh,
+                                    this->npwx,
+                                    wfc_basis->npwk_max,
+                                    GlobalC::ppcell.vkb.nc,
+                                    nbasis,
+                                    ik,
+                                    ipol,
+                                    ModuleBase::NEG_IMAG_UNIT,
+                                    ppcell_vkb,
+                                    gcar,
+                                    vkb1);
+
                     gemm_op()(this->ctx,
                             transa,
                             transb,

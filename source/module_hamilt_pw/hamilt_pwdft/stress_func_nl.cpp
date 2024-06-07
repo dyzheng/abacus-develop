@@ -62,8 +62,8 @@ void Stress_Func<FPTYPE, Device>::stress_nl(ModuleBase::matrix& sigma,
     }
     
     // allocate the memory for ops.
-    FPTYPE *h_ylm = new FPTYPE[(_lmax+1)*(_lmax+1)*max_npw], *d_ylm = nullptr, // (lmax + 1) * (lmax + 1) * npw
-            *h_ylm_deri = new FPTYPE[3*(_lmax+1)*(_lmax+1)*max_npw], *d_ylm_deri = nullptr, //3 * (lmax + 1) * (lmax + 1) * npw
+    FPTYPE *h_ylm = new FPTYPE[(_lmax+1)*(_lmax+1)*max_npw], *hd_ylm = nullptr, // (lmax + 1) * (lmax + 1) * npw
+            *h_ylm_deri = new FPTYPE[3*(_lmax+1)*(_lmax+1)*max_npw], *hd_ylm_deri = nullptr, //3 * (lmax + 1) * (lmax + 1) * npw
             *hd_vq = nullptr, *hd_vq_deri = nullptr, //this->ucell->atoms[it].ncpp.nbeta * npw
             *h_g_plus_k = new FPTYPE[max_npw * 5], *d_g_plus_k = nullptr, // npw * 5
             *h_pref = new FPTYPE[max_nh], *d_pref = nullptr, // this->ucell->atoms[it].ncpp.nh
@@ -79,14 +79,17 @@ void Stress_Func<FPTYPE, Device>::stress_nl(ModuleBase::matrix& sigma,
     std::complex<FPTYPE>** vkb_ptrs = new std::complex<FPTYPE>*[max_nh];
     std::complex<FPTYPE>** d_vkb_ptrs = nullptr;
     std::complex<FPTYPE>*d_sk = nullptr, *d_pref_in = nullptr ;
+    std::complex<FPTYPE>* ppcell_vkb = nullptr;
 
     resmem_var_op()(this->ctx, hd_vq, max_nbeta*max_npw);
     resmem_var_op()(this->ctx, hd_vq_deri, max_nbeta*max_npw);
-
+    resmem_var_op()(this->ctx, hd_ylm, (_lmax+1)*(_lmax+1)*max_npw);
+    resmem_var_op()(this->ctx, hd_ylm_deri, 3*(_lmax+1)*(_lmax+1)*max_npw);
 
     resmem_var_op()(this->ctx, stress, 9);
     setmem_var_op()(this->ctx, stress, 0, 9);
     resmem_var_h_op()(this->cpu_ctx, sigmanlc, 9);
+
     if (this->device == base_device::GpuDevice)
     {
         resmem_var_op()(this->ctx, d_wg, wg.nr * wg.nc);
@@ -104,8 +107,8 @@ void Stress_Func<FPTYPE, Device>::stress_nl(ModuleBase::matrix& sigma,
         syncmem_int_h2d_op()(this->ctx, this->cpu_ctx, atom_nh, h_atom_nh, this->ucell->ntype);
         syncmem_int_h2d_op()(this->ctx, this->cpu_ctx, atom_na, h_atom_na, this->ucell->ntype);
     
-        resmem_var_op()(this->ctx, d_ylm, (_lmax+1)*(_lmax+1)*max_npw);
-        resmem_var_op()(this->ctx, d_ylm_deri, 3*(_lmax+1)*(_lmax+1)*max_npw);
+        
+        
         resmem_var_op()(this->ctx, d_g_plus_k, max_npw * 5);
         resmem_var_op()(this->ctx, d_pref, max_nh);
         resmem_var_op()(this->ctx, d_vq_tab, nlpp->tab.getSize());
@@ -120,6 +123,8 @@ void Stress_Func<FPTYPE, Device>::stress_nl(ModuleBase::matrix& sigma,
 
         resmem_complex_op()(this->ctx, d_sk,  max_npw, "Stress::d_sk");
         resmem_complex_op()(this->ctx, d_pref_in,  max_nh, "Stress::pref_in");
+
+        ppcell_vkb= nlpp->get_vkb_data<FPTYPE>();
     }
     else
     {
@@ -128,6 +133,7 @@ void Stress_Func<FPTYPE, Device>::stress_nl(ModuleBase::matrix& sigma,
         gcar = &wfc_basis->gcar[0][0];
         atom_nh = h_atom_nh;
         atom_na = h_atom_na;
+        ppcell_vkb = nlpp->vkb.c;
     }
 
     // prepare the memory of the becp and dbecp:
@@ -136,8 +142,6 @@ void Stress_Func<FPTYPE, Device>::stress_nl(ModuleBase::matrix& sigma,
     std::complex<FPTYPE> *dbecp = nullptr, *becp = nullptr;
     resmem_complex_op()(this->ctx, becp, wg_nc * nkb, "Stress::becp");
     resmem_complex_op()(this->ctx, dbecp, 6 * wg_nc * nkb, "Stress::dbecp");
-
-
 
     int nks = p_kv->get_nks();
     for(int ik=0;ik<nks;ik++)//loop k points
@@ -171,20 +175,13 @@ void Stress_Func<FPTYPE, Device>::stress_nl(ModuleBase::matrix& sigma,
         {
             dbecp_ptr[i] = &dbecp[i * wg_nc * nkb];
         }
-        std::complex<FPTYPE>* ppcell_vkb = nlpp->vkb.c;
-        std::complex<FPTYPE>* ppcell_vkb_d= nlpp->get_vkb_data<FPTYPE>();
+
         int lmax = nlpp->lmaxkb;
         //prepare ylm，size: (lmax+1)^2 * npwx
-        std::vector<double> ylm = cal_ylm(lmax, npw, g_plus_k.data());
-
+        cal_ylm(lmax, npw, g_plus_k.data(),hd_ylm);
         //prepare ylm'，size: 3 * (lmax+1)^2 * npwx，contain x,y,z 3 axis
-        std::vector<double> ylm_deri = cal_ylm_deri(lmax, npw, g_plus_k.data());
+        cal_ylm_deri(lmax, npw, g_plus_k.data(),hd_ylm_deri);
 
-        if (this->device == base_device::GpuDevice)
-        {
-            syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, d_ylm, ylm.data(), ylm.size());
-            syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, d_ylm_deri, ylm_deri.data(), ylm_deri.size());
-        }
         /////////////////////////////
         //TODO: ylm,ylm_deri pass to GPU
         /////////////////////////////
@@ -197,45 +194,26 @@ void Stress_Func<FPTYPE, Device>::stress_nl(ModuleBase::matrix& sigma,
             std::vector<double> vq(lenth_vq);//cal_vq(it, g_plus_k.data(), npw);
             //std::vector<double> vq2(vq.size());
 
+            FPTYPE *gk = g_plus_k.data(), *vq_tb = nlpp->tab.ptr;
 
             if (this->device == base_device::GpuDevice)
             {
                 syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, d_g_plus_k, g_plus_k.data(), g_plus_k.size());
                 syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, d_vq_tab, nlpp->tab.ptr, nlpp->tab.getSize());
-                cal_vq_op()(
-                    this->ctx, d_vq_tab, it, d_g_plus_k,
-                    npw, nlpp->tab.getBound2(),nlpp->tab.getBound3(),
-                    GlobalV::DQ, this->ucell->atoms[it].ncpp.nbeta, hd_vq
-                );
-
-                syncmem_var_d2h_op()(this->cpu_ctx, this->ctx, vq.data(), hd_vq, vq.size());
-
-            }else{
-                cal_vq_op()(
-                    this->ctx, nlpp->tab.ptr, it, g_plus_k.data(),
-                    npw, nlpp->tab.getBound2(),nlpp->tab.getBound3(),
-                    GlobalV::DQ, this->ucell->atoms[it].ncpp.nbeta, vq.data()
-                );                
-            }
-
-            std::vector<double> vq_deri(lenth_vq);// = cal_vq_deri(it, g_plus_k.data(), npw);
-            if (this->device == base_device::GpuDevice)
-            {
-                cal_vq_deri_op()(
-                    this->ctx, d_vq_tab, it, d_g_plus_k,
-                    npw, nlpp->tab.getBound2(),nlpp->tab.getBound3(),
-                    GlobalV::DQ, this->ucell->atoms[it].ncpp.nbeta, hd_vq_deri
-                );
-                syncmem_var_d2h_op()(this->cpu_ctx, this->ctx, vq_deri.data(), hd_vq_deri, vq_deri.size());
+                gk = d_g_plus_k;
+                vq_tb = d_vq_tab;
                 
-            }else{
-                cal_vq_deri_op()(
-                    this->ctx, nlpp->tab.ptr, it, g_plus_k.data(),
-                    npw, nlpp->tab.getBound2(),nlpp->tab.getBound3(),
-                    GlobalV::DQ, this->ucell->atoms[it].ncpp.nbeta, vq_deri.data()
-                );                        
             }
-
+            cal_vq_op()(
+                this->ctx, vq_tb, it, gk,
+                npw, nlpp->tab.getBound2(),nlpp->tab.getBound3(),
+                GlobalV::DQ, this->ucell->atoms[it].ncpp.nbeta, hd_vq
+            );
+            cal_vq_deri_op()(
+                this->ctx, vq_tb, it, gk,
+                npw, nlpp->tab.getBound2(),nlpp->tab.getBound3(),
+                GlobalV::DQ, this->ucell->atoms[it].ncpp.nbeta, hd_vq_deri
+            );      
             
             // prepare（-i）^l, size: nh
             std::vector<complex<double>> pref = cal_pref(it);
@@ -259,8 +237,8 @@ void Stress_Func<FPTYPE, Device>::stress_nl(ModuleBase::matrix& sigma,
                     prepare_vkb_ptr(
                             this->ucell->atoms[it].ncpp.nbeta, nlpp->nhtol.c, 
                             nlpp->nhtol.nc, npw, it,
-                            ppcell_vkb_d, vkb_ptrs,
-                            d_ylm, ylm_ptrs,
+                            ppcell_vkb, vkb_ptrs,
+                            hd_ylm, ylm_ptrs,
                             hd_vq, vq_ptrs
                         );
 
@@ -283,8 +261,8 @@ void Stress_Func<FPTYPE, Device>::stress_nl(ModuleBase::matrix& sigma,
                             this->ucell->atoms[it].ncpp.nbeta, nlpp->nhtol.c, 
                             nlpp->nhtol.nc, npw, it,
                             ppcell_vkb, vkb_ptrs,
-                            ylm.data(), ylm_ptrs,
-                            vq.data(), vq_ptrs
+                            hd_ylm, ylm_ptrs,
+                            hd_vq, vq_ptrs
                         );
 
                     cal_vkb_op()(
@@ -296,27 +274,9 @@ void Stress_Func<FPTYPE, Device>::stress_nl(ModuleBase::matrix& sigma,
                 // 2.b calculate becp = vkb * psi
                 int npm = GlobalV::NPOL * nbands_occ;
 
-                if (this->device == base_device::GpuDevice)
-                {
-                    //syncmem_complex_h2d_op()(this->ctx, this->cpu_ctx, ppcell_vkb_d, ppcell_vkb, nh * npw);
-                    gemm_op()(this->ctx,
-                            transa,
-                            transb,
-                            nh,
-                            npm,
-                            npw,
-                            &ModuleBase::ONE,
-                            ppcell_vkb_d,
-                            npw,
-                            ppsi,
-                            npwx,
-                            &ModuleBase::ZERO,
-                            becp_ptr,
-                            nkb);
-                    
-                }
-                else {
-                    gemm_op()(this->ctx,
+
+                //syncmem_complex_h2d_op()(this->ctx, this->cpu_ctx, ppcell_vkb_d, ppcell_vkb, nh * npw);
+                gemm_op()(this->ctx,
                         transa,
                         transb,
                         nh,
@@ -330,7 +290,8 @@ void Stress_Func<FPTYPE, Device>::stress_nl(ModuleBase::matrix& sigma,
                         &ModuleBase::ZERO,
                         becp_ptr,
                         nkb);
-                }
+                    
+
 
 
                 becp_ptr += nh;
@@ -349,9 +310,9 @@ void Stress_Func<FPTYPE, Device>::stress_nl(ModuleBase::matrix& sigma,
                             prepare_vkb_deri_ptr(
                                 this->ucell->atoms[it].ncpp.nbeta, nlpp->nhtol.c, 
                                 nlpp->nhtol.nc, npw, it, ipol, jpol,
-                                ppcell_vkb_d, vkb_ptrs,
-                                d_ylm, ylm_ptrs,
-                                d_ylm_deri, ylm_deri_ptrs1, ylm_deri_ptrs2,
+                                ppcell_vkb, vkb_ptrs,
+                                hd_ylm, ylm_ptrs,
+                                hd_ylm_deri, ylm_deri_ptrs1, ylm_deri_ptrs2,
                                 hd_vq, vq_ptrs,
                                 hd_vq_deri, vq_deri_ptrs
                             );
@@ -374,10 +335,10 @@ void Stress_Func<FPTYPE, Device>::stress_nl(ModuleBase::matrix& sigma,
                                 this->ucell->atoms[it].ncpp.nbeta, nlpp->nhtol.c, 
                                 nlpp->nhtol.nc, npw, it, ipol, jpol,
                                 ppcell_vkb, vkb_ptrs,
-                                ylm.data(), ylm_ptrs,
-                                ylm_deri.data(), ylm_deri_ptrs1, ylm_deri_ptrs2,
-                                vq.data(), vq_ptrs,
-                                vq_deri.data(), vq_deri_ptrs
+                                hd_ylm, ylm_ptrs,
+                                hd_ylm_deri, ylm_deri_ptrs1, ylm_deri_ptrs2,
+                                hd_vq, vq_ptrs,
+                                hd_vq_deri, vq_deri_ptrs
                             );
                             cal_vkb_deri_op()(
                                 this->ctx, nh, npw, ipol, jpol,
@@ -389,41 +350,22 @@ void Stress_Func<FPTYPE, Device>::stress_nl(ModuleBase::matrix& sigma,
                  
                         // 2.b calculate dbecp = dbecp_noevc * psi
 
-                        if (this->device == base_device::GpuDevice)
-                        {
-                            gemm_op()(this->ctx,
-                            transa,
-                            transb,
-                            nh,
-                            npm,
-                            npw,
-                            &ModuleBase::ONE,
-                            ppcell_vkb_d,
-                            npw,
-                            ppsi,
-                            npwx,
-                            &ModuleBase::ZERO,
-                            dbecp_ptr[index],
-                            nkb);
+                        gemm_op()(this->ctx,
+                        transa,
+                        transb,
+                        nh,
+                        npm,
+                        npw,
+                        &ModuleBase::ONE,
+                        ppcell_vkb,
+                        npw,
+                        ppsi,
+                        npwx,
+                        &ModuleBase::ZERO,
+                        dbecp_ptr[index],
+                        nkb);
 
-                        } 
-                        else 
-                        {
-                            gemm_op()(this->ctx,
-                            transa,
-                            transb,
-                            nh,
-                            npm,
-                            npw,
-                            &ModuleBase::ONE,
-                            ppcell_vkb,
-                            npw,
-                            ppsi,
-                            npwx,
-                            &ModuleBase::ZERO,
-                            dbecp_ptr[index],
-                            nkb);                        
-                        }
+
                         dbecp_ptr[index++] += nh;
                     }//jpol
                 }//ipol
@@ -611,30 +553,49 @@ std::vector<FPTYPE> Stress_Func<FPTYPE, Device>::cal_vq_deri(int it, const FPTYP
 
 // cal_ylm
 template <typename FPTYPE, typename Device>
-std::vector<FPTYPE> Stress_Func<FPTYPE, Device>::cal_ylm(int lmax, int npw, const FPTYPE* gk_in)
+void Stress_Func<FPTYPE, Device>::cal_ylm(int lmax, int npw, const FPTYPE* gk_in, FPTYPE* ylm)
 {
+
+
     int x1 = (lmax + 1) * (lmax + 1);
-    std::vector<FPTYPE> ylm(x1 * npw);
     ModuleBase::Memory::record("stress_nl::ylm", x1 * npw * sizeof(FPTYPE));
 
-    ModuleBase::YlmReal::Ylm_Real(cpu_ctx, x1, npw, gk_in, ylm.data());
+    if (this->device == base_device::GpuDevice)
+    {
+        std::vector<FPTYPE> ylm_cpu(x1 * npw);
+        ModuleBase::YlmReal::Ylm_Real(cpu_ctx, x1, npw, gk_in, ylm_cpu.data());
+        syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, ylm, ylm_cpu.data(), ylm_cpu.size());
+    } else {
+        ModuleBase::YlmReal::Ylm_Real(cpu_ctx, x1, npw, gk_in, ylm);
+    }
     
-    return ylm;
+    return ;
 }
 // cal_ylm_deri
 template <typename FPTYPE, typename Device>
-std::vector<FPTYPE> Stress_Func<FPTYPE, Device>::cal_ylm_deri(int lmax, int npw, const FPTYPE* gk_in)
+void Stress_Func<FPTYPE, Device>::cal_ylm_deri(int lmax, int npw, const FPTYPE* gk_in,FPTYPE* ylm_deri)
 {
     int x1 = (lmax + 1) * (lmax + 1);
-    std::vector<FPTYPE> dylm(3 * x1 * npw);
     ModuleBase::Memory::record("stress_nl::dylm", 3* x1 * npw * sizeof(FPTYPE));
 
-    for(int ipol = 0;ipol<3;ipol++)
+    if (this->device == base_device::GpuDevice)
     {
-        dylmr2(x1, npw, gk_in, &dylm[ipol * x1 * npw], ipol);
+        std::vector<FPTYPE> dylm(3 * x1 * npw);
+        for(int ipol = 0;ipol<3;ipol++)
+        {
+            dylmr2(x1, npw, gk_in, &dylm[ipol * x1 * npw], ipol);
+        }
+        syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, ylm_deri, dylm.data(), dylm.size());
+    } else {
+        for(int ipol = 0;ipol<3;ipol++)
+        {
+            dylmr2(x1, npw, gk_in, &ylm_deri[ipol * x1 * npw], ipol);
+        }
     }
+
+
     
-    return dylm;
+    return ;
 }
 // cal_pref
 template <typename FPTYPE, typename Device>
@@ -648,6 +609,8 @@ std::vector<std::complex<FPTYPE>> Stress_Func<FPTYPE, Device>::cal_pref(int it)
     }
     return pref;
 }
+
+
 // cal_vkb
 // cpu version first, gpu version later
 template <typename FPTYPE, typename Device>

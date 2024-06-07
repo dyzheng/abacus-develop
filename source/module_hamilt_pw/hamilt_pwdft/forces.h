@@ -71,6 +71,7 @@ public:
                       pseudopot_cell_vnl* ppcell_in,
                       const elecstate::ElecState& elec,
                       const UnitCell& ucell);
+    void cal_ylm(int lmax, int npw, const FPTYPE* gk_in, FPTYPE* ylm);
 
   private:
     Device* ctx = {};

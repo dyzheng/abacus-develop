@@ -165,9 +165,9 @@ class Stress_Func
     /// calculate the derivate of the radial part of the non-local pseudopotential
     std::vector<FPTYPE> cal_vq_deri(int it, const FPTYPE* gk_in, int npw);
     /// calculate the sperical bessel function for projections
-    std::vector<FPTYPE> cal_ylm(int lmax, int npw, const FPTYPE* gk_in);
+    void cal_ylm(int lmax, int npw, const FPTYPE* gk_in, FPTYPE* ylm);
     /// calculate the derivate of the sperical bessel function for projections
-    std::vector<FPTYPE> cal_ylm_deri(int lmax, int npw, const FPTYPE* gk_in);
+    void cal_ylm_deri(int lmax, int npw, const FPTYPE* gk_in, FPTYPE* ylm_deri);
     /// calculate the (-i)^l factors
     std::vector<complex<FPTYPE>> cal_pref(int it);
     /// calculate the vkb matrix for this atom
