@@ -313,6 +313,7 @@ void Forces<FPTYPE, Device>::cal_force_nl_new(ModuleBase::matrix& forcenl,
     std::complex<FPTYPE>* ppcell_vkb = nullptr;
 
     resmem_var_op()(this->ctx, hd_vq, max_nbeta*max_npw);
+    resmem_var_op()(this->ctx, hd_ylm, (_lmax+1)*(_lmax+1)*max_npw);
     if (this->device == base_device::GpuDevice)
     {
         resmem_var_op()(this->ctx, d_wg, wg.nr * wg.nc);
@@ -332,7 +333,6 @@ void Forces<FPTYPE, Device>::cal_force_nl_new(ModuleBase::matrix& forcenl,
         syncmem_int_h2d_op()(this->ctx, this->cpu_ctx, atom_nh, h_atom_nh, GlobalC::ucell.ntype);
         syncmem_int_h2d_op()(this->ctx, this->cpu_ctx, atom_na, h_atom_na, GlobalC::ucell.ntype);
     
-        resmem_var_op()(this->ctx, hd_ylm, (_lmax+1)*(_lmax+1)*max_npw);
         resmem_var_op()(this->ctx, d_g_plus_k, max_npw * 5);
         resmem_var_op()(this->ctx, d_pref, max_nh);
         resmem_var_op()(this->ctx, d_vq_tab, GlobalC::ppcell.tab.getSize());
@@ -554,7 +554,7 @@ void Forces<FPTYPE, Device>::cal_force_nl_new(ModuleBase::matrix& forcenl,
         {
             Parallel_Reduce::reduce_pool(becp, GlobalV::NBANDS * nkb);
         }
-        
+        std::cout<<__FILE__<<__LINE__<<std::endl;
         int index = 0;        
 
         //		don't need to reduce here, keep dbecp different in each processor,
@@ -585,6 +585,7 @@ void Forces<FPTYPE, Device>::cal_force_nl_new(ModuleBase::matrix& forcenl,
                           becp,
                           dbecp,
                           force);
+        std::cout<<__FILE__<<__LINE__<<std::endl;
     } // end ik
 
     if (this->device == base_device::GpuDevice)
@@ -594,7 +595,7 @@ void Forces<FPTYPE, Device>::cal_force_nl_new(ModuleBase::matrix& forcenl,
     // sum up forcenl from all processors
     Parallel_Reduce::reduce_all(forcenl.c, forcenl.nr* forcenl.nc);
 
-
+std::cout<<__FILE__<<__LINE__<<std::endl;
     delete [] h_atom_nh;
     delete [] h_atom_na;
     delmem_complex_op()(this->ctx, becp);
@@ -607,6 +608,7 @@ void Forces<FPTYPE, Device>::cal_force_nl_new(ModuleBase::matrix& forcenl,
         delmem_int_op()(this->ctx, atom_nh);
         delmem_int_op()(this->ctx, atom_na);
     }
+std::cout<<__FILE__<<__LINE__<<std::endl;
 	ModuleBase::timer::tick("Forces","cal_force_nl");
 }
 
