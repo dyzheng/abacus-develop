@@ -290,15 +290,15 @@ void DiagoIterAssist<T, Device>::diagH_subspace_init(
         T *ppsi = psi_temp.get_pointer();
         // hpsi and spsi share the temp space
         T* temp = nullptr;
-        resmem_complex_op()(ctx, temp, dmin, "DiagSub::temp");
-        setmem_complex_op()(ctx, temp, 0, dmin);
+        resmem_complex_op()(ctx, temp, psi_nc, "DiagSub::temp");
+        setmem_complex_op()(ctx, temp, 0, psi_nc);
 
         T* hpsi = temp;
         // do hPsi band by band
         for (int i = 0; i < nstart; i++)
         {
             // psi_temp is one band psi, psi is all bands psi, the range always is 1 for the only band in psi_temp
-            syncmem_complex_op ()(ctx, ctx, ppsi, psi+i*dmax, psi_temp.size());
+            syncmem_complex_op ()(ctx, ctx, ppsi, psi+i*psi_nc, psi_nc);
             psi::Range band_by_band_range(1, 0, 0, 0);
             hpsi_info hpsi_in(&psi_temp, band_by_band_range, hpsi);
 
@@ -309,11 +309,11 @@ void DiagoIterAssist<T, Device>::diagH_subspace_init(
             gemv_op<T, Device>()(
                 ctx,
                 'C',
-                dmax,  
+                psi_nc,  
                 nstart,  
                 &one,
-                ppsi,
-                dmax,  
+                psi,
+                psi_nc,  
                 hpsi,
                 1,
                 &zero,
@@ -326,16 +326,17 @@ void DiagoIterAssist<T, Device>::diagH_subspace_init(
         // do sPsi band by band
         for(int i = 0; i < nstart; i++)
         {
+            syncmem_complex_op ()(ctx, ctx, ppsi, psi+i*psi_nc, psi_nc);
             pHamilt->sPsi(ppsi, spsi, dmin, dmin, 1);
         
             gemv_op<T, Device>()(
                     ctx,
                     'C',
-                    dmax,  
+                    psi_nc,  
                     nstart,  
                     &one,
-                    ppsi,
-                    dmax,  // nbasis
+                    psi,
+                    psi_nc,  // nbasis
                     spsi,
                     1,
                     &zero,
