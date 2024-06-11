@@ -53,65 +53,20 @@ void DiagoIterAssist<T, Device>::diagH_subspace(
     // qianrui improve this part 2021-3-14
     const T* ppsi = psi.get_pointer();
 
-    if (base_device::get_device_type(ctx) == base_device::GpuDevice)
-    {
-        // hphi and sphi share the temp space
-        T* temp = nullptr;
-        resmem_complex_op()(ctx, temp, dmax, "DiagSub::temp");
-        setmem_complex_op()(ctx, temp, 0, dmax);
-
-        T* hphi = temp;
-        // do hPsi band by band
-        for (int i = 0; i < nstart; i++)
-        {
-            psi::Range band_by_band_range(1, ik, i, i);
-            hpsi_info hpsi_in(&psi, band_by_band_range, hphi);
-            pHamilt->ops->hPsi(hpsi_in);
-
-            gemv_op<T, Device>()(
-                ctx,
-                'C',
-                dmax,  
-                nstart,  
-                &one,
-                ppsi,
-                dmax,  
-                hphi,
-                1,
-                &zero,
-                hcc + i*nstart,
-                1
-            );
-        }
-
-        T* sphi = temp;
-        // do sPsi band by band
-        for(int i = 0; i < nstart; i++)
-        {
-            pHamilt->sPsi(ppsi+i*dmax, sphi, dmax, dmin, 1);
-        
-            gemv_op<T, Device>()(
-                    ctx,
-                    'C',
-                    dmax,  
-                    nstart,  
-                    &one,
-                    ppsi,
-                    dmax,  // nbasis
-                    sphi,
-                    1,
-                    &zero,
-                    scc + i*nstart,
-                    1
-                );
-        }
-        delmem_complex_op()(ctx, temp);
+    T* temp = nullptr;
+    bool in_place = false;
+    if(psi.get_pointer() != evc.get_pointer() && psi.get_nbands() == evc.get_nbands())
+    {// use memory of evc as temp
+        temp = evc.get_pointer();
+        in_place = true;
     }
-    else if (base_device::get_device_type(ctx) == base_device::CpuDevice)
+    else
     {
-        // hphi and sphi share the temp space
-        T* temp = nullptr;
         resmem_complex_op()(ctx, temp, nstart * dmax, "DiagSub::temp");
+        setmem_complex_op()(ctx, temp, 0, nstart * dmax);
+    }
+
+    {// code block to calculate hcc and scc
         setmem_complex_op()(ctx, temp, 0, nstart * dmax);
 
         T* hphi = temp;
@@ -136,13 +91,12 @@ void DiagoIterAssist<T, Device>::diagH_subspace(
             hcc,
             nstart
         );
-        
+     
         T* sphi = temp;
         // do sPsi for all bands
         pHamilt->sPsi(ppsi, sphi, dmax, dmin, nstart);
 
-        gemm_op<T, Device>()(ctx, 'C', 'N', nstart, nstart, dmin, &one, ppsi, dmax, sphi, dmax, &zero, scc, nstart);
-        delmem_complex_op()(ctx, temp);    
+        gemm_op<T, Device>()(ctx, 'C', 'N', nstart, nstart, dmin, &one, ppsi, dmax, sphi, dmax, &zero, scc, nstart);  
     }
 
     if (GlobalV::NPROC_IN_POOL > 1)
@@ -154,60 +108,7 @@ void DiagoIterAssist<T, Device>::diagH_subspace(
     // after generation of H and S matrix, diag them
     DiagoIterAssist::diagH_LAPACK(nstart, n_band, hcc, scc, nstart, en, vcc);
 
-    //=======================
-    // diagonize the H-matrix
-    //=======================
-    if (
-        (
-            (GlobalV::BASIS_TYPE == "lcao")
-          ||(GlobalV::BASIS_TYPE == "lcao_in_pw")
-        )
-      &&(GlobalV::CALCULATION == "nscf")
-      )
-    {
-        GlobalV::ofs_running << " Not do zgemm to get evc." << std::endl;
-    }
-    else if (
-        (
-            (GlobalV::BASIS_TYPE == "lcao")
-          ||(GlobalV::BASIS_TYPE == "lcao_in_pw")
-        )
-      &&(
-            (GlobalV::CALCULATION == "scf")
-          ||(GlobalV::CALCULATION == "md")
-          ||(GlobalV::CALCULATION == "relax")
-        )
-        ) // pengfei 2014-10-13
-    {
-        // because psi and evc are different here,
-        // I think if psi and evc are the same,
-        // there may be problems, mohan 2011-01-01
-        gemm_op<T, Device>()(
-            ctx,
-            'N',
-            'N',
-            dmax,
-            n_band,
-            nstart,
-            &one,
-            ppsi, // dmax * nstart
-            dmax,
-            vcc,  // nstart * n_band
-            nstart,
-            &zero,
-            evc.get_pointer(),
-            dmax
-        );
-    }
-    else
-    {
-        // As the evc and psi may refer to the same matrix, we first
-        // create a temporary matrix to store the result. (by wangjp)
-        // qianrui improve this part 2021-3-13
-        T* evctemp = nullptr;
-        resmem_complex_op()(ctx, evctemp, n_band * dmin, "DiagSub::evctemp");
-        setmem_complex_op()(ctx, evctemp, 0, n_band * dmin);
-
+    {// code block to calculate evc
         gemm_op<T, Device>()(
             ctx,
             'N',
@@ -221,14 +122,16 @@ void DiagoIterAssist<T, Device>::diagH_subspace(
             vcc,  // nstart * n_band
             nstart,
             &zero,
-            evctemp,
+            temp,
             dmin
         );
-
-        matrixSetToAnother<T, Device>()(ctx, n_band, evctemp, dmin, evc.get_pointer(), dmax);
-        delmem_complex_op()(ctx, evctemp);
     }
 
+    if(!in_place)
+    {
+        matrixSetToAnother<T, Device>()(ctx, n_band, temp, dmin, evc.get_pointer(), dmax);
+        delmem_complex_op()(ctx, temp);
+    }
     delmem_complex_op()(ctx, hcc);
     delmem_complex_op()(ctx, scc);
     delmem_complex_op()(ctx, vcc);

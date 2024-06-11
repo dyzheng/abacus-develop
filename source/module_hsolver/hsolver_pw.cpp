@@ -822,8 +822,7 @@ void HSolverPW<T, Device>::hamiltSolvePsiK(hamilt::Hamilt<T, Device>* hm, psi::P
     auto psi_tensor = ct::TensorMap(psi.get_pointer(),
                                     ct::DataTypeToEnum<T>::value,
                                     ct::DeviceTypeToEnum<ct_Device>::value,
-                                    ct::TensorShape({psi.get_nbands(), psi.get_nbasis()}))
-                          .slice({0, 0}, {psi.get_nbands(), psi.get_current_nbas()});
+                                    ct::TensorShape({psi.get_nbands(), psi.get_nbasis()}));
     auto eigen_tensor = ct::TensorMap(eigenvalue,
                                       ct::DataTypeToEnum<Real>::value,
                                       ct::DeviceTypeToEnum<ct::DEVICE_CPU>::value,
@@ -836,8 +835,6 @@ void HSolverPW<T, Device>::hamiltSolvePsiK(hamilt::Hamilt<T, Device>* hm, psi::P
                            .slice({0}, {psi.get_current_nbas()});
 
     cg->diag(hpsi_func, spsi_func, psi_tensor, eigen_tensor, prec_tensor);
-    // TODO: Double check tensormap's potential problem
-    ct::TensorMap(psi.get_pointer(), psi_tensor, {psi.get_nbands(), psi.get_nbasis()}).sync(psi_tensor);
 }
 
 template <typename T, typename Device>
