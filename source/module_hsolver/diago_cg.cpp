@@ -591,8 +591,9 @@ void DiagoCG<T, Device>::diag(
         std::cout << "\n notconv = " << this->notconv_;
         std::cout << "\n DiagoCG::diag', too many bands are not converged! \n";
     }
-    // TODO: Double check tensormap's potential problem
-    //ct::TensorMap(psi.data(), psi_temp, {psi.shape().dim_size(0), psi.shape().dim_size(1)}).sync(psi_temp);
+    // keep psi between npw to npwx is always zero, better keep npw-npwx won't be used
+    psi.zero();
+    // copy psi_temp to psi for 0 to npw.
     psi.sync(psi_temp);
 }
 
