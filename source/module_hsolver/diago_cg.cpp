@@ -573,14 +573,14 @@ void DiagoCG<T, Device>::diag(
 
     // create a new slice of psi to do cg diagonalization
     ct::Tensor psi_temp = psi.slice({0, 0}, {int(psi.shape().dim_size(0)), int(prec.shape().dim_size(0))});
-    auto psi_map = ct::TensorMap(psi.data(), psi, {psi_temp.shape().dim_size(0), psi_temp.shape().dim_size(1)});
     do
     {
-        if (need_subspace_ || ntry > 0) {
+        if (need_subspace_ || ntry > 0) 
+        {
+            ct::TensorMap psi_map = ct::TensorMap(psi.data(), psi_temp);
             this->subspace_func_(psi_temp, psi_map);
+            psi_temp.sync(psi_map);
         }
-        
-        psi_temp.sync(psi_map);
 
         ++ntry;
         avg_iter_ += 1.0;
@@ -592,7 +592,8 @@ void DiagoCG<T, Device>::diag(
         std::cout << "\n DiagoCG::diag', too many bands are not converged! \n";
     }
     // TODO: Double check tensormap's potential problem
-    ct::TensorMap(psi.data(), psi_temp, {psi.shape().dim_size(0), psi.shape().dim_size(1)}).sync(psi_temp);
+    //ct::TensorMap(psi.data(), psi_temp, {psi.shape().dim_size(0), psi.shape().dim_size(1)}).sync(psi_temp);
+    psi.sync(psi_temp);
 }
 
 namespace hsolver {
