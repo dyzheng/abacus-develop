@@ -9,7 +9,6 @@ gamma_only          0
 
 
 calculation         scf
-symmetry             1
 
 #test_force          1
 relax_nmax               1
