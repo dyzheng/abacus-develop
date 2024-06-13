@@ -506,10 +506,6 @@ void Input_Conv::Convert(void)
     elecstate::Efield::efield_pos_dec = INPUT.efield_pos_dec;
     elecstate::Efield::efield_amp = INPUT.efield_amp;
 
-    // efield does not support symmetry=1
-    if (INPUT.efield_flag && INPUT.symmetry == "1")
-        ModuleSymmetry::Symmetry::symm_flag = 0;
-
     //----------------------------------------------------------
     // Yu Liu add 2022-09-13
     //----------------------------------------------------------
@@ -673,6 +669,21 @@ void Input_Conv::Convert(void)
 #endif // __LCAO
 #endif // __EXX
     GlobalC::ppcell.cell_factor = INPUT.cell_factor; // LiuXh add 20180619
+
+    //----------------------------------------------------------
+    // reset symmetry flag to avoid error
+    //----------------------------------------------------------
+    // In these case, symmetry should be reset to 0
+    // efield does not support symmetry=1
+    if (INPUT.efield_flag && ModuleSymmetry::Symmetry::symm_flag == 1) {
+        ModuleSymmetry::Symmetry::symm_flag = 0;
+    }
+    // In these case, inversion symmetry is also not allowed, symmetry should be reset to -1
+    if(GlobalV::LSPINORB)
+    {
+        ModuleSymmetry::Symmetry::symm_flag = -1;
+    }
+    // end of symmetry reset
 
     //----------------------------------------------------------
     // main parameters / electrons / spin ( 2/16 )
