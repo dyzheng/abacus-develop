@@ -31,6 +31,7 @@ list(APPEND objects
     soc.cpp
     global.cpp
     parallel_grid.cpp
+    elecond.cpp
 )
 
 add_library(
