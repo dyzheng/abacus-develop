@@ -15,7 +15,7 @@
 #include "module_hamilt_general/module_ewald/H_Ewald_pw.h"
 #include "module_hamilt_general/module_surchem/surchem.h"
 #include "module_hamilt_general/module_vdw/vdw.h"
-#include "module_psi/kernels/device.h"
+#include "module_base/module_device/device.h"
 #include "module_base/memory.h"
 #include "module_base/math_polyint.h"
 #ifdef _OPENMP
