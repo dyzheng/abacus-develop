@@ -66,7 +66,7 @@ void Forces<FPTYPE, Device>::cal_force(ModuleBase::matrix& force,
         if(!GlobalV::use_paw)
         {
             this->npwx = wfc_basis->npwk_max;
-            Forces::cal_force_nl_new(forcenl, wg, ekb, pkv, wfc_basis, psi_in);
+            Forces::cal_force_nl_new(forcenl, wg, ekb, pkv, wfc_basis, p_sf, &GlobalC::ppcell, GlobalC::ucell, psi_in);
 
             if (GlobalV::use_uspp)
             {

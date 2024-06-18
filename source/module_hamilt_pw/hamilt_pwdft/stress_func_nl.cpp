@@ -33,7 +33,7 @@ void Stress_Func<FPTYPE, Device>::stress_nl(ModuleBase::matrix& sigma,
     for(int ik=0;ik<nks;ik++)//loop k points
     {
         // skip zero weights to speed up
-        int nbands_occ = GlobalV::NBANDS;
+        int nbands_occ = wg.nc;
         while (wg(ik, nbands_occ - 1) == 0.0)
         {
             nbands_occ--;
@@ -42,7 +42,7 @@ void Stress_Func<FPTYPE, Device>::stress_nl(ModuleBase::matrix& sigma,
                 break;
             }
         }
-        const int npm = GlobalV::NPOL * nbands_occ;
+        const int npm = ucell_in.get_npol() * nbands_occ;
 
         // calculate becp = <psi|beta> for all beta functions
         nl_tools.cal_becp(ik, npm);

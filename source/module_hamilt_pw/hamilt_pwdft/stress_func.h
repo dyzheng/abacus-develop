@@ -153,14 +153,6 @@ class Stress_Func
                    const int ik,
                    Structure_Factor* p_sf,
                    ModulePW::PW_Basis_K* wfc_basis); // used in nonlocal part in PW basis
-    
-
-    /// polynomial interpolation tool for calculate derivate of vq 
-    FPTYPE Polynomial_Interpolation_nl(const ModuleBase::realArray& table,
-                                       const int& dim1,
-                                       const int& dim2,
-                                       const FPTYPE& table_interval,
-                                       const FPTYPE& x); // used in get_dvnl2()
 
     FPTYPE Polynomial_Interpolation_nl(const ModuleBase::realArray& table,
                                        const int& dim1,

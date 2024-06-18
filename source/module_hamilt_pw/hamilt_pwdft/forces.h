@@ -58,8 +58,11 @@ public:
     void cal_force_nl_new(ModuleBase::matrix& forcenl,
                       const ModuleBase::matrix& wg,
                       const ModuleBase::matrix& ekb,
-                      K_Vectors* p_kv,
-                      ModulePW::PW_Basis_K* psi_basis,
+                      const K_Vectors* p_kv,
+                      const ModulePW::PW_Basis_K* psi_basis,
+                      const Structure_Factor* p_sf,
+                      pseudopot_cell_vnl* nlpp_in,
+                      const UnitCell& ucell_in,
                       const psi::Psi<std::complex<FPTYPE>, Device>* psi_in = nullptr);    
     void cal_force_scc(ModuleBase::matrix& forcescc,
                        ModulePW::PW_Basis* rho_basis,

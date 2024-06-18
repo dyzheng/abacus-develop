@@ -3,6 +3,7 @@
 #include "module_base/memory.h"
 #include "module_base/math_polyint.h"
 #include "module_base/math_ylmreal.h"
+#include "module_hamilt_pw/hamilt_pwdft/kernels/force_op.h"
 
 namespace hamilt
 {
@@ -185,7 +186,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::delete_memory()
 template <typename FPTYPE, typename Device>
 void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
 {
-    if (this->dbecp == nullptr)
+    if (this->becp == nullptr)
     {
         resmem_complex_op()(this->ctx, becp, this->nbands * this->nkb);
     }
@@ -193,6 +194,8 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
 
     const std::complex<FPTYPE>* ppsi = &(this->psi_[0](ik, 0, 0));
     const int npw = this->wfc_basis_->npwk[ik];
+
+    std::complex<FPTYPE>* vkb_ptr = this->ppcell_vkb;
 
     std::vector<FPTYPE> g_plus_k = cal_gk(ik, this->wfc_basis_);
     int lmax_ = this->nlpp_->lmaxkb;
@@ -257,7 +260,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
                                 this->nlpp_->nhtol.nc,
                                 npw,
                                 it,
-                                ppcell_vkb,
+                                vkb_ptr,
                                 vkb_ptrs,
                                 hd_ylm,
                                 ylm_ptrs,
@@ -280,7 +283,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
                                 this->nlpp_->nhtol.nc,
                                 npw,
                                 it,
-                                ppcell_vkb,
+                                vkb_ptr,
                                 vkb_ptrs,
                                 hd_ylm,
                                 ylm_ptrs,
@@ -304,7 +307,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
                       npm,
                       npw,
                       &ModuleBase::ONE,
-                      ppcell_vkb,
+                      vkb_ptr,
                       npw,
                       ppsi,
                       this->max_npw,
@@ -313,6 +316,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
                       nkb);
 
             becp_ptr += nh;
+            vkb_ptr += nh * npw;
         }
     }
     // becp calculate is over , now we should broadcast this data.
@@ -521,6 +525,99 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, i
                        becp,
                        dbecp,
                        stress);
+}
+
+template <typename FPTYPE, typename Device>
+void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_f(int ik, int npm, int ipol)
+{
+    if (this->dbecp == nullptr)
+    {
+        resmem_complex_op()(this->ctx, dbecp, 3 * this->nbands * this->nkb);
+    }
+    std::complex<FPTYPE>* dbecp_ptr = this->dbecp + ipol * this->nbands * this->nkb;
+    const std::complex<FPTYPE>* vkb_ptr = this->ppcell_vkb;
+
+    const std::complex<FPTYPE>* ppsi = &(this->psi_[0](ik, 0, 0));
+    const int npw = this->wfc_basis_->npwk[ik];
+
+    std::complex<FPTYPE>* vkb1 = nullptr;
+    resmem_complex_op()(this->ctx, vkb1, this->max_nh * npw);
+
+    for (int it = 0; it < this->ucell_->ntype; it++) // loop all elements
+    {
+        // prepare（-i）^l, size: nh
+        std::vector<std::complex<double>> pref = cal_pref(it);
+        int nh = pref.size();
+        for (int ia = 0; ia < h_atom_na[it]; ia++)
+        {
+            // 2.b calculate dbecp = dbecp_noevc * psi
+            const char transa = 'C';
+            const char transb = 'N';
+
+            cal_vkb1_nl_op<FPTYPE, Device>()(this->ctx,
+                            nh,
+                            npw,
+                            this->wfc_basis_->npwk_max,
+                            npw,
+                            npw,
+                            ik,
+                            ipol,
+                            ModuleBase::NEG_IMAG_UNIT,
+                            vkb_ptr,
+                            gcar,
+                            vkb1);
+
+            gemm_op()(this->ctx,
+                            transa,
+                            transb,
+                            nh,
+                            npm,
+                            npw,
+                            &ModuleBase::ONE,
+                            vkb1,
+                            npw,
+                            ppsi,
+                            this->max_npw,
+                            &ModuleBase::ZERO,
+                            dbecp_ptr,
+                            nkb);
+            dbecp_ptr += nh;
+            vkb_ptr += nh * npw;
+        }
+    }
+    delmem_complex_op()(this->ctx, vkb1);
+}
+
+// cal_force
+template <typename FPTYPE, typename Device>
+void FS_Nonlocal_tools<FPTYPE, Device>::cal_force(int ik, int npm, FPTYPE* force)
+{
+    const int current_spin = this->kv_->isk[ik];
+    const int force_nc = 3;
+    // calculate the force
+    cal_force_nl_op<FPTYPE, Device>()(this->ctx,
+            nondiagonal,
+            npm,
+            this->nbands,
+            this->ntype,
+            current_spin,
+            this->nlpp_->deeq.getBound2(),
+            this->nlpp_->deeq.getBound3(),
+            this->nlpp_->deeq.getBound4(),
+            force_nc,
+            this->nbands,
+            ik,
+            nkb,
+            atom_nh,
+            atom_na,
+            this->ucell_->tpiba,
+            d_wg,
+            d_ekb,
+            qq_nt,
+            deeq,
+            becp,
+            dbecp,
+            force);
 }
 
 // cal_gk

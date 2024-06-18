@@ -31,8 +31,8 @@ class FS_Nonlocal_tools
 
     void cal_becp(int ik, int npm);
     void cal_dbecp_s(int ik, int npm, int ipol, int jpol, FPTYPE* stress);
-    // std::complex<FPTYPE>* cal_dbecp_f(int ik, int ipol);
-    // void cal_force_i(int ipol);
+    void cal_dbecp_f(int ik, int npm, int ipol);
+    void cal_force(int ik, int npm, FPTYPE* force);
 
   private:
     void allocate_memory(const ModuleBase::matrix& wg, const ModuleBase::matrix& ekb);
