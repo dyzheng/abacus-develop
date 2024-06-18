@@ -20,7 +20,7 @@ hamilt::EkineticNew<hamilt::OperatorLCAO<TK, TR>>::EkineticNew(
     const Parallel_Orbitals* paraV)
     : hamilt::OperatorLCAO<TK, TR>(LM_in, kvec_d_in, hR_in, hK_in), uot_(uot)
 {
-    this->cal_type = lcao_fixed;
+    this->cal_type = calculation_type::lcao_fixed;
     this->ucell = ucell_in;
 #ifdef __DEBUG
     assert(this->ucell != nullptr);
@@ -84,7 +84,7 @@ void hamilt::EkineticNew<hamilt::OperatorLCAO<TK, TR>>::initialize_HR(Grid_Drive
             const int I2 = adjs.natom[ad];
             int iat2 = ucell->itia2iat(T2, I2);
             ModuleBase::Vector3<int>& R_index = adjs.box[ad];
-            hamilt::AtomPair<TR> tmp(iat1, iat2, R_index.x, R_index.y, R_index.z, paraV);
+            hamilt::AtomPair<TR> tmp(iat1, iat2, R_index, paraV);
             this->hR->insert_pair(tmp);
         }
     }
@@ -122,7 +122,7 @@ void hamilt::EkineticNew<hamilt::OperatorLCAO<TK, TR>>::calculate_HR()
             const ModuleBase::Vector3<int>& R_index2 = adjs.box[ad];
             ModuleBase::Vector3<double> dtau = this->ucell->cal_dtau(iat1, iat2, R_index2);
 
-            hamilt::BaseMatrix<TR>* tmp = this->HR_fixed->find_matrix(iat1, iat2, R_index2.x, R_index2.y, R_index2.z);
+            hamilt::BaseMatrix<TR>* tmp = this->HR_fixed->find_matrix(iat1, iat2, R_index2);
             if (tmp != nullptr)
             {
                 this->cal_HR_IJR(iat1, iat2, paraV, dtau, tmp->get_pointer());

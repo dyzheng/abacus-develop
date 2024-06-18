@@ -44,7 +44,7 @@ void Veff<OperatorLCAO<TK, TR>>::initialize_HR(const UnitCell* ucell_in,
             if (ucell_in->cal_dtau(iat1, iat2, R_index2).norm() * ucell_in->lat0
                 < orb.Phi[T1].getRcut() + orb.Phi[T2].getRcut())
             {
-                hamilt::AtomPair<TR> tmp(iat1, iat2, R_index2.x, R_index2.y, R_index2.z, paraV);
+                hamilt::AtomPair<TR> tmp(iat1, iat2, R_index2, paraV);
                 this->hR->insert_pair(tmp);
             }
         }
@@ -114,7 +114,7 @@ void Veff<OperatorLCAO<TK, TR>>::contributeHR()
             }
         }
     }
-    this->GK->transfer_pvpR(this->hR,this->ucell,GlobalC::ORB,this->gd);
+    this->GK->transfer_pvpR(this->hR,this->ucell,this->gd);
 
     if(this->nspin == 2) this->current_spin = 1 - this->current_spin;
 
@@ -151,7 +151,7 @@ void Veff<OperatorLCAO<double, double>>::contributeHR(void)
         Gint_inout inout(vr_eff1, Gint_Tools::job_type::vlocal);
         this->GG->cal_vlocal(&inout,  this->new_e_iteration);
     }
-    this->GG->transfer_pvpR(this->hR,this->ucell,GlobalC::ORB);
+    this->GG->transfer_pvpR(this->hR,this->ucell);
 
     this->new_e_iteration = false;
 
