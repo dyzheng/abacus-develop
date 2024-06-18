@@ -3,6 +3,7 @@
 #include "module_base/math_ylmreal.h"
 #include "module_base/timer.h"
 #include "module_elecstate/elecstate_pw.h"
+#include "module_hamilt_pw/hamilt_pwdft/fs_nonlocal_tools.h"
 #include "stress_pw.h"
 
 // computes the part of the crystal stress which is due
@@ -50,7 +51,7 @@ void Stress_PW<FPTYPE, Device>::stress_us(ModuleBase::matrix& sigma,
     for (int ipol = 0; ipol < 3; ipol++)
     {
         double* gcar_ptr = reinterpret_cast<double*>(rho_basis->gcar);
-        this->dylmr2(ppcell_in->lmaxq * ppcell_in->lmaxq, npw, gcar_ptr, dylmk0.c, ipol);
+        hamilt::FS_Nonlocal_tools<FPTYPE, Device>::dylmr2(ppcell_in->lmaxq * ppcell_in->lmaxq, npw, gcar_ptr, dylmk0.c, ipol);
         for (int it = 0; it < ucell.ntype; it++)
         {
             Atom* atom = &ucell.atoms[it];

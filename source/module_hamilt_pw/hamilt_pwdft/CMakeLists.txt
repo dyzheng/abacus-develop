@@ -32,6 +32,7 @@ list(APPEND objects
     global.cpp
     parallel_grid.cpp
     elecond.cpp
+    fs_nonlocal_tools.cpp
 )
 
 add_library(
