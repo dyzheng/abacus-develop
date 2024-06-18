@@ -24,6 +24,7 @@ void Stress_Func<FPTYPE, Device>::stress_nl(ModuleBase::matrix& sigma,
 
     FPTYPE* stress_device = nullptr;
     resmem_var_op()(this->ctx, stress_device, 9);
+	setmem_var_op()(this->ctx, stress_device, 0, 9);
     std::vector<FPTYPE> sigmanlc(9, 0.0);
 
     hamilt::FS_Nonlocal_tools<FPTYPE, Device> nl_tools(nlpp_in, &ucell_in, psi_in, p_kv, wfc_basis, p_sf, wg, ekb);
@@ -75,7 +76,7 @@ void Stress_Func<FPTYPE, Device>::stress_nl(ModuleBase::matrix& sigma,
 	{
 		for(int jpol = 0; jpol < 3; jpol++)
 		{
-			sigmanlc[ipol * 3 + jpol] *= 1.0 / this->ucell->omega;
+			sigmanlc[ipol * 3 + jpol] *= 1.0 / ucell_in.omega;
 		}
 	}
 	
@@ -89,7 +90,7 @@ void Stress_Func<FPTYPE, Device>::stress_nl(ModuleBase::matrix& sigma,
 	//do symmetry
     if (ModuleSymmetry::Symmetry::symm_flag == 1)
     {
-        p_symm->symmetrize_mat3(sigma, this->ucell->lat);
+        p_symm->symmetrize_mat3(sigma, ucell_in.lat);
     } // end symmetry
 
 	ModuleBase::timer::tick("Stress_Func","stress_nl");

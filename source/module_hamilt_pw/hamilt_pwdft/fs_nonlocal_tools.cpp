@@ -90,10 +90,6 @@ void FS_Nonlocal_tools<FPTYPE, Device>::allocate_memory(const ModuleBase::matrix
     resmem_var_op()(this->ctx, this->hd_ylm, (_lmax + 1) * (_lmax + 1) * max_npw);
     resmem_var_op()(this->ctx, this->hd_ylm_deri, 3 * (_lmax + 1) * (_lmax + 1) * max_npw);
 
-    resmem_var_op()(this->ctx, stress, 9);
-    setmem_var_op()(this->ctx, stress, 0, 9);
-    resmem_var_h_op()(this->cpu_ctx, sigmanlc, 9);
-
     if (this->device == base_device::GpuDevice)
     {
         resmem_var_op()(this->ctx, d_wg, wg.nr * wg.nc);
@@ -132,7 +128,6 @@ void FS_Nonlocal_tools<FPTYPE, Device>::allocate_memory(const ModuleBase::matrix
     // prepare the memory of the becp and dbecp:
     // becp: <Beta(nkb,npw)|psi(nbnd,npw)>
     // dbecp: <dBeta(nkb,npw)/dG|psi(nbnd,npw)>
-    std::complex<FPTYPE>*dbecp = nullptr, *becp = nullptr;
     resmem_complex_op()(this->ctx, becp, this->nbands * nkb, "Stress::becp");
     resmem_complex_op()(this->ctx, dbecp, 6 * this->nbands * nkb, "Stress::dbecp");
 }
@@ -294,6 +289,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
 
                 cal_vkb_op()(this->ctx, nh, npw, vq_ptrs, ylm_ptrs, sk, pref.data(), vkb_ptrs);
             }
+            delete[] sk;
 
             // 2.b calculate becp = vkb * psi
 
@@ -477,6 +473,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, i
                                   g_plus_k.data(),
                                   vkb_ptrs);
             }
+            delete[] sk;
 
             // 2.b calculate dbecp = dbecp_noevc * psi
             const char transa = 'C';
