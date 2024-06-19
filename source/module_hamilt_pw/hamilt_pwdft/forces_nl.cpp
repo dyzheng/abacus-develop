@@ -8,7 +8,7 @@
 #endif
 
 template <typename FPTYPE, typename Device>
-void Forces<FPTYPE, Device>::cal_force_nl_new(ModuleBase::matrix& forcenl,
+void Forces<FPTYPE, Device>::cal_force_nl(ModuleBase::matrix& forcenl,
                                           const ModuleBase::matrix& wg,
                                           const ModuleBase::matrix& ekb,
                                           const K_Vectors* p_kv,
@@ -21,7 +21,7 @@ void Forces<FPTYPE, Device>::cal_force_nl_new(ModuleBase::matrix& forcenl,
     ModuleBase::TITLE("Forces", "cal_force_nl");
     if (nlpp_in->nkb == 0 || psi_in == nullptr || wfc_basis == nullptr)
     {
-        return; // mohan add 2010-07-25
+        return;
     }
     ModuleBase::timer::tick("Forces", "cal_force_nl");
 

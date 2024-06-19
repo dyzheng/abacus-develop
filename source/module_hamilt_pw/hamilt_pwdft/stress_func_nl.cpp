@@ -20,6 +20,11 @@ void Stress_Func<FPTYPE, Device>::stress_nl(ModuleBase::matrix& sigma,
                                             const UnitCell& ucell_in)
 {
     ModuleBase::TITLE("Stress_Func", "stress_nl");
+	//skip nkb==0
+	if (nlpp_in->nkb == 0 || psi_in == nullptr || wfc_basis == nullptr)
+	{
+		return;
+	}
     ModuleBase::timer::tick("Stress_Func", "stress_nl");
 
     FPTYPE* stress_device = nullptr;

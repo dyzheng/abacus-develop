@@ -49,13 +49,8 @@ public:
     void cal_force_loc(ModuleBase::matrix& forcelc, ModulePW::PW_Basis* rho_basis, const Charge* const chr);
     void cal_force_ew(ModuleBase::matrix& forceion, ModulePW::PW_Basis* rho_basis, const Structure_Factor* p_sf);
     void cal_force_cc(ModuleBase::matrix& forcecc, ModulePW::PW_Basis* rho_basis, const Charge* const chr);
+
     void cal_force_nl(ModuleBase::matrix& forcenl,
-                      const ModuleBase::matrix& wg,
-                      const ModuleBase::matrix& ekb,
-                      K_Vectors* p_kv,
-                      ModulePW::PW_Basis_K* psi_basis,
-                      const psi::Psi<std::complex<FPTYPE>, Device>* psi_in = nullptr);
-    void cal_force_nl_new(ModuleBase::matrix& forcenl,
                       const ModuleBase::matrix& wg,
                       const ModuleBase::matrix& ekb,
                       const K_Vectors* p_kv,
