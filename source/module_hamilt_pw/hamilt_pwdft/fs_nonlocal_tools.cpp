@@ -1,8 +1,9 @@
 #include "fs_nonlocal_tools.h"
-#include "module_base/tool_title.h"
-#include "module_base/memory.h"
+
 #include "module_base/math_polyint.h"
 #include "module_base/math_ylmreal.h"
+#include "module_base/memory.h"
+#include "module_base/tool_title.h"
 #include "module_hamilt_pw/hamilt_pwdft/kernels/force_op.h"
 
 namespace hamilt
@@ -306,19 +307,19 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
     const char transa = 'C';
     const char transb = 'N';
     gemm_op()(this->ctx,
-                transa,
-                transb,
-                nkb,
-                npm,
-                npw,
-                &ModuleBase::ONE,
-                ppcell_vkb,
-                npw,
-                ppsi,
-                this->max_npw,
-                &ModuleBase::ZERO,
-                becp,
-                nkb);
+              transa,
+              transb,
+              nkb,
+              npm,
+              npw,
+              &ModuleBase::ONE,
+              ppcell_vkb,
+              npw,
+              ppsi,
+              this->max_npw,
+              &ModuleBase::ZERO,
+              becp,
+              nkb);
 
     // becp calculate is over , now we should broadcast this data.
     if (this->device == base_device::GpuDevice)
@@ -349,10 +350,10 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, i
     const int npw = this->wfc_basis_->npwk[ik];
     std::complex<FPTYPE>* vkb_deri_ptr = this->ppcell_vkb;
 
-    if(this->pre_ik_s != ik)
-    { //k point has changed, we need to recalculate the g_plus_k
+    if (this->pre_ik_s != ik)
+    { // k point has changed, we need to recalculate the g_plus_k
         this->g_plus_k = cal_gk(ik, this->wfc_basis_);
-    
+
         int lmax_ = this->nlpp_->lmaxkb;
         // prepare ylm，size: (lmax+1)^2 * this->max_npw
         cal_ylm(lmax_, npw, g_plus_k.data(), hd_ylm);
@@ -493,19 +494,19 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, i
     const char transb = 'N';
 
     gemm_op()(this->ctx,
-                transa,
-                transb,
-                nkb,
-                npm,
-                npw,
-                &ModuleBase::ONE,
-                ppcell_vkb,
-                npw,
-                ppsi,
-                this->max_npw,
-                &ModuleBase::ZERO,
-                dbecp,
-                nkb);
+              transa,
+              transb,
+              nkb,
+              npm,
+              npw,
+              &ModuleBase::ONE,
+              ppcell_vkb,
+              npw,
+              ppsi,
+              this->max_npw,
+              &ModuleBase::ZERO,
+              dbecp,
+              nkb);
     // calculate stress for target (ipol, jpol)
     const int current_spin = this->kv_->isk[ik];
     cal_stress_nl_op()(this->ctx,
@@ -545,7 +546,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_f(int ik, int npm, int ipol)
     const std::complex<FPTYPE>* ppsi = &(this->psi_[0](ik, 0, 0));
     const int npw = this->wfc_basis_->npwk[ik];
 
-    if(this->pre_ik_f != ik)
+    if (this->pre_ik_f != ik)
     {
         resmem_complex_op()(this->ctx, vkb_deri, this->max_nh * npw);
     }
@@ -562,32 +563,32 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_f(int ik, int npm, int ipol)
             const char transb = 'N';
 
             cal_vkb1_nl_op<FPTYPE, Device>()(this->ctx,
-                            nh,
-                            npw,
-                            this->wfc_basis_->npwk_max,
-                            npw,
-                            npw,
-                            ik,
-                            ipol,
-                            ModuleBase::NEG_IMAG_UNIT,
-                            vkb_ptr,
-                            gcar,
-                            vkb_deri);
+                                             nh,
+                                             npw,
+                                             this->wfc_basis_->npwk_max,
+                                             npw,
+                                             npw,
+                                             ik,
+                                             ipol,
+                                             ModuleBase::NEG_IMAG_UNIT,
+                                             vkb_ptr,
+                                             gcar,
+                                             vkb_deri);
 
             gemm_op()(this->ctx,
-                            transa,
-                            transb,
-                            nh,
-                            npm,
-                            npw,
-                            &ModuleBase::ONE,
-                            vkb_deri,
-                            npw,
-                            ppsi,
-                            this->max_npw,
-                            &ModuleBase::ZERO,
-                            dbecp_ptr,
-                            nkb);
+                      transa,
+                      transb,
+                      nh,
+                      npm,
+                      npw,
+                      &ModuleBase::ONE,
+                      vkb_deri,
+                      npw,
+                      ppsi,
+                      this->max_npw,
+                      &ModuleBase::ZERO,
+                      dbecp_ptr,
+                      nkb);
             dbecp_ptr += nh;
             vkb_ptr += nh * npw;
         }
@@ -602,28 +603,28 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_force(int ik, int npm, FPTYPE* force
     const int force_nc = 3;
     // calculate the force
     cal_force_nl_op<FPTYPE, Device>()(this->ctx,
-            nondiagonal,
-            npm,
-            this->nbands,
-            this->ntype,
-            current_spin,
-            this->nlpp_->deeq.getBound2(),
-            this->nlpp_->deeq.getBound3(),
-            this->nlpp_->deeq.getBound4(),
-            force_nc,
-            this->nbands,
-            ik,
-            nkb,
-            atom_nh,
-            atom_na,
-            this->ucell_->tpiba,
-            d_wg,
-            d_ekb,
-            qq_nt,
-            deeq,
-            becp,
-            dbecp,
-            force);
+                                      nondiagonal,
+                                      npm,
+                                      this->nbands,
+                                      this->ntype,
+                                      current_spin,
+                                      this->nlpp_->deeq.getBound2(),
+                                      this->nlpp_->deeq.getBound3(),
+                                      this->nlpp_->deeq.getBound4(),
+                                      force_nc,
+                                      this->nbands,
+                                      ik,
+                                      nkb,
+                                      atom_nh,
+                                      atom_na,
+                                      this->ucell_->tpiba,
+                                      d_wg,
+                                      d_ekb,
+                                      qq_nt,
+                                      deeq,
+                                      becp,
+                                      dbecp,
+                                      force);
 }
 
 // cal_gk
@@ -954,7 +955,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::dylmr2(const int nylm,
     // the spherical harmonics derivatives
     //
     const FPTYPE delta = 1e-6;
-    const FPTYPE small = 1e-15; 
+    const FPTYPE small = 1e-15;
 
     ModuleBase::matrix ylmaux;
     // dg is the finite increment for numerical derivation:
@@ -985,10 +986,10 @@ void FS_Nonlocal_tools<FPTYPE, Device>::dylmr2(const int nylm,
 #endif
     for (int ig = 0; ig < ngy; ig++)
     {
-        const int igx = ig*3, igy = ig*3+1, igz = ig*3+2;
+        const int igx = ig * 3, igy = ig * 3 + 1, igz = ig * 3 + 2;
         FPTYPE norm2 = gx[igx] * gx[igx] + gx[igy] * gx[igy] + gx[igz] * gx[igz];
         dg[ig] = delta * sqrt(norm2);
-        if (dg[ig] > small)  
+        if (dg[ig] > small)
         {
             dgi[ig] = 1.0 / dg[ig];
         }

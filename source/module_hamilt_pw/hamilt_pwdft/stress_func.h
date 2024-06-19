@@ -16,7 +16,6 @@
 #include "module_hamilt_pw/hamilt_pwdft/structure_factor.h"
 #include "module_hsolver/kernels/math_kernel_op.h"
 #include "module_psi/psi.h"
-#include "module_hamilt_pw/hamilt_pwdft/VNL_in_pw.h"
 
 //-------------------------------------------------------------------
 // mohan reconstruction note: 2021-02-07
@@ -99,11 +98,11 @@ class Stress_Func
     /**
      * @brief compute the derivative of the coulomb potential in reciprocal space
      *        D V(g^2) / D g^2 = 4pi e^2/omegai /G^4
-     * 
+     *
      */
     void dvloc_coulomb(const FPTYPE& zp,
-                    FPTYPE* dvloc,
-                    ModulePW::PW_Basis* rho_basis); // used in local pseudopotential stress
+                       FPTYPE* dvloc,
+                       ModulePW::PW_Basis* rho_basis); // used in local pseudopotential stress
 
     // 5) the stress from the non-linear core correction (if any)
     void stress_cc(ModuleBase::matrix& sigma,
@@ -231,12 +230,11 @@ class Stress_Func
     using cal_vq_deri_op = hamilt::cal_vq_deri_op<FPTYPE, Device>;
 
     using cal_vkb_op = hamilt::cal_vkb_op<FPTYPE, Device>;
-    using cal_vkb_deri_op = hamilt::cal_vkb_deri_op<FPTYPE, Device>;  
+    using cal_vkb_deri_op = hamilt::cal_vkb_deri_op<FPTYPE, Device>;
 
   protected:
     pseudopot_cell_vnl* nlpp = nullptr;
     const UnitCell* ucell = nullptr;
-
 };
 
 #endif

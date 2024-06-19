@@ -367,8 +367,7 @@ void Sto_Stress_PW::sto_stress_nl(ModuleBase::matrix& sigma,
                             qm1 = 1.0 / qvec.norm();
                         else
                             qm1 = 0;
-                        pdbecp_noevc[ig]
-                            -= 2.0 * pvkb[ig] * qvec0[ipol][0] * qvec0[jpol][0] * qm1 * this->ucell->tpiba;
+                        pdbecp_noevc[ig] -= 2.0 * pvkb[ig] * qvec0[ipol][0] * qvec0[jpol][0] * qm1 * this->ucell->tpiba;
                     } // end ig
                 }     // end i
 

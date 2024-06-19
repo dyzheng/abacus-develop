@@ -17,8 +17,8 @@
 template <typename FPTYPE, typename Device = base_device::DEVICE_CPU>
 class Forces
 {
-public:
-    template<typename T>
+  public:
+    template <typename T>
     friend class Force_Stress_LCAO;
     /* This routine is a driver routine which compute the forces
      * acting on the atoms, the complete forces in plane waves
@@ -30,7 +30,7 @@ public:
      * (5) cal_force_us: contribution due to US pseudopotential.
      * (6) cal_scc: contributino due to incomplete SCF calculation.
      */
-    Forces(const int nat_in):nat(nat_in){};
+    Forces(const int nat_in) : nat(nat_in){};
     ~Forces(){};
 
     void cal_force(ModuleBase::matrix& force,
@@ -58,7 +58,7 @@ public:
                       const Structure_Factor* p_sf,
                       pseudopot_cell_vnl* nlpp_in,
                       const UnitCell& ucell_in,
-                      const psi::Psi<std::complex<FPTYPE>, Device>* psi_in = nullptr);    
+                      const psi::Psi<std::complex<FPTYPE>, Device>* psi_in = nullptr);
     void cal_force_scc(ModuleBase::matrix& forcescc,
                        ModulePW::PW_Basis* rho_basis,
                        const ModuleBase::matrix& v_current,

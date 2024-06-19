@@ -2,12 +2,15 @@
 #define SRC_PW_VNL_MULTI_DEVICE_H
 
 #include "module_psi/psi.h"
+
 #include <complex>
 
-namespace hamilt {
+namespace hamilt
+{
 
 template <typename FPTYPE, typename Device>
-struct cal_vnl_op {
+struct cal_vnl_op
+{
     /// @brief Calculate the getvnl for multi-device
     ///
     /// Input Parameters
@@ -34,58 +37,57 @@ struct cal_vnl_op {
     ///
     /// Output Parameters
     /// @param vkb_in - output results with size nkb * GlobalC::wf.npwx
-    void operator() (
-        const Device* ctx,
-        const int &ntype,
-        const int &npw,
-        const int &npwx,
-        const int &nhm,
-        const int &tab_2,
-        const int &tab_3,
-        const int * atom_na,
-        const int * atom_nb,
-        const int * atom_nh,
-        const FPTYPE &DQ,
-        const FPTYPE &tpiba,
-        const std::complex<FPTYPE> &NEG_IMAG_UNIT,
-        const FPTYPE *gk,
-        const FPTYPE *ylm,
-        const FPTYPE *indv,
-        const FPTYPE *nhtol,
-        const FPTYPE *nhtolm,
-        const FPTYPE *tab,
-        FPTYPE *vkb1,
-        const std::complex<FPTYPE> *sk,
-        std::complex<FPTYPE> *vkb_in);
+    void operator()(const Device* ctx,
+                    const int& ntype,
+                    const int& npw,
+                    const int& npwx,
+                    const int& nhm,
+                    const int& tab_2,
+                    const int& tab_3,
+                    const int* atom_na,
+                    const int* atom_nb,
+                    const int* atom_nh,
+                    const FPTYPE& DQ,
+                    const FPTYPE& tpiba,
+                    const std::complex<FPTYPE>& NEG_IMAG_UNIT,
+                    const FPTYPE* gk,
+                    const FPTYPE* ylm,
+                    const FPTYPE* indv,
+                    const FPTYPE* nhtol,
+                    const FPTYPE* nhtolm,
+                    const FPTYPE* tab,
+                    FPTYPE* vkb1,
+                    const std::complex<FPTYPE>* sk,
+                    std::complex<FPTYPE>* vkb_in);
 };
 
 #if __CUDA || __UT_USE_CUDA || __ROCM || __UT_USE_ROCM
 template <typename FPTYPE>
-struct cal_vnl_op<FPTYPE, base_device::DEVICE_GPU> {
-    void operator() (
-        const base_device::DEVICE_GPU *ctx,
-        const int &ntype,
-        const int &npw,
-        const int &npwx,
-        const int &nhm,
-        const int &tab_2,
-        const int &tab_3,
-        const int * atom_na,
-        const int * atom_nb,
-        const int * atom_nh,
-        const FPTYPE &DQ,
-        const FPTYPE &tpiba,
-        const std::complex<FPTYPE> &NEG_IMAG_UNIT,
-        const FPTYPE *gk,
-        const FPTYPE *ylm,
-        const FPTYPE *indv,
-        const FPTYPE *nhtol,
-        const FPTYPE *nhtolm,
-        const FPTYPE *tab,
-        FPTYPE *vkb1,
-        const std::complex<FPTYPE> *sk,
-        std::complex<FPTYPE> *vkb_in);
+struct cal_vnl_op<FPTYPE, base_device::DEVICE_GPU>
+{
+    void operator()(const base_device::DEVICE_GPU* ctx,
+                    const int& ntype,
+                    const int& npw,
+                    const int& npwx,
+                    const int& nhm,
+                    const int& tab_2,
+                    const int& tab_3,
+                    const int* atom_na,
+                    const int* atom_nb,
+                    const int* atom_nh,
+                    const FPTYPE& DQ,
+                    const FPTYPE& tpiba,
+                    const std::complex<FPTYPE>& NEG_IMAG_UNIT,
+                    const FPTYPE* gk,
+                    const FPTYPE* ylm,
+                    const FPTYPE* indv,
+                    const FPTYPE* nhtol,
+                    const FPTYPE* nhtolm,
+                    const FPTYPE* tab,
+                    FPTYPE* vkb1,
+                    const std::complex<FPTYPE>* sk,
+                    std::complex<FPTYPE>* vkb_in);
 };
 #endif // __CUDA || __UT_USE_CUDA || __ROCM || __UT_USE_ROCM
-}  // namespace hamilt
-#endif //SRC_PW_VNL_MULTI_DEVICE_H
+} // namespace hamilt
+#endif // SRC_PW_VNL_MULTI_DEVICE_H

@@ -147,7 +147,6 @@ class FS_Nonlocal_tools
     std::vector<FPTYPE> g_plus_k;
     std::complex<FPTYPE>* vkb_deri = nullptr;
 
-
     FPTYPE* d_wg = nullptr;
     FPTYPE* d_ekb = nullptr;
     FPTYPE* gcar = nullptr;
