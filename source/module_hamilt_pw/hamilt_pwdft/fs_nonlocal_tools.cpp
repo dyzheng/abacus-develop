@@ -54,9 +54,9 @@ void FS_Nonlocal_tools<FPTYPE, Device>::allocate_memory(const ModuleBase::matrix
         h_atom_na[ii] = this->ucell_->atoms[ii].na;
     }
 
-    this->deeq = this->nlpp_->get_deeq_data<FPTYPE>();
-    this->kvec_c = this->wfc_basis_->get_kvec_c_data<FPTYPE>();
-    this->qq_nt = this->nlpp_->get_qq_nt_data<FPTYPE>();
+    this->deeq = this->nlpp_->template get_deeq_data<FPTYPE>();
+    this->kvec_c = this->wfc_basis_->template get_kvec_c_data<FPTYPE>();
+    this->qq_nt = this->nlpp_->template get_qq_nt_data<FPTYPE>();
 
     int max_nbeta = 0;
     for (int it = 0; it < this->ntype; it++) // loop all elements
@@ -115,7 +115,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::allocate_memory(const ModuleBase::matrix
         resmem_complex_op()(this->ctx, d_sk, max_npw);
         resmem_complex_op()(this->ctx, d_pref_in, max_nh);
 
-        this->ppcell_vkb = this->nlpp_->get_vkb_data<FPTYPE>();
+        this->ppcell_vkb = this->nlpp_->template get_vkb_data<FPTYPE>();
     }
     else
     {
