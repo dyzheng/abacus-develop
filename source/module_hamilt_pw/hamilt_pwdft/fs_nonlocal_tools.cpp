@@ -954,7 +954,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::dylmr2(const int nylm,
     // the spherical harmonics derivatives
     //
     const FPTYPE delta = 1e-6;
-    FPTYPE *dg, *dgi;
+    const FPTYPE small = 1e-15; 
 
     ModuleBase::matrix ylmaux;
     // dg is the finite increment for numerical derivation:
@@ -962,10 +962,10 @@ void FS_Nonlocal_tools<FPTYPE, Device>::dylmr2(const int nylm,
     // dgi= 1 /(delta * sqrt(gg))
     // gx = g +/- dg
 
-    FPTYPE* gx = new FPTYPE[3 * ngy];
+    std::vector<FPTYPE> gx(ngy * 3);
 
-    dg = new FPTYPE[ngy];
-    dgi = new FPTYPE[ngy];
+    std::vector<FPTYPE> dg(ngy);
+    std::vector<FPTYPE> dgi(ngy);
 
     ylmaux.create(nylm, ngy);
 
@@ -985,9 +985,10 @@ void FS_Nonlocal_tools<FPTYPE, Device>::dylmr2(const int nylm,
 #endif
     for (int ig = 0; ig < ngy; ig++)
     {
-        FPTYPE norm2 = gx[ig * 3] * gx[ig * 3] + gx[ig * 3 + 1] * gx[ig * 3 + 1] + gx[ig * 3 + 2] * gx[ig * 3 + 2];
+        const int igx = ig*3, igy = ig*3+1, igz = ig*3+2;
+        FPTYPE norm2 = gx[igx] * gx[igx] + gx[igy] * gx[igy] + gx[igz] * gx[igz];
         dg[ig] = delta * sqrt(norm2);
-        if (norm2 > 1e-9)
+        if (dg[ig] > small)  
         {
             dgi[ig] = 1.0 / dg[ig];
         }
@@ -1004,23 +1005,25 @@ void FS_Nonlocal_tools<FPTYPE, Device>::dylmr2(const int nylm,
 #endif
     for (int ig = 0; ig < ngy; ig++)
     {
-        gx[ig * 3 + ipol] = gk[ig * 3 + ipol] + dg[ig];
+        const int index = ig * 3 + ipol;
+        gx[index] = gk[index] + dg[ig];
     }
     //$OMP END PARALLEL DO
 
     base_device::DEVICE_CPU* cpu = {};
-    ModuleBase::YlmReal::Ylm_Real(cpu, nylm, ngy, gx, dylm);
+    ModuleBase::YlmReal::Ylm_Real(cpu, nylm, ngy, gx.data(), dylm);
     //$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(ig)
 #ifdef _OPENMP
 #pragma omp parallel for
 #endif
     for (int ig = 0; ig < ngy; ig++)
     {
-        gx[ig * 3 + ipol] = gk[ig * 3 + ipol] - dg[ig];
+        const int index = ig * 3 + ipol;
+        gx[index] = gk[index] - dg[ig];
     }
     //$OMP END PARALLEL DO
 
-    ModuleBase::YlmReal::Ylm_Real(cpu, nylm, ngy, gx, ylmaux.c);
+    ModuleBase::YlmReal::Ylm_Real(cpu, nylm, ngy, gx.data(), ylmaux.c);
 
     //  zaxpy ( - 1.0, ylmaux, 1, dylm, 1);
 #ifdef _OPENMP
@@ -1034,10 +1037,6 @@ void FS_Nonlocal_tools<FPTYPE, Device>::dylmr2(const int nylm,
             dylm[lm * ngy + ig] *= 0.5 * dgi[ig];
         }
     }
-
-    delete[] gx;
-    delete[] dg;
-    delete[] dgi;
 
     return;
 }
