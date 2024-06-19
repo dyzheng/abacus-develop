@@ -70,6 +70,14 @@ void Input::Init(const std::string& fn)
                                           this->mdp.md_restart,
                                           this->out_alllog); // xiaohui add 2013-09-01
     Check();
+    // if only check the input, then quit
+    if (this->check_input)
+    {
+        std::cout << "----------------------------------------------------------" << std::endl;
+        std::cout << "  INPUT parameters have been successfully checked!" << std::endl;
+        std::cout << "----------------------------------------------------------" << std::endl;
+        exit(0);
+    }
 #ifdef VERSION
     const char* version = VERSION;
 #else
@@ -973,6 +981,7 @@ bool Input::Read(const std::string& fn)
         }
         else if (strcmp("nupdown", word) == 0)
         {
+            two_fermi = true;
             read_value(ifs, nupdown);
         }
         else if (strcmp("lmaxmax", word) == 0)
@@ -3470,6 +3479,7 @@ void Input::Bcast()
     Parallel_Common::bcast_int(nspin);
     Parallel_Common::bcast_double(nelec);
     Parallel_Common::bcast_double(nelec_delta);
+    Parallel_Common::bcast_bool(two_fermi);
     Parallel_Common::bcast_double(nupdown);
     Parallel_Common::bcast_int(lmaxmax);
 
