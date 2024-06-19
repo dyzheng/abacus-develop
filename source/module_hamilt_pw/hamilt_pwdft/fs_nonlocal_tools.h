@@ -132,18 +132,22 @@ class FS_Nonlocal_tools
     int nkb;
     int nbands;
 
-    int max_nbeta = 0;
     int max_nh = 0;
     int max_npw = 0;
     int ntype;
     bool nondiagonal;
+    int pre_ik_s = -1;
+    int pre_ik_f = -1;
 
     int* atom_nh = nullptr;
     int* atom_na = nullptr;
     int* h_atom_nh = nullptr;
     int* h_atom_na = nullptr;
-    FPTYPE* stress = nullptr;
-    FPTYPE* sigmanlc = nullptr;
+
+    std::vector<FPTYPE> g_plus_k;
+    std::complex<FPTYPE>* vkb_deri = nullptr;
+
+
     FPTYPE* d_wg = nullptr;
     FPTYPE* d_ekb = nullptr;
     FPTYPE* gcar = nullptr;
