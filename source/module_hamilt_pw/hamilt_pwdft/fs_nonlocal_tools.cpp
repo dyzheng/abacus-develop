@@ -113,6 +113,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::allocate_memory(const ModuleBase::matrix
         resmem_var_op()(this->ctx, d_vq_tab, this->nlpp_->tab.getSize());
 
         resmem_complex_op()(this->ctx, d_sk, max_npw);
+        resmem_complex_op()(this->ctx, d_pref_in, max_nh);
 
         this->ppcell_vkb = this->nlpp_->get_vkb_data<FPTYPE>();
     }
@@ -164,6 +165,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::delete_memory()
         delmem_var_op()(this->ctx, d_pref);
         delmem_var_op()(this->ctx, d_vq_tab);
         delmem_complex_op()(this->ctx, d_sk);
+        delmem_complex_op()(this->ctx, this->d_pref_in);
         base_device::memory::delete_memory_op<FPTYPE*, Device>()(this->ctx, d_ylm_ptrs);
         base_device::memory::delete_memory_op<FPTYPE*, Device>()(this->ctx, d_vq_ptrs);
         base_device::memory::delete_memory_op<std::complex<FPTYPE>*, Device>()(this->ctx, d_vkb_ptrs);
