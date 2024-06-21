@@ -44,11 +44,11 @@ void Forces<FPTYPE, Device>::cal_force(ModuleBase::matrix& force,
     ModuleBase::matrix forcecc(nat, 3);
     ModuleBase::matrix forcenl(nat, 3);
     ModuleBase::matrix forcescc(nat, 3);
-    ModuleBase::matrix forcepaw(nat,3);
+    ModuleBase::matrix forcepaw(nat, 3);
 
     // Force due to local ionic potential
     // For PAW, calculated together in paw_cell.calculate_force
-    if(!GlobalV::use_paw)
+    if (!GlobalV::use_paw)
     {
         this->cal_force_loc(forcelc, rho_basis, chr);
     }
@@ -61,9 +61,9 @@ void Forces<FPTYPE, Device>::cal_force(ModuleBase::matrix& force,
     this->cal_force_ew(forceion, rho_basis, p_sf);
 
     // Force due to nonlocal part of pseudopotential
-    if(wfc_basis != nullptr)
+    if (wfc_basis != nullptr)
     {
-        if(!GlobalV::use_paw)
+        if (!GlobalV::use_paw)
         {
             this->npwx = wfc_basis->npwk_max;
             Forces::cal_force_nl(forcenl, wg, ekb, pkv, wfc_basis, p_sf, &GlobalC::ppcell, GlobalC::ucell, psi_in);
@@ -76,13 +76,13 @@ void Forces<FPTYPE, Device>::cal_force(ModuleBase::matrix& force,
         else
         {
 #ifdef USE_PAW
-            for(int ik = 0; ik < wfc_basis->nks; ik++)
+            for (int ik = 0; ik < wfc_basis->nks; ik++)
             {
                 const int npw = wfc_basis->npwk[ik];
-                ModuleBase::Vector3<double> *_gk = new ModuleBase::Vector3<double>[npw];
-                for (int ig = 0;ig < npw; ig++)
+                ModuleBase::Vector3<double>* _gk = new ModuleBase::Vector3<double>[npw];
+                for (int ig = 0; ig < npw; ig++)
                 {
-                    _gk[ig] = wfc_basis->getgpluskcar(ik,ig);
+                    _gk[ig] = wfc_basis->getgpluskcar(ik, ig);
                 }
 
                 double* kpt;
@@ -91,11 +91,11 @@ void Forces<FPTYPE, Device>::cal_force(ModuleBase::matrix& force,
                 kpt[1] = wfc_basis->kvec_c[ik].y;
                 kpt[2] = wfc_basis->kvec_c[ik].z;
 
-                double ** kpg;
-                double ** gcar;
+                double** kpg;
+                double** gcar;
                 kpg = new double*[npw];
                 gcar = new double*[npw];
-                for(int ipw=0;ipw<npw;ipw++)
+                for (int ipw = 0; ipw < npw; ipw++)
                 {
                     kpg[ipw] = new double[3];
                     kpg[ipw][0] = _gk[ipw].x;
@@ -103,19 +103,23 @@ void Forces<FPTYPE, Device>::cal_force(ModuleBase::matrix& force,
                     kpg[ipw][2] = _gk[ipw].z;
 
                     gcar[ipw] = new double[3];
-                    gcar[ipw][0] = wfc_basis->getgcar(ik,ipw).x;
-                    gcar[ipw][1] = wfc_basis->getgcar(ik,ipw).y;
-                    gcar[ipw][2] = wfc_basis->getgcar(ik,ipw).z;
+                    gcar[ipw][0] = wfc_basis->getgcar(ik, ipw).x;
+                    gcar[ipw][1] = wfc_basis->getgcar(ik, ipw).y;
+                    gcar[ipw][2] = wfc_basis->getgcar(ik, ipw).z;
                 }
 
-                GlobalC::paw_cell.set_paw_k(npw,wfc_basis->npwk_max,kpt,
-                    wfc_basis->get_ig2ix(ik).data(),
-                    wfc_basis->get_ig2iy(ik).data(),
-                    wfc_basis->get_ig2iz(ik).data(),
-                    (const double **) kpg,GlobalC::ucell.tpiba,(const double **) gcar);
+                GlobalC::paw_cell.set_paw_k(npw,
+                                            wfc_basis->npwk_max,
+                                            kpt,
+                                            wfc_basis->get_ig2ix(ik).data(),
+                                            wfc_basis->get_ig2iy(ik).data(),
+                                            wfc_basis->get_ig2iz(ik).data(),
+                                            (const double**)kpg,
+                                            GlobalC::ucell.tpiba,
+                                            (const double**)gcar);
 
                 delete[] kpt;
-                for(int ipw = 0; ipw < npw; ipw++)
+                for (int ipw = 0; ipw < npw; ipw++)
                 {
                     delete[] kpg[ipw];
                     delete[] gcar[ipw];
@@ -128,16 +132,19 @@ void Forces<FPTYPE, Device>::cal_force(ModuleBase::matrix& force,
                 GlobalC::paw_cell.set_currentk(ik);
 
                 psi_in[0].fix_k(ik);
-                double * weight, * epsilon;
-                weight = new double [GlobalV::NBANDS];
-                epsilon = new double [GlobalV::NBANDS];
-                for(int ib = 0; ib < GlobalV::NBANDS; ib++)
+                double *weight, *epsilon;
+                weight = new double[GlobalV::NBANDS];
+                epsilon = new double[GlobalV::NBANDS];
+                for (int ib = 0; ib < GlobalV::NBANDS; ib++)
                 {
-                    weight[ib] = wg(ik,ib);
-                    epsilon[ib] = ekb(ik,ib);
+                    weight[ib] = wg(ik, ib);
+                    epsilon[ib] = ekb(ik, ib);
                 }
-                GlobalC::paw_cell.paw_nl_force(reinterpret_cast<std::complex<double>*> (psi_in[0].get_pointer()),
-                    epsilon, weight, GlobalV::NBANDS, forcenl.c);
+                GlobalC::paw_cell.paw_nl_force(reinterpret_cast<std::complex<double>*>(psi_in[0].get_pointer()),
+                                               epsilon,
+                                               weight,
+                                               GlobalV::NBANDS,
+                                               forcenl.c);
 
                 delete[] weight;
                 delete[] epsilon;
@@ -148,7 +155,7 @@ void Forces<FPTYPE, Device>::cal_force(ModuleBase::matrix& force,
 
     // non-linear core correction
     // not relevant for PAW
-    if(!GlobalV::use_paw)
+    if (!GlobalV::use_paw)
     {
         this->cal_force_cc(forcecc, rho_basis, chr);
     }
@@ -159,7 +166,7 @@ void Forces<FPTYPE, Device>::cal_force(ModuleBase::matrix& force,
 
     // force due to core charge
     // For PAW, calculated together in paw_cell.calculate_force
-    if(!GlobalV::use_paw)
+    if (!GlobalV::use_paw)
     {
         this->cal_force_scc(forcescc, rho_basis, elec.vnew, elec.vnew_exist);
     }
@@ -221,18 +228,18 @@ void Forces<FPTYPE, Device>::cal_force(ModuleBase::matrix& force,
     }
 
 #ifdef USE_PAW
-    if(GlobalV::use_paw)
+    if (GlobalV::use_paw)
     {
-        double * force_paw;
-        double * rhor;
+        double* force_paw;
+        double* rhor;
         rhor = new double[rho_basis->nrxx];
-        for(int ir = 0; ir < rho_basis->nrxx; ir++)
+        for (int ir = 0; ir < rho_basis->nrxx; ir++)
         {
             rhor[ir] = 0.0;
         }
-        for(int is = 0; is < GlobalV::NSPIN; is++)
+        for (int is = 0; is < GlobalV::NSPIN; is++)
         {
-            for(int ir = 0; ir < rho_basis->nrxx; ir++)
+            for (int ir = 0; ir < rho_basis->nrxx; ir++)
             {
                 rhor[ir] += chr->rho[is][ir] + chr->nhat[is][ir];
             }
@@ -253,7 +260,7 @@ void Forces<FPTYPE, Device>::cal_force(ModuleBase::matrix& force,
 
         GlobalC::paw_cell.calculate_force(v_effective.c, v_xc.c, rhor, force_paw);
 
-        for(int iat = 0; iat < this->nat; iat++)
+        for (int iat = 0; iat < this->nat; iat++)
         {
             // Ha to Ry
             forcepaw(iat, 0) = force_paw[3 * iat] * 2.0;
@@ -280,7 +287,7 @@ void Forces<FPTYPE, Device>::cal_force(ModuleBase::matrix& force,
                 force(iat, ipol) = forcelc(iat, ipol) + forceion(iat, ipol) + forcenl(iat, ipol) + forcecc(iat, ipol)
                                    + forcescc(iat, ipol);
 
-                if(GlobalV::use_paw)
+                if (GlobalV::use_paw)
                 {
                     force(iat, ipol) += forcepaw(iat, ipol);
                 }
@@ -412,33 +419,41 @@ void Forces<FPTYPE, Device>::cal_force(ModuleBase::matrix& force,
 
     if (GlobalV::TEST_FORCE)
     {
-        ModuleIO::print_force(GlobalV::ofs_running, GlobalC::ucell, "LOCAL    FORCE (eV/Angstrom)", forcelc, 0);
-        ModuleIO::print_force(GlobalV::ofs_running, GlobalC::ucell, "NONLOCAL FORCE (eV/Angstrom)", forcenl, 0);
-        ModuleIO::print_force(GlobalV::ofs_running, GlobalC::ucell, "NLCC     FORCE (eV/Angstrom)", forcecc, 0);
-        ModuleIO::print_force(GlobalV::ofs_running, GlobalC::ucell, "ION      FORCE (eV/Angstrom)", forceion, 0);
-        ModuleIO::print_force(GlobalV::ofs_running, GlobalC::ucell, "SCC      FORCE (eV/Angstrom)", forcescc, 0);
-        if(GlobalV::use_paw)
+        ModuleIO::print_force(GlobalV::ofs_running, GlobalC::ucell, "LOCAL    FORCE (eV/Angstrom)", forcelc, false);
+        ModuleIO::print_force(GlobalV::ofs_running, GlobalC::ucell, "NONLOCAL FORCE (eV/Angstrom)", forcenl, false);
+        ModuleIO::print_force(GlobalV::ofs_running, GlobalC::ucell, "NLCC     FORCE (eV/Angstrom)", forcecc, false);
+        ModuleIO::print_force(GlobalV::ofs_running, GlobalC::ucell, "ION      FORCE (eV/Angstrom)", forceion, false);
+        ModuleIO::print_force(GlobalV::ofs_running, GlobalC::ucell, "SCC      FORCE (eV/Angstrom)", forcescc, false);
+        if (GlobalV::use_paw)
         {
-            ModuleIO::print_force(GlobalV::ofs_running, GlobalC::ucell, "PAW      FORCE (eV/Angstrom)", forcepaw, 0);
+            ModuleIO::print_force(GlobalV::ofs_running,
+                                  GlobalC::ucell,
+                                  "PAW      FORCE (eV/Angstrom)",
+                                  forcepaw,
+                                  false);
         }
-		if (GlobalV::EFIELD_FLAG)
-		{
-			ModuleIO::print_force(GlobalV::ofs_running, GlobalC::ucell, "EFIELD   FORCE (eV/Angstrom)", force_e, 0);
-		}
-		if (GlobalV::GATE_FLAG)
-		{
-			ModuleIO::print_force(GlobalV::ofs_running,
-					GlobalC::ucell,
-					"GATEFIELD   FORCE (eV/Angstrom)",
-					force_gate,
-					0);
-		}
-		if (GlobalV::imp_sol)
-		{
-			ModuleIO::print_force(GlobalV::ofs_running, GlobalC::ucell, "IMP_SOL   FORCE (eV/Angstrom)", forcesol, 0);
-		}
+        if (GlobalV::EFIELD_FLAG)
+        {
+            ModuleIO::print_force(GlobalV::ofs_running, GlobalC::ucell, "EFIELD   FORCE (eV/Angstrom)", force_e, false);
+        }
+        if (GlobalV::GATE_FLAG)
+        {
+            ModuleIO::print_force(GlobalV::ofs_running,
+                                  GlobalC::ucell,
+                                  "GATEFIELD   FORCE (eV/Angstrom)",
+                                  force_gate,
+                                  false);
+        }
+        if (GlobalV::imp_sol)
+        {
+            ModuleIO::print_force(GlobalV::ofs_running,
+                                  GlobalC::ucell,
+                                  "IMP_SOL   FORCE (eV/Angstrom)",
+                                  forcesol,
+                                  false);
+        }
     }
-    ModuleIO::print_force(GlobalV::ofs_running, GlobalC::ucell, "TOTAL-FORCE (eV/Angstrom)", force, 0);
+    ModuleIO::print_force(GlobalV::ofs_running, GlobalC::ucell, "TOTAL-FORCE (eV/Angstrom)", force, false);
 
     return;
 }
@@ -477,7 +492,7 @@ void Forces<FPTYPE, Device>::cal_force_loc(ModuleBase::matrix& forcelc,
                 aux[ir] = std::complex<double>(chr->rho[0][ir], 0.0);
             }
         }
-        if(GlobalV::NSPIN == 2)
+        if (GlobalV::NSPIN == 2)
         {
             for (int ir = irb; ir < ir_end; ++ir)
             { // accumulate aux
@@ -554,7 +569,7 @@ void Forces<FPTYPE, Device>::cal_force_ew(ModuleBase::matrix& forceion,
         for (int it = 0; it < GlobalC::ucell.ntype; it++)
         {
             double dzv;
-            if(GlobalV::use_paw)
+            if (GlobalV::use_paw)
             {
 #ifdef USE_PAW
                 dzv = GlobalC::paw_cell.get_val(it);
@@ -576,7 +591,7 @@ void Forces<FPTYPE, Device>::cal_force_ew(ModuleBase::matrix& forceion,
     double charge = 0.0;
     for (int it = 0; it < GlobalC::ucell.ntype; it++)
     {
-        if(GlobalV::use_paw)
+        if (GlobalV::use_paw)
         {
 #ifdef USE_PAW
             charge += GlobalC::ucell.atoms[it].na * GlobalC::paw_cell.get_val(it);
@@ -584,7 +599,7 @@ void Forces<FPTYPE, Device>::cal_force_ew(ModuleBase::matrix& forceion,
         }
         else
         {
-            charge += GlobalC::ucell.atoms[it].na * GlobalC::ucell.atoms[it].ncpp.zv;//mohan modify 2007-11-7
+            charge += GlobalC::ucell.atoms[it].na * GlobalC::ucell.atoms[it].ncpp.zv; // mohan modify 2007-11-7
         }
     }
 
@@ -658,7 +673,7 @@ void Forces<FPTYPE, Device>::cal_force_ew(ModuleBase::matrix& forceion,
             if (it != last_it)
             { // calculate it_tact when it is changed
                 double zv;
-                if(GlobalV::use_paw)
+                if (GlobalV::use_paw)
                 {
 #ifdef USE_PAW
                     zv = GlobalC::paw_cell.get_val(it);
@@ -668,8 +683,7 @@ void Forces<FPTYPE, Device>::cal_force_ew(ModuleBase::matrix& forceion,
                 {
                     zv = GlobalC::ucell.atoms[it].ncpp.zv;
                 }
-                it_fact = zv * ModuleBase::e2 * GlobalC::ucell.tpiba * ModuleBase::TWO_PI
-                          / GlobalC::ucell.omega * fact;
+                it_fact = zv * ModuleBase::e2 * GlobalC::ucell.tpiba * ModuleBase::TWO_PI / GlobalC::ucell.omega * fact;
                 last_it = it;
             }
 
@@ -741,21 +755,21 @@ void Forces<FPTYPE, Device>::cal_force_ew(ModuleBase::matrix& forceion,
                             const double rr = sqrt(r2[n]) * GlobalC::ucell.lat0;
 
                             double factor;
-                            if(GlobalV::use_paw)
+                            if (GlobalV::use_paw)
                             {
 #ifdef USE_PAW
-                                factor = GlobalC::paw_cell.get_val(T1) * GlobalC::paw_cell.get_val(T2)
-                                            * ModuleBase::e2 / (rr * rr)
-                                            * (erfc(sqa * rr) / rr + sq8a_2pi * ModuleBase::libm::exp(-alpha * rr * rr))
-                                            * GlobalC::ucell.lat0;
+                                factor = GlobalC::paw_cell.get_val(T1) * GlobalC::paw_cell.get_val(T2) * ModuleBase::e2
+                                         / (rr * rr)
+                                         * (erfc(sqa * rr) / rr + sq8a_2pi * ModuleBase::libm::exp(-alpha * rr * rr))
+                                         * GlobalC::ucell.lat0;
 #endif
                             }
                             else
                             {
                                 factor = GlobalC::ucell.atoms[T1].ncpp.zv * GlobalC::ucell.atoms[T2].ncpp.zv
-                                            * ModuleBase::e2 / (rr * rr)
-                                            * (erfc(sqa * rr) / rr + sq8a_2pi * ModuleBase::libm::exp(-alpha * rr * rr))
-                                            * GlobalC::ucell.lat0;
+                                         * ModuleBase::e2 / (rr * rr)
+                                         * (erfc(sqa * rr) / rr + sq8a_2pi * ModuleBase::libm::exp(-alpha * rr * rr))
+                                         * GlobalC::ucell.lat0;
                             }
 
                             forceion(iat1, 0) -= factor * r[n].x;
@@ -778,7 +792,7 @@ void Forces<FPTYPE, Device>::cal_force_ew(ModuleBase::matrix& forceion,
     }
 #endif
 
-Parallel_Reduce::reduce_pool(forceion.c, forceion.nr* forceion.nc);
+    Parallel_Reduce::reduce_pool(forceion.c, forceion.nr * forceion.nc);
 
     // this->print(GlobalV::ofs_running, "ewald forces", forceion);
 
@@ -941,7 +955,7 @@ void Forces<FPTYPE, Device>::cal_force_cc(ModuleBase::matrix& forcecc,
 
     delete[] rhocg;
 
-    delete[] psiv;                                                           // mohan fix bug 2012-03-22
+    delete[] psiv;                                                    // mohan fix bug 2012-03-22
     Parallel_Reduce::reduce_pool(forcecc.c, forcecc.nr * forcecc.nc); // qianrui fix a bug for kpar > 1
     ModuleBase::timer::tick("Forces", "cal_force_cc");
     return;
@@ -1075,7 +1089,7 @@ void Forces<FPTYPE, Device>::cal_force_scc(ModuleBase::matrix& forcescc,
         }
     }
 
-    Parallel_Reduce::reduce_pool(forcescc.c, forcescc.nr* forcescc.nc);
+    Parallel_Reduce::reduce_pool(forcescc.c, forcescc.nr * forcescc.nc);
 
     delete[] psic;    // mohan fix bug 2012-03-22
     delete[] rhocgnt; // mohan fix bug 2012-03-22

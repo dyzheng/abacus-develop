@@ -152,7 +152,6 @@ class FS_Nonlocal_tools
     void save_vkb(int npw, int ipol);
     void revert_vkb(int npw, int ipol);
 
-
     FPTYPE* d_wg = nullptr;
     FPTYPE* d_ekb = nullptr;
     FPTYPE* gcar = nullptr;

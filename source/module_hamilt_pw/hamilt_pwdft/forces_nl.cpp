@@ -1,7 +1,7 @@
 #include "forces.h"
-#include "module_hamilt_pw/hamilt_pwdft/fs_nonlocal_tools.h"
-#include "module_base/tool_title.h"
 #include "module_base/timer.h"
+#include "module_base/tool_title.h"
+#include "module_hamilt_pw/hamilt_pwdft/fs_nonlocal_tools.h"
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -33,7 +33,7 @@ void Forces<FPTYPE, Device>::cal_force_nl(ModuleBase::matrix& forcenl,
     hamilt::FS_Nonlocal_tools<FPTYPE, Device> nl_tools(nlpp_in, &ucell_in, psi_in, p_kv, wfc_basis, p_sf, wg, ekb);
 
     int nks = wfc_basis->nks;
-    for(int ik=0;ik<nks;ik++)//loop k points
+    for (int ik = 0; ik < nks; ik++) // loop k points
     {
         // skip zero weights to speed up
         int nbands_occ = wg.nc;
@@ -48,7 +48,7 @@ void Forces<FPTYPE, Device>::cal_force_nl(ModuleBase::matrix& forcenl,
         const int npm = ucell_in.get_npol() * nbands_occ;
         // calculate becp = <psi|beta> for all beta functions
         nl_tools.cal_becp(ik, npm);
-        for(int ipol=0;ipol<3;ipol++)
+        for (int ipol = 0; ipol < 3; ipol++)
         {
             nl_tools.cal_dbecp_f(ik, npm, ipol);
         }
@@ -58,9 +58,9 @@ void Forces<FPTYPE, Device>::cal_force_nl(ModuleBase::matrix& forcenl,
     syncmem_var_d2h_op()(this->cpu_ctx, this->ctx, forcenl.c, force, forcenl.nr * forcenl.nc);
     delmem_var_op()(this->ctx, force);
     // sum up forcenl from all processors
-    Parallel_Reduce::reduce_all(forcenl.c, forcenl.nr* forcenl.nc);
+    Parallel_Reduce::reduce_all(forcenl.c, forcenl.nr * forcenl.nc);
 
-	ModuleBase::timer::tick("Forces","cal_force_nl");
+    ModuleBase::timer::tick("Forces", "cal_force_nl");
 }
 
 template class Forces<double, base_device::DEVICE_CPU>;
