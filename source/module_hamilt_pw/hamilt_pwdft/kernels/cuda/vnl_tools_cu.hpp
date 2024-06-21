@@ -1,3 +1,6 @@
+#ifndef W_ABACUS_DEVELOP_ABACUS_DEVELOP_SOURCE_MODULE_HAMILT_PW_HAMILT_PWDFT_KERNELS_CUDA_VNL_TOOLS_CU_HPP
+#define W_ABACUS_DEVELOP_ABACUS_DEVELOP_SOURCE_MODULE_HAMILT_PW_HAMILT_PWDFT_KERNELS_CUDA_VNL_TOOLS_CU_HPP
+
 #include <thrust/complex.h>
 #ifdef __CUDA
 #include <cuda_runtime.h>
@@ -59,3 +62,4 @@ __device__ FPTYPE _polynomial_interpolation_nl(const FPTYPE* table,
 }
 
 } // namespace hamilt
+#endif

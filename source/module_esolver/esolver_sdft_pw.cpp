@@ -251,7 +251,7 @@ void ESolver_SDFT_PW::cal_stress(ModuleBase::matrix& stress)
                   GlobalC::ucell);
 }
 
-void ESolver_SDFT_PW::after_all_runners(void)
+void ESolver_SDFT_PW::after_all_runners()
 {
 
     GlobalV::ofs_running << "\n\n --------------------------------------------" << std::endl;
@@ -323,7 +323,7 @@ void ESolver_SDFT_PW::others(const int istep)
     return;
 }
 
-void ESolver_SDFT_PW::nscf(void)
+void ESolver_SDFT_PW::nscf()
 {
     ModuleBase::TITLE("ESolver_SDFT_PW", "nscf");
     ModuleBase::timer::tick("ESolver_SDFT_PW", "nscf");
