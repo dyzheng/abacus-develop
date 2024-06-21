@@ -98,10 +98,8 @@ struct cal_vkb1_nl_op<FPTYPE, base_device::DEVICE_GPU>
     void operator()(const base_device::DEVICE_GPU* ctx,
                     const int& nkb,
                     const int& npwx,
-                    const int& npwk_max,
                     const int& vkb_nc,
                     const int& nbasis,
-                    const int& ik,
                     const int& ipol,
                     const std::complex<FPTYPE>& NEG_IMAG_UNIT,
                     const std::complex<FPTYPE>* vkb,
@@ -137,9 +135,11 @@ struct cal_force_nl_op<FPTYPE, base_device::DEVICE_GPU>
                     FPTYPE* force);
 };
 
-// saveVkbValues function
+/**
+ * @brief revert the vkb values for force_nl calculation
+ */
 template <typename FPTYPE>
-__global__ void revertVkbValues(
+void revertVkbValues(
     const int *gcar_zero_ptrs, 
     std::complex<FPTYPE> *vkb_ptr, 
     const std::complex<FPTYPE> *vkb_save_ptr, 
@@ -148,8 +148,11 @@ __global__ void revertVkbValues(
     size_t n_total_gcar_zeros,
     const std::complex<FPTYPE> coeff);
 
+/**
+ * @brief save the vkb values for force_nl calculation
+ */
 template <typename FPTYPE>
-__global__ void saveVkbValues(
+void saveVkbValues(
     const int *gcar_zero_ptrs, 
     const std::complex<FPTYPE> *vkb_ptr, 
     std::complex<FPTYPE> *vkb_save_ptr, 

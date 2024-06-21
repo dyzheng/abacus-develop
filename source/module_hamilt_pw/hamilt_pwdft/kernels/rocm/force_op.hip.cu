@@ -167,7 +167,7 @@ void cal_force_nl_op<FPTYPE, base_device::DEVICE_GPU>::operator()(const base_dev
 }
 
 template <typename FPTYPE>
-__global__ void saveVkbValues(
+__global__ void saveVkbValues_(
     const int *gcar_zero_ptrs, 
     const std::complex<FPTYPE> *vkb_ptr, 
     std::complex<FPTYPE> *vkb_save_ptr, 
@@ -189,7 +189,20 @@ __global__ void saveVkbValues(
 }
 
 template <typename FPTYPE>
-__global__ void revertVkbValues(
+void saveVkbValues(const int *gcar_zero_ptrs, const std::complex<FPTYPE> *vkb_ptr, std::complex<FPTYPE> *vkb_save_ptr, int nkb, int npw, size_t n_total_gcar_zeros)
+{
+    hipLaunchKernelGGL(HIP_KERNEL_NAME(saveVkbValues_<FPTYPE>), dim3(nkb*n_total_gcar_zeros), dim3(THREADS_PER_BLOCK), 0, 0,
+        gcar_zero_ptrs, 
+        reinterpret_cast<const thrust::complex<FPTYPE>*>(vkb_ptr), 
+        reinterpret_cast<thrust::complex<FPTYPE>*>(vkb_save_ptr), 
+        nkb, 
+        npw, 
+        n_total_gcar_zeros);
+    hipCheckOnDebug();
+}
+
+template <typename FPTYPE>
+__global__ void revertVkbValues_(
     const int *gcar_zero_ptrs, 
     std::complex<FPTYPE> *vkb_ptr, 
     const std::complex<FPTYPE> *vkb_save_ptr, 
@@ -209,6 +222,20 @@ __global__ void revertVkbValues(
         // use the flat index to get the saved position, pay attention to the relationship between ikb and npw,
         vkb_ptr[ikb * npw + ig] = vkb_save_ptr[index] * coeff;    // revert the values
     }
+}
+
+template <typename FPTYPE>
+void revertVkbValues(const int *gcar_zero_ptrs, std::complex<FPTYPE> *vkb_ptr, const std::complex<FPTYPE> *vkb_save_ptr, int nkb, int npw, size_t n_total_gcar_zeros, const std::complex<FPTYPE> coeff)
+{
+    hipLaunchKernelGGL(HIP_KERNEL_NAME(revertVkbValues_<FPTYPE>), dim3(nkb*n_total_gcar_zeros), dim3(THREADS_PER_BLOCK), 0, 0,
+        gcar_zero_ptrs, 
+        reinterpret_cast<thrust::complex<FPTYPE>*>(vkb_ptr), 
+        reinterpret_cast<const thrust::complex<FPTYPE>*>(vkb_save_ptr), 
+        nkb, 
+        npw, 
+        n_total_gcar_zeros,
+        static_cast<const thrust::complex<FPTYPE>>(coeff));
+    hipCheckOnDebug();
 }
 
 // for revertVkbValues functions instantiation
