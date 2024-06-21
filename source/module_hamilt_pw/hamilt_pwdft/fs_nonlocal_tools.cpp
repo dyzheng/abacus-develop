@@ -613,13 +613,13 @@ void FS_Nonlocal_tools<FPTYPE, Device>::save_vkb(int npw, int ipol)
     else
     {
 #if __CUDA || __UT_USE_CUDA || __ROCM || __UT_USE_ROCM
-        saveVkbValues<FPTYPE><<<nkb * gcar_zero_counts, 256>>>(
-            gcar_zero_ptrs, 
-            vkb_ptr, 
-            vkb_save_ptr, 
-            nkb, 
-            npw, 
-            gcar_zero_counts);
+	    saveVkbValues<FPTYPE>(
+                gcar_zero_ptrs, 
+                vkb_ptr, 
+                vkb_save_ptr, 
+                nkb, 
+                npw, 
+                gcar_zero_counts);
 #endif
     }
 }
@@ -649,7 +649,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::revert_vkb(int npw, int ipol)
     else
     {
 #if __CUDA || __UT_USE_CUDA || __ROCM || __UT_USE_ROCM
-        revertVkbValues<FPTYPE><<<nkb * gcar_zero_counts, 256>>>(
+        revertVkbValues<FPTYPE>(
             gcar_zero_ptrs, 
             vkb_ptr, 
             vkb_save_ptr, 

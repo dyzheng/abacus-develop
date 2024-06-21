@@ -169,8 +169,8 @@ void cal_force_nl_op<FPTYPE, base_device::DEVICE_GPU>::operator()(const base_dev
 template <typename FPTYPE>
 __global__ void saveVkbValues_(
     const int *gcar_zero_ptrs, 
-    const std::complex<FPTYPE> *vkb_ptr, 
-    std::complex<FPTYPE> *vkb_save_ptr, 
+    const thrust::complex<FPTYPE> *vkb_ptr, 
+    thrust::complex<FPTYPE> *vkb_save_ptr, 
     int nkb, 
     int npw, 
     size_t n_total_gcar_zeros)
@@ -204,12 +204,12 @@ void saveVkbValues(const int *gcar_zero_ptrs, const std::complex<FPTYPE> *vkb_pt
 template <typename FPTYPE>
 __global__ void revertVkbValues_(
     const int *gcar_zero_ptrs, 
-    std::complex<FPTYPE> *vkb_ptr, 
-    const std::complex<FPTYPE> *vkb_save_ptr, 
+    thrust::complex<FPTYPE> *vkb_ptr, 
+    const thrust::complex<FPTYPE> *vkb_save_ptr, 
     int nkb, 
     int npw, 
     size_t n_total_gcar_zeros,
-    const std::complex<FPTYPE> coeff)
+    const thrust::complex<FPTYPE> coeff)
 {
     int index = blockIdx.x * blockDim.x + threadIdx.x; // global index
     int ikb = index / n_total_gcar_zeros;              // index of nkb
@@ -239,10 +239,8 @@ void revertVkbValues(const int *gcar_zero_ptrs, std::complex<FPTYPE> *vkb_ptr, c
 }
 
 // for revertVkbValues functions instantiation
-template void revertVkbValues<float>(const int *gcar_zero_ptrs, std::complex<float> *vkb_ptr, const std::complex<float> *vkb_save_ptr, int nkb, int npw, size_t n_total_gcar_zeros);
-template void revertVkbValues<double>(const int *gcar_zero_ptrs, std::complex<double> *vkb_ptr, const std::complex<double> *vkb_save_ptr, int nkb, int npw, size_t n_total_gcar_zeros);
+template void revertVkbValues<double>(const int *gcar_zero_ptrs, std::complex<double> *vkb_ptr, const std::complex<double> *vkb_save_ptr, int nkb, int npw, size_t n_total_gcar_zeros, const std::complex<double> coeff);
 // for saveVkbValues functions instantiation
-template void saveVkbValues<float>(const int *gcar_zero_ptrs, const std::complex<float> *vkb_ptr, std::complex<float> *vkb_save_ptr, int nkb, int npw, size_t n_total_gcar_zeros);
 template void saveVkbValues<double>(const int *gcar_zero_ptrs, const std::complex<double> *vkb_ptr, std::complex<double> *vkb_save_ptr, int nkb, int npw, size_t n_total_gcar_zeros);
 
 template struct cal_vkb1_nl_op<float, base_device::DEVICE_GPU>;
