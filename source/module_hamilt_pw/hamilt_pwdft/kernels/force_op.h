@@ -14,10 +14,8 @@ struct cal_vkb1_nl_op {
     /// @param ctx - which device this function runs on
     /// @param nkb - number of k point
     /// @param npwx - number of planewaves
-    /// @param npwk_max - number of planewaves
     /// @param vkb_nc - the second dimension of vkb matrix
     /// @param nbasis - number of planewaves of current k point
-    /// @param ik - current k point
     /// @param ipol - 0,1,2
     /// @param NEG_IMAG_UNIT - ModuleBase::NEG_IMAG_UNIT
     /// @param vkb - result of getvnl
@@ -29,10 +27,8 @@ struct cal_vkb1_nl_op {
         const Device* ctx,
         const int& nkb,
         const int& npwx,
-        const int &npwk_max,
         const int& vkb_nc,
         const int& nbasis,
-        const int& ik,
         const int& ipol,
         const std::complex<FPTYPE>& NEG_IMAG_UNIT,
         const std::complex<FPTYPE>* vkb,
@@ -140,6 +136,25 @@ struct cal_force_nl_op<FPTYPE, base_device::DEVICE_GPU>
                     const std::complex<FPTYPE>* dbecp,
                     FPTYPE* force);
 };
+
+// saveVkbValues function
+template <typename FPTYPE>
+__global__ void revertVkbValues(
+    const int *gcar_zero_ptrs, 
+    std::complex<FPTYPE> *vkb_ptr, 
+    const std::complex<FPTYPE> *vkb_save_ptr, 
+    int nkb, 
+    int npw, 
+    size_t n_total_gcar_zeros);
+
+template <typename FPTYPE>
+__global__ void saveVkbValues(
+    const int *gcar_zero_ptrs, 
+    const std::complex<FPTYPE> *vkb_ptr, 
+    std::complex<FPTYPE> *vkb_save_ptr, 
+    int nkb, 
+    int npw, 
+    size_t n_total_gcar_zeros);
 
 #endif // __CUDA || __UT_USE_CUDA || __ROCM || __UT_USE_ROCM
 }  // namespace hamilt

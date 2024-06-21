@@ -13,10 +13,8 @@ namespace hamilt {
 template <typename FPTYPE>
 __global__ void cal_vkb1_nl(
         const int npwx,
-        const int npwk_max,
         const int vkb_nc,
         const int nbasis,
-        const int ik,
         const int ipol,
         const thrust::complex<FPTYPE> NEG_IMAG_UNIT,
         const thrust::complex<FPTYPE> *vkb,
@@ -26,7 +24,7 @@ __global__ void cal_vkb1_nl(
     thrust::complex<FPTYPE> *pvkb1 = vkb1 + blockIdx.x * npwx;
     const thrust::complex<FPTYPE> *pvkb = vkb + blockIdx.x * vkb_nc;
     for (int ig = threadIdx.x; ig < nbasis; ig += blockDim.x) {
-        pvkb1[ig] = pvkb[ig] * NEG_IMAG_UNIT * gcar[(ik * npwk_max + ig) * 3 + ipol];
+        pvkb1[ig] = pvkb[ig] * NEG_IMAG_UNIT * gcar[ig * 3 + ipol];
     }
 }
 
@@ -107,10 +105,8 @@ template <typename FPTYPE>
 void cal_vkb1_nl_op<FPTYPE, base_device::DEVICE_GPU>::operator()(const base_device::DEVICE_GPU* ctx,
                                                                  const int& nkb,
                                                                  const int& npwx,
-                                                                 const int& npwk_max,
                                                                  const int& vkb_nc,
                                                                  const int& nbasis,
-                                                                 const int& ik,
                                                                  const int& ipol,
                                                                  const std::complex<FPTYPE>& NEG_IMAG_UNIT,
                                                                  const std::complex<FPTYPE>* vkb,
@@ -119,10 +115,8 @@ void cal_vkb1_nl_op<FPTYPE, base_device::DEVICE_GPU>::operator()(const base_devi
 {
     hipLaunchKernelGGL(HIP_KERNEL_NAME(cal_vkb1_nl<FPTYPE>), dim3(nkb), dim3(THREADS_PER_BLOCK), 0, 0,
             npwx,
-            npwk_max,
             vkb_nc,
             nbasis,
-            ik,
             ipol,
             static_cast<const thrust::complex<FPTYPE>>(NEG_IMAG_UNIT), // array of data
             reinterpret_cast<const thrust::complex<FPTYPE>*>(vkb),
@@ -171,6 +165,57 @@ void cal_force_nl_op<FPTYPE, base_device::DEVICE_GPU>::operator()(const base_dev
 
     hipCheckOnDebug();
 }
+
+template <typename FPTYPE>
+__global__ void saveVkbValues(
+    const int *gcar_zero_ptrs, 
+    const std::complex<FPTYPE> *vkb_ptr, 
+    std::complex<FPTYPE> *vkb_save_ptr, 
+    int nkb, 
+    int npw, 
+    size_t n_total_gcar_zeros)
+{
+    int index = blockIdx.x * blockDim.x + threadIdx.x; // global index
+    int ikb = index / n_total_gcar_zeros;              // index of nkb
+    int icount = index % n_total_gcar_zeros;           // index of n_total_gcar_zeros
+    
+    // check if the index is valid
+    if(ikb < nkb && icount < gcar_zero_ptrs[0] + 1 && icount > 0)
+    {
+        int ig = gcar_zero_ptrs[icount]; // get ig from gcar_zero_ptrs
+        // use the flat index to get the saved position, pay attention to the relationship between ikb and npw,
+        vkb_save_ptr[index] = vkb_ptr[ikb * npw + ig];    // save the value
+    }
+}
+
+template <typename FPTYPE>
+__global__ void revertVkbValues(
+    const int *gcar_zero_ptrs, 
+    std::complex<FPTYPE> *vkb_ptr, 
+    const std::complex<FPTYPE> *vkb_save_ptr, 
+    int nkb, 
+    int npw, 
+    size_t n_total_gcar_zeros)
+{
+    int index = blockIdx.x * blockDim.x + threadIdx.x; // global index
+    int ikb = index / n_total_gcar_zeros;              // index of nkb
+    int icount = index % n_total_gcar_zeros;           // index of n_total_gcar_zeros
+    
+    // check if the index is valid
+    if(ikb < nkb && icount < n_total_gcar_zeros)
+    {
+        int ig = gcar_zero_ptrs[icount]; // get ig from gcar_zero_ptrs
+        // use the flat index to get the saved position, pay attention to the relationship between ikb and npw,
+        vkb_ptr[ikb * npw + ig] = vkb_save_ptr[index];    // revert the values
+    }
+}
+
+// for revertVkbValues functions instantiation
+template void revertVkbValues<float>(const int *gcar_zero_ptrs, std::complex<float> *vkb_ptr, const std::complex<float> *vkb_save_ptr, int nkb, int npw, size_t n_total_gcar_zeros);
+template void revertVkbValues<double>(const int *gcar_zero_ptrs, std::complex<double> *vkb_ptr, const std::complex<double> *vkb_save_ptr, int nkb, int npw, size_t n_total_gcar_zeros);
+// for saveVkbValues functions instantiation
+template void saveVkbValues<float>(const int *gcar_zero_ptrs, const std::complex<float> *vkb_ptr, std::complex<float> *vkb_save_ptr, int nkb, int npw, size_t n_total_gcar_zeros);
+template void saveVkbValues<double>(const int *gcar_zero_ptrs, const std::complex<double> *vkb_ptr, std::complex<double> *vkb_save_ptr, int nkb, int npw, size_t n_total_gcar_zeros);
 
 template struct cal_vkb1_nl_op<float, base_device::DEVICE_GPU>;
 template struct cal_force_nl_op<float, base_device::DEVICE_GPU>;

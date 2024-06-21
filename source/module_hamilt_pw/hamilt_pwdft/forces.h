@@ -75,8 +75,6 @@ public:
     base_device::DEVICE_CPU* cpu_ctx = {};
     base_device::AbacusDevice_t device = {};
     using gemm_op = hsolver::gemm_op<std::complex<FPTYPE>, Device>;
-    using cal_vkb1_nl_op = hamilt::cal_vkb1_nl_op<FPTYPE, Device>;
-    using cal_force_nl_op = hamilt::cal_force_nl_op<FPTYPE, Device>;
 
     using resmem_complex_op = base_device::memory::resize_memory_op<std::complex<FPTYPE>, Device>;
     using resmem_complex_h_op = base_device::memory::resize_memory_op<std::complex<FPTYPE>, base_device::DEVICE_CPU>;

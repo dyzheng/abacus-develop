@@ -12,10 +12,8 @@ struct cal_vkb1_nl_op<FPTYPE, base_device::DEVICE_CPU>
     void operator()(const base_device::DEVICE_CPU* ctx,
                     const int& nkb,
                     const int& npwx,
-                    const int& npwk_max,
                     const int& vkb_nc,
                     const int& nbasis,
-                    const int& ik,
                     const int& ipol,
                     const std::complex<FPTYPE>& NEG_IMAG_UNIT,
                     const std::complex<FPTYPE>* vkb,
@@ -29,7 +27,7 @@ struct cal_vkb1_nl_op<FPTYPE, base_device::DEVICE_CPU>
             for (int ig = 0; ig < nbasis; ig++) {
                 std::complex<FPTYPE> *pvkb1 = vkb1 + i * npwx;
                 const std::complex<FPTYPE> *pvkb = vkb + i * vkb_nc;
-                pvkb1[ig] = pvkb[ig] * NEG_IMAG_UNIT * gcar[(ik * npwk_max + ig) * 3 + ipol];
+                pvkb1[ig] = pvkb[ig] * NEG_IMAG_UNIT * gcar[ig * 3 + ipol];
             }
         }
     }

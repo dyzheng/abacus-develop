@@ -145,7 +145,12 @@ class FS_Nonlocal_tools
     int* h_atom_na = nullptr;
 
     std::vector<FPTYPE> g_plus_k;
-    std::complex<FPTYPE>* vkb_deri = nullptr;
+
+    int* gcar_zero_indexes = nullptr;
+    std::complex<FPTYPE>* vkb_save = nullptr;
+    void transfer_gcar(int npw, int npw_max, const FPTYPE* gcar_in);
+    void save_vkb(int npw, int ipol);
+    void revert_vkb(int npw, int ipol);
 
 
     FPTYPE* d_wg = nullptr;
