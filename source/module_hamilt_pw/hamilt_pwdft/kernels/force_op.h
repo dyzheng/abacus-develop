@@ -145,7 +145,8 @@ __global__ void revertVkbValues(
     const std::complex<FPTYPE> *vkb_save_ptr, 
     int nkb, 
     int npw, 
-    size_t n_total_gcar_zeros);
+    size_t n_total_gcar_zeros,
+    const std::complex<FPTYPE> coeff);
 
 template <typename FPTYPE>
 __global__ void saveVkbValues(

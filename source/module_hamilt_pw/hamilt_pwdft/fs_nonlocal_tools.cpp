@@ -655,7 +655,8 @@ void FS_Nonlocal_tools<FPTYPE, Device>::revert_vkb(int npw, int ipol)
             vkb_save_ptr, 
             nkb, 
             npw, 
-            gcar_zero_counts);
+            gcar_zero_counts,
+            coeff);
 #endif
     }
 }

@@ -195,7 +195,8 @@ __global__ void revertVkbValues(
     const std::complex<FPTYPE> *vkb_save_ptr, 
     int nkb, 
     int npw, 
-    size_t n_total_gcar_zeros)
+    size_t n_total_gcar_zeros,
+    const std::complex<FPTYPE> coeff)
 {
     int index = blockIdx.x * blockDim.x + threadIdx.x; // global index
     int ikb = index / n_total_gcar_zeros;              // index of nkb
@@ -206,7 +207,7 @@ __global__ void revertVkbValues(
     {
         int ig = gcar_zero_ptrs[icount]; // get ig from gcar_zero_ptrs
         // use the flat index to get the saved position, pay attention to the relationship between ikb and npw,
-        vkb_ptr[ikb * npw + ig] = vkb_save_ptr[index];    // revert the values
+        vkb_ptr[ikb * npw + ig] = vkb_save_ptr[index] * coeff;    // revert the values
     }
 }
 
