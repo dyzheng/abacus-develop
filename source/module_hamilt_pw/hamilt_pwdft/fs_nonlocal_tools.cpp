@@ -593,12 +593,12 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_f(int ik, int npm, int ipol)
 template <typename FPTYPE, typename Device>
 void FS_Nonlocal_tools<FPTYPE, Device>::save_vkb(int npw, int ipol)
 {
-    const int gcar_zero_counts = this->gcar_zero_indexes[ipol * this->wfc_basis_->npwk_max];
-    const int* gcar_zero_ptrs = &this->gcar_zero_indexes[ipol * this->wfc_basis_->npwk_max+1];
-    const std::complex<FPTYPE>* vkb_ptr = this->ppcell_vkb;
-    std::complex<FPTYPE>* vkb_save_ptr = this->vkb_save;
     if(this->device == base_device::CpuDevice)
     {
+        const int gcar_zero_counts = this->gcar_zero_indexes[ipol * this->wfc_basis_->npwk_max];
+        const int* gcar_zero_ptrs = &this->gcar_zero_indexes[ipol * this->wfc_basis_->npwk_max+1];
+        const std::complex<FPTYPE>* vkb_ptr = this->ppcell_vkb;
+        std::complex<FPTYPE>* vkb_save_ptr = this->vkb_save;
         //find the zero indexes to save the vkb values to vkb_save
         for(int ikb = 0;ikb < this->nkb;++ikb)
         {
@@ -614,12 +614,13 @@ void FS_Nonlocal_tools<FPTYPE, Device>::save_vkb(int npw, int ipol)
     {
 #if __CUDA || __UT_USE_CUDA || __ROCM || __UT_USE_ROCM
 	    saveVkbValues<FPTYPE>(
-                gcar_zero_ptrs, 
-                vkb_ptr, 
-                vkb_save_ptr, 
+                this->gcar_zero_indexes, 
+                this->ppcell_vkb, 
+                this->vkb_save, 
                 nkb, 
-                npw, 
-                gcar_zero_counts);
+                npw,
+                ipol,
+                this->wfc_basis_->npwk_max);
 #endif
     }
 }
@@ -628,13 +629,13 @@ void FS_Nonlocal_tools<FPTYPE, Device>::save_vkb(int npw, int ipol)
 template <typename FPTYPE, typename Device>
 void FS_Nonlocal_tools<FPTYPE, Device>::revert_vkb(int npw, int ipol)
 {
-    const int gcar_zero_counts = this->gcar_zero_indexes[ipol * this->wfc_basis_->npwk_max];
-    const int* gcar_zero_ptrs = &this->gcar_zero_indexes[ipol * this->wfc_basis_->npwk_max+1];
-    std::complex<FPTYPE>* vkb_ptr = this->ppcell_vkb;
-    const std::complex<FPTYPE>* vkb_save_ptr = this->vkb_save;
     const std::complex<FPTYPE> coeff = ipol==0?ModuleBase::NEG_IMAG_UNIT:ModuleBase::ONE;
     if(this->device == base_device::CpuDevice)
     {
+        const int gcar_zero_counts = this->gcar_zero_indexes[ipol * this->wfc_basis_->npwk_max];
+        const int* gcar_zero_ptrs = &this->gcar_zero_indexes[ipol * this->wfc_basis_->npwk_max+1];
+        std::complex<FPTYPE>* vkb_ptr = this->ppcell_vkb;
+        const std::complex<FPTYPE>* vkb_save_ptr = this->vkb_save;
         //find the zero indexes to save the vkb values to vkb_save
         for(int ikb = 0;ikb < this->nkb;++ikb)
         {
@@ -650,12 +651,13 @@ void FS_Nonlocal_tools<FPTYPE, Device>::revert_vkb(int npw, int ipol)
     {
 #if __CUDA || __UT_USE_CUDA || __ROCM || __UT_USE_ROCM
         revertVkbValues<FPTYPE>(
-            gcar_zero_ptrs, 
-            vkb_ptr, 
-            vkb_save_ptr, 
+            this->gcar_zero_indexes, 
+            this->ppcell_vkb, 
+            this->vkb_save, 
             nkb, 
             npw, 
-            gcar_zero_counts,
+            ipol,
+            this->wfc_basis_->npwk_max,
             coeff);
 #endif
     }

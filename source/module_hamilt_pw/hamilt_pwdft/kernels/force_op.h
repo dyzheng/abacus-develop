@@ -145,7 +145,8 @@ void revertVkbValues(
     const std::complex<FPTYPE> *vkb_save_ptr, 
     int nkb, 
     int npw, 
-    size_t n_total_gcar_zeros,
+    int ipol,
+    int npwx,
     const std::complex<FPTYPE> coeff);
 
 /**
@@ -158,7 +159,8 @@ void saveVkbValues(
     std::complex<FPTYPE> *vkb_save_ptr, 
     int nkb, 
     int npw, 
-    size_t n_total_gcar_zeros);
+    int ipol,
+    int npwx);
 
 #endif // __CUDA || __UT_USE_CUDA || __ROCM || __UT_USE_ROCM
 }  // namespace hamilt

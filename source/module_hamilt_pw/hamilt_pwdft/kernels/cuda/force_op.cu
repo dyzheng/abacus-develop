@@ -177,23 +177,33 @@ __global__ void saveVkbValues_(
     thrust::complex<FPTYPE> *vkb_save_ptr, 
     int nkb, 
     int npw, 
-    size_t n_total_gcar_zeros)
+    int ipol,
+    int npwx)
 {
     int index = blockIdx.x * blockDim.x + threadIdx.x; // global index
+    int n_total_gcar_zeros = gcar_zero_ptrs[ipol * npwx];
+    const int* gcar_zero_ptr = gcar_zero_ptrs + ipol * npwx + 1; // skip the first element
     int ikb = index / n_total_gcar_zeros;              // index of nkb
     int icount = index % n_total_gcar_zeros;           // index of n_total_gcar_zeros
     
     // check if the index is valid
-    if(ikb < nkb && icount < n_total_gcar_zeros)
+    if(ikb < nkb)
     {
-        int ig = gcar_zero_ptrs[icount]; // get ig from gcar_zero_ptrs
+        int ig = gcar_zero_ptr[icount]; // get ig from gcar_zero_ptrs
         // use the flat index to get the saved position, pay attention to the relationship between ikb and npw,
         vkb_save_ptr[index] = vkb_ptr[ikb * npw + ig];    // save the value
     }
 }
 
 template <typename FPTYPE>
-void saveVkbValues(const int *gcar_zero_ptrs, const std::complex<FPTYPE> *vkb_ptr, std::complex<FPTYPE> *vkb_save_ptr, int nkb, int npw, size_t n_total_gcar_zeros)
+void saveVkbValues(
+    const int *gcar_zero_ptrs, 
+    const std::complex<FPTYPE> *vkb_ptr, 
+    std::complex<FPTYPE> *vkb_save_ptr, 
+    int nkb, 
+    int npw, 
+    int ipol,
+    int npwx)
 {
     saveVkbValues_<FPTYPE><<<nkb*n_total_gcar_zeros , THREADS_PER_BLOCK>>>(
         gcar_zero_ptrs, 
@@ -201,7 +211,8 @@ void saveVkbValues(const int *gcar_zero_ptrs, const std::complex<FPTYPE> *vkb_pt
         reinterpret_cast<thrust::complex<FPTYPE>*>(vkb_save_ptr), 
         nkb, 
         npw, 
-        n_total_gcar_zeros);
+        ipol,
+        npwx);
     cudaCheckOnDebug();
 }
 
@@ -212,24 +223,35 @@ __global__ void revertVkbValues_(
     const thrust::complex<FPTYPE> *vkb_save_ptr, 
     int nkb, 
     int npw, 
-    size_t n_total_gcar_zeros,
+    int ipol,
+    int npwx,
     const thrust::complex<FPTYPE> coeff)
 {
     int index = blockIdx.x * blockDim.x + threadIdx.x; // global index
+    int n_total_gcar_zeros = gcar_zero_ptrs[ipol * npwx];
+    const int* gcar_zero_ptr = gcar_zero_ptrs + ipol * npwx + 1; // skip the first element
     int ikb = index / n_total_gcar_zeros;              // index of nkb
     int icount = index % n_total_gcar_zeros;           // index of n_total_gcar_zeros
     
     // check if the index is valid
     if(ikb < nkb && icount < n_total_gcar_zeros)
     {
-        int ig = gcar_zero_ptrs[icount]; // get ig from gcar_zero_ptrs
+        int ig = gcar_zero_ptr[icount]; // get ig from gcar_zero_ptrs
         // use the flat index to get the saved position, pay attention to the relationship between ikb and npw,
         vkb_ptr[ikb * npw + ig] = vkb_save_ptr[index] * coeff;    // revert the values
     }
 }
 
 template <typename FPTYPE>
-void revertVkbValues(const int *gcar_zero_ptrs, std::complex<FPTYPE> *vkb_ptr, const std::complex<FPTYPE> *vkb_save_ptr, int nkb, int npw, size_t n_total_gcar_zeros, const std::complex<FPTYPE> coeff)
+void revertVkbValues(
+    const int *gcar_zero_ptrs, 
+    std::complex<FPTYPE> *vkb_ptr, 
+    const std::complex<FPTYPE> *vkb_save_ptr, 
+    int nkb, 
+    int npw, 
+    int ipol,
+    int npwx, 
+    const std::complex<FPTYPE> coeff)
 {
     revertVkbValues_<FPTYPE><<<nkb*n_total_gcar_zeros , THREADS_PER_BLOCK>>>(
         gcar_zero_ptrs, 
@@ -237,7 +259,8 @@ void revertVkbValues(const int *gcar_zero_ptrs, std::complex<FPTYPE> *vkb_ptr, c
         reinterpret_cast<const thrust::complex<FPTYPE>*>(vkb_save_ptr), 
         nkb, 
         npw, 
-        n_total_gcar_zeros,
+        ipol,
+        npwx,
         static_cast<const thrust::complex<FPTYPE>>(coeff));
     cudaCheckOnDebug();
 }
