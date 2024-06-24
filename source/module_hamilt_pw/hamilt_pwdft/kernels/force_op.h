@@ -1,13 +1,16 @@
-#ifndef SRC_PW_FORCE_MULTI_DEVICE_H
-#define SRC_PW_FORCE_MULTI_DEVICE_H
+#ifndef W_ABACUS_DEVELOP_ABACUS_DEVELOP_SOURCE_MODULE_HAMILT_PW_HAMILT_PWDFT_KERNELS_FORCE_OP_H
+#define W_ABACUS_DEVELOP_ABACUS_DEVELOP_SOURCE_MODULE_HAMILT_PW_HAMILT_PWDFT_KERNELS_FORCE_OP_H
 
 #include "module_psi/psi.h"
+
 #include <complex>
 
-namespace hamilt {
+namespace hamilt
+{
 
 template <typename FPTYPE, typename Device>
-struct cal_vkb1_nl_op {
+struct cal_vkb1_nl_op
+{
     /// @brief The prestep to calculate the final forces
     ///
     /// Input Parameters
@@ -23,21 +26,21 @@ struct cal_vkb1_nl_op {
     ///
     /// Output Parameters
     /// @param vkb1 - output vkb matrix
-    void operator() (
-        const Device* ctx,
-        const int& nkb,
-        const int& npwx,
-        const int& vkb_nc,
-        const int& nbasis,
-        const int& ipol,
-        const std::complex<FPTYPE>& NEG_IMAG_UNIT,
-        const std::complex<FPTYPE>* vkb,
-        const FPTYPE* gcar,
-        std::complex<FPTYPE>* vkb1);
+    void operator()(const Device* ctx,
+                    const int& nkb,
+                    const int& npwx,
+                    const int& vkb_nc,
+                    const int& nbasis,
+                    const int& ipol,
+                    const std::complex<FPTYPE>& NEG_IMAG_UNIT,
+                    const std::complex<FPTYPE>* vkb,
+                    const FPTYPE* gcar,
+                    std::complex<FPTYPE>* vkb1);
 };
 
 template <typename FPTYPE, typename Device>
-struct cal_force_nl_op {
+struct cal_force_nl_op
+{
     /// @brief Calculate the final forces for multi-device
     ///
     /// Input Parameters
@@ -163,5 +166,5 @@ void saveVkbValues(
     int npwx);
 
 #endif // __CUDA || __UT_USE_CUDA || __ROCM || __UT_USE_ROCM
-}  // namespace hamilt
-#endif //SRC_PW_FORCE_MULTI_DEVICE_H
+} // namespace hamilt
+#endif // W_ABACUS_DEVELOP_ABACUS_DEVELOP_SOURCE_MODULE_HAMILT_PW_HAMILT_PWDFT_KERNELS_FORCE_OP_H

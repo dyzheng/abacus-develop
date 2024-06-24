@@ -663,7 +663,7 @@ void ESolver_KS_PW<T, Device>::allocate_psi_init()
 //! Although ESolver_KS_PW supports template, but in this function it has no relationship with
 //! heterogeneous calculation, so all templates function are specialized to double
 template <typename T, typename Device>
-void ESolver_KS_PW<T, Device>::initialize_psi(void)
+void ESolver_KS_PW<T, Device>::initialize_psi()
 {
     ModuleBase::timer::tick("ESolver_KS_PW", "initialize_psi");
     if (GlobalV::psi_initializer)
@@ -1155,7 +1155,7 @@ void ESolver_KS_PW<T, Device>::cal_stress(ModuleBase::matrix& stress)
 }
 
 template <typename T, typename Device>
-void ESolver_KS_PW<T, Device>::after_all_runners(void)
+void ESolver_KS_PW<T, Device>::after_all_runners()
 {
     GlobalV::ofs_running << "\n\n --------------------------------------------" << std::endl;
     GlobalV::ofs_running << std::setprecision(16);
@@ -1284,7 +1284,7 @@ void ESolver_KS_PW<T, Device>::hamilt2estates(const double ethr)
 }
 
 template <typename T, typename Device>
-void ESolver_KS_PW<T, Device>::nscf(void)
+void ESolver_KS_PW<T, Device>::nscf()
 {
     ModuleBase::TITLE("ESolver_KS_PW", "nscf");
     ModuleBase::timer::tick("ESolver_KS_PW", "nscf");
