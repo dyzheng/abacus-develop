@@ -32,7 +32,7 @@ void Forces<FPTYPE, Device>::cal_force_nl(ModuleBase::matrix& forcenl,
 
     hamilt::FS_Nonlocal_tools<FPTYPE, Device> nl_tools(nlpp_in, &ucell_in, psi_in, p_kv, wfc_basis, p_sf, wg, ekb);
 
-    int nks = wfc_basis->nks;
+    const int nks = wfc_basis->nks;
     for (int ik = 0; ik < nks; ik++) // loop k points
     {
         // skip zero weights to speed up

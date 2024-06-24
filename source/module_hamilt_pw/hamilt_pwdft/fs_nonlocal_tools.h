@@ -1,5 +1,5 @@
-#ifndef W_ABACUS_DEVELOP_ABACUS_DEVELOP_SOURCE_MODULE_HAMILT_PW_HAMILT_PWDFT_FS_NONLOCAL_TOOLS_H
-#define W_ABACUS_DEVELOP_ABACUS_DEVELOP_SOURCE_MODULE_HAMILT_PW_HAMILT_PWDFT_FS_NONLOCAL_TOOLS_H
+#ifndef HAMILTPW_FS_NONLOCAL_TOOLS_H
+#define HAMILTPW_FS_NONLOCAL_TOOLS_H
 
 #include "module_base/module_device/device.h"
 #include "module_basis/module_pw/pw_basis_k.h"
@@ -19,7 +19,7 @@ template <typename FPTYPE, typename Device>
 class FS_Nonlocal_tools
 {
   public:
-    FS_Nonlocal_tools(pseudopot_cell_vnl* nlpp_in,
+    FS_Nonlocal_tools(const pseudopot_cell_vnl* nlpp_in,
                       const UnitCell* ucell_in,
                       const psi::Psi<std::complex<FPTYPE>, Device>* psi_in,
                       const K_Vectors* kv_in,
@@ -37,86 +37,6 @@ class FS_Nonlocal_tools
   private:
     void allocate_memory(const ModuleBase::matrix& wg, const ModuleBase::matrix& ekb);
     void delete_memory();
-
-    // functions
-    /// calculate the G+K vectors
-    std::vector<FPTYPE> cal_gk(int ik, const ModulePW::PW_Basis_K* wfc_basis);
-    /// calculate radial part of the non-local pseudopotential
-    std::vector<FPTYPE> cal_vq(int it, const FPTYPE* gk_in, int npw);
-    /// calculate the derivate of the radial part of the non-local pseudopotential
-    std::vector<FPTYPE> cal_vq_deri(int it, const FPTYPE* gk_in, int npw);
-    /// calculate the sperical bessel function for projections
-    void cal_ylm(int lmax, int npw, const FPTYPE* gk_in, FPTYPE* ylm);
-    /// calculate the derivate of the sperical bessel function for projections
-    void cal_ylm_deri(int lmax, int npw, const FPTYPE* gk_in, FPTYPE* ylm_deri);
-    /// calculate the (-i)^l factors
-    std::vector<complex<FPTYPE>> cal_pref(int it);
-    /// calculate the vkb matrix for this atom
-    /// vkb = sum_lm (-i)^l * ylm(g^) * vq(g^) * sk(g^)
-    void cal_vkb(int it,
-                 int ia,
-                 int npw,
-                 const FPTYPE* vq_in,
-                 const FPTYPE* ylm_in,
-                 const complex<FPTYPE>* sk_in,
-                 const complex<FPTYPE>* pref_in,
-                 complex<FPTYPE>* vkb_out);
-    /// calculate the dvkb matrix for this atom
-    void cal_vkb_deri(int it,
-                      int ia,
-                      int npw,
-                      int ipol,
-                      int jpol,
-                      const FPTYPE* vq_in,
-                      const FPTYPE* vq_deri_in,
-                      const FPTYPE* ylm_in,
-                      const FPTYPE* ylm_deri_in,
-                      const complex<FPTYPE>* sk_in,
-                      const complex<FPTYPE>* pref_in,
-                      const FPTYPE* gk_in,
-                      complex<FPTYPE>* vkb_out);
-
-    /// calculate the ptr used in vkb_op
-    void prepare_vkb_ptr(int nbeta,
-                         double* nhtol,
-                         int nhtol_nc,
-                         int npw,
-                         int it,
-                         std::complex<FPTYPE>* vkb_out,
-                         std::complex<FPTYPE>** vkb_ptrs,
-                         FPTYPE* ylm_in,
-                         FPTYPE** ylm_ptrs,
-                         FPTYPE* vq_in,
-                         FPTYPE** vq_ptrs);
-
-    /// calculate the ptr used in vkb_deri_op
-    void prepare_vkb_deri_ptr(int nbeta,
-                              double* nhtol,
-                              int nhtol_nc,
-                              int npw,
-                              int it,
-                              int ipol,
-                              int jpol,
-                              std::complex<FPTYPE>* vkb_out,
-                              std::complex<FPTYPE>** vkb_ptrs,
-                              FPTYPE* ylm_in,
-                              FPTYPE** ylm_ptrs,
-                              FPTYPE* ylm_deri_in,
-                              FPTYPE** ylm_deri_ptr1s,
-                              FPTYPE** ylm_deri_ptr2s,
-                              FPTYPE* vq_in,
-                              FPTYPE** vq_ptrs,
-                              FPTYPE* vq_deri_in,
-                              FPTYPE** vq_deri_ptrs);
-
-  public:
-    static void dylmr2(const int nylm, const int ngy, const FPTYPE* gk, FPTYPE* dylm, const int ipol);
-    /// polynomial interpolation tool for calculate derivate of vq
-    static FPTYPE Polynomial_Interpolation_nl(const ModuleBase::realArray& table,
-                                              const int& dim1,
-                                              const int& dim2,
-                                              const FPTYPE& table_interval,
-                                              const FPTYPE& x);
 
   private:
     const Structure_Factor* sf_;

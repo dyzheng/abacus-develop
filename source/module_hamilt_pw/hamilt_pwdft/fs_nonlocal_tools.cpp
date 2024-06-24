@@ -5,12 +5,13 @@
 #include "module_base/memory.h"
 #include "module_base/tool_title.h"
 #include "module_hamilt_pw/hamilt_pwdft/kernels/force_op.h"
+#include "nonlocal_maths.hpp"
 
 namespace hamilt
 {
 
 template <typename FPTYPE, typename Device>
-FS_Nonlocal_tools<FPTYPE, Device>::FS_Nonlocal_tools(pseudopot_cell_vnl* nlpp_in,
+FS_Nonlocal_tools<FPTYPE, Device>::FS_Nonlocal_tools(const pseudopot_cell_vnl* nlpp_in,
                                                      const UnitCell* ucell_in,
                                                      const psi::Psi<std::complex<FPTYPE>, Device>* psi_in,
                                                      const K_Vectors* kv_in,
@@ -187,20 +188,24 @@ void FS_Nonlocal_tools<FPTYPE, Device>::delete_memory()
 template <typename FPTYPE, typename Device>
 void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
 {
+    ModuleBase::TITLE("FS_Nonlocal_tools","cal_becp");
     if (this->becp == nullptr)
     {
         resmem_complex_op()(this->ctx, becp, this->nbands * this->nkb);
     }
+
+    // prepare math tools
+    Nonlocal_maths<FPTYPE, Device> maths(this->nlpp_, this->ucell_);
 
     const std::complex<FPTYPE>* ppsi = &(this->psi_[0](ik, 0, 0));
     const int npw = this->wfc_basis_->npwk[ik];
 
     std::complex<FPTYPE>* vkb_ptr = this->ppcell_vkb;
 
-    std::vector<FPTYPE> g_plus_k = cal_gk(ik, this->wfc_basis_);
-    int lmax_ = this->nlpp_->lmaxkb;
+    std::vector<FPTYPE> g_plus_k = maths.cal_gk(ik, this->wfc_basis_);
+    const int lmax_ = this->nlpp_->lmaxkb;
     // prepare ylm，size: (lmax+1)^2 * this->max_npw
-    cal_ylm(lmax_, npw, g_plus_k.data(), hd_ylm);
+    maths.cal_ylm(lmax_, npw, g_plus_k.data(), hd_ylm);
     for (int it = 0; it < this->ucell_->ntype; it++) // loop all elements
     {
         int lenth_vq = this->ucell_->atoms[it].ncpp.nbeta * npw;
@@ -240,8 +245,8 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
                          hd_vq_deri);
 
         // prepare（-i）^l, size: nh
-        std::vector<std::complex<double>> pref = cal_pref(it);
-        int nh = pref.size();
+        const std::vector<std::complex<double>> pref = maths.cal_pref(it);
+        const int nh = pref.size();
 
         for (int ia = 0; ia < h_atom_na[it]; ia++)
         {
@@ -255,7 +260,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
                 syncmem_complex_h2d_op()(this->ctx, this->cpu_ctx, d_sk, sk, npw);
                 syncmem_complex_h2d_op()(this->ctx, this->cpu_ctx, d_pref_in, pref.data(), nh);
 
-                prepare_vkb_ptr(this->ucell_->atoms[it].ncpp.nbeta,
+                maths.prepare_vkb_ptr(this->ucell_->atoms[it].ncpp.nbeta,
                                 this->nlpp_->nhtol.c,
                                 this->nlpp_->nhtol.nc,
                                 npw,
@@ -278,7 +283,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
             }
             else
             {
-                prepare_vkb_ptr(this->ucell_->atoms[it].ncpp.nbeta,
+                maths.prepare_vkb_ptr(this->ucell_->atoms[it].ncpp.nbeta,
                                 this->nlpp_->nhtol.c,
                                 this->nlpp_->nhtol.nc,
                                 npw,
@@ -335,10 +340,14 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
 template <typename FPTYPE, typename Device>
 void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, int jpol, FPTYPE* stress)
 {
+    ModuleBase::TITLE("FS_Nonlocal_tools","cal_dbecp_s");
     if (this->dbecp == nullptr)
     {
         resmem_complex_op()(this->ctx, dbecp, this->nbands * this->nkb);
     }
+
+    // prepare math tools
+    Nonlocal_maths<FPTYPE, Device> maths(this->nlpp_, this->ucell_);
 
     const std::complex<FPTYPE>* ppsi = &(this->psi_[0](ik, 0, 0));
     const int npw = this->wfc_basis_->npwk[ik];
@@ -346,12 +355,12 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, i
 
     if (this->pre_ik_s != ik)
     { // k point has changed, we need to recalculate the g_plus_k
-        this->g_plus_k = cal_gk(ik, this->wfc_basis_);
+        this->g_plus_k = maths.cal_gk(ik, this->wfc_basis_);
 
-        int lmax_ = this->nlpp_->lmaxkb;
+        const int lmax_ = this->nlpp_->lmaxkb;
         // prepare ylm，size: (lmax+1)^2 * this->max_npw
-        cal_ylm(lmax_, npw, g_plus_k.data(), hd_ylm);
-        cal_ylm_deri(lmax_, npw, g_plus_k.data(), hd_ylm_deri);
+        maths.cal_ylm(lmax_, npw, g_plus_k.data(), hd_ylm);
+        maths.cal_ylm_deri(lmax_, npw, g_plus_k.data(), hd_ylm_deri);
         this->pre_ik_s = ik;
     }
     for (int it = 0; it < this->ucell_->ntype; it++) // loop all elements
@@ -392,7 +401,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, i
                          this->ucell_->atoms[it].ncpp.nbeta,
                          hd_vq_deri);
         // prepare（-i）^l, size: nh
-        std::vector<std::complex<double>> pref = cal_pref(it);
+        std::vector<std::complex<double>> pref = maths.cal_pref(it);
         int nh = pref.size();
         for (int ia = 0; ia < h_atom_na[it]; ia++)
         {
@@ -406,7 +415,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, i
                 syncmem_complex_h2d_op()(this->ctx, this->cpu_ctx, d_sk, sk, npw);
                 syncmem_complex_h2d_op()(this->ctx, this->cpu_ctx, d_pref_in, pref.data(), nh);
 
-                prepare_vkb_deri_ptr(this->ucell_->atoms[it].ncpp.nbeta,
+                maths.prepare_vkb_deri_ptr(this->ucell_->atoms[it].ncpp.nbeta,
                                      this->nlpp_->nhtol.c,
                                      this->nlpp_->nhtol.nc,
                                      npw,
@@ -450,7 +459,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, i
             else
             {
 
-                prepare_vkb_deri_ptr(this->ucell_->atoms[it].ncpp.nbeta,
+                maths.prepare_vkb_deri_ptr(this->ucell_->atoms[it].ncpp.nbeta,
                                      this->nlpp_->nhtol.c,
                                      this->nlpp_->nhtol.nc,
                                      npw,
@@ -535,10 +544,12 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, i
 template <typename FPTYPE, typename Device>
 void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_f(int ik, int npm, int ipol)
 {
+    ModuleBase::TITLE("FS_Nonlocal_tools","cal_dbecp_s");
     if (this->dbecp == nullptr)
     {
         resmem_complex_op()(this->ctx, dbecp, 3 * this->nbands * this->nkb);
     }
+
     std::complex<FPTYPE>* dbecp_ptr = this->dbecp + ipol * this->nbands * this->nkb;
     const std::complex<FPTYPE>* vkb_ptr = this->ppcell_vkb;
     std::complex<FPTYPE>* vkb_deri_ptr = this->ppcell_vkb;
@@ -749,447 +760,6 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_force(int ik, int npm, FPTYPE* force
                                       becp,
                                       dbecp,
                                       force);
-}
-
-// cal_gk
-template <typename FPTYPE, typename Device>
-std::vector<FPTYPE> FS_Nonlocal_tools<FPTYPE, Device>::cal_gk(int ik, const ModulePW::PW_Basis_K* wfc_basis)
-{
-    int npw = wfc_basis->npwk[ik];
-    std::vector<FPTYPE> gk(npw * 5);
-    ModuleBase::Memory::record("stress_nl::gk", 5 * npw * sizeof(FPTYPE));
-    ModuleBase::Vector3<FPTYPE> tmp;
-    for (int ig = 0; ig < npw; ++ig)
-    {
-        tmp = wfc_basis->getgpluskcar(ik, ig);
-        gk[ig * 3] = tmp.x;
-        gk[ig * 3 + 1] = tmp.y;
-        gk[ig * 3 + 2] = tmp.z;
-        FPTYPE norm = sqrt(tmp.norm2());
-        gk[3 * npw + ig] = norm * this->ucell_->tpiba;
-        gk[4 * npw + ig] = norm < 1e-8 ? 0.0 : 1.0 / norm * this->ucell_->tpiba;
-    }
-    return gk;
-}
-
-// cal_vq
-template <typename FPTYPE, typename Device>
-std::vector<FPTYPE> FS_Nonlocal_tools<FPTYPE, Device>::cal_vq(int it, const FPTYPE* gk, int npw)
-{
-    // calculate beta in G-space using an interpolation table
-    const int nbeta = this->ucell_->atoms[it].ncpp.nbeta;
-
-    std::vector<FPTYPE> vq(nbeta * npw);
-    ModuleBase::Memory::record("stress_nl::vq", nbeta * npw * sizeof(FPTYPE));
-
-    for (int nb = 0; nb < nbeta; nb++)
-    {
-        FPTYPE* vq_ptr = &vq[nb * npw];
-        const FPTYPE* gnorm = &gk[3 * npw];
-        for (int ig = 0; ig < npw; ig++)
-        {
-            vq_ptr[ig] = ModuleBase::PolyInt::Polynomial_Interpolation(this->nlpp_->tab,
-                                                                       it,
-                                                                       nb,
-                                                                       GlobalV::NQX,
-                                                                       GlobalV::DQ,
-                                                                       gnorm[ig]);
-        }
-    }
-    return vq;
-}
-
-// cal_vq_deri
-template <typename FPTYPE, typename Device>
-std::vector<FPTYPE> FS_Nonlocal_tools<FPTYPE, Device>::cal_vq_deri(int it, const FPTYPE* gk, int npw)
-{
-    // calculate beta in G-space using an interpolation table
-    const int nbeta = this->ucell_->atoms[it].ncpp.nbeta;
-
-    std::vector<FPTYPE> vq(nbeta * npw);
-    ModuleBase::Memory::record("stress_nl::vq_deri", nbeta * npw * sizeof(FPTYPE));
-
-    for (int nb = 0; nb < nbeta; nb++)
-    {
-        const FPTYPE* gnorm = &gk[3 * npw];
-        FPTYPE* vq_ptr = &vq[nb * npw];
-        for (int ig = 0; ig < npw; ig++)
-        {
-            vq_ptr[ig] = this->Polynomial_Interpolation_nl(this->nlpp_->tab, it, nb, GlobalV::DQ, gnorm[ig]);
-        }
-    }
-    return vq;
-}
-
-// cal_ylm
-template <typename FPTYPE, typename Device>
-void FS_Nonlocal_tools<FPTYPE, Device>::cal_ylm(int lmax, int npw, const FPTYPE* gk_in, FPTYPE* ylm)
-{
-
-    int x1 = (lmax + 1) * (lmax + 1);
-    ModuleBase::Memory::record("stress_nl::ylm", x1 * npw * sizeof(FPTYPE));
-
-    if (this->device == base_device::GpuDevice)
-    {
-        std::vector<FPTYPE> ylm_cpu(x1 * npw);
-        ModuleBase::YlmReal::Ylm_Real(cpu_ctx, x1, npw, gk_in, ylm_cpu.data());
-        syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, ylm, ylm_cpu.data(), ylm_cpu.size());
-    }
-    else
-    {
-        ModuleBase::YlmReal::Ylm_Real(cpu_ctx, x1, npw, gk_in, ylm);
-    }
-
-    return;
-}
-// cal_ylm_deri
-template <typename FPTYPE, typename Device>
-void FS_Nonlocal_tools<FPTYPE, Device>::cal_ylm_deri(int lmax, int npw, const FPTYPE* gk_in, FPTYPE* ylm_deri)
-{
-    int x1 = (lmax + 1) * (lmax + 1);
-    ModuleBase::Memory::record("stress_nl::dylm", 3 * x1 * npw * sizeof(FPTYPE));
-
-    if (this->device == base_device::GpuDevice)
-    {
-        std::vector<FPTYPE> dylm(3 * x1 * npw);
-        for (int ipol = 0; ipol < 3; ipol++)
-        {
-            FS_Nonlocal_tools<FPTYPE, Device>::dylmr2(x1, npw, gk_in, &dylm[ipol * x1 * npw], ipol);
-        }
-        syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, ylm_deri, dylm.data(), dylm.size());
-    }
-    else
-    {
-        for (int ipol = 0; ipol < 3; ipol++)
-        {
-            FS_Nonlocal_tools<FPTYPE, Device>::dylmr2(x1, npw, gk_in, &ylm_deri[ipol * x1 * npw], ipol);
-        }
-    }
-
-    return;
-}
-// cal_pref
-template <typename FPTYPE, typename Device>
-std::vector<std::complex<FPTYPE>> FS_Nonlocal_tools<FPTYPE, Device>::cal_pref(int it)
-{
-    const int nh = this->ucell_->atoms[it].ncpp.nh;
-    std::vector<std::complex<FPTYPE>> pref(nh);
-    for (int ih = 0; ih < nh; ih++)
-    {
-        pref[ih] = std::pow(std::complex<FPTYPE>(0.0, -1.0), this->nlpp_->nhtol(it, ih));
-    }
-    return pref;
-}
-
-// cal_vkb
-// cpu version first, gpu version later
-template <typename FPTYPE, typename Device>
-void FS_Nonlocal_tools<FPTYPE, Device>::cal_vkb(int it,
-                                                int ia,
-                                                int npw,
-                                                const FPTYPE* vq_in,
-                                                const FPTYPE* ylm_in,
-                                                const std::complex<FPTYPE>* sk_in,
-                                                const std::complex<FPTYPE>* pref_in,
-                                                std::complex<FPTYPE>* vkb_out)
-{
-    int ih = 0;
-    // loop over all beta functions
-    for (int nb = 0; nb < this->ucell_->atoms[it].ncpp.nbeta; nb++)
-    {
-        int l = this->nlpp_->nhtol(it, ih);
-        // loop over all m angular momentum
-        for (int m = 0; m < 2 * l + 1; m++)
-        {
-            int lm = l * l + m;
-            std::complex<FPTYPE>* vkb_ptr = &vkb_out[ih * npw];
-            const FPTYPE* ylm_ptr = &ylm_in[lm * npw];
-            const FPTYPE* vq_ptr = &vq_in[nb * npw];
-            // loop over all G-vectors
-            for (int ig = 0; ig < npw; ig++)
-            {
-                vkb_ptr[ig] = ylm_ptr[ig] * vq_ptr[ig] * sk_in[ig] * pref_in[ih];
-            }
-            ih++;
-        }
-    }
-}
-
-// cal_vkb
-// cpu version first, gpu version later
-template <typename FPTYPE, typename Device>
-void FS_Nonlocal_tools<FPTYPE, Device>::cal_vkb_deri(int it,
-                                                     int ia,
-                                                     int npw,
-                                                     int ipol,
-                                                     int jpol,
-                                                     const FPTYPE* vq_in,
-                                                     const FPTYPE* vq_deri_in,
-                                                     const FPTYPE* ylm_in,
-                                                     const FPTYPE* ylm_deri_in,
-                                                     const std::complex<FPTYPE>* sk_in,
-                                                     const std::complex<FPTYPE>* pref_in,
-                                                     const FPTYPE* gk_in,
-                                                     std::complex<FPTYPE>* vkb_out)
-{
-    int x1 = (this->nlpp_->lmaxkb + 1) * (this->nlpp_->lmaxkb + 1);
-    int ih = 0;
-    // loop over all beta functions
-    for (int nb = 0; nb < this->ucell_->atoms[it].ncpp.nbeta; nb++)
-    {
-        int l = this->nlpp_->nhtol(it, ih);
-        // loop over all m angular momentum
-        for (int m = 0; m < 2 * l + 1; m++)
-        {
-            int lm = l * l + m;
-            std::complex<FPTYPE>* vkb_ptr = &vkb_out[ih * npw];
-            const FPTYPE* ylm_ptr = &ylm_in[lm * npw];
-            const FPTYPE* vq_ptr = &vq_in[nb * npw];
-            // set vkb to zero
-            for (int ig = 0; ig < npw; ig++)
-            {
-                vkb_ptr[ig] = std::complex<FPTYPE>(0.0, 0.0);
-            }
-            // first term: ylm * vq * sk * pref
-            // loop over all G-vectors
-            if (ipol == jpol)
-            {
-                for (int ig = 0; ig < npw; ig++)
-                {
-                    vkb_ptr[ig] -= ylm_ptr[ig] * vq_ptr[ig] * sk_in[ig] * pref_in[ih];
-                }
-            }
-            // second term: ylm_deri * vq_deri * sk * pref
-            //  loop over all G-vectors
-            const FPTYPE* ylm_deri_ptr1 = &ylm_deri_in[(ipol * x1 + lm) * npw];
-            const FPTYPE* ylm_deri_ptr2 = &ylm_deri_in[(jpol * x1 + lm) * npw];
-            const FPTYPE* vq_deri_ptr = &vq_deri_in[nb * npw];
-            const FPTYPE* gkn = &gk_in[4 * npw];
-            for (int ig = 0; ig < npw; ig++)
-            {
-                vkb_ptr[ig] -= (gk_in[ig * 3 + ipol] * ylm_deri_ptr2[ig] + gk_in[ig * 3 + jpol] * ylm_deri_ptr1[ig])
-                               * vq_ptr[ig] * sk_in[ig] * pref_in[ih];
-            }
-            // third term: ylm * vq_deri * sk * pref
-            //  loop over all G-vectors
-            for (int ig = 0; ig < npw; ig++)
-            {
-                vkb_ptr[ig] -= 2.0 * ylm_ptr[ig] * vq_deri_ptr[ig] * sk_in[ig] * pref_in[ih] * gk_in[ig * 3 + ipol]
-                               * gk_in[ig * 3 + jpol] * gkn[ig];
-            }
-            ih++;
-        }
-    }
-}
-
-template <typename FPTYPE, typename Device>
-void FS_Nonlocal_tools<FPTYPE, Device>::prepare_vkb_ptr(int nbeta,
-                                                        double* nhtol,
-                                                        int nhtol_nc,
-                                                        int npw,
-                                                        int it,
-                                                        std::complex<FPTYPE>* vkb_out,
-                                                        std::complex<FPTYPE>** vkb_ptrs,
-                                                        FPTYPE* ylm_in,
-                                                        FPTYPE** ylm_ptrs,
-                                                        FPTYPE* vq_in,
-                                                        FPTYPE** vq_ptrs)
-{
-    // std::complex<FPTYPE>** vkb_ptrs[nh];
-    // const FPTYPE** ylm_ptrs[nh];
-    // const FPTYPE** vq_ptrs[nh];
-    int ih = 0;
-    for (int nb = 0; nb < nbeta; nb++)
-    {
-        int l = nhtol[it * nhtol_nc + ih];
-        for (int m = 0; m < 2 * l + 1; m++)
-        {
-            int lm = l * l + m;
-            vkb_ptrs[ih] = &vkb_out[ih * npw];
-            ylm_ptrs[ih] = &ylm_in[lm * npw];
-            vq_ptrs[ih] = &vq_in[nb * npw];
-            ih++;
-        }
-    }
-}
-
-template <typename FPTYPE, typename Device>
-void FS_Nonlocal_tools<FPTYPE, Device>::prepare_vkb_deri_ptr(int nbeta,
-                                                             double* nhtol,
-                                                             int nhtol_nc,
-                                                             int npw,
-                                                             int it,
-                                                             int ipol,
-                                                             int jpol,
-                                                             std::complex<FPTYPE>* vkb_out,
-                                                             std::complex<FPTYPE>** vkb_ptrs,
-                                                             FPTYPE* ylm_in,
-                                                             FPTYPE** ylm_ptrs,
-                                                             FPTYPE* ylm_deri_in,
-                                                             FPTYPE** ylm_deri_ptr1s,
-                                                             FPTYPE** ylm_deri_ptr2s,
-                                                             FPTYPE* vq_in,
-                                                             FPTYPE** vq_ptrs,
-                                                             FPTYPE* vq_deri_in,
-                                                             FPTYPE** vq_deri_ptrs
-
-)
-{
-    int ih = 0;
-    int x1 = (this->nlpp_->lmaxkb + 1) * (this->nlpp_->lmaxkb + 1);
-    for (int nb = 0; nb < nbeta; nb++)
-    {
-        int l = nhtol[it * nhtol_nc + ih];
-        for (int m = 0; m < 2 * l + 1; m++)
-        {
-            int lm = l * l + m;
-            vkb_ptrs[ih] = &vkb_out[ih * npw];
-            ylm_ptrs[ih] = &ylm_in[lm * npw];
-            vq_ptrs[ih] = &vq_in[nb * npw];
-
-            ylm_deri_ptr1s[ih] = &ylm_deri_in[(ipol * x1 + lm) * npw];
-            ylm_deri_ptr2s[ih] = &ylm_deri_in[(jpol * x1 + lm) * npw];
-            vq_deri_ptrs[ih] = &vq_deri_in[nb * npw];
-
-            ih++;
-        }
-    }
-}
-
-template <typename FPTYPE, typename Device>
-void FS_Nonlocal_tools<FPTYPE, Device>::dylmr2(const int nylm,
-                                               const int ngy,
-                                               const FPTYPE* gk,
-                                               FPTYPE* dylm,
-                                               const int ipol)
-{
-    //-----------------------------------------------------------------------
-    //
-    //     compute \partial Y_lm(G) \over \partial (G)_ipol
-    //     using simple numerical derivation (SdG)
-    //     The spherical harmonics are calculated in ylmr2
-    //
-    // int nylm, ngy, ipol;
-    // number of spherical harmonics
-    // the number of g vectors to compute
-    // desired polarization
-    // FPTYPE g (3, ngy), gg (ngy), dylm (ngy, nylm)
-    // the coordinates of g vectors
-    // the moduli of g vectors
-    // the spherical harmonics derivatives
-    //
-    const FPTYPE delta = 1e-6;
-    const FPTYPE small = 1e-15;
-
-    ModuleBase::matrix ylmaux;
-    // dg is the finite increment for numerical derivation:
-    // dg = delta |G| = delta * sqrt(gg)
-    // dgi= 1 /(delta * sqrt(gg))
-    // gx = g +/- dg
-
-    std::vector<FPTYPE> gx(ngy * 3);
-
-    std::vector<FPTYPE> dg(ngy);
-    std::vector<FPTYPE> dgi(ngy);
-
-    ylmaux.create(nylm, ngy);
-
-    ModuleBase::GlobalFunc::ZEROS(dylm, nylm * ngy);
-    ylmaux.zero_out();
-
-#ifdef _OPENMP
-#pragma omp parallel for
-#endif
-    for (int ig = 0; ig < 3 * ngy; ig++)
-    {
-        gx[ig] = gk[ig];
-    }
-    //$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(ig)
-#ifdef _OPENMP
-#pragma omp parallel for
-#endif
-    for (int ig = 0; ig < ngy; ig++)
-    {
-        const int igx = ig * 3, igy = ig * 3 + 1, igz = ig * 3 + 2;
-        FPTYPE norm2 = gx[igx] * gx[igx] + gx[igy] * gx[igy] + gx[igz] * gx[igz];
-        dg[ig] = delta * sqrt(norm2);
-        if (dg[ig] > small)
-        {
-            dgi[ig] = 1.0 / dg[ig];
-        }
-        else
-        {
-            dgi[ig] = 0.0;
-        }
-    }
-    //$OMP END PARALLEL DO
-
-    //$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(ig)
-#ifdef _OPENMP
-#pragma omp parallel for
-#endif
-    for (int ig = 0; ig < ngy; ig++)
-    {
-        const int index = ig * 3 + ipol;
-        gx[index] = gk[index] + dg[ig];
-    }
-    //$OMP END PARALLEL DO
-
-    base_device::DEVICE_CPU* cpu = {};
-    ModuleBase::YlmReal::Ylm_Real(cpu, nylm, ngy, gx.data(), dylm);
-    //$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(ig)
-#ifdef _OPENMP
-#pragma omp parallel for
-#endif
-    for (int ig = 0; ig < ngy; ig++)
-    {
-        const int index = ig * 3 + ipol;
-        gx[index] = gk[index] - dg[ig];
-    }
-    //$OMP END PARALLEL DO
-
-    ModuleBase::YlmReal::Ylm_Real(cpu, nylm, ngy, gx.data(), ylmaux.c);
-
-    //  zaxpy ( - 1.0, ylmaux, 1, dylm, 1);
-#ifdef _OPENMP
-#pragma omp parallel for collapse(2)
-#endif
-    for (int lm = 0; lm < nylm; lm++)
-    {
-        for (int ig = 0; ig < ngy; ig++)
-        {
-            dylm[lm * ngy + ig] -= ylmaux(lm, ig);
-            dylm[lm * ngy + ig] *= 0.5 * dgi[ig];
-        }
-    }
-
-    return;
-}
-
-template <typename FPTYPE, typename Device>
-FPTYPE FS_Nonlocal_tools<FPTYPE, Device>::Polynomial_Interpolation_nl(const ModuleBase::realArray& table,
-                                                                      const int& dim1,
-                                                                      const int& dim2,
-                                                                      const FPTYPE& table_interval,
-                                                                      const FPTYPE& x // input value
-)
-{
-
-    assert(table_interval > 0.0);
-    const FPTYPE position = x / table_interval;
-    const int iq = static_cast<int>(position);
-
-    const FPTYPE x0 = position - static_cast<FPTYPE>(iq);
-    const FPTYPE x1 = 1.0 - x0;
-    const FPTYPE x2 = 2.0 - x0;
-    const FPTYPE x3 = 3.0 - x0;
-    const FPTYPE y = (table(dim1, dim2, iq) * (-x2 * x3 - x1 * x3 - x1 * x2) / 6.0
-                      + table(dim1, dim2, iq + 1) * (+x2 * x3 - x0 * x3 - x0 * x2) / 2.0
-                      - table(dim1, dim2, iq + 2) * (+x1 * x3 - x0 * x3 - x0 * x1) / 2.0
-                      + table(dim1, dim2, iq + 3) * (+x1 * x2 - x0 * x2 - x0 * x1) / 6.0)
-                     / table_interval;
-
-    return y;
 }
 
 // template instantiation

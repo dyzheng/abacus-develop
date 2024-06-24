@@ -3,6 +3,7 @@
 #include "module_base/memory.h"
 #include "module_base/module_device/device.h"
 #include "module_base/timer.h"
+#include "module_hamilt_pw/hamilt_pwdft/nonlocal_maths.hpp"
 #include "module_hamilt_pw/hamilt_pwdft/fs_nonlocal_tools.h"
 #include "module_hamilt_pw/hamilt_pwdft/global.h"
 #include "stress_func.h"
@@ -34,7 +35,7 @@ void Stress_Func<FPTYPE, Device>::stress_nl(ModuleBase::matrix& sigma,
 
     hamilt::FS_Nonlocal_tools<FPTYPE, Device> nl_tools(nlpp_in, &ucell_in, psi_in, p_kv, wfc_basis, p_sf, wg, ekb);
 
-    int nks = p_kv->get_nks();
+    const int nks = p_kv->get_nks();
     for (int ik = 0; ik < nks; ik++) // loop k points
     {
         // skip zero weights to speed up
@@ -134,7 +135,7 @@ void Stress_Func<FPTYPE, Device>::get_dvnl1(ModuleBase::ComplexMatrix& vkb,
         gk[ig] = wfc_basis->getgpluskcar(ik, ig);
     }
 
-    hamilt::FS_Nonlocal_tools<FPTYPE, Device>::dylmr2(x1, npw, reinterpret_cast<double*>(gk), dylm.c, ipol);
+    hamilt::Nonlocal_maths<FPTYPE, Device>::dylmr2(x1, npw, reinterpret_cast<double*>(gk), dylm.c, ipol);
 
     const int imag_pow_period = 4;
     // result table of pow(0-1i, int)
@@ -278,7 +279,7 @@ void Stress_Func<FPTYPE, Device>::get_dvnl2(ModuleBase::ComplexMatrix& vkb,
                 const FPTYPE gnorm = gk[ig].norm() * this->ucell->tpiba;
                 // cout << "\n gk[ig] = " << gk[ig].x << " " << gk[ig].y << " " << gk[ig].z;
                 // cout << "\n gk.norm = " << gnorm;
-                vq[ig] = hamilt::FS_Nonlocal_tools<FPTYPE, Device>::Polynomial_Interpolation_nl(nlpp->tab,
+                vq[ig] = hamilt::Nonlocal_maths<FPTYPE, Device>::Polynomial_Interpolation_nl(nlpp->tab,
                                                                                                 it,
                                                                                                 nb,
                                                                                                 GlobalV::DQ,

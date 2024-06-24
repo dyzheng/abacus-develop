@@ -301,6 +301,7 @@ __global__ void cal_vkb_deri(
     const FPTYPE* ylm_deri_ptr2 = ylms_deri_in2[ih];
     const FPTYPE* vq_deri_ptr = vqs_deri_in[ih];
     const FPTYPE* gkn = &gk_in[4 * npw];
+    const FPTYPE* gk = &gk_in[idx * 3];
 
     if(idx<npw) {
         vkb_ptr[idx] = thrust::complex<FPTYPE>(0.0, 0.0);
@@ -308,12 +309,12 @@ __global__ void cal_vkb_deri(
         {
             vkb_ptr[idx] -= ylm_ptr[idx] * vq_ptr[idx] * sk_in[idx] * pref_in[ih];
         }
-        vkb_ptr[idx] -= (gk_in[idx*3+ipol] * ylm_deri_ptr2[idx] 
-                        + gk_in[idx*3+jpol] * ylm_deri_ptr1[idx]) 
+        vkb_ptr[idx] -= (gk[ipol] * ylm_deri_ptr2[idx] 
+                        + gk[jpol] * ylm_deri_ptr1[idx]) 
                         * vq_ptr[idx] * sk_in[idx] * pref_in[ih];
 
         vkb_ptr[idx] -= 2.0 * ylm_ptr[idx] * vq_deri_ptr[idx] * sk_in[idx] * pref_in[ih]
-                    * gk_in[idx*3+ipol] * gk_in[idx*3+jpol] * gkn[idx];  
+                    * gk[ipol] * gk[jpol] * gkn[idx];  
     }
 }
 
