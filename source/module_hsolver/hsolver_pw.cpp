@@ -862,17 +862,17 @@ void HSolverPW<T, Device>::hamiltSolvePsiK(hamilt::Hamilt<T, Device>* hm, psi::P
                                            const int band_index2) {
             ModuleBase::timer::tick("DavSubspace", "hpsi_func");
 
-                  // Convert "pointer data stucture" to a psi::Psi object
-                  auto psi_iter_wrapper = psi::Psi<T, Device>(psi_in, 1, nband_in, nbasis_in, ngk_pointer);
+            // Convert "pointer data stucture" to a psi::Psi object
+            auto psi_iter_wrapper = psi::Psi<T, Device>(psi_in, 1, nband_in, nbasis_in, ngk_pointer);
 
-                  psi::Range bands_range(true, 0, band_index1, band_index2);
+            psi::Range bands_range(true, 0, band_index1, band_index2);
 
-                  using hpsi_info = typename hamilt::Operator<T, Device>::hpsi_info;
-                  hpsi_info info(&psi_iter_wrapper, bands_range, hpsi_out);
-                  hm->ops->hPsi(info);
+            using hpsi_info = typename hamilt::Operator<T, Device>::hpsi_info;
+            hpsi_info info(&psi_iter_wrapper, bands_range, hpsi_out);
+            hm->ops->hPsi(info);
 
-                  ModuleBase::timer::tick("DavSubspace", "hpsi_func");
-              };
+            ModuleBase::timer::tick("DavSubspace", "hpsi_func");
+        };
 
         auto subspace_func = [hm, ngk_pointer](T* psi_out,
                                                T* psi_in,

@@ -142,30 +142,28 @@ struct cal_force_nl_op<FPTYPE, base_device::DEVICE_GPU>
  * @brief revert the vkb values for force_nl calculation
  */
 template <typename FPTYPE>
-void revertVkbValues(
-    const int *gcar_zero_ptrs, 
-    std::complex<FPTYPE> *vkb_ptr, 
-    const std::complex<FPTYPE> *vkb_save_ptr, 
-    int nkb, 
-    int gcar_zero_counts,
-    int npw, 
-    int ipol,
-    int npwx,
-    const std::complex<FPTYPE> coeff);
+void revertVkbValues(const int* gcar_zero_ptrs,
+                     std::complex<FPTYPE>* vkb_ptr,
+                     const std::complex<FPTYPE>* vkb_save_ptr,
+                     int nkb,
+                     int gcar_zero_counts,
+                     int npw,
+                     int ipol,
+                     int npwx,
+                     const std::complex<FPTYPE> coeff);
 
 /**
  * @brief save the vkb values for force_nl calculation
  */
 template <typename FPTYPE>
-void saveVkbValues(
-    const int *gcar_zero_ptrs, 
-    const std::complex<FPTYPE> *vkb_ptr, 
-    std::complex<FPTYPE> *vkb_save_ptr, 
-    int nkb, 
-    int gcar_zero_counts,
-    int npw, 
-    int ipol,
-    int npwx);
+void saveVkbValues(const int* gcar_zero_ptrs,
+                   const std::complex<FPTYPE>* vkb_ptr,
+                   std::complex<FPTYPE>* vkb_save_ptr,
+                   int nkb,
+                   int gcar_zero_counts,
+                   int npw,
+                   int ipol,
+                   int npwx);
 
 #endif // __CUDA || __UT_USE_CUDA || __ROCM || __UT_USE_ROCM
 } // namespace hamilt
