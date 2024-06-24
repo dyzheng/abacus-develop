@@ -591,14 +591,14 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_f(int ik, int npm, int ipol)
 template <typename FPTYPE, typename Device>
 void FS_Nonlocal_tools<FPTYPE, Device>::save_vkb(int npw, int ipol)
 {
-    if(this->device == base_device::CpuDevice)
+    if (this->device == base_device::CpuDevice)
     {
         const int gcar_zero_count = this->gcar_zero_indexes[ipol * this->wfc_basis_->npwk_max];
-        const int* gcar_zero_ptrs = &this->gcar_zero_indexes[ipol * this->wfc_basis_->npwk_max+1];
+        const int* gcar_zero_ptrs = &this->gcar_zero_indexes[ipol * this->wfc_basis_->npwk_max + 1];
         const std::complex<FPTYPE>* vkb_ptr = this->ppcell_vkb;
         std::complex<FPTYPE>* vkb_save_ptr = this->vkb_save;
-        //find the zero indexes to save the vkb values to vkb_save
-        for(int ikb = 0;ikb < this->nkb;++ikb)
+        // find the zero indexes to save the vkb values to vkb_save
+        for (int ikb = 0; ikb < this->nkb; ++ikb)
         {
             for (int icount = 0; icount < gcar_zero_count; ++icount)
             {
@@ -611,15 +611,14 @@ void FS_Nonlocal_tools<FPTYPE, Device>::save_vkb(int npw, int ipol)
     else
     {
 #if __CUDA || __UT_USE_CUDA || __ROCM || __UT_USE_ROCM
-	    saveVkbValues<FPTYPE>(
-                this->gcar_zero_indexes, 
-                this->ppcell_vkb, 
-                this->vkb_save, 
-                nkb, 
-                this->gcar_zero_counts[ipol],
-                npw,
-                ipol,
-                this->wfc_basis_->npwk_max);
+        saveVkbValues<FPTYPE>(this->gcar_zero_indexes,
+                              this->ppcell_vkb,
+                              this->vkb_save,
+                              nkb,
+                              this->gcar_zero_counts[ipol],
+                              npw,
+                              ipol,
+                              this->wfc_basis_->npwk_max);
 #endif
     }
 }
@@ -628,15 +627,15 @@ void FS_Nonlocal_tools<FPTYPE, Device>::save_vkb(int npw, int ipol)
 template <typename FPTYPE, typename Device>
 void FS_Nonlocal_tools<FPTYPE, Device>::revert_vkb(int npw, int ipol)
 {
-    const std::complex<FPTYPE> coeff = ipol==0?ModuleBase::NEG_IMAG_UNIT:ModuleBase::ONE;
-    if(this->device == base_device::CpuDevice)
+    const std::complex<FPTYPE> coeff = ipol == 0 ? ModuleBase::NEG_IMAG_UNIT : ModuleBase::ONE;
+    if (this->device == base_device::CpuDevice)
     {
         const int gcar_zero_count = this->gcar_zero_indexes[ipol * this->wfc_basis_->npwk_max];
-        const int* gcar_zero_ptrs = &this->gcar_zero_indexes[ipol * this->wfc_basis_->npwk_max+1];
+        const int* gcar_zero_ptrs = &this->gcar_zero_indexes[ipol * this->wfc_basis_->npwk_max + 1];
         std::complex<FPTYPE>* vkb_ptr = this->ppcell_vkb;
         const std::complex<FPTYPE>* vkb_save_ptr = this->vkb_save;
-        //find the zero indexes to save the vkb values to vkb_save
-        for(int ikb = 0;ikb < this->nkb;++ikb)
+        // find the zero indexes to save the vkb values to vkb_save
+        for (int ikb = 0; ikb < this->nkb; ++ikb)
         {
             for (int icount = 0; icount < gcar_zero_count; ++icount)
             {
@@ -649,16 +648,15 @@ void FS_Nonlocal_tools<FPTYPE, Device>::revert_vkb(int npw, int ipol)
     else
     {
 #if __CUDA || __UT_USE_CUDA || __ROCM || __UT_USE_ROCM
-        revertVkbValues<FPTYPE>(
-            this->gcar_zero_indexes, 
-            this->ppcell_vkb, 
-            this->vkb_save, 
-            nkb, 
-            this->gcar_zero_counts[ipol],
-            npw, 
-            ipol,
-            this->wfc_basis_->npwk_max,
-            coeff);
+        revertVkbValues<FPTYPE>(this->gcar_zero_indexes,
+                                this->ppcell_vkb,
+                                this->vkb_save,
+                                nkb,
+                                this->gcar_zero_counts[ipol],
+                                npw,
+                                ipol,
+                                this->wfc_basis_->npwk_max,
+                                coeff);
 #endif
     }
 }
