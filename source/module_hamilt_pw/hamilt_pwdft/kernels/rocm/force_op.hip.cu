@@ -171,33 +171,46 @@ __global__ void saveVkbValues_(
     const int *gcar_zero_ptrs, 
     const thrust::complex<FPTYPE> *vkb_ptr, 
     thrust::complex<FPTYPE> *vkb_save_ptr, 
-    int nkb, 
-    int npw, 
-    size_t n_total_gcar_zeros)
+    int nkb,  
+    int npw,  
+    int ipol,
+    int npwx)
 {
     int index = blockIdx.x * blockDim.x + threadIdx.x; // global index
+    int n_total_gcar_zeros = gcar_zero_ptrs[ipol * npwx];
+    const int* gcar_zero_ptr = gcar_zero_ptrs + ipol * npwx + 1; // skip the first element
     int ikb = index / n_total_gcar_zeros;              // index of nkb
     int icount = index % n_total_gcar_zeros;           // index of n_total_gcar_zeros
     
     // check if the index is valid
-    if(ikb < nkb && icount < gcar_zero_ptrs[0] + 1 && icount > 0)
+    if(ikb < nkb )
     {
-        int ig = gcar_zero_ptrs[icount]; // get ig from gcar_zero_ptrs
+        int ig = gcar_zero_ptr[icount]; // get ig from gcar_zero_ptrs
         // use the flat index to get the saved position, pay attention to the relationship between ikb and npw,
         vkb_save_ptr[index] = vkb_ptr[ikb * npw + ig];    // save the value
     }
 }
 
 template <typename FPTYPE>
-void saveVkbValues(const int *gcar_zero_ptrs, const std::complex<FPTYPE> *vkb_ptr, std::complex<FPTYPE> *vkb_save_ptr, int nkb, int npw, size_t n_total_gcar_zeros)
+void saveVkbValues(
+    const int *gcar_zero_ptrs, 
+    const std::complex<FPTYPE> *vkb_ptr, 
+    std::complex<FPTYPE> *vkb_save_ptr, 
+    int nkb, 
+    int gcar_zero_count,
+    int npw,  
+    int ipol,
+    int npwx 
+    )
 {
-    hipLaunchKernelGGL(HIP_KERNEL_NAME(saveVkbValues_<FPTYPE>), dim3(nkb*n_total_gcar_zeros), dim3(THREADS_PER_BLOCK), 0, 0,
+    hipLaunchKernelGGL(HIP_KERNEL_NAME(saveVkbValues_<FPTYPE>), dim3(nkb*gcar_zero_count), dim3(THREADS_PER_BLOCK), 0, 0,
         gcar_zero_ptrs, 
         reinterpret_cast<const thrust::complex<FPTYPE>*>(vkb_ptr), 
         reinterpret_cast<thrust::complex<FPTYPE>*>(vkb_save_ptr), 
-        nkb, 
-        npw, 
-        n_total_gcar_zeros);
+        nkb,  
+        npw,  
+        ipol,
+        npwx);
     hipCheckOnDebug();
 }
 
@@ -207,41 +220,54 @@ __global__ void revertVkbValues_(
     thrust::complex<FPTYPE> *vkb_ptr, 
     const thrust::complex<FPTYPE> *vkb_save_ptr, 
     int nkb, 
-    int npw, 
-    size_t n_total_gcar_zeros,
+    int npw,  
+    int ipol,
+    int npwx,
     const thrust::complex<FPTYPE> coeff)
 {
     int index = blockIdx.x * blockDim.x + threadIdx.x; // global index
+    int n_total_gcar_zeros = gcar_zero_ptrs[ipol * npwx];
+    const int* gcar_zero_ptr = gcar_zero_ptrs + ipol * npwx + 1; // skip the first element
     int ikb = index / n_total_gcar_zeros;              // index of nkb
     int icount = index % n_total_gcar_zeros;           // index of n_total_gcar_zeros
     
     // check if the index is valid
-    if(ikb < nkb && icount < n_total_gcar_zeros)
+    if(ikb < nkb)
     {
-        int ig = gcar_zero_ptrs[icount]; // get ig from gcar_zero_ptrs
+        int ig = gcar_zero_ptr[icount]; // get ig from gcar_zero_ptrs
         // use the flat index to get the saved position, pay attention to the relationship between ikb and npw,
         vkb_ptr[ikb * npw + ig] = vkb_save_ptr[index] * coeff;    // revert the values
     }
 }
 
 template <typename FPTYPE>
-void revertVkbValues(const int *gcar_zero_ptrs, std::complex<FPTYPE> *vkb_ptr, const std::complex<FPTYPE> *vkb_save_ptr, int nkb, int npw, size_t n_total_gcar_zeros, const std::complex<FPTYPE> coeff)
+void revertVkbValues(
+    const int *gcar_zero_ptrs, 
+    std::complex<FPTYPE> *vkb_ptr, 
+    const std::complex<FPTYPE> *vkb_save_ptr, 
+    int nkb, 
+    int gcar_zero_count,
+    int npw,  
+    int ipol,
+    int npwx,
+    const std::complex<FPTYPE> coeff)
 {
-    hipLaunchKernelGGL(HIP_KERNEL_NAME(revertVkbValues_<FPTYPE>), dim3(nkb*n_total_gcar_zeros), dim3(THREADS_PER_BLOCK), 0, 0,
+    hipLaunchKernelGGL(HIP_KERNEL_NAME(revertVkbValues_<FPTYPE>), dim3(nkb*gcar_zero_count), dim3(THREADS_PER_BLOCK), 0, 0,
         gcar_zero_ptrs, 
         reinterpret_cast<thrust::complex<FPTYPE>*>(vkb_ptr), 
         reinterpret_cast<const thrust::complex<FPTYPE>*>(vkb_save_ptr), 
         nkb, 
         npw, 
-        n_total_gcar_zeros,
+        ipol,
+        npwx,
         static_cast<const thrust::complex<FPTYPE>>(coeff));
     hipCheckOnDebug();
 }
 
 // for revertVkbValues functions instantiation
-template void revertVkbValues<double>(const int *gcar_zero_ptrs, std::complex<double> *vkb_ptr, const std::complex<double> *vkb_save_ptr, int nkb, int npw, size_t n_total_gcar_zeros, const std::complex<double> coeff);
+template void revertVkbValues<double>(const int *gcar_zero_ptrs, std::complex<double> *vkb_ptr, const std::complex<double> *vkb_save_ptr, int nkb, int gcar_zero_count, int npw, int ipol, int npwx, const std::complex<double> coeff);
 // for saveVkbValues functions instantiation
-template void saveVkbValues<double>(const int *gcar_zero_ptrs, const std::complex<double> *vkb_ptr, std::complex<double> *vkb_save_ptr, int nkb, int npw, size_t n_total_gcar_zeros);
+template void saveVkbValues<double>(const int *gcar_zero_ptrs, const std::complex<double> *vkb_ptr, std::complex<double> *vkb_save_ptr, int nkb, int gcar_zero_count, int npw, int ipol, int npwx);
 
 template struct cal_vkb1_nl_op<float, base_device::DEVICE_GPU>;
 template struct cal_force_nl_op<float, base_device::DEVICE_GPU>;

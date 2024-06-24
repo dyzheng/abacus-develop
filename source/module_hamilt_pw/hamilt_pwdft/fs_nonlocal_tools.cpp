@@ -588,14 +588,14 @@ void FS_Nonlocal_tools<FPTYPE, Device>::save_vkb(int npw, int ipol)
 {
     if(this->device == base_device::CpuDevice)
     {
-        const int gcar_zero_counts = this->gcar_zero_indexes[ipol * this->wfc_basis_->npwk_max];
+        const int gcar_zero_count = this->gcar_zero_indexes[ipol * this->wfc_basis_->npwk_max];
         const int* gcar_zero_ptrs = &this->gcar_zero_indexes[ipol * this->wfc_basis_->npwk_max+1];
         const std::complex<FPTYPE>* vkb_ptr = this->ppcell_vkb;
         std::complex<FPTYPE>* vkb_save_ptr = this->vkb_save;
         //find the zero indexes to save the vkb values to vkb_save
         for(int ikb = 0;ikb < this->nkb;++ikb)
         {
-            for (int icount = 0; icount < gcar_zero_counts; ++icount)
+            for (int icount = 0; icount < gcar_zero_count; ++icount)
             {
                 *vkb_save_ptr = vkb_ptr[gcar_zero_ptrs[icount]];
                 ++vkb_save_ptr;
@@ -611,6 +611,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::save_vkb(int npw, int ipol)
                 this->ppcell_vkb, 
                 this->vkb_save, 
                 nkb, 
+                this->gcar_zero_counts[ipol],
                 npw,
                 ipol,
                 this->wfc_basis_->npwk_max);
@@ -625,14 +626,14 @@ void FS_Nonlocal_tools<FPTYPE, Device>::revert_vkb(int npw, int ipol)
     const std::complex<FPTYPE> coeff = ipol==0?ModuleBase::NEG_IMAG_UNIT:ModuleBase::ONE;
     if(this->device == base_device::CpuDevice)
     {
-        const int gcar_zero_counts = this->gcar_zero_indexes[ipol * this->wfc_basis_->npwk_max];
+        const int gcar_zero_count = this->gcar_zero_indexes[ipol * this->wfc_basis_->npwk_max];
         const int* gcar_zero_ptrs = &this->gcar_zero_indexes[ipol * this->wfc_basis_->npwk_max+1];
         std::complex<FPTYPE>* vkb_ptr = this->ppcell_vkb;
         const std::complex<FPTYPE>* vkb_save_ptr = this->vkb_save;
         //find the zero indexes to save the vkb values to vkb_save
         for(int ikb = 0;ikb < this->nkb;++ikb)
         {
-            for (int icount = 0; icount < gcar_zero_counts; ++icount)
+            for (int icount = 0; icount < gcar_zero_count; ++icount)
             {
                 vkb_ptr[gcar_zero_ptrs[icount]] = *vkb_save_ptr * coeff;
                 ++vkb_save_ptr;
@@ -648,6 +649,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::revert_vkb(int npw, int ipol)
             this->ppcell_vkb, 
             this->vkb_save, 
             nkb, 
+            this->gcar_zero_counts[ipol],
             npw, 
             ipol,
             this->wfc_basis_->npwk_max,
@@ -668,8 +670,8 @@ void FS_Nonlocal_tools<FPTYPE, Device>::transfer_gcar(int npw, int npw_max, cons
     {
         gcar_zero_ptrs[i] = &gcar_zero_indexes_tmp[i * npw_max];
         gcar_zero_ptrs[i][0] = -1;
+        this->gcar_zero_counts[i] = 0;
     }
-    int counts[3] = {0, 0, 0};
     for (int ig = 0; ig < npw; ig++)
     {
         // calculate gcar.x , gcar.y/gcar.x, gcar.z/gcar.y
@@ -678,19 +680,19 @@ void FS_Nonlocal_tools<FPTYPE, Device>::transfer_gcar(int npw, int npw_max, cons
         {
             if (std::abs(gcar_tmp[ig * 3 + i]) < 1e-15)
             {
-                ++counts[i];
-                gcar_zero_ptrs[i][counts[i]] = ig;
+                ++gcar_zero_counts[i];
+                gcar_zero_ptrs[i][gcar_zero_counts[i]] = ig;
             }
         }
         // four cases for the gcar of y and z
-        if (gcar_zero_ptrs[0][counts[0]] == ig && gcar_zero_ptrs[1][counts[1]] == ig)
+        if (gcar_zero_ptrs[0][gcar_zero_counts[0]] == ig && gcar_zero_ptrs[1][gcar_zero_counts[1]] == ig)
         { // x == y == 0, z = z
         }
-        else if (gcar_zero_ptrs[0][counts[0]] != ig && gcar_zero_ptrs[1][counts[1]] == ig)
+        else if (gcar_zero_ptrs[0][gcar_zero_counts[0]] != ig && gcar_zero_ptrs[1][gcar_zero_counts[1]] == ig)
         { // x != 0, y == 0, z = z/x
             gcar_tmp[ig * 3 + 2] /= gcar_tmp[ig * 3];
         }
-        else if (gcar_zero_ptrs[0][counts[0]] == ig && gcar_zero_ptrs[1][counts[1]] != ig)
+        else if (gcar_zero_ptrs[0][gcar_zero_counts[0]] == ig && gcar_zero_ptrs[1][gcar_zero_counts[1]] != ig)
         { // x == 0, y != 0, y = y, z = z/y
             gcar_tmp[ig * 3 + 2] /= gcar_tmp[ig * 3 + 1];
         }
@@ -702,10 +704,10 @@ void FS_Nonlocal_tools<FPTYPE, Device>::transfer_gcar(int npw, int npw_max, cons
     }
     for (int i = 0; i < 3; ++i)
     { // record the counts to the first element
-        gcar_zero_ptrs[i][0] = counts[i];
+        gcar_zero_ptrs[i][0] = gcar_zero_counts[i];
     }
     // prepare the memory for vkb_save
-    const int max_count = std::max(counts[0], std::max(counts[1], counts[2]));
+    const int max_count = std::max(gcar_zero_counts[0], std::max(gcar_zero_counts[1], gcar_zero_counts[2]));
     resmem_complex_op()(this->ctx, this->vkb_save, this->nkb * max_count);
     // transfer the gcar and gcar_zero_indexes to the device
     syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, gcar, gcar_tmp.data(), 3 * npw_max);

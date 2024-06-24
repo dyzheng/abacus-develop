@@ -147,6 +147,7 @@ class FS_Nonlocal_tools
     std::vector<FPTYPE> g_plus_k;
 
     int* gcar_zero_indexes = nullptr;
+    int gcar_zero_counts[3] = {0, 0, 0};
     std::complex<FPTYPE>* vkb_save = nullptr;
     void transfer_gcar(int npw, int npw_max, const FPTYPE* gcar_in);
     void save_vkb(int npw, int ipol);

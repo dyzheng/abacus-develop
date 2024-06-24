@@ -147,6 +147,7 @@ void revertVkbValues(
     std::complex<FPTYPE> *vkb_ptr, 
     const std::complex<FPTYPE> *vkb_save_ptr, 
     int nkb, 
+    int gcar_zero_counts,
     int npw, 
     int ipol,
     int npwx,
@@ -161,6 +162,7 @@ void saveVkbValues(
     const std::complex<FPTYPE> *vkb_ptr, 
     std::complex<FPTYPE> *vkb_save_ptr, 
     int nkb, 
+    int gcar_zero_counts,
     int npw, 
     int ipol,
     int npwx);

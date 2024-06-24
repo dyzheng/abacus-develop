@@ -201,11 +201,12 @@ void saveVkbValues(
     const std::complex<FPTYPE> *vkb_ptr, 
     std::complex<FPTYPE> *vkb_save_ptr, 
     int nkb, 
+    int gcar_zero_count,
     int npw, 
     int ipol,
     int npwx)
 {
-    saveVkbValues_<FPTYPE><<<nkb*n_total_gcar_zeros , THREADS_PER_BLOCK>>>(
+    saveVkbValues_<FPTYPE><<<nkb*gcar_zero_count , THREADS_PER_BLOCK>>>(
         gcar_zero_ptrs, 
         reinterpret_cast<const thrust::complex<FPTYPE>*>(vkb_ptr), 
         reinterpret_cast<thrust::complex<FPTYPE>*>(vkb_save_ptr), 
@@ -248,12 +249,13 @@ void revertVkbValues(
     std::complex<FPTYPE> *vkb_ptr, 
     const std::complex<FPTYPE> *vkb_save_ptr, 
     int nkb, 
+    int gcar_zero_count,
     int npw, 
     int ipol,
     int npwx, 
     const std::complex<FPTYPE> coeff)
 {
-    revertVkbValues_<FPTYPE><<<nkb*n_total_gcar_zeros , THREADS_PER_BLOCK>>>(
+    revertVkbValues_<FPTYPE><<<nkb*gcar_zero_count , THREADS_PER_BLOCK>>>(
         gcar_zero_ptrs, 
         reinterpret_cast<thrust::complex<FPTYPE>*>(vkb_ptr), 
         reinterpret_cast<const thrust::complex<FPTYPE>*>(vkb_save_ptr), 
@@ -266,9 +268,9 @@ void revertVkbValues(
 }
 
 // for revertVkbValues functions instantiation
-template void revertVkbValues<double>(const int *gcar_zero_ptrs, std::complex<double> *vkb_ptr, const std::complex<double> *vkb_save_ptr, int nkb, int npw, size_t n_total_gcar_zeros, const std::complex<double> coeff);
+template void revertVkbValues<double>(const int *gcar_zero_ptrs, std::complex<double> *vkb_ptr, const std::complex<double> *vkb_save_ptr, int nkb, int gcar_zero_count, int npw, int ipol, int npwx, const std::complex<double> coeff);
 // for saveVkbValues functions instantiation
-template void saveVkbValues<double>(const int *gcar_zero_ptrs, const std::complex<double> *vkb_ptr, std::complex<double> *vkb_save_ptr, int nkb, int npw, size_t n_total_gcar_zeros);
+template void saveVkbValues<double>(const int *gcar_zero_ptrs, const std::complex<double> *vkb_ptr, std::complex<double> *vkb_save_ptr, int nkb, int gcar_zero_count, int npw, int ipol, int npwx);
 
 template struct cal_vkb1_nl_op<float, base_device::DEVICE_GPU>;
 template struct cal_force_nl_op<float, base_device::DEVICE_GPU>;
