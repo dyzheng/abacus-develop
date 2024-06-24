@@ -10,7 +10,6 @@
 #include "module_base/memory.h"
 #include "module_base/module_device/device.h"
 #include "module_base/timer.h"
-#include "module_basis/module_ao/ORB_gen_tables.h"
 #include "module_hamilt_pw/hamilt_pwdft/global.h"
 #include "module_hamilt_pw/hamilt_pwdft/kernels/vnl_op.h"
 #include "module_hamilt_pw/hamilt_pwdft/wavefunc.h"
