@@ -188,7 +188,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::delete_memory()
 template <typename FPTYPE, typename Device>
 void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
 {
-    ModuleBase::TITLE("FS_Nonlocal_tools","cal_becp");
+    ModuleBase::TITLE("FS_Nonlocal_tools", "cal_becp");
     if (this->becp == nullptr)
     {
         resmem_complex_op()(this->ctx, becp, this->nbands * this->nkb);
@@ -261,16 +261,16 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
                 syncmem_complex_h2d_op()(this->ctx, this->cpu_ctx, d_pref_in, pref.data(), nh);
 
                 maths.prepare_vkb_ptr(this->ucell_->atoms[it].ncpp.nbeta,
-                                this->nlpp_->nhtol.c,
-                                this->nlpp_->nhtol.nc,
-                                npw,
-                                it,
-                                vkb_ptr,
-                                vkb_ptrs,
-                                hd_ylm,
-                                ylm_ptrs,
-                                hd_vq,
-                                vq_ptrs);
+                                      this->nlpp_->nhtol.c,
+                                      this->nlpp_->nhtol.nc,
+                                      npw,
+                                      it,
+                                      vkb_ptr,
+                                      vkb_ptrs,
+                                      hd_ylm,
+                                      ylm_ptrs,
+                                      hd_vq,
+                                      vq_ptrs);
 
                 // transfer the pointers from CPU to GPU
                 hamilt::synchronize_ptrs<Device>()((void**)d_vq_ptrs, (const void**)vq_ptrs, nh);
@@ -284,16 +284,16 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
             else
             {
                 maths.prepare_vkb_ptr(this->ucell_->atoms[it].ncpp.nbeta,
-                                this->nlpp_->nhtol.c,
-                                this->nlpp_->nhtol.nc,
-                                npw,
-                                it,
-                                vkb_ptr,
-                                vkb_ptrs,
-                                hd_ylm,
-                                ylm_ptrs,
-                                hd_vq,
-                                vq_ptrs);
+                                      this->nlpp_->nhtol.c,
+                                      this->nlpp_->nhtol.nc,
+                                      npw,
+                                      it,
+                                      vkb_ptr,
+                                      vkb_ptrs,
+                                      hd_ylm,
+                                      ylm_ptrs,
+                                      hd_vq,
+                                      vq_ptrs);
 
                 cal_vkb_op()(this->ctx, nh, npw, vq_ptrs, ylm_ptrs, sk, pref.data(), vkb_ptrs);
             }
@@ -340,7 +340,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
 template <typename FPTYPE, typename Device>
 void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, int jpol, FPTYPE* stress)
 {
-    ModuleBase::TITLE("FS_Nonlocal_tools","cal_dbecp_s");
+    ModuleBase::TITLE("FS_Nonlocal_tools", "cal_dbecp_s");
     if (this->dbecp == nullptr)
     {
         resmem_complex_op()(this->ctx, dbecp, this->nbands * this->nkb);
@@ -416,23 +416,23 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, i
                 syncmem_complex_h2d_op()(this->ctx, this->cpu_ctx, d_pref_in, pref.data(), nh);
 
                 maths.prepare_vkb_deri_ptr(this->ucell_->atoms[it].ncpp.nbeta,
-                                     this->nlpp_->nhtol.c,
-                                     this->nlpp_->nhtol.nc,
-                                     npw,
-                                     it,
-                                     ipol,
-                                     jpol,
-                                     vkb_deri_ptr,
-                                     vkb_ptrs,
-                                     hd_ylm,
-                                     ylm_ptrs,
-                                     hd_ylm_deri,
-                                     ylm_deri_ptrs1,
-                                     ylm_deri_ptrs2,
-                                     hd_vq,
-                                     vq_ptrs,
-                                     hd_vq_deri,
-                                     vq_deri_ptrs);
+                                           this->nlpp_->nhtol.c,
+                                           this->nlpp_->nhtol.nc,
+                                           npw,
+                                           it,
+                                           ipol,
+                                           jpol,
+                                           vkb_deri_ptr,
+                                           vkb_ptrs,
+                                           hd_ylm,
+                                           ylm_ptrs,
+                                           hd_ylm_deri,
+                                           ylm_deri_ptrs1,
+                                           ylm_deri_ptrs2,
+                                           hd_vq,
+                                           vq_ptrs,
+                                           hd_vq_deri,
+                                           vq_deri_ptrs);
 
                 // transfer the pointers from CPU to GPU
                 hamilt::synchronize_ptrs<Device>()((void**)d_vq_ptrs, (const void**)vq_ptrs, nh);
@@ -460,23 +460,23 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, i
             {
 
                 maths.prepare_vkb_deri_ptr(this->ucell_->atoms[it].ncpp.nbeta,
-                                     this->nlpp_->nhtol.c,
-                                     this->nlpp_->nhtol.nc,
-                                     npw,
-                                     it,
-                                     ipol,
-                                     jpol,
-                                     vkb_deri_ptr,
-                                     vkb_ptrs,
-                                     hd_ylm,
-                                     ylm_ptrs,
-                                     hd_ylm_deri,
-                                     ylm_deri_ptrs1,
-                                     ylm_deri_ptrs2,
-                                     hd_vq,
-                                     vq_ptrs,
-                                     hd_vq_deri,
-                                     vq_deri_ptrs);
+                                           this->nlpp_->nhtol.c,
+                                           this->nlpp_->nhtol.nc,
+                                           npw,
+                                           it,
+                                           ipol,
+                                           jpol,
+                                           vkb_deri_ptr,
+                                           vkb_ptrs,
+                                           hd_ylm,
+                                           ylm_ptrs,
+                                           hd_ylm_deri,
+                                           ylm_deri_ptrs1,
+                                           ylm_deri_ptrs2,
+                                           hd_vq,
+                                           vq_ptrs,
+                                           hd_vq_deri,
+                                           vq_deri_ptrs);
                 cal_vkb_deri_op()(this->ctx,
                                   nh,
                                   npw,
@@ -544,7 +544,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, i
 template <typename FPTYPE, typename Device>
 void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_f(int ik, int npm, int ipol)
 {
-    ModuleBase::TITLE("FS_Nonlocal_tools","cal_dbecp_s");
+    ModuleBase::TITLE("FS_Nonlocal_tools", "cal_dbecp_s");
     if (this->dbecp == nullptr)
     {
         resmem_complex_op()(this->ctx, dbecp, 3 * this->nbands * this->nkb);
