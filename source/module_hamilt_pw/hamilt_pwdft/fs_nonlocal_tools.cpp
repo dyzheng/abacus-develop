@@ -403,6 +403,8 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, i
 
             if (this->device == base_device::GpuDevice)
             {
+                syncmem_complex_h2d_op()(this->ctx, this->cpu_ctx, d_sk, sk, npw);
+                syncmem_complex_h2d_op()(this->ctx, this->cpu_ctx, d_pref_in, pref.data(), nh);
 
                 prepare_vkb_deri_ptr(this->ucell_->atoms[it].ncpp.nbeta,
                                      this->nlpp_->nhtol.c,
@@ -424,9 +426,12 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, i
                                      vq_deri_ptrs);
 
                 // transfer the pointers from CPU to GPU
+                hamilt::synchronize_ptrs<Device>()((void**)d_vq_ptrs, (const void**)vq_ptrs, nh);
                 hamilt::synchronize_ptrs<Device>()((void**)d_vq_deri_ptrs, (const void**)vq_deri_ptrs, nh);
+                hamilt::synchronize_ptrs<Device>()((void**)d_ylm_ptrs, (const void**)ylm_ptrs, nh);
                 hamilt::synchronize_ptrs<Device>()((void**)d_ylm_deri_ptrs1, (const void**)ylm_deri_ptrs1, nh);
                 hamilt::synchronize_ptrs<Device>()((void**)d_ylm_deri_ptrs2, (const void**)ylm_deri_ptrs2, nh);
+                hamilt::synchronize_ptrs<Device>()((void**)d_vkb_ptrs, (const void**)vkb_ptrs, nh);
                 cal_vkb_deri_op()(this->ctx,
                                   nh,
                                   npw,
