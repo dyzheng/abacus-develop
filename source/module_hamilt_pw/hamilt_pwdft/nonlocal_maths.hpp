@@ -312,14 +312,13 @@ void Nonlocal_maths<FPTYPE, Device>::prepare_vkb_ptr(int nbeta,
 
 template <typename FPTYPE, typename Device>
 void Nonlocal_maths<FPTYPE, Device>::cal_dvkb_index(const int nbeta,
-                        const double* nhtol,
-                        const int nhtol_nc,
-                        const int npw,
-                        const int it,
-                        const int ipol,
-                        const int jpol,
-                        int* indexes
-)
+                                                    const double* nhtol,
+                                                    const int nhtol_nc,
+                                                    const int npw,
+                                                    const int it,
+                                                    const int ipol,
+                                                    const int jpol,
+                                                    int* indexes)
 {
     int ih = 0;
     const int x1 = (this->nlpp_->lmaxkb + 1) * (this->nlpp_->lmaxkb + 1);
@@ -329,10 +328,10 @@ void Nonlocal_maths<FPTYPE, Device>::cal_dvkb_index(const int nbeta,
         for (int m = 0; m < 2 * l + 1; m++)
         {
             int lm = l * l + m;
-            indexes[ih*4] = lm;
-            indexes[ih*4+1] = nb;
-            indexes[ih*4+2] = (ipol * x1 + lm);
-            indexes[ih*4+3] = (jpol * x1 + lm);
+            indexes[ih * 4] = lm;
+            indexes[ih * 4 + 1] = nb;
+            indexes[ih * 4 + 2] = (ipol * x1 + lm);
+            indexes[ih * 4 + 3] = (jpol * x1 + lm);
 
             ih++;
         }

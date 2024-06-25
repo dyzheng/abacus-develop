@@ -215,16 +215,16 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
         const int nh = pref.size();
         this->dvkb_indexes.resize(nh * 4);
         maths.cal_dvkb_index(this->ucell_->atoms[it].ncpp.nbeta,
-                                     this->nlpp_->nhtol.c,
-                                     this->nlpp_->nhtol.nc,
-                                     npw,
-                                     it,
-                                     0,
-                                     0,
-                                     this->dvkb_indexes.data());
+                             this->nlpp_->nhtol.c,
+                             this->nlpp_->nhtol.nc,
+                             npw,
+                             it,
+                             0,
+                             0,
+                             this->dvkb_indexes.data());
         if (this->device == base_device::GpuDevice)
         {
-            syncmem_int_h2d_op()(this->ctx, this->cpu_ctx, d_dvkb_indexes, dvkb_indexes.data(), nh*4);
+            syncmem_int_h2d_op()(this->ctx, this->cpu_ctx, d_dvkb_indexes, dvkb_indexes.data(), nh * 4);
             syncmem_complex_h2d_op()(this->ctx, this->cpu_ctx, d_pref_in, pref.data(), nh);
         }
 
@@ -349,23 +349,23 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, i
                          GlobalV::DQ,
                          this->ucell_->atoms[it].ncpp.nbeta,
                          hd_vq_deri);
-        
+
         // prepare（-i）^l, size: nh
         std::vector<std::complex<double>> pref = maths.cal_pref(it);
         int nh = pref.size();
         // prepare indexes for calculate vkb_deri
         this->dvkb_indexes.resize(nh * 4);
         maths.cal_dvkb_index(this->ucell_->atoms[it].ncpp.nbeta,
-                                     this->nlpp_->nhtol.c,
-                                     this->nlpp_->nhtol.nc,
-                                     npw,
-                                     it,
-                                     ipol,
-                                     jpol,
-                                     this->dvkb_indexes.data());
+                             this->nlpp_->nhtol.c,
+                             this->nlpp_->nhtol.nc,
+                             npw,
+                             it,
+                             ipol,
+                             jpol,
+                             this->dvkb_indexes.data());
         if (this->device == base_device::GpuDevice)
         {
-            syncmem_int_h2d_op()(this->ctx, this->cpu_ctx, d_dvkb_indexes, dvkb_indexes.data(), nh*4);
+            syncmem_int_h2d_op()(this->ctx, this->cpu_ctx, d_dvkb_indexes, dvkb_indexes.data(), nh * 4);
             syncmem_complex_h2d_op()(this->ctx, this->cpu_ctx, d_pref_in, pref.data(), nh);
         }
         for (int ia = 0; ia < h_atom_na[it]; ia++)
@@ -387,19 +387,19 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, i
                 d_g_plus_k = g_plus_k.data();
             }
             cal_vkb_deri_op()(this->ctx,
-                            nh,
-                            npw,
-                            ipol,
-                            jpol,
-                            d_dvkb_indexes,
-                            hd_vq,
-                            hd_vq_deri,
-                            hd_ylm,
-                            hd_ylm_deri,
-                            d_sk,
-                            d_pref_in,
-                            d_g_plus_k,
-                            vkb_deri_ptr);
+                              nh,
+                              npw,
+                              ipol,
+                              jpol,
+                              d_dvkb_indexes,
+                              hd_vq,
+                              hd_vq_deri,
+                              hd_ylm,
+                              hd_ylm_deri,
+                              d_sk,
+                              d_pref_in,
+                              d_g_plus_k,
+                              vkb_deri_ptr);
             delete[] sk;
 
             vkb_deri_ptr += nh * npw;
