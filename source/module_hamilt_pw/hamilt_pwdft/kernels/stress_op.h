@@ -117,13 +117,14 @@ template <typename FPTYPE, typename Device>
 struct cal_vkb_op
 {
     void operator()(const Device* ctx,
-                    int nh,
-                    int npw,
-                    FPTYPE** vqs_in,
-                    FPTYPE** ylms_in,
+                    const int nh,
+                    const int npw,
+                    const int* indexes,
+                    const FPTYPE* vqs_in,
+                    const FPTYPE* ylms_in,
                     const std::complex<FPTYPE>* sk_in,
                     const std::complex<FPTYPE>* pref_in,
-                    std::complex<FPTYPE>** vkbs_out);
+                    std::complex<FPTYPE>* vkbs_out);
 };
 
 // cpu version first, gpu version later
@@ -131,19 +132,19 @@ template <typename FPTYPE, typename Device>
 struct cal_vkb_deri_op
 {
     void operator()(const Device* ctx,
-                    int nh,
-                    int npw,
-                    int ipol,
-                    int jpol,
-                    FPTYPE** vqs_in,
-                    FPTYPE** vqs_deri_in,
-                    FPTYPE** ylms_in,
-                    FPTYPE** ylms_deri_in1,
-                    FPTYPE** ylms_deri_in2,
+                    const int nh,
+                    const int npw,
+                    const int ipol,
+                    const int jpol,
+                    const int* indexes,
+                    const FPTYPE* vqs_in,
+                    const FPTYPE* vqs_deri_in,
+                    const FPTYPE* ylms_in,
+                    const FPTYPE* ylms_deri_in,
                     const std::complex<FPTYPE>* sk_in,
                     const std::complex<FPTYPE>* pref_in,
                     const FPTYPE* gk_in,
-                    std::complex<FPTYPE>** vkbs_out);
+                    std::complex<FPTYPE>* vkbs_out);
 };
 
 // cpu version first, gpu version later
@@ -247,32 +248,33 @@ template <typename FPTYPE>
 struct cal_vkb_op<FPTYPE, base_device::DEVICE_GPU>
 {
     void operator()(const base_device::DEVICE_GPU* ctx,
-                    int nh,
-                    int npw,
-                    FPTYPE** vqs_in,
-                    FPTYPE** ylms_in,
+                    const int nh,
+                    const int npw,
+                    const int* indexes,
+                    const FPTYPE* vqs_in,
+                    const FPTYPE* ylms_in,
                     const std::complex<FPTYPE>* sk_in,
                     const std::complex<FPTYPE>* pref_in,
-                    std::complex<FPTYPE>** vkbs_out);
+                    std::complex<FPTYPE>* vkbs_out);
 };
 
 template <typename FPTYPE>
 struct cal_vkb_deri_op<FPTYPE, base_device::DEVICE_GPU>
 {
     void operator()(const base_device::DEVICE_GPU* ctx,
-                    int nh,
-                    int npw,
-                    int ipol,
-                    int jpol,
-                    FPTYPE** vqs_in,
-                    FPTYPE** vqs_deri_in,
-                    FPTYPE** ylms_in,
-                    FPTYPE** ylms_deri_in1,
-                    FPTYPE** ylms_deri_in2,
+                    const int nh,
+                    const int npw,
+                    const int ipol,
+                    const int jpol,
+                    const int* indexes,
+                    const FPTYPE* vqs_in,
+                    const FPTYPE* vqs_deri_in,
+                    const FPTYPE* ylms_in,
+                    const FPTYPE* ylms_deri_in,
                     const std::complex<FPTYPE>* sk_in,
                     const std::complex<FPTYPE>* pref_in,
                     const FPTYPE* gk_in,
-                    std::complex<FPTYPE>** vkbs_out);
+                    std::complex<FPTYPE>* vkbs_out);
 };
 
 // cpu version first, gpu version later

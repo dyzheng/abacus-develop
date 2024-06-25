@@ -261,45 +261,47 @@ void cal_stress_mgga_op<T, Device>::operator()(
 
 template <typename FPTYPE>
 __global__ void cal_vkb(
-    int npw,
-    FPTYPE** vqs_in,
-    FPTYPE** ylms_in,
+    const int npw,
+    const int* indexes,
+    const FPTYPE* vqs_in,
+    const FPTYPE* ylms_in,
     const thrust::complex<FPTYPE>* sk_in,
     const thrust::complex<FPTYPE>* pref_in,
-    thrust::complex<FPTYPE>** vkbs_out
+    thrust::complex<FPTYPE>* vkbs_out
 ){
     int idx = threadIdx.x + blockIdx.x * blockDim.x;
     int ih =  blockIdx.y;
 
-    thrust::complex<FPTYPE>* vkb_ptr = vkbs_out[ih];
-    const FPTYPE* ylm_ptr = ylms_in[ih];
-    const FPTYPE* vq_ptr = vqs_in[ih];
+    thrust::complex<FPTYPE>* vkb_ptr = vkbs_out + ih * npw;
+    const FPTYPE* ylm_ptr = ylms_in + indexes[ih*4] * npw;
+    const FPTYPE* vq_ptr = vqs_in + indexes[ih*4+1] * npw;
     if(idx<npw) vkb_ptr[idx] = ylm_ptr[idx] * vq_ptr[idx] * sk_in[idx] * pref_in[ih];              
     
 }
 
 template <typename FPTYPE>
 __global__ void cal_vkb_deri(
-        int npw,
-        int ipol,
-        int jpol,
-        FPTYPE** vqs_in, FPTYPE** vqs_deri_in,
-        FPTYPE** ylms_in, FPTYPE** ylms_deri_in1, FPTYPE** ylms_deri_in2,
+        const int npw,
+        const int ipol,
+        const int jpol,
+        const int* indexes,
+        const FPTYPE* vqs_in, const FPTYPE* vqs_deri_in,
+        const FPTYPE* ylms_in, const FPTYPE* ylms_deri_in,
         const thrust::complex<FPTYPE>* sk_in,
         const thrust::complex<FPTYPE>* pref_in,
         const FPTYPE* gk_in,
-        thrust::complex<FPTYPE>** vkbs_out
+        thrust::complex<FPTYPE>* vkbs_out
 ){
     int idx = threadIdx.x + blockIdx.x * blockDim.x;
     int ih =  blockIdx.y;
 
-    thrust::complex<FPTYPE>* vkb_ptr = vkbs_out[ih];
-    const FPTYPE* ylm_ptr = ylms_in[ih];
-    const FPTYPE* vq_ptr = vqs_in[ih];
+    thrust::complex<FPTYPE>* vkb_ptr = vkbs_out + ih * npw;
+    const FPTYPE* ylm_ptr = ylms_in + indexes[ih*4] * npw;
+    const FPTYPE* vq_ptr = vqs_in + indexes[ih*4 + 1] * npw;
 
-    const FPTYPE* ylm_deri_ptr1 = ylms_deri_in1[ih];
-    const FPTYPE* ylm_deri_ptr2 = ylms_deri_in2[ih];
-    const FPTYPE* vq_deri_ptr = vqs_deri_in[ih];
+    const FPTYPE* ylm_deri_ptr1 = ylms_deri_in + indexes[ih*4+2] * npw;
+    const FPTYPE* ylm_deri_ptr2 = ylms_deri_in + indexes[ih*4+3] * npw;
+    const FPTYPE* vq_deri_ptr = vqs_deri_in + indexes[ih*4+1] * npw;
     const FPTYPE* gkn = &gk_in[4 * npw];
     const FPTYPE* gk = &gk_in[idx * 3];
 
@@ -351,61 +353,27 @@ __global__ void cal_vq_deri(
         tab, it, ib, tab_2, tab_3, table_interval, gnorm[idx]);
 }
 
-// template <typename FPTYPE>
-// __global__ void prepare_vkb_deri_ptr(
-//         int nbeta, double* nhtol, int nhtol_nc, int npw, int it,
-//         int ipol, int jpol,
-//         thrust::complex<FPTYPE>*vkb_out, thrust::complex<FPTYPE>** vkb_ptrs,
-//         FPTYPE* ylm_in, FPTYPE** ylm_ptrs,
-//         FPTYPE* ylm_deri_in, FPTYPE** ylm_deri_ptr1s, FPTYPE** ylm_deri_ptr2s,
-//         FPTYPE* vq_in, FPTYPE** vq_ptrs,
-//         FPTYPE* vq_deri_in, FPTYPE** vq_deri_ptrs
-// ){
-//     // int ih=0;
-//     // int x1 = (nlpp->lmaxkb + 1) * (nlpp->lmaxkb + 1);
-//     // for(int nb=0;nb<nbeta;nb++)
-//     // {
-//     //     int l = nhtol[it*nhtol_nc+ih];
-//     //     for(int m=0;m<2*l+1;m++)
-//     //     {
-//     //         int lm = l*l + m;
-//     //         vkb_ptrs[ih] = &vkb_out[ih * npw];
-//     //         ylm_ptrs[ih] = &ylm_in[lm * npw];
-//     //         vq_ptrs[ih] = &vq_in[nb * npw];
-
-
-//     //         ylm_deri_ptr1s[ih] = &ylm_deri_in[(ipol * x1 + lm) * npw];
-//     //         ylm_deri_ptr2s[ih] = &ylm_deri_in[(jpol * x1 + lm) * npw];
-//     //         vq_deri_ptrs[ih] = &vq_deri_in[nb * npw];
-
-//     //         ih++;
-        
-        
-//     //     }
-//     // }
-// }
-
-
 template <typename FPTYPE>
 void cal_vkb_op<FPTYPE, base_device::DEVICE_GPU>::operator()(
-        const base_device::DEVICE_GPU *ctx,
-        int nh,
-        int npw,
-        FPTYPE** vqs_in,
-        FPTYPE** ylms_in,
+        const base_device::DEVICE_GPU* ctx,
+        const int nh,
+        const int npw,
+        const int* indexes,
+        const FPTYPE* vqs_in,
+        const FPTYPE* ylms_in,
         const std::complex<FPTYPE>* sk_in,
         const std::complex<FPTYPE>* pref_in,
-        std::complex<FPTYPE>** vkbs_out
+        std::complex<FPTYPE>* vkbs_out
     )
 {
     const int block = (npw + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
     dim3 gridsize(block,nh);
 
     cal_vkb<FPTYPE><<<gridsize,THREADS_PER_BLOCK>>>(
-        npw, vqs_in, ylms_in,
+        npw, indexes, vqs_in, ylms_in,
         reinterpret_cast<const thrust::complex<FPTYPE>*>(sk_in), 
         reinterpret_cast<const thrust::complex<FPTYPE>*>(pref_in), 
-        reinterpret_cast<thrust::complex<FPTYPE>**>(vkbs_out)
+        reinterpret_cast<thrust::complex<FPTYPE>*>(vkbs_out)
         
     );
 
@@ -413,29 +381,31 @@ void cal_vkb_op<FPTYPE, base_device::DEVICE_GPU>::operator()(
 
 template <typename FPTYPE>
 void cal_vkb_deri_op<FPTYPE, base_device::DEVICE_GPU>::operator()(
-        const base_device::DEVICE_GPU *ctx,
-        int nh,
-        int npw,
-        int ipol,
-        int jpol,
-        FPTYPE** vqs_in, FPTYPE** vqs_deri_in,
-        FPTYPE** ylms_in, FPTYPE** ylms_deri_in1, FPTYPE** ylms_deri_in2,
+        const base_device::DEVICE_GPU* ctx,
+        const int nh,
+        const int npw,
+        const int ipol,
+        const int jpol,
+        const int* indexes,
+        const FPTYPE* vqs_in,
+        const FPTYPE* vqs_deri_in,
+        const FPTYPE* ylms_in,
+        const FPTYPE* ylms_deri_in,
         const std::complex<FPTYPE>* sk_in,
         const std::complex<FPTYPE>* pref_in,
         const FPTYPE* gk_in,
-        std::complex<FPTYPE>** vkbs_out
-    )
+        std::complex<FPTYPE>* vkbs_out)
 {
     const int block = (npw + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
     dim3 gridsize(block,nh);
 
     cal_vkb_deri<FPTYPE><<<gridsize,THREADS_PER_BLOCK>>>(
-        npw, ipol, jpol, 
-        vqs_in, vqs_deri_in, ylms_in, ylms_deri_in1, ylms_deri_in2,
+        npw, ipol, jpol, indexes,
+        vqs_in, vqs_deri_in, ylms_in, ylms_deri_in,
         reinterpret_cast<const thrust::complex<FPTYPE>*>(sk_in), 
         reinterpret_cast<const thrust::complex<FPTYPE>*>(pref_in),       
         gk_in,
-        reinterpret_cast<thrust::complex<FPTYPE>**>(vkbs_out)
+        reinterpret_cast<thrust::complex<FPTYPE>*>(vkbs_out)
     );
 }
 

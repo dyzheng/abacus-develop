@@ -259,45 +259,47 @@ void cal_stress_mgga_op<T, Device>::operator()(
 
 template <typename FPTYPE>
 __global__ void cal_vkb(
-    int npw,
-    FPTYPE** vqs_in,
-    FPTYPE** ylms_in,
+    const int npw,
+    const int* indexes,
+    const FPTYPE* vqs_in,
+    const FPTYPE* ylms_in,
     const thrust::complex<FPTYPE>* sk_in,
     const thrust::complex<FPTYPE>* pref_in,
-    thrust::complex<FPTYPE>** vkbs_out
+    thrust::complex<FPTYPE>* vkbs_out
 ){
     int idx = threadIdx.x + blockIdx.x * blockDim.x;
     int ih =  blockIdx.y;
 
-    thrust::complex<FPTYPE>* vkb_ptr = vkbs_out[ih];
-    const FPTYPE* ylm_ptr = ylms_in[ih];
-    const FPTYPE* vq_ptr = vqs_in[ih];
+    thrust::complex<FPTYPE>* vkb_ptr = vkbs_out + ih * npw;
+    const FPTYPE* ylm_ptr = ylms_in + indexes[ih*4] * npw;
+    const FPTYPE* vq_ptr = vqs_in + indexes[ih*4+1] * npw;
     if(idx<npw) vkb_ptr[idx] = ylm_ptr[idx] * vq_ptr[idx] * sk_in[idx] * pref_in[ih];              
     
 }
 
 template <typename FPTYPE>
 __global__ void cal_vkb_deri(
-        int npw,
-        int ipol,
-        int jpol,
-        FPTYPE** vqs_in, FPTYPE** vqs_deri_in,
-        FPTYPE** ylms_in, FPTYPE** ylms_deri_in1, FPTYPE** ylms_deri_in2,
+        const int npw,
+        const int ipol,
+        const int jpol,
+        const int* indexes,
+        const FPTYPE* vqs_in, const FPTYPE* vqs_deri_in,
+        const FPTYPE* ylms_in, const FPTYPE* ylms_deri_in,
         const thrust::complex<FPTYPE>* sk_in,
         const thrust::complex<FPTYPE>* pref_in,
         const FPTYPE* gk_in,
-        thrust::complex<FPTYPE>** vkbs_out
+        thrust::complex<FPTYPE>* vkbs_out
 ){
     int idx = threadIdx.x + blockIdx.x * blockDim.x;
     int ih =  blockIdx.y;
 
-    thrust::complex<FPTYPE>* vkb_ptr = vkbs_out[ih];
-    const FPTYPE* ylm_ptr = ylms_in[ih];
-    const FPTYPE* vq_ptr = vqs_in[ih];
+    thrust::complex<FPTYPE>* vkb_ptr = vkbs_out + ih * npw;
+    const FPTYPE* ylm_ptr = ylms_in + indexes[ih*4] * npw;
+    const FPTYPE* vq_ptr = vqs_in + indexes[ih*4 + 1] * npw;
 
-    const FPTYPE* ylm_deri_ptr1 = ylms_deri_in1[ih];
-    const FPTYPE* ylm_deri_ptr2 = ylms_deri_in2[ih];
-    const FPTYPE* vq_deri_ptr = vqs_deri_in[ih];
+    const FPTYPE* ylm_deri_ptr1 = ylms_deri_in + indexes[ih*4+2] * npw;
+    const FPTYPE* ylm_deri_ptr2 = ylms_deri_in + indexes[ih*4+3] * npw;
+    const FPTYPE* vq_deri_ptr = vqs_deri_in + indexes[ih*4+1] * npw;
     const FPTYPE* gkn = &gk_in[4 * npw];
     const FPTYPE* gk = &gk_in[idx * 3];
 
@@ -352,24 +354,25 @@ __global__ void cal_vq_deri(
 
 template <typename FPTYPE>
 void cal_vkb_op<FPTYPE, base_device::DEVICE_GPU>::operator()(
-        const base_device::DEVICE_GPU *ctx,
-        int nh,
-        int npw,
-        FPTYPE** vqs_in,
-        FPTYPE** ylms_in,
+        const base_device::DEVICE_GPU* ctx,
+        const int nh,
+        const int npw,
+        const int* indexes,
+        const FPTYPE* vqs_in,
+        const FPTYPE* ylms_in,
         const std::complex<FPTYPE>* sk_in,
         const std::complex<FPTYPE>* pref_in,
-        std::complex<FPTYPE>** vkbs_out
+        std::complex<FPTYPE>* vkbs_out
     )
 {
     const int block = (npw + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
     dim3 gridsize(block,nh);
 
     hipLaunchKernelGGL(HIP_KERNEL_NAME(cal_vkb<FPTYPE>),gridsize,THREADS_PER_BLOCK,0,0,
-        npw, vqs_in, ylms_in,
+        npw, indexes, vqs_in, ylms_in,
         reinterpret_cast<const thrust::complex<FPTYPE>*>(sk_in), 
         reinterpret_cast<const thrust::complex<FPTYPE>*>(pref_in), 
-        reinterpret_cast<thrust::complex<FPTYPE>**>(vkbs_out)
+        reinterpret_cast<thrust::complex<FPTYPE>*>(vkbs_out)
         
     );
 
@@ -377,29 +380,32 @@ void cal_vkb_op<FPTYPE, base_device::DEVICE_GPU>::operator()(
 
 template <typename FPTYPE>
 void cal_vkb_deri_op<FPTYPE, base_device::DEVICE_GPU>::operator()(
-        const base_device::DEVICE_GPU *ctx,
-        int nh,
-        int npw,
-        int ipol,
-        int jpol,
-        FPTYPE** vqs_in, FPTYPE** vqs_deri_in,
-        FPTYPE** ylms_in, FPTYPE** ylms_deri_in1, FPTYPE** ylms_deri_in2,
+        const base_device::DEVICE_GPU* ctx,
+        const int nh,
+        const int npw,
+        const int ipol,
+        const int jpol,
+        const int* indexes,
+        const FPTYPE* vqs_in,
+        const FPTYPE* vqs_deri_in,
+        const FPTYPE* ylms_in,
+        const FPTYPE* ylms_deri_in,
         const std::complex<FPTYPE>* sk_in,
         const std::complex<FPTYPE>* pref_in,
         const FPTYPE* gk_in,
-        std::complex<FPTYPE>** vkbs_out
+        std::complex<FPTYPE>* vkbs_out
     )
 {
     const int block = (npw + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
     dim3 gridsize(block,nh);
 
     hipLaunchKernelGGL(HIP_KERNEL_NAME(cal_vkb_deri<FPTYPE>),gridsize,THREADS_PER_BLOCK,0,0,
-        npw, ipol, jpol, 
-        vqs_in, vqs_deri_in, ylms_in, ylms_deri_in1, ylms_deri_in2,
+        npw, ipol, jpol, indexes,
+        vqs_in, vqs_deri_in, ylms_in, ylms_deri_in,
         reinterpret_cast<const thrust::complex<FPTYPE>*>(sk_in), 
         reinterpret_cast<const thrust::complex<FPTYPE>*>(pref_in),       
         gk_in,
-        reinterpret_cast<thrust::complex<FPTYPE>**>(vkbs_out)
+        reinterpret_cast<thrust::complex<FPTYPE>*>(vkbs_out)
     );
 }
 

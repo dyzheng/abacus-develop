@@ -169,20 +169,21 @@ template <typename FPTYPE>
 struct cal_vkb_op<FPTYPE, base_device::DEVICE_CPU>
 {
     void operator()(const base_device::DEVICE_CPU* ctx,
-                    int nh,
-                    int npw,
-                    FPTYPE** vqs_in,
-                    FPTYPE** ylms_in,
+                    const int nh,
+                    const int npw,
+                    const int* indexes,
+                    const FPTYPE* vqs_in,
+                    const FPTYPE* ylms_in,
                     const std::complex<FPTYPE>* sk_in,
                     const std::complex<FPTYPE>* pref_in,
-                    std::complex<FPTYPE>** vkbs_out)
+                    std::complex<FPTYPE>* vkbs_out)
     {
         // loop over all beta functions
         for (int ih = 0; ih < nh; ih++)
         {
-            std::complex<FPTYPE>* vkb_ptr = vkbs_out[ih];
-            const FPTYPE* ylm_ptr = ylms_in[ih];
-            const FPTYPE* vq_ptr = vqs_in[ih];
+            std::complex<FPTYPE>* vkb_ptr = vkbs_out + ih * npw;
+            const FPTYPE* ylm_ptr = ylms_in + indexes[ih*4] * npw;
+            const FPTYPE* vq_ptr = vqs_in + indexes[ih*4+1] * npw;
             // loop over all G-vectors
             for (int ig = 0; ig < npw; ig++)
             {
@@ -197,27 +198,28 @@ template <typename FPTYPE>
 struct cal_vkb_deri_op<FPTYPE, base_device::DEVICE_CPU>
 {
     void operator()(const base_device::DEVICE_CPU* ctx,
-                    int nh,
-                    int npw,
-                    int ipol,
-                    int jpol,
-                    FPTYPE** vqs_in,
-                    FPTYPE** vqs_deri_in,
-                    FPTYPE** ylms_in,
-                    FPTYPE** ylms_deri_in1,
-                    FPTYPE** ylms_deri_in2,
+                    const int nh,
+                    const int npw,
+                    const int ipol,
+                    const int jpol,
+                    const int* indexes,
+                    const FPTYPE* vqs_in,
+                    const FPTYPE* vqs_deri_in,
+                    const FPTYPE* ylms_in,
+                    const FPTYPE* ylms_deri_in,
                     const std::complex<FPTYPE>* sk_in,
                     const std::complex<FPTYPE>* pref_in,
                     const FPTYPE* gk_in,
-                    std::complex<FPTYPE>** vkbs_out)
+                    std::complex<FPTYPE>* vkbs_out)
     {
         int ih = 0;
         // loop over all beta functions
         for (int ih = 0; ih < nh; ih++)
         {
-            std::complex<FPTYPE>* vkb_ptr = vkbs_out[ih];
-            const FPTYPE* ylm_ptr = ylms_in[ih];
-            const FPTYPE* vq_ptr = vqs_in[ih];
+            //move ptrs
+            std::complex<FPTYPE>* vkb_ptr = vkbs_out + ih * npw;
+            const FPTYPE* ylm_ptr = ylms_in + indexes[ih*4] * npw;
+            const FPTYPE* vq_ptr = vqs_in + indexes[ih*4 + 1] * npw;
             // set vkb to zero
             for (int ig = 0; ig < npw; ig++)
             {
@@ -234,9 +236,9 @@ struct cal_vkb_deri_op<FPTYPE, base_device::DEVICE_CPU>
             }
             // second term: ylm_deri * vq_deri * sk * pref
             //  loop over all G-vectors
-            const FPTYPE* ylm_deri_ptr1 = ylms_deri_in1[ih];
-            const FPTYPE* ylm_deri_ptr2 = ylms_deri_in2[ih];
-            const FPTYPE* vq_deri_ptr = vqs_deri_in[ih];
+            const FPTYPE* ylm_deri_ptr1 = ylms_deri_in + indexes[ih*4+2] * npw;
+            const FPTYPE* ylm_deri_ptr2 = ylms_deri_in + indexes[ih*4+3] * npw;
+            const FPTYPE* vq_deri_ptr = vqs_deri_in + indexes[ih*4+1] * npw;
             const FPTYPE* gkn = &gk_in[4 * npw];
             for (int ig = 0; ig < npw; ig++)
             {

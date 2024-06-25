@@ -78,25 +78,16 @@ class Nonlocal_maths
                          FPTYPE* vq_in,
                          FPTYPE** vq_ptrs);
 
-    /// calculate the ptr used in vkb_deri_op
-    void prepare_vkb_deri_ptr(int nbeta,
-                              double* nhtol,
-                              int nhtol_nc,
-                              int npw,
-                              int it,
-                              int ipol,
-                              int jpol,
-                              std::complex<FPTYPE>* vkb_out,
-                              std::complex<FPTYPE>** vkb_ptrs,
-                              FPTYPE* ylm_in,
-                              FPTYPE** ylm_ptrs,
-                              FPTYPE* ylm_deri_in,
-                              FPTYPE** ylm_deri_ptr1s,
-                              FPTYPE** ylm_deri_ptr2s,
-                              FPTYPE* vq_in,
-                              FPTYPE** vq_ptrs,
-                              FPTYPE* vq_deri_in,
-                              FPTYPE** vq_deri_ptrs);
+    /// calculate the indexes used in vkb_deri_op
+    /// indexes save (lm, nb, dylm_lm_ipol, dylm_lm_jpol) for nh
+    void cal_dvkb_index(const int nbeta,
+                        const double* nhtol,
+                        const int nhtol_nc,
+                        const int npw,
+                        const int it,
+                        const int ipol,
+                        const int jpol,
+                        int* indexes);
 
     static void dylmr2(const int nylm, const int ngy, const FPTYPE* gk, FPTYPE* dylm, const int ipol);
     /// polynomial interpolation tool for calculate derivate of vq
@@ -320,25 +311,14 @@ void Nonlocal_maths<FPTYPE, Device>::prepare_vkb_ptr(int nbeta,
 }
 
 template <typename FPTYPE, typename Device>
-void Nonlocal_maths<FPTYPE, Device>::prepare_vkb_deri_ptr(int nbeta,
-                                                          double* nhtol,
-                                                          int nhtol_nc,
-                                                          int npw,
-                                                          int it,
-                                                          int ipol,
-                                                          int jpol,
-                                                          std::complex<FPTYPE>* vkb_out,
-                                                          std::complex<FPTYPE>** vkb_ptrs,
-                                                          FPTYPE* ylm_in,
-                                                          FPTYPE** ylm_ptrs,
-                                                          FPTYPE* ylm_deri_in,
-                                                          FPTYPE** ylm_deri_ptr1s,
-                                                          FPTYPE** ylm_deri_ptr2s,
-                                                          FPTYPE* vq_in,
-                                                          FPTYPE** vq_ptrs,
-                                                          FPTYPE* vq_deri_in,
-                                                          FPTYPE** vq_deri_ptrs
-
+void Nonlocal_maths<FPTYPE, Device>::cal_dvkb_index(const int nbeta,
+                        const double* nhtol,
+                        const int nhtol_nc,
+                        const int npw,
+                        const int it,
+                        const int ipol,
+                        const int jpol,
+                        int* indexes
 )
 {
     int ih = 0;
@@ -349,13 +329,10 @@ void Nonlocal_maths<FPTYPE, Device>::prepare_vkb_deri_ptr(int nbeta,
         for (int m = 0; m < 2 * l + 1; m++)
         {
             int lm = l * l + m;
-            vkb_ptrs[ih] = &vkb_out[ih * npw];
-            ylm_ptrs[ih] = &ylm_in[lm * npw];
-            vq_ptrs[ih] = &vq_in[nb * npw];
-
-            ylm_deri_ptr1s[ih] = &ylm_deri_in[(ipol * x1 + lm) * npw];
-            ylm_deri_ptr2s[ih] = &ylm_deri_in[(jpol * x1 + lm) * npw];
-            vq_deri_ptrs[ih] = &vq_deri_in[nb * npw];
+            indexes[ih*4] = lm;
+            indexes[ih*4+1] = nb;
+            indexes[ih*4+2] = (ipol * x1 + lm);
+            indexes[ih*4+3] = (jpol * x1 + lm);
 
             ih++;
         }
