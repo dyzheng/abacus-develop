@@ -3,8 +3,8 @@
 #include "module_base/math_polyint.h"
 #include "module_base/math_ylmreal.h"
 #include "module_base/memory.h"
-#include "module_base/tool_title.h"
 #include "module_base/timer.h"
+#include "module_base/tool_title.h"
 #include "module_hamilt_pw/hamilt_pwdft/kernels/force_op.h"
 #include "nonlocal_maths.hpp"
 
@@ -244,16 +244,16 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
                 syncmem_complex_h2d_op()(this->ctx, this->cpu_ctx, d_pref_in, pref.data(), nh);
 
                 maths.prepare_vkb_ptr(this->ucell_->atoms[it].ncpp.nbeta,
-                                this->nlpp_->nhtol.c,
-                                this->nlpp_->nhtol.nc,
-                                npw,
-                                it,
-                                vkb_ptr,
-                                vkb_ptrs.data(),
-                                hd_ylm,
-                                ylm_ptrs.data(),
-                                hd_vq,
-                                vq_ptrs.data());
+                                      this->nlpp_->nhtol.c,
+                                      this->nlpp_->nhtol.nc,
+                                      npw,
+                                      it,
+                                      vkb_ptr,
+                                      vkb_ptrs.data(),
+                                      hd_ylm,
+                                      ylm_ptrs.data(),
+                                      hd_vq,
+                                      vq_ptrs.data());
 
                 // transfer the pointers from CPU to GPU
                 hamilt::synchronize_ptrs<Device>()((void**)d_vq_ptrs, (const void**)vq_ptrs.data(), nh);
@@ -267,16 +267,16 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
             else
             {
                 maths.prepare_vkb_ptr(this->ucell_->atoms[it].ncpp.nbeta,
-                                this->nlpp_->nhtol.c,
-                                this->nlpp_->nhtol.nc,
-                                npw,
-                                it,
-                                vkb_ptr,
-                                vkb_ptrs.data(),
-                                hd_ylm,
-                                ylm_ptrs.data(),
-                                hd_vq,
-                                vq_ptrs.data());
+                                      this->nlpp_->nhtol.c,
+                                      this->nlpp_->nhtol.nc,
+                                      npw,
+                                      it,
+                                      vkb_ptr,
+                                      vkb_ptrs.data(),
+                                      hd_ylm,
+                                      ylm_ptrs.data(),
+                                      hd_vq,
+                                      vq_ptrs.data());
 
                 cal_vkb_op()(this->ctx, nh, npw, vq_ptrs.data(), ylm_ptrs.data(), sk, pref.data(), vkb_ptrs.data());
             }
@@ -324,7 +324,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
 template <typename FPTYPE, typename Device>
 void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, int jpol, FPTYPE* stress)
 {
-    ModuleBase::TITLE("FS_Nonlocal_tools","cal_dbecp_s");
+    ModuleBase::TITLE("FS_Nonlocal_tools", "cal_dbecp_s");
     ModuleBase::timer::tick("FS_Nonlocal_tools", "cal_dbecp_s");
     if (this->dbecp == nullptr)
     {
@@ -340,11 +340,11 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, i
 
     if (this->pre_ik_s != ik)
     { // k point has changed, we need to recalculate the g_plus_k
-        //this->g_plus_k = maths.cal_gk(ik, this->wfc_basis_); //has been calculated by cal_becp
+        // this->g_plus_k = maths.cal_gk(ik, this->wfc_basis_); //has been calculated by cal_becp
 
         const int lmax_ = this->nlpp_->lmaxkb;
         // prepare ylm，size: (lmax+1)^2 * this->max_npw
-        //maths.cal_ylm(lmax_, npw, g_plus_k.data(), hd_ylm); //has been calculated by cal_becp
+        // maths.cal_ylm(lmax_, npw, g_plus_k.data(), hd_ylm); //has been calculated by cal_becp
         maths.cal_ylm_deri(lmax_, npw, g_plus_k.data(), hd_ylm_deri);
         this->pre_ik_s = ik;
     }
@@ -399,23 +399,23 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, i
                 syncmem_complex_h2d_op()(this->ctx, this->cpu_ctx, d_pref_in, pref.data(), nh);
 
                 maths.prepare_vkb_deri_ptr(this->ucell_->atoms[it].ncpp.nbeta,
-                                     this->nlpp_->nhtol.c,
-                                     this->nlpp_->nhtol.nc,
-                                     npw,
-                                     it,
-                                     ipol,
-                                     jpol,
-                                     vkb_deri_ptr,
-                                     vkb_ptrs.data(),
-                                     hd_ylm,
-                                     ylm_ptrs.data(),
-                                     hd_ylm_deri,
-                                     ylm_deri_ptrs1.data(),
-                                     ylm_deri_ptrs2.data(),
-                                     hd_vq,
-                                     vq_ptrs.data(),
-                                     hd_vq_deri,
-                                     vq_deri_ptrs.data());
+                                           this->nlpp_->nhtol.c,
+                                           this->nlpp_->nhtol.nc,
+                                           npw,
+                                           it,
+                                           ipol,
+                                           jpol,
+                                           vkb_deri_ptr,
+                                           vkb_ptrs.data(),
+                                           hd_ylm,
+                                           ylm_ptrs.data(),
+                                           hd_ylm_deri,
+                                           ylm_deri_ptrs1.data(),
+                                           ylm_deri_ptrs2.data(),
+                                           hd_vq,
+                                           vq_ptrs.data(),
+                                           hd_vq_deri,
+                                           vq_deri_ptrs.data());
 
                 // transfer the pointers from CPU to GPU
                 hamilt::synchronize_ptrs<Device>()((void**)d_vq_ptrs, (const void**)vq_ptrs.data(), nh);
@@ -443,23 +443,23 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, i
             {
 
                 maths.prepare_vkb_deri_ptr(this->ucell_->atoms[it].ncpp.nbeta,
-                                     this->nlpp_->nhtol.c,
-                                     this->nlpp_->nhtol.nc,
-                                     npw,
-                                     it,
-                                     ipol,
-                                     jpol,
-                                     vkb_deri_ptr,
-                                     vkb_ptrs.data(),
-                                     hd_ylm,
-                                     ylm_ptrs.data(),
-                                     hd_ylm_deri,
-                                     ylm_deri_ptrs1.data(),
-                                     ylm_deri_ptrs2.data(),
-                                     hd_vq,
-                                     vq_ptrs.data(),
-                                     hd_vq_deri,
-                                     vq_deri_ptrs.data());
+                                           this->nlpp_->nhtol.c,
+                                           this->nlpp_->nhtol.nc,
+                                           npw,
+                                           it,
+                                           ipol,
+                                           jpol,
+                                           vkb_deri_ptr,
+                                           vkb_ptrs.data(),
+                                           hd_ylm,
+                                           ylm_ptrs.data(),
+                                           hd_ylm_deri,
+                                           ylm_deri_ptrs1.data(),
+                                           ylm_deri_ptrs2.data(),
+                                           hd_vq,
+                                           vq_ptrs.data(),
+                                           hd_vq_deri,
+                                           vq_deri_ptrs.data());
                 cal_vkb_deri_op()(this->ctx,
                                   nh,
                                   npw,
