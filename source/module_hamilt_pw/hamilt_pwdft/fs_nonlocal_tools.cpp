@@ -69,8 +69,6 @@ void FS_Nonlocal_tools<FPTYPE, Device>::allocate_memory(const ModuleBase::matrix
         this->max_nh = std::max(this->ucell_->atoms[it].ncpp.nh, max_nh);
     }
 
-    // allocate the memory on CPU.
-
     // allocate the memory for vkb and vkb_deri.
     if (this->device == base_device::GpuDevice)
     {
@@ -97,8 +95,6 @@ void FS_Nonlocal_tools<FPTYPE, Device>::allocate_memory(const ModuleBase::matrix
         resmem_var_op()(this->ctx, d_g_plus_k, max_npw * 5);
         resmem_var_op()(this->ctx, d_pref, max_nh);
         resmem_var_op()(this->ctx, d_vq_tab, this->nlpp_->tab.getSize());
-
-        resmem_complex_op()(this->ctx, d_sk, max_npw);
         resmem_complex_op()(this->ctx, d_pref_in, max_nh);
 
         this->ppcell_vkb = this->nlpp_->template get_vkb_data<FPTYPE>();
@@ -139,7 +135,6 @@ void FS_Nonlocal_tools<FPTYPE, Device>::delete_memory()
         delmem_var_op()(this->ctx, d_g_plus_k);
         delmem_var_op()(this->ctx, d_pref);
         delmem_var_op()(this->ctx, d_vq_tab);
-        delmem_complex_op()(this->ctx, d_sk);
         delmem_complex_op()(this->ctx, this->d_pref_in);
         delmem_int_op()(this->ctx, d_dvkb_indexes);
     }
@@ -147,6 +142,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::delete_memory()
     if (becp != nullptr)
     {
         delmem_complex_op()(this->ctx, becp);
+        delmem_complex_op()(this->ctx, hd_sk);
     }
     if (dbecp != nullptr)
     {
@@ -179,10 +175,15 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
 
     std::complex<FPTYPE>* vkb_ptr = this->ppcell_vkb;
 
+    // calculate G+K
     this->g_plus_k = maths.cal_gk(ik, this->wfc_basis_);
     FPTYPE *gk = g_plus_k.data(), *vq_tb = this->nlpp_->tab.ptr;
-    const int lmax_ = this->nlpp_->lmaxkb;
+    // calculate sk
+    resmem_complex_op()(ctx, hd_sk, this->ucell_->nat * npw);
+    this->sf_->get_sk(ctx, ik, this->wfc_basis_, hd_sk);
+    std::complex<FPTYPE>* d_sk = this->hd_sk;
     // prepare ylm，size: (lmax+1)^2 * this->max_npw
+    const int lmax_ = this->nlpp_->lmaxkb;
     maths.cal_ylm(lmax_, npw, g_plus_k.data(), hd_ylm);
     if (this->device == base_device::GpuDevice)
     {
@@ -230,26 +231,19 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
 
         for (int ia = 0; ia < h_atom_na[it]; ia++)
         {
-            // prepare SK
-            std::complex<FPTYPE>* sk = this->sf_->get_sk(ik, it, ia, this->wfc_basis_);
             // 1. calculate becp
             // 1.a calculate vkb
 
-            if (this->device == base_device::GpuDevice)
+            if (this->device == base_device::CpuDevice)
             {
-                syncmem_complex_h2d_op()(this->ctx, this->cpu_ctx, d_sk, sk, npw);
-            }
-            else
-            {
-                d_sk = sk;
                 d_pref_in = pref.data();
                 d_dvkb_indexes = dvkb_indexes.data();
             }
             cal_vkb_op()(this->ctx, nh, npw, d_dvkb_indexes, hd_vq, hd_ylm, d_sk, d_pref_in, vkb_ptr);
-            delete[] sk;
 
             // 2.b calculate becp = vkb * psi
             vkb_ptr += nh * npw;
+            d_sk += npw;
         }
     }
     const char transa = 'C';
@@ -315,6 +309,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, i
         this->pre_ik_s = ik;
     }
     FPTYPE *gk = g_plus_k.data(), *vq_tb = this->nlpp_->tab.ptr;
+    std::complex<FPTYPE>* d_sk = this->hd_sk;
     if (this->device == base_device::GpuDevice)
     {
         gk = d_g_plus_k;
@@ -370,19 +365,12 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, i
         }
         for (int ia = 0; ia < h_atom_na[it]; ia++)
         {
-            std::complex<FPTYPE>* sk = this->sf_->get_sk(ik, it, ia, this->wfc_basis_);
-            int index = 0;
             // 2. calculate dbecp：
             // 2.a. calculate dbecp_noevc, repeat use the memory of ppcell.vkb
 
-            if (this->device == base_device::GpuDevice)
-            {
-                syncmem_complex_h2d_op()(this->ctx, this->cpu_ctx, d_sk, sk, npw);
-            }
-            else
+            if (this->device == base_device::CpuDevice)
             {
                 d_dvkb_indexes = dvkb_indexes.data();
-                d_sk = sk;
                 d_pref_in = pref.data();
                 d_g_plus_k = g_plus_k.data();
             }
@@ -400,8 +388,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, i
                             d_pref_in,
                             d_g_plus_k,
                             vkb_deri_ptr);
-            delete[] sk;
-
+            d_sk += npw;
             vkb_deri_ptr += nh * npw;
         }
     }

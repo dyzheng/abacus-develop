@@ -65,6 +65,7 @@ class FS_Nonlocal_tools
     std::vector<int> h_atom_na;
 
     std::vector<FPTYPE> g_plus_k;
+    std::complex<FPTYPE>* hd_sk = nullptr;
 
     int* gcar_zero_indexes = nullptr;
     int gcar_zero_counts[3] = {0, 0, 0};
@@ -99,7 +100,6 @@ class FS_Nonlocal_tools
 
     std::complex<FPTYPE>* ppcell_vkb = nullptr;
     std::complex<FPTYPE>** d_vkb_ptrs = nullptr;
-    std::complex<FPTYPE>* d_sk = nullptr;
     std::complex<FPTYPE>* d_pref_in = nullptr;
 
     // becp and dbecp:

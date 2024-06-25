@@ -18,6 +18,7 @@ class Nonlocal_maths
   public:
     Nonlocal_maths(const pseudopot_cell_vnl* nlpp_in, const UnitCell* ucell_in)
     {
+        this->device = base_device::get_device_type<Device>(this->ctx);
         this->nlpp_ = nlpp_in;
         this->ucell_ = ucell_in;
     }
