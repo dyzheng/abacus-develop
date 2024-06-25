@@ -3,8 +3,8 @@
 #include "module_base/math_polyint.h"
 #include "module_base/math_ylmreal.h"
 #include "module_base/memory.h"
-#include "module_base/tool_title.h"
 #include "module_base/timer.h"
+#include "module_base/tool_title.h"
 #include "module_hamilt_pw/hamilt_pwdft/kernels/force_op.h"
 #include "nonlocal_maths.hpp"
 
@@ -290,7 +290,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
 template <typename FPTYPE, typename Device>
 void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, int jpol, FPTYPE* stress)
 {
-    ModuleBase::TITLE("FS_Nonlocal_tools","cal_dbecp_s");
+    ModuleBase::TITLE("FS_Nonlocal_tools", "cal_dbecp_s");
     ModuleBase::timer::tick("FS_Nonlocal_tools", "cal_dbecp_s");
     if (this->dbecp == nullptr)
     {
@@ -306,11 +306,11 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, i
 
     if (this->pre_ik_s != ik)
     { // k point has changed, we need to recalculate the g_plus_k
-        //this->g_plus_k = maths.cal_gk(ik, this->wfc_basis_); //has been calculated by cal_becp
+        // this->g_plus_k = maths.cal_gk(ik, this->wfc_basis_); //has been calculated by cal_becp
 
         const int lmax_ = this->nlpp_->lmaxkb;
         // prepare ylm，size: (lmax+1)^2 * this->max_npw
-        //maths.cal_ylm(lmax_, npw, g_plus_k.data(), hd_ylm); //has been calculated by cal_becp
+        // maths.cal_ylm(lmax_, npw, g_plus_k.data(), hd_ylm); //has been calculated by cal_becp
         maths.cal_ylm_deri(lmax_, npw, g_plus_k.data(), hd_ylm_deri);
         this->pre_ik_s = ik;
     }
