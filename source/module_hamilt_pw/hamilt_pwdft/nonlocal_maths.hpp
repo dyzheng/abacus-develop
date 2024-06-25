@@ -16,8 +16,7 @@ template <typename FPTYPE, typename Device>
 class Nonlocal_maths
 {
   public:
-    Nonlocal_maths(const pseudopot_cell_vnl* nlpp_in,
-                      const UnitCell* ucell_in)
+    Nonlocal_maths(const pseudopot_cell_vnl* nlpp_in, const UnitCell* ucell_in)
     {
         this->nlpp_ = nlpp_in;
         this->ucell_ = ucell_in;
@@ -192,13 +191,13 @@ std::vector<std::complex<FPTYPE>> Nonlocal_maths<FPTYPE, Device>::cal_pref(int i
 // cpu version first, gpu version later
 template <typename FPTYPE, typename Device>
 void Nonlocal_maths<FPTYPE, Device>::cal_vkb(int it,
-                                                int ia,
-                                                int npw,
-                                                const FPTYPE* vq_in,
-                                                const FPTYPE* ylm_in,
-                                                const std::complex<FPTYPE>* sk_in,
-                                                const std::complex<FPTYPE>* pref_in,
-                                                std::complex<FPTYPE>* vkb_out)
+                                             int ia,
+                                             int npw,
+                                             const FPTYPE* vq_in,
+                                             const FPTYPE* ylm_in,
+                                             const std::complex<FPTYPE>* sk_in,
+                                             const std::complex<FPTYPE>* pref_in,
+                                             std::complex<FPTYPE>* vkb_out)
 {
     int ih = 0;
     // loop over all beta functions
@@ -226,18 +225,18 @@ void Nonlocal_maths<FPTYPE, Device>::cal_vkb(int it,
 // cpu version first, gpu version later
 template <typename FPTYPE, typename Device>
 void Nonlocal_maths<FPTYPE, Device>::cal_vkb_deri(int it,
-                                                     int ia,
-                                                     int npw,
-                                                     int ipol,
-                                                     int jpol,
-                                                     const FPTYPE* vq_in,
-                                                     const FPTYPE* vq_deri_in,
-                                                     const FPTYPE* ylm_in,
-                                                     const FPTYPE* ylm_deri_in,
-                                                     const std::complex<FPTYPE>* sk_in,
-                                                     const std::complex<FPTYPE>* pref_in,
-                                                     const FPTYPE* gk_in,
-                                                     std::complex<FPTYPE>* vkb_out)
+                                                  int ia,
+                                                  int npw,
+                                                  int ipol,
+                                                  int jpol,
+                                                  const FPTYPE* vq_in,
+                                                  const FPTYPE* vq_deri_in,
+                                                  const FPTYPE* ylm_in,
+                                                  const FPTYPE* ylm_deri_in,
+                                                  const std::complex<FPTYPE>* sk_in,
+                                                  const std::complex<FPTYPE>* pref_in,
+                                                  const FPTYPE* gk_in,
+                                                  std::complex<FPTYPE>* vkb_out)
 {
     const int x1 = (this->nlpp_->lmaxkb + 1) * (this->nlpp_->lmaxkb + 1);
     int ih = 0;
@@ -291,16 +290,16 @@ void Nonlocal_maths<FPTYPE, Device>::cal_vkb_deri(int it,
 
 template <typename FPTYPE, typename Device>
 void Nonlocal_maths<FPTYPE, Device>::prepare_vkb_ptr(int nbeta,
-                                                        double* nhtol,
-                                                        int nhtol_nc,
-                                                        int npw,
-                                                        int it,
-                                                        std::complex<FPTYPE>* vkb_out,
-                                                        std::complex<FPTYPE>** vkb_ptrs,
-                                                        FPTYPE* ylm_in,
-                                                        FPTYPE** ylm_ptrs,
-                                                        FPTYPE* vq_in,
-                                                        FPTYPE** vq_ptrs)
+                                                     double* nhtol,
+                                                     int nhtol_nc,
+                                                     int npw,
+                                                     int it,
+                                                     std::complex<FPTYPE>* vkb_out,
+                                                     std::complex<FPTYPE>** vkb_ptrs,
+                                                     FPTYPE* ylm_in,
+                                                     FPTYPE** ylm_ptrs,
+                                                     FPTYPE* vq_in,
+                                                     FPTYPE** vq_ptrs)
 {
     // std::complex<FPTYPE>** vkb_ptrs[nh];
     // const FPTYPE** ylm_ptrs[nh];
@@ -322,23 +321,23 @@ void Nonlocal_maths<FPTYPE, Device>::prepare_vkb_ptr(int nbeta,
 
 template <typename FPTYPE, typename Device>
 void Nonlocal_maths<FPTYPE, Device>::prepare_vkb_deri_ptr(int nbeta,
-                                                             double* nhtol,
-                                                             int nhtol_nc,
-                                                             int npw,
-                                                             int it,
-                                                             int ipol,
-                                                             int jpol,
-                                                             std::complex<FPTYPE>* vkb_out,
-                                                             std::complex<FPTYPE>** vkb_ptrs,
-                                                             FPTYPE* ylm_in,
-                                                             FPTYPE** ylm_ptrs,
-                                                             FPTYPE* ylm_deri_in,
-                                                             FPTYPE** ylm_deri_ptr1s,
-                                                             FPTYPE** ylm_deri_ptr2s,
-                                                             FPTYPE* vq_in,
-                                                             FPTYPE** vq_ptrs,
-                                                             FPTYPE* vq_deri_in,
-                                                             FPTYPE** vq_deri_ptrs
+                                                          double* nhtol,
+                                                          int nhtol_nc,
+                                                          int npw,
+                                                          int it,
+                                                          int ipol,
+                                                          int jpol,
+                                                          std::complex<FPTYPE>* vkb_out,
+                                                          std::complex<FPTYPE>** vkb_ptrs,
+                                                          FPTYPE* ylm_in,
+                                                          FPTYPE** ylm_ptrs,
+                                                          FPTYPE* ylm_deri_in,
+                                                          FPTYPE** ylm_deri_ptr1s,
+                                                          FPTYPE** ylm_deri_ptr2s,
+                                                          FPTYPE* vq_in,
+                                                          FPTYPE** vq_ptrs,
+                                                          FPTYPE* vq_deri_in,
+                                                          FPTYPE** vq_deri_ptrs
 
 )
 {
@@ -365,10 +364,10 @@ void Nonlocal_maths<FPTYPE, Device>::prepare_vkb_deri_ptr(int nbeta,
 
 template <typename FPTYPE, typename Device>
 void Nonlocal_maths<FPTYPE, Device>::dylmr2(const int nylm,
-                                               const int ngy,
-                                               const FPTYPE* gk,
-                                               FPTYPE* dylm,
-                                               const int ipol)
+                                            const int ngy,
+                                            const FPTYPE* gk,
+                                            FPTYPE* dylm,
+                                            const int ipol)
 {
     //-----------------------------------------------------------------------
     //
@@ -475,10 +474,10 @@ void Nonlocal_maths<FPTYPE, Device>::dylmr2(const int nylm,
 
 template <typename FPTYPE, typename Device>
 FPTYPE Nonlocal_maths<FPTYPE, Device>::Polynomial_Interpolation_nl(const ModuleBase::realArray& table,
-                                                                      const int& dim1,
-                                                                      const int& dim2,
-                                                                      const FPTYPE& table_interval,
-                                                                      const FPTYPE& x // input value
+                                                                   const int& dim1,
+                                                                   const int& dim2,
+                                                                   const FPTYPE& table_interval,
+                                                                   const FPTYPE& x // input value
 )
 {
 
@@ -498,6 +497,6 @@ FPTYPE Nonlocal_maths<FPTYPE, Device>::Polynomial_Interpolation_nl(const ModuleB
 
     return y;
 }
-}// namespace hamilt
+} // namespace hamilt
 
 #endif

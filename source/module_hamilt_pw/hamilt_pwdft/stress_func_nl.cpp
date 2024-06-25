@@ -3,9 +3,9 @@
 #include "module_base/memory.h"
 #include "module_base/module_device/device.h"
 #include "module_base/timer.h"
-#include "module_hamilt_pw/hamilt_pwdft/nonlocal_maths.hpp"
 #include "module_hamilt_pw/hamilt_pwdft/fs_nonlocal_tools.h"
 #include "module_hamilt_pw/hamilt_pwdft/global.h"
+#include "module_hamilt_pw/hamilt_pwdft/nonlocal_maths.hpp"
 #include "stress_func.h"
 // calculate the nonlocal pseudopotential stress in PW
 template <typename FPTYPE, typename Device>
@@ -280,10 +280,10 @@ void Stress_Func<FPTYPE, Device>::get_dvnl2(ModuleBase::ComplexMatrix& vkb,
                 // cout << "\n gk[ig] = " << gk[ig].x << " " << gk[ig].y << " " << gk[ig].z;
                 // cout << "\n gk.norm = " << gnorm;
                 vq[ig] = hamilt::Nonlocal_maths<FPTYPE, Device>::Polynomial_Interpolation_nl(nlpp->tab,
-                                                                                                it,
-                                                                                                nb,
-                                                                                                GlobalV::DQ,
-                                                                                                gnorm);
+                                                                                             it,
+                                                                                             nb,
+                                                                                             GlobalV::DQ,
+                                                                                             gnorm);
 
             } // enddo
 

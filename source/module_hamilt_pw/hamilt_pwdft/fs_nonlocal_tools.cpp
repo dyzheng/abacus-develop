@@ -181,7 +181,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::delete_memory()
 template <typename FPTYPE, typename Device>
 void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
 {
-    ModuleBase::TITLE("FS_Nonlocal_tools","cal_becp");
+    ModuleBase::TITLE("FS_Nonlocal_tools", "cal_becp");
     ModuleBase::timer::tick("FS_Nonlocal_tools", "cal_becp");
     if (this->becp == nullptr)
     {
@@ -528,7 +528,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, i
 template <typename FPTYPE, typename Device>
 void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_f(int ik, int npm, int ipol)
 {
-    ModuleBase::TITLE("FS_Nonlocal_tools","cal_dbecp_s");
+    ModuleBase::TITLE("FS_Nonlocal_tools", "cal_dbecp_s");
     ModuleBase::timer::tick("FS_Nonlocal_tools", "cal_dbecp_f");
     if (this->dbecp == nullptr)
     {

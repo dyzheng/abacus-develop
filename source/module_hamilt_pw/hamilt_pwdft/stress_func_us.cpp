@@ -52,10 +52,10 @@ void Stress_PW<FPTYPE, Device>::stress_us(ModuleBase::matrix& sigma,
     {
         double* gcar_ptr = reinterpret_cast<double*>(rho_basis->gcar);
         hamilt::Nonlocal_maths<FPTYPE, Device>::dylmr2(ppcell_in->lmaxq * ppcell_in->lmaxq,
-                                                          npw,
-                                                          gcar_ptr,
-                                                          dylmk0.c,
-                                                          ipol);
+                                                       npw,
+                                                       gcar_ptr,
+                                                       dylmk0.c,
+                                                       ipol);
         for (int it = 0; it < ucell.ntype; it++)
         {
             Atom* atom = &ucell.atoms[it];
