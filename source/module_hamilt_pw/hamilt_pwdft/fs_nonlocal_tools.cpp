@@ -4,6 +4,7 @@
 #include "module_base/math_ylmreal.h"
 #include "module_base/memory.h"
 #include "module_base/tool_title.h"
+#include "module_base/timer.h"
 #include "module_hamilt_pw/hamilt_pwdft/kernels/force_op.h"
 #include "nonlocal_maths.hpp"
 
@@ -49,7 +50,8 @@ void FS_Nonlocal_tools<FPTYPE, Device>::allocate_memory(const ModuleBase::matrix
     // allocate memory
 
     // prepare the memory of stress and init some variables:
-    this->h_atom_nh = new int[this->ntype], this->h_atom_na = new int[this->ntype];
+    this->h_atom_nh.resize(this->ntype);
+    this->h_atom_na.resize(this->ntype);
     for (int ii = 0; ii < this->ntype; ii++)
     {
         h_atom_nh[ii] = this->ucell_->atoms[ii].ncpp.nh;
@@ -70,12 +72,12 @@ void FS_Nonlocal_tools<FPTYPE, Device>::allocate_memory(const ModuleBase::matrix
     // allocate the memory on CPU.
 
     // allocate the memory for vkb and vkb_deri.
-    this->vq_ptrs = new FPTYPE*[max_nh];
-    this->ylm_ptrs = new FPTYPE*[max_nh];
-    this->vq_deri_ptrs = new FPTYPE*[max_nh];
-    this->ylm_deri_ptrs1 = new FPTYPE*[max_nh];
-    this->ylm_deri_ptrs2 = new FPTYPE*[max_nh];
-    this->vkb_ptrs = new std::complex<FPTYPE>*[max_nh];
+    this->vq_ptrs.resize(max_nh);
+    this->ylm_ptrs.resize(max_nh);
+    this->vq_deri_ptrs.resize(max_nh);
+    this->ylm_deri_ptrs1.resize(max_nh);
+    this->ylm_deri_ptrs2.resize(max_nh);
+    this->vkb_ptrs.resize(max_nh);
     if (this->device == base_device::GpuDevice)
     {
         hamilt::pointer_array_malloc<Device>()((void**)&d_ylm_ptrs, max_nh);
@@ -101,8 +103,8 @@ void FS_Nonlocal_tools<FPTYPE, Device>::allocate_memory(const ModuleBase::matrix
         syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, d_ekb, ekb.c, ekb.nr * ekb.nc);
         resmem_int_op()(this->ctx, atom_nh, this->ntype);
         resmem_int_op()(this->ctx, atom_na, this->ntype);
-        syncmem_int_h2d_op()(this->ctx, this->cpu_ctx, atom_nh, h_atom_nh, this->ntype);
-        syncmem_int_h2d_op()(this->ctx, this->cpu_ctx, atom_na, h_atom_na, this->ntype);
+        syncmem_int_h2d_op()(this->ctx, this->cpu_ctx, atom_nh, h_atom_nh.data(), this->ntype);
+        syncmem_int_h2d_op()(this->ctx, this->cpu_ctx, atom_na, h_atom_na.data(), this->ntype);
 
         resmem_var_op()(this->ctx, d_g_plus_k, max_npw * 5);
         resmem_var_op()(this->ctx, d_pref, max_nh);
@@ -117,8 +119,8 @@ void FS_Nonlocal_tools<FPTYPE, Device>::allocate_memory(const ModuleBase::matrix
     {
         this->d_wg = wg.c;
         this->d_ekb = ekb.c;
-        this->atom_nh = h_atom_nh;
-        this->atom_na = h_atom_na;
+        this->atom_nh = h_atom_nh.data();
+        this->atom_na = h_atom_na.data();
         this->ppcell_vkb = this->nlpp_->vkb.c;
     }
 
@@ -133,15 +135,6 @@ template <typename FPTYPE, typename Device>
 void FS_Nonlocal_tools<FPTYPE, Device>::delete_memory()
 {
     // delete memory
-    delete[] this->h_atom_nh;
-    delete[] this->h_atom_na;
-
-    delete[] this->vkb_ptrs;
-    delete[] this->vq_ptrs;
-    delete[] this->ylm_ptrs;
-    delete[] this->vq_deri_ptrs;
-    delete[] this->ylm_deri_ptrs1;
-    delete[] this->ylm_deri_ptrs2;
 
     delmem_var_op()(this->ctx, hd_vq);
     delmem_var_op()(this->ctx, hd_vq_deri);
@@ -189,6 +182,7 @@ template <typename FPTYPE, typename Device>
 void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
 {
     ModuleBase::TITLE("FS_Nonlocal_tools","cal_becp");
+    ModuleBase::timer::tick("FS_Nonlocal_tools", "cal_becp");
     if (this->becp == nullptr)
     {
         resmem_complex_op()(this->ctx, becp, this->nbands * this->nkb);
@@ -203,9 +197,17 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
     std::complex<FPTYPE>* vkb_ptr = this->ppcell_vkb;
 
     std::vector<FPTYPE> g_plus_k = maths.cal_gk(ik, this->wfc_basis_);
+    FPTYPE *gk = g_plus_k.data(), *vq_tb = this->nlpp_->tab.ptr;
     const int lmax_ = this->nlpp_->lmaxkb;
     // prepare ylm，size: (lmax+1)^2 * this->max_npw
     maths.cal_ylm(lmax_, npw, g_plus_k.data(), hd_ylm);
+    if (this->device == base_device::GpuDevice)
+    {
+        syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, d_g_plus_k, g_plus_k.data(), g_plus_k.size());
+        syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, d_vq_tab, this->nlpp_->tab.ptr, this->nlpp_->tab.getSize());
+        gk = d_g_plus_k;
+        vq_tb = d_vq_tab;
+    }
     for (int it = 0; it < this->ucell_->ntype; it++) // loop all elements
     {
         int lenth_vq = this->ucell_->atoms[it].ncpp.nbeta * npw;
@@ -214,15 +216,6 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
         std::vector<double> vq(lenth_vq); // cal_vq(it, g_plus_k.data(), npw);
         // std::vector<double> vq2(vq.size());
 
-        FPTYPE *gk = g_plus_k.data(), *vq_tb = this->nlpp_->tab.ptr;
-
-        if (this->device == base_device::GpuDevice)
-        {
-            syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, d_g_plus_k, g_plus_k.data(), g_plus_k.size());
-            syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, d_vq_tab, this->nlpp_->tab.ptr, this->nlpp_->tab.getSize());
-            gk = d_g_plus_k;
-            vq_tb = d_vq_tab;
-        }
         cal_vq_op()(this->ctx,
                     vq_tb,
                     it,
@@ -233,16 +226,6 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
                     GlobalV::DQ,
                     this->ucell_->atoms[it].ncpp.nbeta,
                     hd_vq);
-        cal_vq_deri_op()(this->ctx,
-                         vq_tb,
-                         it,
-                         gk,
-                         npw,
-                         this->nlpp_->tab.getBound2(),
-                         this->nlpp_->tab.getBound3(),
-                         GlobalV::DQ,
-                         this->ucell_->atoms[it].ncpp.nbeta,
-                         hd_vq_deri);
 
         // prepare（-i）^l, size: nh
         const std::vector<std::complex<double>> pref = maths.cal_pref(it);
@@ -266,16 +249,16 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
                                 npw,
                                 it,
                                 vkb_ptr,
-                                vkb_ptrs,
+                                vkb_ptrs.data(),
                                 hd_ylm,
-                                ylm_ptrs,
+                                ylm_ptrs.data(),
                                 hd_vq,
-                                vq_ptrs);
+                                vq_ptrs.data());
 
                 // transfer the pointers from CPU to GPU
-                hamilt::synchronize_ptrs<Device>()((void**)d_vq_ptrs, (const void**)vq_ptrs, nh);
-                hamilt::synchronize_ptrs<Device>()((void**)d_ylm_ptrs, (const void**)ylm_ptrs, nh);
-                hamilt::synchronize_ptrs<Device>()((void**)d_vkb_ptrs, (const void**)vkb_ptrs, nh);
+                hamilt::synchronize_ptrs<Device>()((void**)d_vq_ptrs, (const void**)vq_ptrs.data(), nh);
+                hamilt::synchronize_ptrs<Device>()((void**)d_ylm_ptrs, (const void**)ylm_ptrs.data(), nh);
+                hamilt::synchronize_ptrs<Device>()((void**)d_vkb_ptrs, (const void**)vkb_ptrs.data(), nh);
 
                 cal_vkb_op()(this->ctx, nh, npw, d_vq_ptrs, d_ylm_ptrs, d_sk, d_pref_in, d_vkb_ptrs);
 
@@ -289,13 +272,13 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
                                 npw,
                                 it,
                                 vkb_ptr,
-                                vkb_ptrs,
+                                vkb_ptrs.data(),
                                 hd_ylm,
-                                ylm_ptrs,
+                                ylm_ptrs.data(),
                                 hd_vq,
-                                vq_ptrs);
+                                vq_ptrs.data());
 
-                cal_vkb_op()(this->ctx, nh, npw, vq_ptrs, ylm_ptrs, sk, pref.data(), vkb_ptrs);
+                cal_vkb_op()(this->ctx, nh, npw, vq_ptrs.data(), ylm_ptrs.data(), sk, pref.data(), vkb_ptrs.data());
             }
             delete[] sk;
 
@@ -334,6 +317,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
     {
         Parallel_Reduce::reduce_pool(becp, this->nbands * this->nkb);
     }
+    ModuleBase::timer::tick("FS_Nonlocal_tools", "cal_becp");
 }
 
 // cal_dbecp
@@ -341,6 +325,7 @@ template <typename FPTYPE, typename Device>
 void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, int jpol, FPTYPE* stress)
 {
     ModuleBase::TITLE("FS_Nonlocal_tools","cal_dbecp_s");
+    ModuleBase::timer::tick("FS_Nonlocal_tools", "cal_dbecp_s");
     if (this->dbecp == nullptr)
     {
         resmem_complex_op()(this->ctx, dbecp, this->nbands * this->nkb);
@@ -355,14 +340,21 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, i
 
     if (this->pre_ik_s != ik)
     { // k point has changed, we need to recalculate the g_plus_k
-        this->g_plus_k = maths.cal_gk(ik, this->wfc_basis_);
+        //this->g_plus_k = maths.cal_gk(ik, this->wfc_basis_); //has been calculated by cal_becp
 
         const int lmax_ = this->nlpp_->lmaxkb;
         // prepare ylm，size: (lmax+1)^2 * this->max_npw
-        maths.cal_ylm(lmax_, npw, g_plus_k.data(), hd_ylm);
+        //maths.cal_ylm(lmax_, npw, g_plus_k.data(), hd_ylm); //has been calculated by cal_becp
         maths.cal_ylm_deri(lmax_, npw, g_plus_k.data(), hd_ylm_deri);
         this->pre_ik_s = ik;
     }
+    FPTYPE *gk = g_plus_k.data(), *vq_tb = this->nlpp_->tab.ptr;
+    if (this->device == base_device::GpuDevice)
+    {
+        gk = d_g_plus_k;
+        vq_tb = d_vq_tab;
+    }
+
     for (int it = 0; it < this->ucell_->ntype; it++) // loop all elements
     {
         int lenth_vq = this->ucell_->atoms[it].ncpp.nbeta * npw;
@@ -371,15 +363,6 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, i
         std::vector<double> vq(lenth_vq); // cal_vq(it, g_plus_k.data(), npw);
         // std::vector<double> vq2(vq.size());
 
-        FPTYPE *gk = g_plus_k.data(), *vq_tb = this->nlpp_->tab.ptr;
-
-        if (this->device == base_device::GpuDevice)
-        {
-            syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, d_g_plus_k, g_plus_k.data(), g_plus_k.size());
-            syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, d_vq_tab, this->nlpp_->tab.ptr, this->nlpp_->tab.getSize());
-            gk = d_g_plus_k;
-            vq_tb = d_vq_tab;
-        }
         cal_vq_op()(this->ctx,
                     vq_tb,
                     it,
@@ -423,24 +406,24 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, i
                                      ipol,
                                      jpol,
                                      vkb_deri_ptr,
-                                     vkb_ptrs,
+                                     vkb_ptrs.data(),
                                      hd_ylm,
-                                     ylm_ptrs,
+                                     ylm_ptrs.data(),
                                      hd_ylm_deri,
-                                     ylm_deri_ptrs1,
-                                     ylm_deri_ptrs2,
+                                     ylm_deri_ptrs1.data(),
+                                     ylm_deri_ptrs2.data(),
                                      hd_vq,
-                                     vq_ptrs,
+                                     vq_ptrs.data(),
                                      hd_vq_deri,
-                                     vq_deri_ptrs);
+                                     vq_deri_ptrs.data());
 
                 // transfer the pointers from CPU to GPU
-                hamilt::synchronize_ptrs<Device>()((void**)d_vq_ptrs, (const void**)vq_ptrs, nh);
-                hamilt::synchronize_ptrs<Device>()((void**)d_vq_deri_ptrs, (const void**)vq_deri_ptrs, nh);
-                hamilt::synchronize_ptrs<Device>()((void**)d_ylm_ptrs, (const void**)ylm_ptrs, nh);
-                hamilt::synchronize_ptrs<Device>()((void**)d_ylm_deri_ptrs1, (const void**)ylm_deri_ptrs1, nh);
-                hamilt::synchronize_ptrs<Device>()((void**)d_ylm_deri_ptrs2, (const void**)ylm_deri_ptrs2, nh);
-                hamilt::synchronize_ptrs<Device>()((void**)d_vkb_ptrs, (const void**)vkb_ptrs, nh);
+                hamilt::synchronize_ptrs<Device>()((void**)d_vq_ptrs, (const void**)vq_ptrs.data(), nh);
+                hamilt::synchronize_ptrs<Device>()((void**)d_vq_deri_ptrs, (const void**)vq_deri_ptrs.data(), nh);
+                hamilt::synchronize_ptrs<Device>()((void**)d_ylm_ptrs, (const void**)ylm_ptrs.data(), nh);
+                hamilt::synchronize_ptrs<Device>()((void**)d_ylm_deri_ptrs1, (const void**)ylm_deri_ptrs1.data(), nh);
+                hamilt::synchronize_ptrs<Device>()((void**)d_ylm_deri_ptrs2, (const void**)ylm_deri_ptrs2.data(), nh);
+                hamilt::synchronize_ptrs<Device>()((void**)d_vkb_ptrs, (const void**)vkb_ptrs.data(), nh);
                 cal_vkb_deri_op()(this->ctx,
                                   nh,
                                   npw,
@@ -467,30 +450,30 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, i
                                      ipol,
                                      jpol,
                                      vkb_deri_ptr,
-                                     vkb_ptrs,
+                                     vkb_ptrs.data(),
                                      hd_ylm,
-                                     ylm_ptrs,
+                                     ylm_ptrs.data(),
                                      hd_ylm_deri,
-                                     ylm_deri_ptrs1,
-                                     ylm_deri_ptrs2,
+                                     ylm_deri_ptrs1.data(),
+                                     ylm_deri_ptrs2.data(),
                                      hd_vq,
-                                     vq_ptrs,
+                                     vq_ptrs.data(),
                                      hd_vq_deri,
-                                     vq_deri_ptrs);
+                                     vq_deri_ptrs.data());
                 cal_vkb_deri_op()(this->ctx,
                                   nh,
                                   npw,
                                   ipol,
                                   jpol,
-                                  vq_ptrs,
-                                  vq_deri_ptrs,
-                                  ylm_ptrs,
-                                  ylm_deri_ptrs1,
-                                  ylm_deri_ptrs2,
+                                  vq_ptrs.data(),
+                                  vq_deri_ptrs.data(),
+                                  ylm_ptrs.data(),
+                                  ylm_deri_ptrs1.data(),
+                                  ylm_deri_ptrs2.data(),
                                   sk,
                                   pref.data(),
                                   g_plus_k.data(),
-                                  vkb_ptrs);
+                                  vkb_ptrs.data());
             }
             delete[] sk;
 
@@ -539,12 +522,14 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, i
                        becp,
                        dbecp,
                        stress);
+    ModuleBase::timer::tick("FS_Nonlocal_tools", "cal_dbecp_s");
 }
 
 template <typename FPTYPE, typename Device>
 void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_f(int ik, int npm, int ipol)
 {
     ModuleBase::TITLE("FS_Nonlocal_tools","cal_dbecp_s");
+    ModuleBase::timer::tick("FS_Nonlocal_tools", "cal_dbecp_f");
     if (this->dbecp == nullptr)
     {
         resmem_complex_op()(this->ctx, dbecp, 3 * this->nbands * this->nkb);
@@ -596,6 +581,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_f(int ik, int npm, int ipol)
 
     this->revert_vkb(npw, ipol);
     this->pre_ik_f = ik;
+    ModuleBase::timer::tick("FS_Nonlocal_tools", "cal_dbecp_f");
 }
 
 // save_vkb

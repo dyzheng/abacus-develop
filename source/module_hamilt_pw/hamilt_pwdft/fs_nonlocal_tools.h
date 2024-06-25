@@ -61,8 +61,8 @@ class FS_Nonlocal_tools
 
     int* atom_nh = nullptr;
     int* atom_na = nullptr;
-    int* h_atom_nh = nullptr;
-    int* h_atom_na = nullptr;
+    std::vector<int> h_atom_nh;
+    std::vector<int> h_atom_na;
 
     std::vector<FPTYPE> g_plus_k;
 
@@ -89,19 +89,19 @@ class FS_Nonlocal_tools
     FPTYPE* d_gk = nullptr;
     FPTYPE* d_vq_tab = nullptr;
     // allocate the memory for vkb and vkb_deri.
-    FPTYPE** vq_ptrs = nullptr;
+    std::vector<FPTYPE*> vq_ptrs;
     FPTYPE** d_vq_ptrs = nullptr;
-    FPTYPE** ylm_ptrs = nullptr;
+    std::vector<FPTYPE*> ylm_ptrs;
     FPTYPE** d_ylm_ptrs = nullptr;
-    FPTYPE** vq_deri_ptrs = nullptr;
+    std::vector<FPTYPE*> vq_deri_ptrs;
     FPTYPE** d_vq_deri_ptrs = nullptr;
-    FPTYPE** ylm_deri_ptrs1 = nullptr;
+    std::vector<FPTYPE*> ylm_deri_ptrs1;
     FPTYPE** d_ylm_deri_ptrs1 = nullptr;
-    FPTYPE** ylm_deri_ptrs2 = nullptr;
+    std::vector<FPTYPE*> ylm_deri_ptrs2;
     FPTYPE** d_ylm_deri_ptrs2 = nullptr;
 
     std::complex<FPTYPE>* ppcell_vkb = nullptr;
-    std::complex<FPTYPE>** vkb_ptrs = nullptr;
+    std::vector<std::complex<FPTYPE>*> vkb_ptrs;
     std::complex<FPTYPE>** d_vkb_ptrs = nullptr;
     std::complex<FPTYPE>* d_sk = nullptr;
     std::complex<FPTYPE>* d_pref_in = nullptr;
