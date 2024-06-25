@@ -196,7 +196,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
 
     std::complex<FPTYPE>* vkb_ptr = this->ppcell_vkb;
 
-    std::vector<FPTYPE> g_plus_k = maths.cal_gk(ik, this->wfc_basis_);
+    this->g_plus_k = maths.cal_gk(ik, this->wfc_basis_);
     FPTYPE *gk = g_plus_k.data(), *vq_tb = this->nlpp_->tab.ptr;
     const int lmax_ = this->nlpp_->lmaxkb;
     // prepare ylm，size: (lmax+1)^2 * this->max_npw
