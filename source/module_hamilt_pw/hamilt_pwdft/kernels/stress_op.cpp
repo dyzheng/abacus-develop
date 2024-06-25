@@ -182,8 +182,8 @@ struct cal_vkb_op<FPTYPE, base_device::DEVICE_CPU>
         for (int ih = 0; ih < nh; ih++)
         {
             std::complex<FPTYPE>* vkb_ptr = vkbs_out + ih * npw;
-            const FPTYPE* ylm_ptr = ylms_in + indexes[ih*4] * npw;
-            const FPTYPE* vq_ptr = vqs_in + indexes[ih*4+1] * npw;
+            const FPTYPE* ylm_ptr = ylms_in + indexes[ih * 4] * npw;
+            const FPTYPE* vq_ptr = vqs_in + indexes[ih * 4 + 1] * npw;
             // loop over all G-vectors
             for (int ig = 0; ig < npw; ig++)
             {
@@ -216,10 +216,10 @@ struct cal_vkb_deri_op<FPTYPE, base_device::DEVICE_CPU>
         // loop over all beta functions
         for (int ih = 0; ih < nh; ih++)
         {
-            //move ptrs
+            // move ptrs
             std::complex<FPTYPE>* vkb_ptr = vkbs_out + ih * npw;
-            const FPTYPE* ylm_ptr = ylms_in + indexes[ih*4] * npw;
-            const FPTYPE* vq_ptr = vqs_in + indexes[ih*4 + 1] * npw;
+            const FPTYPE* ylm_ptr = ylms_in + indexes[ih * 4] * npw;
+            const FPTYPE* vq_ptr = vqs_in + indexes[ih * 4 + 1] * npw;
             // set vkb to zero
             for (int ig = 0; ig < npw; ig++)
             {
@@ -236,9 +236,9 @@ struct cal_vkb_deri_op<FPTYPE, base_device::DEVICE_CPU>
             }
             // second term: ylm_deri * vq_deri * sk * pref
             //  loop over all G-vectors
-            const FPTYPE* ylm_deri_ptr1 = ylms_deri_in + indexes[ih*4+2] * npw;
-            const FPTYPE* ylm_deri_ptr2 = ylms_deri_in + indexes[ih*4+3] * npw;
-            const FPTYPE* vq_deri_ptr = vqs_deri_in + indexes[ih*4+1] * npw;
+            const FPTYPE* ylm_deri_ptr1 = ylms_deri_in + indexes[ih * 4 + 2] * npw;
+            const FPTYPE* ylm_deri_ptr2 = ylms_deri_in + indexes[ih * 4 + 3] * npw;
+            const FPTYPE* vq_deri_ptr = vqs_deri_in + indexes[ih * 4 + 1] * npw;
             const FPTYPE* gkn = &gk_in[4 * npw];
             for (int ig = 0; ig < npw; ig++)
             {
