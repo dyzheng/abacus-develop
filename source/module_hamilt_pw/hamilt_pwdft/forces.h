@@ -50,6 +50,16 @@ class Forces
     void cal_force_ew(ModuleBase::matrix& forceion, ModulePW::PW_Basis* rho_basis, const Structure_Factor* p_sf);
     void cal_force_cc(ModuleBase::matrix& forcecc, ModulePW::PW_Basis* rho_basis, const Charge* const chr);
 
+    /**
+     * @brief This routine computes the atomic force of non-local pseudopotential
+     *    F^{NL}_i = \sum_{n,k}f_{nk}\sum_I \sum_{lm,l'm'}D_{l,l'}^{I} [
+     *               \sum_G \langle c_{nk}(\mathbf{G+K})|\beta_{lm}^I(\mathbf{G+K})\rangle * 
+     *               \sum_{G'}\langle \beta_{lm}^I(\mathbf{G+K})*(-j)^l(\mathbf{G+K})_i |c_{nk}(\mathbf{G+K})\rangle ] 
+     *    there would be three parts in the above equation:
+     *    (1) sum over becp and dbecp with D_{l,l'}^{I} ----- first line in the above equation
+     *    (2) calculate becp = <psi | beta> ----- second line in the above equation
+     *    (3) calculate dbecp = <psi | \nabla beta> ----- third line in the above equation
+     */
     void cal_force_nl(ModuleBase::matrix& forcenl,
                       const ModuleBase::matrix& wg,
                       const ModuleBase::matrix& ekb,

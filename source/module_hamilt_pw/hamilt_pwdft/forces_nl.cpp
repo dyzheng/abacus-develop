@@ -50,8 +50,10 @@ void Forces<FPTYPE, Device>::cal_force_nl(ModuleBase::matrix& forcenl,
         nl_tools.cal_becp(ik, npm);
         for (int ipol = 0; ipol < 3; ipol++)
         {
+            // calculate dbecp = <psi|\nabla beta> for all beta functions
             nl_tools.cal_dbecp_f(ik, npm, ipol);
         }
+        // calculate the force_i = \sum_{n,k}f_{nk}\sum_I \sum_{lm,l'm'}D_{l,l'}^{I} becp * dbecp_i
         nl_tools.cal_force(ik, npm, force);
     } // end ik
 
