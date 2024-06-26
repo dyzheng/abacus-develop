@@ -135,12 +135,11 @@ class Stress_Func
     /**
      * @brief This routine computes the atomic force of non-local pseudopotential
      *    Stress^{NL}_{ij} = -1/\Omega \sum_{n,k}f_{nk}\sum_I \sum_{lm,l'm'}D_{l,l'}^{I} [
-     *               \sum_G \langle c_{nk}(\mathbf{G+K})|\beta_{lm}^I(\mathbf{G+K})\rangle * 
-     *               \sum_{G'}\langle \partial \beta_{lm}^I(\mathbf{G+K})/\partial \varepsilon_{ij} |c_{nk}(\mathbf{G+K})\rangle ] 
-     *    there would be three parts in the above equation:
-     *    (1) sum over becp and dbecp with D_{l,l'}^{I} ----- first line in the above equation
-     *    (2) calculate becp = <psi | beta> ----- second line in the above equation
-     *    (3) calculate dbecp = <psi | dbeta> ----- third line in the above equation
+     *               \sum_G \langle c_{nk}(\mathbf{G+K})|\beta_{lm}^I(\mathbf{G+K})\rangle *
+     *               \sum_{G'}\langle \partial \beta_{lm}^I(\mathbf{G+K})/\partial \varepsilon_{ij}
+     * |c_{nk}(\mathbf{G+K})\rangle ] there would be three parts in the above equation: (1) sum over becp and dbecp with
+     * D_{l,l'}^{I} ----- first line in the above equation (2) calculate becp = <psi | beta> ----- second line in the
+     * above equation (3) calculate dbecp = <psi | dbeta> ----- third line in the above equation
      */
     void stress_nl(ModuleBase::matrix& sigma,
                    const ModuleBase::matrix& wg,
