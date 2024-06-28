@@ -22,10 +22,6 @@ class LCAO_Matrix
 
     void divide_HS_in_frag(const bool isGamma, Parallel_Orbitals& pv, const int& nks);
 
-    // folding the fixed Hamiltonian (T+Vnl) if
-    // k-point algorithm is used.
-    void folding_fixedH(const int& ik, const std::vector<ModuleBase::Vector3<double>>& kvec_d, bool cal_syns = false);
-
     Parallel_Orbitals* ParaV;
 
 #ifdef __EXX
@@ -37,33 +33,7 @@ class LCAO_Matrix
     std::vector<std::vector<std::complex<double>>> Hexxc_k_load;
 #endif
 
-    void allocate_HS_k(const long& nloc);
-
-  private:
-    void allocate_HS_gamma(const long& nloc);
-
   public:
-    //------------------------------
-    // H, S, Hfixed
-    // used in gamma only algorithm.
-    // thse matrix are used to
-    // diagonalize.
-    //------------------------------
-    std::vector<double> Hloc;
-    std::vector<double> Sloc;
-    std::vector<double> Hloc_fixed;
-
-    //------------------------------
-    // 1. Hamiltonian(vl),
-    // 2. overlap matrix Sloc2
-    // 3. fixed (vna+T+Vnl) matrix.
-    // used in kpoint algorithm.
-    // these matrix are used to
-    // diagonalize.
-    //------------------------------
-    std::vector<std::complex<double>> Hloc2;
-    std::vector<std::complex<double>> Sloc2;
-    std::vector<std::complex<double>> Hloc_fixed2;
 
     // LiuXh add 2019-07-15
     double**** Hloc_fixedR_tr;

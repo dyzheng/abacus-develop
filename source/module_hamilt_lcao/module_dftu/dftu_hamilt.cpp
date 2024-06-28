@@ -6,7 +6,7 @@
 namespace ModuleDFTU
 {
 
-void DFTU::cal_eff_pot_mat_complex(const int ik, std::complex<double>* eff_pot, const std::vector<int>& isk)
+void DFTU::cal_eff_pot_mat_complex(const int ik, std::complex<double>* eff_pot, const std::vector<int>& isk, const std::complex<double>* sk)
 {
     ModuleBase::TITLE("DFTU", "cal_eff_pot_mat");
     ModuleBase::timer::tick("DFTU", "cal_eff_pot_mat");
@@ -37,7 +37,7 @@ void DFTU::cal_eff_pot_mat_complex(const int ik, std::complex<double>* eff_pot, 
             &GlobalV::NLOCAL, &GlobalV::NLOCAL, &GlobalV::NLOCAL,
             &half, 
             ModuleBase::GlobalFunc::VECTOR_TO_PTR(VU), &one_int, &one_int, this->LM->ParaV->desc,
-            this->LM->Sloc2.data(), &one_int, &one_int, this->LM->ParaV->desc,
+            sk, &one_int, &one_int, this->LM->ParaV->desc,
             &zero,
             eff_pot, &one_int, &one_int, this->LM->ParaV->desc);
 #endif
@@ -57,7 +57,7 @@ void DFTU::cal_eff_pot_mat_complex(const int ik, std::complex<double>* eff_pot, 
     return;
 }
 
-void DFTU::cal_eff_pot_mat_real(const int ik, double* eff_pot, const std::vector<int>& isk)
+void DFTU::cal_eff_pot_mat_real(const int ik, double* eff_pot, const std::vector<int>& isk, const double* sk)
 {
     ModuleBase::TITLE("DFTU", "cal_eff_pot_mat");
     ModuleBase::timer::tick("DFTU", "cal_eff_pot_mat");
@@ -86,7 +86,7 @@ void DFTU::cal_eff_pot_mat_real(const int ik, double* eff_pot, const std::vector
             &GlobalV::NLOCAL, &GlobalV::NLOCAL, &GlobalV::NLOCAL,
             &half, 
             ModuleBase::GlobalFunc::VECTOR_TO_PTR(VU), &one_int, &one_int, this->LM->ParaV->desc, 
-            this->LM->Sloc.data(), &one_int, &one_int, this->LM->ParaV->desc,
+            sk, &one_int, &one_int, this->LM->ParaV->desc,
             &beta,
             eff_pot, &one_int, &one_int, this->LM->ParaV->desc);
 #endif

@@ -249,15 +249,13 @@ void Force_Stress_LCAO<T>::getForceStress(const bool isforce,
         }
         else
         {
-            hamilt::DFTU<hamilt::OperatorLCAO<T, double>> tmp_dftu(&lm,
+            hamilt::DFTU<hamilt::OperatorLCAO<T, double>> tmp_dftu(nullptr, // HK and SK are not used for force&stress
                                                                    kv.kvec_d,
-                                                                   nullptr,
-                                                                   nullptr,
+                                                                   nullptr, // HR are not used for force&stress
                                                                    GlobalC::ucell,
                                                                    &GlobalC::GridD,
                                                                    two_center_bundle.overlap_orb_onsite.get(),
-                                                                   &GlobalC::dftu,
-                                                                   *(lm.ParaV));
+                                                                   &GlobalC::dftu);
 
             tmp_dftu.cal_force_stress(isforce, isstress, force_dftu, stress_dftu);
         }

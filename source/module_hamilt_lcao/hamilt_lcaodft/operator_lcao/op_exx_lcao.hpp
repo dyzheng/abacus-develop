@@ -13,20 +13,21 @@ namespace hamilt
 
 template <typename TK, typename TR>
 OperatorEXX<OperatorLCAO<TK, TR>>::OperatorEXX(
+	HS_Matrix_K<TK>* hsk_in,
 	LCAO_Matrix* LM_in,
 	hamilt::HContainer<TR>* hR_in,
-	std::vector<TK>* hK_in,
 	const K_Vectors& kv_in,
 	std::vector<std::map<int, std::map<TAC, RI::Tensor<double>>>>* Hexxd_in,
 	std::vector<std::map<int, std::map<TAC, RI::Tensor<std::complex<double>>>>>* Hexxc_in,
 	int* two_level_step_in,
 	const bool restart_in)
-	: OperatorLCAO<TK, TR>(LM_in, kv_in.kvec_d, hR_in, hK_in),
+	: OperatorLCAO<TK, TR>(hsk_in, kv_in.kvec_d, hR_in),
 	  kv(kv_in),
 	  Hexxd(Hexxd_in),
 	  Hexxc(Hexxc_in), 
 	  two_level_step(two_level_step_in),
-	  restart(restart_in)
+	  restart(restart_in),
+	  LM(LM_in)
 {
 	this->cal_type = calculation_type::lcao_exx;
 	if (this->restart)
@@ -102,7 +103,7 @@ void OperatorEXX<OperatorLCAO<TK, TR>>::contributeHk(int ik)
 				GlobalC::exx_info.info_global.hybrid_alpha,
 				this->Hexxd == nullptr ? *this->LM->Hexxd : *this->Hexxd,
 				*this->LM->ParaV,
-				*this->hK);
+				this->hsk->get_hk());
 		else
 			RI_2D_Comm::add_Hexx(
 				this->kv,
@@ -110,7 +111,7 @@ void OperatorEXX<OperatorLCAO<TK, TR>>::contributeHk(int ik)
 				GlobalC::exx_info.info_global.hybrid_alpha,
 				this->Hexxc == nullptr ? *this->LM->Hexxc : *this->Hexxc,
 				*this->LM->ParaV,
-				*this->hK);
+				this->hsk->get_hk());
 	}
 }
 

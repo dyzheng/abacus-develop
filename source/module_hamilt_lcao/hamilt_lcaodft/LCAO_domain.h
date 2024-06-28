@@ -16,14 +16,6 @@
 namespace LCAO_domain
 {
 
-// can used in gamma algorithm.
-void build_Nonlocal_beta_new(LCAO_Matrix& lm,
-                             double* Hloc,
-                             const UnitCell& ucell,
-                             const LCAO_Orbitals& orb,
-                             const TwoCenterIntegrator& intor_orb_beta,
-                             Grid_Driver* GridD);
-
 void build_Nonlocal_mu_new(LCAO_Matrix& lm,
                            ForceStressArrays& fsr, // mohan 2024-06-16
                            double* HlocR,

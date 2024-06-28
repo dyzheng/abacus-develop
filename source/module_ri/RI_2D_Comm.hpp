@@ -101,7 +101,7 @@ void RI_2D_Comm::add_Hexx(
 	const double alpha,
 	const std::vector<std::map<TA,std::map<TAC,RI::Tensor<Tdata>>>> &Hs,
     const Parallel_Orbitals& pv,
-    std::vector<TK>& Hloc)
+    TK* hk)
 {
 	ModuleBase::TITLE("RI_2D_Comm","add_Hexx");
 	ModuleBase::timer::tick("RI_2D_Comm", "add_Hexx");
@@ -129,7 +129,7 @@ void RI_2D_Comm::add_Hexx(
 					{
 						const int iwt1 = RI_2D_Comm::get_iwt(iat1, iw1_b, is1_b);
                         if (pv.global2local_col(iwt1) < 0)	continue;
-                        LCAO_Matrix::set_mat2d(iwt0, iwt1, RI::Global_Func::convert<TK>(H(iw0_b, iw1_b)) * RI::Global_Func::convert<TK>(frac), pv, Hloc.data());
+                        LCAO_Matrix::set_mat2d(iwt0, iwt1, RI::Global_Func::convert<TK>(H(iw0_b, iw1_b)) * RI::Global_Func::convert<TK>(frac), pv, hk);
 					}
 				}
 			}

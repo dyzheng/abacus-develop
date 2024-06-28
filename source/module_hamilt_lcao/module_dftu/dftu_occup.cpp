@@ -1,6 +1,7 @@
 #include "dftu.h"
 #include "module_base/timer.h"
 #include "module_hamilt_pw/hamilt_pwdft/global.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/hamilt_lcao.h"
 
 extern "C"
 {
@@ -160,7 +161,15 @@ void DFTU::cal_occup_m_k(const int iter,
     {
         // srho(mu,nu) = \sum_{iw} S(mu,iw)*dm_k(iw,nu)
         this->folding_matrix_k_new(ik, p_ham);
-        std::complex<double>* s_k_pointer = this->LM->Sloc2.data();
+        std::complex<double>* s_k_pointer = nullptr;
+        if(GlobalV::NSPIN != 4)
+        {
+            s_k_pointer = dynamic_cast<hamilt::HamiltLCAO<std::complex<double>, double>*>(p_ham)->getSk();
+        }
+        else
+        {
+            s_k_pointer = dynamic_cast<hamilt::HamiltLCAO<std::complex<double>, std::complex<double>>*>(p_ham)->getSk();
+        }
 
 #ifdef __MPI
         pzgemm_(&transN,
@@ -344,7 +353,7 @@ void DFTU::cal_occup_m_k(const int iter,
     return;
 }
 
-void DFTU::cal_occup_m_gamma(const int iter, const std::vector<std::vector<double>> &dm_gamma, const double& mixing_beta)
+void DFTU::cal_occup_m_gamma(const int iter, const std::vector<std::vector<double>> &dm_gamma, const double& mixing_beta, hamilt::Hamilt<double>* p_ham)
 {
     ModuleBase::TITLE("DFTU", "cal_occup_m_gamma");
     ModuleBase::timer::tick("DFTU", "cal_occup_m_gamma");
@@ -361,7 +370,7 @@ void DFTU::cal_occup_m_gamma(const int iter, const std::vector<std::vector<doubl
     for (int is = 0; is < GlobalV::NSPIN; is++)
     {
         // srho(mu,nu) = \sum_{iw} S(mu,iw)*dm_gamma(iw,nu)
-        double* s_gamma_pointer = this->LM->Sloc.data();
+        double* s_gamma_pointer = dynamic_cast<hamilt::HamiltLCAO<double, double>*>(p_ham)->getSk();
 
 #ifdef __MPI
         pdgemm_(&transN,

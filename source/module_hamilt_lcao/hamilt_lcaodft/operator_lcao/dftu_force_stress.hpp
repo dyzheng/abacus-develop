@@ -28,7 +28,7 @@ void DFTU<OperatorLCAO<TK, TR>>::cal_force_stress(const bool cal_force,
     // begin the calculation of force and stress
     ModuleBase::timer::tick("DFTU", "cal_force_stress");
 
-    const Parallel_Orbitals* paraV = dmR_tmp[0]->get_atom_pair(0).get_paraV();
+    const Parallel_Orbitals* paraV = dmR_tmp[0]->get_paraV();
     const int npol = this->ucell->get_npol();
     std::vector<double> stress_tmp(6, 0);
     if (cal_force)

@@ -165,6 +165,7 @@ void ESolver_KS_LCAO<TK, TR>::beforesolver(const int istep)
             GlobalV::GAMMA_ONLY_LOCAL ? &(this->GG) : nullptr,
             GlobalV::GAMMA_ONLY_LOCAL ? nullptr : &(this->GK),
             &(this->LM),
+            this->LM.ParaV,
             &(this->LOC),
             this->pelec->pot,
             this->kv,
@@ -533,7 +534,7 @@ void ESolver_KS_LCAO<std::complex<double>, double>::get_S(void)
 
     if (this->p_hamilt == nullptr)
     {
-        this->p_hamilt = new hamilt::HamiltLCAO<std::complex<double>, double>(&this->LM,
+        this->p_hamilt = new hamilt::HamiltLCAO<std::complex<double>, double>(this->LM.ParaV,
                                                                               this->kv,
                                                                               *(two_center_bundle_.overlap_orb));
         dynamic_cast<hamilt::OperatorLCAO<std::complex<double>, double>*>(this->p_hamilt->ops)->contributeHR();
@@ -572,7 +573,7 @@ void ESolver_KS_LCAO<std::complex<double>, std::complex<double>>::get_S(void)
     if (this->p_hamilt == nullptr)
     {
         this->p_hamilt
-            = new hamilt::HamiltLCAO<std::complex<double>, std::complex<double>>(&this->LM,
+            = new hamilt::HamiltLCAO<std::complex<double>, std::complex<double>>(this->LM.ParaV,
                                                                                  this->kv,
                                                                                  *(two_center_bundle_.overlap_orb));
         dynamic_cast<hamilt::OperatorLCAO<std::complex<double>, std::complex<double>>*>(this->p_hamilt->ops)
