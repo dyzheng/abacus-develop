@@ -1,43 +1,42 @@
 #include "dftu.h"
 #include "module_base/timer.h"
-#include "module_hamilt_pw/hamilt_pwdft/global.h"
 #include "module_cell/module_neighbor/sltk_grid_driver.h"
 #include "module_hamilt_lcao/hamilt_lcaodft/hamilt_lcao.h"
 #include "module_hamilt_lcao/module_hcontainer/hcontainer.h"
 #include "module_hamilt_lcao/module_hcontainer/hcontainer_funcs.h"
+#include "module_hamilt_pw/hamilt_pwdft/global.h"
 
 namespace ModuleDFTU
 {
 
-void DFTU::fold_dSR_gamma(
-    const UnitCell &ucell,
-    const Parallel_Orbitals &pv,
-    Grid_Driver* gd,
-    double* dsloc_x,
-    double* dsloc_y,
-    double* dsloc_z,
-    double* dh_r,
-    const int dim1, 
-    const int dim2, 
-    double* dSR_gamma)
+void DFTU::fold_dSR_gamma(const UnitCell& ucell,
+                          const Parallel_Orbitals& pv,
+                          Grid_Driver* gd,
+                          double* dsloc_x,
+                          double* dsloc_y,
+                          double* dsloc_z,
+                          double* dh_r,
+                          const int dim1,
+                          const int dim2,
+                          double* dSR_gamma)
 {
     ModuleBase::TITLE("DFTU", "fold_dSR_gamma");
 
     ModuleBase::GlobalFunc::ZEROS(dSR_gamma, pv.nloc);
 
     double* dS_ptr = nullptr;
-	if(dim1 == 0) 
-	{
-		dS_ptr = dsloc_x;
-	}
-	else if(dim1 == 1) 
-	{
-		dS_ptr = dsloc_y;
-	}
-	else if (dim1 == 2) 
-	{
-		dS_ptr = dsloc_z;
-	}
+    if (dim1 == 0)
+    {
+        dS_ptr = dsloc_x;
+    }
+    else if (dim1 == 1)
+    {
+        dS_ptr = dsloc_y;
+    }
+    else if (dim1 == 2)
+    {
+        dS_ptr = dsloc_z;
+    }
 
     int nnr = 0;
     ModuleBase::Vector3<double> tau1, tau2, dtau;
@@ -62,10 +61,10 @@ void DFTU::fold_dSR_gamma(
                 double distance = dtau.norm() * ucell.lat0;
                 double rcut = GlobalC::ORB.Phi[T1].getRcut() + GlobalC::ORB.Phi[T2].getRcut();
                 bool adj = false;
-				if (distance < rcut)
-				{
-					adj = true;
-				}
+                if (distance < rcut)
+                {
+                    adj = true;
+                }
                 else if (distance >= rcut)
                 {
                     for (int ad0 = 0; ad0 < gd->getAdjacentNum() + 1; ++ad0)
@@ -96,51 +95,53 @@ void DFTU::fold_dSR_gamma(
                         const int jj0 = jj / GlobalV::NPOL;
                         const int iw1_all = start1 + jj0;
                         const int mu = pv.global2local_row(iw1_all);
-						if (mu < 0) 
-						{
-							continue;
-						}
+                        if (mu < 0)
+                        {
+                            continue;
+                        }
 
                         for (int kk = 0; kk < atom2->nw * GlobalV::NPOL; ++kk)
                         {
                             const int kk0 = kk / GlobalV::NPOL;
                             const int iw2_all = start2 + kk0;
                             const int nu = pv.global2local_col(iw2_all);
-							if (nu < 0) 
-							{
-								continue;
-							}
+                            if (nu < 0)
+                            {
+                                continue;
+                            }
 
                             dSR_gamma[nu * pv.nrow + mu] += dS_ptr[nnr] * dh_r[nnr * 3 + dim2];
 
                             ++nnr;
                         } // kk
-                    } // jj
-                } // adj
-            } // ad
-        } // I1
-    } // T1
+                    }     // jj
+                }         // adj
+            }             // ad
+        }                 // I1
+    }                     // T1
 
     return;
 }
 
-void DFTU::folding_matrix_k(
-        ForceStressArrays &fsr,
-        const Parallel_Orbitals &pv,
-		const int ik, 
-		const int dim1, 
-		const int dim2, 
-		std::complex<double>* mat_k, 
-		const std::vector<ModuleBase::Vector3<double>> &kvec_d)
+void DFTU::folding_matrix_k(ForceStressArrays& fsr,
+                            const Parallel_Orbitals& pv,
+                            const int ik,
+                            const int dim1,
+                            const int dim2,
+                            std::complex<double>* mat_k,
+                            const std::vector<ModuleBase::Vector3<double>>& kvec_d)
 {
     ModuleBase::TITLE("DFTU", "folding_matrix_k");
     ModuleBase::timer::tick("DFTU", "folding_matrix_k");
     ModuleBase::GlobalFunc::ZEROS(mat_k, pv.nloc);
 
     double* mat_ptr;
-    if      (dim1 == 1 || dim1 == 4) mat_ptr = fsr.DSloc_Rx;
-    else if (dim1 == 2 || dim1 == 5) mat_ptr = fsr.DSloc_Ry;
-    else if (dim1 == 3 || dim1 == 6) mat_ptr = fsr.DSloc_Rz;
+    if (dim1 == 1 || dim1 == 4)
+        mat_ptr = fsr.DSloc_Rx;
+    else if (dim1 == 2 || dim1 == 5)
+        mat_ptr = fsr.DSloc_Ry;
+    else if (dim1 == 3 || dim1 == 6)
+        mat_ptr = fsr.DSloc_Rz;
 
     int nnr = 0;
     ModuleBase::Vector3<double> dtau;
@@ -227,13 +228,15 @@ void DFTU::folding_matrix_k(
                         // the index of orbitals in this processor
                         const int iw1_all = start1 + ii;
                         const int mu = pv.global2local_row(iw1_all);
-                        if (mu < 0) continue;
+                        if (mu < 0)
+                            continue;
 
                         for (int jj = 0; jj < atom2->nw * GlobalV::NPOL; jj++)
                         {
                             int iw2_all = start2 + jj;
                             const int nu = pv.global2local_col(iw2_all);
-                            if (nu < 0) continue;
+                            if (nu < 0)
+                                continue;
 
                             int iic;
                             if (ModuleBase::GlobalFunc::IS_COLUMN_MAJOR_KS_SOLVER())
@@ -256,19 +259,18 @@ void DFTU::folding_matrix_k(
 
                             ++nnr;
                         } // kk
-                    } // jj
-                } // adj
+                    }     // jj
+                }         // adj
 
             } // ad
-        } // I1
-    } // T1
+        }     // I1
+    }         // T1
     ModuleBase::timer::tick("DFTU", "folding_matrix_k");
 
     return;
 }
 
-void DFTU::folding_matrix_k_new(const int ik,
-    hamilt::Hamilt<std::complex<double>>* p_ham)
+void DFTU::folding_matrix_k_new(const int ik, hamilt::Hamilt<std::complex<double>>* p_ham)
 {
     ModuleBase::TITLE("DFTU", "folding_matrix_k_new");
     ModuleBase::timer::tick("DFTU", "folding_matrix_k_new");
@@ -280,13 +282,13 @@ void DFTU::folding_matrix_k_new(const int ik,
     }
 
     // get SR and fold to mat_k
-    if(GlobalV::GAMMA_ONLY_LOCAL)
+    if (GlobalV::GAMMA_ONLY_LOCAL)
     {
         dynamic_cast<hamilt::HamiltLCAO<double, double>*>(p_ham)->updateSk(ik, hk_type);
     }
     else
     {
-        if(GlobalV::NSPIN != 4)
+        if (GlobalV::NSPIN != 4)
         {
             dynamic_cast<hamilt::HamiltLCAO<std::complex<double>, double>*>(p_ham)->updateSk(ik, hk_type);
         }
@@ -296,7 +298,5 @@ void DFTU::folding_matrix_k_new(const int ik,
         }
     }
 }
-
-    
 
 } // namespace ModuleDFTU

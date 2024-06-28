@@ -1,5 +1,3 @@
-#include <iostream>
-
 #include "module_base/matrix.h"
 #include "module_base/name_angular.h"
 #include "module_base/scalapack_connector.h"
@@ -7,6 +5,8 @@
 #include "module_elecstate/elecstate_lcao.h"
 #include "module_hamilt_lcao/hamilt_lcaodft/hamilt_lcao.h"
 #include "spin_constrain.h"
+
+#include <iostream>
 
 template <>
 ModuleBase::matrix SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::cal_MW_k(
@@ -17,12 +17,13 @@ ModuleBase::matrix SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>:
     int nw = this->get_nw();
     const int nlocal = (this->nspin_ == 4) ? nw / 2 : nw;
     ModuleBase::matrix MecMulP(this->nspin_, nlocal, true), orbMulP(this->nspin_, nlocal, true);
-    for(size_t ik = 0; ik != this->kv_.get_nks(); ++ik)
+    for (size_t ik = 0; ik != this->kv_.get_nks(); ++ik)
     {
-        std::complex<double> *sk = nullptr;
+        std::complex<double>* sk = nullptr;
         if (this->nspin_ == 4)
         {
-            dynamic_cast<hamilt::HamiltLCAO<std::complex<double>, std::complex<double>>*>(this->p_hamilt)->updateSk(ik, 1);
+            dynamic_cast<hamilt::HamiltLCAO<std::complex<double>, std::complex<double>>*>(this->p_hamilt)
+                ->updateSk(ik, 1);
             sk = dynamic_cast<hamilt::HamiltLCAO<std::complex<double>, std::complex<double>>*>(this->p_hamilt)->getSk();
         }
         else
@@ -35,7 +36,7 @@ ModuleBase::matrix SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>:
         const char T_char = 'T';
         const char N_char = 'N';
         const int one_int = 1;
-        const std::complex<double> one_float = {1.0, 0.0}, zero_float = {0.0, 0.0};        
+        const std::complex<double> one_float = {1.0, 0.0}, zero_float = {0.0, 0.0};
         pzgemm_(&N_char,
                 &T_char,
                 &nw,
@@ -59,8 +60,8 @@ ModuleBase::matrix SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>:
 #endif
     }
 #ifdef __MPI
-    MPI_Allreduce(MecMulP.c, orbMulP.c, this->nspin_*nlocal, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-#endif 
+    MPI_Allreduce(MecMulP.c, orbMulP.c, this->nspin_ * nlocal, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+#endif
 
     return orbMulP;
 }

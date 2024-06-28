@@ -44,7 +44,7 @@ void hamilt::EkineticNew<hamilt::OperatorLCAO<TK, TR>>::initialize_HR(Grid_Drive
     ModuleBase::TITLE("EkineticNew", "initialize_HR");
     ModuleBase::timer::tick("EkineticNew", "initialize_HR");
 
-    auto* paraV = this->hR->get_paraV();// get parallel orbitals from HR
+    auto* paraV = this->hR->get_paraV(); // get parallel orbitals from HR
     // TODO: if paraV is nullptr, AtomPair can not use paraV for constructor, I will repair it in the future.
 
     for (int iat1 = 0; iat1 < ucell->nat; iat1++)

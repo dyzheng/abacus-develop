@@ -3,10 +3,11 @@
 
 #ifdef __EXX
 
-#include <RI/global/Tensor.h>
-#include "operator_lcao.h"
 #include "module_cell/klist.h"
 #include "module_hamilt_lcao/hamilt_lcaodft/LCAO_matrix.h"
+#include "operator_lcao.h"
+
+#include <RI/global/Tensor.h>
 
 namespace hamilt
 {
@@ -25,8 +26,10 @@ template <typename TK, typename TR>
 class OperatorEXX<OperatorLCAO<TK, TR>> : public OperatorLCAO<TK, TR>
 {
     using TAC = std::pair<int, std::array<int, 3>>;
-public:
-    OperatorEXX<OperatorLCAO<TK, TR>>(HS_Matrix_K<TK>* hsk_in,
+
+  public:
+    OperatorEXX<OperatorLCAO<TK, TR>>(
+        HS_Matrix_K<TK>* hsk_in,
         LCAO_Matrix* LM_in,
         hamilt::HContainer<TR>* hR_in,
         const K_Vectors& kv_in,
@@ -38,24 +41,23 @@ public:
     virtual void contributeHk(int ik) override;
 
   private:
+    bool HR_fixed_done = false;
 
-      bool HR_fixed_done = false;
+    std::vector<std::map<int, std::map<TAC, RI::Tensor<double>>>>* Hexxd = nullptr;
+    std::vector<std::map<int, std::map<TAC, RI::Tensor<std::complex<double>>>>>* Hexxc = nullptr;
 
-      std::vector<std::map<int, std::map<TAC, RI::Tensor<double>>>>* Hexxd = nullptr;
-      std::vector<std::map<int, std::map<TAC, RI::Tensor<std::complex<double>>>>>* Hexxc = nullptr;
+    /// @brief  the step of the outer loop.
+    /// nullptr: no dependence on the number of two_level_step, contributeHk will do enerything normally.
+    /// 0: the first outer loop. If restart, contributeHk will directly add Hexx to Hloc. else, do nothing.
+    /// >0: not the first outer loop. contributeHk will do enerything normally.
+    int* two_level_step = nullptr;
+    /// @brief if restart, read and save Hexx, and directly use it during the first outer loop.
+    bool restart = false;
 
-      /// @brief  the step of the outer loop.
-      /// nullptr: no dependence on the number of two_level_step, contributeHk will do enerything normally.
-      /// 0: the first outer loop. If restart, contributeHk will directly add Hexx to Hloc. else, do nothing.
-      /// >0: not the first outer loop. contributeHk will do enerything normally.
-      int* two_level_step = nullptr;
-      /// @brief if restart, read and save Hexx, and directly use it during the first outer loop.
-      bool restart = false;
+    void add_loaded_Hexx(const int ik);
+    const K_Vectors& kv;
 
-      void add_loaded_Hexx(const int ik);
-      const K_Vectors& kv;
-
-      LCAO_Matrix* LM = nullptr;
+    LCAO_Matrix* LM = nullptr;
 };
 
 } // namespace hamilt

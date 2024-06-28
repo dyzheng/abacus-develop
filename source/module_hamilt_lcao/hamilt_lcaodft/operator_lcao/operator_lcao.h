@@ -3,8 +3,8 @@
 #include "module_base/vector3.h"
 #include "module_hamilt_general/matrixblock.h"
 #include "module_hamilt_general/operator.h"
-#include "module_hamilt_lcao/module_hcontainer/hcontainer.h"
 #include "module_hamilt_lcao/hamilt_lcaodft/hs_matrix_k.hpp"
+#include "module_hamilt_lcao/module_hcontainer/hcontainer.h"
 
 namespace hamilt
 {
@@ -13,11 +13,12 @@ template <typename TK, typename TR>
 class OperatorLCAO : public Operator<TK>
 {
   public:
-    OperatorLCAO(
-        HS_Matrix_K<TK>* hsk_in, 
-        const std::vector<ModuleBase::Vector3<double>>& kvec_d_in,
-        HContainer<TR>* hR_in)
-        : hsk(hsk_in), kvec_d(kvec_d_in), hR(hR_in){}
+    OperatorLCAO(HS_Matrix_K<TK>* hsk_in,
+                 const std::vector<ModuleBase::Vector3<double>>& kvec_d_in,
+                 HContainer<TR>* hR_in)
+        : hsk(hsk_in), kvec_d(kvec_d_in), hR(hR_in)
+    {
+    }
     virtual ~OperatorLCAO()
     {
         if (this->allocated_smatrix)
@@ -54,16 +55,18 @@ class OperatorLCAO : public Operator<TK>
         this->get_hs_pointers();
 #ifdef __MPI
         hk_in = MatrixBlock<TK>{hmatrix_k,
-                               (size_t)this->hsk->get_pv()->nrow,
-                               (size_t)this->hsk->get_pv()->ncol,
-                               this->hsk->get_pv()->desc};
+                                (size_t)this->hsk->get_pv()->nrow,
+                                (size_t)this->hsk->get_pv()->ncol,
+                                this->hsk->get_pv()->desc};
         sk_in = MatrixBlock<TK>{smatrix_k,
-                               (size_t)this->hsk->get_pv()->nrow,
-                               (size_t)this->hsk->get_pv()->ncol,
-                               this->hsk->get_pv()->desc};
+                                (size_t)this->hsk->get_pv()->nrow,
+                                (size_t)this->hsk->get_pv()->ncol,
+                                this->hsk->get_pv()->desc};
 #else
-        hk_in = MatrixBlock<TK>{hmatrix_k, (size_t)this->hsk->get_pv()->nrow, (size_t)this->hsk->get_pv()->ncol, nullptr};
-        sk_in = MatrixBlock<TK>{smatrix_k, (size_t)this->hsk->get_pv()->nrow, (size_t)this->hsk->get_pv()->ncol, nullptr};
+        hk_in
+            = MatrixBlock<TK>{hmatrix_k, (size_t)this->hsk->get_pv()->nrow, (size_t)this->hsk->get_pv()->ncol, nullptr};
+        sk_in
+            = MatrixBlock<TK>{smatrix_k, (size_t)this->hsk->get_pv()->nrow, (size_t)this->hsk->get_pv()->ncol, nullptr};
 #endif
     }
 
@@ -74,7 +77,7 @@ class OperatorLCAO : public Operator<TK>
     /**
      * @brief set_HR_fixed() is used for pass HR_fixed matrix to the next node in sub-chain table
      * not used in base class, only be override in fixed Hamiltonian Operators (e.g. Ekinetic and Nonlocal)
-    */
+     */
     virtual void set_HR_fixed(void*)
     {
         return;
@@ -82,7 +85,7 @@ class OperatorLCAO : public Operator<TK>
 
     /**
      * @brief reset hr_done status
-    */
+     */
     void set_hr_done(bool hr_done_in);
 
     // protected:
@@ -106,7 +109,7 @@ class OperatorLCAO : public Operator<TK>
 
     // only used for Gamma_only case
     bool allocated_smatrix = false;
-    
+
     // if HR is calculated
     bool hr_done = false;
 };

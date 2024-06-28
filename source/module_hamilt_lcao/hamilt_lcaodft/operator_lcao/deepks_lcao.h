@@ -55,7 +55,6 @@ class DeePKS<OperatorLCAO<TK, TR>> : public OperatorLCAO<TK, TR>
 #endif
 
   private:
-
     elecstate::DensityMatrix<TK, double>* DM;
 
     const UnitCell* ucell = nullptr;

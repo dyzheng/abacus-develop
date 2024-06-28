@@ -6,11 +6,11 @@
 #include "module_elecstate/potentials/potential_new.h"
 #include "module_hamilt_general/hamilt.h"
 #include "module_hamilt_lcao/hamilt_lcaodft/LCAO_matrix.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/hs_matrix_k.hpp"
 #include "module_hamilt_lcao/hamilt_lcaodft/local_orbital_charge.h"
 #include "module_hamilt_lcao/module_gint/gint_gamma.h"
 #include "module_hamilt_lcao/module_gint/gint_k.h"
 #include "module_hamilt_lcao/module_hcontainer/hcontainer.h"
-#include "module_hamilt_lcao/hamilt_lcaodft/hs_matrix_k.hpp"
 namespace hamilt
 {
 
@@ -53,14 +53,29 @@ class HamiltLCAO : public Hamilt<TK>
     /// get pointer of Operator<TK> ops
     Operator<TK>*& getOperator();
     /// get hk-pointer
-    TK* getHk() const{return this->hsk->get_hk();}
+    TK* getHk() const
+    {
+        return this->hsk->get_hk();
+    }
     /// get sk-pointer
-    TK* getSk() const{return this->hsk->get_sk();}
-    int get_size_hsk() const{return this->hsk->get_size();}
+    TK* getSk() const
+    {
+        return this->hsk->get_sk();
+    }
+    int get_size_hsk() const
+    {
+        return this->hsk->get_size();
+    }
     /// get HR pointer of *this->hR, which is a HContainer<TR> and contains H(R)
-    HContainer<TR>*& getHR(){return this->hR;}
+    HContainer<TR>*& getHR()
+    {
+        return this->hR;
+    }
     /// get SR pointer of *this->sR, which is a HContainer<TR> and contains S(R)
-    HContainer<TR>*& getSR(){return this->sR;}
+    HContainer<TR>*& getSR()
+    {
+        return this->sR;
+    }
     /// refresh the status of HR
     void refresh() override;
 
