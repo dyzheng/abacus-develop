@@ -26,7 +26,7 @@ OperatorEXX<OperatorLCAO<TK, TR>>::OperatorEXX(
 {
     this->cal_type = calculation_type::lcao_exx;
     if (this->restart)
-    {   ///  Now only Hexx depends on DM, so we can directly read Hexx to reduce the computational cost.
+    { ///  Now only Hexx depends on DM, so we can directly read Hexx to reduce the computational cost.
         /// If other operators depends on DM, we can also read DM and then calculate the operators to save the memory to
         /// store operator terms.
         assert(this->two_level_step != nullptr);
