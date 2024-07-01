@@ -33,7 +33,7 @@ void hamilt::OverlapNew<hamilt::OperatorLCAO<TK, TR>>::initialize_SR(Grid_Driver
 {
     ModuleBase::TITLE("OverlapNew", "initialize_SR");
     ModuleBase::timer::tick("OverlapNew", "initialize_SR");
-    auto* paraV = this->hR->get_paraV(); // get parallel orbitals from HR
+    auto* paraV = this->SR->get_paraV(); // get parallel orbitals from HR
     // TODO: if paraV is nullptr, AtomPair can not use paraV for constructor, I will repair it in the future.
     for (int iat1 = 0; iat1 < ucell->nat; iat1++)
     {
