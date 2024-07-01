@@ -1270,10 +1270,12 @@ bool ESolver_KS_LCAO<TK, TR>::do_after_converge(int& iter)
         GlobalC::dftu.initialed_locale = true;
     }
 
+#ifdef __DEEPKS
     if (GlobalV::deepks_scf)
     {
         GlobalC::ld.set_init_pdm(true);
     }
+#endif
 #ifdef __EXX
     if (GlobalC::exx_info.info_ri.real_number)
     {
