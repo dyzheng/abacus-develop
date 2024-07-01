@@ -90,7 +90,7 @@ namespace hsolver
         mat_g.row = nrows;
         mat_g.col = ncols;
 
-        Cpxgemr2d(nrows, ncols, a, 1, 1, desca, mat_g.p.get(), 1, 1, mat_g.desc.get(), ctxt);
+        Cpxgemr2d(nrows, ncols, a, 1, 1, const_cast<int*>(desca), mat_g.p.get(), 1, 1, mat_g.desc.get(), ctxt);
     }
 
     // Convert the Psi to a 2D block storage format
