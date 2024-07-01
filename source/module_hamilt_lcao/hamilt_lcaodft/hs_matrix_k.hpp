@@ -2,6 +2,7 @@
 #define ABACUS_HS_MATRIX_K_HPP
 
 #include <vector>
+#include "module_basis/module_ao/parallel_orbitals.h"
 namespace hamilt
 {
 template <typename TK>
