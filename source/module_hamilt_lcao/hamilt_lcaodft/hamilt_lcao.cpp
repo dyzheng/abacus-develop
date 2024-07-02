@@ -163,7 +163,6 @@ HamiltLCAO<TK, TR>::HamiltLCAO(Gint_Gamma* GG_in,
                 pot_in->pot_register(pot_register_in);
                 // effective potential term
                 Operator<TK>* veff = new Veff<OperatorLCAO<TK, TR>>(GG_in,
-                                                                    loc_in,
                                                                     this->hsk,
                                                                     this->kv->kvec_d,
                                                                     pot_in,
@@ -228,7 +227,6 @@ HamiltLCAO<TK, TR>::HamiltLCAO(Gint_Gamma* GG_in,
                 pot_in->pot_register(pot_register_in);
                 // Veff term
                 this->getOperator() = new Veff<OperatorLCAO<TK, TR>>(GK_in,
-                                                                     loc_in,
                                                                      this->hsk,
                                                                      kv->kvec_d,
                                                                      pot_in,

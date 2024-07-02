@@ -281,7 +281,6 @@ void write_Vxc(int nspin,
                Gint_Gamma& gint_gamma, // mohan add 2024-04-01
                Gint_k& gint_k,         // mohan add 2024-04-01
                LCAO_Matrix& lm,
-               Local_Orbital_Charge& loc,
                const K_Vectors& kv,
                const ModuleBase::matrix& wg,
                Grid_Driver& gd)
@@ -319,7 +318,6 @@ void write_Vxc(int nspin,
     for (int is = 0; is < nspin0; ++is)
     {
         vxcs_op_ao[is] = new hamilt::Veff<hamilt::OperatorLCAO<TK, TR>>(gint,
-                                                                        &loc,
                                                                         &vxc_k_ao,
                                                                         kv.kvec_d,
                                                                         potxc,
