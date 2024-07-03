@@ -20,7 +20,6 @@ DensityMatrix<TK, TR>::~DensityMatrix()
     {
         delete it;
     }
-    delete[] this->dmr_origin_;
     delete[] this->dmr_tmp_;
 }
 
@@ -843,9 +842,9 @@ void DensityMatrix<TK, TR>::switch_dmr(const int mode)
         {
         case 0:
             // switch to original density matrix
-            if (this->dmr_origin_ != nullptr && this->dmr_tmp_ != nullptr)
+            if (this->dmr_tmp_ != nullptr)
             {
-                this->_DMR[0]->allocate(this->dmr_origin_, false);
+                this->_DMR[0]->allocate(this->dmr_origin_.data(), false);
                 delete[] this->dmr_tmp_;
                 this->dmr_tmp_ = nullptr;
             }
@@ -855,9 +854,9 @@ void DensityMatrix<TK, TR>::switch_dmr(const int mode)
             // switch to total magnetization density matrix, dmr_up + dmr_down
             if(this->dmr_tmp_ == nullptr)
             {
-                this->dmr_origin_ = this->_DMR[0]->get_wrapper();
                 const size_t size = this->_DMR[0]->get_nnr();
                 this->dmr_tmp_ = new TR[size];
+                this->dmr_origin_.resize(size);
                 for (int i = 0; i < size; ++i)
                 {
                     this->dmr_tmp_[i] = this->dmr_origin_[i] + this->_DMR[1]->get_wrapper()[i];
@@ -877,11 +876,12 @@ void DensityMatrix<TK, TR>::switch_dmr(const int mode)
             // switch to magnetization density matrix, dmr_up - dmr_down
             if(this->dmr_tmp_ == nullptr)
             {
-                this->dmr_origin_ = this->_DMR[0]->get_wrapper();
                 const size_t size = this->_DMR[0]->get_nnr();
                 this->dmr_tmp_ = new TR[size];
+                this->dmr_origin_.resize(size);
                 for (int i = 0; i < size; ++i)
                 {
+                    this->dmr_origin_[i] = this->_DMR[0]->get_wrapper()[i];
                     this->dmr_tmp_[i] = this->dmr_origin_[i] - this->_DMR[1]->get_wrapper()[i];
                 }
                 this->_DMR[0]->allocate(this->dmr_tmp_, false);

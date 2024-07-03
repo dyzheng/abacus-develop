@@ -272,7 +272,7 @@ class DensityMatrix
     int _nks = 0;
 
     /// temporary pointers for switch DMR
-    TR* dmr_origin_ = nullptr;
+    std::vector<TR> dmr_origin_;
     TR* dmr_tmp_ = nullptr;
 };
 
