@@ -19,14 +19,15 @@ void DFTU<OperatorLCAO<TK, TR>>::cal_force_stress(const bool cal_force,
     // try to get the density matrix, if the density matrix is empty, skip the calculation and return
     const hamilt::HContainer<double>* dmR_tmp[this->nspin];
     dmR_tmp[0] = this->dftu->get_dmr(0);
-    if (this->nspin == 2)
+    if (this->nspin == 2) {
         dmR_tmp[1] = this->dftu->get_dmr(1);
+    }
     if (dmR_tmp[0]->size_atom_pairs() == 0)
     {
         return;
     }
     // begin the calculation of force and stress
-    ModuleBase::timer::tick("DFTU", "cal_force_stress");
+    timex::tick("DFTU", "cal_force_stress");
 
     const Parallel_Orbitals* paraV = dmR_tmp[0]->get_paraV();
     const int npol = this->ucell->get_npol();
@@ -45,8 +46,9 @@ void DFTU<OperatorLCAO<TK, TR>>::cal_force_stress(const bool cal_force,
         int T0, I0;
         ucell->iat2iait(iat0, &I0, &T0);
         const int target_L = this->dftu->orbital_corr[T0];
-        if (target_L == -1)
+        if (target_L == -1) {
             continue;
+        }
         const int tlp1 = 2 * target_L + 1;
         AdjacentAtomInfo& adjs = this->adjs_all[atom_index++];
 
@@ -161,7 +163,7 @@ void DFTU<OperatorLCAO<TK, TR>>::cal_force_stress(const bool cal_force,
                 if (tmp[0] != nullptr)
                 {
                     // calculate force
-                    if (cal_force)
+                    if (cal_force) {
                         this->cal_force_IJR(iat1,
                                             iat2,
                                             paraV,
@@ -172,9 +174,10 @@ void DFTU<OperatorLCAO<TK, TR>>::cal_force_stress(const bool cal_force,
                                             this->nspin,
                                             force_tmp1,
                                             force_tmp2);
+                    }
 
                     // calculate stress
-                    if (cal_stress)
+                    if (cal_stress) {
                         this->cal_stress_IJR(iat1,
                                              iat2,
                                              paraV,
@@ -186,6 +189,7 @@ void DFTU<OperatorLCAO<TK, TR>>::cal_force_stress(const bool cal_force,
                                              dis1,
                                              dis2,
                                              stress_tmp.data());
+                    }
                 }
             }
         }
@@ -223,7 +227,7 @@ void DFTU<OperatorLCAO<TK, TR>>::cal_force_stress(const bool cal_force,
         stress.c[3] = stress.c[1]; // stress(1,0)
     }
 
-    ModuleBase::timer::tick("DFTU", "cal_force_stress");
+    timex::tick("DFTU", "cal_force_stress");
 }
 
 template <typename TK, typename TR>
@@ -251,8 +255,9 @@ void DFTU<OperatorLCAO<TK, TR>>::cal_force_IJR(const int& iat1,
     const int m_size2 = m_size * m_size;
     // step_trace = 0 for NSPIN=1,2; ={0, 1, local_col, local_col+1} for NSPIN=4
     std::vector<int> step_trace(npol, 0);
-    if (npol == 2)
+    if (npol == 2) {
         step_trace[1] = col_indexes.size() + 1;
+    }
     double tmp[3];
     // calculate the local matrix
     for (int is = 0; is < nspin; is++)
@@ -319,8 +324,9 @@ void DFTU<OperatorLCAO<TK, TR>>::cal_stress_IJR(const int& iat1,
     const int m_size2 = m_size * m_size;
     // step_trace = 0 for NSPIN=1,2; ={0, 1, local_col, local_col+1} for NSPIN=4
     std::vector<int> step_trace(npol, 0);
-    if (npol == 2)
+    if (npol == 2) {
         step_trace[1] = col_indexes.size() + 1;
+    }
     // calculate the local matrix
     for (int is = 0; is < nspin; is++)
     {

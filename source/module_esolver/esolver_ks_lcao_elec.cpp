@@ -592,12 +592,12 @@ void ESolver_KS_LCAO<std::complex<double>, std::complex<double>>::get_S(void) {
 }
 
 template <typename TK, typename TR>
-void ESolver_KS_LCAO<TK, TR>::nscf(void) {
+void ESolver_KS_LCAO<TK, TR>::nscf() {
     ModuleBase::TITLE("ESolver_KS_LCAO", "nscf");
 
     std::cout << " NON-SELF CONSISTENT CALCULATIONS" << std::endl;
 
-    time_t time_start = std::time(NULL);
+    time_t time_start = std::time(nullptr);
 
 #ifdef __EXX
 #ifdef __MPI
@@ -630,7 +630,7 @@ void ESolver_KS_LCAO<TK, TR>::nscf(void) {
                                  "HSolver has not been initialed!");
     }
 
-    time_t time_finish = std::time(NULL);
+    time_t time_finish = std::time(nullptr);
     ModuleBase::GlobalFunc::OUT_TIME("cal_bands", time_start, time_finish);
 
     GlobalV::ofs_running << " end of band structure calculation " << std::endl;
