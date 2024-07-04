@@ -36,9 +36,7 @@ namespace hamilt
 {
 
 template <typename TK, typename TR>
-HamiltLCAO<TK, TR>::HamiltLCAO(const Parallel_Orbitals* paraV,
-                               const K_Vectors& kv_in,
-                               const TwoCenterIntegrator& intor_overlap_orb)
+HamiltLCAO<TK, TR>::HamiltLCAO(const Parallel_Orbitals* paraV, const K_Vectors& kv_in, const TwoCenterIntegrator& intor_overlap_orb)
 {
     this->classname = "HamiltLCAO";
 
@@ -168,7 +166,8 @@ HamiltLCAO<TK, TR>::HamiltLCAO(Gint_Gamma* GG_in,
                                                                     pot_in,
                                                                     this->hR, // no explicit call yet
                                                                     &GlobalC::ucell,
-                                                                    &GlobalC::GridD);
+                                                                    &GlobalC::GridD
+                );
                 this->getOperator()->add(veff);
             }
         }

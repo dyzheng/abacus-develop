@@ -1,11 +1,11 @@
-#include "../sc_lambda_lcao.h"
-#include "module_cell/klist.h"
-#include "module_hamilt_lcao/module_deltaspin/spin_constrain.h"
-
-#include "gmock/gmock.h"
-#include "gtest/gtest.h"
 #include <algorithm>
 #include <random>
+
+#include "../sc_lambda_lcao.h"
+#include "gmock/gmock.h"
+#include "gtest/gtest.h"
+#include "module_cell/klist.h"
+#include "module_hamilt_lcao/module_deltaspin/spin_constrain.h"
 
 // mockes
 K_Vectors::K_Vectors()
@@ -96,8 +96,12 @@ TEST_F(ScLambdaLCAOTest, ContributeHk)
         = SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::getScInstance();
     sc.set_ParaV(&paraV);
     EXPECT_EQ(sc.ParaV->nloc, 4);
-    std::map<int, int> atomCounts = {{0, 1}};
-    std::map<int, int> orbitalCounts = {{0, 1}};
+    std::map<int, int> atomCounts = {
+        {0, 1}
+    };
+    std::map<int, int> orbitalCounts = {
+        {0, 1}
+    };
     sc.set_atomCounts(atomCounts);
     sc.set_orbitalCounts(orbitalCounts);
     sc.set_nspin(4);
@@ -117,10 +121,12 @@ TEST_F(ScLambdaLCAOTest, ContributeHk)
                                                                                                      nullptr,
                                                                                                      isk);
     sc_lambda_op.contributeHk(0);
-    std::vector<std::complex<double>> columnMajor_h_lambda = {std::complex<double>{-1.0, 0.0},
-                                                              std::complex<double>{-1.0, 1.0},
-                                                              std::complex<double>{-1.0, -1.0},
-                                                              std::complex<double>{1.0, 0.0}};
+    std::vector<std::complex<double>> columnMajor_h_lambda = {
+        std::complex<double>{-1.0, 0.0},
+        std::complex<double>{-1.0, 1.0},
+        std::complex<double>{-1.0, -1.0},
+        std::complex<double>{1.0,  0.0}
+    };
     EXPECT_DOUBLE_EQ(hsk.get_hk()[0].real(), columnMajor_h_lambda[0].real());
     EXPECT_DOUBLE_EQ(hsk.get_hk()[0].imag(), columnMajor_h_lambda[0].imag());
     EXPECT_DOUBLE_EQ(hsk.get_hk()[1].real(), columnMajor_h_lambda[1].real());
@@ -149,8 +155,12 @@ TEST_F(ScLambdaLCAOTest, ContributeHkS2)
         = SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::getScInstance();
     sc.set_ParaV(&paraV);
     EXPECT_EQ(sc.ParaV->nloc, 1);
-    std::map<int, int> atomCounts = {{0, 1}};
-    std::map<int, int> orbitalCounts = {{0, 1}};
+    std::map<int, int> atomCounts = {
+        {0, 1}
+    };
+    std::map<int, int> orbitalCounts = {
+        {0, 1}
+    };
     sc.set_atomCounts(atomCounts);
     sc.set_orbitalCounts(orbitalCounts);
     sc.set_nspin(2);
@@ -164,12 +174,15 @@ TEST_F(ScLambdaLCAOTest, ContributeHkS2)
     GlobalV::KS_SOLVER = "genelpa";
     EXPECT_TRUE(ModuleBase::GlobalFunc::IS_COLUMN_MAJOR_KS_SOLVER());
     // set sc_lambda_op
-    auto sc_lambda_op = hamilt::OperatorScLambda<hamilt::OperatorLCAO<std::complex<double>, double>>(&hsk,
-                                                                                                     this->kvec_d,
-                                                                                                     nullptr,
-                                                                                                     isk);
+    auto sc_lambda_op
+        = hamilt::OperatorScLambda<hamilt::OperatorLCAO<std::complex<double>, double>>(&hsk,
+                                                                                    this->kvec_d,
+                                                                                    nullptr,
+                                                                                    isk);
     sc_lambda_op.contributeHk(0);
-    std::vector<std::complex<double>> columnMajor_h_lambda = {std::complex<double>{-1.0, 0.0}};
+    std::vector<std::complex<double>> columnMajor_h_lambda = {
+        std::complex<double>{-1.0,  0.0}
+    };
     EXPECT_DOUBLE_EQ(hsk.get_hk()[0].real(), columnMajor_h_lambda[0].real());
     EXPECT_DOUBLE_EQ(hsk.get_hk()[0].imag(), columnMajor_h_lambda[0].imag());
 }

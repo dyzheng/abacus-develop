@@ -34,6 +34,7 @@ class LCAO_Matrix
 #endif
 
   public:
+
     // LiuXh add 2019-07-15
     double**** Hloc_fixedR_tr;
     double**** SlocR_tr;

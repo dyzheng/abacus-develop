@@ -1,51 +1,29 @@
 #include "dftu.h"
 #include "module_base/timer.h"
-#include "module_hamilt_lcao/hamilt_lcaodft/hamilt_lcao.h"
 #include "module_hamilt_pw/hamilt_pwdft/global.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/hamilt_lcao.h"
 
 extern "C"
 {
-    // I'm not sure what's happenig here, but the interface in scalapack_connecter.h
-    // does not seem to work, so I'll use this one here
-    void pzgemm_(const char* transa,
-                 const char* transb,
-                 const int* M,
-                 const int* N,
-                 const int* K,
-                 const std::complex<double>* alpha,
-                 const std::complex<double>* A,
-                 const int* IA,
-                 const int* JA,
-                 const int* DESCA,
-                 const std::complex<double>* B,
-                 const int* IB,
-                 const int* JB,
-                 const int* DESCB,
-                 const std::complex<double>* beta,
-                 std::complex<double>* C,
-                 const int* IC,
-                 const int* JC,
-                 const int* DESCC);
-
-    void pdgemm_(const char* transa,
-                 const char* transb,
-                 const int* M,
-                 const int* N,
-                 const int* K,
-                 const double* alpha,
-                 const double* A,
-                 const int* IA,
-                 const int* JA,
-                 const int* DESCA,
-                 const double* B,
-                 const int* IB,
-                 const int* JB,
-                 const int* DESCB,
-                 const double* beta,
-                 double* C,
-                 const int* IC,
-                 const int* JC,
-                 const int* DESCC);
+  //I'm not sure what's happenig here, but the interface in scalapack_connecter.h
+  //does not seem to work, so I'll use this one here
+  void pzgemm_(
+		const char *transa, const char *transb,
+		const int *M, const int *N, const int *K,
+		const std::complex<double> *alpha,
+		const std::complex<double> *A, const int *IA, const int *JA, const int *DESCA,
+		const std::complex<double> *B, const int *IB, const int *JB, const int *DESCB,
+		const std::complex<double> *beta,
+		std::complex<double> *C, const int *IC, const int *JC, const int *DESCC);
+  
+  void pdgemm_(
+		const char *transa, const char *transb,
+		const int *M, const int *N, const int *K,
+		const double *alpha,
+		const double *A, const int *IA, const int *JA, const int *DESCA,
+		const double *B, const int *IB, const int *JB, const int *DESCB,
+		const double *beta,
+		double *C, const int *IC, const int *JC, const int *DESCC);
 }
 
 namespace ModuleDFTU
@@ -93,8 +71,7 @@ void DFTU::zero_locale()
 
     for (int T = 0; T < GlobalC::ucell.ntype; T++)
     {
-        if (orbital_corr[T] == -1)
-            continue;
+        if (orbital_corr[T] == -1) continue;
 
         for (int I = 0; I < GlobalC::ucell.atoms[T].na; I++)
         {
@@ -146,12 +123,12 @@ void DFTU::mix_locale(const double& mixing_beta)
                 {
                     if (GlobalV::NSPIN == 4)
                     {
-                        locale[iat][l][n][0] = locale[iat][l][n][0] * beta + locale_save[iat][l][n][0] * (1.0 - beta);
+                        locale[iat][l][n][0] = locale[iat][l][n][0]*beta + locale_save[iat][l][n][0]*(1.0-beta);
                     }
                     else if (GlobalV::NSPIN == 1 || GlobalV::NSPIN == 2)
                     {
-                        locale[iat][l][n][0] = locale[iat][l][n][0] * beta + locale_save[iat][l][n][0] * (1.0 - beta);
-                        locale[iat][l][n][1] = locale[iat][l][n][1] * beta + locale_save[iat][l][n][1] * (1.0 - beta);
+                        locale[iat][l][n][0] = locale[iat][l][n][0] * beta + locale_save[iat][l][n][0] * (1.0-beta);
+                        locale[iat][l][n][1] = locale[iat][l][n][1] * beta + locale_save[iat][l][n][1] * (1.0-beta);
                     }
                 }
             }
@@ -160,11 +137,11 @@ void DFTU::mix_locale(const double& mixing_beta)
     ModuleBase::timer::tick("DFTU", "mix_locale");
 }
 
-void DFTU::cal_occup_m_k(const int iter,
-                         const std::vector<std::vector<std::complex<double>>>& dm_k,
-                         const K_Vectors& kv,
-                         const double& mixing_beta,
-                         hamilt::Hamilt<std::complex<double>>* p_ham)
+void DFTU::cal_occup_m_k(const int iter, 
+                        const std::vector<std::vector<std::complex<double>>>& dm_k,
+                        const K_Vectors& kv,
+                        const double& mixing_beta,
+                        hamilt::Hamilt<std::complex<double>>* p_ham)
 {
     ModuleBase::TITLE("DFTU", "cal_occup_m_k");
     ModuleBase::timer::tick("DFTU", "cal_occup_m_k");
@@ -176,7 +153,7 @@ void DFTU::cal_occup_m_k(const int iter,
     // call SCALAPACK routine to calculate the product of the S and density matrix
     const char transN = 'N', transT = 'T';
     const int one_int = 1;
-    const std::complex<double> beta(0.0, 0.0), alpha(1.0, 0.0);
+    const std::complex<double> beta(0.0,0.0), alpha(1.0,0.0);
 
     std::vector<std::complex<double>> srho(this->LM->ParaV->nloc);
 
@@ -185,7 +162,7 @@ void DFTU::cal_occup_m_k(const int iter,
         // srho(mu,nu) = \sum_{iw} S(mu,iw)*dm_k(iw,nu)
         this->folding_matrix_k_new(ik, p_ham);
         std::complex<double>* s_k_pointer = nullptr;
-        if (GlobalV::NSPIN != 4)
+        if(GlobalV::NSPIN != 4)
         {
             s_k_pointer = dynamic_cast<hamilt::HamiltLCAO<std::complex<double>, double>*>(p_ham)->getSk();
         }
@@ -206,7 +183,7 @@ void DFTU::cal_occup_m_k(const int iter,
                 &one_int,
                 this->LM->ParaV->desc,
                 dm_k[ik].data(),
-                // dm_k[ik].c,
+                //dm_k[ik].c,
                 &one_int,
                 &one_int,
                 this->LM->ParaV->desc,
@@ -273,14 +250,14 @@ void DFTU::cal_occup_m_k(const int iter,
                                             locale[iat][l][n][spin](m0_all, m1_all)
                                                 += (std::conj(srho[irc_prime])).real() / 4.0;
                                     } // ipol1
-                                }     // m1
-                            }         // ipol0
-                        }             // m0
-                    }                 // end n
-                }                     // end l
-            }                         // end ia
-        }                             // end it
-    }                                 // ik
+                                } // m1
+                            } // ipol0
+                        } // m0
+                    } // end n
+                } // end l
+            } // end ia
+        } // end it
+    } // ik
 
     for (int it = 0; it < GlobalC::ucell.ntype; it++)
     {
@@ -362,11 +339,11 @@ void DFTU::cal_occup_m_k(const int iter,
                         exit(0);
                     }
                 } // end n
-            }     // end l
-        }         // end ia
-    }             // end it
+            } // end l
+        } // end ia
+    } // end it
 
-    if (mixing_dftu && initialed_locale)
+    if(mixing_dftu && initialed_locale)
     {
         this->mix_locale(mixing_beta);
     }
@@ -376,10 +353,7 @@ void DFTU::cal_occup_m_k(const int iter,
     return;
 }
 
-void DFTU::cal_occup_m_gamma(const int iter,
-                             const std::vector<std::vector<double>>& dm_gamma,
-                             const double& mixing_beta,
-                             hamilt::Hamilt<double>* p_ham)
+void DFTU::cal_occup_m_gamma(const int iter, const std::vector<std::vector<double>> &dm_gamma, const double& mixing_beta, hamilt::Hamilt<double>* p_ham)
 {
     ModuleBase::TITLE("DFTU", "cal_occup_m_gamma");
     ModuleBase::timer::tick("DFTU", "cal_occup_m_gamma");
@@ -410,7 +384,7 @@ void DFTU::cal_occup_m_gamma(const int iter,
                 &one_int,
                 this->LM->ParaV->desc,
                 dm_gamma[is].data(),
-                // dm_gamma[is].c,
+                //dm_gamma[is].c,
                 &one_int,
                 &one_int,
                 this->LM->ParaV->desc,
@@ -512,12 +486,12 @@ void DFTU::cal_occup_m_gamma(const int iter,
                         }
 
                     } // end for(n)
-                }     // L
-            }         // ia
-        }             // it
-    }                 // is
+                } // L
+            } // ia
+        } // it
+    } // is
 
-    if (mixing_dftu && initialed_locale)
+    if(mixing_dftu && initialed_locale)
     {
         this->mix_locale(mixing_beta);
     }

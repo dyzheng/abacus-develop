@@ -448,10 +448,8 @@ void ModuleIO::write_dos_lcao(const psi::Psi<std::complex<double>>* psi,
                 const std::complex<double>* sk = nullptr;
                 if (GlobalV::NSPIN == 4)
                 {
-                    dynamic_cast<hamilt::HamiltLCAO<std::complex<double>, std::complex<double>>*>(p_ham)->updateSk(ik,
-                                                                                                                   1);
-                    sk = dynamic_cast<const hamilt::HamiltLCAO<std::complex<double>, std::complex<double>>*>(p_ham)
-                             ->getSk();
+                    dynamic_cast<hamilt::HamiltLCAO<std::complex<double>, std::complex<double>>*>(p_ham)->updateSk(ik, 1);
+                    sk = dynamic_cast<const hamilt::HamiltLCAO<std::complex<double>, std::complex<double>>*>(p_ham)->getSk();
                 }
                 else
                 {

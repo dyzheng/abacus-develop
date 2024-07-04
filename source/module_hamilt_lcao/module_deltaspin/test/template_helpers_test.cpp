@@ -1,9 +1,9 @@
-#include "../spin_constrain.h"
-
-#include "gmock/gmock.h"
-#include "gtest/gtest.h"
 #include <algorithm>
 #include <string>
+
+#include "../spin_constrain.h"
+#include "gmock/gmock.h"
+#include "gtest/gtest.h"
 
 /************************************************
  *  unit test of functions in template_helpers.cpp

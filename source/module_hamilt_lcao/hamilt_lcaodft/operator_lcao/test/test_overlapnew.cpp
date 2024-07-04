@@ -107,7 +107,8 @@ TEST_F(OverlapNewTest, constructHRd2d)
     hamilt::HS_Matrix_K<double> hsk(paraV);
     hsk.set_zero_sk();
     Grid_Driver gd(0, 0, 0);
-    hamilt::OverlapNew<hamilt::OperatorLCAO<double, double>> op(&hsk, kvec_d_in, nullptr, SR, &ucell, &gd, &intor_);
+    hamilt::OverlapNew<hamilt::OperatorLCAO<double, double>>
+        op(&hsk, kvec_d_in, nullptr, SR, &ucell, &gd, &intor_);
     op.contributeHR();
     // check the value of SR
     for (int iap = 0; iap < SR->size_atom_pairs(); ++iap)

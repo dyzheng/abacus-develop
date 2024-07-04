@@ -1,5 +1,4 @@
 #include "op_dftu_lcao.h"
-
 #include "module_base/timer.h"
 #include "module_base/tool_title.h"
 #include "module_hamilt_lcao/module_dftu/dftu.h"
@@ -14,14 +13,14 @@ template class OperatorDFTU<OperatorLCAO<std::complex<double>, double>>;
 
 template class OperatorDFTU<OperatorLCAO<std::complex<double>, std::complex<double>>>;
 
-template <typename TK, typename TR>
+template<typename TK, typename TR>
 void OperatorDFTU<OperatorLCAO<TK, TR>>::contributeHR()
 {
-    // no calculation of HR yet for DFTU operator
+    //no calculation of HR yet for DFTU operator
     return;
 }
 
-template <>
+template<>
 void OperatorDFTU<OperatorLCAO<double, double>>::contributeHk(int ik)
 {
     ModuleBase::TITLE("OperatorDFTU", "contributeHk");
@@ -39,7 +38,7 @@ void OperatorDFTU<OperatorLCAO<double, double>>::contributeHk(int ik)
     ModuleBase::timer::tick("OperatorDFTU", "contributeHk");
 }
 
-template <>
+template<>
 void OperatorDFTU<OperatorLCAO<std::complex<double>, double>>::contributeHk(int ik)
 {
     ModuleBase::TITLE("OperatorDFTU", "contributeHk");
@@ -57,7 +56,7 @@ void OperatorDFTU<OperatorLCAO<std::complex<double>, double>>::contributeHk(int 
     ModuleBase::timer::tick("OperatorDFTU", "contributeHk");
 }
 
-template <>
+template<>
 void OperatorDFTU<OperatorLCAO<std::complex<double>, std::complex<double>>>::contributeHk(int ik)
 {
     ModuleBase::TITLE("OperatorDFTU", "contributeHk");
@@ -75,4 +74,4 @@ void OperatorDFTU<OperatorLCAO<std::complex<double>, std::complex<double>>>::con
     ModuleBase::timer::tick("OperatorDFTU", "contributeHk");
 }
 
-} // namespace hamilt
+}

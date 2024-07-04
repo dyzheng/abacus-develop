@@ -143,7 +143,8 @@ void Force_LCAO<std::complex<double>>::allocate(const Parallel_Orbitals& pv,
     {
         cal_deri = false;
 
-        ModuleBase::WARNING_QUIT("cal_syns", "This function has been broken and will be fixed later.");
+        ModuleBase::WARNING_QUIT("cal_syns",
+                                 "This function has been broken and will be fixed later.");
 
         LCAO_domain::build_ST_new(lm,
                                   fsr,
@@ -160,7 +161,7 @@ void Force_LCAO<std::complex<double>>::allocate(const Parallel_Orbitals& pv,
 
         for (int ik = 0; ik < nks; ik++)
         {
-
+            
             bool bit = false; // LiuXh, 2017-03-21
             /*ModuleIO::save_mat(0,
                                lm.Hloc2.data(),
