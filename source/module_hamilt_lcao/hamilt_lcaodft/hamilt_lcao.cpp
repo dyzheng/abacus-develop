@@ -61,7 +61,6 @@ HamiltLCAO<TK, TR>::HamiltLCAO(Gint_Gamma* GG_in,
                                Gint_k* GK_in,
                                LCAO_Matrix* LM_in,
                                const Parallel_Orbitals* paraV,
-                               Local_Orbital_Charge* loc_in,
                                elecstate::Potential* pot_in,
                                const K_Vectors& kv_in,
                                const TwoCenterBundle& two_center_bundle,
@@ -308,7 +307,7 @@ HamiltLCAO<TK, TR>::HamiltLCAO(Gint_Gamma* GG_in,
         }
 #endif
         // TDDFT_velocity_gague
-        if (GlobalV::ESOLVER_TYPE == "tddft" && elecstate::H_TDDFT_pw::stype == 1)
+        if (TD_Velocity::tddft_velocity)
         {
             elecstate::H_TDDFT_pw::update_At();
             Operator<TK>* td_ekinetic = new TDEkinetic<OperatorLCAO<TK, TR>>(this->hsk,
@@ -316,7 +315,8 @@ HamiltLCAO<TK, TR>::HamiltLCAO(Gint_Gamma* GG_in,
                                                                              this->sR,
                                                                              kv,
                                                                              &GlobalC::ucell,
-                                                                             &GlobalC::GridD);
+                                                                             &GlobalC::GridD,
+                                                                             two_center_bundle.overlap_orb.get());
             this->getOperator()->add(td_ekinetic);
 
             Operator<TK>* td_nonlocal = new TDNonlocal<OperatorLCAO<TK, TR>>(this->hsk,

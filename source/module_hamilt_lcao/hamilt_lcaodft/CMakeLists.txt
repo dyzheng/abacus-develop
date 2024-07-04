@@ -38,6 +38,7 @@ if(ENABLE_LCAO)
 		LCAO_set_st.cpp
 		LCAO_nl_mu.cpp	
         LCAO_set_zero.cpp
+        LCAO_allocate.cpp
 		record_adj.cpp
         center2_orb.cpp
         center2_orb-orb11.cpp

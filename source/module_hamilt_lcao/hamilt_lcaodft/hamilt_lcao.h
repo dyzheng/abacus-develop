@@ -28,7 +28,6 @@ class HamiltLCAO : public Hamilt<TK>
                Gint_k* GK_in,
                LCAO_Matrix* LM_in,
                const Parallel_Orbitals* paraV,
-               Local_Orbital_Charge* loc_in,
                elecstate::Potential* pot_in,
                const K_Vectors& kv_in,
                const TwoCenterBundle& two_center_bundle,
