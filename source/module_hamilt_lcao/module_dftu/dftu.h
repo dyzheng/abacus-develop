@@ -8,7 +8,6 @@
 #include "module_cell/klist.h"
 #include "module_cell/unitcell.h"
 #include "module_basis/module_ao/parallel_orbitals.h"
-#include "module_hamilt_lcao/hamilt_lcaodft/LCAO_matrix.h"
 #include "module_elecstate/module_charge/charge_mixing.h"
 #include "module_hamilt_general/hamilt.h"
 #include "module_elecstate/elecstate.h"
@@ -39,7 +38,7 @@ class DFTU
   public:
     // allocate relevant data strcutures
     void init(UnitCell& cell, // unitcell class
-              LCAO_Matrix& lm,
+              const Parallel_Orbitals* pv,
               const int& nks);
 
     // calculate the energy correction
@@ -57,7 +56,7 @@ class DFTU
 
     double EU; //+U energy
   private:
-    LCAO_Matrix* LM;
+    const Parallel_Orbitals* paraV = nullptr;
     int cal_type = 3; // 1:dftu_tpye=1, dc=1; 2:dftu_type=1, dc=2; 3:dftu_tpye=2, dc=1; 4:dftu_tpye=2, dc=2;
     
     // transform between iwt index and it, ia, L, N and m index
@@ -162,7 +161,6 @@ private:
   public:
 
    void force_stress(const elecstate::ElecState* pelec,
-		   LCAO_Matrix& lm,
 		   const Parallel_Orbitals& pv,
 		   ForceStressArrays& fsr,
 		   ModuleBase::matrix& force_dftu,

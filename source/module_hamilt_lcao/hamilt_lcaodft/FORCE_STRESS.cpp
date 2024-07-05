@@ -240,7 +240,6 @@ void Force_Stress_LCAO<T>::getForceStress(const bool isforce,
         if (GlobalV::dft_plus_u == 2)
         {
             GlobalC::dftu.force_stress(pelec,
-                                       lm,
                                        pv,
                                        fsr, // mohan 2024-06-16
                                        force_dftu,

@@ -1,6 +1,7 @@
 #pragma once
 #include "dftu_lcao.h"
 #include "module_base/parallel_reduce.h"
+#include "module_base/timer.h"
 
 namespace hamilt
 {
@@ -27,7 +28,7 @@ void DFTU<OperatorLCAO<TK, TR>>::cal_force_stress(const bool cal_force,
         return;
     }
     // begin the calculation of force and stress
-    timex::tick("DFTU", "cal_force_stress");
+    ModuleBase::timer::tick("DFTU", "cal_force_stress");
 
     const Parallel_Orbitals* paraV = dmR_tmp[0]->get_paraV();
     const int npol = this->ucell->get_npol();
@@ -227,7 +228,7 @@ void DFTU<OperatorLCAO<TK, TR>>::cal_force_stress(const bool cal_force,
         stress.c[3] = stress.c[1]; // stress(1,0)
     }
 
-    timex::tick("DFTU", "cal_force_stress");
+    ModuleBase::timer::tick("DFTU", "cal_force_stress");
 }
 
 template <typename TK, typename TR>
