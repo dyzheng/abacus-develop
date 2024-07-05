@@ -169,10 +169,6 @@ void hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::contributeHR()
             }
         }
     }
-    else
-    {
-        this->current_spin = 1 - this->current_spin;
-    }
     return;
 }
 

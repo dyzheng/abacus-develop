@@ -86,6 +86,8 @@ class OperatorLCAO : public Operator<TK>
     */
     void set_hr_done(bool hr_done_in);
 
+    void set_current_spin(const int current_spin_in);
+
     // protected:
     //  Hamiltonian matrix which are stored in LCAO_Matrix and calculated in OperatorLCAO
     LCAO_Matrix* LM = nullptr;
@@ -102,6 +104,9 @@ class OperatorLCAO : public Operator<TK>
 
     // if HR is calculated
     bool hr_done = false;
+
+    // current spin index
+    int current_spin = 0;
 
   private:
     void get_hs_pointers();

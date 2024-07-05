@@ -50,7 +50,13 @@ class DeltaSpin<OperatorLCAO<TK, TR>> : public OperatorLCAO<TK, TR>
     /**
      * @brief set the update_lambda_ to true, which means the lambda will be updated in the next contributeHR()
     */
-    void update_lambda(){for(int is=0;is<this->spin_num;is++){this->update_lambda_[is] = true;}}
+    void update_lambda()
+    {
+        for(int is=0;is<this->spin_num;is++)
+        {
+            this->update_lambda_[is] = true;
+        }
+    }
 
   private:
     const UnitCell* ucell = nullptr;
@@ -65,8 +71,6 @@ class DeltaSpin<OperatorLCAO<TK, TR>> : public OperatorLCAO<TK, TR>
 
     /// @brief the number of spin components, 1 for no-spin, 2 for collinear spin case and 4 for non-collinear spin case
     int nspin = 0;
-    /// @brief the current spin index for nspin==2 to calculate spin-up and spin-down separately
-    int current_spin = 0;
 
     /**
      * @brief calculate the HR local matrix of <I,J,R> atom pair

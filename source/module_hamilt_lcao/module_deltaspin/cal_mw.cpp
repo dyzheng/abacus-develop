@@ -80,6 +80,8 @@ void SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::cal_MW(const 
             dynamic_cast<const elecstate::ElecStateLCAO<std::complex<double>>*>(this->pelec)->get_DM()->switch_dmr(0);
             for(int iat=0;iat<this->Mi_.size();iat++)
             {
+                this->Mi_[iat].x = 0.0;
+                this->Mi_[iat].y = 0.0;
                 this->Mi_[iat].z = moments[iat];
             }
         }
