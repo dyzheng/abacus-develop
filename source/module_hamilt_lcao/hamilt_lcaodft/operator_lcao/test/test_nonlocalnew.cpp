@@ -133,7 +133,7 @@ class NonlocalNewTest : public ::testing::Test
 TEST_F(NonlocalNewTest, constructHRd2d)
 {
     std::vector<ModuleBase::Vector3<double>> kvec_d_in(1, ModuleBase::Vector3<double>(0.0, 0.0, 0.0));
-    hamilt::HS_Matrix_K<double> hsk(paraV, 1);
+    hamilt::HS_Matrix_K<double> hsk(paraV, true);
     hsk.set_zero_hk();
     Grid_Driver gd(0, 0, 0);
     // check some input values

@@ -76,7 +76,7 @@ class TDNonlocal<OperatorLCAO<TK, TR>> : public OperatorLCAO<TK, TR>
      */
     void initialize_HR_tmp(const Parallel_Orbitals* paraV);
     /// @brief init vector potential for td_nonlocal term
-    void init_td(void);
+    void init_td();
     /**
      * @brief calculate the non-local pseudopotential matrix with specific <I,J,R> atom-pairs
      * nearest neighbor atoms don't need to be calculated again
