@@ -383,7 +383,7 @@ TEST_F(InputTest, Default)
     EXPECT_DOUBLE_EQ(INPUT.sc_thr, 1e-6);
     EXPECT_EQ(INPUT.nsc, 100);
     EXPECT_EQ(INPUT.nsc_min, 2);
-	EXPECT_EQ(INPUT.sc_scf_thr, 1e-5);
+	EXPECT_EQ(INPUT.sc_scf_thr, 1e-3);
     EXPECT_DOUBLE_EQ(INPUT.alpha_trial, 0.01);
     EXPECT_DOUBLE_EQ(INPUT.sccut, 3.0);
     EXPECT_EQ(INPUT.sc_file, "none");

@@ -640,7 +640,7 @@ void Input::Default(void)
     sc_thr = 1e-6;
     nsc = 100;
     nsc_min = 2;
-    sc_scf_thr = 1e-5;
+    sc_scf_thr = 1e-3;
     alpha_trial = 0.01;
     sccut = 3.0;
     sc_file = "none";
@@ -3245,6 +3245,11 @@ void Input::Default_2(void) // jiyy add 2019-08-04
         {
             //autoset onsite_radius to 3.0 as default
             onsite_radius = 3.0;
+        }
+        if(sc_mag_switch == 1)
+        {
+            mixing_dmr = 1;
+            mixing_restart = sc_scf_thr;
         }
     }
 

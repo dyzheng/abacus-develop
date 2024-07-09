@@ -760,22 +760,22 @@ void ESolver_KS_LCAO<TK, TR>::iter_init(const int istep, const int iter)
             // optimize lambda to get target magnetic moments, but the lambda is not near target
             sc.run_lambda_loop(iter-1);
             // calculate the near target magnetic density
-            this->hamilt2density(istep, iter, /*useless value*/0.0);
+            //this->hamilt2density(istep, iter, /*useless value*/0.0);
             // revert rho to rho_save
-            this->pelec->charge->revert_rho(0);
+            //this->pelec->charge->revert_rho(0);
             // update potential from the new charge density and magnetic density
-            this->update_pot(istep, iter);
+            //this->update_pot(istep, iter);
             // recalculate the Hamiltonian of real space
-            if(GlobalV::VL_IN_H)
-            {
-                this->GK.renew();
-                this->p_hamilt->refresh();
-            }
+            //if(GlobalV::VL_IN_H)
+            //{
+            //    this->GK.renew();
+            //    this->p_hamilt->refresh();
+            //}
             // optimize lambda to get target magnetic moments, and the lambda is near target
-            sc.run_lambda_loop(iter-1);
+            //sc.run_lambda_loop(iter-1);
             sc.set_mag_converged(true);
             // init mixing for the next iteration
-            this->p_chgmix->init_mixing();
+            //this->p_chgmix->init_mixing(); //mixing_restart is equal to sc_scf_thr, skip this line
         }
         else if(sc.mag_converged())
         {
