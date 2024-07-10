@@ -3250,6 +3250,17 @@ void Input::Default_2(void) // jiyy add 2019-08-04
         {
             mixing_dmr = 1;
             mixing_restart = sc_scf_thr;
+            if(dft_plus_u == 1 && uramping == -1.0)
+            {
+                // autoset uramping to maximum U
+                for(int i = 0; i < ntype; i++)
+                {
+                    if(uramping < this->hubbard_u[i])
+                    {
+                        uramping = this->hubbard_u[i];
+                    }
+                }
+            }
         }
     }
 
