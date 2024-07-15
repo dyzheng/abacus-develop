@@ -107,8 +107,9 @@ void build_Nonlocal_mu_new(const Parallel_Orbitals& pv,
                 const int iw1_all = start1 + iw1;
                 const int iw1_local = pv.global2local_row(iw1_all);
                 const int iw2_local = pv.global2local_col(iw1_all);
-                if (iw1_local < 0 && iw2_local < 0)
+                if (iw1_local < 0 && iw2_local < 0) {
                     continue;
+}
                 const int iw1_0 = iw1 / npol;
                 std::vector<std::vector<double>> nlm;
                 // nlm is a vector of vectors, but size of outer vector is only 1 here
@@ -214,9 +215,9 @@ void build_Nonlocal_mu_new(const Parallel_Orbitals& pv,
                     // this rcut is in order to make nnr consistent
                     // with other matrix.
                     rcut = pow(orb.Phi[T1].getRcut() + orb.Phi[T2].getRcut(), 2);
-                    if (distance < rcut)
+                    if (distance < rcut) {
                         is_adj = true;
-                    else if (distance >= rcut)
+                    } else if (distance >= rcut)
                     {
                         for (int ad0 = 0; ad0 < adjs.adj_num + 1; ++ad0)
                         {
@@ -301,8 +302,9 @@ void build_Nonlocal_mu_new(const Parallel_Orbitals& pv,
                                 const int j0 = j / npol; // added by zhengdy-soc
                                 const int iw1_all = start1 + j;
                                 const int mu = pv.global2local_row(iw1_all);
-                                if (mu < 0)
+                                if (mu < 0) {
                                     continue;
+}
 
                                 // fix a serious bug: atom2[T2] -> atom2
                                 // mohan 2010-12-20
@@ -311,8 +313,9 @@ void build_Nonlocal_mu_new(const Parallel_Orbitals& pv,
                                     const int k0 = k / npol;
                                     const int iw2_all = start2 + k;
                                     const int nu = pv.global2local_col(iw2_all);
-                                    if (nu < 0)
+                                    if (nu < 0) {
                                         continue;
+}
 
                                     if (!calc_deri)
                                     {
