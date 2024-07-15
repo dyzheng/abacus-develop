@@ -13,6 +13,7 @@
 #include "module_io/read_input.h"
 #include "module_io/winput.h"
 #include "module_parameter/parameter.h"
+#include "version.h"
 Driver::Driver()
 {
 }
@@ -48,11 +49,12 @@ void Driver::init()
 
     // (5) output the json file
     // Json::create_Json(&GlobalC::ucell.symm,GlobalC::ucell.atoms,&INPUT);
-    Json::create_Json(&GlobalC::ucell, &INPUT);
+    Json::create_Json(&GlobalC::ucell, PARAM);
 }
 
 void Driver::print_start_info()
 {
+    ModuleBase::TITLE("Driver", "print_start_info");
 #ifdef VERSION
     const char* version = VERSION;
 #else
@@ -66,7 +68,6 @@ void Driver::print_start_info()
 #endif
     time_t time_now = time(nullptr);
 
-    INPUT.start_time = time_now;
     PARAM.set_start_time(time_now);
     GlobalV::ofs_running << "                                                  "
                             "                                   "
@@ -91,16 +92,8 @@ void Driver::print_start_info()
     GlobalV::ofs_running << "                      Commit: " << commit << std::endl << std::endl;
     GlobalV::ofs_running << std::setiosflags(std::ios::right);
 
-#ifdef __MPI
-    // GlobalV::ofs_running << "    Version: Parallel, under ALPHA test" <<
-    // std::endl; GlobalV::ofs_running << "    Version: Parallel, in
-    // development" << std::endl; GlobalV::ofs_running << "    Processor Number
-    // is " << GlobalV::NPROC << std::endl;
-    ModuleBase::TITLE("Input", "init");
-    ModuleBase::TITLE("Input", "Bcast");
-#else
+#ifndef __MPI
     GlobalV::ofs_running << "    This is SERIES version." << std::endl;
-    ModuleBase::TITLE("Input", "init");
 #endif
     GlobalV::ofs_running << "    Start Time is " << ctime(&time_now);
     GlobalV::ofs_running << "                                                  "
@@ -109,17 +102,24 @@ void Driver::print_start_info()
     GlobalV::ofs_running << " -------------------------------------------------"
                             "-----------------------------------"
                          << std::endl;
+
+    GlobalV::ofs_running << std::setiosflags(std::ios::left);
+    std::cout << std::setiosflags(std::ios::left);
+
+    GlobalV::ofs_running << "\n READING GENERAL INFORMATION" << std::endl;
+    ModuleBase::GlobalFunc::OUT(GlobalV::ofs_running, "global_out_dir", GlobalV::global_out_dir);
+    ModuleBase::GlobalFunc::OUT(GlobalV::ofs_running, "global_in_card", GlobalV::global_in_card);
 }
 
 void Driver::reading()
 {
     ModuleBase::timer::tick("Driver", "reading");
     // temperarily
-    GlobalV::MY_RANK = PARAM.sys.myrank;
-    GlobalV::NPROC = PARAM.sys.nproc;
+    GlobalV::MY_RANK = PARAM.globalv.myrank;
+    GlobalV::NPROC = PARAM.globalv.nproc;
 
     // (1) read the input file
-    ModuleIO::ReadInput read_input(PARAM.sys.myrank);
+    ModuleIO::ReadInput read_input(PARAM.globalv.myrank);
     read_input.read_parameters(PARAM, GlobalV::global_in_card);
 
     // (2) create the output directory, running_*.log and print info

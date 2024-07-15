@@ -15,6 +15,7 @@ add_library(
     ../read_input_item_postprocess.cpp
     ../read_input_item_md.cpp
     ../read_input.cpp
+    ../bcast_globalv.cpp
 )
 
 install(DIRECTORY support DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
@@ -51,5 +52,5 @@ AddTest(
 AddTest(
   TARGET io_read_wfc_nao_test
   LIBS ${math_libs} base device
-  SOURCES read_wfc_nao_test.cpp ../read_wfc_nao.cpp ../../module_psi/psi.cpp
+  SOURCES read_wfc_nao_test.cpp ../read_wfc_nao.cpp ../../module_psi/psi.cpp ../../module_basis/module_ao/parallel_orbitals.cpp ../../module_basis/module_ao/parallel_2d.cpp
 )

@@ -23,6 +23,7 @@ add_library(
     parallel_kpoints.cpp
     cell_index.cpp
     check_atomic_stru.cpp
+    print_cif.cpp
 )
 
 if(ENABLE_COVERAGE)
@@ -30,6 +31,8 @@ if(ENABLE_COVERAGE)
 endif()
 
 if(BUILD_TESTING)
-  add_subdirectory(test)
-  add_subdirectory(test_pw)
+  if(ENABLE_MPI)
+    add_subdirectory(test)
+    add_subdirectory(test_pw)
+  endif()
 endif()
