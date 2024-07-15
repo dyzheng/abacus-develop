@@ -321,22 +321,14 @@ void build_Nonlocal_mu_new(const Parallel_Orbitals& pv,
                                         if (nspin == 2 || nspin == 1)
                                         {
                                             double nlm_tmp = 0.0;
-                                            const int nproj = ucell.infoNL.nproj[T0];
-                                            int ib = 0;
-                                            for (int nb = 0; nb < nproj; nb++)
+                                            const double* tmp_d = nullptr;
+                                            for (int no = 0; no < ucell.atoms[T0].ncpp.non_zero_count_soc[0]; no++)
                                             {
-                                                const int L0 = ucell.infoNL.Beta[T0].Proj[nb].getL();
-                                                for (int m = 0; m < 2 * L0 + 1; m++)
-                                                {
-                                                    if (nlm_1[ib] != 0.0 && nlm_2[ib] != 0.0)
-                                                    {
-                                                        nlm_tmp += nlm_1[ib] * nlm_2[ib]
-                                                                   * ucell.atoms[T0].ncpp.dion(nb, nb);
-                                                    }
-                                                    ib += 1;
-                                                }
+                                                const int p1 = ucell.atoms[T0].ncpp.index1_soc[0][no];
+                                                const int p2 = ucell.atoms[T0].ncpp.index2_soc[0][no];
+                                                ucell.atoms[T0].ncpp.get_d(0, p1, p2, tmp_d);
+                                                nlm_tmp += nlm_2[p2] * nlm_1[p1] * *tmp_d;
                                             }
-                                            assert(ib == nlm_1.size());
 
                                             if (gamma_only_local)
                                             {
@@ -467,22 +459,17 @@ void build_Nonlocal_mu_new(const Parallel_Orbitals& pv,
 
                                                 assert(nlm_1.size() == nlm_2[0].size());
 
-                                                const int nproj = ucell.infoNL.nproj[T0];
-                                                int ib = 0;
-                                                for (int nb = 0; nb < nproj; nb++)
+                                                const double* tmp_d = nullptr;
+                                                for (int no = 0; no < ucell.atoms[T0].ncpp.non_zero_count_soc[0]; no++)
                                                 {
-                                                    const int L0 = ucell.infoNL.Beta[T0].Proj[nb].getL();
-                                                    for (int m = 0; m < 2 * L0 + 1; m++)
+                                                    const int p1 = ucell.atoms[T0].ncpp.index1_soc[0][no];
+                                                    const int p2 = ucell.atoms[T0].ncpp.index2_soc[0][no];
+                                                    ucell.atoms[T0].ncpp.get_d(0, p1, p2, tmp_d);
+                                                    for (int ir = 0; ir < 3; ir++)
                                                     {
-                                                        for (int ir = 0; ir < 3; ir++)
-                                                        {
-                                                            nlm[ir] += nlm_2[ir][ib] * nlm_1[ib]
-                                                                       * ucell.atoms[T0].ncpp.dion(nb, nb);
-                                                        }
-                                                        ib += 1;
+                                                        nlm[ir] += nlm_2[ir][p2] * nlm_1[p1] * *tmp_d;
                                                     }
                                                 }
-                                                assert(ib == nlm_1.size());
 
                                                 LCAO_domain::set_force(pv,
                                                                        iw1_all,
@@ -516,22 +503,17 @@ void build_Nonlocal_mu_new(const Parallel_Orbitals& pv,
 
                                                 assert(nlm_1.size() == nlm_2[0].size());
 
-                                                const int nproj = ucell.infoNL.nproj[T0];
-                                                int ib = 0;
-                                                for (int nb = 0; nb < nproj; nb++)
+                                                const double* tmp_d = nullptr;
+                                                for (int no = 0; no < ucell.atoms[T0].ncpp.non_zero_count_soc[0]; no++)
                                                 {
-                                                    const int L0 = ucell.infoNL.Beta[T0].Proj[nb].getL();
-                                                    for (int m = 0; m < 2 * L0 + 1; m++)
+                                                    const int p1 = ucell.atoms[T0].ncpp.index1_soc[0][no];
+                                                    const int p2 = ucell.atoms[T0].ncpp.index2_soc[0][no];
+                                                    ucell.atoms[T0].ncpp.get_d(0, p1, p2, tmp_d);
+                                                    for (int ir = 0; ir < 3; ir++)
                                                     {
-                                                        for (int ir = 0; ir < 3; ir++)
-                                                        {
-                                                            nlm[ir] += nlm_2[ir][ib] * nlm_1[ib]
-                                                                       * ucell.atoms[T0].ncpp.dion(nb, nb);
-                                                        }
-                                                        ib += 1;
+                                                        nlm[ir] += nlm_2[ir][p2] * nlm_1[p1] * *tmp_d;
                                                     }
                                                 }
-                                                assert(ib == nlm_1.size());
 
                                                 fsr.DHloc_fixedR_x[nnr + nnr_inner] += nlm[0];
                                                 fsr.DHloc_fixedR_y[nnr + nnr_inner] += nlm[1];
