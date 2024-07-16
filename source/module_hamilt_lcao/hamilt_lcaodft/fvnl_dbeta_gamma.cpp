@@ -159,7 +159,7 @@ void Force_LCAO<double>::cal_fvnl_dbeta(const elecstate::DensityMatrix<double, d
                             ucell.atoms[T0].ncpp.get_d(0, p1, p2, tmp_d);
                             for (int ir = 0; ir < 3; ir++)
                             {
-                                nlm[ir] += nlm2[ir][p2] * nlm1[p1] * *tmp_d;
+                                nlm[ir] += nlm2[ir][p2] * nlm1[p1] * (*tmp_d);
                             }
                         }
 
@@ -179,7 +179,7 @@ void Force_LCAO<double>::cal_fvnl_dbeta(const elecstate::DensityMatrix<double, d
                                 ucell.atoms[T0].ncpp.get_d(0, p1, p2, tmp_d);
                                 for (int ir = 0; ir < 3; ir++)
                                 {
-                                    nlm_t[ir] += nlm2[ir][p1] * nlm1[p2] * *tmp_d;
+                                    nlm_t[ir] += nlm2[ir][p1] * nlm1[p2] * (*tmp_d);
                                 }
                             }
                         }

@@ -330,7 +330,7 @@ void build_Nonlocal_mu_new(const Parallel_Orbitals& pv,
                                                 const int p1 = ucell.atoms[T0].ncpp.index1_soc[0][no];
                                                 const int p2 = ucell.atoms[T0].ncpp.index2_soc[0][no];
                                                 ucell.atoms[T0].ncpp.get_d(0, p1, p2, tmp_d);
-                                                nlm_tmp += nlm_2[p2] * nlm_1[p1] * *tmp_d;
+                                                nlm_tmp += nlm_2[p2] * nlm_1[p1] * (*tmp_d);
                                             }
 
                                             if (gamma_only_local)
@@ -470,7 +470,7 @@ void build_Nonlocal_mu_new(const Parallel_Orbitals& pv,
                                                     ucell.atoms[T0].ncpp.get_d(0, p1, p2, tmp_d);
                                                     for (int ir = 0; ir < 3; ir++)
                                                     {
-                                                        nlm[ir] += nlm_2[ir][p2] * nlm_1[p1] * *tmp_d;
+                                                        nlm[ir] += nlm_2[ir][p2] * nlm_1[p1] * (*tmp_d);
                                                     }
                                                 }
 
@@ -514,7 +514,7 @@ void build_Nonlocal_mu_new(const Parallel_Orbitals& pv,
                                                     ucell.atoms[T0].ncpp.get_d(0, p1, p2, tmp_d);
                                                     for (int ir = 0; ir < 3; ir++)
                                                     {
-                                                        nlm[ir] += nlm_2[ir][p2] * nlm_1[p1] * *tmp_d;
+                                                        nlm[ir] += nlm_2[ir][p2] * nlm_1[p1] * (*tmp_d);
                                                     }
                                                 }
 
