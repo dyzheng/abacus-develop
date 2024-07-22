@@ -2,11 +2,21 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
+#define private public
+#include "module_parameter/parameter.h"
+#undef private
 #include "module_elecstate/elecstate.h"
 #include "module_elecstate/elecstate_getters.h"
 #include "module_elecstate/potentials/efield.h"
 #include "module_elecstate/potentials/gatefield.h"
 #include "module_elecstate/module_charge/charge.h"
+#include "module_cell/klist.h"
+K_Vectors::K_Vectors()
+{
+}
+K_Vectors::~K_Vectors()
+{
+}
 
 /***************************************************************
  *  mock functions
@@ -55,12 +65,6 @@ std::string get_ks_solver_type()
 }
 } // namespace elecstate
 
-K_Vectors::K_Vectors()
-{
-}
-K_Vectors::~K_Vectors()
-{
-}
 Charge::Charge()
 {
 }
@@ -93,7 +97,7 @@ class ElecStatePrintTest : public ::testing::Test
     void SetUp()
     {
         p_klist = new K_Vectors;
-        p_klist->nks = 2;
+        p_klist->set_nks(2);
         p_klist->isk = {0, 1};
         p_klist->ngk = {100, 101};
         p_klist->kvec_c.resize(2);
@@ -179,7 +183,6 @@ TEST_F(ElecStatePrintTest, PrintEigenvalueS4)
 TEST_F(ElecStatePrintTest, PrintBand)
 {
     GlobalV::NSPIN = 1;
-    GlobalV::CURRENT_SPIN = 0;
     GlobalV::NBANDS = 2;
     GlobalV::MY_RANK = 0;
     GlobalV::ofs_running.open("test.dat", std::ios::out);
@@ -240,7 +243,7 @@ TEST_F(ElecStatePrintTest, PrintEtot)
     GlobalV::EFIELD_FLAG = true;
     GlobalV::GATE_FLAG = true;
     GlobalV::TWO_EFERMI = true;
-    GlobalV::out_bandgap = true;
+    PARAM.input.out_bandgap = true;
     GlobalV::COLOUR = false;
     GlobalV::MY_RANK = 0;
     GlobalV::BASIS_TYPE = "pw";
@@ -321,7 +324,7 @@ TEST_F(ElecStatePrintTest, PrintEtot2)
     GlobalV::EFIELD_FLAG = true;
     GlobalV::GATE_FLAG = true;
     GlobalV::TWO_EFERMI = false;
-    GlobalV::out_bandgap = true;
+    PARAM.input.out_bandgap = true;
     GlobalV::COLOUR = false;
     GlobalV::MY_RANK = 0;
     GlobalV::BASIS_TYPE = "pw";
@@ -359,7 +362,7 @@ TEST_F(ElecStatePrintTest, PrintEtotColorS2)
     GlobalV::EFIELD_FLAG = true;
     GlobalV::GATE_FLAG = true;
     GlobalV::TWO_EFERMI = true;
-    GlobalV::out_bandgap = true;
+    PARAM.input.out_bandgap = true;
     GlobalV::COLOUR = true;
     GlobalV::NSPIN = 2;
     GlobalV::MY_RANK = 0;
@@ -384,7 +387,7 @@ TEST_F(ElecStatePrintTest, PrintEtotColorS4)
     GlobalV::EFIELD_FLAG = true;
     GlobalV::GATE_FLAG = true;
     GlobalV::TWO_EFERMI = true;
-    GlobalV::out_bandgap = true;
+    PARAM.input.out_bandgap = true;
     GlobalV::COLOUR = true;
     GlobalV::NSPIN = 4;
     GlobalV::NONCOLIN = true;
@@ -411,7 +414,7 @@ TEST_F(ElecStatePrintTest, PrintEtotColorS4)
 //     GlobalV::EFIELD_FLAG = true;
 //     GlobalV::GATE_FLAG = true;
 //     GlobalV::TWO_EFERMI = false;
-//     GlobalV::out_bandgap = true;
+//     PARAM.input.out_bandgap = true;
 //     GlobalV::COLOUR = false;
 //     GlobalV::MY_RANK = 0;
 //     GlobalV::BASIS_TYPE = "pw";

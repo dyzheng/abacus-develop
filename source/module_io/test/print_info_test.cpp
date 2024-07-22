@@ -8,7 +8,7 @@
 #include "module_cell/klist.h"
 #include "module_cell/parallel_kpoints.h"
 #include "module_io/berryphase.h"
-
+#undef private
 #ifdef __LCAO
 InfoNonlocal::InfoNonlocal(){}
 InfoNonlocal::~InfoNonlocal(){}
@@ -24,7 +24,7 @@ void LCAO_Orbitals::bcast_files(
 Magnetism::Magnetism(){}
 Magnetism::~Magnetism(){}
 
-bool berryphase::berry_phase_flag=0;
+bool berryphase::berry_phase_flag=false;
 
 namespace GlobalC
 {
@@ -72,7 +72,7 @@ TEST_F(PrintInfoTest, SetupParameters)
 	std::string k_file = "./support/KPT";
 	kv->nspin = 1;
 	kv->read_kpoints(k_file);
-	EXPECT_EQ(kv->nkstot,512);
+	EXPECT_EQ(kv->get_nkstot(),512);
 	std::vector<std::string> cal_type = {"scf","relax","cell-relax","md"};
 	std::vector<std::string> md_types = {"fire","nve","nvt","npt","langevin","msst"};
 	GlobalV::MY_RANK = 0;
@@ -219,8 +219,8 @@ TEST_F(PrintInfoTest, PrintScreen)
 
 TEST_F(PrintInfoTest, PrintTime)
 {
-	time_t time_start = std::time(NULL);
-	time_t time_finish = std::time(NULL);
+	time_t time_start = std::time(nullptr);
+	time_t time_finish = std::time(nullptr);
 	testing::internal::CaptureStdout();
 	EXPECT_NO_THROW(Print_Info::print_time(time_start,time_finish));
 	output = testing::internal::GetCapturedStdout();
@@ -228,4 +228,3 @@ TEST_F(PrintInfoTest, PrintTime)
 	EXPECT_THAT(output,testing::HasSubstr("FINISH Time"));
 	EXPECT_THAT(output,testing::HasSubstr("TOTAL  Time"));
 }
-#undef private

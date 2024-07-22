@@ -10,11 +10,6 @@ AddTest(
   SOURCES atom_in_test.cpp
 )
 AddTest(
-  TARGET base_blacs_connector
-  LIBS ${math_libs}
-  SOURCES blacs_connector_test.cpp
-)
-AddTest(
   TARGET base_timer
   SOURCES timer_test.cpp ../timer.cpp  ../global_variable.cpp
 )
@@ -78,7 +73,7 @@ AddTest(
   TARGET base_ylmreal
   LIBS ${math_libs} device
   SOURCES math_ylmreal_test.cpp ../math_ylmreal.cpp ../complexmatrix.cpp ../global_variable.cpp ../ylm.cpp ../realarray.cpp ../timer.cpp  ../matrix.cpp ../vector3.h
-          ../parallel_reduce.cpp ../parallel_global.cpp ../parallel_common.cpp
+          ../parallel_reduce.cpp ../parallel_global.cpp ../parallel_comm.cpp ../parallel_common.cpp
           ../memory.cpp ../libm/branred.cpp ../libm/sincos.cpp
 )
 AddTest(
@@ -192,7 +187,7 @@ AddTest(
 AddTest(
   TARGET clebsch_gordan_coeff_test
   SOURCES clebsch_gordan_coeff_test.cpp ../clebsch_gordan_coeff.cpp ../intarray.cpp ../realarray.cpp ../complexmatrix.cpp ../matrix.cpp ../timer.cpp  
-  ../math_ylmreal.cpp  ../global_variable.cpp ../ylm.cpp  ../timer.cpp  ../vector3.h ../parallel_reduce.cpp ../parallel_global.cpp ../parallel_common.cpp
+  ../math_ylmreal.cpp  ../global_variable.cpp ../ylm.cpp  ../timer.cpp  ../vector3.h ../parallel_reduce.cpp ../parallel_global.cpp ../parallel_comm.cpp ../parallel_common.cpp
   ../memory.cpp ../libm/branred.cpp ../libm/sincos.cpp ../inverse_matrix.cpp ../lapack_connector.h
   LIBS ${math_libs} device
 )

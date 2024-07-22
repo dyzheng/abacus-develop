@@ -1,4 +1,5 @@
 #include "module_hamilt_pw/hamilt_pwdft/kernels/stress_op.h"
+#include "vnl_tools_cu.hpp"
 #include "module_base/module_device/types.h"
 
 #include <complex>
@@ -36,8 +37,8 @@ __global__ void cal_stress_mgga(
     int ipol = 0;
     for (int ix = 0; ix < 3; ix++) {
         for (int iy = 0; iy < ix + 1; iy++) {
-            crosstaus[spin * nrxx * 6 + ipol * nrxx + idx] 
-                += 2.0 * w1 
+            crosstaus[spin * nrxx * 6 + ipol * nrxx + idx]
+                += 2.0 * w1
                 * (gradwfc[ix * nrxx + idx].real() * gradwfc[iy*nrxx + idx].real()
                 +  gradwfc[ix * nrxx + idx].imag() * gradwfc[iy*nrxx + idx].imag());
             ipol += 1;
@@ -186,9 +187,8 @@ void cal_dbecp_noevc_nl_op<FPTYPE, base_device::DEVICE_GPU>::operator()(const ba
             reinterpret_cast<thrust::complex<FPTYPE>*>(vkb1),
             reinterpret_cast<thrust::complex<FPTYPE>*>(vkb2),
             reinterpret_cast<thrust::complex<FPTYPE>*>(dbecp_noevc));
-    
-    cudaErrcheck(cudaGetLastError());
-    cudaErrcheck(cudaDeviceSynchronize());
+
+    cudaCheckOnDebug();
 }
 
 template <typename FPTYPE>
@@ -236,9 +236,8 @@ void cal_stress_nl_op<FPTYPE, base_device::DEVICE_GPU>::operator()(const base_de
              reinterpret_cast<const thrust::complex<FPTYPE>*>(becp),
              reinterpret_cast<const thrust::complex<FPTYPE>*>(dbecp),
              stress);// array of data
-    
-    cudaErrcheck(cudaGetLastError());
-    cudaErrcheck(cudaDeviceSynchronize());
+
+    cudaCheckOnDebug();
 }
 
 template <typename T, typename Device>
@@ -254,9 +253,355 @@ void cal_stress_mgga_op<T, Device>::operator()(
     cal_stress_mgga<Real><<<block, THREADS_PER_BLOCK>>>(
         spin, nrxx, w1, gradwfc_, crosstaus);
 
-    cudaErrcheck(cudaGetLastError());
-    cudaErrcheck(cudaDeviceSynchronize());
+    cudaCheckOnDebug();
 }
+
+
+
+
+template <typename FPTYPE>
+__global__ void cal_vkb(
+    const int npw,
+    const int* indexes,
+    const FPTYPE* vqs_in,
+    const FPTYPE* ylms_in,
+    const thrust::complex<FPTYPE>* sk_in,
+    const thrust::complex<FPTYPE>* pref_in,
+    thrust::complex<FPTYPE>* vkbs_out
+){
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    int ih =  blockIdx.y;
+
+    thrust::complex<FPTYPE>* vkb_ptr = vkbs_out + ih * npw;
+    const FPTYPE* ylm_ptr = ylms_in + indexes[ih*4] * npw;
+    const FPTYPE* vq_ptr = vqs_in + indexes[ih*4+1] * npw;
+    if(idx<npw) vkb_ptr[idx] = ylm_ptr[idx] * vq_ptr[idx] * sk_in[idx] * pref_in[ih];              
+    
+}
+
+template <typename FPTYPE>
+__global__ void cal_vkb_deri(
+        const int npw,
+        const int ipol,
+        const int jpol,
+        const int* indexes,
+        const FPTYPE* vqs_in, const FPTYPE* vqs_deri_in,
+        const FPTYPE* ylms_in, const FPTYPE* ylms_deri_in,
+        const thrust::complex<FPTYPE>* sk_in,
+        const thrust::complex<FPTYPE>* pref_in,
+        const FPTYPE* gk_in,
+        thrust::complex<FPTYPE>* vkbs_out
+){
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    int ih =  blockIdx.y;
+
+    thrust::complex<FPTYPE>* vkb_ptr = vkbs_out + ih * npw;
+    const FPTYPE* ylm_ptr = ylms_in + indexes[ih*4] * npw;
+    const FPTYPE* vq_ptr = vqs_in + indexes[ih*4 + 1] * npw;
+
+    const FPTYPE* ylm_deri_ptr1 = ylms_deri_in + indexes[ih*4+2] * npw;
+    const FPTYPE* ylm_deri_ptr2 = ylms_deri_in + indexes[ih*4+3] * npw;
+    const FPTYPE* vq_deri_ptr = vqs_deri_in + indexes[ih*4+1] * npw;
+    const FPTYPE* gkn = &gk_in[4 * npw];
+    const FPTYPE* gk = &gk_in[idx * 3];
+
+    if(idx<npw) {
+        vkb_ptr[idx] = thrust::complex<FPTYPE>(0.0, 0.0);
+        if(ipol == jpol)
+        {
+            vkb_ptr[idx] -= ylm_ptr[idx] * vq_ptr[idx] * sk_in[idx] * pref_in[ih];
+        }
+        vkb_ptr[idx] -= (gk[ipol] * ylm_deri_ptr2[idx] 
+                        + gk[jpol] * ylm_deri_ptr1[idx]) 
+                        * vq_ptr[idx] * sk_in[idx] * pref_in[ih];
+
+        vkb_ptr[idx] -= 2.0 * ylm_ptr[idx] * vq_deri_ptr[idx] * sk_in[idx] * pref_in[ih]
+                    * gk[ipol] * gk[jpol] * gkn[idx];  
+    }
+}
+
+
+template <typename FPTYPE>
+__global__ void cal_vq(
+        const FPTYPE* tab,
+        int it, const FPTYPE* gk, int npw,
+        const int tab_2,const int tab_3,  const FPTYPE table_interval, 
+        const int nbeta, FPTYPE* vq
+){
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    int ib =  blockIdx.y;
+
+    FPTYPE* vq_ptr = &vq[ib * npw];
+    const FPTYPE* gnorm = &gk[3 * npw];
+    if(idx<npw) vq_ptr[idx] = _polynomial_interpolation(
+        tab, it, ib, tab_2, tab_3, table_interval, gnorm[idx]);
+}
+
+template <typename FPTYPE>
+__global__ void cal_vq_deri(
+        const FPTYPE* tab,
+        int it, const FPTYPE* gk, int npw,
+        const int tab_2,const int tab_3,  const FPTYPE table_interval, 
+        const int nbeta, FPTYPE* vq
+){
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    int ib =  blockIdx.y;
+
+    FPTYPE* vq_ptr = &vq[ib * npw];
+    const FPTYPE* gnorm = &gk[3 * npw];
+    if(idx<npw) vq_ptr[idx] = _polynomial_interpolation_nl(
+        tab, it, ib, tab_2, tab_3, table_interval, gnorm[idx]);
+}
+
+
+template <typename FPTYPE>
+__global__ void cal_stress_drhoc_aux0(
+        const FPTYPE* r, const FPTYPE* rhoc, 
+        const FPTYPE *gx_arr, const FPTYPE *rab, FPTYPE *drhocg, 
+        const int mesh, const int igl0, const int ngg, const double omega
+){
+    const double FOUR_PI =  4.0 * 3.14159265358979323846;
+
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+
+    FPTYPE aux_d[2];
+    FPTYPE rhocg1=0.0, f_0=0.0, f_2=0.0, f_1=0.0;
+
+    if (idx >= ngg) {return;}
+    
+    for( int ir = 0;ir< mesh; ir++)
+    {
+        aux_d [ir%2]  = r [ir] * rhoc [ir] * (r [ir] * cos (gx_arr[idx] * r [ir] ) / gx_arr[idx] - sin (gx_arr[idx] * r [ir] ) / pow(gx_arr[idx],2));
+
+        if(ir==0){
+            f_0 = aux_d[ir%2]*rab[ir];
+        } else if(ir==mesh-2){
+            f_2 = aux_d[ir%2]*rab[ir];
+        } else if(ir==mesh-1) {
+            f_1 = aux_d[ir%2]*rab[ir];
+        } else if(ir%2==0){
+            const double f1 = aux_d[1]*rab[ir-1];
+            rhocg1 += f1 + f1 + aux_d[0]*rab[ir];
+        }
+
+    }//ir
+    rhocg1 += f_2+f_2;
+    rhocg1 += rhocg1;
+    rhocg1 += f_0 + f_1;
+    rhocg1/=3.0;
+
+    drhocg [idx] = FOUR_PI / omega * rhocg1;
+}
+
+template <typename FPTYPE>
+__global__ void cal_stress_drhoc_aux1(
+        const FPTYPE* r, const FPTYPE* rhoc, 
+        const FPTYPE *gx_arr, const FPTYPE *rab, FPTYPE *drhocg, 
+        const int mesh, const int igl0, const int ngg, const double omega
+){
+    const double FOUR_PI =  4.0 * 3.14159265358979323846;
+
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+
+    FPTYPE aux_d[2];
+    FPTYPE rhocg1=0.0, f_0=0.0, f_2=0.0, f_1=0.0;
+
+    if (idx >= ngg) {return;}
+    
+    for( int ir = 0;ir< mesh; ir++)
+    {
+        aux_d [ir%2] = ir!=0 ? sin(gx_arr[idx] * r[ir]) / (gx_arr[idx] * r[ir]) : 1.0;
+        aux_d [ir%2] = r[ir] * r[ir] * rhoc [ir] * aux_d [ir%2];
+
+        if(ir==0){
+            f_0 = aux_d[ir%2]*rab[ir];
+        } else if(ir==mesh-2){
+            f_2 = aux_d[ir%2]*rab[ir];
+        } else if(ir==mesh-1) {
+            f_1 = aux_d[ir%2]*rab[ir];
+        } else if(ir%2==0){
+            const double f1 = aux_d[1]*rab[ir-1];
+            rhocg1 += f1 + f1 + aux_d[0]*rab[ir];
+        }
+
+    }//ir
+    rhocg1 += f_2+f_2;
+    rhocg1 += rhocg1;
+    rhocg1 += f_0 + f_1;
+    rhocg1/=3.0;
+
+    drhocg [idx] = FOUR_PI * rhocg1 / omega;
+}
+
+
+
+template <typename FPTYPE>
+void cal_vkb_op<FPTYPE, base_device::DEVICE_GPU>::operator()(
+        const base_device::DEVICE_GPU* ctx,
+        const int nh,
+        const int npw,
+        const int* indexes,
+        const FPTYPE* vqs_in,
+        const FPTYPE* ylms_in,
+        const std::complex<FPTYPE>* sk_in,
+        const std::complex<FPTYPE>* pref_in,
+        std::complex<FPTYPE>* vkbs_out
+    )
+{
+    const int block = (npw + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
+    dim3 gridsize(block,nh);
+
+    cal_vkb<FPTYPE><<<gridsize,THREADS_PER_BLOCK>>>(
+        npw, indexes, vqs_in, ylms_in,
+        reinterpret_cast<const thrust::complex<FPTYPE>*>(sk_in), 
+        reinterpret_cast<const thrust::complex<FPTYPE>*>(pref_in), 
+        reinterpret_cast<thrust::complex<FPTYPE>*>(vkbs_out)
+        
+    );
+
+}
+
+template <typename FPTYPE>
+void cal_vkb_deri_op<FPTYPE, base_device::DEVICE_GPU>::operator()(
+        const base_device::DEVICE_GPU* ctx,
+        const int nh,
+        const int npw,
+        const int ipol,
+        const int jpol,
+        const int* indexes,
+        const FPTYPE* vqs_in,
+        const FPTYPE* vqs_deri_in,
+        const FPTYPE* ylms_in,
+        const FPTYPE* ylms_deri_in,
+        const std::complex<FPTYPE>* sk_in,
+        const std::complex<FPTYPE>* pref_in,
+        const FPTYPE* gk_in,
+        std::complex<FPTYPE>* vkbs_out)
+{
+    const int block = (npw + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
+    dim3 gridsize(block,nh);
+
+    cal_vkb_deri<FPTYPE><<<gridsize,THREADS_PER_BLOCK>>>(
+        npw, ipol, jpol, indexes,
+        vqs_in, vqs_deri_in, ylms_in, ylms_deri_in,
+        reinterpret_cast<const thrust::complex<FPTYPE>*>(sk_in), 
+        reinterpret_cast<const thrust::complex<FPTYPE>*>(pref_in),       
+        gk_in,
+        reinterpret_cast<thrust::complex<FPTYPE>*>(vkbs_out)
+    );
+}
+
+template <typename FPTYPE>
+void cal_vq_op<FPTYPE, base_device::DEVICE_GPU>::operator()(
+        const base_device::DEVICE_GPU *ctx,
+        const FPTYPE* tab,
+        int it, const FPTYPE* gk, int npw,
+        const int tab_2, const int tab_3, const FPTYPE table_interval, 
+        const int nbeta, FPTYPE* vq
+    )
+{
+    const int block = (npw + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
+    dim3 gridsize(block,nbeta);
+
+    cal_vq<FPTYPE><<<gridsize,THREADS_PER_BLOCK>>>(
+        tab, it, gk, npw, tab_2, tab_3,
+        table_interval, nbeta, vq
+    );
+}
+
+
+template <typename FPTYPE>
+void cal_vq_deri_op<FPTYPE, base_device::DEVICE_GPU>::operator()(
+        const base_device::DEVICE_GPU *ctx,
+        const FPTYPE* tab,
+        int it, const FPTYPE* gk, int npw,
+        const int tab_2, const int tab_3, const FPTYPE table_interval, 
+        const int nbeta, FPTYPE* vq
+    )
+{
+    const int block = (npw + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
+    dim3 gridsize(block,nbeta);
+
+    cal_vq_deri<FPTYPE><<<gridsize,THREADS_PER_BLOCK>>>(
+        tab, it, gk, npw, tab_2, tab_3,
+        table_interval, nbeta, vq
+    );
+
+    return ;
+}
+
+template <typename FPTYPE>
+void cal_stress_drhoc_aux_op<FPTYPE, base_device::DEVICE_GPU>::operator()(
+        const FPTYPE* r, const FPTYPE* rhoc,  
+        const FPTYPE *gx_arr, const FPTYPE *rab, FPTYPE *drhocg, 
+        const int mesh, const int igl0, const int ngg, const double omega,
+        int type
+    )
+{
+    const int block = (ngg + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
+    
+    if(type == 0) {
+        cal_stress_drhoc_aux0<FPTYPE><<<block,THREADS_PER_BLOCK>>>(
+            r,rhoc,gx_arr,rab,drhocg,mesh,igl0,ngg,omega
+        );
+    } else if(type == 1 ){
+        cal_stress_drhoc_aux1<FPTYPE><<<block,THREADS_PER_BLOCK>>>(
+            r,rhoc,gx_arr,rab,drhocg,mesh,igl0,ngg,omega
+        );        
+    }
+
+    return ;
+}
+
+// template <typename FPTYPE>
+// void prepare_vkb_deri_ptr_op<FPTYPE, base_device::DEVICE_GPU>::operator()(
+//         const base_device::DEVICE_GPU* ctx,
+//         int nbeta, double* nhtol, int nhtol_nc, int npw, int it,
+//         int ipol, int jpol,
+//         std::complex<FPTYPE>*vkb_out, std::complex<FPTYPE>** vkb_ptrs,
+//         FPTYPE* ylm_in, FPTYPE** ylm_ptrs,
+//         FPTYPE* ylm_deri_in, FPTYPE** ylm_deri_ptr1s, FPTYPE** ylm_deri_ptr2s,
+//         FPTYPE* vq_in, FPTYPE** vq_ptrs,
+//         FPTYPE* vq_deri_in, FPTYPE** vq_deri_ptrs
+//     )
+// {
+//     const int block = (npw + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
+//     dim3 gridsize(block,nbeta);
+
+
+//     prepare_vkb_deri_ptr<FPTYPE><<<1,1>>>(
+//         nbeta, nhtol, nhtol_nc, npw, it, ipol, jpol,
+//         reinterpret_cast<const thrust::complex<FPTYPE>*>(vkb_out), 
+//         reinterpret_cast<const thrust::complex<FPTYPE>*>(vkb_ptrs), 
+//         ylm_in, ylm_ptrs, ylm_deri_in, ylm_deri_ptr1s, ylm_deri_ptr2s,
+//         vq_in, vq_ptrs, vq_deri_in, vq_deri_ptrs
+//     );
+
+//     return ;
+// }
+
+
+template <>
+void pointer_array_malloc<base_device::DEVICE_GPU>::operator()(
+    void **ptr,
+    const int n
+)
+{
+    cudaErrcheck(cudaMalloc(ptr, n * sizeof(void*)));
+}
+
+template struct pointer_array_malloc<base_device::DEVICE_GPU>;
+
+template <>
+void synchronize_ptrs<base_device::DEVICE_GPU>::operator()(
+    void **ptr_out,
+    const void **ptr_in,
+    const int size)
+{
+    cudaMemcpy(ptr_out, ptr_in, sizeof(void*) * size, cudaMemcpyHostToDevice);
+}
+
+template struct synchronize_ptrs<base_device::DEVICE_GPU>;
 
 template struct cal_stress_mgga_op<std::complex<float>, base_device::DEVICE_GPU>;
 template struct cal_stress_mgga_op<std::complex<double>, base_device::DEVICE_GPU>;
@@ -267,4 +612,22 @@ template struct cal_dbecp_noevc_nl_op<double, base_device::DEVICE_GPU>;
 template struct cal_stress_nl_op<float, base_device::DEVICE_GPU>;
 template struct cal_stress_nl_op<double, base_device::DEVICE_GPU>;
 
+
+template struct cal_vq_op<double, base_device::DEVICE_GPU>;
+template struct cal_vq_op<float, base_device::DEVICE_GPU>;
+
+template struct cal_vq_deri_op<double, base_device::DEVICE_GPU>;
+template struct cal_vq_deri_op<float, base_device::DEVICE_GPU>;
+
+template struct cal_vkb_op<double, base_device::DEVICE_GPU>;
+template struct cal_vkb_op<float, base_device::DEVICE_GPU>;
+
+template struct cal_vkb_deri_op<double, base_device::DEVICE_GPU>;
+template struct cal_vkb_deri_op<float, base_device::DEVICE_GPU>;
+
+template struct cal_stress_drhoc_aux_op<double, base_device::DEVICE_GPU>;
+template struct cal_stress_drhoc_aux_op<float, base_device::DEVICE_GPU>;
+
+// template struct prepare_vkb_deri_ptr_op<double, base_device::DEVICE_GPU>;
+// template struct prepare_vkb_deri_ptr_op<float, base_device::DEVICE_GPU>;
 }  // namespace hamilt

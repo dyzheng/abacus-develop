@@ -2,6 +2,7 @@
 #define DELTA_SPIN_LCAO_H
 
 #include "module_basis/module_ao/parallel_orbitals.h"
+#include "module_basis/module_nao/two_center_integrator.h"
 #include "module_cell/module_neighbor/sltk_grid_driver.h"
 #include "module_cell/unitcell.h"
 #include "module_hamilt_lcao/hamilt_lcaodft/operator_lcao/operator_lcao.h"
@@ -25,13 +26,12 @@ template <typename TK, typename TR>
 class DeltaSpin<OperatorLCAO<TK, TR>> : public OperatorLCAO<TK, TR>
 {
   public:
-    DeltaSpin<OperatorLCAO<TK, TR>>(LCAO_Matrix* lm_in,
+    DeltaSpin<OperatorLCAO<TK, TR>>(HS_Matrix_K<TK>* hsk_in,
                                       const std::vector<ModuleBase::Vector3<double>>& kvec_d_in,
                                       hamilt::HContainer<TR>* hR_in,
-                                      std::vector<TK>* hK_in,
                                       const UnitCell& ucell_in,
                                       Grid_Driver* gridD_in,
-                                      const Parallel_Orbitals& paraV);
+                                      const TwoCenterIntegrator* intor);
     ~DeltaSpin<OperatorLCAO<TK, TR>>();
 
     /**
@@ -67,7 +67,7 @@ class DeltaSpin<OperatorLCAO<TK, TR>> : public OperatorLCAO<TK, TR>
 
     hamilt::HContainer<TR>* HR = nullptr;
 
-    TK* HK_pointer = nullptr;
+    const TwoCenterIntegrator* intor_ = nullptr;
 
     /// @brief the number of spin components, 1 for no-spin, 2 for collinear spin case and 4 for non-collinear spin case
     int nspin = 0;

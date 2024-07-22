@@ -23,6 +23,21 @@ int XC_Functional::get_func_type()
 {
     return func_type;
 }
+void XC_Functional::set_xc_first_loop(const UnitCell& ucell)
+{
+    /** In the special "two-level" calculation case,
+the first scf iteration only calculate the functional without exact
+exchange. but in "nscf" calculation, there is no need of "two-level"
+method. */
+    if (ucell.atoms[0].ncpp.xc_func == "HF"
+        || ucell.atoms[0].ncpp.xc_func == "PBE0"
+        || ucell.atoms[0].ncpp.xc_func == "HSE") {
+        XC_Functional::set_xc_type("pbe");
+    }
+    else if (ucell.atoms[0].ncpp.xc_func == "SCAN0") {
+        XC_Functional::set_xc_type("scan");
+    }
+}
 
 // The setting values of functional id according to the index in LIBXC
 // for detail, refer to https://www.tddft.org/programs/libxc/functionals/
@@ -65,7 +80,8 @@ void XC_Functional::set_xc_type(const std::string xc_func_in)
         func_type = 1;
         use_libxc = false;
 #ifdef USE_PAW
-        if(GlobalV::use_paw) GlobalC::paw_cell.set_libpaw_xc(1,7);
+        if(GlobalV::use_paw) { GlobalC::paw_cell.set_libpaw_xc(1,7);
+}
 #endif
     }
 	else if ( xc_func == "PBE" || xc_func == "SLAPWPBXPBC") //PBX+PBC
@@ -75,7 +91,8 @@ void XC_Functional::set_xc_type(const std::string xc_func_in)
         func_type = 2;
         use_libxc = false;
 #ifdef USE_PAW
-        if(GlobalV::use_paw) GlobalC::paw_cell.set_libpaw_xc(2,11);
+        if(GlobalV::use_paw) { GlobalC::paw_cell.set_libpaw_xc(2,11);
+}
 #endif
 	}
 	else if ( xc_func == "PBESOL") //PBX_S+PBC_S
@@ -92,7 +109,8 @@ void XC_Functional::set_xc_type(const std::string xc_func_in)
         func_type = 2;
         use_libxc = false;
 #ifdef USE_PAW
-        if(GlobalV::use_paw) GlobalC::paw_cell.set_libpaw_xc(2,14);
+        if(GlobalV::use_paw) { GlobalC::paw_cell.set_libpaw_xc(2,14);
+}
 #endif
 	}
 	else if ( xc_func == "WC") //WC+PBC
@@ -228,10 +246,14 @@ void XC_Functional::set_xc_type_libxc(std::string xc_func_in)
 
     // determine the type (lda/gga/mgga)
     func_type = 1;
-    if(xc_func_in.find("GGA") != std::string::npos) func_type = 2;
-    if(xc_func_in.find("MGGA") != std::string::npos) func_type = 3;
-    if(xc_func_in.find("HYB") != std::string::npos) func_type =4;
-    if(xc_func_in.find("HYB") != std::string::npos && xc_func_in.find("MGGA") != std::string::npos) func_type =5;
+    if(xc_func_in.find("GGA") != std::string::npos) { func_type = 2;
+}
+    if(xc_func_in.find("MGGA") != std::string::npos) { func_type = 3;
+}
+    if(xc_func_in.find("HYB") != std::string::npos) { func_type =4;
+}
+    if(xc_func_in.find("HYB") != std::string::npos && xc_func_in.find("MGGA") != std::string::npos) { func_type =5;
+}
 
     // determine the id
     int pos = 0;
@@ -242,13 +264,15 @@ void XC_Functional::set_xc_type_libxc(std::string xc_func_in)
         token = xc_func_in.substr(0, pos);
         int id = xc_functional_get_number(token.c_str());
         std::cout << "func,id" << token << " " << id << std::endl;
-        if (id == -1) ModuleBase::WARNING_QUIT("XC_Functional::set_xc_type_libxc","functional name not recognized!");
+        if (id == -1) { ModuleBase::WARNING_QUIT("XC_Functional::set_xc_type_libxc","functional name not recognized!");
+}
         func_id.push_back(id);
         xc_func_in.erase(0, pos + delimiter.length());
     }
     int id = xc_functional_get_number(xc_func_in.c_str());
     std::cout << "func,id" << xc_func_in << " " << id << std::endl;
-    if (id == -1) ModuleBase::WARNING_QUIT("XC_Functional::set_xc_type_libxc","functional name not recognized!");
+    if (id == -1) { ModuleBase::WARNING_QUIT("XC_Functional::set_xc_type_libxc","functional name not recognized!");
+}
     func_id.push_back(id);
 
 }
@@ -276,7 +300,7 @@ std::vector<xc_func_type> XC_Functional::init_func(const int xc_polarized)
         if(id == XC_LDA_XC_KSDT || id == XC_LDA_XC_CORRKSDT || id == XC_LDA_XC_GDSMFB) //finite temperature XC functionals
         {
             add_func(id);
-            double parameter_finitet[1] = {GlobalV::XC_TEMPERATURE * 0.5}; // converts to Hartree for libxc
+            double parameter_finitet[1] = {PARAM.inp.xc_temperature * 0.5}; // converts to Hartree for libxc
             xc_func_set_ext_params(&funcs.back(), parameter_finitet);
         }
 #ifdef __EXX

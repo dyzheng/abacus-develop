@@ -35,13 +35,14 @@ Magnetism::~Magnetism()
  *  - SpinConstrain::init_sc()
  *    - initialize the SpinConstrain class
  */
-
+#include "module_cell/klist.h"
 K_Vectors::K_Vectors()
 {
 }
 K_Vectors::~K_Vectors()
 {
 }
+
 
 template <typename T>
 class SpinConstrainTest : public testing::Test
@@ -85,7 +86,6 @@ TYPED_TEST(SpinConstrainTest, InitSc)
                      4,
                      kv,
                      KS_SOLVER,
-                     nullptr,
                      nullptr,
                      nullptr,
                      nullptr,

@@ -1,5 +1,4 @@
 #include "dspin_lcao.h"
-#include "module_basis/module_ao/ORB_gen_tables.h"
 #include "module_hamilt_lcao/module_deltaspin/spin_constrain.h"
 #include "module_base/blas_connector.h"
 #include "module_base/timer.h"
@@ -9,19 +8,18 @@
 
 template <typename TK, typename TR>
 hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::DeltaSpin(
-    LCAO_Matrix* LM_in,
+    HS_Matrix_K<TK>* hsk_in,
     const std::vector<ModuleBase::Vector3<double>>& kvec_d_in,
     hamilt::HContainer<TR>* hR_in,
-    std::vector<TK>* hK_in,
     const UnitCell& ucell_in,
     Grid_Driver* gridD_in,
-    const Parallel_Orbitals& paraV)
-    : hamilt::OperatorLCAO<TK, TR>(LM_in, kvec_d_in, hR_in, hK_in)
+    const TwoCenterIntegrator* intor)
+    : hamilt::OperatorLCAO<TK, TR>(hsk_in, kvec_d_in, hR_in), intor_(intor)
 {
-    this->cal_type = lcao_sc_lambda;
+    this->cal_type = calculation_type::lcao_sc_lambda;
     this->ucell = &ucell_in;
     this->gridD = gridD_in;
-    this->paraV = &paraV;
+    this->paraV = this->hR->get_paraV();
 #ifdef __DEBUG
     assert(this->ucell != nullptr);
     assert(this->gridD != nullptr);
@@ -130,7 +128,7 @@ void hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::contributeHR()
             }
             for(int ir = 0;ir < tmp.get_R_size(); ++ir )
             {
-                const int* r_index = tmp.get_R_index(ir);
+                const ModuleBase::Vector3<int> r_index = tmp.get_R_index(ir);
                 const TR* pre_hr_data = tmp.get_pointer(ir);
                 TR* dhr_data = this->hR->find_matrix(iat1, iat2, r_index[0], r_index[1], r_index[2])->get_pointer();
                 // TR== double: axpy for dhr_data += current_lambda * pre_hr_data
@@ -226,6 +224,7 @@ void hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::cal_pre_HR()
     this->pre_hr.resize(this->ucell->nat, nullptr);
 
     const int npol = this->ucell->get_npol();
+    size_t memory_cost = 0;
     for(int iat=0;iat<this->ucell->nat;iat++)
     {
         if(!this->constraint_atom_list[iat])
@@ -303,7 +302,6 @@ void hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::cal_pre_HR()
             const Atom* atom1 = &ucell->atoms[T1];
             const ModuleBase::Vector3<double>& tau1 = adjs.adjacent_tau[ad];
 
-            const ORB_gen_tables& uot = ORB_gen_tables::get_const_instance();
             auto all_indexes = paraV->get_indexes_row(iat1);
             auto col_indexes = paraV->get_indexes_col(iat1);
             // insert col_indexes into all_indexes to get universal set with no repeat elements
@@ -318,22 +316,17 @@ void hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::cal_pre_HR()
                 const int L1 = atom1->iw2l[ iw1 ];
                 const int N1 = atom1->iw2n[ iw1 ];
                 const int m1 = atom1->iw2m[ iw1 ];
-#ifdef USE_NEW_TWO_CENTER
                 std::vector<std::vector<double>> nlm;
                 // nlm is a vector of vectors, but size of outer vector is only 1 here
                 // If we are calculating force, we need also to store the gradient
                 // and size of outer vector is then 4
                 // inner loop : all projectors (L0,M0)
-                //=================================================================
-                //          new two-center integral (temporary)
-                //=================================================================
 
                 // convert m (0,1,...2l) to M (-l, -l+1, ..., l-1, l)
-                const int M1 = (m1 % 2 == 0) ? -m1/2 : (m1+1)/2;
-
+                const int M1 = (m1 % 2 == 0) ? -m1 / 2 : (m1 + 1) / 2;
                 ModuleBase::Vector3<double> dtau = tau0 - tau1;
-                uot.two_center_bundle->overlap_orb_onsite->snap(
-                        T1, L1, N1, M1, T0, dtau * this->ucell->lat0, 0 /*cal_deri*/, nlm);
+                intor_->snap(T1, L1, N1, M1, T0, dtau * this->ucell->lat0, 0 /*cal_deri*/, nlm);
+
                 // select the elements of nlm with target_L (0, 1, 2, 3 ...)
                 int target_L = 0, index=0;
                 for(int iw =0;iw < this->ucell->atoms[T0].nw; iw++)
@@ -350,39 +343,6 @@ void hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::cal_pre_HR()
                         target_L++;
                     }
                 }
-#else
-                ModuleBase::WARNING("DeltaSpin", "autoset onsite_radius to rcut for old two-center integral");
-                double olm[3] = {0, 0, 0};
-                int target_L = 0, index = 0;
-                for(int iw =0;iw < this->ucell->atoms[T0].nw; iw++)
-                {
-                    const int L0 = this->ucell->atoms[T0].iw2l[iw];
-                    if(L0 == target_L)
-                    {
-                        for(int m = 0; m < 2*L0+1; m++)
-                        {
-                            uot.snap_psipsi(orb, // orbitals
-                                olm,
-                                0,
-                                'S', // olm, job of derivation, dtype of Operator
-                                tau1,
-                                T1,
-                                L1,
-                                m1,
-                                N1, // all zeta of atom1
-                                tau0,
-                                T0,
-                                L0,
-                                m,
-                                0 // choose only the first zeta
-                            );
-                            nlm_target[index] = olm[0];
-                            index++;
-                        }
-                        target_L++;
-                    }
-                }
-#endif
                 nlm_iat0[ad].insert({all_indexes[iw1l], nlm_target});
             }
         }
@@ -413,7 +373,9 @@ void hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::cal_pre_HR()
                 }
             }
         }
+        memory_cost += this->pre_hr[iat]->get_memory_size();
     }
+    ModuleBase::Memory::record("DeltaSpin:pre_HR", memory_cost);
     ModuleBase::timer::tick("DeltaSpin", "cal_pre_HR");
 }
 
@@ -503,7 +465,7 @@ std::vector<double> hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::cal_moment(
             int col_size = tmp.get_col_size();
             for(int ir = 0;ir < tmp.get_R_size(); ++ir )
             {
-                const int* r_index = tmp.get_R_index(ir);
+                const ModuleBase::Vector3<int> r_index = tmp.get_R_index(ir);
                 double* dmr_data = dmR->find_matrix(iat1, iat2, r_index[0], r_index[1], r_index[2])->get_pointer();
                 const TR* hr_data = tmp.get_pointer(ir);
                 this->cal_moment_IJR(dmr_data, hr_data, row_size, col_size, &moment[iat*mag_fold]);
