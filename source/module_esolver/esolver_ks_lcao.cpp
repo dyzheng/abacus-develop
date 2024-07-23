@@ -50,6 +50,8 @@
 #include "module_io/io_dmk.h"
 #include "module_io/write_dmr.h"
 #include "module_io/write_wfc_nao.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/operator_lcao/dspin_lcao.h"
+#include "module_hamilt_lcao/module_hcontainer/hcontainer.h"
 
 namespace ModuleESolver
 {
@@ -1239,10 +1241,7 @@ void ESolver_KS_LCAO<TK, TR>::after_scf(const int istep)
     {
         this->create_Output_Mat_Sparse(istep).write();
         // mulliken charge analysis
-        if (PARAM.inp.out_mul)
-        {
-            this->cal_mag(istep, true);
-        }
+        this->cal_mag(istep, true);
     }
 
     // 15) write spin constrian MW?
@@ -1369,35 +1368,111 @@ bool ESolver_KS_LCAO<TK, TR>::md_skip_out(std::string calculation, int istep, in
 template <typename TK, typename TR>
 void ESolver_KS_LCAO<TK, TR>::cal_mag(const int istep, const bool print)
 {
-    auto cell_index = CellIndex(GlobalC::ucell.get_atomLabels(),
-                                GlobalC::ucell.get_atomCounts(),
-                                GlobalC::ucell.get_lnchiCounts(),
-                                GlobalV::NSPIN);
-    auto out_sk = ModuleIO::Output_Sk<TK>(this->p_hamilt,
-                                          &(this->ParaV),
-                                          GlobalV::NSPIN,
-                                          this->kv.get_nks());
-    auto out_dmk = ModuleIO::Output_DMK<TK>(dynamic_cast<const elecstate::ElecStateLCAO<TK>*>(this->pelec)->get_DM(),
-                                            &(this->ParaV),
-                                            GlobalV::NSPIN,
-                                            this->kv.get_nks());
-    auto mulp = ModuleIO::Output_Mulliken<TK>(&(out_sk),
-                                              &(out_dmk),
-                                              &(this->ParaV),
-                                              &cell_index,
-                                              this->kv.isk,
-                                              GlobalV::NSPIN);
-    auto atom_chg = mulp.get_atom_chg();
-    /// used in updating mag info in STRU file
-    GlobalC::ucell.atom_mulliken = mulp.get_atom_mulliken(atom_chg);
-    if (print && GlobalV::MY_RANK == 0)
+    this->mag_tag = (PARAM.inp.onsite_radius > 0)? "Projection" : "Mulliken";
+    if (this->mag_tag == "Mulliken")
     {
-        /// write the Orbital file
-        cell_index.write_orb_info(GlobalV::global_out_dir);
-        /// write mulliken.txt
-        mulp.write(istep, GlobalV::global_out_dir);
-        /// write atomic mag info in running log file
-        mulp.print_atom_mag(atom_chg, GlobalV::ofs_running);
+        auto cell_index = CellIndex(GlobalC::ucell.get_atomLabels(),
+                                    GlobalC::ucell.get_atomCounts(),
+                                    GlobalC::ucell.get_lnchiCounts(),
+                                    GlobalV::NSPIN);
+        auto out_sk = ModuleIO::Output_Sk<TK>(this->p_hamilt,
+                                              &(this->ParaV),
+                                              GlobalV::NSPIN,
+                                              this->kv.get_nks());
+        auto out_dmk = ModuleIO::Output_DMK<TK>(dynamic_cast<const elecstate::ElecStateLCAO<TK>*>(this->pelec)->get_DM(),
+                                                &(this->ParaV),
+                                                GlobalV::NSPIN,
+                                                this->kv.get_nks());
+        auto mulp = ModuleIO::Output_Mulliken<TK>(&(out_sk),
+                                                  &(out_dmk),
+                                                  &(this->ParaV),
+                                                  &cell_index,
+                                                  this->kv.isk,
+                                                  GlobalV::NSPIN);
+        auto atom_chg = mulp.get_atom_chg();
+        /// used in updating mag info in STRU file
+        GlobalC::ucell.atom_mulliken = mulp.get_atom_mulliken(atom_chg);
+        if (print && GlobalV::MY_RANK == 0)
+        {
+            /// write the Orbital file
+            cell_index.write_orb_info(GlobalV::global_out_dir);
+            /// write mulliken.txt
+            mulp.write(istep, GlobalV::global_out_dir);
+            /// write atomic mag info in running log file
+            mulp.print_atom_mag(atom_chg, GlobalV::ofs_running);
+        }
+    }
+    else if (this->mag_tag == "Projection")
+    {
+        std::vector<ModuleBase::Vector3<double>> Mi_;
+        std::vector<ModuleBase::Vector3<int>> constrain;
+        for (int iat = 0; iat < GlobalC::ucell.nat; iat++)
+        {
+            ModuleBase::Vector3<double> Mi;
+            Mi.x = 0.0;
+            Mi.y = 0.0;
+            Mi.z = 0.0;
+            Mi_.push_back(Mi);
+            // set constrain to 1
+            ModuleBase::Vector3<int> c;
+            c.x = 1;
+            c.y = 1;
+            c.z = 1;
+            constrain.push_back(c);
+        }
+        const hamilt::HContainer<double>* dmr
+            = dynamic_cast<const elecstate::ElecStateLCAO<TK>*>(this->pelec)->get_DM()->get_DMR_pointer(1);
+        std::vector<double> moments;
+        auto hR = new hamilt::HContainer<TR>(&(this->ParaV));
+        auto sc_lambda = new hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>(
+                    nullptr,
+                    this->kv.kvec_d,
+                    hR,
+                    GlobalC::ucell,
+                    &GlobalC::GridD,
+                    two_center_bundle_.overlap_orb_onsite.get()
+            );
+        if(GlobalV::NSPIN==2)
+        {
+            dynamic_cast<const elecstate::ElecStateLCAO<TK>*>(this->pelec)->get_DM()->switch_dmr(2);
+            moments = sc_lambda->cal_moment(dmr, constrain);
+            dynamic_cast<const elecstate::ElecStateLCAO<TK>*>(this->pelec)->get_DM()->switch_dmr(0);
+            for(int iat=0;iat<Mi_.size();iat++)
+            {
+                Mi_[iat].x = 0.0;
+                Mi_[iat].y = 0.0;
+                Mi_[iat].z = moments[iat];
+            }
+            GlobalV::ofs_running << std::endl;
+            GlobalV::ofs_running << "Atomic magnetic moments (Bohr magneton) in z direction:" << std::endl;
+            for(int iat=0;iat<Mi_.size();iat++)
+            {
+                GlobalV::ofs_running << "Atom " << iat << ": " << Mi_[iat].z << std::endl;
+            }
+            GlobalV::ofs_running << std::endl;
+        }
+        else if(GlobalV::NSPIN==4)
+        {
+            moments = sc_lambda->cal_moment(dmr, constrain);
+            for(int iat=0;iat<Mi_.size();iat++)
+            {
+                Mi_[iat].x = moments[iat*3];
+                Mi_[iat].y = moments[iat*3+1];
+                Mi_[iat].z = moments[iat*3+2];
+            }
+            GlobalV::ofs_running << std::endl;
+            GlobalV::ofs_running << "Atomic magnetic moments (Bohr magneton) in x, y, z direction:" << std::endl;
+            for(int iat=0;iat<Mi_.size();iat++)
+            {
+                GlobalV::ofs_running << "Atom " << iat << ": " << Mi_[iat].x << " " << Mi_[iat].y << " " << Mi_[iat].z << std::endl;
+            }
+        }
+        delete sc_lambda;
+        delete hR;
+    }
+    else
+    {
+        ModuleBase::WARNING_QUIT("ESolver_KS_LCAO", "Unknown magnetic moment calculation method! Please set out_mul for Mulliken type, onsite_radius for projection type.");
     }
 }
 

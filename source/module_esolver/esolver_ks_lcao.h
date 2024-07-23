@@ -87,6 +87,8 @@ class ESolver_KS_LCAO : public ESolver_KS<TK> {
     ModuleBase::matrix scs;
     bool have_force = false;
 
+    std::string mag_tag = "none";
+
     //--------------common for all calculation, not only scf-------------
     // set matrix and grid integral
     void set_matrix_grid(Record_adj& ra);

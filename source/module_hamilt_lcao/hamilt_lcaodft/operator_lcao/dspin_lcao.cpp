@@ -433,7 +433,7 @@ void hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::cal_HR_IJR(const int& iat1
 
 // cal_moment
 template <typename TK, typename TR>
-std::vector<double> hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::cal_moment(const HContainer<double>* dmR)
+std::vector<double> hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::cal_moment(const HContainer<double>* dmR, const std::vector<ModuleBase::Vector3<int>>& constrain)
 {
     const int mag_fold = this->nspin==4?3:1;
     std::vector<double> moment(this->ucell->nat * mag_fold, 0.0);
@@ -443,8 +443,8 @@ std::vector<double> hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::cal_moment(
     }
     if (!this->initialized)
     {
-        SpinConstrain<TK, base_device::DEVICE_CPU>& sc = SpinConstrain<TK, base_device::DEVICE_CPU>::getScInstance();
-        auto& constrain = sc.get_constrain();
+        //SpinConstrain<TK, base_device::DEVICE_CPU>& sc = SpinConstrain<TK, base_device::DEVICE_CPU>::getScInstance();
+        //auto& constrain = sc.get_constrain();
         this->cal_constraint_atom_list(constrain);
         this->cal_pre_HR();
         this->initialized = true;

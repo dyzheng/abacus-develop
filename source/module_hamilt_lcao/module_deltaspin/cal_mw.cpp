@@ -80,7 +80,7 @@ void SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::cal_MW(const 
         if(GlobalV::NSPIN==2)
         {
             dynamic_cast<const elecstate::ElecStateLCAO<std::complex<double>>*>(this->pelec)->get_DM()->switch_dmr(2);
-            moments = dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double>>*>(this->p_operator)->cal_moment(dmr);
+            moments = dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double>>*>(this->p_operator)->cal_moment(dmr, this->get_constrain());
             dynamic_cast<const elecstate::ElecStateLCAO<std::complex<double>>*>(this->pelec)->get_DM()->switch_dmr(0);
             for(int iat=0;iat<this->Mi_.size();iat++)
             {
@@ -91,7 +91,7 @@ void SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::cal_MW(const 
         }
         else if(GlobalV::NSPIN==4)
         {
-            moments = dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, std::complex<double>>>*>(this->p_operator)->cal_moment(dmr);
+            moments = dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, std::complex<double>>>*>(this->p_operator)->cal_moment(dmr, this->get_constrain());
             for(int iat=0;iat<this->Mi_.size();iat++)
             {
                 this->Mi_[iat].x = moments[iat*3];
