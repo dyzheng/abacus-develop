@@ -45,7 +45,7 @@ class DeltaSpin<OperatorLCAO<TK, TR>> : public OperatorLCAO<TK, TR>
      * @param dmR the density matrix in real space
      * @return the magnetization moment for each atom
     */
-    std::vector<double> cal_moment(const HContainer<double>* dmR);
+    std::vector<double> cal_moment(const HContainer<double>* dmR, const std::vector<ModuleBase::Vector3<int>>& constrain);
 
     /**
      * @brief set the update_lambda_ to true, which means the lambda will be updated in the next contributeHR()
