@@ -1423,7 +1423,7 @@ void ESolver_KS_LCAO<TK, TR>::cal_mag(const int istep, const bool print)
         const hamilt::HContainer<double>* dmr
             = dynamic_cast<const elecstate::ElecStateLCAO<TK>*>(this->pelec)->get_DM()->get_DMR_pointer(1);
         std::vector<double> moments;
-        auto hR = new hamilt::HContainer<TR>(&(this->ParaV));
+        hamilt::HContainer<TR>* hR = dynamic_cast<hamilt::HamiltLCAO<TK, TR>*>(this->p_hamilt)->getHR();
         auto sc_lambda = new hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>(
                     nullptr,
                     this->kv.kvec_d,
@@ -1468,7 +1468,6 @@ void ESolver_KS_LCAO<TK, TR>::cal_mag(const int istep, const bool print)
             }
         }
         delete sc_lambda;
-        delete hR;
     }
     else
     {
