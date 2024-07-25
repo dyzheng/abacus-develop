@@ -1368,6 +1368,10 @@ bool ESolver_KS_LCAO<TK, TR>::md_skip_out(std::string calculation, int istep, in
 template <typename TK, typename TR>
 void ESolver_KS_LCAO<TK, TR>::cal_mag(const int istep, const bool print)
 {
+    if (!PARAM.inp.out_mul && !PARAM.inp.onsite_radius > 0)
+    {
+        return;
+    }
     this->mag_tag = (PARAM.inp.onsite_radius > 0)? "Projection" : "Mulliken";
     if (this->mag_tag == "Mulliken")
     {
@@ -1404,15 +1408,10 @@ void ESolver_KS_LCAO<TK, TR>::cal_mag(const int istep, const bool print)
     }
     else if (this->mag_tag == "Projection")
     {
-        std::vector<ModuleBase::Vector3<double>> Mi_;
+        std::vector<std::vector<double>> atom_mag(GlobalC::ucell.nat, std::vector<double>(GlobalV::NSPIN, 0.0));
         std::vector<ModuleBase::Vector3<int>> constrain;
         for (int iat = 0; iat < GlobalC::ucell.nat; iat++)
         {
-            ModuleBase::Vector3<double> Mi;
-            Mi.x = 0.0;
-            Mi.y = 0.0;
-            Mi.z = 0.0;
-            Mi_.push_back(Mi);
             // set constrain to 1
             ModuleBase::Vector3<int> c;
             c.x = 1;
@@ -1437,36 +1436,31 @@ void ESolver_KS_LCAO<TK, TR>::cal_mag(const int istep, const bool print)
             dynamic_cast<const elecstate::ElecStateLCAO<TK>*>(this->pelec)->get_DM()->switch_dmr(2);
             moments = sc_lambda->cal_moment(dmr, constrain);
             dynamic_cast<const elecstate::ElecStateLCAO<TK>*>(this->pelec)->get_DM()->switch_dmr(0);
-            for(int iat=0;iat<Mi_.size();iat++)
-            {
-                Mi_[iat].x = 0.0;
-                Mi_[iat].y = 0.0;
-                Mi_[iat].z = moments[iat];
-            }
             GlobalV::ofs_running << std::endl;
             GlobalV::ofs_running << "Atomic magnetic moments (Bohr magneton) in z direction:" << std::endl;
-            for(int iat=0;iat<Mi_.size();iat++)
+            for(int iat=0;iat<GlobalC::ucell.nat;iat++)
             {
-                GlobalV::ofs_running << "Atom " << iat << ": " << Mi_[iat].z << std::endl;
+                GlobalV::ofs_running << "Atom " << iat << ": " << moments[iat] << std::endl;
+                atom_mag[iat][0] = 0.0;
+                atom_mag[iat][1] = moments[iat];
             }
             GlobalV::ofs_running << std::endl;
         }
         else if(GlobalV::NSPIN==4)
         {
             moments = sc_lambda->cal_moment(dmr, constrain);
-            for(int iat=0;iat<Mi_.size();iat++)
-            {
-                Mi_[iat].x = moments[iat*3];
-                Mi_[iat].y = moments[iat*3+1];
-                Mi_[iat].z = moments[iat*3+2];
-            }
             GlobalV::ofs_running << std::endl;
             GlobalV::ofs_running << "Atomic magnetic moments (Bohr magneton) in x, y, z direction:" << std::endl;
-            for(int iat=0;iat<Mi_.size();iat++)
+            for(int iat=0;iat<GlobalC::ucell.nat;iat++)
             {
-                GlobalV::ofs_running << "Atom " << iat << ": " << Mi_[iat].x << " " << Mi_[iat].y << " " << Mi_[iat].z << std::endl;
+                GlobalV::ofs_running << "Atom " << iat << ": " << moments[iat*3] << " " << moments[iat*3+1] << " " << moments[iat*3+2] << std::endl;
+                atom_mag[iat][0] = 0.0;
+                atom_mag[iat][1] = moments[iat*3];
+                atom_mag[iat][2] = moments[iat*3+1];
+                atom_mag[iat][3] = moments[iat*3+2];
             }
         }
+        GlobalC::ucell.atom_mulliken = atom_mag;
         delete sc_lambda;
     }
     else
