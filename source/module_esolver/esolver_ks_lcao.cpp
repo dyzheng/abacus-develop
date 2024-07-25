@@ -559,6 +559,10 @@ void ESolver_KS_LCAO<TK, TR>::iter_init(const int istep, const int iter)
         this->p_chgmix->mixing_restart_count++;
         if (GlobalV::dft_plus_u)
         {
+            if (GlobalC::dftu.uramping > 0.01 && !GlobalC::dftu.u_converged())
+            {
+                this->p_chgmix->mixing_restart_step = GlobalV::SCF_NMAX + 1;
+            }
             GlobalC::dftu.uramping_update(); // update U by uramping if uramping > 0.01
             if (GlobalC::dftu.uramping > 0.01)
             {
@@ -568,10 +572,6 @@ void ESolver_KS_LCAO<TK, TR>::iter_init(const int istep, const int iter)
                     std::cout << GlobalC::dftu.U[i] * ModuleBase::Ry_to_eV << " ";
                 }
                 std::cout << " eV " << std::endl;
-            }
-            if (GlobalC::dftu.uramping > 0.01 && !GlobalC::dftu.u_converged())
-            {
-                this->p_chgmix->mixing_restart_step = GlobalV::SCF_NMAX + 1;
             }
         }
         if (GlobalV::MIXING_DMR) // for mixing_dmr
