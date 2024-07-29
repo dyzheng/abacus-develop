@@ -45,22 +45,6 @@ AddTest(
 )
 
 AddTest(
-  TARGET deltaspin_bcast_scdata
-  LIBS ${math_libs} base device
-  SOURCES bcast_scdata_test.cpp
-    ../spin_constrain.cpp
-    ../sc_parse_json.cpp
-)
-
-install(FILES bcast_scdata_test.sh DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
-
-find_program(BASH bash)
-add_test(NAME deltaspin_bcast_scdata_para
-      COMMAND ${BASH} bcast_scdata_test.sh
-      WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-)
-
-AddTest(
   TARGET deltaspin_init_sc
   LIBS ${math_libs} base device cell_info parameter
   SOURCES init_sc_test.cpp
