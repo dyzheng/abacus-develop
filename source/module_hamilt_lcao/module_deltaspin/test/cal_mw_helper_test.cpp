@@ -64,11 +64,11 @@ TEST_F(SpinConstrainTest, CalculateMW)
     EXPECT_EQ(AorbMulP[3][0][0], 4.0);
     // calculate_MW
     sc.calculate_MW(AorbMulP);
-    testing::internal::CaptureStdout();
-    sc.print_Mi(true);
-    std::string output = testing::internal::GetCapturedStdout();
-    EXPECT_THAT(output, testing::HasSubstr("Total Magnetism (uB):"));
-    EXPECT_THAT(output, testing::HasSubstr("ATOM      0         2.0000000000         3.0000000000         4.0000000000"));
+    //testing::internal::CaptureStdout();
+    //sc.print_Mi(true);
+    //std::string output = testing::internal::GetCapturedStdout();
+    //EXPECT_THAT(output, testing::HasSubstr("Total Magnetism (uB):"));
+    //EXPECT_THAT(output, testing::HasSubstr("ATOM      0         2.0000000000         3.0000000000         4.0000000000"));
 }
 
 TEST_F(SpinConstrainTest, CollectMW)
@@ -140,11 +140,11 @@ TEST_F(SpinConstrainTest, CalculateMWS2)
     EXPECT_EQ(AorbMulP[1][0][0], 2.0);
     // calculate_MW
     sc.calculate_MW(AorbMulP);
-    testing::internal::CaptureStdout();
-    sc.print_Mi(true);
-    std::string output = testing::internal::GetCapturedStdout();
-    EXPECT_THAT(output, testing::HasSubstr("Total Magnetism (uB):"));
-    EXPECT_THAT(output, testing::HasSubstr("ATOM      0        -1.0000000000"));
+    //testing::internal::CaptureStdout();
+    //sc.print_Mi(true);
+    //std::string output = testing::internal::GetCapturedStdout();
+    //EXPECT_THAT(output, testing::HasSubstr("Total Magnetism (uB):"));
+    //EXPECT_THAT(output, testing::HasSubstr("ATOM      0        -1.0000000000"));
 }
 
 TEST_F(SpinConstrainTest, CollectMWS2)

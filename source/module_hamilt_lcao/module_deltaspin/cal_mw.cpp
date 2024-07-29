@@ -106,7 +106,7 @@ void SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::cal_MW(const 
             = dynamic_cast<const elecstate::ElecStateLCAO<std::complex<double>>*>(this->pelec)->get_DM()->get_DMK_vector();
         this->calculate_MW(this->convert(this->cal_MW_k(dm)));
     }*/
-    this->print_Mi(print);
+    //this->print_Mi(print);
 
     ModuleBase::timer::tick("SpinConstrain", "cal_MW");
 }

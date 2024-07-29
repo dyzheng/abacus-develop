@@ -25,7 +25,11 @@ void SpinConstrain<FPTYPE, Device>::init_sc(double sc_thr_in,
     this->set_orbitalCounts(ucell.get_orbital_Counts());
     this->set_lnchiCounts(ucell.get_lnchi_Counts());
     this->set_nspin(nspin_in);
-    this->bcast_ScData(sc_file, this->get_nat(), this->get_ntype());
+    this->set_target_mag(ucell.get_target_mag());
+    this->lambda_ = ucell.get_lambda();
+    this->constrain_ = ucell.get_constrain();
+    this->atomLabels_ = ucell.get_atomLabels();
+    this->set_decay_grad();
     this->set_npol(NPOL);
     this->set_ParaV(ParaV_in);
     this->set_solver_parameters(kv_in, phsol_in, p_hamilt_in, psi_in, pelec_in, KS_SOLVER_in);

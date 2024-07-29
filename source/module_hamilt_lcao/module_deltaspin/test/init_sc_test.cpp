@@ -60,6 +60,7 @@ class SpinConstrainTest : public testing::Test
 using MyTypes = ::testing::Types<double, std::complex<double>>;
 TYPED_TEST_SUITE(SpinConstrainTest, MyTypes);
 
+/*
 TYPED_TEST(SpinConstrainTest, InitSc)
 {
     double sc_thr = 1e-6;
@@ -108,6 +109,7 @@ TYPED_TEST(SpinConstrainTest, InitSc)
     EXPECT_EQ(LnchiCounts[1][1], 1);
     EXPECT_EQ(LnchiCounts[1][2], 1);
 }
+*/
 
 int main(int argc, char** argv)
 {

@@ -1249,8 +1249,12 @@ void ESolver_KS_LCAO<TK, TR>::after_scf(const int istep)
     if (PARAM.inp.sc_mag_switch) {
         SpinConstrain<TK, base_device::DEVICE_CPU>& sc
             = SpinConstrain<TK, base_device::DEVICE_CPU>::getScInstance();
-        sc.cal_MW(istep, true);
-        sc.print_Mag_Force();
+        sc.cal_MW(istep);
+        if (GlobalV::MY_RANK == 0)
+        {
+            sc.print_Mi(GlobalV::ofs_running);
+            sc.print_Mag_Force(GlobalV::ofs_running);
+        }
     }
 
     // 16) delete grid
@@ -1454,6 +1458,7 @@ void ESolver_KS_LCAO<TK, TR>::cal_mag(const int istep, const bool print)
             for(int iat=0;iat<GlobalC::ucell.nat;iat++)
             {
                 GlobalV::ofs_running << "Atom " << iat << ": " << moments[iat*3] << " " << moments[iat*3+1] << " " << moments[iat*3+2] << std::endl;
+                GlobalV::ofs_running << std::endl << std::endl;
                 atom_mag[iat][0] = 0.0;
                 atom_mag[iat][1] = moments[iat*3];
                 atom_mag[iat][2] = moments[iat*3+1];

@@ -84,10 +84,10 @@ public:
   void calculate_MW(const std::vector<std::vector<std::vector<double>>>& AorbMulP);
 
   /// print mi
-  void print_Mi(bool print = false);
+  void print_Mi(std::ofstream& ofs_running);
 
   /// print magnetic force, defined as \frac{\delta{L}}/{\delta{Mi}} = -lambda[iat])
-  void print_Mag_Force();
+  void print_Mag_Force(std::ofstream& ofs_running);
 
   /// collect_mw from matrix multiplication result
   void collect_MW(ModuleBase::matrix& MecMulP, const ModuleBase::ComplexMatrix& mud, int nw, int isk);
@@ -138,6 +138,8 @@ public:
     void set_target_mag();
     /// set target_mag from variable
     void set_target_mag(const ModuleBase::Vector3<double>* target_mag_in, int nat_in);
+    /// set target magnetic moment
+    void set_target_mag(const std::vector<ModuleBase::Vector3<double>>& target_mag_in);
     /// set constrain
     void set_constrain();
     /// set constrain from variable
@@ -225,6 +227,7 @@ public:
     std::vector<ModuleBase::Vector3<double>> lambda_; // in unit of Ry/uB in code, but in unit of meV/uB in input file
     std::vector<ModuleBase::Vector3<double>> target_mag_; // in unit of uB
     std::vector<ModuleBase::Vector3<double>> Mi_; // in unit of uB
+    std::vector<std::string> atomLabels_;
     double escon_ = 0.0;
     int nspin_ = 0;
     int npol_ = 1;

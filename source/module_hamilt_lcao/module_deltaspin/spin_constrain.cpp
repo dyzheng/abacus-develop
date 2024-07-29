@@ -333,6 +333,29 @@ void SpinConstrain<FPTYPE, Device>::set_target_mag(const ModuleBase::Vector3<dou
     }
 }
 
+template<typename FPTYPE, typename Device>
+void SpinConstrain<FPTYPE, Device>::set_target_mag(const std::vector<ModuleBase::Vector3<double>>& target_mag_in)
+{
+    int nat = this->get_nat();
+    assert(target_mag_in.size() == nat);
+    if (this->nspin_ == 2)
+    {
+        this->target_mag_.resize(nat, 0.0);
+        for (int iat = 0; iat < nat; iat++)
+        {
+            this->target_mag_[iat].z = target_mag_in[iat].x; /// this is wired because the UnitCell class set in x direction
+        }
+    }
+    else if (this->nspin_ == 4)
+    {
+        this->target_mag_ = target_mag_in;
+    }
+    else
+    {
+        ModuleBase::WARNING_QUIT("SpinConstrain::set_target_mag", "nspin must be 2 or 4");
+    }
+}
+
 /// set constrain from variable
 template<typename FPTYPE, typename Device>
 void SpinConstrain<FPTYPE, Device>::set_constrain(const ModuleBase::Vector3<int>* constrain_in, int nat_in)
@@ -404,14 +427,14 @@ void SpinConstrain<FPTYPE, Device>::set_decay_grad()
     {
         this->decay_grad_[itype] = 0.0;
     }
-    if (this->decay_grad_switch_)
-    {
-        for (auto& itype_data: this->ScDecayGrad)
-        {
-            int itype = itype_data.first;
-            this->decay_grad_[itype] = itype_data.second * ModuleBase::Ry_to_eV;
-        }
-    }
+    //if (this->decay_grad_switch_)
+    //{
+    //    for (auto& itype_data: this->ScDecayGrad)
+    //    {
+    //        int itype = itype_data.first;
+    //        this->decay_grad_[itype] = itype_data.second * ModuleBase::Ry_to_eV;
+    //    }
+    //}
 }
 
 /// get decay_grad
@@ -534,56 +557,75 @@ void SpinConstrain<FPTYPE, Device>::set_ParaV(Parallel_Orbitals* ParaV_in)
 
 /// print Mi
 template <typename FPTYPE, typename Device>
-void SpinConstrain<FPTYPE, Device>::print_Mi(bool print)
+void SpinConstrain<FPTYPE, Device>::print_Mi(std::ofstream& ofs_running)
 {
     this->check_atomCounts();
     int nat = this->get_nat();
-    if (print)
+    std::vector<double> mag_x(nat, 0.0);
+    std::vector<double> mag_y(nat, 0.0);
+    std::vector<double> mag_z(nat ,0.0);
+    if (this->nspin_ == 2)
     {
-        std::cout << "Total Magnetism (uB): " << std::endl;
+        const std::vector<std::string> title = {"Total Magnetism (uB)", ""};
+        const std::vector<std::string> fmts = {"%-26s", "%20.10f"};
+        FmtTable table(title, nat, fmts, {FmtTable::Align::RIGHT, FmtTable::Align::LEFT});
         for (int iat = 0; iat < nat; ++iat)
         {
-            if (this->nspin_ == 2)
-            {
-                std::cout << FmtCore::format("ATOM %6d %20.10f\n", iat, Mi_[iat].z);
-            }
-            else if (this->nspin_ ==4)
-            {
-                std::cout << FmtCore::format("ATOM %6d %20.10f %20.10f %20.10f\n", iat, Mi_[iat].x, Mi_[iat].y, Mi_[iat].z);
-            }
+            mag_z[iat] = Mi_[iat].z;
         }
+        table << this->atomLabels_ << mag_z;
+        ofs_running << table.str() << std::endl;
+    }
+    else if (this->nspin_ == 4)
+    {
+        const std::vector<std::string> title = {"Total Magnetism (uB)", "", "", ""};
+        const std::vector<std::string> fmts = {"%-26s", "%20.10f", "%20.10f", "%20.10f"};
+        FmtTable table(title, nat, fmts, {FmtTable::Align::RIGHT, FmtTable::Align::LEFT});
+        for (int iat = 0; iat < nat; ++iat)
+        {
+            mag_x[iat] = Mi_[iat].x;
+            mag_y[iat] = Mi_[iat].y;
+            mag_z[iat] = Mi_[iat].z;
+        }
+        table << this->atomLabels_ << mag_x << mag_y << mag_z;
+        ofs_running << table.str() << std::endl;
     }
 }
 
 /// print magnetic force (defined as \frac{\delta{L}}/{\delta{Mi}} = -lambda[iat])
 template <typename FPTYPE, typename Device>
-void SpinConstrain<FPTYPE, Device>::print_Mag_Force()
+void SpinConstrain<FPTYPE, Device>::print_Mag_Force(std::ofstream& ofs_running)
 {
     this->check_atomCounts();
     int nat = this->get_nat();
-    std::cout << "Final optimal lambda (Ry/uB): " << std::endl;
-    for (int iat = 0; iat < nat; ++iat)
+    std::vector<double> mag_force_x(nat, 0.0);
+    std::vector<double> mag_force_y(nat, 0.0);
+    std::vector<double> mag_force_z(nat ,0.0);
+    if (this->nspin_ == 2)
     {
-        if (this->nspin_ == 2)
+        const std::vector<std::string> title = {"Magnetic force (Ry/uB)", ""};
+        const std::vector<std::string> fmts = {"%-26s", "%20.10f"};
+        FmtTable table(title, nat, fmts, {FmtTable::Align::RIGHT, FmtTable::Align::LEFT});
+        for (int iat = 0; iat < nat; ++iat)
         {
-            std::cout << FmtCore::format("ATOM %6d %20.10f\n", iat, lambda_[iat].z);
+            mag_force_z[iat] = lambda_[iat].z;
         }
-        else if (this->nspin_ ==4)
-        {
-            std::cout << FmtCore::format("ATOM %6d %20.10f %20.10f %20.10f\n", iat, lambda_[iat].x, lambda_[iat].y, lambda_[iat].z);
-        }
+        table << this->atomLabels_ << mag_force_z;
+        ofs_running << table.str() << std::endl;
     }
-    std::cout << "Magnetic force (Ry/uB): " << std::endl;
-    for (int iat = 0; iat < nat; ++iat)
+    else if (this->nspin_ == 4)
     {
-        if (this->nspin_ == 2)
+        const std::vector<std::string> title = {"Magnetic force (Ry/uB)", "", "", ""};
+        const std::vector<std::string> fmts = {"%-26s", "%20.10f", "%20.10f", "%20.10f"};
+        FmtTable table(title, nat, fmts, {FmtTable::Align::RIGHT, FmtTable::Align::LEFT});
+        for (int iat = 0; iat < nat; ++iat)
         {
-            std::cout << FmtCore::format("ATOM %6d %20.10f\n", iat, -lambda_[iat].z);
+            mag_force_x[iat] = lambda_[iat].x;
+            mag_force_y[iat] = lambda_[iat].y;
+            mag_force_z[iat] = lambda_[iat].z;
         }
-        else if (this->nspin_ ==4)
-        {
-            std::cout << FmtCore::format("ATOM %6d %20.10f %20.10f %20.10f\n", iat, -lambda_[iat].x, -lambda_[iat].y, -lambda_[iat].z);
-        }
+        table << this->atomLabels_ << mag_force_x << mag_force_y << mag_force_z;
+        ofs_running << table.str() << std::endl;
     }
 }
 

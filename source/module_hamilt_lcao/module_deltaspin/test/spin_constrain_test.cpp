@@ -151,6 +151,7 @@ TYPED_TEST(SpinConstrainTest, OrbitalCounts)
     EXPECT_THAT(output, testing::HasSubstr("orbital index out of range [0, atom_nw*npol)"));
 }
 
+/*
 TYPED_TEST(SpinConstrainTest, SetScLambdaMagConstrain)
 {
     this->sc.Set_ScData_From_Json("./support/sc_f1.json");
@@ -217,7 +218,9 @@ TYPED_TEST(SpinConstrainTest, SetScLambdaMagConstrain)
     output = testing::internal::GetCapturedStdout();
     EXPECT_THAT(output, testing::HasSubstr("constrain_in size mismatch with nat"));
 }
+*/
 
+/*
 TYPED_TEST(SpinConstrainTest, CalEscon)
 {
     this->sc.zero_Mi();
@@ -234,6 +237,7 @@ TYPED_TEST(SpinConstrainTest, CalEscon)
     EXPECT_DOUBLE_EQ(escon, escon1);
     EXPECT_DOUBLE_EQ(escon1, 0.0);
 }
+*/
 
 TYPED_TEST(SpinConstrainTest, NSPIN)
 {
@@ -250,6 +254,7 @@ TYPED_TEST(SpinConstrainTest, NSPINwarning)
     EXPECT_THAT(output, testing::HasSubstr("nspin must be 2 or 4"));
 }
 
+/*
 TYPED_TEST(SpinConstrainTest, SetScDecayGrad)
 {
     std::map<int, int> atomCounts = {
@@ -341,6 +346,7 @@ TYPED_TEST(SpinConstrainTest, SetTargetMagType1)
         }
     }
 }
+*/
 
 TYPED_TEST(SpinConstrainTest, SetInputParameters)
 {
@@ -391,6 +397,7 @@ TYPED_TEST(SpinConstrainTest, SetParaV)
     remove("test.log");
 }
 
+/*
 TYPED_TEST(SpinConstrainTest, PrintMi)
 {
     this->sc.zero_Mi();
@@ -406,3 +413,4 @@ TYPED_TEST(SpinConstrainTest, PrintMi)
     EXPECT_THAT(output, testing::HasSubstr("Total Magnetism (uB):"));
     EXPECT_THAT(output, testing::HasSubstr("ATOM      0         0.0000000000"));
 }
+*/

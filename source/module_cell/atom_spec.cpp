@@ -28,6 +28,8 @@ Atom::Atom()
     iw2_ylm = new int[1];
     iw2_new = new bool[1];
     mbl = new ModuleBase::Vector3<int>[1];
+    lambda = new ModuleBase::Vector3<double>[1];
+    constrain = new ModuleBase::Vector3<int>[1];
 }
 
 Atom::~Atom()
@@ -47,6 +49,8 @@ Atom::~Atom()
     delete[] iw2_ylm;
     delete[] iw2_new;
     delete[] mbl;
+    delete[] lambda;
+    delete[] constrain;
 }
 
 void Atom::set_index(void)
@@ -153,6 +157,8 @@ void Atom::bcast_atom(void)
         delete[] angle2;
         delete[] m_loc_;
         delete[] mbl;
+        delete[] lambda;
+        delete[] constrain;
         tau = new ModuleBase::Vector3<double>[na];
         dis = new ModuleBase::Vector3<double>[na];
         taud = new ModuleBase::Vector3<double>[na];
@@ -162,6 +168,8 @@ void Atom::bcast_atom(void)
         angle2 = new double[na];
         m_loc_ = new ModuleBase::Vector3<double>[na];
         mbl = new ModuleBase::Vector3<int>[na];
+        lambda = new ModuleBase::Vector3<double>[na];
+        constrain = new ModuleBase::Vector3<int>[na];
     }
 
     for (int i = 0; i < na; i++)
@@ -187,6 +195,12 @@ void Atom::bcast_atom(void)
         Parallel_Common::bcast_int(mbl[i].x);
         Parallel_Common::bcast_int(mbl[i].y);
         Parallel_Common::bcast_int(mbl[i].z);
+        Parallel_Common::bcast_double( lambda[i].x );
+        Parallel_Common::bcast_double( lambda[i].y );
+        Parallel_Common::bcast_double( lambda[i].z );
+        Parallel_Common::bcast_int( constrain[i].x );
+        Parallel_Common::bcast_int( constrain[i].y );
+        Parallel_Common::bcast_int( constrain[i].z );
     }
 
     return;
