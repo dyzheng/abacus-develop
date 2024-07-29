@@ -12,6 +12,7 @@ list(APPEND objects
     forces_nl.cpp
     forces_onsite.cpp
     forces_cc.cpp
+    forces_scc.cpp
     forces.cpp
     forces_us.cpp
     stress_func_cc.cpp
