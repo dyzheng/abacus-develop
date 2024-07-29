@@ -50,9 +50,9 @@ void SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::run_lambda_lo
             this->cal_mw_from_lambda(i_step);
             spin = this->Mi_;
             where_fill_scalar_else_2d(this->constrain_, 0, zero, this->lambda_, initial_lambda);
-            print_2d("initial lambda: ", initial_lambda, this->nspin_);
-            print_2d("initial spin: ", spin, this->nspin_);
-            print_2d("target spin: ", this->target_mag_, this->nspin_);
+            print_2d("initial lambda (eV/uB): ", initial_lambda, this->nspin_, ModuleBase::Ry_to_eV);
+            print_2d("initial spin (uB): ", spin, this->nspin_);
+            print_2d("target spin (uB): ", this->target_mag_, this->nspin_);
         }
         else
         {
