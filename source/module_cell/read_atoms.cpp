@@ -655,7 +655,7 @@ bool UnitCell::read_atom_positions(std::ifstream &ifpos, std::ofstream &ofs_runn
                                 atoms[it].lambda[ia].z=tmplam;
                             }
                         }
-                        else if ( tmpid == "constrain")
+                        else if ( tmpid == "sc")
                         {
                             double tmplam=0;
                             ifpos >> tmplam;
