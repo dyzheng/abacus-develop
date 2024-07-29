@@ -333,6 +333,29 @@ void SpinConstrain<FPTYPE, Device>::set_target_mag(const ModuleBase::Vector3<dou
     }
 }
 
+template<typename FPTYPE, typename Device>
+void SpinConstrain<FPTYPE, Device>::set_target_mag(const std::vector<ModuleBase::Vector3<double>>& target_mag_in)
+{
+    int nat = this->get_nat();
+    assert(target_mag_in.size() == nat);
+    if (this->nspin_ == 2)
+    {
+        this->target_mag_.resize(nat, 0.0);
+        for (int iat = 0; iat < nat; iat++)
+        {
+            this->target_mag_[iat].z = target_mag_in[iat].x; /// this is wired because the UnitCell class set in x direction
+        }
+    }
+    else if (this->nspin_ == 4)
+    {
+        this->target_mag_ = target_mag_in;
+    }
+    else
+    {
+        ModuleBase::WARNING_QUIT("SpinConstrain::set_target_mag", "nspin must be 2 or 4");
+    }
+}
+
 /// set constrain from variable
 template<typename FPTYPE, typename Device>
 void SpinConstrain<FPTYPE, Device>::set_constrain(const ModuleBase::Vector3<int>* constrain_in, int nat_in)
@@ -404,14 +427,14 @@ void SpinConstrain<FPTYPE, Device>::set_decay_grad()
     {
         this->decay_grad_[itype] = 0.0;
     }
-    if (this->decay_grad_switch_)
-    {
-        for (auto& itype_data: this->ScDecayGrad)
-        {
-            int itype = itype_data.first;
-            this->decay_grad_[itype] = itype_data.second * ModuleBase::Ry_to_eV;
-        }
-    }
+    //if (this->decay_grad_switch_)
+    //{
+    //    for (auto& itype_data: this->ScDecayGrad)
+    //    {
+    //        int itype = itype_data.first;
+    //        this->decay_grad_[itype] = itype_data.second * ModuleBase::Ry_to_eV;
+    //    }
+    //}
 }
 
 /// get decay_grad

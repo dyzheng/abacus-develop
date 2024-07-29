@@ -138,6 +138,8 @@ public:
     void set_target_mag();
     /// set target_mag from variable
     void set_target_mag(const ModuleBase::Vector3<double>* target_mag_in, int nat_in);
+    /// set target magnetic moment
+    void set_target_mag(const std::vector<ModuleBase::Vector3<double>>& target_mag_in);
     /// set constrain
     void set_constrain();
     /// set constrain from variable

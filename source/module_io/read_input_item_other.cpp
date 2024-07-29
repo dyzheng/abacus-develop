@@ -1634,23 +1634,6 @@ void ReadInput::item_others()
         };
         this->add_item(item);
     }
-    {
-        Input_Item item("sc_file");
-        item.annotation = "file name for parameters used in non-collinear "
-                          "spin-constrained DFT (json format)";
-        read_sync_string(input.sc_file);
-        item.check_value = [](const Input_Item& item, const Parameter& para) {
-            if (para.input.sc_mag_switch)
-            {
-                const std::string ss = "test -f " + para.input.sc_file;
-                if (system(ss.c_str()))
-                {
-                    ModuleBase::WARNING_QUIT("ReadInput", "sc_file does not exist");
-                }
-            }
-        };
-        this->add_item(item);
-    }
 
     // 23. Quasiatomic Orbital analysis
     {
