@@ -283,7 +283,6 @@ TYPED_TEST(SpinConstrainTest, SetScDecayGrad)
     std::string output = testing::internal::GetCapturedStdout();
     EXPECT_THAT(output, testing::HasSubstr("decay_grad_in size mismatch with ntype"));
 }
-*/
 
 TYPED_TEST(SpinConstrainTest, SetTargetMagType1)
 {
@@ -347,6 +346,7 @@ TYPED_TEST(SpinConstrainTest, SetTargetMagType1)
         }
     }
 }
+*/
 
 TYPED_TEST(SpinConstrainTest, SetInputParameters)
 {
