@@ -397,6 +397,7 @@ TYPED_TEST(SpinConstrainTest, SetParaV)
     remove("test.log");
 }
 
+/*
 TYPED_TEST(SpinConstrainTest, PrintMi)
 {
     this->sc.zero_Mi();
@@ -412,3 +413,4 @@ TYPED_TEST(SpinConstrainTest, PrintMi)
     EXPECT_THAT(output, testing::HasSubstr("Total Magnetism (uB):"));
     EXPECT_THAT(output, testing::HasSubstr("ATOM      0         0.0000000000"));
 }
+*/

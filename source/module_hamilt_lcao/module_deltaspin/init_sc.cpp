@@ -28,6 +28,7 @@ void SpinConstrain<FPTYPE, Device>::init_sc(double sc_thr_in,
     this->set_target_mag(ucell.get_target_mag());
     this->lambda_ = ucell.get_lambda();
     this->constrain_ = ucell.get_constrain();
+    this->atomLabels_ = ucell.get_atomLabels();
     this->set_decay_grad();
     this->set_npol(NPOL);
     this->set_ParaV(ParaV_in);
