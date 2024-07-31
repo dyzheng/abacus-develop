@@ -654,6 +654,9 @@ bool UnitCell::read_atom_positions(std::ifstream &ifpos, std::ofstream &ofs_runn
                                 ifpos.putback(tmp);
                                 atoms[it].lambda[ia].z=tmplam;
                             }
+                            atoms[it].lambda[ia].x /= ModuleBase::Ry_to_eV;
+                            atoms[it].lambda[ia].y /= ModuleBase::Ry_to_eV;
+                            atoms[it].lambda[ia].z /= ModuleBase::Ry_to_eV;
                         }
                         else if ( tmpid == "sc")
                         {
