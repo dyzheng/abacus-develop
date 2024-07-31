@@ -162,9 +162,12 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
 {
     ModuleBase::TITLE("FS_Nonlocal_tools", "cal_becp");
     ModuleBase::timer::tick("FS_Nonlocal_tools", "cal_becp");
+    const int npol = this->ucell_->get_npol();
+    const int size_becp = this->nbands * npol * this->nkb;
+    const int size_becp_act = npm * npol * this->nkb;
     if (this->becp == nullptr)
     {
-        resmem_complex_op()(this->ctx, becp, this->nbands * this->nkb);
+        resmem_complex_op()(this->ctx, becp, size_becp);
     }
 
     // prepare math tools
@@ -248,11 +251,12 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
     }
     const char transa = 'C';
     const char transb = 'N';
+    int npm_npol = npm * npol;
     gemm_op()(this->ctx,
               transa,
               transb,
               nkb,
-              npm,
+              npm_npol,
               npw,
               &ModuleBase::ONE,
               ppcell_vkb,
@@ -267,15 +271,15 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
     if (this->device == base_device::GpuDevice)
     {
         std::complex<FPTYPE>* h_becp = nullptr;
-        resmem_complex_h_op()(this->cpu_ctx, h_becp, this->nbands * nkb);
-        syncmem_complex_d2h_op()(this->cpu_ctx, this->ctx, h_becp, becp, this->nbands * nkb);
-        Parallel_Reduce::reduce_pool(h_becp, this->nbands * nkb);
-        syncmem_complex_h2d_op()(this->ctx, this->cpu_ctx, becp, h_becp, this->nbands * nkb);
+        resmem_complex_h_op()(this->cpu_ctx, h_becp, size_becp_act);
+        syncmem_complex_d2h_op()(this->cpu_ctx, this->ctx, h_becp, becp, size_becp_act);
+        Parallel_Reduce::reduce_pool(h_becp, size_becp_act);
+        syncmem_complex_h2d_op()(this->ctx, this->cpu_ctx, becp, h_becp, size_becp_act);
         delmem_complex_h_op()(this->cpu_ctx, h_becp);
     }
     else
     {
-        Parallel_Reduce::reduce_pool(becp, this->nbands * this->nkb);
+        Parallel_Reduce::reduce_pool(becp, size_becp_act);
     }
     ModuleBase::timer::tick("FS_Nonlocal_tools", "cal_becp");
 }
@@ -286,9 +290,12 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, i
 {
     ModuleBase::TITLE("FS_Nonlocal_tools", "cal_dbecp_s");
     ModuleBase::timer::tick("FS_Nonlocal_tools", "cal_dbecp_s");
+    const int npol = this->ucell_->get_npol();
+    const int size_becp = this->nbands * npol * this->nkb;
+    const int npm_npol = npm * npol;
     if (this->dbecp == nullptr)
     {
-        resmem_complex_op()(this->ctx, dbecp, this->nbands * this->nkb);
+        resmem_complex_op()(this->ctx, dbecp, size_becp);
     }
 
     // prepare math tools
@@ -400,7 +407,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, i
               transa,
               transb,
               nkb,
-              npm,
+              npm_npol,
               npw,
               &ModuleBase::ONE,
               ppcell_vkb,
@@ -411,6 +418,8 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, i
               dbecp,
               nkb);
     // calculate stress for target (ipol, jpol)
+    if(npol == 1)
+    {
     const int current_spin = this->kv_->isk[ik];
     cal_stress_nl_op()(this->ctx,
                        nondiagonal,
@@ -434,20 +443,48 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, i
                        becp,
                        dbecp,
                        stress);
+    }
+    else
+    {
+        cal_stress_nl_op()(this->ctx,
+                           nondiagonal,
+                           ipol,
+                           jpol,
+                           nkb,
+                           npm,
+                           this->ntype,
+                           this->nbands,
+                           ik,
+                           this->nlpp_->deeq_nc.getBound2(),
+                           this->nlpp_->deeq_nc.getBound3(),
+                           this->nlpp_->deeq_nc.getBound4(),
+                           atom_nh,
+                           atom_na,
+                           d_wg,
+                           d_ekb,
+                           qq_nt,
+                           this->nlpp_->template get_deeq_nc_data<FPTYPE>(),
+                           becp,
+                           dbecp,
+                           stress);
+    }
     ModuleBase::timer::tick("FS_Nonlocal_tools", "cal_dbecp_s");
 }
 
 template <typename FPTYPE, typename Device>
 void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_f(int ik, int npm, int ipol)
 {
-    ModuleBase::TITLE("FS_Nonlocal_tools", "cal_dbecp_s");
+    ModuleBase::TITLE("FS_Nonlocal_tools", "cal_dbecp_f");
     ModuleBase::timer::tick("FS_Nonlocal_tools", "cal_dbecp_f");
+    const int npol = this->ucell_->get_npol();
+    const int npm_npol = npm * npol;
+    const int size_becp = this->nbands * npol * this->nkb;
     if (this->dbecp == nullptr)
     {
-        resmem_complex_op()(this->ctx, dbecp, 3 * this->nbands * this->nkb);
+        resmem_complex_op()(this->ctx, dbecp, 3 * size_becp);
     }
 
-    std::complex<FPTYPE>* dbecp_ptr = this->dbecp + ipol * this->nbands * this->nkb;
+    std::complex<FPTYPE>* dbecp_ptr = this->dbecp + ipol * size_becp;
     const std::complex<FPTYPE>* vkb_ptr = this->ppcell_vkb;
     std::complex<FPTYPE>* vkb_deri_ptr = this->ppcell_vkb;
 
@@ -480,7 +517,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_f(int ik, int npm, int ipol)
               transa,
               transb,
               this->nkb,
-              npm,
+              npm_npol,
               npw,
               &ModuleBase::ONE,
               vkb_deri_ptr,
@@ -490,7 +527,6 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_f(int ik, int npm, int ipol)
               &ModuleBase::ZERO,
               dbecp_ptr,
               nkb);
-
     this->revert_vkb(npw, ipol);
     this->pre_ik_f = ik;
     ModuleBase::timer::tick("FS_Nonlocal_tools", "cal_dbecp_f");
@@ -633,29 +669,57 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_force(int ik, int npm, FPTYPE* force
     const int current_spin = this->kv_->isk[ik];
     const int force_nc = 3;
     // calculate the force
-    cal_force_nl_op<FPTYPE, Device>()(this->ctx,
-                                      nondiagonal,
-                                      npm,
-                                      this->nbands,
-                                      this->ntype,
-                                      current_spin,
-                                      this->nlpp_->deeq.getBound2(),
-                                      this->nlpp_->deeq.getBound3(),
-                                      this->nlpp_->deeq.getBound4(),
-                                      force_nc,
-                                      this->nbands,
-                                      ik,
-                                      nkb,
-                                      atom_nh,
-                                      atom_na,
-                                      this->ucell_->tpiba,
-                                      d_wg,
-                                      d_ekb,
-                                      qq_nt,
-                                      deeq,
-                                      becp,
-                                      dbecp,
-                                      force);
+    if(this->ucell_->get_npol() == 1)
+    {
+        cal_force_nl_op<FPTYPE, Device>()(this->ctx,
+                                        nondiagonal,
+                                        npm,
+                                        this->nbands,
+                                        this->ntype,
+                                        current_spin,
+                                        this->nlpp_->deeq.getBound2(),
+                                        this->nlpp_->deeq.getBound3(),
+                                        this->nlpp_->deeq.getBound4(),
+                                        force_nc,
+                                        this->nbands,
+                                        ik,
+                                        nkb,
+                                        atom_nh,
+                                        atom_na,
+                                        this->ucell_->tpiba,
+                                        d_wg,
+                                        d_ekb,
+                                        qq_nt,
+                                        deeq,
+                                        becp,
+                                        dbecp,
+                                        force);
+    }
+    else
+    {
+        cal_force_nl_op<FPTYPE, Device>()(this->ctx,
+                                          nondiagonal,
+                                          npm,
+                                          this->nbands,
+                                          this->ntype,
+                                          this->nlpp_->deeq_nc.getBound2(),
+                                          this->nlpp_->deeq_nc.getBound3(),
+                                          this->nlpp_->deeq_nc.getBound4(),
+                                          force_nc,
+                                          this->nbands,
+                                          ik,
+                                          nkb,
+                                          atom_nh,
+                                          atom_na,
+                                          this->ucell_->tpiba,
+                                          d_wg,
+                                          d_ekb,
+                                          qq_nt,
+                                          this->nlpp_->template get_deeq_nc_data<FPTYPE>(),
+                                          becp,
+                                          dbecp,
+                                          force);
+    }
 }
 
 // template instantiation
