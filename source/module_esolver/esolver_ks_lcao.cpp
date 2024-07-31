@@ -52,6 +52,7 @@
 #include "module_io/write_wfc_nao.h"
 #include "module_hamilt_lcao/hamilt_lcaodft/operator_lcao/dspin_lcao.h"
 #include "module_hamilt_lcao/module_hcontainer/hcontainer.h"
+#include "module_base/formatter.h"
 
 namespace ModuleESolver
 {
@@ -1435,35 +1436,45 @@ void ESolver_KS_LCAO<TK, TR>::cal_mag(const int istep, const bool print)
                     &GlobalC::GridD,
                     two_center_bundle_.overlap_orb_onsite.get()
             );
+        std::vector<double> mag_x(GlobalC::ucell.nat, 0.0);
+        std::vector<double> mag_y(GlobalC::ucell.nat, 0.0);
+        std::vector<double> mag_z(GlobalC::ucell.nat,0.0);
+        auto atomLabels = GlobalC::ucell.get_atomLabels();
         if(GlobalV::NSPIN==2)
         {
             dynamic_cast<const elecstate::ElecStateLCAO<TK>*>(this->pelec)->get_DM()->switch_dmr(2);
             moments = sc_lambda->cal_moment(dmr, constrain);
             dynamic_cast<const elecstate::ElecStateLCAO<TK>*>(this->pelec)->get_DM()->switch_dmr(0);
-            GlobalV::ofs_running << std::endl;
-            GlobalV::ofs_running << "Atomic magnetic moments (Bohr magneton) in z direction:" << std::endl;
+            const std::vector<std::string> title = {"Total Magnetism (uB)", ""};
+            const std::vector<std::string> fmts = {"%-26s", "%20.10f"};
+            FmtTable table(title, GlobalC::ucell.nat, fmts, {FmtTable::Align::RIGHT, FmtTable::Align::LEFT});
             for(int iat=0;iat<GlobalC::ucell.nat;iat++)
             {
-                GlobalV::ofs_running << "Atom " << iat << ": " << moments[iat] << std::endl;
                 atom_mag[iat][0] = 0.0;
                 atom_mag[iat][1] = moments[iat];
+                mag_z[iat] = moments[iat];
             }
-            GlobalV::ofs_running << std::endl;
+            table << atomLabels << mag_z;
+            GlobalV::ofs_running << table.str() << std::endl;
         }
         else if(GlobalV::NSPIN==4)
         {
             moments = sc_lambda->cal_moment(dmr, constrain);
-            GlobalV::ofs_running << std::endl;
-            GlobalV::ofs_running << "Atomic magnetic moments (Bohr magneton) in x, y, z direction:" << std::endl;
+            const std::vector<std::string> title = {"Total Magnetism (uB)", "", "", ""};
+            const std::vector<std::string> fmts = {"%-26s", "%20.10f", "%20.10f", "%20.10f"};
+            FmtTable table(title, GlobalC::ucell.nat, fmts, {FmtTable::Align::RIGHT, FmtTable::Align::LEFT});
             for(int iat=0;iat<GlobalC::ucell.nat;iat++)
             {
-                GlobalV::ofs_running << "Atom " << iat << ": " << moments[iat*3] << " " << moments[iat*3+1] << " " << moments[iat*3+2] << std::endl;
-                GlobalV::ofs_running << std::endl << std::endl;
                 atom_mag[iat][0] = 0.0;
                 atom_mag[iat][1] = moments[iat*3];
                 atom_mag[iat][2] = moments[iat*3+1];
                 atom_mag[iat][3] = moments[iat*3+2];
+                mag_x[iat] = moments[iat*3];
+                mag_y[iat] = moments[iat*3+1];
+                mag_z[iat] = moments[iat*3+2];
             }
+            table << atomLabels << mag_x << mag_y << mag_z;
+            GlobalV::ofs_running << table.str() << std::endl;
         }
         GlobalC::ucell.atom_mulliken = atom_mag;
         delete sc_lambda;
