@@ -39,6 +39,7 @@ void Stress_Func<FPTYPE, Device>::stress_kin(ModuleBase::matrix& sigma,
     FPTYPE tpiba = ModuleBase::TWO_PI / GlobalC::ucell.lat0;
     FPTYPE twobysqrtpi = 2.0 / std::sqrt(ModuleBase::PI);
     FPTYPE* kfac = new FPTYPE[npwx];
+    const int npol = GlobalC::ucell.get_npol();
 
     for (int ik = 0; ik < p_kv->get_nks(); ik++)
     {
@@ -71,8 +72,7 @@ void Stress_Func<FPTYPE, Device>::stress_kin(ModuleBase::matrix& sigma,
             {
                 for (int ibnd = 0; ibnd < GlobalV::NBANDS; ibnd++)
                 {
-                    if (std::fabs(wg(ik, ibnd)) < ModuleBase::threshold_wg * wg(ik, 0))
-                        continue;
+                    if (wg(ik, ibnd) == 0.0) continue;
                     const std::complex<FPTYPE>* ppsi = nullptr;
                     ppsi = &(psi_in[0](ik, ibnd, 0));
 
@@ -84,6 +84,18 @@ void Stress_Func<FPTYPE, Device>::stress_kin(ModuleBase::matrix& sigma,
                     {
                         sum += wg(ik, ibnd) * gk[l][i] * gk[m][i] * kfac[i]
                                * (FPTYPE((conj(ppsi[i]) * ppsi[i]).real()));
+                    }
+                    if(npol == 2)
+                    {
+                        ppsi = &(psi_in[0](ik, ibnd, npwx));
+#ifdef _OPENMP
+#pragma omp parallel for reduction(+ : sum)
+#endif
+                        for (int i = 0; i < npw; i++)
+                        {
+                            sum += wg(ik, ibnd) * gk[l][i] * gk[m][i] * kfac[i]
+                                   * (FPTYPE((conj(ppsi[i]) * ppsi[i]).real()));
+                        }
                     }
                     s_kin[l][m] += sum;
                 }

@@ -103,6 +103,28 @@ struct cal_stress_nl_op
                     const std::complex<FPTYPE>* becp,
                     const std::complex<FPTYPE>* dbecp,
                     FPTYPE* stress);
+    // interface for nspin=4 only
+    void operator()(const Device* ctx,
+                    const bool& nondiagonal,
+                    const int& ipol,
+                    const int& jpol,
+                    const int& nkb,
+                    const int& nbands_occ,
+                    const int& ntype,
+                    const int& wg_nc,
+                    const int& ik,
+                    const int& deeq_2,
+                    const int& deeq_3,
+                    const int& deeq_4,
+                    const int* atom_nh,
+                    const int* atom_na,
+                    const FPTYPE* d_wg,
+                    const FPTYPE* d_ekb,
+                    const FPTYPE* qq_nt,
+                    const std::complex<FPTYPE>* deeq_nc,
+                    const std::complex<FPTYPE>* becp,
+                    const std::complex<FPTYPE>* dbecp,
+                    FPTYPE* stress);
 };
 
 template <typename T, typename Device>
