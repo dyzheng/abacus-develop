@@ -65,7 +65,6 @@ void Force_LCAO<std::complex<double>>::cal_fedm(
             wg_ekb(ik, ib) = pelec->wg(ik, ib) * pelec->ekb(ik, ib);
         }
     }
-    std::vector<ModuleBase::ComplexMatrix> edm_k(kv->get_nks());
 
     // use the original formula (Hamiltonian matrix) to calculate energy density matrix
     if (dm->EDMK.size())
@@ -75,7 +74,7 @@ void Force_LCAO<std::complex<double>>::cal_fedm(
 #endif
         for (int ik = 0; ik < kv->get_nks(); ++ik)
         {
-            edm.set_DMK_pointer(ik,dm->EDMK[ik].c);
+            edm.set_DMK_pointer(ik, dm->EDMK[ik].data());
         }
     }
     else

@@ -92,6 +92,9 @@ public:
   /// collect_mw from matrix multiplication result
   void collect_MW(ModuleBase::matrix& MecMulP, const ModuleBase::ComplexMatrix& mud, int nw, int isk);
 
+  /// revert lambda to -lambda
+  void revert_lambda();
+
 public:
     /**
      * important outter class pointers used in spin-constrained DFT

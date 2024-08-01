@@ -162,7 +162,7 @@ class DensityMatrix
      * @brief set _DMK using a input TK* pointer
      * please make sure the size of TK* is correct
     */
-    void set_DMK_pointer(const int ik, TK* DMK_in);
+    void set_DMK_pointer(const int ik, const TK* DMK_in);
 
     /**
      * @brief get pointer of paraV
@@ -218,7 +218,10 @@ class DensityMatrix
      */
     void save_DMR();
     
-    std::vector<ModuleBase::ComplexMatrix> EDMK; // for TD-DFT
+    /// energy density matrix, used for force or stress calculation in TDDFT or DeltaSpin method
+    std::vector<std::vector<std::complex<double>>> EDMK; 
+    /// allocate memory for EDMK
+    void allocate_edmk();
 
 #ifdef __PEXSI
     /**

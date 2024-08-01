@@ -281,7 +281,7 @@ TK* DensityMatrix<TK, TR>::get_DMK_pointer(const int ik) const
 
 // set DMK using a pointer
 template <typename TK, typename TR>
-void DensityMatrix<TK, TR>::set_DMK_pointer(const int ik, TK* DMK_in)
+void DensityMatrix<TK, TR>::set_DMK_pointer(const int ik, const TK* DMK_in)
 {
 #ifdef __DEBUG
     assert(ik < this->_nks * this->_nspin);
@@ -1021,6 +1021,25 @@ void DensityMatrix<TK, TR>::switch_dmr(const int mode)
             throw std::string("Unknown mode in switch_dmr");
         }
         ModuleBase::timer::tick("DensityMatrix", "switch_dmr");
+    }
+}
+
+// allocate edmk
+template <typename TK, typename TR>
+void DensityMatrix<TK, TR>::allocate_edmk()
+{
+    ModuleBase::TITLE("DensityMatrix", "allocate_edmk");
+    if (this->_DMK.size() == 0 || this->EDMK.size() != 0)
+    {
+        return;
+    }
+    else
+    {
+        this->EDMK.resize(this->_DMK.size());
+        for (int i = 0; i < this->_DMK.size(); ++i)
+        {
+            this->EDMK[i].resize(this->_paraV->nrow * this->_paraV->ncol);
+        }
     }
 }
 

@@ -441,14 +441,13 @@ void ESolver_KS_LCAO_TDDFT::cal_edm_tddft()
     assert(nlocal >= 0);
 
     dynamic_cast<elecstate::ElecStateLCAO<std::complex<double>>*>(this->pelec)
-        ->get_DM()
-        ->EDMK.resize(kv.get_nks());
+        ->get_DM()->allocate_edmk();
     for (int ik = 0; ik < kv.get_nks(); ++ik) {
         std::complex<double>* tmp_dmk
             = dynamic_cast<elecstate::ElecStateLCAO<std::complex<double>>*>(this->pelec)->get_DM()->get_DMK_pointer(ik);
 
-        ModuleBase::ComplexMatrix& tmp_edmk
-            = dynamic_cast<elecstate::ElecStateLCAO<std::complex<double>>*>(this->pelec)->get_DM()->EDMK[ik];
+        std::complex<double>* tmp_edmk
+            = dynamic_cast<elecstate::ElecStateLCAO<std::complex<double>>*>(this->pelec)->get_DM()->EDMK[ik].data();
 
         const Parallel_Orbitals* tmp_pv
             = dynamic_cast<elecstate::ElecStateLCAO<std::complex<double>>*>(this->pelec)->get_DM()->get_paraV_pointer();
@@ -462,7 +461,6 @@ void ESolver_KS_LCAO_TDDFT::cal_edm_tddft()
         const int ncol = this->ParaV.ncol;
         const int nrow = this->ParaV.nrow;
 
-        tmp_edmk.create(ncol, nrow);
         complex<double>* Htmp = new complex<double>[nloc];
         complex<double>* Sinv = new complex<double>[nloc];
         complex<double>* tmp1 = new complex<double>[nloc];
@@ -630,7 +628,7 @@ void ESolver_KS_LCAO_TDDFT::cal_edm_tddft()
                  &one_int,
                  this->ParaV.desc);
 
-        zcopy_(&nloc, tmp4, &inc, tmp_edmk.c, &inc);
+        zcopy_(&nloc, tmp4, &inc, tmp_edmk, &inc);
 
         delete[] Htmp;
         delete[] Sinv;
@@ -640,7 +638,7 @@ void ESolver_KS_LCAO_TDDFT::cal_edm_tddft()
         delete[] tmp4;
 #else
         // for serial version
-        tmp_edmk.create(this->ParaV.ncol, this->ParaV.nrow);
+        ModuleBase::ComplexMatrix tmp_edmk1(this->ParaV.ncol, this->ParaV.nrow);
         ModuleBase::ComplexMatrix Sinv(nlocal, nlocal);
         ModuleBase::ComplexMatrix Htmp(nlocal, nlocal);
 
@@ -677,7 +675,10 @@ void ESolver_KS_LCAO_TDDFT::cal_edm_tddft()
                 tmp_dmk_base(i, j) = tmp_dmk[i * nlocal + j];
             }
         }
-        tmp_edmk = 0.5 * (Sinv * Htmp * tmp_dmk_base + tmp_dmk_base * Htmp * Sinv);
+        tmp_edmk1 = 0.5 * (Sinv * Htmp * tmp_dmk_base + tmp_dmk_base * Htmp * Sinv);
+        int inc = 1;
+        long nloc = nlocal * nlocal;
+        zcopy_(&nloc, tmp_edmk1.c, &inc, tmp_edmk, &inc);
         delete[] work;
 #endif
     }
