@@ -1261,7 +1261,7 @@ void ESolver_KS_LCAO<TK, TR>::after_scf(const int istep)
             // calculate edm for Force and Stress calculation
             if(sc.mag_converged())
             {
-                //sc.revert_lambda();
+                sc.revert_lambda();
                 auto* dm = dynamic_cast<elecstate::ElecStateLCAO<TK>*>(this->pelec)->get_DM();
                 dm->allocate_edmk();
                 hamilt::cal_edm<TK>(&this->ParaV, this->kv.get_nks(), this->p_hamilt, dm->get_DMK_vector(), dm->EDMK);
