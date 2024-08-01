@@ -1241,8 +1241,10 @@ void ESolver_KS_LCAO<TK, TR>::after_scf(const int istep)
     if (!md_skip_out(GlobalV::CALCULATION, istep, PARAM.inp.out_interval))
     {
         this->create_Output_Mat_Sparse(istep).write();
-        // mulliken charge analysis
-        this->cal_mag(istep, true);
+        if (!(PARAM.inp.sc_mag_switch) && (PARAM.inp.out_mul || PARAM.inp.onsite_radius > 0))
+        {
+            this->cal_mag(istep, false);
+        }
     }
 
     // 15) write spin constrian MW?
@@ -1373,10 +1375,6 @@ bool ESolver_KS_LCAO<TK, TR>::md_skip_out(std::string calculation, int istep, in
 template <typename TK, typename TR>
 void ESolver_KS_LCAO<TK, TR>::cal_mag(const int istep, const bool print)
 {
-    if (!PARAM.inp.out_mul && !PARAM.inp.onsite_radius > 0)
-    {
-        return;
-    }
     this->mag_tag = (PARAM.inp.onsite_radius > 0)? "Projection" : "Mulliken";
     if (this->mag_tag == "Mulliken")
     {
