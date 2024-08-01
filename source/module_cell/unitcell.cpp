@@ -272,9 +272,10 @@ std::map<int, std::map<int, int>> UnitCell::get_lnchi_Counts() const {
 }
 
 std::vector<std::string> UnitCell::get_atomLabels() const {
-    std::vector<std::string> atomLabels(this->ntype);
-    for (int it = 0; it < this->ntype; it++) {
-        atomLabels[it] = this->atoms[it].label;
+    std::vector<std::string> atomLabels(this->nat);
+    for (int iat = 0; iat < this->nat; iat++) {
+        int it = this->iat2it[iat];
+        atomLabels[iat] = this->atoms[it].label;
     }
     return atomLabels;
 }
