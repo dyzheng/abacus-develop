@@ -67,12 +67,12 @@ void cal_edm(
         //! be careful, the type of nloc is 'long'
         //! whether the long type is safe, needs more discussion
 
-        Htmp.assign(nloc, 0);
-        Sinv.assign(nloc, 0);
-        tmp1.assign(nloc, 0);
-        tmp2.assign(nloc, 0);
-        tmp3.assign(nloc, 0);
-        tmp4.assign(nloc, 0);
+        Htmp.assign(nloc, ModuleBase::ZERO);
+        Sinv.assign(nloc, ModuleBase::ZERO);
+        tmp1.assign(nloc, ModuleBase::ZERO);
+        tmp2.assign(nloc, ModuleBase::ZERO);
+        tmp3.assign(nloc, ModuleBase::ZERO);
+        tmp4.assign(nloc, ModuleBase::ZERO);
 
         const int inc = 1;
         
@@ -136,7 +136,7 @@ void cal_edm(
         const complex<double> zero_float = {0.0, 0.0};
         const complex<double> half_float = {0.5, 0.0};
 
-        pzgemm_(&N_char,
+        pzgemm_(&T_char,
                 &N_char,
                 &nlocal,
                 &nlocal,
@@ -197,7 +197,7 @@ void cal_edm(
                 desc);
 
         pzgemm_(&N_char,
-                &N_char,
+                &T_char,
                 &nlocal,
                 &nlocal,
                 &nlocal,
