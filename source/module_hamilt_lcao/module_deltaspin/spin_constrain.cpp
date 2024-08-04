@@ -630,24 +630,5 @@ void SpinConstrain<FPTYPE, Device>::print_Mag_Force(std::ofstream& ofs_running)
     }
 }
 
-template<typename FPTYPE, typename Device>
-void SpinConstrain<FPTYPE, Device>::revert_lambda()
-{
-    if(GlobalV::NSPIN==2)
-    {
-        dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double>>*>(this->p_operator)->update_lambda();
-    }
-    else if(GlobalV::NSPIN==4)
-    {
-        dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, std::complex<double>>>*>(this->p_operator)->update_lambda();
-    }
-    for(int iat = 0; iat < this->get_nat(); iat++)
-    {
-        this->lambda_[iat].x = -1 * this->lambda_[iat].x;
-        this->lambda_[iat].y = -1 * this->lambda_[iat].y;
-        this->lambda_[iat].z = -1 * this->lambda_[iat].z;
-    }
-}
-
 template class SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>;
 template class SpinConstrain<double, base_device::DEVICE_CPU>;

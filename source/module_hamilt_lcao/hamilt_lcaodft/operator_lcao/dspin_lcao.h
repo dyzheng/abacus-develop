@@ -58,6 +58,13 @@ class DeltaSpin<OperatorLCAO<TK, TR>> : public OperatorLCAO<TK, TR>
         }
     }
 
+    /// calculate force and stress for DFT+U
+    void cal_force_stress(const bool cal_force,
+                          const bool cal_stress,
+                          const HContainer<double>* dmR,
+                          ModuleBase::matrix& force,
+                          ModuleBase::matrix& stress);
+
   private:
     const UnitCell* ucell = nullptr;
 
@@ -100,6 +107,35 @@ class DeltaSpin<OperatorLCAO<TK, TR>> : public OperatorLCAO<TK, TR>
                         const int row_size,
                         const int col_size,
                         double* moment);
+
+    /**
+     * @brief calculate the atomic Force of <I,J,R> atom pair
+     */
+    void cal_force_IJR(const int& iat1,
+                       const int& iat2,
+                       const Parallel_Orbitals* paraV,
+                       const std::unordered_map<int, std::vector<double>>& nlm1_all,
+                       const std::unordered_map<int, std::vector<double>>& nlm2_all,
+                       const hamilt::BaseMatrix<double>* dmR_pointer,
+                       const ModuleBase::Vector3<double>& lambda,
+                       const int nspin,
+                       double* force1,
+                       double* force2);
+    /**
+     * @brief calculate the Stress of <I,J,R> atom pair
+     */
+    void cal_stress_IJR(const int& iat1,
+                        const int& iat2,
+                        const Parallel_Orbitals* paraV,
+                        const std::unordered_map<int, std::vector<double>>& nlm1_all,
+                        const std::unordered_map<int, std::vector<double>>& nlm2_all,
+                        const hamilt::BaseMatrix<double>* dmR_pointer,
+                        const ModuleBase::Vector3<double>& lambda,
+                        const int nspin,
+                        const ModuleBase::Vector3<double>& dis1,
+                        const ModuleBase::Vector3<double>& dis2,
+                        double* stress);
+
     /**
      * @brief calculate the array of coefficient of lambda * d\rho^p/drho^{\sigma\sigma'}
     */
@@ -107,8 +143,6 @@ class DeltaSpin<OperatorLCAO<TK, TR>> : public OperatorLCAO<TK, TR>
 
     std::vector<bool> constraint_atom_list;
     std::vector<hamilt::HContainer<TR>*> pre_hr;
-
-    std::vector<AdjacentAtomInfo> adjs_all;
 
     std::vector<double> tmp_dmr_memory;
     std::vector<TR> tmp_coeff_array;

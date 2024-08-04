@@ -47,7 +47,6 @@
 //---------------------------------------------------
 
 #include "module_hamilt_lcao/module_deltaspin/spin_constrain.h"
-#include "module_hamilt_lcao/hamilt_lcaodft/cal_edm.hpp"
 #include "module_io/io_dmk.h"
 #include "module_io/write_dmr.h"
 #include "module_io/write_wfc_nao.h"
@@ -1258,18 +1257,6 @@ void ESolver_KS_LCAO<TK, TR>::after_scf(const int istep)
         {
             sc.print_Mi(GlobalV::ofs_running);
             sc.print_Mag_Force(GlobalV::ofs_running);
-        }
-        if(GlobalV::CAL_FORCE || GlobalV::CAL_STRESS)
-        {
-            // calculate edm for Force and Stress calculation
-            if(sc.mag_converged())
-            {
-                sc.revert_lambda();
-                auto* dm = dynamic_cast<elecstate::ElecStateLCAO<TK>*>(this->pelec)->get_DM();
-                dm->allocate_edmk();
-                hamilt::cal_edm<TK>(&this->ParaV, this->kv.get_nks(), this->p_hamilt, dm->get_DMK_vector(), dm->EDMK);
-                sc.revert_lambda();
-            }
         }
     }
 

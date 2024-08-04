@@ -19,7 +19,6 @@ hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::DeltaSpin(
     this->cal_type = calculation_type::lcao_sc_lambda;
     this->ucell = &ucell_in;
     this->gridD = gridD_in;
-    this->paraV = this->hR->get_paraV();
 #ifdef __DEBUG
     assert(this->ucell != nullptr);
     assert(this->gridD != nullptr);
@@ -219,6 +218,7 @@ void hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::cal_pre_HR()
     {
         return;
     }
+    this->paraV = this->hR->get_paraV();
     ModuleBase::timer::tick("DeltaSpin", "cal_pre_HR");
     this->pre_hr.clear();
     this->pre_hr.resize(this->ucell->nat, nullptr);
@@ -525,6 +525,8 @@ void hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, std::complex<d
     moment[1] += tmp_moment[1].real();
     moment[2] += tmp_moment[2].real();
 }
+
+#include "dspin_force_stress.hpp"
 
 template class hamilt::DeltaSpin<hamilt::OperatorLCAO<double, double>>;
 template class hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double>>;
