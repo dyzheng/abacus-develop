@@ -14,6 +14,10 @@ template<typename FPTYPE, typename Device>
 double SpinConstrain<FPTYPE, Device>::cal_escon()
 {
     this->escon_ = 0.0;
+    if(!this->is_Mi_converged)
+    {
+        return this->escon_;
+    }
     int nat = this->get_nat();
     for (int iat = 0; iat < nat; iat++)
     {

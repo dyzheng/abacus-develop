@@ -51,6 +51,11 @@ public:
 
   void cal_mw_from_lambda(int i_step);
 
+  /**
+   * @brief calculate the energy of \sum_i \lambda_i * Mi
+   * if this->is_mag_converged is true, then this function will calculate the energy and return the real value
+   * if this->is_mag_converged is false, then this function will return 0.0
+   */
   double cal_escon();
 
   double get_escon();
