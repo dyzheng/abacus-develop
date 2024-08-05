@@ -257,7 +257,7 @@ void DeltaSpin<OperatorLCAO<TK, TR>>::cal_force_IJR(const int& iat1,
     }
     double tmp[3];
     // calculate the local matrix
-    for (int is = 3; is < nspin; is++)
+    for (int is = 1; is < nspin; is++)
     {
         const int is0 = nspin==2 ? is : 0;
         const int step_is = nspin==4 ? is : 0;
