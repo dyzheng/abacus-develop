@@ -118,7 +118,7 @@ void DeltaSpin<OperatorLCAO<TK, TR>>::cal_force_stress(const bool cal_force,
                         {
                             for (int n = 0; n < 4; n++) // value, deri_x, deri_y, deri_z
                             {
-                                nlm_target[m + n * length] = nlm[n][iw + m];
+                                nlm_target[index + n * length] = nlm[n][iw + m];
                             }
                             index++;
                         }
@@ -257,7 +257,7 @@ void DeltaSpin<OperatorLCAO<TK, TR>>::cal_force_IJR(const int& iat1,
     }
     double tmp[3];
     // calculate the local matrix
-    for (int is = 1; is < nspin; is++)
+    for (int is = 3; is < nspin; is++)
     {
         const int is0 = nspin==2 ? is : 0;
         const int step_is = nspin==4 ? is : 0;
