@@ -141,7 +141,7 @@ void ESolver_KS_LCAO_TDDFT::cal_edm_tddft()
         const complex<double> zero_float = {0.0, 0.0};
         const complex<double> half_float = {0.5, 0.0};
 
-        pzgemm_(&N_char,
+        pzgemm_(&T_char,
                 &N_char,
                 &nlocal,
                 &nlocal,
@@ -202,7 +202,7 @@ void ESolver_KS_LCAO_TDDFT::cal_edm_tddft()
                 this->pv.desc);
 
         pzgemm_(&N_char,
-                &N_char,
+                &T_char,
                 &nlocal,
                 &nlocal,
                 &nlocal,
