@@ -283,8 +283,17 @@ void Force_Stress_LCAO<T>::getForceStress(const bool isforce,
                     two_center_bundle.overlap_orb_onsite.get()
             );
 
-        const hamilt::HContainer<double>* dmr = dynamic_cast<const elecstate::ElecStateLCAO<std::complex<double>>*>(pelec)->get_DM()->get_DMR_pointer(1);
+        const auto* dm_p = dynamic_cast<const elecstate::ElecStateLCAO<std::complex<double>>*>(pelec)->get_DM();
+        if(GlobalV::NSPIN==2)
+        {
+            const_cast<elecstate::DensityMatrix<std::complex<double>, double>*>(dm_p)->switch_dmr(2);
+        }
+        const hamilt::HContainer<double>* dmr = dm_p->get_DMR_pointer(1);
         tmp_dspin.cal_force_stress(isforce, isstress, dmr, force_dspin, stress_dspin);
+        if(GlobalV::NSPIN==2)
+        {
+            const_cast<elecstate::DensityMatrix<std::complex<double>, double>*>(dm_p)->switch_dmr(0);
+        }
     }
 
     if (!GlobalV::GAMMA_ONLY_LOCAL)

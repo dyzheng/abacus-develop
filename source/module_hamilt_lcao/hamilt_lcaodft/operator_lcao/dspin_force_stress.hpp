@@ -248,9 +248,9 @@ void DeltaSpin<OperatorLCAO<TK, TR>>::cal_force_IJR(const int& iat1,
     // ---------------------------------------------
     auto row_indexes = paraV->get_indexes_row(iat1);
     auto col_indexes = paraV->get_indexes_col(iat2);
-    // step_trace = 0 for NSPIN=1,2; ={0, 1, local_col, local_col+1} for NSPIN=4
-    std::vector<int> step_trace(npol * npol, 0);
-    if (npol == 2) {
+    // step_trace = 0 for NSPIN=2; ={0, 1, local_col, local_col+1} for NSPIN=4
+    std::vector<int> step_trace(nspin, 0);
+    if (nspin == 4) {
         step_trace[1] = 1;
         step_trace[2] = col_indexes.size();
         step_trace[3] = col_indexes.size() + 1;
@@ -259,8 +259,7 @@ void DeltaSpin<OperatorLCAO<TK, TR>>::cal_force_IJR(const int& iat1,
     // calculate the local matrix
     for (int is = 1; is < nspin; is++)
     {
-        const int is0 = nspin==2 ? is : 0;
-        const int step_is = nspin==4 ? is : 0;
+        const double lambda_tmp = nspin==2?lambda[2]:lambda[is-1];
         const double* dm_pointer = dmR_pointer->get_pointer();
         for (int iw1l = 0; iw1l < row_indexes.size(); iw1l += npol)
         {
@@ -279,9 +278,9 @@ void DeltaSpin<OperatorLCAO<TK, TR>>::cal_force_IJR(const int& iat1,
                     for (int m = 0; m < 2*l+1; m++)
                     {
                         index = l*l + m;
-                        tmp[0] = lambda[is-1] * nlm1[index + length] * nlm2[index] * dm_pointer[step_trace[step_is]];
-                        tmp[1] = lambda[is-1] * nlm1[index + length * 2] * nlm2[index] * dm_pointer[step_trace[step_is]];
-                        tmp[2] = lambda[is-1] * nlm1[index + length * 3] * nlm2[index] * dm_pointer[step_trace[step_is]];
+                        tmp[0] = lambda_tmp * nlm1[index + length] * nlm2[index] * dm_pointer[step_trace[is]];
+                        tmp[1] = lambda_tmp * nlm1[index + length * 2] * nlm2[index] * dm_pointer[step_trace[is]];
+                        tmp[2] = lambda_tmp * nlm1[index + length * 3] * nlm2[index] * dm_pointer[step_trace[is]];
                         // force1 = - VU * <d phi_{I,R1}/d R1|chi_m> * <chi_m'|phi_{J,R2}>
                         // force2 = - VU * <phi_{I,R1}|d chi_m/d R0> * <chi_m'|phi_{J,R2>}
                         force1[0] += tmp[0];
@@ -321,9 +320,9 @@ void DeltaSpin<OperatorLCAO<TK, TR>>::cal_stress_IJR(const int& iat1,
     // ---------------------------------------------
     auto row_indexes = paraV->get_indexes_row(iat1);
     auto col_indexes = paraV->get_indexes_col(iat2);
-    // step_trace = 0 for NSPIN=1,2; ={0, 1, local_col, local_col+1} for NSPIN=4
-    std::vector<int> step_trace(npol * npol, 0);
-    if (npol == 2) {
+    // step_trace = 0 for NSPIN=2; ={0, 1, local_col, local_col+1} for NSPIN=4
+    std::vector<int> step_trace(nspin, 0);
+    if (nspin == 4) {
         step_trace[1] = 1;
         step_trace[2] = col_indexes.size();
         step_trace[3] = col_indexes.size() + 1;
@@ -331,8 +330,7 @@ void DeltaSpin<OperatorLCAO<TK, TR>>::cal_stress_IJR(const int& iat1,
     // calculate the local matrix
     for (int is = 1; is < nspin; is++)
     {
-        const int is0 = nspin==2 ? is : 0;
-        const int step_is = nspin==4 ? is : 0;
+        const double lambda_tmp = nspin==2?lambda[2]:lambda[is-1];
         const double* dm_pointer = dmR_pointer->get_pointer();
         for (int iw1l = 0; iw1l < row_indexes.size(); iw1l += npol)
         {
@@ -345,7 +343,7 @@ void DeltaSpin<OperatorLCAO<TK, TR>>::cal_stress_IJR(const int& iat1,
 #endif
                 const int length = nlm1.size() / 4;
                 const int lmax = sqrt(length);
-                double tmp = lambda[is-1] * dm_pointer[step_trace[step_is]];
+                double tmp = lambda_tmp * dm_pointer[step_trace[is]];
                 int index = 0;
                 for(int l = 0; l<lmax; l++)
                 {
