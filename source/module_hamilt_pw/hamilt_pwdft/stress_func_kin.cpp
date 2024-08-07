@@ -29,8 +29,9 @@ void Stress_Func<FPTYPE, Device>::stress_kin(ModuleBase::matrix& sigma,
 	int npwx=0;
     for (int ik = 0; ik < p_kv->get_nks(); ik++)
     {
-        if (npwx < p_kv->ngk[ik])
+        if (npwx < p_kv->ngk[ik]) {
             npwx = p_kv->ngk[ik];
+}
     }
 
     gk[0]= new FPTYPE[npwx];
@@ -72,7 +73,8 @@ void Stress_Func<FPTYPE, Device>::stress_kin(ModuleBase::matrix& sigma,
             {
                 for (int ibnd = 0; ibnd < GlobalV::NBANDS; ibnd++)
                 {
-                    if (wg(ik, ibnd) == 0.0) continue;
+                    if (wg(ik, ibnd) == 0.0) { continue;
+}
                     const std::complex<FPTYPE>* ppsi = nullptr;
                     ppsi = &(psi_in[0](ik, ibnd, 0));
 
