@@ -441,7 +441,6 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, i
     else
     {
         cal_stress_nl_op()(this->ctx,
-                           nondiagonal,
                            ipol,
                            jpol,
                            nkb,
@@ -692,7 +691,6 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_force(int ik, int npm, FPTYPE* force
     else
     {
         cal_force_nl_op<FPTYPE, Device>()(this->ctx,
-                                          nondiagonal,
                                           npm,
                                           this->nbands,
                                           this->ntype,

@@ -149,7 +149,6 @@ struct cal_force_nl_op<FPTYPE, base_device::DEVICE_CPU>
     };
 
     void operator()(const base_device::DEVICE_CPU* ctx,
-                    const bool& nondiagonal,
                     const int& nbands_occ,
                     const int& wg_nc,
                     const int& ntype,
@@ -199,8 +198,6 @@ struct cal_force_nl_op<FPTYPE, base_device::DEVICE_CPU>
                             // out<<"\n ps = "<<ps;
                             for (int ip2 = 0; ip2 < Nprojs; ip2++)
                             {
-                                if(ip2 != ip && !nondiagonal) continue;
-
                                 // Effective values of the D-eS coefficients
                                 std::complex<FPTYPE> ps_qq = - ekb_now * qq_nt[it * deeq_3 * deeq_4 + ip * deeq_4 + ip2];
                                 const int jnkb = sum + ip2;
