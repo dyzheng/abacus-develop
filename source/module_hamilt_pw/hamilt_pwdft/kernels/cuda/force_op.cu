@@ -193,6 +193,7 @@ __global__ void cal_force_nl(
         FPTYPE *force)
 {
     const int ib = blockIdx.x / ntype;
+    const int ib2 = ib * 2;
     const int it = blockIdx.x % ntype;
 
     int iat = 0, sum = 0;
@@ -217,14 +218,13 @@ __global__ void cal_force_nl(
                 const thrust::complex<FPTYPE> ps2 = deeq_nc[((2 * deeq_2 + iat) * deeq_3 + ip) * deeq_4 + ip2];
                 const thrust::complex<FPTYPE> ps3 = deeq_nc[((3 * deeq_2 + iat) * deeq_3 + ip) * deeq_4 + ip2] + ps_qq;
 
-                const int jnkb = sum + ip2;
                 for (int ipol = 0; ipol < 3; ipol++) {
                     const int index0 = ipol * nbands * 2 * nkb + ib2 * nkb + inkb;
                     const int index1 = ib2 * nkb + jnkb;
-                    const std::complex<FPTYPE> dbb0 = conj(dbecp[index0]) * becp[index1];
-                    const std::complex<FPTYPE> dbb1 = conj(dbecp[index0]) * becp[index1 + nkb];
-                    const std::complex<FPTYPE> dbb2 = conj(dbecp[index0 + nkb]) * becp[index1];
-                    const std::complex<FPTYPE> dbb3 = conj(dbecp[index0 + nkb]) * becp[index1 + nkb];
+                    const thrust::complex<FPTYPE> dbb0 = conj(dbecp[index0]) * becp[index1];
+                    const thrust::complex<FPTYPE> dbb1 = conj(dbecp[index0]) * becp[index1 + nkb];
+                    const thrust::complex<FPTYPE> dbb2 = conj(dbecp[index0 + nkb]) * becp[index1];
+                    const thrust::complex<FPTYPE> dbb3 = conj(dbecp[index0 + nkb]) * becp[index1 + nkb];
                     const FPTYPE tmp = - fac * (ps0 * dbb0 + ps1 * dbb1 + ps2 * dbb2 + ps3 * dbb3).real();
                     atomicAdd(force + iat * forcenl_nc + ipol, tmp);
                 }
@@ -236,6 +236,7 @@ __global__ void cal_force_nl(
 }
 
 // interface for nspin=4 only
+template <typename FPTYPE>
 void cal_force_nl_op<FPTYPE, base_device::DEVICE_GPU>::operator()(const base_device::DEVICE_GPU* ctx,
                     const int& nbands_occ,
                     const int& wg_nc,
