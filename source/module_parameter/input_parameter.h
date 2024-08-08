@@ -90,6 +90,7 @@ struct Input_para
     double pw_diag_thr = 0.01;          ///< used in cg method
     int nb2d = 0;                       ///< matrix 2d division.
     double scf_thr = -1.0;              ///< \sum |rhog_out - rhog_in |^2
+    double scf_ene_thr = -1.0; ///< energy threshold for scf convergence, in eV
     int scf_thr_type = -1;              ///< type of the criterion of scf_thr, 1: reci drho, 2: real drho
     std::string init_wfc = "atomic";    ///< "file","atomic","random"
     bool psi_initializer = false;       ///< whether use psi_initializer to initialize wavefunctions
