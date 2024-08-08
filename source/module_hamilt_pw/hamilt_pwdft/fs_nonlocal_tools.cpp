@@ -107,12 +107,6 @@ void FS_Nonlocal_tools<FPTYPE, Device>::allocate_memory(const ModuleBase::matrix
         this->atom_na = h_atom_na.data();
         this->ppcell_vkb = this->nlpp_->vkb.c;
     }
-
-    // prepare the memory of the becp and dbecp:
-    // becp: <Beta(nkb,npw)|psi(nbnd,npw)>
-    // dbecp: <dBeta(nkb,npw)/dG|psi(nbnd,npw)>
-    resmem_complex_op()(this->ctx, becp, this->nbands * nkb, "Stress::becp");
-    resmem_complex_op()(this->ctx, dbecp, 6 * this->nbands * nkb, "Stress::dbecp");
 }
 
 template <typename FPTYPE, typename Device>
@@ -447,7 +441,6 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, i
     else
     {
         cal_stress_nl_op()(this->ctx,
-                           nondiagonal,
                            ipol,
                            jpol,
                            nkb,
@@ -698,7 +691,6 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_force(int ik, int npm, FPTYPE* force
     else
     {
         cal_force_nl_op<FPTYPE, Device>()(this->ctx,
-                                          nondiagonal,
                                           npm,
                                           this->nbands,
                                           this->ntype,
