@@ -263,7 +263,7 @@ void projectors::OnsiteProjector<T, Device>::init_k(
     }
     const int nrow = irow2it.size();
     std::vector<std::complex<double>> tab_(nrow*this->npw_);
-    rp.sbtft(q, tab_, 'l', this->ucell->omega, this->ucell->tpiba); // l: <p|G+k>, r: <G+k|p>
+    rp.sbtft(q, tab_, 'r', this->ucell->omega, this->ucell->tpiba); // l: <p|G+k>, r: <G+k|p>
     q.clear();
     q.shrink_to_fit(); // release memory
 
@@ -293,7 +293,7 @@ void projectors::OnsiteProjector<T, Device>::init_k(
             const int irow_out = itiaiprojm2irow.at(std::make_tuple(it, ia, iproj, m));
             for(int ig = 0; ig < this->npw_; ++ig)
             {
-                this->tab_atomic_[irow_out*this->npw_ + ig] = conj(sk[ig]*tab_[irow*this->npw_ + ig]);
+                this->tab_atomic_[irow_out*this->npw_ + ig] = sk[ig]*tab_[irow*this->npw_ + ig];
             }
             delete[] sk;
         }
