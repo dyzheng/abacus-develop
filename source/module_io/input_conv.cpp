@@ -319,6 +319,7 @@ void Input_Conv::Convert()
     // iteration (1/3)
     //----------------------------------------------------------
     GlobalV::SCF_THR_TYPE = PARAM.inp.scf_thr_type;
+    GlobalV::onsite_radius = PARAM.inp.onsite_radius;
 
 #ifdef __LCAO
     if (PARAM.inp.dft_plus_u)

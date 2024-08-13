@@ -45,7 +45,10 @@
 #include <ATen/kernels/lapack.h>
 #include "module_base/formatter.h"
 
-namespace ModuleESolver {
+#include "module_hamilt_pw/hamilt_pwdft/onsite_projector.h"
+#include "module_hamilt_lcao/module_deltaspin/spin_constrain.h"
+namespace ModuleESolver
+{
 
 template <typename T, typename Device>
 ESolver_KS_PW<T, Device>::ESolver_KS_PW() {
@@ -508,6 +511,42 @@ void ESolver_KS_PW<T, Device>::before_scf(const int istep) {
                                         this->p_hamilt,
                                         GlobalV::ofs_running);
     }
+
+    if(GlobalV::onsite_radius > 0)
+    {
+        std::cout<<__FILE__<<__LINE__<<std::endl;
+        auto* onsite_p = projectors::OnsiteProjector<double, Device>::get_instance();
+        onsite_p->init(PARAM.inp.orbital_dir,
+            &GlobalC::ucell,
+            *(this->pw_wfc), 
+            this->sf,
+            GlobalV::onsite_radius);
+        std::cout<<__FILE__<<__LINE__<<std::endl;
+    }
+
+    if (PARAM.inp.sc_mag_switch)
+    {
+        std::cout<<__FILE__<<__LINE__<<std::endl;
+        SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>& sc = SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::getScInstance();
+        sc.init_sc(GlobalV::sc_thr,
+                   PARAM.inp.nsc,
+                   PARAM.inp.nsc_min,
+                   PARAM.inp.alpha_trial,
+                   PARAM.inp.sccut,
+                   PARAM.inp.decay_grad_switch,
+                   GlobalC::ucell,
+                   PARAM.inp.sc_file,
+                   GlobalV::NPOL,
+                   nullptr,
+                   GlobalV::NSPIN,
+                   this->kv,
+                   GlobalV::KS_SOLVER,
+                   reinterpret_cast<hsolver::HSolver<std::complex<double>, base_device::DEVICE_CPU> *>(this->phsol),
+                   reinterpret_cast<hamilt::Hamilt<std::complex<double>, base_device::DEVICE_CPU> *>(this->p_hamilt),
+                   this->psi,
+                   this->pelec);
+        std::cout<<__FILE__<<__LINE__<<std::endl;
+    }
 }
 
 template <typename T, typename Device>
@@ -559,6 +598,41 @@ void ESolver_KS_PW<T, Device>::iter_init(const int istep, const int iter) {
     // prepared fox mixing.
     if (GlobalV::MY_STOGROUP == 0) {
         this->pelec->charge->save_rho_before_sum_band();
+    }
+
+    // run the inner lambda loop to contrain atomic moments with the DeltaSpin method
+    if (PARAM.inp.sc_mag_switch)
+    {
+        std::cout<<__FILE__<<__LINE__<<std::endl;
+        SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>& sc = SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::getScInstance();
+        if(!sc.mag_converged() && this->drho>0 && this->drho < PARAM.inp.sc_scf_thr)
+        {
+            // optimize lambda to get target magnetic moments, but the lambda is not near target
+            sc.run_lambda_loop(iter-1);
+            // calculate the near target magnetic density
+            //this->hamilt2density(istep, iter, /*useless value*/0.0);
+            // revert rho to rho_save
+            //this->pelec->charge->revert_rho(0);
+            // update potential from the new charge density and magnetic density
+            //this->update_pot(istep, iter);
+            // recalculate the Hamiltonian of real space
+            //if(GlobalV::VL_IN_H)
+            //{
+            //    this->GK.renew();
+            //    this->p_hamilt->refresh();
+            //}
+            // optimize lambda to get target magnetic moments, and the lambda is near target
+            //sc.run_lambda_loop(iter-1);
+            sc.set_mag_converged(true);
+            // init mixing for the next iteration
+            //this->p_chgmix->init_mixing(); //mixing_restart is equal to sc_scf_thr, skip this line
+        }
+        else if(sc.mag_converged())
+        {
+            // optimize lambda to get target magnetic moments, but the lambda is not near target
+            sc.run_lambda_loop(iter-1);
+        }
+std::cout<<__FILE__<<__LINE__<<std::endl;
     }
 }
 
@@ -656,6 +730,14 @@ void ESolver_KS_PW<T, Device>::iter_finish(const int iter) {
         GlobalC::ppcell.cal_effective_D(veff, this->pw_rhod, GlobalC::ucell);
     }
 
+    if (PARAM.inp.sc_mag_switch)
+    {
+        std::cout<<__FILE__<<__LINE__<<std::endl;
+        SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>& sc = SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::getScInstance();
+        sc.cal_Mi_pw();
+        std::cout<<__FILE__<<__LINE__<<std::endl;
+    }
+
     // 1 means Harris-Foulkes functional
     // 2 means Kohn-Sham functional
     const int energy_type = 2;
@@ -721,6 +803,21 @@ void ESolver_KS_PW<T, Device>::after_scf(const int istep) {
         std::stringstream ssw;
         ssw << GlobalV::global_out_dir << "WAVEFUNC";
         ModuleIO::write_wfc_pw(ssw.str(), this->psi[0], this->kv, this->pw_wfc);
+    }
+
+    // 15) write spin constrian MW?
+    // spin constrain calculations, added by Tianqi Zhao.
+    if (PARAM.inp.sc_mag_switch) {
+        std::cout<<__FILE__<<__LINE__<<std::endl;
+        SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>& sc
+            = SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::getScInstance();
+        sc.cal_Mi_pw();
+        if (GlobalV::MY_RANK == 0)
+        {
+            sc.print_Mi(GlobalV::ofs_running);
+            sc.print_Mag_Force(GlobalV::ofs_running);
+        }
+        std::cout<<__FILE__<<__LINE__<<std::endl;
     }
 
     ModuleIO::output_convergence_after_scf(this->conv_elec,

@@ -112,6 +112,15 @@ void UnitCell::bcast_unitcell() {
     Parallel_Common::bcast_int(lc[1]);
     Parallel_Common::bcast_int(lc[2]);
 
+    if(this->orbital_fn == nullptr)
+    {
+        this->orbital_fn = new std::string[this->ntype];
+    }
+    for (int i = 0; i < ntype; i++)
+    {
+        Parallel_Common::bcast_string(orbital_fn[i]);
+    }
+
     // distribute lattice vectors.
     Parallel_Common::bcast_double(a1.x);
     Parallel_Common::bcast_double(a1.y);

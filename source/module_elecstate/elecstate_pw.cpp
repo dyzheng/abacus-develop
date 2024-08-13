@@ -8,6 +8,8 @@
 #include "module_base/timer.h"
 #include "module_base/module_device/device.h"
 
+#include "module_hamilt_lcao/module_deltaspin/spin_constrain.h"
+
 namespace elecstate {
 
 template <typename T, typename Device>
@@ -520,6 +522,17 @@ void ElecStatePW<T, Device>::addusdens_g(const Real* becsum, T* rhog)
     delmem_complex_op()(this->ctx, qgm);
     delmem_var_op()(this->ctx, ylmk0);
 }
+
+template <>
+double ElecStatePW<std::complex<double>, base_device::DEVICE_CPU>::get_spin_constrain_energy()
+{
+    SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>& sc
+        = SpinConstrain<std::complex<double>>::getScInstance();
+    return sc.cal_escon();
+}
+template <>
+double ElecStatePW<std::complex<float>, base_device::DEVICE_CPU>::get_spin_constrain_energy()
+{}
 
 template class ElecStatePW<std::complex<float>, base_device::DEVICE_CPU>;
 template class ElecStatePW<std::complex<double>, base_device::DEVICE_CPU>;

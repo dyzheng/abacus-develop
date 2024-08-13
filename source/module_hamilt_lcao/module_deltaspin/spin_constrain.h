@@ -47,6 +47,8 @@ public:
 
   void cal_MW(const int& step, bool print = false);
 
+  void cal_Mi_pw();
+
   ModuleBase::matrix cal_MW_k(const std::vector<std::vector<std::complex<double>>>& dm);
 
   void cal_mw_from_lambda(int i_step);

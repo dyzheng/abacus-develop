@@ -8,6 +8,7 @@
 #include "module_base/timer.h"
 #include "module_hamilt_lcao/hamilt_lcaodft/hamilt_lcao.h"
 #include "module_hamilt_lcao/hamilt_lcaodft/operator_lcao/dspin_lcao.h"
+#include "module_hamilt_pw/hamilt_pwdft/onsite_projector.h"
 #include "spin_constrain.h"
 
 template <>
@@ -109,6 +110,60 @@ void SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::cal_MW(const 
     //this->print_Mi(print);
 
     ModuleBase::timer::tick("SpinConstrain", "cal_MW");
+}
+
+template <>
+void SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::cal_Mi_pw()
+{
+    this->zero_Mi();
+    auto* onsite_p = projectors::OnsiteProjector<double, base_device::DEVICE_CPU>::get_instance();
+    // loop over k-points to calculate Mi of \sum_{k,i,l,m}<Psi_{k,i}|alpha_{l,m}><alpha_{l,m}|Psi_{k,i}>
+    const int nbands = this->psi->get_nbands();
+    std::vector<double> charge(this->Mi_.size(), 0.0);
+    for(int ik = 0; ik < this->psi->get_nk(); ik++)
+    {
+        this->psi->fix_k(ik);
+        onsite_p->init_k(GlobalV::NQX, 
+                        GlobalV::DQ, 
+                        ik);
+        onsite_p->overlap_proj_psi(
+                        nbands * this->psi->npol,
+                        this->psi->get_pointer());
+        const std::complex<double>* becp = onsite_p->get_becp();
+        // becp(nbands*npol , nkb)
+        // mag = wg * \sum_{nh}becp * becp
+        int nkb = onsite_p->get_size_becp() / nbands / this->psi->npol;
+        const int nh = nkb / this->Mi_.size();
+        for(int ib = 0;ib<nbands;ib++)
+        {
+            const double weight = this->pelec->wg(ik, ib);
+            int begin_ih = 0;
+            for(int iat = 0; iat < this->Mi_.size(); iat++)
+            {
+                std::complex<double> occ[4] = {ModuleBase::ZERO, ModuleBase::ZERO, ModuleBase::ZERO, ModuleBase::ZERO};
+                for(int ih = 0; ih < nh; ih++)
+                {
+                    const int index = ib*2*nkb + begin_ih + ih;
+                    occ[0] += conj(becp[index]) * becp[index];
+                    occ[1] += conj(becp[index]) * becp[index + nkb];
+                    occ[2] += conj(becp[index + nkb]) * becp[index];
+                    occ[3] += conj(becp[index + nkb]) * becp[index + nkb];
+                }
+                // occ has been reduced and calculate mag
+                this->Mi_[iat].z += weight * (occ[0] - occ[3]).real();
+                this->Mi_[iat].x += weight * (occ[1] + occ[2]).real();
+                this->Mi_[iat].y += weight * (occ[1] - occ[2]).imag();
+                charge[iat] += weight * (occ[0] + occ[3]).real();
+                begin_ih += nh;
+            }
+        }
+    }
+    // print charge
+    for(int i = 0; i < this->Mi_.size(); i++)
+    {
+        //std::cout<<"atom"<<i<<": "<<" charge: "<<charge[i]<<" "<<this->Mi_[i].z<<" "<<this->lambda_[i].z<<std::endl;
+    }
+    
 }
 
 template <>

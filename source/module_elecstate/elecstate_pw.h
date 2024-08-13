@@ -39,6 +39,8 @@ class ElecStatePW : public ElecState
 
     Real* becsum = nullptr;
 
+    double get_spin_constrain_energy() override;
+
   protected:
     ModulePW::PW_Basis* rhopw_smooth = nullptr;
     ModulePW::PW_Basis_K* basis = nullptr;

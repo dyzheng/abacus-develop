@@ -31,7 +31,7 @@ void SpinConstrain<FPTYPE, Device>::init_sc(double sc_thr_in,
     this->atomLabels_ = ucell.get_atomLabels();
     this->set_decay_grad();
     this->set_npol(NPOL);
-    this->set_ParaV(ParaV_in);
+    if(ParaV_in != nullptr) this->set_ParaV(ParaV_in);
     this->set_solver_parameters(kv_in, phsol_in, p_hamilt_in, psi_in, pelec_in, KS_SOLVER_in);
 }
 

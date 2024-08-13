@@ -101,13 +101,16 @@ int UnitCell::read_atom_species(std::ifstream &ifa, std::ofstream &ofs_running)
         &&(GlobalV::psi_initializer)
         &&(GlobalV::init_wfc.substr(0, 3) == "nao")
         )
+        || 1
     )
     {
+        std::cout<<__FILE__<<__LINE__<<GlobalV::onsite_radius<<std::endl;
         if( ModuleBase::GlobalFunc::SCAN_BEGIN(ifa, "NUMERICAL_ORBITAL") )
         {
             for(int i=0; i<ntype; i++)
             {
                 ifa >> orbital_fn[i];
+                std::cout<<__FILE__<<__LINE__<<" orbital_fn["<<i<<"] = "<<orbital_fn[i]<<std::endl;
             }
         }    
         // caoyu add 2021-03-16

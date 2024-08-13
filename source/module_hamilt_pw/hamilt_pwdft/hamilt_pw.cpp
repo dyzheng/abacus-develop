@@ -9,6 +9,7 @@
 #include "operator_pw/ekinetic_pw.h"
 #include "operator_pw/meta_pw.h"
 #include "operator_pw/nonlocal_pw.h"
+#include "operator_pw/onsite_proj_pw.h"
 
 #ifdef USE_PAW
 #include "module_cell/module_paw/paw_cell.h"
@@ -108,6 +109,12 @@ HamiltPW<T, Device>::HamiltPW(elecstate::Potential* pot_in, ModulePW::PW_Basis_K
         {
             this->ops->add(nonlocal);
         }
+    }
+    if(PARAM.inp.sc_mag_switch)
+    {
+        Operator<T, Device>* onsite_proj
+            = new OnsiteProj<OperatorPW<T, Device>>(isk, &GlobalC::ucell);
+        this->ops->add(onsite_proj);
     }
     return;
 }

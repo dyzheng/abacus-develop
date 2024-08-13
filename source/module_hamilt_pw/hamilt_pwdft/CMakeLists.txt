@@ -8,6 +8,7 @@ list(APPEND objects
     operator_pw/meta_pw.cpp
     operator_pw/velocity_pw.cpp
     operator_pw/operator_pw.cpp
+    operator_pw/onsite_proj_pw.cpp
     forces_nl.cpp
     forces_cc.cpp
     forces.cpp
@@ -36,6 +37,7 @@ list(APPEND objects
     elecond.cpp
     fs_nonlocal_tools.cpp
     radial_proj.cpp
+    onsite_projector.cpp
 )
 
 add_library(
