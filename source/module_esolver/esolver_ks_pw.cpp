@@ -514,19 +514,16 @@ void ESolver_KS_PW<T, Device>::before_scf(const int istep) {
 
     if(GlobalV::onsite_radius > 0)
     {
-        std::cout<<__FILE__<<__LINE__<<std::endl;
         auto* onsite_p = projectors::OnsiteProjector<double, Device>::get_instance();
         onsite_p->init(PARAM.inp.orbital_dir,
             &GlobalC::ucell,
             *(this->pw_wfc), 
             this->sf,
             GlobalV::onsite_radius);
-        std::cout<<__FILE__<<__LINE__<<std::endl;
     }
 
     if (PARAM.inp.sc_mag_switch)
     {
-        std::cout<<__FILE__<<__LINE__<<std::endl;
         SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>& sc = SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::getScInstance();
         sc.init_sc(GlobalV::sc_thr,
                    PARAM.inp.nsc,
@@ -545,7 +542,6 @@ void ESolver_KS_PW<T, Device>::before_scf(const int istep) {
                    reinterpret_cast<hamilt::Hamilt<std::complex<double>, base_device::DEVICE_CPU> *>(this->p_hamilt),
                    this->psi,
                    this->pelec);
-        std::cout<<__FILE__<<__LINE__<<std::endl;
     }
 }
 
@@ -603,7 +599,6 @@ void ESolver_KS_PW<T, Device>::iter_init(const int istep, const int iter) {
     // run the inner lambda loop to contrain atomic moments with the DeltaSpin method
     if (PARAM.inp.sc_mag_switch)
     {
-        std::cout<<__FILE__<<__LINE__<<std::endl;
         SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>& sc = SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::getScInstance();
         if(!sc.mag_converged() && this->drho>0 && this->drho < PARAM.inp.sc_scf_thr)
         {
@@ -632,7 +627,6 @@ void ESolver_KS_PW<T, Device>::iter_init(const int istep, const int iter) {
             // optimize lambda to get target magnetic moments, but the lambda is not near target
             sc.run_lambda_loop(iter-1);
         }
-std::cout<<__FILE__<<__LINE__<<std::endl;
     }
 }
 
@@ -732,10 +726,8 @@ void ESolver_KS_PW<T, Device>::iter_finish(const int iter) {
 
     if (PARAM.inp.sc_mag_switch)
     {
-        std::cout<<__FILE__<<__LINE__<<std::endl;
         SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>& sc = SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::getScInstance();
         sc.cal_Mi_pw();
-        std::cout<<__FILE__<<__LINE__<<std::endl;
     }
 
     // 1 means Harris-Foulkes functional
@@ -808,7 +800,6 @@ void ESolver_KS_PW<T, Device>::after_scf(const int istep) {
     // 15) write spin constrian MW?
     // spin constrain calculations, added by Tianqi Zhao.
     if (PARAM.inp.sc_mag_switch) {
-        std::cout<<__FILE__<<__LINE__<<std::endl;
         SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>& sc
             = SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::getScInstance();
         sc.cal_Mi_pw();
@@ -817,7 +808,6 @@ void ESolver_KS_PW<T, Device>::after_scf(const int istep) {
             sc.print_Mi(GlobalV::ofs_running);
             sc.print_Mag_Force(GlobalV::ofs_running);
         }
-        std::cout<<__FILE__<<__LINE__<<std::endl;
     }
 
     ModuleIO::output_convergence_after_scf(this->conv_elec,
