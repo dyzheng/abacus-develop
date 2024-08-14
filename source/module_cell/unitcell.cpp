@@ -63,7 +63,6 @@ UnitCell::UnitCell() {
     atom_mass = nullptr;
     pseudo_fn = new std::string[1];
     pseudo_type = new std::string[1];
-    orbital_fn = new std::string[1];
 
     set_atom_flag = false;
 }
@@ -114,7 +113,7 @@ void UnitCell::bcast_unitcell() {
 
     if(this->orbital_fn == nullptr)
     {
-        this->orbital_fn = new std::string[this->ntype];
+        this->orbital_fn = new std::string[ntype];
     }
     for (int i = 0; i < ntype; i++)
     {
