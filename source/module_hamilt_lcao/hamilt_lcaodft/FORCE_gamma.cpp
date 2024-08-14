@@ -100,15 +100,6 @@ void Force_LCAO<double>::allocate(const Parallel_Orbitals& pv,
                               &GlobalC::GridD,
                               nullptr);
 
-    LCAO_domain::build_Nonlocal_mu_new(pv,
-                                       fsr,
-                                       nullptr,
-                                       cal_deri,
-                                       GlobalC::ucell,
-                                       GlobalC::ORB,
-                                       *(two_center_bundle.overlap_orb_beta),
-                                       &GlobalC::GridD);
-
     // calculate asynchronous S matrix to output for Hefei-NAMD
     if (PARAM.inp.cal_syns)
     {
@@ -214,7 +205,7 @@ void Force_LCAO<double>::ftable(const bool isforce,
 
     this->cal_ftvnl_dphi(dm, pv, ucell, fsr, isforce, isstress, ftvnl_dphi, stvnl_dphi);
 
-    this->cal_fvnl_dbeta(dm,
+    /*this->cal_fvnl_dbeta(dm,
                          pv,
                          ucell,
                          GlobalC::ORB,
@@ -223,7 +214,7 @@ void Force_LCAO<double>::ftable(const bool isforce,
                          isforce,
                          isstress,
                          fvnl_dbeta,
-                         svnl_dbeta);
+                         svnl_dbeta);*/
 
     this->cal_fvl_dphi(isforce, isstress, pelec->pot, gint, fvl_dphi, svl_dphi);
 
