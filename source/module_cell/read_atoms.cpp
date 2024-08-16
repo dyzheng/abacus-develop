@@ -700,7 +700,7 @@ bool UnitCell::read_atom_positions(std::ifstream &ifpos, std::ofstream &ofs_runn
                             {
                                 atoms[it].m_loc_[ia].z = atoms[it].mag[ia] *
                                     cos(atoms[it].angle1[ia]);
-                                if(sin(atoms[it].angle1[ia]) > 1e-10 )
+                                if(std::abs(sin(atoms[it].angle1[ia])) > 1e-10 )
                                 {
                                     atoms[it].m_loc_[ia].x = atoms[it].mag[ia] *
                                         sin(atoms[it].angle1[ia]) * cos(atoms[it].angle2[ia]);
