@@ -148,6 +148,113 @@ void DiagoIterAssist<T, Device>::diagH_subspace(hamilt::Hamilt<T, Device>* pHami
 }
 
 template <typename T, typename Device>
+void DiagoIterAssist<T, Device>::diag_responce(hamilt::Hamilt<T, Device>* pHamilt, // hamiltonian operator carrier
+                                                const psi::Psi<T, Device>& psi,     // [in] wavefunction
+                                                const T* mat_in,           // [out] target matrix to be multiplied
+                                                T* mat_out,
+                                                int mat_col,          // [in] number of columns of target matrix
+                                                Real* en                           // [out] eigenvalues
+)
+{
+    ModuleBase::TITLE("DiagoIterAssist", "diag_responce");
+    ModuleBase::timer::tick("DiagoIterAssist", "diag_responce");
+
+    const int nstart = psi.get_nbands();
+
+    T *hcc = nullptr, *scc = nullptr, *vcc = nullptr;
+    resmem_complex_op()(ctx, hcc, nstart * nstart, "DiagSub::hcc");
+    resmem_complex_op()(ctx, scc, nstart * nstart, "DiagSub::scc");
+    resmem_complex_op()(ctx, vcc, nstart * nstart, "DiagSub::vcc");
+    setmem_complex_op()(ctx, hcc, 0, nstart * nstart);
+    setmem_complex_op()(ctx, scc, 0, nstart * nstart);
+    setmem_complex_op()(ctx, vcc, 0, nstart * nstart);
+
+    const int dmin = psi.get_current_nbas();
+    const int dmax = psi.get_nbasis();
+
+    T* temp = nullptr;
+    resmem_complex_op()(ctx, temp, nstart * dmax, "DiagSub::temp");
+    setmem_complex_op()(ctx, temp, 0, nstart * dmax);
+
+    { // code block to calculate hcc and scc
+        setmem_complex_op()(ctx, temp, 0, nstart * dmax);
+
+        T* hphi = temp;
+        // do hPsi for all bands
+        psi::Range all_bands_range(1, psi.get_current_k(), 0, nstart - 1);
+        hpsi_info hpsi_in(&psi, all_bands_range, hphi);
+        pHamilt->ops->hPsi(hpsi_in);
+
+        gemm_op<T, Device>()(ctx,
+                             'C',
+                             'N',
+                             nstart,
+                             nstart,
+                             dmin,
+                             &one,
+                             psi.get_pointer(),
+                             dmax,
+                             hphi,
+                             dmax,
+                             &zero,
+                             hcc,
+                             nstart);
+
+        T* sphi = temp;
+        // do sPsi for all bands
+        pHamilt->sPsi(psi.get_pointer(), sphi, dmax, dmin, nstart);
+
+        gemm_op<T, Device>()(ctx,
+                             'C',
+                             'N',
+                             nstart,
+                             nstart,
+                             dmin,
+                             &one,
+                             psi.get_pointer(),
+                             dmax,
+                             sphi,
+                             dmax,
+                             &zero,
+                             scc,
+                             nstart);
+    }
+
+    if (GlobalV::NPROC_IN_POOL > 1)
+    {
+        Parallel_Reduce::reduce_pool(hcc, nstart * nstart);
+        Parallel_Reduce::reduce_pool(scc, nstart * nstart);
+    }
+
+    // after generation of H and S matrix, diag them
+    DiagoIterAssist::diagH_LAPACK(nstart, nstart, hcc, scc, nstart, en, vcc);
+
+    { // code block to calculate tar_mat
+        gemm_op<T, Device>()(ctx,
+                             'N',
+                             'N',
+                             mat_col,
+                             nstart,
+                             nstart,
+                             &one,
+                             mat_in, // mat_col * nstart
+                             mat_col,
+                             vcc, // nstart * nstart
+                             nstart,
+                             &zero,
+                             mat_out,
+                             mat_col);
+    }
+
+    delmem_complex_op()(ctx, temp);
+    delmem_complex_op()(ctx, hcc);
+    delmem_complex_op()(ctx, scc);
+    delmem_complex_op()(ctx, vcc);
+
+    ModuleBase::timer::tick("DiagoIterAssist", "diag_responce");
+}
+
+template <typename T, typename Device>
 void DiagoIterAssist<T, Device>::diagH_subspace_init(hamilt::Hamilt<T, Device>* pHamilt,
     const T* psi,
     int psi_nr,

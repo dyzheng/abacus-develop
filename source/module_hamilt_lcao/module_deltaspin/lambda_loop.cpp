@@ -6,6 +6,97 @@
 
 #include "basic_funcs.h"
 
+// lambda = initial_lambda + delta_lambda/(spin2 - spin1) * (target_spin - spin1)
+/*inline void next_lambda(std::vector<ModuleBase::Vector3<double>>& initial_lambda,
+                        std::vector<ModuleBase::Vector3<double>>& delta_lambda,
+                        std::vector<ModuleBase::Vector3<double>>& lambda,
+                        std::vector<ModuleBase::Vector3<double>>& spin1,
+                        std::vector<ModuleBase::Vector3<double>>& spin2,
+                        std::vector<ModuleBase::Vector3<double>>& target_spin)
+{
+    for (int ia = 0; ia < lambda.size(); ia++)
+    {
+        for (int ic = 0; ic < 3; ic++)
+        {
+            lambda[ia][ic] = initial_lambda[ia][ic] + delta_lambda[ia][ic] / (spin2[ia][ic] - spin1[ia][ic]) * (target_spin[ia][ic] - spin1[ia][ic]);
+        }
+    }
+}
+
+template <>
+void SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::run_lambda_loop(int outer_step)
+{
+    // init parameters
+    int nat = this->get_nat();
+    std::vector<ModuleBase::Vector3<double>> initial_lambda(nat, 0.0);
+    std::vector<ModuleBase::Vector3<double>> delta_lambda(nat, 0.0);
+    std::vector<ModuleBase::Vector3<double>> spin1(nat, 0.0);
+    std::vector<ModuleBase::Vector3<double>> spin2(nat, 0.0);
+    std::vector<ModuleBase::Vector3<double>> delta_spin(nat, 0.0);
+    // current lambda is this->lambda_
+    // current spin is this->Mi_
+    // target spin is this->target_mag_
+    // loop to optimize lambda to get target spin
+    int step = -1;
+    do
+    {
+        // set initial lambda
+        where_fill_scalar_else_2d(this->constrain_, 0, 0.0, this->lambda_, initial_lambda);
+        // save current spin to spin1 if step > 0
+        if (step > 0)
+        {
+            spin1 = this->Mi_;
+        }
+        // calculate current spin
+        this->cal_mw_from_lambda(step);
+        // save current spin to spin2
+        spin2 = this->Mi_;
+        // calculate delta_spin = target_spin - spin
+        subtract_2d(this->target_mag_, spin2, delta_spin);
+        // check RMS error and stop if needed
+        // calculate RMS error
+        double sum = 0.0;
+        for (int ia = 0; ia < nat; ia++)
+        {
+            for (int ic = 0; ic < 3; ic++)
+            {
+                sum += std::pow(delta_spin[ia][ic],2);
+            }
+        }
+        double rms_error = std::sqrt(sum/nat);
+        std::cout << "RMS error = " << rms_error <<" in step:" <<step << std::endl;
+        // check RMS error and stop if needed
+        if(rms_error < 1e-5)
+        {
+            std::cout<<"success"<<std::endl;
+            break;
+        }
+        // calculate delta_lambda
+        if(1)//step == 0)
+        {
+            for(int ia = 0; ia < nat; ia++)
+            {
+                for(int ic = 2; ic < 3; ic++)
+                {
+                    delta_lambda[ia][ic] = 0.01;//- delta_spin[ia][ic] / 10.0;
+                    this->lambda_[ia][ic] = initial_lambda[ia][ic] + delta_lambda[ia][ic];
+                    std::cout<<__LINE__<<"lambda["<<ia<<"] = "<<this->lambda_[ia][ic]<<std::endl;
+                }
+            }
+        }
+        else
+        {
+            //calculate next lambda
+            next_lambda(initial_lambda, delta_lambda, this->lambda_, spin1, spin2, this->target_mag_);
+            // calculate delta_lambda = this->lambda - initial_lambda
+            subtract_2d(this->lambda_, initial_lambda, delta_lambda);
+        }
+        step++;
+    } while (step < this->nsc_);
+    
+}*/
+
+
 template <>
 void SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::run_lambda_loop(int outer_step)
 {
@@ -42,10 +133,10 @@ void SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::run_lambda_lo
 
     this->print_header();
     // lambda loop
-    for (int i_step = 0; i_step < this->nsc_; i_step++)
+    for (int i_step = -1; i_step < this->nsc_; i_step++)
     {
         double duration = 0.0;
-        if (i_step == 0)
+        if (i_step == -1)
         {
             this->cal_mw_from_lambda(i_step);
             spin = this->Mi_;
@@ -53,6 +144,7 @@ void SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::run_lambda_lo
             print_2d("initial lambda (eV/uB): ", initial_lambda, this->nspin_, ModuleBase::Ry_to_eV);
             print_2d("initial spin (uB): ", spin, this->nspin_);
             print_2d("target spin (uB): ", this->target_mag_, this->nspin_);
+            i_step++;
         }
         else
         {

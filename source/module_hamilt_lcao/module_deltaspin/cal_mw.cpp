@@ -161,7 +161,7 @@ void SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::cal_Mi_pw()
     // print charge
     for(int i = 0; i < this->Mi_.size(); i++)
     {
-        std::cout<<"atom"<<i<<": "<<" charge: "<<charge[i]<<" "<<this->Mi_[i].z<<" "<<this->lambda_[i].z<<std::endl;
+        std::cout<<"atom"<<i<<": "<<" charge: "<<charge[i]<<" mag: "<<this->Mi_[i].x<<" "<<this->Mi_[i].y<<" "<<this->Mi_[i].z<<std::endl;
     }
     
 }

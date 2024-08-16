@@ -34,6 +34,13 @@ class DiagoIterAssist
                                psi::Psi<T, Device>& evc,
                                Real* en,
                                int n_band = 0);
+    
+    static void diag_responce(hamilt::Hamilt<T, Device>* pHamilt,
+                              const psi::Psi<T, Device>& psi, 
+                              const T* mat_in, 
+                              T* mat_out, 
+                              int mat_col, 
+                              Real* en);
 
     /// @brief use LAPACK to diagonalize the Hamiltonian matrix
     /// @param pHamilt interface to hamiltonian

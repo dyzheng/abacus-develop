@@ -133,8 +133,8 @@ void OnsiteProj<OperatorPW<T, Device>>::add_onsite_proj(T *hpsi_in, const T *psi
                         const std::complex<double> becp1 = becp[becpind];
                         const std::complex<double> becp2 = becp[becpind + tnp];
                         ps[psind] += coefficients0 * becp1
-                                        + coefficients1 * becp2;
-                        ps[psind + 1] += coefficients2 * becp1
+                                        + coefficients2 * becp2;
+                        ps[psind + 1] += coefficients1 * becp1
                                             + coefficients3 * becp2;
                     } // end ip
                 } // end ib
