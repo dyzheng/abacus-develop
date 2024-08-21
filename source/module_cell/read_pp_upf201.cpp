@@ -318,9 +318,11 @@ void Pseudopot_upf::read_pseudo_upf201_header(std::ifstream& ifs, Atom_pseudo& p
         else if (name[ip] == "mesh_size")
         {
             pp.mesh = atoi(val[ip].c_str());
+            this->mesh_changed = false;
             if (pp.mesh % 2 == 0)
             {
                 pp.mesh -= 1;
+                this->mesh_changed = true;
             }
         }
         else if (name[ip] == "number_of_wfc")
@@ -363,9 +365,11 @@ void Pseudopot_upf::read_pseudo_upf201_mesh(std::ifstream& ifs, Atom_pseudo& pp)
             else if (name[ip] == "mesh")
             {
                 pp.mesh = atoi(val[ip].c_str());
+                this->mesh_changed = false;
                 if (pp.mesh % 2 == 0)
                 {
                     pp.mesh -= 1;
+                    this->mesh_changed = true;
                 }
             }
             else if (name[ip] == "xmin")

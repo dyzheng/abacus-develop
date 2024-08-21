@@ -74,6 +74,8 @@ public:
     void set_upf_q(Atom_pseudo& pp);                    // liuyu add 2023-09-21
 
   private:
+    bool mesh_changed = false; // if the mesh is even, it will be changed to odd
+
     int set_pseudo_type(const std::string& fn, std::string& type);
     std::string& trim(std::string& in_str);
     std::string trimend(std::string& in_str);
