@@ -123,9 +123,7 @@ void SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::cal_Mi_pw()
     for(int ik = 0; ik < this->psi->get_nk(); ik++)
     {
         this->psi->fix_k(ik);
-        onsite_p->init_k(GlobalV::NQX, 
-                        GlobalV::DQ, 
-                        ik);
+        onsite_p->init_k(ik);
         onsite_p->overlap_proj_psi(
                         nbands * this->psi->npol,
                         this->psi->get_pointer());
