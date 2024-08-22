@@ -481,4 +481,79 @@ void projectors::OnsiteProjector<T, Device>::read_abacus_orb(std::ifstream& ifs,
     }
 } // end of read_abacus_orb
 
+template<typename T, typename Device>
+void projectors::OnsiteProjector<T, Device>::cal_occupations(const psi::Psi<std::complex<double>>* psi_in, const ModuleBase::matrix& wg_in)
+{
+    ModuleBase::timer::tick("OnsiteProj", "cal_occupation");
+    this->init_k(GlobalV::NQX, GlobalV::DQ, 0);
+    std::vector<std::complex<double>> occs(this->tot_nproj * 4, 0.0);
+
+    // loop over k-points to calculate Mi of \sum_{k,i,l,m}<Psi_{k,i}|alpha_{l,m}><alpha_{l,m}|Psi_{k,i}>
+    const int nbands = psi_in->get_nbands();
+    for(int ik = 0; ik < psi_in->get_nk(); ik++)
+    {
+        psi_in->fix_k(ik);
+        if(ik!=0) this->init_k(GlobalV::NQX, GlobalV::DQ, ik);
+        this->overlap_proj_psi(
+                        nbands * psi_in->npol,
+                        psi_in->get_pointer());
+        const std::complex<double>* becp = this->get_becp();
+        // becp(nbands*npol , nkb)
+        // mag = wg * \sum_{nh}becp * becp
+        int nkb = this->get_size_becp() / nbands / psi_in->npol;
+        for(int ib = 0;ib<nbands;ib++)
+        {
+            const double weight = wg_in(ik, ib);
+            int begin_ih = 0;
+            for(int iat = 0; iat < this->iat_nh.size(); iat++)
+            {
+                const int nh = this->get_nh(iat);
+                for(int ih = 0; ih < nh; ih++)
+                {
+                    const int occ_index = (begin_ih + ih) * 4;
+                    const int index = ib*2*nkb + begin_ih + ih;
+                    occs[occ_index] += weight * conj(becp[index]) * becp[index];
+                    occs[occ_index + 1] += weight * conj(becp[index]) * becp[index + nkb];
+                    occs[occ_index + 2] += weight * conj(becp[index + nkb]) * becp[index];
+                    occs[occ_index + 3] += weight * conj(becp[index + nkb]) * becp[index + nkb];
+                }
+                begin_ih += nh;
+            }
+        }
+    }
+    // reduce mag from all k-pools
+    Parallel_Reduce::reduce_double_allpool(GlobalV::KPAR, GlobalV::NPROC_IN_POOL, (double*)(&(occs[0])), occs.size()*2);
+    // occ has been reduced and calculate mag
+    int occ_index = 0;
+    for(int iat=0;iat<this->ucell->nat;iat++)
+    {
+        std::vector<double> sum(4, 0.0);
+        GlobalV::ofs_running<<"Charge and Mag of Atom "<<iat<<std::endl;
+        int current_l = 1;
+        std::vector<double> charge_mag(4, 0.0);
+        for(int ih=0;ih<this->iat_nh[iat];ih++)
+        {
+            charge_mag[3] += (occs[occ_index] - occs[occ_index + 3]).real();
+            charge_mag[1] += (occs[occ_index + 1] + occs[occ_index + 2]).real();
+            charge_mag[2] += (occs[occ_index + 1] - occs[occ_index + 2]).imag();
+            charge_mag[0] += (occs[occ_index] + occs[occ_index + 3]).real();
+            if(ih == current_l * current_l - 1)
+            {
+                sum[0] += charge_mag[0];
+                sum[1] += charge_mag[1];
+                sum[2] += charge_mag[2];
+                sum[3] += charge_mag[3];
+                GlobalV::ofs_running << " Orbital "<<current_l << " Charge: "<< charge_mag[0] << " Mag: " << charge_mag[1] << " " << charge_mag[2] << " " << charge_mag[3] << std::endl;
+                current_l++;
+                charge_mag.assign(4, 0.0);
+            }
+            occ_index += 4;
+        }
+        GlobalV::ofs_running << "Sum of atom " <<iat<<" is: "<< sum[0] << " " << sum[1] << " " << sum[2] << " " << sum[3] << std::endl;
+    }
+    
+    // print charge
+    ModuleBase::timer::tick("OnsiteProj", "cal_occupation");
+}
+
 template class projectors::OnsiteProjector<double, base_device::DEVICE_CPU>;

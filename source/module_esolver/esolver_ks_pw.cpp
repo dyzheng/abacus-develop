@@ -797,8 +797,8 @@ void ESolver_KS_PW<T, Device>::after_scf(const int istep) {
         ModuleIO::write_wfc_pw(ssw.str(), this->psi[0], this->kv, this->pw_wfc);
     }
 
-    // 15) write spin constrian MW?
-    // spin constrain calculations, added by Tianqi Zhao.
+    // 15) write spin constrian results
+    // spin constrain calculations, write atomic magnetization and magnetic force.
     if (PARAM.inp.sc_mag_switch) {
         SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>& sc
             = SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::getScInstance();
@@ -808,6 +808,13 @@ void ESolver_KS_PW<T, Device>::after_scf(const int istep) {
             sc.print_Mi(GlobalV::ofs_running);
             sc.print_Mag_Force(GlobalV::ofs_running);
         }
+    }
+
+    // 16) write onsite occupations for charge and magnetizations
+    if(GlobalV::onsite_radius > 0)
+    {
+        auto* onsite_p = projectors::OnsiteProjector<double, Device>::get_instance();
+        onsite_p->cal_occupations(this->psi, this->pelec->wg);
     }
 
     ModuleIO::output_convergence_after_scf(this->conv_elec,

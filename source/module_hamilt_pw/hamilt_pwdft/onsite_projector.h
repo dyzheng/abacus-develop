@@ -50,6 +50,9 @@ namespace projectors
                     const ModulePW::PW_Basis_K& pw_basis,             // level1: the plane wave basis, need ik
                     Structure_Factor& sf,                              // level2: the structure factor calculator
                     const double onsite_radius);
+        
+        /// @brief calculate and print the occupations of all lm orbitals
+        void cal_occupations(const psi::Psi<std::complex<double>>* psi, const ModuleBase::matrix& wg_in);
 
         int get_size_becp() const { return size_becp; }
         std::complex<double>* get_becp() const { return becp; }
