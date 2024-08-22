@@ -4,6 +4,7 @@
 #include "module_hsolver/kernels/math_kernel_op.h"
 #include "module_hamilt_pw/hamilt_pwdft/structure_factor.h"
 #include "module_basis/module_pw/pw_basis_k.h"
+#include "module_hamilt_pw/hamilt_pwdft/radial_proj.h"
 #include "module_psi/psi.h"
 #include <string>
 #include <vector>
@@ -25,11 +26,7 @@ namespace projectors
         /**
          * @brief calculate the onsite projectors in reciprocal space(|G+K>) for all atoms
          */
-        void init_k(
-                    const int nq,                                     // level0: GlobalV::NQX
-                    const double& dq,                                 // level0: GlobalV::DQ
-                    const int ik                                     // level1: the k-point index
-                    );
+        void init_k(const int ik);
         
         void overlap_proj_psi(
                     const int npm,
@@ -49,7 +46,9 @@ namespace projectors
                     const UnitCell* ucell_in,
                     const ModulePW::PW_Basis_K& pw_basis,             // level1: the plane wave basis, need ik
                     Structure_Factor& sf,                              // level2: the structure factor calculator
-                    const double onsite_radius);
+                    const double onsite_radius,
+                    const int nq,
+                    const double dq);
         
         /// @brief calculate and print the occupations of all lm orbitals
         void cal_occupations(const psi::Psi<std::complex<double>>* psi, const ModuleBase::matrix& wg_in);
@@ -91,6 +90,13 @@ namespace projectors
         const ModulePW::PW_Basis_K* pw_basis_ = nullptr;             // level1: the plane wave basis, need ik
         Structure_Factor* sf_ = nullptr;                             // level2: the structure factor calculator
         int ntype = 0;
+
+        RadialProjection::RadialProjector rp_;
+        std::vector<int> irow2it_;
+        std::vector<int> irow2iproj_;
+        std::vector<int> irow2m_;
+        std::map<std::tuple<int, int, int, int>, int> itiaiprojm2irow_;
+
 
         bool initialed = false;
 

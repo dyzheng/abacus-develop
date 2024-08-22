@@ -516,10 +516,12 @@ void ESolver_KS_PW<T, Device>::before_scf(const int istep) {
     {
         auto* onsite_p = projectors::OnsiteProjector<double, Device>::get_instance();
         onsite_p->init(PARAM.inp.orbital_dir,
-            &GlobalC::ucell,
-            *(this->pw_wfc), 
-            this->sf,
-            GlobalV::onsite_radius);
+                       &GlobalC::ucell,
+                       *(this->pw_wfc), 
+                       this->sf,
+                       GlobalV::onsite_radius,
+                       GlobalV::NQX,
+                       GlobalV::DQ);
     }
 
     if (PARAM.inp.sc_mag_switch)

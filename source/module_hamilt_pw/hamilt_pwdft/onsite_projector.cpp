@@ -6,7 +6,6 @@
 #include <tuple>
 #include "module_hamilt_pw/hamilt_pwdft/onsite_projector.h"
 
-#include "module_hamilt_pw/hamilt_pwdft/radial_proj.h"
 #include "module_basis/module_nao/projgen.h"
 #include "module_base/blas_connector.h"
 #include "module_hsolver/kernels/math_kernel_op.h"
@@ -93,12 +92,13 @@ projectors::OnsiteProjector<T, Device>* projectors::OnsiteProjector<T, Device>::
 }
 
 template<typename T, typename Device>
-void projectors::OnsiteProjector<T, Device>::init(
-                    const std::string& orbital_dir,
-                    const UnitCell* ucell_in,
-                    const ModulePW::PW_Basis_K& pw_basis,             // level1: the plane wave basis, need ik
-                    Structure_Factor& sf,                              // level2: the structure factor calculator
-                    const double onsite_radius)
+void projectors::OnsiteProjector<T, Device>::init(const std::string& orbital_dir,
+                                                  const UnitCell* ucell_in,
+                                                  const ModulePW::PW_Basis_K& pw_basis,             // level1: the plane wave basis, need ik
+                                                  Structure_Factor& sf,                              // level2: the structure factor calculator
+                                                  const double onsite_radius,
+                                                  const int nq,
+                                                  const double dq)
 {
     if(!this->initialed)
     {
@@ -148,6 +148,17 @@ void projectors::OnsiteProjector<T, Device>::init(
                         lproj, 
                         iproj, 
                         onsite_r);
+
+        ModuleBase::timer::tick("OnsiteProj", "init_k_stage0");
+        // STAGE 0 - making the interpolation table
+        // CACHE 0 - if cache the irow2it, irow2iproj, irow2m, itiaiprojm2irow, <G+k|p> can be reused for 
+        //           SCF, RELAX and CELL-RELAX calculation
+        // [in] rgrid, projs, lproj, it2ia, it2iproj, nq, dq
+        RadialProjection::RadialProjector::_build_backward_map(it2iproj, lproj, irow2it_, irow2iproj_, irow2m_);
+        RadialProjection::RadialProjector::_build_forward_map(it2ia, it2iproj, lproj, itiaiprojm2irow_);
+        rp_._build_sbt_tab(rgrid, projs, lproj, nq, dq);
+        ModuleBase::timer::tick("OnsiteProj", "init_k_stage0");
+
         this->initialed = true;
     }
 }
@@ -249,26 +260,10 @@ void projectors::OnsiteProjector<T, Device>::init_proj(const std::string& orbita
 }
 
 template<typename T, typename Device>
-void projectors::OnsiteProjector<T, Device>::init_k( 
-                    const int nq,                                     // level0: GlobalV::NQX
-                    const double& dq,                                 // level0: GlobalV::DQ
-                    const int ik                                     // level1: the k-point index
-                    )
+void projectors::OnsiteProjector<T, Device>::init_k(const int ik)
 {
     ModuleBase::timer::tick("OnsiteProj", "init_k");
-    // STAGE 0 - making the interpolation table
-    // CACHE 0 - if cache the irow2it, irow2iproj, irow2m, itiaiprojm2irow, <G+k|p> can be reused for 
-    //           SCF, RELAX and CELL-RELAX calculation
-    // [in] rgrid, projs, lproj, it2ia, it2iproj, nq, dq
-    RadialProjection::RadialProjector rp;
-    std::vector<int> irow2it;
-    std::vector<int> irow2iproj;
-    std::vector<int> irow2m;
-    std::map<std::tuple<int, int, int, int>, int> itiaiprojm2irow;
-    RadialProjection::RadialProjector::_build_backward_map(it2iproj, lproj, irow2it, irow2iproj, irow2m);
-    RadialProjection::RadialProjector::_build_forward_map(it2ia, it2iproj, lproj, itiaiprojm2irow);
-    rp._build_sbt_tab(rgrid, projs, lproj, nq, dq);
-
+    ModuleBase::timer::tick("OnsiteProj", "init_k_stage1");
     // STAGE 1 - calculate the <G+k|p> for the given G+k vector
     // CACHE 1 - if cache the tab_, <G+k|p> can be reused for SCF and RELAX calculation
     // [in] pw_basis, ik, omega, tpiba, irow2it
@@ -280,12 +275,14 @@ void projectors::OnsiteProjector<T, Device>::init_k(
     {
         q[ig] = pw_basis_->getgpluskcar(ik, ig); // get the G+k vector, G+k will change during CELL-RELAX
     }
-    const int nrow = irow2it.size();
+    const int nrow = irow2it_.size();
     std::vector<std::complex<double>> tab_(nrow*this->npw_);
-    rp.sbtft(q, tab_, 'r', this->ucell->omega, this->ucell->tpiba); // l: <p|G+k>, r: <G+k|p>
+    rp_.sbtft(q, tab_, 'r', this->ucell->omega, this->ucell->tpiba); // l: <p|G+k>, r: <G+k|p>
     q.clear();
     q.shrink_to_fit(); // release memory
+    ModuleBase::timer::tick("OnsiteProj", "init_k_stage1");
 
+    ModuleBase::timer::tick("OnsiteProj", "init_k_stage2");
     // STAGE 2 - make_atomic: multiply e^iqtau and extend the <G+k|p> to <G+k|pi> for each atom
     // CACHE 2 - if cache the tab_atomic_, <G+k|p> can be reused for SCF calculation
     // [in] it2ia, itiaiprojm2irow, tab_, npw, sf
@@ -296,20 +293,20 @@ void projectors::OnsiteProjector<T, Device>::init_k(
     }
     if(this->tab_atomic_ == nullptr)
     {
-        this->tot_nproj = itiaiprojm2irow.size();
+        this->tot_nproj = itiaiprojm2irow_.size();
         this->tab_atomic_ = new std::complex<double>[this->tot_nproj * this->npwx_];
         this->size_vproj = this->tot_nproj * this->npwx_;
     }
     for(int irow = 0; irow < nrow; ++irow)
     {
-        const int it = irow2it[irow];
-        const int iproj = irow2iproj[irow];
-        const int m = irow2m[irow];
+        const int it = irow2it_[irow];
+        const int iproj = irow2iproj_[irow];
+        const int m = irow2m_[irow];
         for(int ia = 0; ia < na[it]; ++ia)
         {
             // why Structure_Factor needs the FULL pw_basis???
             std::complex<double>* sk = this->sf_->get_sk(ik, it, ia, pw_basis_);
-            const int irow_out = itiaiprojm2irow.at(std::make_tuple(it, ia, iproj, m));
+            const int irow_out = itiaiprojm2irow_.at(std::make_tuple(it, ia, iproj, m));
             for(int ig = 0; ig < this->npw_; ++ig)
             {
                 this->tab_atomic_[irow_out*this->npw_ + ig] = sk[ig]*tab_[irow*this->npw_ + ig];
@@ -319,6 +316,8 @@ void projectors::OnsiteProjector<T, Device>::init_k(
     }
     tab_.clear();
     tab_.shrink_to_fit(); // release memory
+    ModuleBase::timer::tick("OnsiteProj", "init_k_stage2");
+
     ModuleBase::timer::tick("OnsiteProj", "init_k");
 }
 
