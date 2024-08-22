@@ -484,7 +484,7 @@ template<typename T, typename Device>
 void projectors::OnsiteProjector<T, Device>::cal_occupations(const psi::Psi<std::complex<double>>* psi_in, const ModuleBase::matrix& wg_in)
 {
     ModuleBase::timer::tick("OnsiteProj", "cal_occupation");
-    this->init_k(GlobalV::NQX, GlobalV::DQ, 0);
+    this->init_k(0);
     std::vector<std::complex<double>> occs(this->tot_nproj * 4, 0.0);
 
     // loop over k-points to calculate Mi of \sum_{k,i,l,m}<Psi_{k,i}|alpha_{l,m}><alpha_{l,m}|Psi_{k,i}>
@@ -492,7 +492,7 @@ void projectors::OnsiteProjector<T, Device>::cal_occupations(const psi::Psi<std:
     for(int ik = 0; ik < psi_in->get_nk(); ik++)
     {
         psi_in->fix_k(ik);
-        if(ik!=0) this->init_k(GlobalV::NQX, GlobalV::DQ, ik);
+        if(ik!=0) this->init_k(ik);
         this->overlap_proj_psi(
                         nbands * psi_in->npol,
                         psi_in->get_pointer());
