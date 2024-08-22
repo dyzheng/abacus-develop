@@ -76,13 +76,9 @@ void OnsiteProj<OperatorPW<T, Device>>::add_onsite_proj(T *hpsi_in, const T *psi
     setmem_complex_op()(this->ctx, this->ps, 0, tnp * m);
 
     int sum = 0;
-    int iat = 0;
     if (npol == 1)
     {
         const int current_spin = this->isk[this->ik];
-        for (int it = 0; it < this->ucell->ntype; it++)
-        {
-            const int nproj = this->ucell->atoms[it].ncpp.nh;
             // for (int ia = 0; ia < this->ucell->atoms[it].na; ia++)
             // {
             //     // each atom has nproj, means this is with structure factor;
@@ -102,46 +98,40 @@ void OnsiteProj<OperatorPW<T, Device>>::add_onsite_proj(T *hpsi_in, const T *psi
             //     sum += nproj;
             //     ++iat;
             // } // end na
-        } // end nt
     }
     else
     {
-        for (int it = 0; it < this->ucell->ntype; it++)
+        for (int iat = 0; iat < this->ucell->nat; iat++)
         {
-            const int nproj = this->tnp / this->ucell->atoms[it].na;
-            for (int ia = 0; ia < this->ucell->atoms[it].na; ia++)
+            const int nproj = onsite_p->get_nh(iat);
+            if(constrain[iat].x == 0 && constrain[iat].y == 0 && constrain[iat].z == 0)
             {
-                if(constrain[iat].x == 0 && constrain[iat].y == 0 && constrain[iat].z == 0)
-                {
-                    sum += nproj;
-                    ++iat;
-                    continue;
-                }
-                const std::complex<double> coefficients0(lambda[iat][2], 0.0);
-                const std::complex<double> coefficients1(lambda[iat][0] , lambda[iat][1]);
-                const std::complex<double> coefficients2(lambda[iat][0] , -1 * lambda[iat][1]);
-                const std::complex<double> coefficients3(-1 * lambda[iat][2], 0.0);
-                // each atom has nproj, means this is with structure factor;
-                // each projector (each atom) must multiply coefficient
-                // with all the other projectors.
-                for (int ib = 0; ib < m; ib+=2)
-                {
-                    for (int ip = 0; ip < nproj; ip++)
-                    {
-                        const int psind = (sum + ip) * m + ib;
-                        const int becpind = ib * tnp + sum + ip;
-                        const std::complex<double> becp1 = becp[becpind];
-                        const std::complex<double> becp2 = becp[becpind + tnp];
-                        ps[psind] += coefficients0 * becp1
-                                        + coefficients2 * becp2;
-                        ps[psind + 1] += coefficients1 * becp1
-                                            + coefficients3 * becp2;
-                    } // end ip
-                } // end ib
                 sum += nproj;
-                ++iat;
-            } // end na
-        } // end nt
+                continue;
+            }
+            const std::complex<double> coefficients0(lambda[iat][2], 0.0);
+            const std::complex<double> coefficients1(lambda[iat][0] , lambda[iat][1]);
+            const std::complex<double> coefficients2(lambda[iat][0] , -1 * lambda[iat][1]);
+            const std::complex<double> coefficients3(-1 * lambda[iat][2], 0.0);
+            // each atom has nproj, means this is with structure factor;
+            // each projector (each atom) must multiply coefficient
+            // with all the other projectors.
+            for (int ib = 0; ib < m; ib+=2)
+            {
+                for (int ip = 0; ip < nproj; ip++)
+                {
+                    const int psind = (sum + ip) * m + ib;
+                    const int becpind = ib * tnp + sum + ip;
+                    const std::complex<double> becp1 = becp[becpind];
+                    const std::complex<double> becp2 = becp[becpind + tnp];
+                    ps[psind] += coefficients0 * becp1
+                                    + coefficients2 * becp2;
+                    ps[psind + 1] += coefficients1 * becp1
+                                        + coefficients3 * becp2;
+                } // end ip
+            } // end ib
+            sum += nproj;
+        } // end iat
     }
     // qianrui optimize 2021-3-31
     char transa = 'N';

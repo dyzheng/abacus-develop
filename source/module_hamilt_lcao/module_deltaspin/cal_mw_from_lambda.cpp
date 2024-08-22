@@ -80,13 +80,13 @@ void SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::cal_mw_from_l
                 const std::complex<double>* becp = &becp_tmp[ik * nbands * nkb * npol];
                 // becp(nbands*npol , nkb)
                 // mag = wg * \sum_{nh}becp * becp
-                const int nh = nkb / this->Mi_.size();
                 for(int ib = 0;ib<nbands;ib++)
                 {
                     const double weight = this->pelec->wg(ik, ib);
                     int begin_ih = 0;
                     for(int iat = 0; iat < this->Mi_.size(); iat++)
                     {
+                        const int nh = onsite_p->get_nh(iat);
                         std::complex<double> occ[4] = {ModuleBase::ZERO, ModuleBase::ZERO, ModuleBase::ZERO, ModuleBase::ZERO};
                         for(int ih = 0; ih < nh; ih++)
                         {
@@ -104,10 +104,10 @@ void SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::cal_mw_from_l
                     }
                 }
             }
+            Parallel_Reduce::reduce_double_allpool(GlobalV::KPAR, GlobalV::NPROC_IN_POOL, &(this->Mi_[0][0]), 3 * this->Mi_.size());
             //for(int i = 0; i < this->Mi_.size(); i++)
             //{
             //    std::cout<<"atom"<<i<<": "<<" mag: "<<this->Mi_[i].x<<" "<<this->Mi_[i].y<<" "<<this->Mi_[i].z<<" "<<this->lambda_[i].x<<" "<<this->lambda_[i].y<<" "<<this->lambda_[i].z<<std::endl;
-            //    GlobalV::ofs_running<<std::setprecision(12)<<"atom"<<i<<": "<<" mag: "<<this->Mi_[i].x<<" "<<this->Mi_[i].y<<" "<<this->Mi_[i].z<<" "<<this->lambda_[i].x<<" "<<this->lambda_[i].y<<" "<<this->lambda_[i].z<<std::endl;
             //}
         }
     }

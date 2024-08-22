@@ -57,6 +57,7 @@ namespace projectors
         int get_tot_nproj() const { return tot_nproj; }
         int get_npw() const { return npw_; }
         int get_npwx() const { return npwx_; }
+        int get_nh(int iat) const { return iat_nh[iat]; }
 
         private:
         OnsiteProjector(){};
@@ -80,6 +81,7 @@ namespace projectors
         std::vector<std::vector<double>> projs;
         std::vector<std::vector<int>> it2iproj;
         std::vector<int> lproj;
+        std::vector<int> iat_nh;
 
         const UnitCell* ucell = nullptr;
 

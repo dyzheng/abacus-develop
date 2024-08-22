@@ -40,7 +40,6 @@ Nonlocal<OperatorPW<T, Device>>::~Nonlocal() {
 template<typename T, typename Device>
 void Nonlocal<OperatorPW<T, Device>>::init(const int ik_in)
 {
-    ModuleBase::timer::tick("Nonlocal", "getvnl");
     this->ik = ik_in;
     // Calculate nonlocal pseudopotential vkb
 	if(this->ppcell->nkb > 0) //xiaohui add 2013-09-02. Attention...
@@ -52,8 +51,6 @@ void Nonlocal<OperatorPW<T, Device>>::init(const int ik_in)
     {
         this->next_op->init(ik_in);
     }
-
-    ModuleBase::timer::tick("Nonlocal", "getvnl");
 }
 
 //--------------------------------------------------------------------------

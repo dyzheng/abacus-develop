@@ -15,6 +15,7 @@
 #include "module_base/parallel_common.h"
 #endif
 #include "module_parameter/parameter.h"
+#include "module_base/timer.h"
 
 /**
  * ===============================================================================================
@@ -108,20 +109,37 @@ void projectors::OnsiteProjector<T, Device>::init(
         this->sf_ = &sf;
 
         std::vector<std::string> orb_files(ntype);
+        std::vector<int> nproj(ntype);
+        int sum_nproj = 0;
         for(int it=0;it<ntype;++it)
         {
             orb_files[it] = ucell->orbital_fn[it];
+            nproj[it] = ucell->atoms[it].nwl;
+            sum_nproj += nproj[it];
         }
-        std::vector<int> nproj = {3};
-        this->lproj = std::vector<int>{0, 1, 2};
-        std::vector<int> iproj = {0, 0, 0};
-        std::vector<double> onsite_r(3, onsite_radius);
+        this->lproj.resize(sum_nproj);
+        int index = 0;
+        for(int it=0;it<ntype;++it)
+        {
+            for(int il=0;il<nproj[it];++il)
+            {
+                this->lproj[index++] = il;
+            }
+        }
+        std::vector<int> iproj(sum_nproj, 0);
+        std::vector<double> onsite_r(sum_nproj, onsite_radius);
 
         this->it2ia.resize(this->ntype);
+        this->iat_nh.resize(this->ucell->nat);
+        int iat = 0;
         for(int it = 0; it < it2ia.size(); it++)
         {
             it2ia[it].resize(this->ucell->atoms[it].na);
             std::iota(it2ia[it].begin(), it2ia[it].end(), 0);
+            for(int ia = 0; ia < it2ia[it].size(); ia++)
+            {
+                iat_nh[iat++] = nproj[it] * nproj[it];
+            }
         }
 
         this->init_proj(PARAM.inp.orbital_dir, 
@@ -237,6 +255,7 @@ void projectors::OnsiteProjector<T, Device>::init_k(
                     const int ik                                     // level1: the k-point index
                     )
 {
+    ModuleBase::timer::tick("OnsiteProj", "init_k");
     // STAGE 0 - making the interpolation table
     // CACHE 0 - if cache the irow2it, irow2iproj, irow2m, itiaiprojm2irow, <G+k|p> can be reused for 
     //           SCF, RELAX and CELL-RELAX calculation
@@ -300,6 +319,7 @@ void projectors::OnsiteProjector<T, Device>::init_k(
     }
     tab_.clear();
     tab_.shrink_to_fit(); // release memory
+    ModuleBase::timer::tick("OnsiteProj", "init_k");
 }
 
 template<typename T, typename Device>
@@ -308,7 +328,7 @@ void projectors::OnsiteProjector<T, Device>::overlap_proj_psi(
                     const std::complex<double>* ppsi
                     )
 {
-
+    ModuleBase::timer::tick("OnsiteProj", "overlap");
     // STAGE 3 - cal_becp
     // CACHE 3 - it is no use to cache becp, it will change in each SCF iteration
     // [in] psi, tab_atomic_, npw, becp, ik
@@ -343,6 +363,7 @@ void projectors::OnsiteProjector<T, Device>::overlap_proj_psi(
 #ifdef __MPI
     Parallel_Reduce::reduce_pool(becp, size_becp);
 #endif
+    ModuleBase::timer::tick("OnsiteProj", "overlap");
 }
 
 template<typename T, typename Device>
