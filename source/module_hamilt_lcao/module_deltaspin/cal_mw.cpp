@@ -159,11 +159,6 @@ void SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::cal_Mi_pw()
     // reduce mag from all k-pools
     Parallel_Reduce::reduce_double_allpool(GlobalV::KPAR, GlobalV::NPROC_IN_POOL, &(this->Mi_[0][0]), 3 * this->Mi_.size());
     Parallel_Reduce::reduce_double_allpool(GlobalV::KPAR, GlobalV::NPROC_IN_POOL, &(charge[0]), charge.size());
-    // print charge
-    for(int i = 0; i < this->Mi_.size(); i++)
-    {
-        std::cout<<"atom"<<i<<": "<<" charge: "<<charge[i]<<" mag: "<<this->Mi_[i].x<<" "<<this->Mi_[i].y<<" "<<this->Mi_[i].z<<std::endl;
-    }
     
 }
 
