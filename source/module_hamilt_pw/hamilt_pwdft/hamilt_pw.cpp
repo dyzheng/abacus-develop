@@ -110,10 +110,10 @@ HamiltPW<T, Device>::HamiltPW(elecstate::Potential* pot_in, ModulePW::PW_Basis_K
             this->ops->add(nonlocal);
         }
     }
-    if(PARAM.inp.sc_mag_switch)
+    if(PARAM.inp.sc_mag_switch || PARAM.inp.dft_plus_u)
     {
         Operator<T, Device>* onsite_proj
-            = new OnsiteProj<OperatorPW<T, Device>>(isk, &GlobalC::ucell);
+            = new OnsiteProj<OperatorPW<T, Device>>(isk, &GlobalC::ucell, PARAM.inp.sc_mag_switch, (PARAM.inp.dft_plus_u>0));
         this->ops->add(onsite_proj);
     }
     return;

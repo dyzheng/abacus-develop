@@ -35,8 +35,7 @@ DFTU::~DFTU()
 }
 
 void DFTU::init(UnitCell& cell, // unitcell class
-                const Parallel_Orbitals* pv,
-                const int& nks)
+                const Parallel_Orbitals* pv)
 {
     ModuleBase::TITLE("DFTU", "init");
 
@@ -57,6 +56,8 @@ void DFTU::init(UnitCell& cell, // unitcell class
 
     this->locale.resize(cell.nat);
     this->locale_save.resize(cell.nat);
+    // only for PW base
+    this->eff_pot_pw.resize(cell.nat);
 
     this->iatlnmipol2iwt.resize(cell.nat);
 
@@ -64,6 +65,10 @@ void DFTU::init(UnitCell& cell, // unitcell class
     // it:index of type of atom
     for (int it = 0; it < cell.ntype; ++it)
     {
+        if(this->orbital_corr[it] == -1)
+        {
+            continue;
+        }
         for (int ia = 0; ia < cell.atoms[it].na; ia++)
         {
             // ia:index of atoms of this type
@@ -72,6 +77,8 @@ void DFTU::init(UnitCell& cell, // unitcell class
 
             locale[iat].resize(cell.atoms[it].nwl + 1);
             locale_save[iat].resize(cell.atoms[it].nwl + 1);
+            const int tlp1_npol = (this->orbital_corr[it]*2+1)*npol;
+            this->eff_pot_pw[iat].resize(tlp1_npol * tlp1_npol, 0.0);
 
             for (int l = 0; l <= cell.atoms[it].nwl; l++)
             {

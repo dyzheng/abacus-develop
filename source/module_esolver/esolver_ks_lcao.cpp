@@ -210,7 +210,7 @@ void ESolver_KS_LCAO<TK, TR>::before_all_runners(const Input_para& inp, UnitCell
 
     // 8) initialize DFT+U
     if (GlobalV::dft_plus_u) {
-        GlobalC::dftu.init(ucell, &this->ParaV, this->kv.get_nks());
+        GlobalC::dftu.init(ucell, &this->ParaV);
     }
 
     // 9) initialize ppcell

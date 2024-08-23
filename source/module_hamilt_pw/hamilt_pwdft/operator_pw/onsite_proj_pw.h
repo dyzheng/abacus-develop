@@ -24,7 +24,9 @@ class OnsiteProj<OperatorPW<T, Device>> : public OperatorPW<T, Device>
     using Real = typename GetTypeReal<T>::type;
   public:
     OnsiteProj(const int* isk_in,
-             const UnitCell* ucell_in);
+             const UnitCell* ucell_in,
+             const bool cal_delta_spin,
+             const bool cal_dftu);
 
     template<typename T_in, typename Device_in = Device>
     explicit OnsiteProj(const OnsiteProj<OperatorPW<T_in, Device_in>>* onsite_proj);
@@ -44,13 +46,19 @@ class OnsiteProj<OperatorPW<T, Device>> : public OperatorPW<T, Device>
     const UnitCell *get_ucell() const {return this->ucell;}
 
   private:
-    void add_onsite_proj(T *hpsi_in, const T *psi_in, const int npol, const int m) const;
+    void cal_ps_delta_spin(const int npol, const int m) const;
+    void cal_ps_dftu(const int npol, const int m) const;
+    void update_becp(const T* psi_in, const int m) const;
+    void add_onsite_proj(T *hpsi_in, const int npol, const int m) const;
 
     const int* isk = nullptr;
 
     const UnitCell* ucell = nullptr;
 
     mutable int nkb_m = 0;
+
+    bool has_delta_spin = false;
+    bool has_dftu = false;
 
     mutable T *ps = nullptr;
     int tnp = 0;

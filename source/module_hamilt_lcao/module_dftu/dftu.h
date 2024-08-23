@@ -38,8 +38,9 @@ class DFTU
   public:
     // allocate relevant data strcutures
     void init(UnitCell& cell, // unitcell class
-              const Parallel_Orbitals* pv,
-              const int& nks);
+              const Parallel_Orbitals* pv = nullptr);
+    
+    static DFTU* get_instance();
 
     // calculate the energy correction
     void cal_energy_correction(const int istep);
@@ -79,6 +80,15 @@ class DFTU
     // and other operations of locale: copy,zero out,mix
     //=============================================================
   public:
+    /// interface for PW base
+    /// calculate the local occupation number matrix for PW based wave functions
+    void cal_occ_pw(const int iter, const psi::Psi<std::complex<double>>* psi_in, const ModuleBase::matrix& wg_in, const UnitCell& cell);
+    /// calculate the local DFT+U effective potential matrix for PW base.
+    void cal_VU_pot_pw(const int spin);
+    /// get effective potential matrix for PW base
+    const std::complex<double>* get_eff_pot_pw(const int iat) const { return eff_pot_pw[iat].data(); }
+    
+
     // calculate the local occupation number matrix
     void cal_occup_m_k(const int iter, const std::vector<std::vector<std::complex<double>>>& dm_k, const K_Vectors& kv, const double& mixing_beta, hamilt::Hamilt<std::complex<double>>* p_ham);
     void cal_occup_m_gamma(const int iter, const std::vector<std::vector<double>>& dm_gamma, const double& mixing_beta, hamilt::Hamilt<double>* p_ham);
@@ -90,6 +100,8 @@ class DFTU
     void copy_locale();
     void zero_locale();
     void mix_locale(const double& mixing_beta);
+
+    std::vector<std::vector<std::complex<double>>> eff_pot_pw;
 
 public:
     // local occupancy matrix of the correlated subspace
