@@ -162,6 +162,7 @@ TEST_F(InputParaTest, ParaRead)
     EXPECT_EQ(param.inp.test_force, 0);
     EXPECT_EQ(param.inp.test_stress, 0);
     EXPECT_NEAR(param.inp.scf_thr, 1.0e-8, 1.0e-15);
+    EXPECT_NEAR(param.inp.scf_ene_thr, -1.0, 1.0e-15);
     EXPECT_EQ(param.inp.scf_nmax, 50);
     EXPECT_EQ(param.inp.relax_nmax, 1);
     EXPECT_EQ(param.inp.out_stru, 0);
@@ -178,7 +179,8 @@ TEST_F(InputParaTest, ParaRead)
     EXPECT_EQ(param.inp.chg_extrap, "atomic");
     EXPECT_EQ(param.inp.out_freq_elec, 0);
     EXPECT_EQ(param.inp.out_freq_ion, 0);
-    EXPECT_EQ(param.inp.out_chg, 0);
+    EXPECT_EQ(param.inp.out_chg[0], 0);
+    EXPECT_EQ(param.inp.out_chg[1], 3);
     EXPECT_EQ(param.inp.out_dm, 0);
     EXPECT_EQ(param.inp.out_dm1, 0);
     EXPECT_EQ(param.inp.deepks_out_labels, 0);

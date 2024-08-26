@@ -6,13 +6,13 @@
 # Only problem is the installation from github.com
 # LibRI is under highly-active development, the git submodule installation is more recommended
 
-# Last Update in 2023-1124
+# Last Update in 2024-0815
 
 [ "${BASH_SOURCE[0]}" ] && SCRIPT_NAME="${BASH_SOURCE[0]}" || SCRIPT_NAME=$0
 SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_NAME")/.." && pwd -P)"
-
-libri_ver="0.1.1"
-libri_sha256="51deb08aa373e54d2c123b57bfd4b3507accac0d496a94b766eaeadccd9e4bd0"
+# libri 0.2.0 need to be used in newer ABACUS
+libri_ver="0.2.0"
+libri_sha256="ad79dfbc3ed8ff066c85549a2737d29205dbf755b38ea216ab2ab42754f80389"
 source "${SCRIPT_DIR}"/common_vars.sh
 source "${SCRIPT_DIR}"/tool_kit.sh
 source "${SCRIPT_DIR}"/signal_trap.sh
@@ -47,8 +47,8 @@ case "$with_libri" in
             report_error "failed to download $url"
             recommend_offline_installation $filename $url
             fi
-        # checksum
-        checksum "$filename" "$libri_sha256"
+            # checksum
+            checksum "$filename" "$libri_sha256"
         fi
         echo "Installing from scratch into ${pkg_install_dir}"
         [ -d $dirname ] && rm -rf $dirname

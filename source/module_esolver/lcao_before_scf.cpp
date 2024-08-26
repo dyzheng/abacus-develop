@@ -175,7 +175,6 @@ template <typename TK, typename TR>
 void ESolver_KS_LCAO<TK, TR>::before_scf(const int istep)
 {
     ModuleBase::TITLE("ESolver_KS_LCAO", "before_scf");
-    ModuleBase::timer::tick("ESolver_KS_LCAO", "before_scf");
 
     if (GlobalC::ucell.cell_parameter_updated)
     {
@@ -190,7 +189,9 @@ void ESolver_KS_LCAO<TK, TR>::before_scf(const int istep)
 #endif
             GlobalC::ucell,
             this->pelec->charge,
-            &(this->sf));
+            &(this->sf),
+            GlobalV::ofs_running,
+            GlobalV::ofs_warning);
     }
 
     //----------------------------------------------------------
@@ -219,7 +220,7 @@ void ESolver_KS_LCAO<TK, TR>::before_scf(const int istep)
     this->pelec->init_scf(istep, this->sf.strucFac);
 
     //! output the initial charge density
-    if (PARAM.inp.out_chg == 2)
+    if (PARAM.inp.out_chg[0] == 2)
     {
         for (int is = 0; is < GlobalV::NSPIN; is++)
         {
@@ -235,7 +236,7 @@ void ESolver_KS_LCAO<TK, TR>::before_scf(const int istep)
                 this->pelec->charge->rho[is],
                 is,
                 GlobalV::NSPIN,
-                0,
+                istep,
                 ss.str(),
                 this->pw_rhod->nx,
                 this->pw_rhod->ny,
@@ -262,7 +263,7 @@ void ESolver_KS_LCAO<TK, TR>::before_scf(const int istep)
                 this->pelec->pot->get_effective_v(is),
                 is,
                 GlobalV::NSPIN,
-                0, // iter
+                istep,
                 ss.str(),
                 this->pw_rhod->nx,
                 this->pw_rhod->ny,
@@ -347,8 +348,6 @@ void ESolver_KS_LCAO<TK, TR>::before_scf(const int istep)
     }
 
     this->p_hamilt->non_first_scf = istep;
-
-    ModuleBase::timer::tick("ESolver_KS_LCAO", "before_scf");
     return;
 }
 

@@ -42,7 +42,7 @@ has_cond=$(get_input_key_value "cal_cond" "INPUT")
 has_hs=$(get_input_key_value "out_mat_hs" "INPUT")
 has_hs2=$(get_input_key_value "out_mat_hs2" "INPUT")
 has_xc=$(get_input_key_value "out_mat_xc" "INPUT")
-has_eband_separate=$(get_input_key_value "out_eband_separate_term" "INPUT")
+has_eband_separate=$(get_input_key_value "out_eband_terms" "INPUT")
 has_r=$(get_input_key_value "out_mat_r" "INPUT")
 deepks_out_labels=$(get_input_key_value "deepks_out_labels" "INPUT")
 deepks_scf=$(get_input_key_value "deepks_scf" "INPUT")
@@ -495,7 +495,7 @@ if ! test -z "$deepks_v_delta" && [ $deepks_v_delta == 1 ]; then
 	echo "totalh $totalh" >>$1
 	totalvdelta=`python3 get_v_delta.py`
 	echo "totalvdelta $totalvdelta" >>$1
-	totalvdp=`python3 get_sum_numpy.py v_delta_precalc.npy `
+	totalvdp=`python3 get_sum_numpy.py OUT.autotest/deepks_vdpre.npy `
 	echo "totalvdp $totalvdp" >> $1
 fi
 
@@ -504,9 +504,9 @@ if ! test -z "$deepks_v_delta" && [ $deepks_v_delta == 2 ]; then
 	echo "totalh $totalh" >>$1
 	totalvdelta=`python3 get_v_delta.py`
 	echo "totalvdelta $totalvdelta" >>$1
-	total_psialpha=`python3 get_sum_numpy.py psialpha.npy `
+	total_psialpha=`python3 get_sum_numpy.py OUT.autotest/deepks_psialpha.npy `
 	echo "total_psialpha $total_psialpha" >> $1
-	total_gevdm=`python3 get_sum_numpy.py grad_evdm.npy `
+	total_gevdm=`python3 get_sum_numpy.py OUT.autotest/deepks_gevdm.npy `
 	echo "total_gevdm $total_gevdm" >> $1
 fi
 

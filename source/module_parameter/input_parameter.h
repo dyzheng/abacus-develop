@@ -56,8 +56,8 @@ struct Input_para
     std::string stru_file = "STRU";     ///< file contains atomic positions --
                                         ///< xiaohui modify 2015-02-01
     std::string kpoint_file = "KPT";    ///< file contains k-points -- xiaohui modify 2015-02-01
-    std::string pseudo_dir = "auto";      ///< directory of pseudopotential
-    std::string orbital_dir = "auto";     ///< directory of orbital file
+    std::string pseudo_dir = "";      ///< directory of pseudopotential
+    std::string orbital_dir = "";     ///< directory of orbital file
     std::string read_file_dir = "auto"; ///< directory of files for reading
     bool restart_load = false;
     std::string wannier_card = "none";              ///< input card for wannier functions.
@@ -112,6 +112,7 @@ struct Input_para
     bool gamma_only = false; ///< for plane wave.
     int scf_nmax = 100;      ///< number of max elec iter
     double scf_thr = -1.0;   ///< \sum |rhog_out - rhog_in |^2
+    double scf_ene_thr = -1.0; ///< energy threshold for scf convergence, in eV
     int scf_thr_type = -1;   ///< type of the criterion of scf_thr, 1: reci drho, 2: real drho
 
     bool lspinorb = false;   ///< consider the spin-orbit interaction
@@ -309,7 +310,7 @@ struct Input_para
                                           ///< 0: output only when converged
     int out_freq_ion = 0;                 ///< the frequency ( >= 0 ) of ionic step to output charge density;
                                           ///< 0: output only when ion steps are finished
-    int out_chg = 0;                      ///< output charge density. 0: no; 1: yes
+    std::vector<int> out_chg = {0, 3};    ///< output charge density. 0: no; 1: yes
     int out_pot = 0;                      ///< yes or no
     int out_wfc_pw = 0;                   ///< 0: no; 1: txt; 2: dat
     bool out_wfc_r = false;               ///< 0: no; 1: yes
@@ -323,6 +324,7 @@ struct Input_para
     bool out_dm1 = false;                 ///< output density matrix. (multi-k points)
     bool out_bandgap = false;             ///< QO added for bandgap printing
     std::vector<int> out_mat_hs = {0, 8}; ///< output H matrix and S matrix in local basis.
+    std::vector<int> out_mat_tk = {0, 8}; ///< output T(k) matrix in local basis.
     bool out_mat_hs2 = false;             ///< LiuXh add 2019-07-16, output H(R) matrix and
                                           ///< S(R) matrix in local basis.
     bool out_mat_dh = false;
@@ -470,6 +472,8 @@ struct Input_para
     double exx_cauchy_threshold = 1e-07;        ///< threshold to screen exx using Cauchy-Schwartz inequality
     double exx_c_grad_threshold = 0.0001;       ///< threshold to screen nabla C matrix in exx
     double exx_v_grad_threshold = 0.1;          ///< threshold to screen nabla V matrix in exx
+    double exx_c_grad_r_threshold = 0.0001;     ///< threshold to screen nabla C matrix in exx
+    double exx_v_grad_r_threshold = 0.1;        ///< threshold to screen nabla V matrix in exx
     double exx_cauchy_force_threshold = 1e-07;  ///< threshold to screen exx force using Cauchy-Schwartz
                                                 ///< inequality
     double exx_cauchy_stress_threshold = 1e-07; ///< threshold to screen exx stress using Cauchy-Schwartz

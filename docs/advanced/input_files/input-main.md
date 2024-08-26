@@ -87,6 +87,7 @@
     - [printe](#printe)
     - [scf\_nmax](#scf_nmax)
     - [scf\_thr](#scf_thr)
+    - [scf\_ene\_thr](#scf_ene_thr)
     - [scf\_thr\_type](#scf_thr_type)
     - [chg\_extrap](#chg_extrap)
     - [lspinorb](#lspinorb)
@@ -142,6 +143,7 @@
     - [out\_level](#out_level)
     - [out\_alllog](#out_alllog)
     - [out\_mat\_hs](#out_mat_hs)
+    - [out\_mat\_tk](#out_mat_tk)
     - [out\_mat\_r](#out_mat_r)
     - [out\_mat\_hs2](#out_mat_hs2)
     - [out\_mat\_t](#out_mat_t)
@@ -258,7 +260,6 @@
     - [md\_tfreq](#md_tfreq)
     - [md\_tchain](#md_tchain)
     - [md\_pmode](#md_pmode)
-    - [md\_prec\_level](#md_prec_level)
     - [ref\_cell\_factor](#ref_cell_factor)
     - [md\_pcouple](#md_pcouple)
     - [md\_pfirst, md\_plast](#md_pfirst-md_plast)
@@ -422,8 +423,9 @@
     - [lr\_nstates](#lr_nstates)
     - [abs\_wavelen\_range](#abs_wavelen_range)
     - [out\_wfc\_lr](#out_wfc_lr)
-[back to top](#full-list-of-input-keywords)
+    - [abs\_broadening](#abs_broadening)
 
+[back to top](#full-list-of-input-keywords)
 ## System variables
 
 These variables are used to control general system parameters.
@@ -1171,8 +1173,15 @@ Note: In new angle mixing, you should set `mixing_beta_mag >> mixing_beta`. The 
 ### scf_thr
 
 - **Type**: Real
-- **Description**: It's the threshold for electronic iteration. It represents the charge density error between two sequential densities from electronic iterations. Usually for local orbitals, usually 1e-6 may be accurate enough.
+- **Description**: It's the density threshold for electronic iteration. It represents the charge density error between two sequential densities from electronic iterations. Usually for local orbitals, usually 1e-6 may be accurate enough.
 - **Default**: 1.0e-9 (plane-wave basis), or 1.0e-7 (localized atomic orbital basis).
+
+### scf_ene_thr
+
+- **Type**: Real
+- **Description**: It's the energy threshold for electronic iteration. It represents the total energy error between two sequential densities from electronic iterations.
+- **Default**: -1.0. If the user does not set this parameter, it will not take effect.
+- **Unit**: eV
 
 ### scf_thr_type
 
@@ -1504,8 +1513,10 @@ These variables are used to control the output of properties.
 
 ### out_chg
 
-- **Type**: Integer
+- **Type**: Integer \[Integer\](optional)
 - **Description**: 
+  
+  The first integer controls whether to output the charge density on real space grids:
   - 1. Output the charge density (in Bohr^-3) on real space grids into the density files in the folder `OUT.${suffix}`. The files are named as:
     - nspin = 1: SPIN1_CHG.cube;
     - nspin = 2: SPIN1_CHG.cube, and SPIN2_CHG.cube;
@@ -1514,11 +1525,16 @@ These variables are used to control the output of properties.
     - nspin = 1: SPIN1_CHG_INI.cube
     - nspin = 2: SPIN1_CHG_INI.cube, and SPIN2_CHG_INI.cube;
     - nspin = 4: SPIN1_CHG_INI.cube, SPIN2_CHG_INI.cube, SPIN3_CHG_INI.cube, and SPIN4_CHG_INI.cube.
+  
+  The second integer controls the precision of the charge density output, if not given, will use `3` as default. For purpose restarting from this file and other high-precision involved calculation, recommend to use `10`.
 
+  ---
   The circle order of the charge density on real space grids is: x is the outer loop, then y and finally z (z is moving fastest).
 
   If EXX(exact exchange) is calculated, (i.e. *[dft_fuctional](#dft_functional)==hse/hf/pbe0/scan0/opt_orb* or *[rpa](#rpa)==True*), the Hexx(R) files will be output in the folder `OUT.${suffix}` too, which can be read in NSCF calculation.
-- **Default**: 0
+
+  In molecular dynamics calculations, the output frequency is controlled by [out_interval](#out_interval).
+- **Default**: 0 3
 
 ### out_pot
 
@@ -1535,6 +1551,8 @@ These variables are used to control the output of properties.
     - nspin = 1: SPIN1_POT_INI.cube;
     - nspin = 2: SPIN1_POT_INI.cube, and SPIN2_POT_INI.cube;
     - nspin = 4: SPIN1_POT_INI.cube, SPIN2_POT_INI.cube, SPIN3_POT_INI.cube, and SPIN4_POT_INI.cube.
+
+  In molecular dynamics calculations, the output frequency is controlled by [out_interval](#out_interval).
 - **Default**: 0
 
 ### out_dm
@@ -1601,7 +1619,7 @@ These variables are used to control the output of properties.
 
 ### out_band
 
-- **Type**: Boolean Integer(optional)
+- **Type**: Boolean \[Integer\](optional)
 - **Description**: Whether to output the band structure (in eV), optionally output precision can be set by a second parameter, default is 8. For more information, refer to the [band.md](../elec_properties/band.md)
 - **Default**: False
 
@@ -1645,10 +1663,17 @@ These variables are used to control the output of properties.
 
 ### out_mat_hs
 
-- **Type**: Boolean Integer(optional)
+- **Type**: Boolean \[Integer\](optional)
 - **Availability**: Numerical atomic orbital basis
 - **Description**: Whether to print the upper triangular part of the Hamiltonian matrices (in Ry) and overlap matrices for each k point into files in the directory `OUT.${suffix}`. The second number controls precision. For more information, please refer to [hs_matrix.md](../elec_properties/hs_matrix.md#out_mat_hs). Also controled by [out_interval](#out_interval) and [out_app_flag](#out_app_flag).
 - **Default**: False 8
+
+### out_mat_tk
+
+- **Type**: Boolean \[Integer\](optional)
+- **Availability**: Numerical atomic orbital basis
+- **Description**: Whether to print the upper triangular part of the kinetic matrices (in Ry) for each k point into `OUT.${suffix}/data-i-T`, where i is the index of k points (see `OUT.${suffix}/kpoints`). One may optionally provide a second parameter to specify the precision. 
+- **Default**: False \[8\]
 
 ### out_mat_r
 
@@ -1724,8 +1749,7 @@ The band (KS orbital) energy for each (k-point, spin, band) will be printed in t
 ### out_interval
 
 - **Type**: Integer
-- **Availability**: Numerical atomic orbital basis
-- **Description**: Control the interval for printing Mulliken population analysis, $r(R)$, $H(R)$, $S(R)$, $T(R)$, $dH(R)$, $H(k)$, $S(k)$ and $wfc(k)$ matrices during molecular dynamics calculations. Check input parameters [out_mul](#out_mul), [out_mat_r](#out_mat_r), [out_mat_hs2](#out_mat_hs2), [out_mat_t](#out_mat_t), [out_mat_dh](#out_mat_dh), [out_mat_hs](#out_mat_hs) and [out_wfc_lcao](#out_wfc_lcao) for more information, respectively.
+- **Description**: Control the interval for printing charge density, local potential, electrostatic potential, Mulliken population analysis, $r(R)$, $H(R)$, $S(R)$, $T(R)$, $dH(R)$, $H(k)$, $S(k)$ and $\psi(k)$ matrices during molecular dynamics calculations. Check input parameters [out_chg](#out_chg), [out_pot](#out_pot), [out_mul](#out_mul), [out_mat_r](#out_mat_r), [out_mat_hs2](#out_mat_hs2), [out_mat_t](#out_mat_t), [out_mat_dh](#out_mat_dh), [out_mat_hs](#out_mat_hs) and [out_wfc_lcao](#out_wfc_lcao) for more information, respectively.
 - **Default**: 1
 
 ### out_element_info
@@ -1869,7 +1893,7 @@ Warning: this function is not robust enough for the current version. Please try 
 
 - **Type**: Boolean
 - **Availability**: numerical atomic orbital basis
-- **Description**: print energy and force labels and descriptors for DeePKS training
+- **Description**: Print labels and descriptors for DeePKS training in OUT.${suffix}. The names of these files start with "deepks".
 - **Note**: In `LCAO` calculation, the path of a numerical descriptor (an `orb` file) is needed to be specified under the `NUMERICAL_DESCRIPTOR` tag in the `STRU` file. For example:
 
   ```text
@@ -2533,14 +2557,14 @@ These variables are used to control molecular dynamics calculations. For more in
 - **Default**: iso
 - **Relavent**: [md_tfreq](#md_tfreq), [md_tchain](#md_tchain), [md_pcouple](#md_pcouple), [md_pfreq](#md_pfreq), and [md_pchain](#md_pchain).
 
-### md_prec_level
+<!-- ### md_prec_level
 
 - **Type**: Integer
 - **Description**: Determine the precision level of variable-cell molecular dynamics calculations.
   - 0: FFT grids do not change, only G vectors and K vectors are changed due to the change of lattice vector. This level is suitable for cases where the variation of the volume and shape is not large, and the efficiency is relatively higher.
   - 2: FFT grids change per step. This level is suitable for cases where the variation of the volume and shape is large, such as the MSST method. However, accuracy comes at the cost of efficiency.
 
-- **Default**: 0
+- **Default**: 0 -->
 
 ### ref_cell_factor
 

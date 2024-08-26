@@ -8,7 +8,7 @@ namespace hsolver {
 
     // LCAO-in-PW does not support GPU now.
     template <typename T>
-    class HSolverLIP : public HSolver<T, base_device::DEVICE_CPU>
+    class HSolverLIP
     {
     private:
         // Note GetTypeReal<T>::type will 
@@ -30,7 +30,7 @@ namespace hsolver {
             psi::Psi<T>& psi,
             elecstate::ElecState* pes,
             psi::Psi<T>& transform,
-            const bool skip_charge) override;
+            const bool skip_charge);
 
     protected:
 

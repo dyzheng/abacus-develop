@@ -37,14 +37,25 @@ void ReadInput::item_output()
     }
     {
         Input_Item item("out_chg");
-        item.annotation = ">0 output charge density for selected electron steps";
-        item.reset_value = [](const Input_Item& item, Parameter& para) {
-            if (para.input.calculation == "get_wf" || para.input.calculation == "get_pchg")
+        item.annotation = ">0 output charge density for selected electron steps"
+                          ", second parameter controls the precision, default is 3.";
+        item.read_value = [](const Input_Item& item, Parameter& para) {
+            size_t count = item.get_size();
+            std::vector<int> out_chg(count, -1);
+            std::transform(item.str_values.begin(), item.str_values.end(), out_chg.begin(), [](std::string s) { return std::stoi(s); });
+            // assign non-negative values to para.input.out_chg
+            for (size_t i = 0; i < count; ++i)
             {
-                para.input.out_chg = 1;
+                if (out_chg[i] >= 0)
+                {
+                    para.input.out_chg[i] = out_chg[i];
+                }
             }
         };
-        read_sync_int(input.out_chg);
+        item.reset_value = [](const Input_Item& item, Parameter& para) {
+            para.input.out_chg[0] = (para.input.calculation == "get_wf" || para.input.calculation == "get_pchg") ? 1 : para.input.out_chg[0];
+        };
+        sync_intvec(input.out_chg, 2, 0);
         this->add_item(item);
     }
     {
@@ -244,6 +255,29 @@ void ReadInput::item_output()
         this->add_item(item);
     }
     {
+        Input_Item item("out_mat_tk");
+        item.annotation = "output T(k)";
+        item.read_value = [](const Input_Item& item, Parameter& para) {
+            size_t count = item.get_size();
+            if (count == 1)
+            {
+                para.input.out_mat_tk[0] = std::stoi(item.str_values[0]);
+                para.input.out_mat_tk[1] = 8;
+            }
+            else if (count == 2)
+            {
+                para.input.out_mat_tk[0] = std::stoi(item.str_values[0]);
+                para.input.out_mat_tk[1] = std::stoi(item.str_values[1]);
+            }
+            else
+            {
+                ModuleBase::WARNING_QUIT("ReadInput", "out_mat_tk should have 1 or 2 values");
+            }
+        };
+        sync_intvec(input.out_mat_tk, 2, 0);
+        this->add_item(item);
+    }
+    {
         Input_Item item("out_mat_hs2");
         item.annotation = "output H(R) and S(R) matrix";
         read_sync_bool(input.out_mat_hs2);
@@ -309,6 +343,12 @@ void ReadInput::item_output()
         Input_Item item("out_interval");
         item.annotation = "interval for printing H(R) and S(R) matrix during MD";
         read_sync_int(input.out_interval);
+        item.check_value = [](const Input_Item& item, const Parameter& para) {
+            if (para.input.out_interval <= 0)
+            {
+                ModuleBase::WARNING_QUIT("ReadInput", "out_interval should be larger than 0");
+            }
+        };
         this->add_item(item);
     }
     {

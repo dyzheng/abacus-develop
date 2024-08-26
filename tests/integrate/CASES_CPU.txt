@@ -10,6 +10,7 @@
 101_PW_OU_pseudopots
 101_PW_upf100_Al_pseudopots
 101_PW_upf100_uspp_Fe
+101_PW_upf100_Rappe_Fe
 101_PW_upf201_Al_pseudopots
 101_PW_upf201_Eu_pseudopots
 101_PW_upf201_blps_pseudopots
@@ -90,7 +91,7 @@
 118_PW_CHG_BINARY
 118_PW_WFC_BINARY
 120_PW_KP_MD_MSST
-120_PW_KP_MD_MSST_level2
+#120_PW_KP_MD_MSST_level2
 120_PW_KP_MD_NPT
 120_PW_KP_MD_NVT
 121_PW_KPAR
@@ -178,7 +179,7 @@
 217_NO_out_pot
 217_NO_out_pot_nscf
 220_NO_KP_MD_MSST
-220_NO_KP_MD_MSST_level2
+#220_NO_KP_MD_MSST_level2
 220_NO_KP_MD_NVT
 220_NO_KP_MD_wfc_out
 #230_NO_KP_MD_TD
@@ -227,7 +228,7 @@
 315_NO_sol_H2O
 316_NO_scan_Si2
 320_NO_GO_MD_MSST
-320_NO_GO_MD_MSST_level2
+#320_NO_GO_MD_MSST_level2
 320_NO_GO_MD_NVT
 345_NO_GO_BS
 360_NO_15_GO_PU_AF

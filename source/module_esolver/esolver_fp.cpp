@@ -2,6 +2,9 @@
 
 #include "module_base/global_variable.h"
 #include "module_hamilt_pw/hamilt_pwdft/global.h"
+#include "module_io/cube_io.h"
+#include "module_io/output_log.h"
+#include "module_io/write_elecstat_pot.h"
 #include "module_parameter/parameter.h"
 namespace ModuleESolver
 {
@@ -102,7 +105,7 @@ void ESolver_FP::before_all_runners(const Input_para& inp, UnitCell& cell)
     this->print_rhofft(inp, GlobalV::ofs_running);
 
     //! 5) initialize the charge extrapolation method if necessary
-    this->CE.Init_CE(GlobalC::ucell.nat);
+    this->CE.Init_CE(GlobalV::NSPIN, GlobalC::ucell.nat, GlobalC::ucell.omega, this->pw_rhod->nrxx, inp.chg_extrap);
 
     return;
 }
@@ -110,16 +113,115 @@ void ESolver_FP::before_all_runners(const Input_para& inp, UnitCell& cell)
 //! Something to do after SCF iterations when SCF is converged or comes to the max iter step.
 void ESolver_FP::after_scf(const int istep)
 {
-    // 1) write charge difference into files for charge extrapolation
-    if (PARAM.inp.calculation != "scf")
+    // 0) output convergence information
+    ModuleIO::output_convergence_after_scf(this->conv_elec, this->pelec->f_en.etot);
+
+    // 1) write fermi energy
+    ModuleIO::output_efermi(this->conv_elec, this->pelec->eferm.ef);
+
+    if (istep % PARAM.inp.out_interval == 0)
     {
-        this->CE.save_files(istep,
-                            GlobalC::ucell,
+        // 3) write charge density
+        if (PARAM.inp.out_chg[0])
+        {
+            for (int is = 0; is < GlobalV::NSPIN; is++)
+            {
+                double* data = nullptr;
+                if (PARAM.inp.dm_to_rho)
+                {
+                    data = this->pelec->charge->rho[is];
+                }
+                else
+                {
+                    data = this->pelec->charge->rho_save[is];
+                }
+                std::string fn = GlobalV::global_out_dir + "/SPIN" + std::to_string(is + 1) + "_CHG.cube";
+                ModuleIO::write_cube(
 #ifdef __MPI
-                            this->pw_big,
+                    this->pw_big->bz,
+                    this->pw_big->nbz,
+                    this->pw_rhod->nplane,
+                    this->pw_rhod->startz_current,
 #endif
-                            this->pelec->charge,
-                            &this->sf);
+                    data,
+                    is,
+                    GlobalV::NSPIN,
+                    istep,
+                    fn,
+                    this->pw_rhod->nx,
+                    this->pw_rhod->ny,
+                    this->pw_rhod->nz,
+                    this->pelec->eferm.get_efval(is),
+                    &(GlobalC::ucell),
+                    PARAM.inp.out_chg[1],
+                    1);
+                if (XC_Functional::get_func_type() == 3 || XC_Functional::get_func_type() == 5)
+                {
+                    fn = GlobalV::global_out_dir + "/SPIN" + std::to_string(is + 1) + "_TAU.cube";
+                    ModuleIO::write_cube(
+#ifdef __MPI
+                        this->pw_big->bz,
+                        this->pw_big->nbz,
+                        this->pw_rhod->nplane,
+                        this->pw_rhod->startz_current,
+#endif
+                        this->pelec->charge->kin_r_save[is],
+                        is,
+                        GlobalV::NSPIN,
+                        istep,
+                        fn,
+                        this->pw_rhod->nx,
+                        this->pw_rhod->ny,
+                        this->pw_rhod->nz,
+                        this->pelec->eferm.get_efval(is),
+                        &(GlobalC::ucell));
+                }
+            }
+        }
+
+        // 4) write potential
+        if (PARAM.inp.out_pot == 1 || PARAM.inp.out_pot == 3)
+        {
+            for (int is = 0; is < GlobalV::NSPIN; is++)
+            {
+                std::string fn = GlobalV::global_out_dir + "/SPIN" + std::to_string(is + 1) + "_POT.cube";
+
+                ModuleIO::write_cube(
+#ifdef __MPI
+                    this->pw_big->bz,
+                    this->pw_big->nbz,
+                    this->pw_rhod->nplane,
+                    this->pw_rhod->startz_current,
+#endif
+                    this->pelec->pot->get_effective_v(is),
+                    is,
+                    GlobalV::NSPIN,
+                    istep,
+                    fn,
+                    this->pw_rhod->nx,
+                    this->pw_rhod->ny,
+                    this->pw_rhod->nz,
+                    0.0, // efermi
+                    &(GlobalC::ucell),
+                    3,  // precision
+                    0); // out_fermi
+            }
+        }
+        else if (PARAM.inp.out_pot == 2)
+        {
+            std::string fn = GlobalV::global_out_dir + "/ElecStaticPot.cube";
+            ModuleIO::write_elecstat_pot(
+#ifdef __MPI
+                this->pw_big->bz,
+                this->pw_big->nbz,
+#endif
+                fn,
+                istep,
+                this->pw_rhod,
+                this->pelec->charge,
+                &(GlobalC::ucell),
+                this->pelec->pot->get_fixed_v());
+        }
     }
 }
 
