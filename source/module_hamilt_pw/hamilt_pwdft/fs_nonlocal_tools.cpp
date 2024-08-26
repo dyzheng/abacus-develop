@@ -156,39 +156,62 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
 {
     ModuleBase::TITLE("FS_Nonlocal_tools", "cal_becp");
     ModuleBase::timer::tick("FS_Nonlocal_tools", "cal_becp");
+
+    // allocate memory for becp on gpu
     const int npol = this->ucell_->get_npol();
     const int size_becp = this->nbands * npol * this->nkb;
-    const int size_becp_act = npm * npol * this->nkb;
     if (this->becp == nullptr)
     {
         resmem_complex_op()(this->ctx, becp, size_becp);
     }
 
-    // prepare math tools
+    // initialize the gpu heterogeneous calculation by passing ppcell_vnl instance and
+    // the unit cell instance. But this can actually be coded as utils instead of a encapulated
+    // class.
     Nonlocal_maths<FPTYPE, Device> maths(this->nlpp_, this->ucell_);
 
+    // the starting memory address of psi of present k-point
     const std::complex<FPTYPE>* ppsi = &(this->psi_[0](ik, 0, 0));
-    const int npw = this->wfc_basis_->npwk[ik];
-
+    
+    // the starting memory address of vkb, the vkb is <beta|g+k>
     std::complex<FPTYPE>* vkb_ptr = this->ppcell_vkb;
 
-    // calculate G+K
+    // tabulate the q = G+k, remember it is not simply the G+k, but also with their norm and 
+    // reciprocal of the norm, size: npw * 5. First memory block is npw * 3, the second and 
+    // the third memory block are 1 * npw.
     this->g_plus_k = maths.cal_gk(ik, this->wfc_basis_);
-    FPTYPE *gk = g_plus_k.data(), *vq_tb = this->nlpp_->tab.ptr;
+    FPTYPE *gk = g_plus_k.data();
+
+    // explicit interpolation table, involving GlobalV::NQX and GlobalV::DQ
+    // 4*pi/sqrt(omega) * Jl(qr) in which q goes in linspace(0, GlobalV::NQX, GlobalV::DQ)
+    FPTYPE *vq_tb = this->nlpp_->tab.ptr;
+
     // calculate sk
+    const int npw = this->wfc_basis_->npwk[ik];
+    // the "h" and "d" appears at the first place is either "host" or "device"
+    // the "d" and "s" appears at the second place is either "double (64-bit)" or "single (32-bit)"
+    // therefore the following hd_sk is the double precision, sk on the host device, this is done
+    // concurrently by cpu and gpu (if there is).
     resmem_complex_op()(ctx, hd_sk, this->ucell_->nat * npw);
     this->sf_->get_sk(ctx, ik, this->wfc_basis_, hd_sk);
-    std::complex<FPTYPE>* d_sk = this->hd_sk;
+    std::complex<FPTYPE>* d_sk = this->hd_sk; // copy the starting memory address of hd_sk to d_sk
+
     // prepare ylm，size: (lmax+1)^2 * this->max_npw
     const int lmax_ = this->nlpp_->lmaxkb;
-    maths.cal_ylm(lmax_, npw, g_plus_k.data(), hd_ylm);
+    maths.cal_ylm(lmax_, npw, g_plus_k.data(), hd_ylm); // again, calculate host-double-ylm
+
     if (this->device == base_device::GpuDevice)
     {
+        // send the G+k memory block to gpu
         syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, d_g_plus_k, g_plus_k.data(), g_plus_k.size());
+        // send the vq table to gpu
         syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, d_vq_tab, this->nlpp_->tab.ptr, this->nlpp_->tab.getSize());
+        
         gk = d_g_plus_k;
         vq_tb = d_vq_tab;
     }
+
+
     for (int it = 0; it < this->ucell_->ntype; it++) // loop all elements
     {
         int lenth_vq = this->ucell_->atoms[it].ncpp.nbeta * npw;
@@ -262,13 +285,19 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
               nkb);
 
     // becp calculate is over , now we should broadcast this data.
+    const int size_becp_act = npm * npol * this->nkb;
     if (this->device == base_device::GpuDevice)
     {
         std::complex<FPTYPE>* h_becp = nullptr;
+        // allocate memory for h_becp on cpu
         resmem_complex_h_op()(this->cpu_ctx, h_becp, size_becp_act);
+        // copy data from becp to h_becp on cpu
         syncmem_complex_d2h_op()(this->cpu_ctx, this->ctx, h_becp, becp, size_becp_act);
+        // MPI reduce, get the merged becp data on cpu
         Parallel_Reduce::reduce_pool(h_becp, size_becp_act);
+        // send merged becp data to gpu to the array becp
         syncmem_complex_h2d_op()(this->ctx, this->cpu_ctx, becp, h_becp, size_becp_act);
+        // release the memory of h_becp on cpu (a temporary memory)
         delmem_complex_h_op()(this->cpu_ctx, h_becp);
     }
     else

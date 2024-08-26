@@ -149,7 +149,7 @@ void projectors::OnsiteProjector<T, Device>::init(const std::string& orbital_dir
                         iproj, 
                         onsite_r);
 
-        ModuleBase::timer::tick("OnsiteProj", "init_k_stage0");
+        ModuleBase::timer::tick("OnsiteProj", "cubspl_tabulate");
         // STAGE 0 - making the interpolation table
         // CACHE 0 - if cache the irow2it, irow2iproj, irow2m, itiaiprojm2irow, <G+k|p> can be reused for 
         //           SCF, RELAX and CELL-RELAX calculation
@@ -157,7 +157,7 @@ void projectors::OnsiteProjector<T, Device>::init(const std::string& orbital_dir
         RadialProjection::RadialProjector::_build_backward_map(it2iproj, lproj, irow2it_, irow2iproj_, irow2m_);
         RadialProjection::RadialProjector::_build_forward_map(it2ia, it2iproj, lproj, itiaiprojm2irow_);
         rp_._build_sbt_tab(rgrid, projs, lproj, nq, dq);
-        ModuleBase::timer::tick("OnsiteProj", "init_k_stage0");
+        ModuleBase::timer::tick("OnsiteProj", "cubspl_tabulate");
 
         this->initialed = true;
     }
@@ -170,19 +170,7 @@ projectors::OnsiteProjector<T, Device>::~OnsiteProjector()
     delete[] tab_atomic_;
 }
 
-/**
- * @brief initialize the radial projector for real-space projection involving operators
- * 
- * @param orbital_dir You know what it is
- * @param orb_files You know what it is
- * @param nproj # of projectors for each type defined in UnitCell, can be zero
- * @param lproj angular momentum for each projector
- * @param iproj index of zeta function that each projector generated from
- * @param onsite_r onsite-radius for all valid projectors
- * @param rgrid [out] the radial grid shared by all projectors
- * @param projs [out] projectors indexed by `iproj`
- * @param it2iproj [out] for each type, the projector index (across all types)
- */
+
 template<typename T, typename Device>
 void projectors::OnsiteProjector<T, Device>::init_proj(const std::string& orbital_dir,
                      const std::vector<std::string>& orb_files,
@@ -260,10 +248,12 @@ void projectors::OnsiteProjector<T, Device>::init_proj(const std::string& orbita
 }
 
 template<typename T, typename Device>
-void projectors::OnsiteProjector<T, Device>::init_k(const int ik)
+void projectors::OnsiteProjector<T, Device>::tabulate_atomic(const int ik, const char grad)
 {
-    ModuleBase::timer::tick("OnsiteProj", "init_k");
-    ModuleBase::timer::tick("OnsiteProj", "init_k_stage1");
+    ModuleBase::timer::tick("OnsiteProj", "tabulate_atomic");
+    assert(grad == 'n' || grad == 'x' || grad == 'y' || grad == 'z');
+    // grad = 'n' means no gradient, grad = 'x' means gradient along x, etc.
+
     // STAGE 1 - calculate the <G+k|p> for the given G+k vector
     // CACHE 1 - if cache the tab_, <G+k|p> can be reused for SCF and RELAX calculation
     // [in] pw_basis, ik, omega, tpiba, irow2it
@@ -277,12 +267,12 @@ void projectors::OnsiteProjector<T, Device>::init_k(const int ik)
     }
     const int nrow = irow2it_.size();
     std::vector<std::complex<double>> tab_(nrow*this->npw_);
-    rp_.sbtft(q, tab_, 'r', this->ucell->omega, this->ucell->tpiba); // l: <p|G+k>, r: <G+k|p>
-    q.clear();
-    q.shrink_to_fit(); // release memory
-    ModuleBase::timer::tick("OnsiteProj", "init_k_stage1");
+    // convention used here: 'l': <p|G+k>, 'r': <G+k|p>
+    // denote q=G+k, <r|q> = exp(iqr), the routine Fourier Transform written as F(q) = <q|f>
+    rp_.sbtft(q, tab_, 'l', this->ucell->omega, this->ucell->tpiba);
+    // what is calculated is <p|q> here
 
-    ModuleBase::timer::tick("OnsiteProj", "init_k_stage2");
+
     // STAGE 2 - make_atomic: multiply e^iqtau and extend the <G+k|p> to <G+k|pi> for each atom
     // CACHE 2 - if cache the tab_atomic_, <G+k|p> can be reused for SCF calculation
     // [in] it2ia, itiaiprojm2irow, tab_, npw, sf
@@ -305,20 +295,29 @@ void projectors::OnsiteProjector<T, Device>::init_k(const int ik)
         for(int ia = 0; ia < na[it]; ++ia)
         {
             // why Structure_Factor needs the FULL pw_basis???
-            std::complex<double>* sk = this->sf_->get_sk(ik, it, ia, pw_basis_);
+            std::complex<double>* sk = this->sf_->get_sk(ik, it, ia, pw_basis_); // exp(-iqtau)
+            // Note: idea on extending the param list of get_sk
+            // the get_sk should have an extra param 'grad' to calculate the gradient of S(q), which
+            // is actually very simple to be
+            // d(S(q))/dq = -i S(q) * tau, for one direction it is just -i S(q) * tau_x (if x is the direction)
             const int irow_out = itiaiprojm2irow_.at(std::make_tuple(it, ia, iproj, m));
             for(int ig = 0; ig < this->npw_; ++ig)
             {
-                this->tab_atomic_[irow_out*this->npw_ + ig] = sk[ig]*tab_[irow*this->npw_ + ig];
+                std::complex<double> deriv = (grad == 'n')? 1.0: ModuleBase::NEG_IMAG_UNIT; // because sk is exp(-iqtau)
+                deriv = (grad == 'n')? 1.0: (grad == 'x')? deriv * q[ig].x: (grad == 'y')? deriv * q[ig].y: deriv * q[ig].z;
+                // there must be something twisted in ABACUS
+                // because the tab_ is <p|G+k>, but the sk is exp(-iqtau). How can it get the 
+                // correct result?
+                this->tab_atomic_[irow_out*this->npw_ + ig] = sk[ig] * tab_[irow*this->npw_ + ig] * deriv;
             }
             delete[] sk;
         }
     }
+    q.clear();
+    q.shrink_to_fit();    // release memory
     tab_.clear();
     tab_.shrink_to_fit(); // release memory
-    ModuleBase::timer::tick("OnsiteProj", "init_k_stage2");
-
-    ModuleBase::timer::tick("OnsiteProj", "init_k");
+    ModuleBase::timer::tick("OnsiteProj", "tabulate_atomic");
 }
 
 template<typename T, typename Device>
@@ -484,7 +483,7 @@ template<typename T, typename Device>
 void projectors::OnsiteProjector<T, Device>::cal_occupations(const psi::Psi<std::complex<double>>* psi_in, const ModuleBase::matrix& wg_in)
 {
     ModuleBase::timer::tick("OnsiteProj", "cal_occupation");
-    this->init_k(0);
+    this->tabulate_atomic(0);
     std::vector<std::complex<double>> occs(this->tot_nproj * 4, 0.0);
 
     // loop over k-points to calculate Mi of \sum_{k,i,l,m}<Psi_{k,i}|alpha_{l,m}><alpha_{l,m}|Psi_{k,i}>
@@ -492,7 +491,7 @@ void projectors::OnsiteProjector<T, Device>::cal_occupations(const psi::Psi<std:
     for(int ik = 0; ik < psi_in->get_nk(); ik++)
     {
         psi_in->fix_k(ik);
-        if(ik!=0) this->init_k(ik);
+        if(ik!=0) this->tabulate_atomic(ik);
         this->overlap_proj_psi(
                         nbands * psi_in->npol,
                         psi_in->get_pointer());

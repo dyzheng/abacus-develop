@@ -33,8 +33,17 @@ class Nonlocal_maths
 
   public:
     // functions
-    /// calculate the G+K vectors
-    std::vector<FPTYPE> cal_gk(int ik, const ModulePW::PW_Basis_K* wfc_basis);
+    /**
+     * @brief this function prepares all the q (G+k) information in one contiguous memory block
+     * including the x, y and z components, its norm and the reciprocal of its norm
+     * 
+     * @param ik index of k point
+     * @param pw_basis the plane wave basis
+     * @return std::vector<FPTYPE> 1d contiguous memory block containing all the q information. The
+     * first 3*npw are data of x, y and z components, the next 2*npw are data of norm and 1/norm. 
+     * This is beneficial for GPU memory access.
+     */
+    std::vector<FPTYPE> cal_gk(int ik, const ModulePW::PW_Basis_K* pw_basis);
     /// calculate the sperical bessel function for projections
     void cal_ylm(int lmax, int npw, const FPTYPE* gk_in, FPTYPE* ylm);
     /// calculate the derivate of the sperical bessel function for projections
@@ -99,68 +108,81 @@ class Nonlocal_maths
                                               const FPTYPE& x);
 };
 
-// cal_gk
+// prepare a memory block containing information of vector G+k, this function can be named as eval_q or eval_gk
+// seems this operation is not on gpu
 template <typename FPTYPE, typename Device>
-std::vector<FPTYPE> Nonlocal_maths<FPTYPE, Device>::cal_gk(int ik, const ModulePW::PW_Basis_K* wfc_basis)
+std::vector<FPTYPE> Nonlocal_maths<FPTYPE, Device>::cal_gk(int ik, const ModulePW::PW_Basis_K* pw_basis)
 {
-    int npw = wfc_basis->npwk[ik];
+    int npw = pw_basis->npwk[ik];
     std::vector<FPTYPE> gk(npw * 5);
-    ModuleBase::Vector3<FPTYPE> tmp;
+    ModuleBase::Vector3<FPTYPE> q;
     for (int ig = 0; ig < npw; ++ig)
     {
-        tmp = wfc_basis->getgpluskcar(ik, ig);
-        gk[ig * 3] = tmp.x;
-        gk[ig * 3 + 1] = tmp.y;
-        gk[ig * 3 + 2] = tmp.z;
-        FPTYPE norm = sqrt(tmp.norm2());
-        gk[3 * npw + ig] = norm * this->ucell_->tpiba;
-        gk[4 * npw + ig] = norm < 1e-8 ? 0.0 : 1.0 / norm * this->ucell_->tpiba;
+        // written in memory block from 0 to 3*npw. This is like a matrix with npw rows and 3 columns
+        q = pw_basis->getgpluskcar(ik, ig);
+        gk[ig * 3]     = q.x;
+        gk[ig * 3 + 1] = q.y;
+        gk[ig * 3 + 2] = q.z;
+        // the following written in memory block from 3*npw to 5*npw, the excess 2*npw is for norm and 1/norm
+        // for memory consecutive consideration, there are blocks storing the norm and 1/norm.
+        FPTYPE norm = sqrt(q.norm2());
+        gk[3 * npw + ig] = norm * this->ucell_->tpiba; // one line with length npw, storing the norm
+        gk[4 * npw + ig] = norm < 1e-8 ? 0.0 : 1.0 / norm * this->ucell_->tpiba; // one line with length npw, storing 1/norm
     }
     return gk;
 }
 
-// cal_ylm
+// tabulate the spherical haromonic functions up to lmax. The q vector is given as input.
+// I would rather call this function as cal_ylm_cpu2gpu, distincting from the pure cpu implementation
 template <typename FPTYPE, typename Device>
-void Nonlocal_maths<FPTYPE, Device>::cal_ylm(int lmax, int npw, const FPTYPE* gk_in, FPTYPE* ylm)
+void Nonlocal_maths<FPTYPE, Device>::cal_ylm(int lmax, int npw, const FPTYPE* q, FPTYPE* ylm)
 {
-
-    const int x1 = (lmax + 1) * (lmax + 1);
-
+    const int ntot_ylm = (lmax + 1) * (lmax + 1);
     if (this->device == base_device::GpuDevice)
     {
+        // alias
         using syncmem_var_h2d_op = base_device::memory::synchronize_memory_op<FPTYPE, Device, base_device::DEVICE_CPU>;
-        std::vector<FPTYPE> ylm_cpu(x1 * npw);
-        ModuleBase::YlmReal::Ylm_Real(cpu_ctx, x1, npw, gk_in, ylm_cpu.data());
+        // allocate
+        std::vector<FPTYPE> ylm_cpu(ntot_ylm * npw);
+        // calculate
+        ModuleBase::YlmReal::Ylm_Real(cpu_ctx, ntot_ylm, npw, q, ylm_cpu.data());
+        // send from cpu to gpu
         syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, ylm, ylm_cpu.data(), ylm_cpu.size());
     }
     else
     {
-        ModuleBase::YlmReal::Ylm_Real(cpu_ctx, x1, npw, gk_in, ylm);
+        // calculate. Why not implement this logic branch inside some function???
+        ModuleBase::YlmReal::Ylm_Real(cpu_ctx, ntot_ylm, npw, q, ylm);
     }
-
     return;
 }
-// cal_ylm_deri
+
+// this function calculate the numerical derivate of the spherical harmonic functions respect to the G vector...
+// maybe called eval_dylmdq_cpu2gpu?
 template <typename FPTYPE, typename Device>
-void Nonlocal_maths<FPTYPE, Device>::cal_ylm_deri(int lmax, int npw, const FPTYPE* gk_in, FPTYPE* ylm_deri)
+void Nonlocal_maths<FPTYPE, Device>::cal_ylm_deri(int lmax, int npw, const FPTYPE* q, FPTYPE* out)
 {
-    const int x1 = (lmax + 1) * (lmax + 1);
+    const int ntot_ylm = (lmax + 1) * (lmax + 1);
 
     if (this->device == base_device::GpuDevice)
     {
-        std::vector<FPTYPE> dylm(3 * x1 * npw);
+        // alias
+        using syncmem_var_h2d_op = base_device::memory::synchronize_memory_op<FPTYPE, Device, base_device::DEVICE_CPU>;
+        // allocate
+        std::vector<FPTYPE> dylmdq_cpu(3 * ntot_ylm * npw);
+        // calculate
         for (int ipol = 0; ipol < 3; ipol++)
         {
-            Nonlocal_maths<FPTYPE, Device>::dylmr2(x1, npw, gk_in, &dylm[ipol * x1 * npw], ipol);
+            Nonlocal_maths<FPTYPE, Device>::dylmr2(ntot_ylm, npw, q, &dylmdq_cpu[ipol * ntot_ylm * npw], ipol);
         }
-        using syncmem_var_h2d_op = base_device::memory::synchronize_memory_op<FPTYPE, Device, base_device::DEVICE_CPU>;
-        syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, ylm_deri, dylm.data(), dylm.size());
+        // send from cpu to gpu
+        syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, out, dylmdq_cpu.data(), dylmdq_cpu.size());
     }
     else
     {
         for (int ipol = 0; ipol < 3; ipol++)
         {
-            Nonlocal_maths<FPTYPE, Device>::dylmr2(x1, npw, gk_in, &ylm_deri[ipol * x1 * npw], ipol);
+            Nonlocal_maths<FPTYPE, Device>::dylmr2(ntot_ylm, npw, q, &out[ipol * ntot_ylm * npw], ipol);
         }
     }
 
@@ -175,6 +197,7 @@ std::vector<std::complex<FPTYPE>> Nonlocal_maths<FPTYPE, Device>::cal_pref(int i
     for (int ih = 0; ih < nh; ih++)
     {
         pref[ih] = std::pow(std::complex<FPTYPE>(0.0, -1.0), this->nlpp_->nhtol(it, ih));
+        // it is actually nh2l, which means to get the angular momentum...
     }
     return pref;
 }
@@ -193,7 +216,7 @@ void Nonlocal_maths<FPTYPE, Device>::cal_vkb(int it,
 {
     int ih = 0;
     // loop over all beta functions
-    for (int nb = 0; nb < this->ucell_->atoms[it].ncpp.nbeta; nb++)
+    for (int ib = 0; ib < this->ucell_->atoms[it].ncpp.nbeta; ib++)
     {
         int l = this->nlpp_->nhtol(it, ih);
         // loop over all m angular momentum
@@ -202,7 +225,7 @@ void Nonlocal_maths<FPTYPE, Device>::cal_vkb(int it,
             int lm = l * l + m;
             std::complex<FPTYPE>* vkb_ptr = &vkb_out[ih * npw];
             const FPTYPE* ylm_ptr = &ylm_in[lm * npw];
-            const FPTYPE* vq_ptr = &vq_in[nb * npw];
+            const FPTYPE* vq_ptr = &vq_in[ib * npw];
             // loop over all G-vectors
             for (int ig = 0; ig < npw; ig++)
             {

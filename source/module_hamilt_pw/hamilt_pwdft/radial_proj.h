@@ -166,19 +166,20 @@ namespace RadialProjection
             /**
              * @brief perform analytical version of the Fourier transform:
              * F(q) = int(f(r)*exp(-iq.r) d^3r)
-             *      = 4*pi/sqrt(omega) * i^l * Jl[f](q) * Ylm(q)
+             *      = 4*pi/sqrt(omega) * (-i)^l * Jl[f](q) * Ylm(q)
              * , where Ylm(q) is real spherical harmonic function, and Jl[f](q) is 
              * the Spherial Bessel Transform of f(r):
              * Jl[f](q) = int(f(r)*j_l(q*r)*r^2 dr)
              * , where j_l(q*r) is the spherical Bessel function of the first kind.
-             * 
+             * . If use another notation, F(q) = <q|f>, this is denoted as type
+             * "r" for ket |>, and "l" for bra <|.
              */
             
             void sbtft(const std::vector<ModuleBase::Vector3<double>>& qs,
                        std::vector<std::complex<double>>& out,
-                       const char type = 'r',
+                       const char type = 'r',                                   // 'r' for ket |>, 'l' for bra <|
                        const double& omega = 1.0,
-                       const double& tpiba = 1.0); // 'r' for ket |>, 'l' for bra <|
+                       const double& tpiba = 1.0);                                  // 'n' for no gradient, 'x', 'y', 'z' for gradient in x, y, z direction
             
             void sbfft(); // interface for SBFFT
 
