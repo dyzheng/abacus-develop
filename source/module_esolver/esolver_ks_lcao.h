@@ -43,7 +43,7 @@ class ESolver_KS_LCAO : public ESolver_KS<TK> {
 
     void get_S();
 
-    void cal_mag(const int istep, const bool print = false);
+    void cal_mag(const int istep);
 
   protected:
     virtual void before_scf(const int istep) override;

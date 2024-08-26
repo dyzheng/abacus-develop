@@ -15,6 +15,8 @@
 #endif
 #include "module_parameter/parameter.h"
 #include "module_base/timer.h"
+#include "module_base/formatter.h"
+
 
 /**
  * ===============================================================================================
@@ -523,11 +525,31 @@ void projectors::OnsiteProjector<T, Device>::cal_occupations(const psi::Psi<std:
     // reduce mag from all k-pools
     Parallel_Reduce::reduce_double_allpool(GlobalV::KPAR, GlobalV::NPROC_IN_POOL, (double*)(&(occs[0])), occs.size()*2);
     // occ has been reduced and calculate mag
+    // parameters for orbital charge output
+    FmtCore fmt_of_chg("%15.4f");
+    FmtCore fmt_of_label("%-15s");
+    GlobalV::ofs_running << std::endl;
+    GlobalV::ofs_running << "-------------------------------------------------------------------------------------------" << std::endl;
+    GlobalV::ofs_running << "Orbital Charge Analysis      Charge         Mag(x)         Mag(y)         Mag(z)" << std::endl;
+    GlobalV::ofs_running << "-------------------------------------------------------------------------------------------" << std::endl;
+    // parameters for orbital charge output
+    // parameters for mag output
+    std::vector<double> mag_x(this->ucell->nat, 0.0);
+    std::vector<double> mag_y(this->ucell->nat, 0.0);
+    std::vector<double> mag_z(this->ucell->nat,0.0);
+    auto atomLabels = this->ucell->get_atomLabels();
+    const std::vector<std::string> title = {"Total Magnetism (uB)", "", "", ""};
+    const std::vector<std::string> fmts = {"%-26s", "%20.10f", "%20.10f", "%20.10f"};
+    const std::vector<std::string> orb_names = {"s", "p", "d", "f", "g"};
+    FmtTable table(title, this->ucell->nat, fmts, {FmtTable::Align::RIGHT, FmtTable::Align::LEFT});
+    // parameters for mag output
     int occ_index = 0;
     for(int iat=0;iat<this->ucell->nat;iat++)
     {
+        std::string atom_label = atomLabels[iat];
+        int ia = this->ucell->iat2ia[iat];
+        GlobalV::ofs_running << FmtCore::format("%-20s", atom_label+std::to_string(ia+1)) << std::endl;
         std::vector<double> sum(4, 0.0);
-        GlobalV::ofs_running<<"Charge and Mag of Atom "<<iat<<std::endl;
         int current_l = 1;
         std::vector<double> charge_mag(4, 0.0);
         for(int ih=0;ih<this->iat_nh[iat];ih++)
@@ -542,14 +564,25 @@ void projectors::OnsiteProjector<T, Device>::cal_occupations(const psi::Psi<std:
                 sum[1] += charge_mag[1];
                 sum[2] += charge_mag[2];
                 sum[3] += charge_mag[3];
-                GlobalV::ofs_running << " Orbital "<<current_l << " Charge: "<< charge_mag[0] << " Mag: " << charge_mag[1] << " " << charge_mag[2] << " " << charge_mag[3] << std::endl;
+                GlobalV::ofs_running << FmtCore::format("%20s", orb_names[current_l-1])
+                    << fmt_of_chg.format(charge_mag[0]) << fmt_of_chg.format(charge_mag[1])
+                    << fmt_of_chg.format(charge_mag[2]) << fmt_of_chg.format(charge_mag[3]) << std::endl;
                 current_l++;
                 charge_mag.assign(4, 0.0);
             }
             occ_index += 4;
         }
-        GlobalV::ofs_running << "Sum of atom " <<iat<<" is: "<< sum[0] << " " << sum[1] << " " << sum[2] << " " << sum[3] << std::endl;
+        mag_x[iat] = sum[1];
+        mag_y[iat] = sum[2];
+        mag_z[iat] = sum[3];
+        GlobalV::ofs_running << FmtCore::format("%20s", std::string("Sum")) << ""
+                    << fmt_of_chg.format(sum[0]) << fmt_of_chg.format(sum[1])
+                    << fmt_of_chg.format(sum[2]) << fmt_of_chg.format(sum[3]) << std::endl;
     }
+    GlobalV::ofs_running << "-------------------------------------------------------------------------------------------" << std::endl;
+    GlobalV::ofs_running << std::endl;
+    table << atomLabels << mag_x << mag_y << mag_z;
+    GlobalV::ofs_running << table.str() << std::endl;
     
     // print charge
     ModuleBase::timer::tick("OnsiteProj", "cal_occupation");

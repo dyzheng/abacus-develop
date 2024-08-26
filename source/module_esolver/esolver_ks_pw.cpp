@@ -806,11 +806,7 @@ void ESolver_KS_PW<T, Device>::after_scf(const int istep) {
         SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>& sc
             = SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::getScInstance();
         sc.cal_Mi_pw();
-        if (GlobalV::MY_RANK == 0)
-        {
-            sc.print_Mi(GlobalV::ofs_running);
-            sc.print_Mag_Force(GlobalV::ofs_running);
-        }
+        sc.print_Mag_Force(GlobalV::ofs_running);
     }
 
     // 16) write onsite occupations for charge and magnetizations

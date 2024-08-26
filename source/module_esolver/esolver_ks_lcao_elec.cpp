@@ -795,7 +795,7 @@ void ESolver_KS_LCAO<TK, TR>::nscf() {
         this->pelec->calculate_weights();
         this->pelec->calEBand();
         elecstate::cal_dm_psi(&(this->ParaV), pelec_lcao->wg, *(this->psi), *(pelec_lcao->get_DM()));
-        this->cal_mag(istep, true);
+        this->cal_mag(istep);
         std::cout << FmtCore::format(" >> Finish %s.\n * * * * * *\n", "Mulliken charge analysis");
     }
 
