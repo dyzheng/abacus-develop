@@ -192,7 +192,10 @@ void Nonlocal_maths<FPTYPE, Device>::cal_ylm_deri(int lmax, int npw, const FPTYP
 template <typename FPTYPE, typename Device>
 std::vector<std::complex<FPTYPE>> Nonlocal_maths<FPTYPE, Device>::cal_pref(int it)
 {
-    const int nh = this->ucell_->atoms[it].ncpp.nh;
+    const int nh = this->ucell_->atoms[it].ncpp.nh; 
+    // nh is the total number of m-channels of the beta functions
+    // for example, if angular momentum of beta functions are 0, 0, 1, 1, 1, 1, the nh will be 
+    // 1 + 1 + 3 + 3 + 3 + 3 = 14
     std::vector<std::complex<FPTYPE>> pref(nh);
     for (int ih = 0; ih < nh; ih++)
     {

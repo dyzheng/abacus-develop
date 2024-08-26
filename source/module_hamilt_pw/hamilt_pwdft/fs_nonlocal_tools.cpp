@@ -202,9 +202,9 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
 
     if (this->device == base_device::GpuDevice)
     {
-        // send the G+k memory block to gpu
+        // send the G+k memory block from host (cpu here) to device (gpu always)
         syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, d_g_plus_k, g_plus_k.data(), g_plus_k.size());
-        // send the vq table to gpu
+        // send the vq table "h2d"
         syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, d_vq_tab, this->nlpp_->tab.ptr, this->nlpp_->tab.getSize());
         
         gk = d_g_plus_k;
@@ -217,7 +217,6 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
         int lenth_vq = this->ucell_->atoms[it].ncpp.nbeta * npw;
         // prepare inputs for calculating vkb，vkb1，vkb2
         // prepare vq and vq', size: nq * this->max_npw
-        std::vector<double> vq(lenth_vq); // cal_vq(it, g_plus_k.data(), npw);
         // std::vector<double> vq2(vq.size());
 
         cal_vq_op()(this->ctx,
@@ -231,7 +230,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
                     this->ucell_->atoms[it].ncpp.nbeta,
                     hd_vq);
 
-        // prepare（-i）^l, size: nh
+        // prepare（-i）^l, size: nh (total number of m-chennels of beta)
         std::vector<std::complex<double>> pref = maths.cal_pref(it);
         const int nh = pref.size();
         this->dvkb_indexes.resize(nh * 4);
