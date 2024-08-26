@@ -1243,7 +1243,7 @@ void ESolver_KS_LCAO<TK, TR>::after_scf(const int istep)
         this->create_Output_Mat_Sparse(istep).write();
         if (!(PARAM.inp.sc_mag_switch) && (PARAM.inp.out_mul || PARAM.inp.onsite_radius > 0))
         {
-            this->cal_mag(istep, false);
+            this->cal_mag(istep);
         }
     }
 
@@ -1253,11 +1253,8 @@ void ESolver_KS_LCAO<TK, TR>::after_scf(const int istep)
         SpinConstrain<TK, base_device::DEVICE_CPU>& sc
             = SpinConstrain<TK, base_device::DEVICE_CPU>::getScInstance();
         sc.cal_MW(istep);
-        if (GlobalV::MY_RANK == 0)
-        {
-            sc.print_Mi(GlobalV::ofs_running);
-            sc.print_Mag_Force(GlobalV::ofs_running);
-        }
+        sc.print_Mi(GlobalV::ofs_running);
+        sc.print_Mag_Force(GlobalV::ofs_running);
     }
 
     // 16) delete grid
@@ -1373,10 +1370,9 @@ bool ESolver_KS_LCAO<TK, TR>::md_skip_out(std::string calculation, int istep, in
 }
 
 template <typename TK, typename TR>
-void ESolver_KS_LCAO<TK, TR>::cal_mag(const int istep, const bool print)
+void ESolver_KS_LCAO<TK, TR>::cal_mag(const int istep)
 {
-    this->mag_tag = (PARAM.inp.onsite_radius > 0)? "Projection" : "Mulliken";
-    if (this->mag_tag == "Mulliken")
+    if (PARAM.inp.out_mul)
     {
         auto cell_index = CellIndex(GlobalC::ucell.get_atomLabels(),
                                     GlobalC::ucell.get_atomCounts(),
@@ -1399,7 +1395,7 @@ void ESolver_KS_LCAO<TK, TR>::cal_mag(const int istep, const bool print)
         auto atom_chg = mulp.get_atom_chg();
         /// used in updating mag info in STRU file
         GlobalC::ucell.atom_mulliken = mulp.get_atom_mulliken(atom_chg);
-        if (print && GlobalV::MY_RANK == 0)
+        if (GlobalV::MY_RANK == 0)
         {
             /// write the Orbital file
             cell_index.write_orb_info(GlobalV::global_out_dir);
@@ -1409,7 +1405,7 @@ void ESolver_KS_LCAO<TK, TR>::cal_mag(const int istep, const bool print)
             mulp.print_atom_mag(atom_chg, GlobalV::ofs_running);
         }
     }
-    else if (this->mag_tag == "Projection")
+    if (PARAM.inp.onsite_radius > 0)
     {
         std::vector<std::vector<double>> atom_mag(GlobalC::ucell.nat, std::vector<double>(GlobalV::NSPIN, 0.0));
         std::vector<ModuleBase::Vector3<int>> constrain;
