@@ -178,7 +178,7 @@ struct cal_force_nl_op<FPTYPE, base_device::DEVICE_CPU>
             int sum0 = 0;
             for (int it = 0; it < ntype; it++)
             {
-                const int Nprojs = atom_nh[it];
+                const int nprojs = atom_nh[it];
 #ifdef _OPENMP
 #pragma omp for collapse(2)
 #endif
@@ -191,12 +191,12 @@ struct cal_force_nl_op<FPTYPE, base_device::DEVICE_CPU>
                         FPTYPE fac = d_wg[ik * wg_nc + ib] * 2.0 * tpiba;
                         FPTYPE ekb_now = d_ekb[ik * wg_nc + ib];
                         int iat = iat0 + ia;
-                        int sum = sum0 + ia * Nprojs;
-                        for (int ip = 0; ip < Nprojs; ip++)
+                        int sum = sum0 + ia * nprojs;
+                        for (int ip = 0; ip < nprojs; ip++)
                         {
                             const int inkb = sum + ip;
                             // out<<"\n ps = "<<ps;
-                            for (int ip2 = 0; ip2 < Nprojs; ip2++)
+                            for (int ip2 = 0; ip2 < nprojs; ip2++)
                             {
                                 // Effective values of the D-eS coefficients
                                 std::complex<FPTYPE> ps_qq = - ekb_now * qq_nt[it * deeq_3 * deeq_4 + ip * deeq_4 + ip2];
@@ -223,7 +223,7 @@ struct cal_force_nl_op<FPTYPE, base_device::DEVICE_CPU>
 #ifdef _OPENMP
                         if (omp_get_num_threads() > 1)
                         {
-                            for (int ipol = 0; ipol < 3; ipol++)
+                            for (int ipol = 0; ipol < 3; ++ipol)
                             {
 #pragma omp atomic
                                 force[iat * forcenl_nc + ipol] += local_force[ipol];
@@ -232,7 +232,7 @@ struct cal_force_nl_op<FPTYPE, base_device::DEVICE_CPU>
                         else
 #endif
                         {
-                            for (int ipol = 0; ipol < 3; ipol++)
+                            for (int ipol = 0; ipol < 3; ++ipol)
                             {
                                 force[iat * forcenl_nc + ipol] += local_force[ipol];
                             }
@@ -240,7 +240,7 @@ struct cal_force_nl_op<FPTYPE, base_device::DEVICE_CPU>
                     }
                 } // end ia
                 iat0 += atom_na[it];
-                sum0 += atom_na[it] * Nprojs;
+                sum0 += atom_na[it] * nprojs;
             } // end it
 #ifdef _OPENMP
         }

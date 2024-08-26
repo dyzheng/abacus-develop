@@ -261,22 +261,26 @@ __global__ void cal_stress_nl(
         const thrust::complex<FPTYPE> *dbecp,
         FPTYPE *stress)
 {
-    int ib = blockIdx.x / ntype;
+    const int ib = blockIdx.x / ntype; // index of loop-nbands
     const int ib2  = ib * 2;
-    int it = blockIdx.x % ntype;
+    const int it = blockIdx.x % ntype; // index of loop-ntype
 
-    int iat = 0, sum = 0;
+    int iat = 0; // calculate the begin of atomic index
+    int sum = 0; // calculate the begin of atomic-orbital index
     for (int ii = 0; ii < it; ii++) {
         iat += atom_na[ii];
         sum += atom_na[ii] * atom_nh[ii];
     }
 
-    FPTYPE stress_var = 0, fac = d_wg[ik * wg_nc + ib] * 1.0, ekb_now = d_ekb[ik * wg_nc + ib];
+    FPTYPE stress_var = 0;
+    const FPTYPE fac = d_wg[ik * wg_nc + ib] * 1.0;
+    const FPTYPE ekb_now = d_ekb[ik * wg_nc + ib];
     const int Nprojs = atom_nh[it];
     for (int ia = 0; ia < atom_na[it]; ia++)
     {
         for (int ii = threadIdx.x; ii < Nprojs * Nprojs; ii += blockDim.x) {
-            int ip1 = ii / Nprojs, ip2 = ii % Nprojs;
+            const int ip1 = ii / Nprojs;
+	        const int ip2 = ii % Nprojs;
             const thrust::complex<FPTYPE> ps_qq = - ekb_now * qq_nt[it * deeq_3 * deeq_4 + ip1 * deeq_4 + ip2];
             const thrust::complex<FPTYPE> ps0 = deeq_nc[((iat + ia) * deeq_3 + ip1) * deeq_4 + ip2] + ps_qq;
             const thrust::complex<FPTYPE> ps1 = deeq_nc[((1 * deeq_2 + iat + ia) * deeq_3 + ip1) * deeq_4 + ip2];
