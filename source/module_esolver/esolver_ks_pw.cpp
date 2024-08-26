@@ -47,6 +47,7 @@
 
 #include "module_hamilt_pw/hamilt_pwdft/onsite_projector.h"
 #include "module_hamilt_lcao/module_deltaspin/spin_constrain.h"
+#include "module_hamilt_lcao/module_dftu/dftu.h"
 namespace ModuleESolver
 {
 
@@ -516,10 +517,12 @@ void ESolver_KS_PW<T, Device>::before_scf(const int istep) {
     {
         auto* onsite_p = projectors::OnsiteProjector<double, Device>::get_instance();
         onsite_p->init(PARAM.inp.orbital_dir,
-            &GlobalC::ucell,
-            *(this->pw_wfc), 
-            this->sf,
-            GlobalV::onsite_radius);
+                       &GlobalC::ucell,
+                       *(this->pw_wfc), 
+                       this->sf,
+                       GlobalV::onsite_radius,
+                       GlobalV::NQX,
+                       GlobalV::DQ);
     }
 
     if (PARAM.inp.sc_mag_switch)
@@ -542,6 +545,11 @@ void ESolver_KS_PW<T, Device>::before_scf(const int istep) {
                    reinterpret_cast<hamilt::Hamilt<std::complex<double>, base_device::DEVICE_CPU> *>(this->p_hamilt),
                    this->psi,
                    this->pelec);
+    }
+    if(PARAM.inp.dft_plus_u)
+    {
+        auto* dftu = ModuleDFTU::DFTU::get_instance();
+        dftu->init(GlobalC::ucell);
     }
 }
 
@@ -604,29 +612,24 @@ void ESolver_KS_PW<T, Device>::iter_init(const int istep, const int iter) {
         {
             // optimize lambda to get target magnetic moments, but the lambda is not near target
             sc.run_lambda_loop(iter-1);
-            // calculate the near target magnetic density
-            //this->hamilt2density(istep, iter, /*useless value*/0.0);
-            // revert rho to rho_save
-            //this->pelec->charge->revert_rho(0);
-            // update potential from the new charge density and magnetic density
-            //this->update_pot(istep, iter);
-            // recalculate the Hamiltonian of real space
-            //if(GlobalV::VL_IN_H)
-            //{
-            //    this->GK.renew();
-            //    this->p_hamilt->refresh();
-            //}
-            // optimize lambda to get target magnetic moments, and the lambda is near target
-            //sc.run_lambda_loop(iter-1);
             sc.set_mag_converged(true);
-            // init mixing for the next iteration
-            //this->p_chgmix->init_mixing(); //mixing_restart is equal to sc_scf_thr, skip this line
         }
         else if(sc.mag_converged())
         {
             // optimize lambda to get target magnetic moments, but the lambda is not near target
             sc.run_lambda_loop(iter-1);
         }
+    }
+    if (GlobalV::dft_plus_u)
+    {
+        auto* dftu = ModuleDFTU::DFTU::get_instance();
+        // only old DFT+U method should calculated energy correction in esolver,
+        // new DFT+U method will calculate energy in calculating Hamiltonian
+        if (dftu->omc != 2)
+        {
+            dftu->cal_occ_pw(iter, this->psi, this->pelec->wg, GlobalC::ucell);
+        }
+        dftu->output();
     }
 }
 
@@ -797,17 +800,20 @@ void ESolver_KS_PW<T, Device>::after_scf(const int istep) {
         ModuleIO::write_wfc_pw(ssw.str(), this->psi[0], this->kv, this->pw_wfc);
     }
 
-    // 15) write spin constrian MW?
-    // spin constrain calculations, added by Tianqi Zhao.
+    // 15) write spin constrian results
+    // spin constrain calculations, write atomic magnetization and magnetic force.
     if (PARAM.inp.sc_mag_switch) {
         SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>& sc
             = SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::getScInstance();
         sc.cal_Mi_pw();
-        if (GlobalV::MY_RANK == 0)
-        {
-            sc.print_Mi(GlobalV::ofs_running);
-            sc.print_Mag_Force(GlobalV::ofs_running);
-        }
+        sc.print_Mag_Force(GlobalV::ofs_running);
+    }
+
+    // 16) write onsite occupations for charge and magnetizations
+    if(GlobalV::onsite_radius > 0)
+    {
+        auto* onsite_p = projectors::OnsiteProjector<double, Device>::get_instance();
+        onsite_p->cal_occupations(this->psi, this->pelec->wg);
     }
 
     ModuleIO::output_convergence_after_scf(this->conv_elec,

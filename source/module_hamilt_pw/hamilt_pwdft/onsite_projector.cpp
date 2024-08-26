@@ -6,7 +6,6 @@
 #include <tuple>
 #include "module_hamilt_pw/hamilt_pwdft/onsite_projector.h"
 
-#include "module_hamilt_pw/hamilt_pwdft/radial_proj.h"
 #include "module_basis/module_nao/projgen.h"
 #include "module_base/blas_connector.h"
 #include "module_hsolver/kernels/math_kernel_op.h"
@@ -15,6 +14,9 @@
 #include "module_base/parallel_common.h"
 #endif
 #include "module_parameter/parameter.h"
+#include "module_base/timer.h"
+#include "module_base/formatter.h"
+
 
 /**
  * ===============================================================================================
@@ -92,12 +94,13 @@ projectors::OnsiteProjector<T, Device>* projectors::OnsiteProjector<T, Device>::
 }
 
 template<typename T, typename Device>
-void projectors::OnsiteProjector<T, Device>::init(
-                    const std::string& orbital_dir,
-                    const UnitCell* ucell_in,
-                    const ModulePW::PW_Basis_K& pw_basis,             // level1: the plane wave basis, need ik
-                    Structure_Factor& sf,                              // level2: the structure factor calculator
-                    const double onsite_radius)
+void projectors::OnsiteProjector<T, Device>::init(const std::string& orbital_dir,
+                                                  const UnitCell* ucell_in,
+                                                  const ModulePW::PW_Basis_K& pw_basis,             // level1: the plane wave basis, need ik
+                                                  Structure_Factor& sf,                              // level2: the structure factor calculator
+                                                  const double onsite_radius,
+                                                  const int nq,
+                                                  const double dq)
 {
     if(!this->initialed)
     {
@@ -108,20 +111,37 @@ void projectors::OnsiteProjector<T, Device>::init(
         this->sf_ = &sf;
 
         std::vector<std::string> orb_files(ntype);
+        std::vector<int> nproj(ntype);
+        int sum_nproj = 0;
         for(int it=0;it<ntype;++it)
         {
             orb_files[it] = ucell->orbital_fn[it];
+            nproj[it] = ucell->atoms[it].nwl;
+            sum_nproj += nproj[it];
         }
-        std::vector<int> nproj = {3};
-        this->lproj = std::vector<int>{0, 1, 2};
-        std::vector<int> iproj = {0, 0, 0};
-        std::vector<double> onsite_r(3, onsite_radius);
+        this->lproj.resize(sum_nproj);
+        int index = 0;
+        for(int it=0;it<ntype;++it)
+        {
+            for(int il=0;il<nproj[it];++il)
+            {
+                this->lproj[index++] = il;
+            }
+        }
+        std::vector<int> iproj(sum_nproj, 0);
+        std::vector<double> onsite_r(sum_nproj, onsite_radius);
 
         this->it2ia.resize(this->ntype);
+        this->iat_nh.resize(this->ucell->nat);
+        int iat = 0;
         for(int it = 0; it < it2ia.size(); it++)
         {
             it2ia[it].resize(this->ucell->atoms[it].na);
             std::iota(it2ia[it].begin(), it2ia[it].end(), 0);
+            for(int ia = 0; ia < it2ia[it].size(); ia++)
+            {
+                iat_nh[iat++] = nproj[it] * nproj[it];
+            }
         }
 
         this->init_proj(PARAM.inp.orbital_dir, 
@@ -130,6 +150,17 @@ void projectors::OnsiteProjector<T, Device>::init(
                         lproj, 
                         iproj, 
                         onsite_r);
+
+        ModuleBase::timer::tick("OnsiteProj", "init_k_stage0");
+        // STAGE 0 - making the interpolation table
+        // CACHE 0 - if cache the irow2it, irow2iproj, irow2m, itiaiprojm2irow, <G+k|p> can be reused for 
+        //           SCF, RELAX and CELL-RELAX calculation
+        // [in] rgrid, projs, lproj, it2ia, it2iproj, nq, dq
+        RadialProjection::RadialProjector::_build_backward_map(it2iproj, lproj, irow2it_, irow2iproj_, irow2m_);
+        RadialProjection::RadialProjector::_build_forward_map(it2ia, it2iproj, lproj, itiaiprojm2irow_);
+        rp_._build_sbt_tab(rgrid, projs, lproj, nq, dq);
+        ModuleBase::timer::tick("OnsiteProj", "init_k_stage0");
+
         this->initialed = true;
     }
 }
@@ -231,25 +262,10 @@ void projectors::OnsiteProjector<T, Device>::init_proj(const std::string& orbita
 }
 
 template<typename T, typename Device>
-void projectors::OnsiteProjector<T, Device>::init_k( 
-                    const int nq,                                     // level0: GlobalV::NQX
-                    const double& dq,                                 // level0: GlobalV::DQ
-                    const int ik                                     // level1: the k-point index
-                    )
+void projectors::OnsiteProjector<T, Device>::init_k(const int ik)
 {
-    // STAGE 0 - making the interpolation table
-    // CACHE 0 - if cache the irow2it, irow2iproj, irow2m, itiaiprojm2irow, <G+k|p> can be reused for 
-    //           SCF, RELAX and CELL-RELAX calculation
-    // [in] rgrid, projs, lproj, it2ia, it2iproj, nq, dq
-    RadialProjection::RadialProjector rp;
-    std::vector<int> irow2it;
-    std::vector<int> irow2iproj;
-    std::vector<int> irow2m;
-    std::map<std::tuple<int, int, int, int>, int> itiaiprojm2irow;
-    RadialProjection::RadialProjector::_build_backward_map(it2iproj, lproj, irow2it, irow2iproj, irow2m);
-    RadialProjection::RadialProjector::_build_forward_map(it2ia, it2iproj, lproj, itiaiprojm2irow);
-    rp._build_sbt_tab(rgrid, projs, lproj, nq, dq);
-
+    ModuleBase::timer::tick("OnsiteProj", "init_k");
+    ModuleBase::timer::tick("OnsiteProj", "init_k_stage1");
     // STAGE 1 - calculate the <G+k|p> for the given G+k vector
     // CACHE 1 - if cache the tab_, <G+k|p> can be reused for SCF and RELAX calculation
     // [in] pw_basis, ik, omega, tpiba, irow2it
@@ -261,12 +277,14 @@ void projectors::OnsiteProjector<T, Device>::init_k(
     {
         q[ig] = pw_basis_->getgpluskcar(ik, ig); // get the G+k vector, G+k will change during CELL-RELAX
     }
-    const int nrow = irow2it.size();
+    const int nrow = irow2it_.size();
     std::vector<std::complex<double>> tab_(nrow*this->npw_);
-    rp.sbtft(q, tab_, 'r', this->ucell->omega, this->ucell->tpiba); // l: <p|G+k>, r: <G+k|p>
+    rp_.sbtft(q, tab_, 'r', this->ucell->omega, this->ucell->tpiba); // l: <p|G+k>, r: <G+k|p>
     q.clear();
     q.shrink_to_fit(); // release memory
+    ModuleBase::timer::tick("OnsiteProj", "init_k_stage1");
 
+    ModuleBase::timer::tick("OnsiteProj", "init_k_stage2");
     // STAGE 2 - make_atomic: multiply e^iqtau and extend the <G+k|p> to <G+k|pi> for each atom
     // CACHE 2 - if cache the tab_atomic_, <G+k|p> can be reused for SCF calculation
     // [in] it2ia, itiaiprojm2irow, tab_, npw, sf
@@ -277,20 +295,20 @@ void projectors::OnsiteProjector<T, Device>::init_k(
     }
     if(this->tab_atomic_ == nullptr)
     {
-        this->tot_nproj = itiaiprojm2irow.size();
+        this->tot_nproj = itiaiprojm2irow_.size();
         this->tab_atomic_ = new std::complex<double>[this->tot_nproj * this->npwx_];
         this->size_vproj = this->tot_nproj * this->npwx_;
     }
     for(int irow = 0; irow < nrow; ++irow)
     {
-        const int it = irow2it[irow];
-        const int iproj = irow2iproj[irow];
-        const int m = irow2m[irow];
+        const int it = irow2it_[irow];
+        const int iproj = irow2iproj_[irow];
+        const int m = irow2m_[irow];
         for(int ia = 0; ia < na[it]; ++ia)
         {
             // why Structure_Factor needs the FULL pw_basis???
             std::complex<double>* sk = this->sf_->get_sk(ik, it, ia, pw_basis_);
-            const int irow_out = itiaiprojm2irow.at(std::make_tuple(it, ia, iproj, m));
+            const int irow_out = itiaiprojm2irow_.at(std::make_tuple(it, ia, iproj, m));
             for(int ig = 0; ig < this->npw_; ++ig)
             {
                 this->tab_atomic_[irow_out*this->npw_ + ig] = sk[ig]*tab_[irow*this->npw_ + ig];
@@ -300,6 +318,9 @@ void projectors::OnsiteProjector<T, Device>::init_k(
     }
     tab_.clear();
     tab_.shrink_to_fit(); // release memory
+    ModuleBase::timer::tick("OnsiteProj", "init_k_stage2");
+
+    ModuleBase::timer::tick("OnsiteProj", "init_k");
 }
 
 template<typename T, typename Device>
@@ -308,7 +329,7 @@ void projectors::OnsiteProjector<T, Device>::overlap_proj_psi(
                     const std::complex<double>* ppsi
                     )
 {
-
+    ModuleBase::timer::tick("OnsiteProj", "overlap");
     // STAGE 3 - cal_becp
     // CACHE 3 - it is no use to cache becp, it will change in each SCF iteration
     // [in] psi, tab_atomic_, npw, becp, ik
@@ -343,6 +364,7 @@ void projectors::OnsiteProjector<T, Device>::overlap_proj_psi(
 #ifdef __MPI
     Parallel_Reduce::reduce_pool(becp, size_becp);
 #endif
+    ModuleBase::timer::tick("OnsiteProj", "overlap");
 }
 
 template<typename T, typename Device>
@@ -459,5 +481,111 @@ void projectors::OnsiteProjector<T, Device>::read_abacus_orb(std::ifstream& ifs,
 #endif
     }
 } // end of read_abacus_orb
+
+template<typename T, typename Device>
+void projectors::OnsiteProjector<T, Device>::cal_occupations(const psi::Psi<std::complex<double>>* psi_in, const ModuleBase::matrix& wg_in)
+{
+    ModuleBase::timer::tick("OnsiteProj", "cal_occupation");
+    this->init_k(0);
+    std::vector<std::complex<double>> occs(this->tot_nproj * 4, 0.0);
+
+    // loop over k-points to calculate Mi of \sum_{k,i,l,m}<Psi_{k,i}|alpha_{l,m}><alpha_{l,m}|Psi_{k,i}>
+    const int nbands = psi_in->get_nbands();
+    for(int ik = 0; ik < psi_in->get_nk(); ik++)
+    {
+        psi_in->fix_k(ik);
+        if(ik!=0) this->init_k(ik);
+        this->overlap_proj_psi(
+                        nbands * psi_in->npol,
+                        psi_in->get_pointer());
+        const std::complex<double>* becp = this->get_becp();
+        // becp(nbands*npol , nkb)
+        // mag = wg * \sum_{nh}becp * becp
+        int nkb = this->get_size_becp() / nbands / psi_in->npol;
+        for(int ib = 0;ib<nbands;ib++)
+        {
+            const double weight = wg_in(ik, ib);
+            int begin_ih = 0;
+            for(int iat = 0; iat < this->iat_nh.size(); iat++)
+            {
+                const int nh = this->get_nh(iat);
+                for(int ih = 0; ih < nh; ih++)
+                {
+                    const int occ_index = (begin_ih + ih) * 4;
+                    const int index = ib*2*nkb + begin_ih + ih;
+                    occs[occ_index] += weight * conj(becp[index]) * becp[index];
+                    occs[occ_index + 1] += weight * conj(becp[index]) * becp[index + nkb];
+                    occs[occ_index + 2] += weight * conj(becp[index + nkb]) * becp[index];
+                    occs[occ_index + 3] += weight * conj(becp[index + nkb]) * becp[index + nkb];
+                }
+                begin_ih += nh;
+            }
+        }
+    }
+    // reduce mag from all k-pools
+    Parallel_Reduce::reduce_double_allpool(GlobalV::KPAR, GlobalV::NPROC_IN_POOL, (double*)(&(occs[0])), occs.size()*2);
+    // occ has been reduced and calculate mag
+    // parameters for orbital charge output
+    FmtCore fmt_of_chg("%15.4f");
+    FmtCore fmt_of_label("%-15s");
+    GlobalV::ofs_running << std::endl;
+    GlobalV::ofs_running << "-------------------------------------------------------------------------------------------" << std::endl;
+    GlobalV::ofs_running << "Orbital Charge Analysis      Charge         Mag(x)         Mag(y)         Mag(z)" << std::endl;
+    GlobalV::ofs_running << "-------------------------------------------------------------------------------------------" << std::endl;
+    // parameters for orbital charge output
+    // parameters for mag output
+    std::vector<double> mag_x(this->ucell->nat, 0.0);
+    std::vector<double> mag_y(this->ucell->nat, 0.0);
+    std::vector<double> mag_z(this->ucell->nat,0.0);
+    auto atomLabels = this->ucell->get_atomLabels();
+    const std::vector<std::string> title = {"Total Magnetism (uB)", "", "", ""};
+    const std::vector<std::string> fmts = {"%-26s", "%20.10f", "%20.10f", "%20.10f"};
+    const std::vector<std::string> orb_names = {"s", "p", "d", "f", "g"};
+    FmtTable table(title, this->ucell->nat, fmts, {FmtTable::Align::RIGHT, FmtTable::Align::LEFT});
+    // parameters for mag output
+    int occ_index = 0;
+    for(int iat=0;iat<this->ucell->nat;iat++)
+    {
+        std::string atom_label = atomLabels[iat];
+        int ia = this->ucell->iat2ia[iat];
+        GlobalV::ofs_running << FmtCore::format("%-20s", atom_label+std::to_string(ia+1)) << std::endl;
+        std::vector<double> sum(4, 0.0);
+        int current_l = 1;
+        std::vector<double> charge_mag(4, 0.0);
+        for(int ih=0;ih<this->iat_nh[iat];ih++)
+        {
+            charge_mag[3] += (occs[occ_index] - occs[occ_index + 3]).real();
+            charge_mag[1] += (occs[occ_index + 1] + occs[occ_index + 2]).real();
+            charge_mag[2] += (occs[occ_index + 1] - occs[occ_index + 2]).imag();
+            charge_mag[0] += (occs[occ_index] + occs[occ_index + 3]).real();
+            if(ih == current_l * current_l - 1)
+            {
+                sum[0] += charge_mag[0];
+                sum[1] += charge_mag[1];
+                sum[2] += charge_mag[2];
+                sum[3] += charge_mag[3];
+                GlobalV::ofs_running << FmtCore::format("%20s", orb_names[current_l-1])
+                    << fmt_of_chg.format(charge_mag[0]) << fmt_of_chg.format(charge_mag[1])
+                    << fmt_of_chg.format(charge_mag[2]) << fmt_of_chg.format(charge_mag[3]) << std::endl;
+                current_l++;
+                charge_mag.assign(4, 0.0);
+            }
+            occ_index += 4;
+        }
+        mag_x[iat] = sum[1];
+        mag_y[iat] = sum[2];
+        mag_z[iat] = sum[3];
+        GlobalV::ofs_running << FmtCore::format("%20s", std::string("Sum")) << ""
+                    << fmt_of_chg.format(sum[0]) << fmt_of_chg.format(sum[1])
+                    << fmt_of_chg.format(sum[2]) << fmt_of_chg.format(sum[3]) << std::endl;
+    }
+    GlobalV::ofs_running << "-------------------------------------------------------------------------------------------" << std::endl;
+    GlobalV::ofs_running << std::endl;
+    table << atomLabels << mag_x << mag_y << mag_z;
+    GlobalV::ofs_running << table.str() << std::endl;
+    
+    // print charge
+    ModuleBase::timer::tick("OnsiteProj", "cal_occupation");
+}
 
 template class projectors::OnsiteProjector<double, base_device::DEVICE_CPU>;

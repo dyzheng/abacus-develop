@@ -123,9 +123,7 @@ void SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::cal_Mi_pw()
     for(int ik = 0; ik < this->psi->get_nk(); ik++)
     {
         this->psi->fix_k(ik);
-        onsite_p->init_k(GlobalV::NQX, 
-                        GlobalV::DQ, 
-                        ik);
+        onsite_p->init_k(ik);
         onsite_p->overlap_proj_psi(
                         nbands * this->psi->npol,
                         this->psi->get_pointer());
@@ -133,7 +131,6 @@ void SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::cal_Mi_pw()
         // becp(nbands*npol , nkb)
         // mag = wg * \sum_{nh}becp * becp
         int nkb = onsite_p->get_size_becp() / nbands / this->psi->npol;
-        const int nh = nkb / this->Mi_.size();
         for(int ib = 0;ib<nbands;ib++)
         {
             const double weight = this->pelec->wg(ik, ib);
@@ -141,6 +138,7 @@ void SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::cal_Mi_pw()
             for(int iat = 0; iat < this->Mi_.size(); iat++)
             {
                 std::complex<double> occ[4] = {ModuleBase::ZERO, ModuleBase::ZERO, ModuleBase::ZERO, ModuleBase::ZERO};
+                const int nh = onsite_p->get_nh(iat);
                 for(int ih = 0; ih < nh; ih++)
                 {
                     const int index = ib*2*nkb + begin_ih + ih;
@@ -158,11 +156,9 @@ void SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::cal_Mi_pw()
             }
         }
     }
-    // print charge
-    for(int i = 0; i < this->Mi_.size(); i++)
-    {
-        std::cout<<"atom"<<i<<": "<<" charge: "<<charge[i]<<" mag: "<<this->Mi_[i].x<<" "<<this->Mi_[i].y<<" "<<this->Mi_[i].z<<std::endl;
-    }
+    // reduce mag from all k-pools
+    Parallel_Reduce::reduce_double_allpool(GlobalV::KPAR, GlobalV::NPROC_IN_POOL, &(this->Mi_[0][0]), 3 * this->Mi_.size());
+    Parallel_Reduce::reduce_double_allpool(GlobalV::KPAR, GlobalV::NPROC_IN_POOL, &(charge[0]), charge.size());
     
 }
 
