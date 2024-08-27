@@ -164,37 +164,53 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
     ModuleBase::TITLE("FS_Nonlocal_tools", "cal_becp");
     ModuleBase::timer::tick("FS_Nonlocal_tools", "cal_becp");
 
-    // allocate memory for becp on gpu
-    const int npol = this->ucell_->get_npol();
-    const int size_becp = this->nbands * npol * this->nkb;
-    if (this->becp == nullptr)
+    // ----------------------------------------------------------------------------------->8
+    // fetch the ppvnl.tab here, but...why??? it will never change...
+    // explicit interpolation table, involving GlobalV::NQX and GlobalV::DQ
+    // 4*pi/sqrt(omega) * Jl(qr) in which q goes in linspace(0, GlobalV::NQX, GlobalV::DQ)
+    FPTYPE *vq_tb = this->nlpp_->tab.ptr; // this is what cpu knows
+    if (this->device == base_device::GpuDevice) // also let gpu know
     {
-        resmem_complex_op()(this->ctx, becp, size_becp);
+        // send the vq table "h2d"
+        syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, d_vq_tab, this->nlpp_->tab.ptr, this->nlpp_->tab.getSize());
+        vq_tb = d_vq_tab;
     }
+    // ----------------------------------------------------------------------------------->8
 
-    // initialize the gpu heterogeneous calculation by passing ppcell_vnl instance and
-    // the unit cell instance. But this can actually be coded as utils instead of a encapulated
-    // class.
+
+    // some utils are impelemneted in the nonlocal_maths.hpp
+    // but now it seems to be too hard-coded and not feasible for
+    // reuse by other operators with the same formulation structure...
+    // this will be the first to be refactored.
     Nonlocal_maths<FPTYPE, Device> maths(this->nlpp_, this->ucell_);
 
-    // the starting memory address of psi of present k-point
-    const std::complex<FPTYPE>* ppsi = &(this->psi_[0](ik, 0, 0));
-    
-    // the starting memory address of vkb, the vkb is <beta|g+k>
-    std::complex<FPTYPE>* vkb_ptr = this->ppcell_vkb;
 
-    // tabulate the q = G+k, remember it is not simply the G+k, but also with their norm and 
+    // ----------------------------------------------------------------------------------->8
+    // the ik will always refreshed. Once ik changes, should re-calculate the Ylm(q).
+    // and actually the derivative of Ylm(q) is also needed.
+    // There should a function individually (relatively) calculate the ylm and dylm instead
+    // of calculating them inside the cal_becp and cal_dbecp_s.
+
+    // Should refresh the g_plus_k first, then calculate the ylm and dylm.
+    // Another important thing is the function cal_gk. It tabulates the q = G+k, 
+    // however, the g_plus_k it is not simply the G+k, but also with their norm and 
     // reciprocal of the norm, size: npw * 5. First memory block is npw * 3, the second and 
     // the third memory block are 1 * npw.
     this->g_plus_k = maths.cal_gk(ik, this->wfc_basis_);
-    FPTYPE *gk = g_plus_k.data();
-
-    // explicit interpolation table, involving GlobalV::NQX and GlobalV::DQ
-    // 4*pi/sqrt(omega) * Jl(qr) in which q goes in linspace(0, GlobalV::NQX, GlobalV::DQ)
-    FPTYPE *vq_tb = this->nlpp_->tab.ptr;
-
-    // calculate sk
+    FPTYPE *gk = g_plus_k.data(); // this is what cpu knows
+    if (this->device == base_device::GpuDevice) // also let gpu know
+    {
+        syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, d_g_plus_k, g_plus_k.data(), g_plus_k.size());
+        gk = d_g_plus_k;
+    }
+    // angular part
+    // prepare ylm，size: (lmax+1)^2 * this->max_npw
     const int npw = this->wfc_basis_->npwk[ik];
+    const int lmax_ = this->nlpp_->lmaxkb;
+    maths.cal_ylm(lmax_, npw, g_plus_k.data(), hd_ylm);
+    // the function cal_ylm proceeds like, calculate on cpu, if gpu is available, copy to gpu.
+    
+    // calculate sk
     // the "h" and "d" appears at the first place is either "host" or "device"
     // the "d" and "s" appears at the second place is either "double (64-bit)" or "single (32-bit)"
     // therefore the following hd_sk is the double precision, sk on the host device, this is done
@@ -202,81 +218,81 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
     resmem_complex_op()(ctx, hd_sk, this->ucell_->nat * npw);
     this->sf_->get_sk(ctx, ik, this->wfc_basis_, hd_sk);
     std::complex<FPTYPE>* d_sk = this->hd_sk; // copy the starting memory address of hd_sk to d_sk
-
-    // prepare ylm，size: (lmax+1)^2 * this->max_npw
-    const int lmax_ = this->nlpp_->lmaxkb;
-    maths.cal_ylm(lmax_, npw, g_plus_k.data(), hd_ylm); // again, calculate host-double-ylm
-
-    if (this->device == base_device::GpuDevice)
-    {
-        // send the G+k memory block from host (cpu here) to device (gpu always)
-        syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, d_g_plus_k, g_plus_k.data(), g_plus_k.size());
-        // send the vq table "h2d"
-        syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, d_vq_tab, this->nlpp_->tab.ptr, this->nlpp_->tab.getSize());
-        
-        gk = d_g_plus_k;
-        vq_tb = d_vq_tab;
-    }
+    // ----------------------------------------------------------------------------------->8
 
 
+    // in the following the vkb, which is the fourier transform of beta function involving
+    // radial parts the tab, and angular parts the ylm, is calculated.
+    // for radial parts, should do interpolation according to gk to get the vq. New codes
+    // uses cubic spline, while the old uses polynomial interpolation, which is not the best
+    // choice.
+    std::complex<FPTYPE>* vkb_ptr = this->ppcell_vkb;
     for (int it = 0; it < this->ucell_->ntype; it++) // loop all elements
     {
-        int lenth_vq = this->ucell_->atoms[it].ncpp.nbeta * npw;
-        // prepare inputs for calculating vkb，vkb1，vkb2
-        // prepare vq and vq', size: nq * this->max_npw
-        // std::vector<double> vq2(vq.size());
-
+        // simply interpolate the vq table
         cal_vq_op()(this->ctx,
-                    vq_tb,
+                    vq_tb,  // gpu knows it!
                     it,
-                    gk,
+                    gk,     // gpu knows it!
                     npw,
                     this->nlpp_->tab.getBound2(),
                     this->nlpp_->tab.getBound3(),
                     GlobalV::DQ,
                     this->ucell_->atoms[it].ncpp.nbeta,
                     hd_vq);
+        // hd_vq is only for one type, has dimension nbeta * npw
+        // this design saves memory but binds the calculation of vq and vkb together...
 
         // prepare（-i）^l, size: nh (total number of m-chennels of beta)
         std::vector<std::complex<double>> pref = maths.cal_pref(it);
         const int nh = pref.size();
+        // indexing...
         this->dvkb_indexes.resize(nh * 4);
-        maths.cal_dvkb_index(this->ucell_->atoms[it].ncpp.nbeta,
-                             this->nlpp_->nhtol.c,
-                             this->nlpp_->nhtol.nc,
-                             npw,
-                             it,
-                             0,
-                             0,
+        maths.cal_dvkb_index(this->ucell_->atoms[it].ncpp.nbeta, // nproj
+                             this->nlpp_->nhtol.c,               // lproj
+                             this->nlpp_->nhtol.nc,              // 
+                             npw,                                // npw
+                             it,                                 
+                             0,                                  // ipol (index of component, x, y or z)
+                             0,                                  // jpol (index of component, x, y or z)
                              this->dvkb_indexes.data());
+
+        // device_pref_in (d_pref_in) and device_dvkb_indexes (d_dvkb_indexes) are those
+        // really feed in the functor cal_vkb_op, now give them the memory address.
         if (this->device == base_device::GpuDevice)
         {
-            syncmem_int_h2d_op()(this->ctx, this->cpu_ctx, d_dvkb_indexes, dvkb_indexes.data(), nh * 4);
             syncmem_complex_h2d_op()(this->ctx, this->cpu_ctx, d_pref_in, pref.data(), nh);
+            syncmem_int_h2d_op()(this->ctx, this->cpu_ctx, d_dvkb_indexes, dvkb_indexes.data(), nh * 4);
         }
-
+        else
+        {
+            d_pref_in = pref.data();
+            d_dvkb_indexes = dvkb_indexes.data();
+        }
+        // calculate vkb = vq * sk * pref * ylm
         for (int ia = 0; ia < h_atom_na[it]; ia++)
         {
-            // 1. calculate becp
-            // 1.a calculate vkb
-
-            if (this->device == base_device::CpuDevice)
-            {
-                d_pref_in = pref.data();
-                d_dvkb_indexes = dvkb_indexes.data();
-            }
             cal_vkb_op()(this->ctx, nh, npw, d_dvkb_indexes, hd_vq, hd_ylm, d_sk, d_pref_in, vkb_ptr);
-
-            // 2.b calculate becp = vkb * psi
+            // move the pointer to the next atom
             vkb_ptr += nh * npw;
             d_sk += npw;
         }
     }
 
+
     // ----------------------------------------------------------------------------------->8
     // what cal_becp function should do is the following, what it should not do is above.
     const char transa = 'C';
     const char transb = 'N';
+    // allocate memory for becp on gpu
+    const int npol = this->ucell_->get_npol();
+    const int size_becp = this->nbands * npol * this->nkb;
+    if (this->becp == nullptr)
+    {
+        resmem_complex_op()(this->ctx, becp, size_becp);
+    }
+    // the starting memory address of psi of present k-point
+    const std::complex<FPTYPE>* ppsi = &(this->psi_[0](ik, 0, 0));
     int npm_npol = npm * npol;
     gemm_op()(this->ctx,
               transa,
@@ -322,49 +338,39 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, i
 {
     ModuleBase::TITLE("FS_Nonlocal_tools", "cal_dbecp_s");
     ModuleBase::timer::tick("FS_Nonlocal_tools", "cal_dbecp_s");
-    const int npol = this->ucell_->get_npol();
-    const int size_becp = this->nbands * npol * this->nkb;
-    const int npm_npol = npm * npol;
-    if (this->dbecp == nullptr)
-    {
-        resmem_complex_op()(this->ctx, dbecp, size_becp);
-    }
-
     // prepare math tools
     Nonlocal_maths<FPTYPE, Device> maths(this->nlpp_, this->ucell_);
 
-    const std::complex<FPTYPE>* ppsi = &(this->psi_[0](ik, 0, 0));
+
+    // calculate derivative of real spherical harmonics respect to G+k
+    // if k point has changed (not consistent with index of k cached), we need to recalculate 
+    // the g_plus_k. luckily, the g_plus_k has been calculated by cal_becp. But this requires
+    // the cal_becp function is called before this, does it always hold?
+    // besides, after refreshing g_plus_k, should refresh the value of ylm, which is also 
+    // done in cal_becp
     const int npw = this->wfc_basis_->npwk[ik];
-    std::complex<FPTYPE>* vkb_deri_ptr = this->ppcell_vkb;
-
     if (this->pre_ik_s != ik)
-    { // k point has changed, we need to recalculate the g_plus_k
-        // this->g_plus_k = maths.cal_gk(ik, this->wfc_basis_); //has been calculated by cal_becp
-
+    { 
         const int lmax_ = this->nlpp_->lmaxkb;
-        // prepare ylm，size: (lmax+1)^2 * this->max_npw
-        // maths.cal_ylm(lmax_, npw, g_plus_k.data(), hd_ylm); //has been calculated by cal_becp
         maths.cal_ylm_deri(lmax_, npw, g_plus_k.data(), hd_ylm_deri);
         this->pre_ik_s = ik;
     }
-    FPTYPE *gk = g_plus_k.data(), *vq_tb = this->nlpp_->tab.ptr;
-    std::complex<FPTYPE>* d_sk = this->hd_sk;
-    if (this->device == base_device::GpuDevice)
-    {
-        gk = d_g_plus_k;
-        vq_tb = d_vq_tab;
-    }
+    // the function cal_ylm_deri proceeds like, always calculate on cpu, if gpu is
+    // available, copy the data to gpu.
 
+
+    // calculate dvkb, the radial part (seems the angular part is calculated on cpu?)
+    std::complex<FPTYPE>* vkb_deri_ptr = this->ppcell_vkb; // reuse the memory of vkb
+    // on different device, use different variable
+    FPTYPE *vq_tb = (this->device == base_device::GpuDevice)? d_vq_tab: this->nlpp_->tab.ptr; 
+    FPTYPE *gk = (this->device == base_device::GpuDevice)? d_g_plus_k: g_plus_k.data();
+    std::complex<FPTYPE>* d_sk = this->hd_sk;
     for (int it = 0; it < this->ucell_->ntype; it++) // loop all elements
     {
-        int lenth_vq = this->ucell_->atoms[it].ncpp.nbeta * npw;
-        // prepare inputs for calculating vkb，vkb1，vkb2
-        // prepare vq and vq', size: nq * this->max_npw
-        std::vector<double> vq(lenth_vq); // cal_vq(it, g_plus_k.data(), npw);
-        // std::vector<double> vq2(vq.size());
-
+        // simply interpolation from tab to vkb, this has been appeared in function cal_becp
+        // but is calculated again...
         cal_vq_op()(this->ctx,
-                    vq_tb,
+                    vq_tb, // in, the table with linspace(0, GlobalV::NQX, GlobalV::DQ)
                     it,
                     gk,
                     npw,
@@ -372,9 +378,11 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, i
                     this->nlpp_->tab.getBound3(),
                     GlobalV::DQ,
                     this->ucell_->atoms[it].ncpp.nbeta,
-                    hd_vq);
+                    hd_vq); // out
+        // simply an interpolation but the interpolation function is... modified...
+        // but this quantity, the dvkb is only used when calculating the dbecp_s
         cal_vq_deri_op()(this->ctx,
-                         vq_tb,
+                         vq_tb, // in, the table with linspace(0, GlobalV::NQX, GlobalV::DQ)
                          it,
                          gk,
                          npw,
@@ -382,8 +390,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, i
                          this->nlpp_->tab.getBound3(),
                          GlobalV::DQ,
                          this->ucell_->atoms[it].ncpp.nbeta,
-                         hd_vq_deri);
-
+                         hd_vq_deri); // out
         // prepare（-i）^l, size: nh
         std::vector<std::complex<double>> pref = maths.cal_pref(it);
         int nh = pref.size();
@@ -397,44 +404,53 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, i
                              ipol,
                              jpol,
                              this->dvkb_indexes.data());
+        // if it is gpu, let cpu tell gpu
         if (this->device == base_device::GpuDevice)
         {
             syncmem_int_h2d_op()(this->ctx, this->cpu_ctx, d_dvkb_indexes, dvkb_indexes.data(), nh * 4);
             syncmem_complex_h2d_op()(this->ctx, this->cpu_ctx, d_pref_in, pref.data(), nh);
         }
+        else // if it is cpu, cpu knows it
+        {
+            d_dvkb_indexes = dvkb_indexes.data();
+            d_pref_in = pref.data();
+            d_g_plus_k = g_plus_k.data();
+        }
         for (int ia = 0; ia < h_atom_na[it]; ia++)
         {
-            // 2. calculate dbecp：
-            // 2.a. calculate dbecp_noevc, repeat use the memory of ppcell.vkb
-
-            if (this->device == base_device::CpuDevice)
-            {
-                d_dvkb_indexes = dvkb_indexes.data();
-                d_pref_in = pref.data();
-                d_g_plus_k = g_plus_k.data();
-            }
-            cal_vkb_deri_op()(this->ctx,
+            cal_vkb_deri_op()(this->ctx,     // supports run both on cpu and gpu
                               nh,
                               npw,
                               ipol,
                               jpol,
-                              d_dvkb_indexes,
-                              hd_vq,
-                              hd_vq_deri,
-                              hd_ylm,
-                              hd_ylm_deri,
-                              d_sk,
-                              d_pref_in,
-                              d_g_plus_k,
-                              vkb_deri_ptr);
-            d_sk += npw;
+                              d_dvkb_indexes, // gpu knows it!
+                              hd_vq,          // what we just calculated
+                              hd_vq_deri,     // what we just calculated
+                              hd_ylm,         // gpu knows it after calling cal_becp...
+                              hd_ylm_deri,    // what we just calculated
+                              d_sk,           // gpu knows it after calling cal_becp...
+                              d_pref_in,      // gpu knows it!
+                              d_g_plus_k,     // gpu knows it!
+                              vkb_deri_ptr);  // gpu knows it!
+
+            // move to the next atom
+            d_sk += npw; 
             vkb_deri_ptr += nh * npw;
         }
     }
-    // 2.b calculate dbecp = dbecp_noevc * psi
+
+
+    // calculate dbecp_s
+    const int npol = this->ucell_->get_npol();
+    const int size_becp = this->nbands * npol * this->nkb;
+    const int npm_npol = npm * npol;
+    if (this->dbecp == nullptr) // allocate memory for dbecp
+    {
+        resmem_complex_op()(this->ctx, dbecp, size_becp);
+    }
+    const std::complex<FPTYPE>* ppsi = &(this->psi_[0](ik, 0, 0));
     const char transa = 'C';
     const char transb = 'N';
-
     gemm_op()(this->ctx,
               transa,
               transb,
@@ -449,9 +465,10 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, i
               &ModuleBase::ZERO,
               dbecp,
               nkb);
-              
+
     // ----------------------------------------------------------------------------------->8
     // the following calculates the stress, but why it is here?
+    // the correct place for calling these functions below are in stress_func_nl.cpp
     // calculate stress for target (ipol, jpol)
     if(npol == 1)
     {
