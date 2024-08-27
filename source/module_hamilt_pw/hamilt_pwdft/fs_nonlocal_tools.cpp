@@ -151,6 +151,13 @@ void FS_Nonlocal_tools<FPTYPE, Device>::delete_memory()
 }
 
 // cal_becp
+// starts from vkb (nkb, ng) table
+// it should be merely the multiplication of matrix (vkb, ng) * (ng, nbands) -> (vkb, nbands)
+// should be irrelevant with what the matrix is.
+// the vkb index generation should be maintained elsewhere.
+// vkb already has atomic position information, calculated from the vq and sk
+// . the multiplication with sk should be within specific operator
+// because the atom selection task is operator-specific.
 template <typename FPTYPE, typename Device>
 void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
 {
@@ -265,6 +272,9 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
             d_sk += npw;
         }
     }
+
+    // ----------------------------------------------------------------------------------->8
+    // what cal_becp function should do is the following, what it should not do is above.
     const char transa = 'C';
     const char transb = 'N';
     int npm_npol = npm * npol;
@@ -306,7 +316,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
     ModuleBase::timer::tick("FS_Nonlocal_tools", "cal_becp");
 }
 
-// cal_dbecp
+// cal_dbecp_s
 template <typename FPTYPE, typename Device>
 void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, int jpol, FPTYPE* stress)
 {
@@ -439,32 +449,35 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, i
               &ModuleBase::ZERO,
               dbecp,
               nkb);
+              
+    // ----------------------------------------------------------------------------------->8
+    // the following calculates the stress, but why it is here?
     // calculate stress for target (ipol, jpol)
     if(npol == 1)
     {
-    const int current_spin = this->kv_->isk[ik];
-    cal_stress_nl_op()(this->ctx,
-                       nondiagonal,
-                       ipol,
-                       jpol,
-                       nkb,
-                       npm,
-                       this->ntype,
-                       current_spin, // uspp only
-                       this->nbands,
-                       ik,
-                       this->nlpp_->deeq.getBound2(),
-                       this->nlpp_->deeq.getBound3(),
-                       this->nlpp_->deeq.getBound4(),
-                       atom_nh,
-                       atom_na,
-                       d_wg,
-                       d_ekb,
-                       qq_nt,
-                       deeq,
-                       becp,
-                       dbecp,
-                       stress);
+        const int current_spin = this->kv_->isk[ik];
+        cal_stress_nl_op()(this->ctx,
+                        nondiagonal,
+                        ipol,
+                        jpol,
+                        nkb,
+                        npm,
+                        this->ntype,
+                        current_spin, // uspp only
+                        this->nbands,
+                        ik,
+                        this->nlpp_->deeq.getBound2(),
+                        this->nlpp_->deeq.getBound3(),
+                        this->nlpp_->deeq.getBound4(),
+                        atom_nh,
+                        atom_na,
+                        d_wg,
+                        d_ekb,
+                        qq_nt,
+                        deeq,
+                        becp,
+                        dbecp,
+                        stress);
     }
     else
     {
@@ -492,46 +505,64 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, i
     ModuleBase::timer::tick("FS_Nonlocal_tools", "cal_dbecp_s");
 }
 
+// cal_dbecp_f
+// starts from vkb (nkb, ng) table
+// it should be again merely the multiplication of matrix (vkb, ng) * (ng, nbands) -> (vkb, nbands)
+// the vkb is backed-up, and the memory space is reused for calculate ONE COMPONENT of dbecp
+// . the direction of force is indexed by ipol (for stress, there are two, ipol and jpol).
+// the dbecp_f is simply the becp multiplied with -i(G+k)_i
 template <typename FPTYPE, typename Device>
 void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_f(int ik, int npm, int ipol)
 {
     ModuleBase::TITLE("FS_Nonlocal_tools", "cal_dbecp_f");
     ModuleBase::timer::tick("FS_Nonlocal_tools", "cal_dbecp_f");
-    const int npol = this->ucell_->get_npol();
-    const int npm_npol = npm * npol;
-    const int size_becp = this->nbands * npol * this->nkb;
-    if (this->dbecp == nullptr)
-    {
-        resmem_complex_op()(this->ctx, dbecp, 3 * size_becp);
-    }
 
-    std::complex<FPTYPE>* dbecp_ptr = this->dbecp + ipol * size_becp;
-    const std::complex<FPTYPE>* vkb_ptr = this->ppcell_vkb;
-    std::complex<FPTYPE>* vkb_deri_ptr = this->ppcell_vkb;
-
-    const std::complex<FPTYPE>* ppsi = &(this->psi_[0](ik, 0, 0));
     const int npw = this->wfc_basis_->npwk[ik];
-    if (this->pre_ik_f == -1)
+
+    // STAGE1: calculate dvkb_f
+    // calculate gcarx, gcary/gcarx and gcarz/gcary, overwrite gcar
+    if (this->pre_ik_f == -1) // if it is the very first run, we allocate
     {
         resmem_var_op()(this->ctx, gcar, 3 * this->wfc_basis_->npwk_max);
         resmem_int_op()(this->ctx, gcar_zero_indexes, 3 * this->wfc_basis_->npwk_max);
     }
-
+    // first refresh the value of gcar_zero_indexes, gcar_zero_counts
     if (this->pre_ik_f != ik)
-    {
+    { // the following lines will cause UNDEFINED BEHAVIOR because memory layout of vector3 instance
+      // is assumed to be always contiguous but it is not guaranteed.
         this->transfer_gcar(npw,
                             this->wfc_basis_->npwk_max,
                             &(this->wfc_basis_->gcar[ik * this->wfc_basis_->npwk_max].x));
     }
 
+    // backup vkb values to vkb_save
     this->save_vkb(npw, ipol);
-
+    // for x, the coef is -i, for y and z it is 1
     const std::complex<double> coeff = ipol == 0 ? ModuleBase::NEG_IMAG_UNIT : ModuleBase::ONE;
 
+    const std::complex<FPTYPE>* vkb_ptr = this->ppcell_vkb;
+    std::complex<FPTYPE>* vkb_deri_ptr = this->ppcell_vkb;
     // calculate the vkb_deri for ipol with the memory of ppcell_vkb
     cal_vkb1_nl_op<FPTYPE, Device>()(this->ctx, nkb, npw, npw, npw, ipol, coeff, vkb_ptr, gcar, vkb_deri_ptr);
 
+    // ------------------------------------------------------------------------------->8
+
+    // STAGE2: calculate dbecp_f
+    // NPOL
+    // either 1 or 2, for NSPIN 1, 2 or 4 calculation
+    // once NSPIN 4, there are doubled number of pw in each "row" of psi
+    // on the other hand, for NSPIN 4 calculation, the number of bands is also doubled
+    const int npol = this->ucell_->get_npol();
+    const int npm_npol = npm * npol;
+    const int size_becp = this->nbands * npol * this->nkb;
+    if (this->dbecp == nullptr) // if it is the very first run, we allocate
+    { // why not judging whether dbecp == nullptr inside resmem_complex_op?
+        resmem_complex_op()(this->ctx, dbecp, 3 * size_becp);
+    }
     // do gemm to get dbecp and revert the ppcell_vkb for next ipol
+    const std::complex<FPTYPE>* ppsi = &(this->psi_[0](ik, 0, 0));
+    // move the pointer to corresponding read&write position, according to ipol
+    std::complex<FPTYPE>* dbecp_ptr = this->dbecp + ipol * size_becp; // [out]
     const char transa = 'C';
     const char transb = 'N';
     gemm_op()(this->ctx,
@@ -630,9 +661,9 @@ void FS_Nonlocal_tools<FPTYPE, Device>::revert_vkb(int npw, int ipol)
 template <typename FPTYPE, typename Device>
 void FS_Nonlocal_tools<FPTYPE, Device>::transfer_gcar(int npw, int npw_max, const FPTYPE* gcar_in)
 {
-    std::vector<FPTYPE> gcar_tmp(3 * npw_max);
-    gcar_tmp.assign(gcar_in, gcar_in + 3 * npw_max);
-    std::vector<int> gcar_zero_indexes_tmp(3 * npw_max);
+    std::vector<FPTYPE> gcar_tmp(3 * npw_max); // [out], will overwritten this->gcar
+    gcar_tmp.assign(gcar_in, gcar_in + 3 * npw_max); // UNDEFINED BEHAVIOR!!! nobody always knows the memory layout of vector3
+    std::vector<int> gcar_zero_indexes_tmp(3 * npw_max); // a "checklist"
 
     int* gcar_zero_ptrs[3];
     for (int i = 0; i < 3; i++)
@@ -649,7 +680,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::transfer_gcar(int npw, int npw_max, cons
         {
             if (std::abs(gcar_tmp[ig * 3 + i]) < 1e-15)
             {
-                ++gcar_zero_counts[i];
+                ++gcar_zero_counts[i]; // num of zeros on each direction
                 gcar_zero_ptrs[i][gcar_zero_counts[i]] = ig;
             }
         }

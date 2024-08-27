@@ -353,7 +353,7 @@ void projectors::OnsiteProjector<T, Device>::overlap_proj_psi(
         &alpha,                 // const std::complex<double> alpha
         this->tab_atomic_,      // const std::complex<double>* a
         this->npw_,             // const int lda
-        ppsi,      // const std::complex<double>* b
+        ppsi,                   // const std::complex<double>* b
         ldb,                    // const int ldb
         &beta,                  // const std::complex<double> beta
         becp,                   // std::complex<double>* c

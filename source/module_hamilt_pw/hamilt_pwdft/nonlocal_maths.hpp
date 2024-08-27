@@ -44,7 +44,15 @@ class Nonlocal_maths
      * This is beneficial for GPU memory access.
      */
     std::vector<FPTYPE> cal_gk(int ik, const ModulePW::PW_Basis_K* pw_basis);
-    /// calculate the sperical bessel function for projections
+    /**
+     * @brief calculate the real spherical harmonic functions on cpu (and optionally send to gpu,
+     * if gpu is available)
+     * 
+     * @param lmax [in] maximum angular momentum to calculate
+     * @param npw [in] number of G+k vectors
+     * @param gk_in [in] the G+k vectors
+     * @param ylm [out] the spherical harmonic functions
+     */
     void cal_ylm(int lmax, int npw, const FPTYPE* gk_in, FPTYPE* ylm);
     /// calculate the derivate of the sperical bessel function for projections
     void cal_ylm_deri(int lmax, int npw, const FPTYPE* gk_in, FPTYPE* ylm_deri);
@@ -288,7 +296,7 @@ void Nonlocal_maths<FPTYPE, Device>::cal_vkb_deri(int it,
             const FPTYPE* ylm_deri_ptr1 = &ylm_deri_in[(ipol * x1 + lm) * npw];
             const FPTYPE* ylm_deri_ptr2 = &ylm_deri_in[(jpol * x1 + lm) * npw];
             const FPTYPE* vq_deri_ptr = &vq_deri_in[nb * npw];
-            const FPTYPE* gkn = &gk_in[4 * npw];
+            const FPTYPE* qnorm = &gk_in[4 * npw];
             for (int ig = 0; ig < npw; ig++)
             {
                 vkb_ptr[ig] -= (gk_in[ig * 3 + ipol] * ylm_deri_ptr2[ig] + gk_in[ig * 3 + jpol] * ylm_deri_ptr1[ig])
@@ -299,7 +307,7 @@ void Nonlocal_maths<FPTYPE, Device>::cal_vkb_deri(int it,
             for (int ig = 0; ig < npw; ig++)
             {
                 vkb_ptr[ig] -= 2.0 * ylm_ptr[ig] * vq_deri_ptr[ig] * sk_in[ig] * pref_in[ih] * gk_in[ig * 3 + ipol]
-                               * gk_in[ig * 3 + jpol] * gkn[ig];
+                               * gk_in[ig * 3 + jpol] * qnorm[ig];
             }
             ih++;
         }
