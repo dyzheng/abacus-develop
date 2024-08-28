@@ -552,74 +552,6 @@ void cal_dvkb_stress(const int ntype,
     delete[] itich2l_;
 }
 
-template<typename FPTYPE, typename Device>
-void cal_becp_(const int ik,
-               const int nch_tot, // nch sum over all atoms
-               const std::complex<FPTYPE>* vkb,
-               const int npol,
-               const int nbands, // is it different with the nbands from psi?
-               const int npm,
-               const int npw,    // is it different with the nbands from psi?
-               const int npwx,   // is it different with the nbands from psi?
-               const psi::Psi<std::complex<FPTYPE>, Device>* psi,
-               std::complex<FPTYPE>* out,
-               Device* device_to,
-               Device* device_from,
-               const base_device::AbacusDevice_t device_id)
-{
-    using resmem_complex_op 
-        = base_device::memory::resize_memory_op<std::complex<FPTYPE>, Device>;
-    using resmem_complex_h_op
-        = base_device::memory::resize_memory_op<std::complex<FPTYPE>, base_device::DEVICE_CPU>;
-    using syncmem_complex_d2h_op
-        = base_device::memory::synchronize_memory_op<std::complex<FPTYPE>, Device, base_device::DEVICE_CPU>;
-    using syncmem_complex_h2d_op
-        = base_device::memory::synchronize_memory_op<std::complex<FPTYPE>, base_device::DEVICE_CPU, Device>;
-    using delmem_complex_h_op
-        = base_device::memory::delete_memory_op<std::complex<FPTYPE>, base_device::DEVICE_CPU>;
-    // allocate memory for out on gpu
-    const int size_becp = nbands * npol * nch_tot;
-    if (out == nullptr)
-    {
-        resmem_complex_op()(device_to, out, size_becp);
-    }
-    // the starting memory address of psi of present k-point
-    const std::complex<FPTYPE>* ppsi = &(psi[0](ik, 0, 0));
-    int npm_npol = npm * npol;
-    const char transa = 'C';
-    const char transb = 'N';
-    hsolver::gemm_op<std::complex<FPTYPE>, Device>()(device_to,
-                                                     transa,
-                                                     transb,
-                                                     nch_tot,
-                                                     npm_npol,
-                                                     npw,
-                                                     &ModuleBase::ONE,
-                                                     vkb,
-                                                     npw,
-                                                     ppsi,
-                                                     npwx,
-                                                     &ModuleBase::ZERO,
-                                                     out,
-                                                     nch_tot);
-
-    // out calculate is over , now we should broadcast this data.
-    const int size_becp_act = npm * npol * nch_tot;
-    if (device_id == base_device::GpuDevice)
-    {
-        std::complex<FPTYPE>* out_host = nullptr;
-        resmem_complex_h_op()(device_from, out_host, size_becp_act);
-        syncmem_complex_d2h_op()(device_from, device_to, out_host, out, size_becp_act);
-        Parallel_Reduce::reduce_pool(out_host, size_becp_act);
-        syncmem_complex_h2d_op()(device_to, device_from, out, out_host, size_becp_act);
-        delmem_complex_h_op()(device_from, out_host);
-    }
-    else
-    {
-        Parallel_Reduce::reduce_pool(out, size_becp_act);
-    }
-}
-
 template <typename FPTYPE, typename Device>
 FS_Nonlocal_tools<FPTYPE, Device>::FS_Nonlocal_tools(const pseudopot_cell_vnl* nlpp_in,
                                                      const UnitCell* ucell_in,
@@ -779,8 +711,8 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
 
     FPTYPE* gk = nullptr;
     tabulate_gk(ik, 
-              this->wfc_basis_, 
-              this->ucell_->tpiba, gk, this->g_plus_k, this->d_g_plus_k, this->ctx, this->cpu_ctx, this->device);
+                this->wfc_basis_, 
+                this->ucell_->tpiba, gk, this->g_plus_k, this->d_g_plus_k, this->ctx, this->cpu_ctx, this->device);
 
     tabulate_ylm(this->g_plus_k.data(), this->wfc_basis_->npwk[ik],
                  this->nlpp_->lmaxkb, this->hd_ylm, this->hd_ylm_deri,
@@ -788,8 +720,8 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
 
     std::complex<FPTYPE>* d_sk = nullptr;
     tabulate_sk(ik,
-              this->ucell_->nat, this->wfc_basis_->npwk[ik], this->sf_, this->wfc_basis_,
-              d_sk, this->hd_sk, this->ctx);
+                this->ucell_->nat, this->wfc_basis_->npwk[ik], this->sf_, this->wfc_basis_,
+                d_sk, this->hd_sk, this->ctx);
     
     const int npw = this->wfc_basis_->npwk[ik];
 
@@ -828,13 +760,52 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
 
     // ----------------------------------------------------------------------------------->8
     // what cal_becp function should do is the following, what it should not do is above.
-    int nch_tot = 0;
-    for (int it = 0; it < this->ucell_->ntype; it++)
+    const char transa = 'C';
+    const char transb = 'N';
+    // allocate memory for becp on gpu
+    const int npol = this->ucell_->get_npol();
+    const int size_becp = this->nbands * npol * this->nkb;
+    if (this->becp == nullptr)
     {
-        nch_tot += this->ucell_->atoms[it].ncpp.nh * this->ucell_->atoms[it].na;
+        resmem_complex_op()(this->ctx, becp, size_becp);
     }
-    cal_becp_(ik, nch_tot, vkb_ptr, this->ucell_->get_npol(), this->nbands, npm, npw, 
-              this->max_npw, this->psi_, this->becp, this->ctx, this->cpu_ctx, this->device);
+    // the starting memory address of psi of present k-point
+    const std::complex<FPTYPE>* ppsi = &(this->psi_[0](ik, 0, 0));
+    int npm_npol = npm * npol;
+    gemm_op()(this->ctx,
+              transa,  
+              transb,
+              nkb,
+              npm_npol,
+              npw,
+              &ModuleBase::ONE,
+              ppcell_vkb,
+              npw,
+              ppsi,
+              this->max_npw,
+              &ModuleBase::ZERO,
+              becp,
+              nkb);
+    // becp calculate is over , now we should broadcast this data.
+    const int size_becp_act = npm * npol * this->nkb;
+    if (this->device == base_device::GpuDevice)
+    {
+        std::complex<FPTYPE>* h_becp = nullptr;
+        // allocate memory for h_becp on cpu
+        resmem_complex_h_op()(this->cpu_ctx, h_becp, size_becp_act);
+        // copy data from becp to h_becp on cpu
+        syncmem_complex_d2h_op()(this->cpu_ctx, this->ctx, h_becp, becp, size_becp_act);
+        // MPI reduce, get the merged becp data on cpu
+        Parallel_Reduce::reduce_pool(h_becp, size_becp_act);
+        // send merged becp data to gpu to the array becp
+        syncmem_complex_h2d_op()(this->ctx, this->cpu_ctx, becp, h_becp, size_becp_act);
+        // release the memory of h_becp on cpu (a temporary memory)
+        delmem_complex_h_op()(this->cpu_ctx, h_becp);
+    }
+    else
+    {
+        Parallel_Reduce::reduce_pool(becp, size_becp_act);
+    }
 
     ModuleBase::timer::tick("FS_Nonlocal_tools", "cal_becp");
 }
@@ -887,13 +858,33 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, i
                     this->ctx,
                     this->cpu_ctx,
                     this->device);
-    int nch_tot = 0;
-    for (int it = 0; it < this->ucell_->ntype; it++)
+
+    // calculate dbecp_s
+    const int npol = this->ucell_->get_npol();
+    const int size_becp = this->nbands * npol * this->nkb;
+    const int npm_npol = npm * npol;
+    if (this->dbecp == nullptr) // allocate memory for dbecp
     {
-        nch_tot += this->ucell_->atoms[it].ncpp.nh * this->ucell_->atoms[it].na;
+        resmem_complex_op()(this->ctx, dbecp, size_becp);
     }
-    cal_becp_(ik, nch_tot, vkb_deri_buf, this->ucell_->get_npol(), this->nbands, npm, npw, 
-              this->max_npw, this->psi_, this->dbecp, this->ctx, this->cpu_ctx, this->device);
+    const std::complex<FPTYPE>* ppsi = &(this->psi_[0](ik, 0, 0));
+    const char transa = 'C';
+    const char transb = 'N';
+
+    gemm_op()(this->ctx,
+              transa,
+              transb,  
+              nkb,
+              npm_npol,
+              npw,
+              &ModuleBase::ONE,
+              ppcell_vkb,
+              npw,
+              ppsi,
+              this->max_npw,
+              &ModuleBase::ZERO,
+              dbecp,
+              nkb);
 
     // ----------------------------------------------------------------------------------->8
     // the following calculates the stress, but why it is here?
