@@ -38,6 +38,20 @@ class FS_Nonlocal_tools
                       const Structure_Factor* sf_in,
                       const ModuleBase::matrix& wg,
                       const ModuleBase::matrix& ekb);
+
+    // a more general constructor is in the following
+    FS_Nonlocal_tools(const ModuleBase::realArray& tab,  // radials' spherical bessel transform
+                      const std::vector<int>& nproj,     // number of projectors for each atom type
+                      const int lmax,                    // maximal angular momentum over all projectors
+                      const ModuleBase::matrix& nhtol,   // (it, ich) -> l, the ich is (l, m)-distinctive
+                      const UnitCell* ucell_in,
+                      const psi::Psi<std::complex<FPTYPE>, Device>* psi_in,
+                      const K_Vectors* kv_in,
+                      const ModulePW::PW_Basis_K* wfc_basis_in,
+                      const Structure_Factor* sf_in,
+                      const ModuleBase::matrix& wg,
+                      const ModuleBase::matrix& ekb);
+
     ~FS_Nonlocal_tools();
 
     /**
@@ -110,6 +124,10 @@ class FS_Nonlocal_tools
     /// ---------------------------------------------------------------------
 
     /// pointers to access the data without memory arrangement
+    const ModuleBase::realArray* tabtpr = nullptr;
+    const ModuleBase::matrix* nhtol = nullptr;
+    int lprojmax = -1;
+
     FPTYPE* d_wg = nullptr;
     FPTYPE* d_ekb = nullptr;
     FPTYPE* gcar = nullptr;

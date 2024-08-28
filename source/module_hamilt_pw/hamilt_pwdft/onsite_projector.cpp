@@ -157,6 +157,16 @@ void projectors::OnsiteProjector<T, Device>::init(const std::string& orbital_dir
         RadialProjection::RadialProjector::_build_backward_map(it2iproj, lproj, irow2it_, irow2iproj_, irow2m_);
         RadialProjection::RadialProjector::_build_forward_map(it2ia, it2iproj, lproj, itiaiprojm2irow_);
         rp_._build_sbt_tab(rgrid, projs, lproj, nq, dq);
+
+        // For being compatible with present cal_force and cal_stress framework  
+        // uncomment the following code block if you want to use the FS_Nonlocal_tools
+              
+        // ModuleBase::realArray tab;
+        // ModuleBase::matrix nhtol;
+        // rp_._build_sbt_tab(nproj, rgrid, projs, lproj, nq, dq, tab, nhtol);
+        // const int lmax_ = std::max_element(lproj.begin(), lproj.end());
+        // FS_Nonlocal_tools fs_tools(tab, nproj, lmax_, nhtol, ucell, psi, kv, pw_basis, sf, wg, ekb)
+
         ModuleBase::timer::tick("OnsiteProj", "cubspl_tabulate");
 
         this->initialed = true;

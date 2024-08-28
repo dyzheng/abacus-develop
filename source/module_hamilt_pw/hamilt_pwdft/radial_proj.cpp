@@ -125,6 +125,60 @@ void RadialProjection::RadialProjector::_build_sbt_tab(const std::vector<double>
     _build_sbt_tab(nr, r.data(), radptrs, l, nq, dq);
 }
 
+void RadialProjection::RadialProjector::_build_sbt_tab(const std::vector<int>& nproj,
+                                                       const std::vector<double>& r,
+                                                       const std::vector<std::vector<double>>& radials,
+                                                       const std::vector<int>& l,
+                                                       const int nq,                             //< GlobalV::DQ
+                                                       const double& dq,                         //< GlobalV::NQX
+                                                       ModuleBase::realArray& tab,
+                                                       ModuleBase::matrix& nhtol)              // output table
+{
+    const int nprojmax = *std::max_element(nproj.begin(), nproj.end());
+    const int ntype = nproj.size();
+
+    tab.create(ntype, nprojmax, nq);
+    tab.zero_out();
+
+    std::vector<double> qgrid(nq);
+    std::iota(qgrid.begin(), qgrid.end(), 0);
+    std::transform(qgrid.begin(), qgrid.end(), qgrid.begin(), [dq](const double& q){return q*dq;});
+
+    ModuleBase::SphericalBesselTransformer sbt_(true); // bool: enable cache
+    int iproj = 0;
+    int nchmax = 0;
+    for (int it = 0; it < ntype; it++)
+    {
+        int nch = 0;
+        const int nproj_it = nproj[it];
+        for (int ip = 0; ip < nproj_it; ip++)
+        {
+            const int l_ = l[iproj];
+            nch += 2*l_ + 1;
+            std::vector<double> _temp(nq);
+            sbt_.direct(l_, r.size(), r.data(), radials[iproj].data(), nq, qgrid.data(), _temp.data());
+            std::for_each(_temp.begin(), _temp.end(), [l_](double& x){x = x/std::sqrt(2.0*std::acos(-1.0));});
+            double* tab_here = tab.ptr + it*nprojmax*nq + ip*nq; // can I operate on memory like this?
+            std::copy(_temp.begin(), _temp.end(), tab_here);
+            iproj++;
+        }
+        nchmax = std::max(nchmax, nch);
+    }
+    
+    nhtol.create(ntype, nchmax);
+    nhtol.zero_out();
+    iproj = 0;
+    for (int it = 0; it < ntype; it++)
+    {
+        const int nproj_it = nproj[it];
+        for (int ip = 0; ip < nproj_it; ip++)
+        {
+            const int l_ = l[iproj];
+            nhtol(it, ip) = l_;
+        }
+    }
+}
+
 void RadialProjection::RadialProjector::sbtft(const std::vector<ModuleBase::Vector3<double>>& qs,
                                               std::vector<std::complex<double>>& out,
                                               const char type,

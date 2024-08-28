@@ -10,12 +10,14 @@
 
 namespace hamilt
 {
-
+// all stories start from the following function. This function retrieves the interpolation table
+// from instance of pseudopot_cell_vnl, the tab member variable. It will be send to gpu if the device_id
+// is GpuDevice.
 template<typename FPTYPE, typename Device>
-void retrieve_interptab(FPTYPE* in, 
+void retrieve_interptab(FPTYPE* tab, 
                         const int size, 
-                        FPTYPE* out, 
-                        FPTYPE* out_device, 
+                        FPTYPE* tab_host, 
+                        FPTYPE* tab_device, 
                         Device* device_to,  
                         Device* device_from,
                         const base_device::AbacusDevice_t device_id)
@@ -24,12 +26,13 @@ void retrieve_interptab(FPTYPE* in,
     // fetch the ppvnl.tab here, but...why??? it will never change...
     // explicit interpolation table, involving GlobalV::NQX and GlobalV::DQ
     // 4*pi/sqrt(omega) * Jl(qr) in which q goes in linspace(0, GlobalV::NQX, GlobalV::DQ)
-    out = in; // this is what cpu knows
+    using syncmem_var_h2d_op = base_device::memory::synchronize_memory_op<FPTYPE, Device, base_device::DEVICE_CPU>;
+    tab_host = tab; // this is what cpu knows
     if (device_id == base_device::GpuDevice) // also let gpu know
     {
         // send the vq table "h2d"
-        base_device::memory::synchronize_memory_op<FPTYPE, Device, base_device::DEVICE_CPU>()(device_to, device_from, out_device, in, size);
-        out = out_device;
+        syncmem_var_h2d_op()(device_to, device_from, tab_device, tab, size);
+        tab_host = tab_device;
     }
     // ----------------------------------------------------------------------------------->8
 }
@@ -56,6 +59,8 @@ void tabulate_gk(const int ik,
     // however, the g_plus_k it is not simply the G+k, but also with their norm and 
     // reciprocal of the norm, size: npw * 5. First memory block is npw * 3, the second and 
     // the third memory block are 1 * npw.
+    using syncmem_var_h2d_op = base_device::memory::synchronize_memory_op<FPTYPE, Device, base_device::DEVICE_CPU>;
+
     int npw = pw_basis->npwk[ik];
     out_host.resize(npw * 5);
     ModuleBase::Vector3<FPTYPE> q;
@@ -76,12 +81,12 @@ void tabulate_gk(const int ik,
     out = out_host.data(); // this is what cpu knows
     if (device_id == base_device::GpuDevice) // also let gpu know
     {
-        base_device::memory::synchronize_memory_op<FPTYPE, Device, base_device::DEVICE_CPU>()(device_to, device_from, out_device, out_host.data(), out_host.size());
+        syncmem_var_h2d_op()(device_to, device_from, out_device, out_host.data(), out_host.size());
         out = out_device;
     }
 }
 
-template <typename FPTYPE, typename Device>
+template <typename FPTYPE>
 void dylmr2(const int nylm,
             const int ngy,
             const FPTYPE* gk,
@@ -226,7 +231,7 @@ void tabulate_ylm(FPTYPE* q,
         // calculate
         for (int ipol = 0; ipol < 3; ipol++)
         {
-            dylmr2<FPTYPE, Device>(ntot_ylm, nq, q, &out_grad_host[ipol * ntot_ylm * nq], ipol);
+            dylmr2(ntot_ylm, nq, q, &out_grad_host[ipol * ntot_ylm * nq], ipol);
         }
         // send from cpu to gpu
         syncmem_var_h2d_op()(device_to, device_from, out_grad_device, out_grad_host.data(), out_grad_host.size());
@@ -235,7 +240,7 @@ void tabulate_ylm(FPTYPE* q,
     {
         for (int ipol = 0; ipol < 3; ipol++)
         {
-            dylmr2<FPTYPE, Device>(ntot_ylm, nq, q, &out_grad_device[ipol * ntot_ylm * nq], ipol);
+            dylmr2(ntot_ylm, nq, q, &out_grad_device[ipol * ntot_ylm * nq], ipol);
         }
     }
 }
@@ -243,21 +248,21 @@ void tabulate_ylm(FPTYPE* q,
 
 template <typename FPTYPE, typename Device>
 void tabulate_sk(const int ik,
-               const int nat,
-               const int nq,
-               const Structure_Factor* sf,
-               const ModulePW::PW_Basis_K* pw_basis,
-               std::complex<FPTYPE>* out_device,
-               std::complex<FPTYPE>* out_host,
-               Device* device_to
-               )
+                 const int nat,
+                 const int nq,
+                 const Structure_Factor* sf,
+                 const ModulePW::PW_Basis_K* pw_basis,
+                 std::complex<FPTYPE>* out_device,
+                 std::complex<FPTYPE>* out_host,
+                 Device* device_to)
 {
     // calculate sk
     // the "h" and "d" appears at the first place is either "host" or "device"
     // the "d" and "s" appears at the second place is either "double (64-bit)" or "single (32-bit)"
     // therefore the following hd_sk is the double precision, sk on the host device, this is done
     // concurrently by cpu and gpu (if there is).
-    base_device::memory::resize_memory_op<std::complex<FPTYPE>, Device>()(device_to, out_host, nat * nq);
+    using resmem_complex_op = base_device::memory::resize_memory_op<std::complex<FPTYPE>, Device>;
+    resmem_complex_op()(device_to, out_host, nat * nq);
     sf->get_sk(device_to, ik, pw_basis, out_host);
     out_device = out_host; // copy the starting memory address of hd_sk to d_sk
     // ----------------------------------------------------------------------------------->8
@@ -570,6 +575,9 @@ FS_Nonlocal_tools<FPTYPE, Device>::FS_Nonlocal_tools(const pseudopot_cell_vnl* n
     this->max_npw = wfc_basis_->npwk_max;
     this->ntype = ucell_->ntype;
 
+    this->tabtpr = &(nlpp_->tab);
+    this->nhtol = &(nlpp_->nhtol);
+    this->lprojmax = nlpp_->lmaxkb;
     // There is a contribution for jh<>ih in US case or multi projectors case
     // Actually, the judge of nondiagonal should be done on every atom type
     this->nondiagonal = (GlobalV::use_uspp || this->nlpp_->multi_proj) ? true : false;
@@ -706,22 +714,43 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
     ModuleBase::timer::tick("FS_Nonlocal_tools", "cal_becp");
 
     FPTYPE* vq_tb = nullptr;
-    retrieve_interptab(this->nlpp_->tab.ptr, this->nlpp_->tab.getSize(), 
-                       vq_tb, this->d_vq_tab, this->ctx, this->cpu_ctx, this->device);
+    retrieve_interptab(this->tabtpr->ptr,           // [in] the table (ntype, nprojmax, GlobalV::NQX) 
+                       this->tabtpr->getSize(),     // [in] ntype*nprojmax*GlobalV::NQX
+                       vq_tb,                       // [out]
+                       this->d_vq_tab,              // [out]
+                       this->ctx, 
+                       this->cpu_ctx, 
+                       this->device);
 
     FPTYPE* gk = nullptr;
-    tabulate_gk(ik, 
-                this->wfc_basis_, 
-                this->ucell_->tpiba, gk, this->g_plus_k, this->d_g_plus_k, this->ctx, this->cpu_ctx, this->device);
+    tabulate_gk(ik,                     // [in]
+                this->wfc_basis_,       // [in]
+                this->ucell_->tpiba,    // [in]
+                gk,                     // [out]
+                this->g_plus_k,         // [out]
+                this->d_g_plus_k,       // [out]
+                this->ctx, 
+                this->cpu_ctx, 
+                this->device);
 
-    tabulate_ylm(this->g_plus_k.data(), this->wfc_basis_->npwk[ik],
-                 this->nlpp_->lmaxkb, this->hd_ylm, this->hd_ylm_deri,
-                 this->ctx, this->cpu_ctx, this->device);
+    tabulate_ylm(this->g_plus_k.data(),         // [in]
+                 this->wfc_basis_->npwk[ik],    // [in]
+                 this->lprojmax,                // [in] lmax over all radials
+                 this->hd_ylm,                  // [out]
+                 this->hd_ylm_deri,             // [out]
+                 this->ctx, 
+                 this->cpu_ctx, 
+                 this->device);
 
     std::complex<FPTYPE>* d_sk = nullptr;
     tabulate_sk(ik,
-                this->ucell_->nat, this->wfc_basis_->npwk[ik], this->sf_, this->wfc_basis_,
-                d_sk, this->hd_sk, this->ctx);
+                this->ucell_->nat, 
+                this->wfc_basis_->npwk[ik], 
+                this->sf_, 
+                this->wfc_basis_,
+                d_sk, 
+                this->hd_sk, 
+                this->ctx);
     
     const int npw = this->wfc_basis_->npwk[ik];
 
@@ -739,9 +768,9 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
     std::complex<FPTYPE>* vkb_ptr = this->ppcell_vkb;
     cal_vkb(this->ucell_->ntype,        // ntype, from ucell
             this->h_atom_na,            // # of atom of each type, from ucell
-            this->nlpp_->lmaxkb,        // lmax over all radials
+            this->lprojmax,             // lmax over all radials
             nproj.data(),               // # of radials of each atom type
-            this->nlpp_->nhtol.c,       // itiproj2l mapping, size (ntype, nproj_max)
+            this->nhtol->c,             // itiproj2l mapping, size (ntype, nprojmax)
             vq_tb,                      // tabulated vq
             gk,                         // g+k x/y/z (3*npw) with norm (npw) and 1/norm (npw)
             npw,                        // # of plane waves, one dimension of gk
@@ -779,7 +808,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
               npm_npol,
               npw,
               &ModuleBase::ONE,
-              ppcell_vkb,
+              vkb_ptr,
               npw,
               ppsi,
               this->max_npw,
@@ -816,14 +845,12 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, i
 {
     ModuleBase::TITLE("FS_Nonlocal_tools", "cal_dbecp_s");
     ModuleBase::timer::tick("FS_Nonlocal_tools", "cal_dbecp_s");
-    // prepare math tools
-    Nonlocal_maths<FPTYPE, Device> maths(this->nlpp_, this->ucell_);
 
     const int npw = this->wfc_basis_->npwk[ik];
     // calculate dvkb, the radial part (seems the angular part is calculated on cpu?)
     std::complex<FPTYPE>* vkb_deri_buf = this->ppcell_vkb; // reuse the memory of vkb
     // on different device, use different variable
-    FPTYPE *vq_tb = (this->device == base_device::GpuDevice)? this->d_vq_tab: this->nlpp_->tab.ptr; 
+    FPTYPE *vq_tb = (this->device == base_device::GpuDevice)? this->d_vq_tab: this->tabtpr->ptr; 
     FPTYPE *gk = (this->device == base_device::GpuDevice)? this->d_g_plus_k: g_plus_k.data();
     std::complex<FPTYPE>* d_sk = this->hd_sk;
 
@@ -834,27 +861,27 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, i
     }
     // because the vq and vq_deri are calculated on-the-fly to save memory, the following
     // function param list is a bit long.
-    cal_dvkb_stress(this->ucell_->ntype,
-                    this->h_atom_na,
-                    this->nlpp_->lmaxkb,
-                    nproj.data(),
-                    this->nlpp_->nhtol.c,
-                    vq_tb,
-                    gk,
-                    npw,
-                    GlobalV::DQ,
-                    GlobalV::NQX,
-                    this->hd_ylm,
-                    this->hd_ylm_deri,
-                    d_sk,
-                    this->hd_vq,
-                    this->hd_vq_deri,
-                    this->d_pref_in,
-                    this->dvkb_indexes,
-                    this->d_dvkb_indexes,
-                    ipol,
-                    jpol,
-                    vkb_deri_buf,
+    cal_dvkb_stress(this->ucell_->ntype,    // ntype
+                    this->h_atom_na,        // # of atom of each type
+                    this->lprojmax,         // lmax over all radials
+                    nproj.data(),           // # of radials of each atom type
+                    this->nlpp_->nhtol.c,   // itiproj2l mapping, size (ntype, nproj_max)
+                    vq_tb,                  // tabulated vq
+                    gk,                     // g+k x/y/z (3*npw) with norm (npw) and 1/norm (npw)
+                    npw,                    // # of plane waves, one dimension of gk
+                    GlobalV::DQ,            // step of interpolate table
+                    GlobalV::NQX,           // # of interpolation points
+                    this->hd_ylm,           // ylm, on "host"
+                    this->hd_ylm_deri,      // dylm/dq, on "host"
+                    d_sk,                   // structure factor, on "device"
+                    this->hd_vq,            // cached vq, on "host"
+                    this->hd_vq_deri,       // cached vq_deri, on "host"
+                    this->d_pref_in,        // prefactor (i)^l, saved on "device"
+                    this->dvkb_indexes,     // vkb needed indexes
+                    this->d_dvkb_indexes,   // vkb needed indexes, saved on "device"
+                    ipol,                   // the first index of direction of strain/stress
+                    jpol,                   // the second index of direction of strain/stress
+                    vkb_deri_buf,           // output, the vkb_deri
                     this->ctx,
                     this->cpu_ctx,
                     this->device);
