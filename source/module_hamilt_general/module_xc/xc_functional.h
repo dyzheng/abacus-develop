@@ -236,7 +236,8 @@ class XC_Functional
                              const double* const* const rho,
                              const int nrxx,
                              const double* ux_,
-                             const bool lsign_);
+                             const bool lsign_,
+							 double *mag_norm);
 
     //-------------------
     //  xc_funct_exch_lda.cpp
