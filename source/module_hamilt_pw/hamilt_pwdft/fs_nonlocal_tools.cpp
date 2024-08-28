@@ -278,8 +278,12 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
     ModuleBase::TITLE("FS_Nonlocal_tools", "cal_becp");
     ModuleBase::timer::tick("FS_Nonlocal_tools", "cal_becp");
     const int npol = this->ucell_->get_npol();
+    npm /= npol;
     const int size_becp = this->nbands * npol * this->nkb;
     const int size_becp_act = npm * npol * this->nkb;
+    std::cout << "nbands: " << this->psi_->get_nbands() << " nbasis: " << this->psi_->get_nbasis() << std::endl;
+    std::cout << "nkb: " << this->nkb << " npm: " << npm << std::endl;
+    std::cout << "npol: " << npol << " size_becp: " << size_becp << std::endl;
     if (this->becp == nullptr)
     {
         resmem_complex_op()(this->ctx, becp, size_becp);

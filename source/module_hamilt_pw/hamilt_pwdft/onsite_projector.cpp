@@ -380,6 +380,7 @@ void projectors::OnsiteProjector<T, Device>::overlap_proj_psi(
 // #ifdef __MPI
 //     Parallel_Reduce::reduce_pool(becp, size_becp);
 // #endif
+    std::cout << "npm: " << npm << std::endl;
     this->fs_tools->cal_becp(ik_, npm); // in cal_becp, npm should be the one not multiplied by npol
     this->becp = this->fs_tools->get_becp();
     ModuleBase::timer::tick("OnsiteProj", "overlap");
@@ -513,6 +514,7 @@ void projectors::OnsiteProjector<T, Device>::cal_occupations(const psi::Psi<std:
     {
         psi_in->fix_k(ik);
         //if(ik!=0) this->tabulate_atomic(ik);
+        std::cout << __FILE__ << ":" << __LINE__ << " nbands = " << nbands << std::endl;
         this->overlap_proj_psi(
                         nbands,
                         psi_in->get_pointer());
