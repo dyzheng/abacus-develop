@@ -589,10 +589,40 @@ void ESolver_KS_PW<T, Device>::iter_init(const int istep, const int iter) {
         this->p_chgmix->init_mixing();
         this->p_chgmix->mixing_restart_step = GlobalV::SCF_NMAX + 1;
     }
-    // for mixing restart
-    if (iter == this->p_chgmix->mixing_restart_step
-        && GlobalV::MIXING_RESTART > 0.0) {
+    // for mixing_restart
+    if (iter == this->p_chgmix->mixing_restart_step && GlobalV::MIXING_RESTART > 0.0)
+    {
         this->p_chgmix->init_mixing();
+        this->p_chgmix->mixing_restart_count++;
+        if (GlobalV::dft_plus_u)
+        {
+            if (GlobalC::dftu.uramping > 0.01 && !GlobalC::dftu.u_converged())
+            {
+                this->p_chgmix->mixing_restart_step = GlobalV::SCF_NMAX + 1;
+            }
+            if (GlobalC::dftu.uramping > 0.01)
+            {
+                bool do_uramping = true;
+                if (PARAM.inp.sc_mag_switch)
+                {
+                    SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>& sc = SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::getScInstance();
+                    if(!sc.mag_converged())// skip uramping if mag not converged
+                    {
+                        do_uramping = false;
+                    }
+                }
+                if(do_uramping)
+                {
+                    GlobalC::dftu.uramping_update(); // update U by uramping if uramping > 0.01
+                    std::cout << " U-Ramping! Current U = ";
+                    for (int i = 0; i < GlobalC::dftu.U0.size(); i++)
+                    {
+                        std::cout << GlobalC::dftu.U[i] * ModuleBase::Ry_to_eV << " ";
+                    }
+                    std::cout << " eV " << std::endl;
+                }
+            }
+        }
     }
     // mohan move harris functional to here, 2012-06-05
     // use 'rho(in)' and 'v_h and v_xc'(in)
@@ -602,6 +632,20 @@ void ESolver_KS_PW<T, Device>::iter_init(const int istep, const int iter) {
     // prepared fox mixing.
     if (GlobalV::MY_STOGROUP == 0) {
         this->pelec->charge->save_rho_before_sum_band();
+    }
+
+    // update local occupations for DFT+U
+    // should before lambda loop in DeltaSpin
+    if (GlobalV::dft_plus_u)
+    {
+        auto* dftu = ModuleDFTU::DFTU::get_instance();
+        // only old DFT+U method should calculated energy correction in esolver,
+        // new DFT+U method will calculate energy in calculating Hamiltonian
+        if (dftu->omc != 2)
+        {
+            dftu->cal_occ_pw(iter, this->psi, this->pelec->wg, GlobalC::ucell);
+        }
+        dftu->output();
     }
 
     // run the inner lambda loop to contrain atomic moments with the DeltaSpin method
@@ -619,17 +663,6 @@ void ESolver_KS_PW<T, Device>::iter_init(const int istep, const int iter) {
             // optimize lambda to get target magnetic moments, but the lambda is not near target
             sc.run_lambda_loop(iter-1);
         }
-    }
-    if (GlobalV::dft_plus_u)
-    {
-        auto* dftu = ModuleDFTU::DFTU::get_instance();
-        // only old DFT+U method should calculated energy correction in esolver,
-        // new DFT+U method will calculate energy in calculating Hamiltonian
-        if (dftu->omc != 2)
-        {
-            dftu->cal_occ_pw(iter, this->psi, this->pelec->wg, GlobalC::ucell);
-        }
-        dftu->output();
     }
 }
 

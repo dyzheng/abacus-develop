@@ -51,7 +51,7 @@ void XC_Functional::gradcorr(double &etxc, double &vtxc, ModuleBase::matrix &v,
 
 	// doing FFT to get rho in G space: rhog1 
     rhopw->real2recip(chr->rho[0], chr->rhog[0]);
-	if(GlobalV::NSPIN==2)//mohan fix bug 2012-05-28
+	if(GlobalV::NSPIN==2)
 	{
 		rhopw->real2recip(chr->rho[1], chr->rhog[1]);
 	}
