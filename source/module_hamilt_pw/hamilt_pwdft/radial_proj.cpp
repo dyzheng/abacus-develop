@@ -158,8 +158,10 @@ void RadialProjection::RadialProjector::_build_sbt_tab(const std::vector<int>& n
             std::vector<double> _temp(nq);
             sbt_.direct(l_, r.size(), r.data(), radials[iproj].data(), nq, qgrid.data(), _temp.data());
             std::for_each(_temp.begin(), _temp.end(), [l_](double& x){x = x/std::sqrt(2.0*std::acos(-1.0));});
-            double* tab_here = tab.ptr + it*nprojmax*nq + ip*nq; // can I operate on memory like this?
-            std::copy(_temp.begin(), _temp.end(), tab_here);
+            for (int iq = 0; iq < nq; iq++)
+            {
+                tab(it, ip, iq) = _temp[iq];
+            }
             iproj++;
         }
         nchmax = std::max(nchmax, nch);
@@ -170,11 +172,16 @@ void RadialProjection::RadialProjector::_build_sbt_tab(const std::vector<int>& n
     iproj = 0;
     for (int it = 0; it < ntype; it++)
     {
-        const int nproj_it = nproj[it];
-        for (int ip = 0; ip < nproj_it; ip++)
+        int ih = 0;
+        for (int ip = 0; ip < nproj[it]; ip++)
         {
             const int l_ = l[iproj];
-            nhtol(it, ip) = l_;
+            for (int m = -l_; m <= l_; m++)
+            {
+                nhtol(it, ih) = l_;
+                ih++;
+            }
+            iproj++;
         }
     }
 }

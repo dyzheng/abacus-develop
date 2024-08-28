@@ -6,6 +6,8 @@
 #include "module_basis/module_pw/pw_basis_k.h"
 #include "module_hamilt_pw/hamilt_pwdft/radial_proj.h"
 #include "module_psi/psi.h"
+#include "module_hamilt_pw/hamilt_pwdft/fs_nonlocal_tools.h"
+
 #include <string>
 #include <vector>
 #include <complex>
@@ -57,11 +59,15 @@ namespace projectors
         static OnsiteProjector<T, Device>* get_instance();
         void init(const std::string& orbital_dir,
                     const UnitCell* ucell_in,
+                    const psi::Psi<std::complex<T>, Device>& psi,
+                    const K_Vectors& kv,
                     const ModulePW::PW_Basis_K& pw_basis,             // level1: the plane wave basis, need ik
                     Structure_Factor& sf,                              // level2: the structure factor calculator
                     const double onsite_radius,
                     const int nq,
-                    const double dq);
+                    const double dq,
+                    const ModuleBase::matrix& wg,
+                    const ModuleBase::matrix& ekb);
         
         /// @brief calculate and print the occupations of all lm orbitals
         void cal_occupations(const psi::Psi<std::complex<double>>* psi, const ModuleBase::matrix& wg_in);
@@ -82,6 +88,8 @@ namespace projectors
         base_device::DEVICE_CPU* cpu_ctx = {};
         base_device::AbacusDevice_t device = {};
         static OnsiteProjector<T, Device> *instance;
+
+        hamilt::FS_Nonlocal_tools<T, Device>* fs_tools = nullptr;
 
         std::complex<double>* tab_atomic_ = nullptr;
         std::complex<double>* becp = nullptr;  // nbands * nkb
@@ -111,6 +119,8 @@ namespace projectors
         std::vector<int> irow2m_;
         std::map<std::tuple<int, int, int, int>, int> itiaiprojm2irow_;
 
+        ModuleBase::realArray tab;
+        ModuleBase::matrix nhtol;
 
         bool initialed = false;
 

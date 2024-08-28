@@ -19,12 +19,21 @@ class Nonlocal_maths
     Nonlocal_maths(const pseudopot_cell_vnl* nlpp_in, const UnitCell* ucell_in)
     {
         this->device = base_device::get_device_type<Device>(this->ctx);
-        this->nlpp_ = nlpp_in;
+        this->nhtol_ = nlpp_in->nhtol;
+        this->lmax_ = nlpp_in->lmaxkb;
+        this->ucell_ = ucell_in;
+    }
+    Nonlocal_maths(const ModuleBase::matrix& nhtol, const int lmax, const UnitCell* ucell_in)
+    {
+        this->device = base_device::get_device_type<Device>(this->ctx);
+        this->nhtol_ = nhtol;
+        this->lmax_ = lmax;
         this->ucell_ = ucell_in;
     }
 
   private:
-    const pseudopot_cell_vnl* nlpp_;
+    ModuleBase::matrix nhtol_;
+    int lmax_;
     const UnitCell* ucell_;
 
     Device* ctx = {};
@@ -57,7 +66,7 @@ class Nonlocal_maths
     /// calculate the derivate of the sperical bessel function for projections
     void cal_ylm_deri(int lmax, int npw, const FPTYPE* gk_in, FPTYPE* ylm_deri);
     /// calculate the (-i)^l factors
-    std::vector<complex<FPTYPE>> cal_pref(int it);
+    std::vector<complex<FPTYPE>> cal_pref(int it, const int nh);
     /// calculate the vkb matrix for this atom
     /// vkb = sum_lm (-i)^l * ylm(g^) * vq(g^) * sk(g^)
     void cal_vkb(int it,
@@ -198,16 +207,15 @@ void Nonlocal_maths<FPTYPE, Device>::cal_ylm_deri(int lmax, int npw, const FPTYP
 }
 // cal_pref
 template <typename FPTYPE, typename Device>
-std::vector<std::complex<FPTYPE>> Nonlocal_maths<FPTYPE, Device>::cal_pref(int it)
+std::vector<std::complex<FPTYPE>> Nonlocal_maths<FPTYPE, Device>::cal_pref(int it, const int nh)
 {
-    const int nh = this->ucell_->atoms[it].ncpp.nh; 
     // nh is the total number of m-channels of the beta functions
     // for example, if angular momentum of beta functions are 0, 0, 1, 1, 1, 1, the nh will be 
     // 1 + 1 + 3 + 3 + 3 + 3 = 14
     std::vector<std::complex<FPTYPE>> pref(nh);
     for (int ih = 0; ih < nh; ih++)
     {
-        pref[ih] = std::pow(std::complex<FPTYPE>(0.0, -1.0), this->nlpp_->nhtol(it, ih));
+        pref[ih] = std::pow(std::complex<FPTYPE>(0.0, -1.0), this->nhtol_(it, ih));
         // it is actually nh2l, which means to get the angular momentum...
     }
     return pref;
@@ -229,7 +237,7 @@ void Nonlocal_maths<FPTYPE, Device>::cal_vkb(int it,
     // loop over all beta functions
     for (int ib = 0; ib < this->ucell_->atoms[it].ncpp.nbeta; ib++)
     {
-        int l = this->nlpp_->nhtol(it, ih);
+        int l = this->nhtol_(it, ih);
         // loop over all m angular momentum
         for (int m = 0; m < 2 * l + 1; m++)
         {
@@ -264,12 +272,12 @@ void Nonlocal_maths<FPTYPE, Device>::cal_vkb_deri(int it,
                                                   const FPTYPE* gk_in,
                                                   std::complex<FPTYPE>* vkb_out)
 {
-    const int x1 = (this->nlpp_->lmaxkb + 1) * (this->nlpp_->lmaxkb + 1);
+    const int x1 = (this->lmax_ + 1) * (this->lmax_ + 1);
     int ih = 0;
     // loop over all beta functions
     for (int nb = 0; nb < this->ucell_->atoms[it].ncpp.nbeta; nb++)
     {
-        const int l = this->nlpp_->nhtol(it, ih);
+        const int l = this->nhtol_(it, ih);
         // loop over all m angular momentum
         for (int m = 0; m < 2 * l + 1; m++)
         {
@@ -356,7 +364,7 @@ void Nonlocal_maths<FPTYPE, Device>::cal_dvkb_index(const int nbeta,
                                                     int* indexes)
 {
     int ih = 0;
-    const int x1 = (this->nlpp_->lmaxkb + 1) * (this->nlpp_->lmaxkb + 1);
+    const int x1 = (this->lmax_ + 1) * (this->lmax_ + 1);
     for (int nb = 0; nb < nbeta; nb++)
     {
         int l = nhtol[it * nhtol_nc + ih];

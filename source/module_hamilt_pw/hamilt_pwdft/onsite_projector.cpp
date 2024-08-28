@@ -16,6 +16,7 @@
 #include "module_parameter/parameter.h"
 #include "module_base/timer.h"
 
+
 /**
  * ===============================================================================================
  * 
@@ -94,11 +95,15 @@ projectors::OnsiteProjector<T, Device>* projectors::OnsiteProjector<T, Device>::
 template<typename T, typename Device>
 void projectors::OnsiteProjector<T, Device>::init(const std::string& orbital_dir,
                                                   const UnitCell* ucell_in,
+                                                  const psi::Psi<std::complex<T>, Device>& psi,
+                                                  const K_Vectors& kv,
                                                   const ModulePW::PW_Basis_K& pw_basis,             // level1: the plane wave basis, need ik
                                                   Structure_Factor& sf,                              // level2: the structure factor calculator
                                                   const double onsite_radius,
                                                   const int nq,
-                                                  const double dq)
+                                                  const double dq,
+                                                  const ModuleBase::matrix& wg,
+                                                  const ModuleBase::matrix& ekb)
 {
     if(!this->initialed)
     {
@@ -156,17 +161,20 @@ void projectors::OnsiteProjector<T, Device>::init(const std::string& orbital_dir
         // [in] rgrid, projs, lproj, it2ia, it2iproj, nq, dq
         RadialProjection::RadialProjector::_build_backward_map(it2iproj, lproj, irow2it_, irow2iproj_, irow2m_);
         RadialProjection::RadialProjector::_build_forward_map(it2ia, it2iproj, lproj, itiaiprojm2irow_);
-        rp_._build_sbt_tab(rgrid, projs, lproj, nq, dq);
-
+        //rp_._build_sbt_tab(rgrid, projs, lproj, nq, dq);
+        rp_._build_sbt_tab(nproj, rgrid, projs, lproj, nq, dq, tab, nhtol);
         // For being compatible with present cal_force and cal_stress framework  
         // uncomment the following code block if you want to use the FS_Nonlocal_tools
-              
-        // ModuleBase::realArray tab;
-        // ModuleBase::matrix nhtol;
-        // rp_._build_sbt_tab(nproj, rgrid, projs, lproj, nq, dq, tab, nhtol);
-        // const int lmax_ = std::max_element(lproj.begin(), lproj.end());
-        // FS_Nonlocal_tools fs_tools(tab, nproj, lmax_, nhtol, ucell, psi, kv, pw_basis, sf, wg, ekb)
-
+        if(this->tab_atomic_ == nullptr) // fs_nonlocal_tools will borrow memory space here...
+        {
+            this->tot_nproj = itiaiprojm2irow_.size();
+            this->npwx_ = this->pw_basis_->npwk_max;
+            this->tab_atomic_ = new std::complex<double>[this->tot_nproj * this->npwx_];
+            this->size_vproj = this->tot_nproj * this->npwx_;
+        }
+        this->fs_tools = new hamilt::FS_Nonlocal_tools<T, Device>(
+            nproj, lproj, tab, nhtol, this->tab_atomic_, ucell_in, &psi, &kv, &pw_basis, &sf, wg, ekb);      
+        
         ModuleBase::timer::tick("OnsiteProj", "cubspl_tabulate");
 
         this->initialed = true;
@@ -176,8 +184,9 @@ void projectors::OnsiteProjector<T, Device>::init(const std::string& orbital_dir
 template<typename T, typename Device>
 projectors::OnsiteProjector<T, Device>::~OnsiteProjector()
 {
-    delete[] becp;
+    //delete[] becp;
     delete[] tab_atomic_;
+    delete fs_tools;
 }
 
 
@@ -340,37 +349,39 @@ void projectors::OnsiteProjector<T, Device>::overlap_proj_psi(
     // STAGE 3 - cal_becp
     // CACHE 3 - it is no use to cache becp, it will change in each SCF iteration
     // [in] psi, tab_atomic_, npw, becp, ik
-    const char transa = 'C';
-    const char transb = 'N';
-    const int ldb = this->npwx_;
-    const int ldc = this->tot_nproj;
-    const std::complex<double> alpha = 1.0;
-    const std::complex<double> beta = 0.0;
-    if(this->becp == nullptr || this->size_becp < npm*ldc)
-    {
-        delete[] this->becp;
-        this->becp = new std::complex<double>[npm*ldc];
-        this->size_becp = npm*ldc;
-    }
-    setmem_complex_op()(ctx, this->becp, 0.0, this->size_becp);
-    gemm_op()(
-        this->ctx,
-        transa,                 // const char transa
-        transb,                 // const char transb
-        ldc,                    // const int m
-        npm,                    // const int n
-        this->npw_,             // const int k
-        &alpha,                 // const std::complex<double> alpha
-        this->tab_atomic_,      // const std::complex<double>* a
-        this->npw_,             // const int lda
-        ppsi,                   // const std::complex<double>* b
-        ldb,                    // const int ldb
-        &beta,                  // const std::complex<double> beta
-        becp,                   // std::complex<double>* c
-        ldc);                   // const int ldc
-#ifdef __MPI
-    Parallel_Reduce::reduce_pool(becp, size_becp);
-#endif
+//     const char transa = 'C';
+//     const char transb = 'N';
+//     const int ldb = this->npwx_;
+//     const int ldc = this->tot_nproj;
+//     const std::complex<double> alpha = 1.0;
+//     const std::complex<double> beta = 0.0;
+//     if(this->becp == nullptr || this->size_becp < npm*ldc)
+//     {
+//         delete[] this->becp;
+//         this->becp = new std::complex<double>[npm*ldc];
+//         this->size_becp = npm*ldc;
+//     }
+//     setmem_complex_op()(ctx, this->becp, 0.0, this->size_becp);
+//     gemm_op()(
+//         this->ctx,
+//         transa,                 // const char transa
+//         transb,                 // const char transb
+//         ldc,                    // const int m
+//         npm,                    // const int n
+//         this->npw_,             // const int k
+//         &alpha,                 // const std::complex<double> alpha
+//         this->tab_atomic_,      // const std::complex<double>* a
+//         this->npw_,             // const int lda
+//         ppsi,                   // const std::complex<double>* b
+//         ldb,                    // const int ldb
+//         &beta,                  // const std::complex<double> beta
+//         becp,                   // std::complex<double>* c
+//         ldc);                   // const int ldc
+// #ifdef __MPI
+//     Parallel_Reduce::reduce_pool(becp, size_becp);
+// #endif
+    this->fs_tools->cal_becp(ik_, npm); // in cal_becp, npm should be the one not multiplied by npol
+    this->becp = this->fs_tools->get_becp();
     ModuleBase::timer::tick("OnsiteProj", "overlap");
 }
 
@@ -493,7 +504,7 @@ template<typename T, typename Device>
 void projectors::OnsiteProjector<T, Device>::cal_occupations(const psi::Psi<std::complex<double>>* psi_in, const ModuleBase::matrix& wg_in)
 {
     ModuleBase::timer::tick("OnsiteProj", "cal_occupation");
-    this->tabulate_atomic(0);
+    //this->tabulate_atomic(0);
     std::vector<std::complex<double>> occs(this->tot_nproj * 4, 0.0);
 
     // loop over k-points to calculate Mi of \sum_{k,i,l,m}<Psi_{k,i}|alpha_{l,m}><alpha_{l,m}|Psi_{k,i}>
@@ -501,9 +512,9 @@ void projectors::OnsiteProjector<T, Device>::cal_occupations(const psi::Psi<std:
     for(int ik = 0; ik < psi_in->get_nk(); ik++)
     {
         psi_in->fix_k(ik);
-        if(ik!=0) this->tabulate_atomic(ik);
+        //if(ik!=0) this->tabulate_atomic(ik);
         this->overlap_proj_psi(
-                        nbands * psi_in->npol,
+                        nbands,
                         psi_in->get_pointer());
         const std::complex<double>* becp = this->get_becp();
         // becp(nbands*npol , nkb)

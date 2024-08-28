@@ -40,10 +40,11 @@ class FS_Nonlocal_tools
                       const ModuleBase::matrix& ekb);
 
     // a more general constructor is in the following
-    FS_Nonlocal_tools(const ModuleBase::realArray& tab,  // radials' spherical bessel transform
-                      const std::vector<int>& nproj,     // number of projectors for each atom type
-                      const int lmax,                    // maximal angular momentum over all projectors
-                      const ModuleBase::matrix& nhtol,   // (it, ich) -> l, the ich is (l, m)-distinctive
+    FS_Nonlocal_tools(const std::vector<int>& nproj,     // number of projectors for each atom type
+                      const std::vector<int>& lproj,
+                      const ModuleBase::realArray& tab,  // radials' spherical bessel transform
+                      const ModuleBase::matrix& nhtol,
+                      std::complex<FPTYPE>* vkb_buf,
                       const UnitCell* ucell_in,
                       const psi::Psi<std::complex<FPTYPE>, Device>* psi_in,
                       const K_Vectors* kv_in,
@@ -71,12 +72,18 @@ class FS_Nonlocal_tools
      * @brief calculate the force^I_i = - \sum_{n,k}f_{nk} \sum_{lm,l'm'}D_{l,l'}^{I} becp * dbecp_i
      */
     void cal_force(int ik, int npm, FPTYPE* force);
+    
+    std::complex<FPTYPE>* get_becp() { return becp; }
+    std::complex<FPTYPE>* get_dbecp() { return dbecp; }
 
   private:
     /**
      * @brief allocate the memory for the variables
      */
-    void allocate_memory(const ModuleBase::matrix& wg, const ModuleBase::matrix& ekb);
+    void allocate_memory(const ModuleBase::matrix& wg, 
+                         const ModuleBase::matrix& ekb,
+                         const std::vector<int>& nproj,
+                         const std::vector<int>& nch);
     /**
      * @brief delete the memory for the variables
      */
@@ -97,6 +104,8 @@ class FS_Nonlocal_tools
     base_device::AbacusDevice_t device = {};
     int nkb;
     int nbands;
+    int deeq_dims[4] = {0, 0, 0, 0};    // deeq can be something other than that in pseudopotentials
+    int deeq_nc_dims[4] = {0, 0, 0, 0};
 
     int max_nh = 0;
     int max_npw = 0;
@@ -109,6 +118,7 @@ class FS_Nonlocal_tools
     int* atom_na = nullptr;
     std::vector<int> h_atom_nh;
     std::vector<int> h_atom_na;
+    std::vector<int> nproj;
 
     /// ------------------------- Key optimization -------------------------
     /// @brief the following variables are used for transfer gcar and reuse the values of vkb for force calculation
@@ -131,7 +141,10 @@ class FS_Nonlocal_tools
     FPTYPE* d_wg = nullptr;
     FPTYPE* d_ekb = nullptr;
     FPTYPE* gcar = nullptr;
+
     FPTYPE* deeq = nullptr;
+    std::complex<FPTYPE>* deeq_nc = nullptr;
+
     FPTYPE* kvec_c = nullptr;
     FPTYPE* qq_nt = nullptr;
     /// --------------------- Key variable ---------------------
