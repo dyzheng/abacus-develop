@@ -167,12 +167,14 @@ void projectors::OnsiteProjector<T, Device>::init(const std::string& orbital_dir
         // uncomment the following code block if you want to use the FS_Nonlocal_tools
         if(this->tab_atomic_ == nullptr) // fs_nonlocal_tools will borrow memory space here...
         {
+            std::cout << "allocate of tab_atomic at " << __FILE__ << ": " << __LINE__ << std::endl;
             this->tot_nproj = itiaiprojm2irow_.size();
             this->npwx_ = this->pw_basis_->npwk_max;
             this->tab_atomic_ = new std::complex<double>[this->tot_nproj * this->npwx_];
             this->size_vproj = this->tot_nproj * this->npwx_;
+            std::cout << "allocate memory for tab_atomic_ with dimension " 
+                      << this->tot_nproj << " x " << this->npwx_ << std::endl;
         }
-        std::cout << __FILE__ << ":" << __LINE__ << " tab(0, 0, 0) = " << tab(0, 0, 0) << std::endl;
         this->fs_tools = new hamilt::FS_Nonlocal_tools<T, Device>(
             nproj, lproj, tab, nhtol, this->tab_atomic_, ucell_in, &psi, &kv, &pw_basis, &sf, wg, ekb);      
         

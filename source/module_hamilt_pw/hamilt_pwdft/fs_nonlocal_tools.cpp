@@ -301,6 +301,8 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
     // calculate G+K
     this->g_plus_k = maths.cal_gk(ik, this->wfc_basis_);
     FPTYPE *gk = g_plus_k.data(), *vq_tb = this->tabtpr->ptr;
+    // vq_tb has dimension (ntype, nproj, GlobalV::NQX)
+
     // calculate sk
     resmem_complex_op()(ctx, hd_sk, this->ucell_->nat * npw);
     this->sf_->get_sk(ctx, ik, this->wfc_basis_, hd_sk);
@@ -327,7 +329,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
                     this->tabtpr->getBound3(),
                     GlobalV::DQ,
                     nproj[it],
-                    hd_vq);
+                    hd_vq); // hd_vq has dimension (nprojmax, npwx)
 
         // prepare（-i）^l, size: nh
         std::vector<std::complex<double>> pref = maths.cal_pref(it, h_atom_nh[it]);
@@ -359,14 +361,19 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
             }
             cal_vkb_op()(this->ctx, nh, npw, d_dvkb_indexes, hd_vq, hd_ylm, d_sk, d_pref_in, vkb_ptr);
             // 2.b calculate becp = vkb * psi
-            vkb_ptr += nh * npw;
+            vkb_ptr += nh * npw; // vkb_ptr has dimension (nhtot, npwx)
             d_sk += npw;
         }
     }
+    std::cout << "calculation of tab_atomic at" << __FILE__ << ": " << __LINE__ << std::endl;
     // seperate the lower and upper into two parts, individually called.
     const char transa = 'C';
     const char transb = 'N';
     int npm_npol = npm * npol;
+    std::cout << "before gemm_op, check dimension..." << std::endl;
+    std::cout << "nkb: " << this->nkb 
+              << " npm_npol: " << npm_npol 
+              << " npw: " << npw << std::endl;
     gemm_op()(this->ctx,
               transa,
               transb,
