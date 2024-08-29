@@ -183,6 +183,11 @@ void SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::run_lambda_lo
         }
         mean_error = sum_2d(temp_1) / nat;
         rms_error = std::sqrt(mean_error);
+        if(i_step == 0)
+        {
+            // set current_sc_thr_ to max(rms_error * 0.001, this->sc_thr_)
+            this->current_sc_thr_ = std::max(rms_error * 0.001, this->sc_thr_);
+        }
 #ifdef __MPI
 			duration = (double)(MPI_Wtime() - iterstart);
 #else

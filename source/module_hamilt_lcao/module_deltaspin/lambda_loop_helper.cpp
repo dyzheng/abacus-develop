@@ -19,11 +19,11 @@ bool SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::check_rms_sto
 {
     std::cout << "Step (Outer -- Inner) =  " << outer_step << " -- " << std::left << std::setw(5) << i_step + 1
               << "       RMS = " << rms_error << "     TIME(s) = " << std::setw(11) << duration << std::endl;
-    if (rms_error < this->sc_thr_ || i_step == this->nsc_ - 1)
+    if (rms_error < this->current_sc_thr_ || i_step == this->nsc_ - 1)
     {
-        if (rms_error < this->sc_thr_)
+        if (rms_error < this->current_sc_thr_)
         {
-            std::cout << "Meet convergence criterion ( < " << this->sc_thr_ << " ), exit.";
+            std::cout << "Meet convergence criterion ( < " << this->current_sc_thr_ << " ), exit.";
             std::cout << "       Total TIME(s) = " << total_duration << std::endl;
         }
         else if (i_step == this->nsc_ - 1)

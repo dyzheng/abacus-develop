@@ -11,7 +11,7 @@ DFTU* DFTU::get_instance()
     return &GlobalC::dftu;
 }
 /// calculate occupation matrix for DFT+U
-void DFTU::cal_occ_pw(const int iter, const psi::Psi<std::complex<double>>* psi_in, const ModuleBase::matrix& wg_in, const UnitCell& cell)
+void DFTU::cal_occ_pw(const int iter, const psi::Psi<std::complex<double>>* psi_in, const ModuleBase::matrix& wg_in, const UnitCell& cell, const double& mixing_beta)
 {
     auto* onsite_p = projectors::OnsiteProjector<double, base_device::DEVICE_CPU>::get_instance();
 
@@ -127,6 +127,11 @@ void DFTU::cal_occ_pw(const int iter, const psi::Psi<std::complex<double>>* psi_
                 this->eff_pot_pw[iat][index[2]] = 0.5 * (vu_tmp[1] - std::complex<double>(0.0, 1.0) * vu_tmp[2]);
             }
         }
+    }
+
+    if(mixing_dftu && initialed_locale)
+    {
+        this->mix_locale(mixing_beta);
     }
     // update effective potential
     ModuleBase::timer::tick("DFTU", "cal_occ_pw");

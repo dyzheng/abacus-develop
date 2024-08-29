@@ -591,7 +591,11 @@ void ESolver_KS<T, Device>::runner(const int istep, UnitCell& ucell)
                 if (GlobalV::MIXING_RESTART > 0 && iter == this->p_chgmix->mixing_restart_step - 1
                     && drho <= GlobalV::MIXING_RESTART)
                 {
-                    // do not mix charge density
+                    if(PARAM.inp.basis_type == "pw")
+                    {
+                        p_chgmix->mix_rho(pelec->charge);
+                    }
+                    // do not mix charge density in LCAO basis
                 }
                 else
                 {

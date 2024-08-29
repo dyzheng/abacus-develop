@@ -82,7 +82,7 @@ class DFTU
   public:
     /// interface for PW base
     /// calculate the local occupation number matrix for PW based wave functions
-    void cal_occ_pw(const int iter, const psi::Psi<std::complex<double>>* psi_in, const ModuleBase::matrix& wg_in, const UnitCell& cell);
+    void cal_occ_pw(const int iter, const psi::Psi<std::complex<double>>* psi_in, const ModuleBase::matrix& wg_in, const UnitCell& cell, const double& mixing_beta);
     /// calculate the local DFT+U effective potential matrix for PW base.
     void cal_VU_pot_pw(const int spin);
     /// get effective potential matrix for PW base

@@ -643,7 +643,7 @@ void ESolver_KS_PW<T, Device>::iter_init(const int istep, const int iter) {
         // new DFT+U method will calculate energy in calculating Hamiltonian
         if (dftu->omc != 2)
         {
-            dftu->cal_occ_pw(iter, this->psi, this->pelec->wg, GlobalC::ucell);
+            dftu->cal_occ_pw(iter, this->psi, this->pelec->wg, GlobalC::ucell, PARAM.inp.mixing_beta);
         }
         dftu->output();
     }

@@ -245,6 +245,7 @@ public:
     int nsc_min_;
     bool decay_grad_switch_ = false;
     double sc_thr_; // in unit of uB
+    double current_sc_thr_;
     std::vector<ModuleBase::Vector3<int>> constrain_;
     bool debug = false;
     double alpha_trial_; // in unit of Ry/uB^2 = 0.01 eV/uB^2
