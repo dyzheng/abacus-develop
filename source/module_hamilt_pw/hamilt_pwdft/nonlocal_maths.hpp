@@ -372,8 +372,8 @@ void Nonlocal_maths<FPTYPE, Device>::cal_dvkb_index(const int nbeta,
         {
             //std::cout << "in function cal_dvkb_index, nhtol(" << it << ", " << ih << ") = " << l << std::endl;
             int lm = l * l + m;
-            indexes[ih * 4] = lm;
-            indexes[ih * 4 + 1] = nb;
+            indexes[ih * 4] = lm; // the index of ylm matrix, for given l and m, together with ig to get value
+            indexes[ih * 4 + 1] = nb; // the iproj of present atom type
             indexes[ih * 4 + 2] = (ipol * x1 + lm);
             indexes[ih * 4 + 3] = (jpol * x1 + lm);
 

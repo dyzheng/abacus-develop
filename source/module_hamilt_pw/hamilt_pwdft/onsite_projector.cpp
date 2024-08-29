@@ -164,7 +164,7 @@ void projectors::OnsiteProjector<T, Device>::init(const std::string& orbital_dir
         RadialProjection::RadialProjector::_build_backward_map(it2iproj, lproj, irow2it_, irow2iproj_, irow2m_);
         RadialProjection::RadialProjector::_build_forward_map(it2ia, it2iproj, lproj, itiaiprojm2irow_);
         //rp_._build_sbt_tab(rgrid, projs, lproj, nq, dq);
-        rp_._build_sbt_tab(nproj, rgrid, projs, lproj, nq, dq, ucell_in->omega, tab, nhtol);
+        rp_._build_sbt_tab(nproj, rgrid, projs, lproj, nq, dq, ucell_in->omega, psi.npol, tab, nhtol);
         // For being compatible with present cal_force and cal_stress framework  
         // uncomment the following code block if you want to use the FS_Nonlocal_tools
         if(this->tab_atomic_ == nullptr) // fs_nonlocal_tools will borrow memory space here...
@@ -174,6 +174,8 @@ void projectors::OnsiteProjector<T, Device>::init(const std::string& orbital_dir
             this->tab_atomic_ = new std::complex<double>[this->tot_nproj * this->npwx_];
             this->size_vproj = this->tot_nproj * this->npwx_;
         }
+
+        delete this->fs_tools; // it is okay to delete nullptr
         this->fs_tools = new hamilt::FS_Nonlocal_tools<T, Device>(
             nproj, lproj, tab, nhtol, this->tab_atomic_, ucell_in, &psi, &kv, &pw_basis, &sf, wg, ekb);      
         
@@ -272,7 +274,7 @@ template<typename T, typename Device>
 void projectors::OnsiteProjector<T, Device>::tabulate_atomic(const int ik, const char grad)
 {
     ModuleBase::timer::tick("OnsiteProj", "tabulate_atomic");
-    assert(grad == 'n' || grad == 'x' || grad == 'y' || grad == 'z');
+    // assert(grad == 'n' || grad == 'x' || grad == 'y' || grad == 'z');
     // grad = 'n' means no gradient, grad = 'x' means gradient along x, etc.
 
     // STAGE 1 - calculate the <G+k|p> for the given G+k vector
@@ -293,21 +295,20 @@ void projectors::OnsiteProjector<T, Device>::tabulate_atomic(const int ik, const
     // rp_.sbtft(q, tab_, 'l', this->ucell->omega, this->ucell->tpiba);
     // // what is calculated is <p|q> here
 
-
-    // // STAGE 2 - make_atomic: multiply e^iqtau and extend the <G+k|p> to <G+k|pi> for each atom
-    // // CACHE 2 - if cache the tab_atomic_, <G+k|p> can be reused for SCF calculation
-    // // [in] it2ia, itiaiprojm2irow, tab_, npw, sf
-    // std::vector<int> na(it2ia.size());
-    // for(int it = 0; it < it2ia.size(); ++it)
-    // {
-    //     na[it] = it2ia[it].size();
-    // }
-    // if(this->tab_atomic_ == nullptr)
-    // {
-    //     this->tot_nproj = itiaiprojm2irow_.size();
-    //     this->tab_atomic_ = new std::complex<double>[this->tot_nproj * this->npwx_];
-    //     this->size_vproj = this->tot_nproj * this->npwx_;
-    // }
+    // STAGE 2 - make_atomic: multiply e^iqtau and extend the <G+k|p> to <G+k|pi> for each atom
+    // CACHE 2 - if cache the tab_atomic_, <G+k|p> can be reused for SCF calculation
+    // [in] it2ia, itiaiprojm2irow, tab_, npw, sf
+    std::vector<int> na(it2ia.size());
+    for(int it = 0; it < it2ia.size(); ++it)
+    {
+        na[it] = it2ia[it].size();
+    }
+    if(this->tab_atomic_ == nullptr)
+    {
+        this->tot_nproj = itiaiprojm2irow_.size();
+        this->tab_atomic_ = new std::complex<double>[this->tot_nproj * this->npwx_];
+        this->size_vproj = this->tot_nproj * this->npwx_;
+    }
     // for(int irow = 0; irow < nrow; ++irow)
     // {
     //     const int it = irow2it_[irow];
@@ -523,7 +524,10 @@ void projectors::OnsiteProjector<T, Device>::cal_occupations(const psi::Psi<std:
     for(int ik = 0; ik < psi_in->get_nk(); ik++)
     {
         psi_in->fix_k(ik);
-        if(ik!=0) this->tabulate_atomic(ik);
+        if(ik != 0)
+        {
+            this->tabulate_atomic(ik);
+        }
         // std::cout << __FILE__ << ":" << __LINE__ << " nbands = " << nbands << std::endl;
         this->overlap_proj_psi(
                         nbands,
@@ -533,9 +537,9 @@ void projectors::OnsiteProjector<T, Device>::cal_occupations(const psi::Psi<std:
         // becp(nbands*npol , nkb)
         // mag = wg * \sum_{nh}becp * becp
         int nkb = this->get_size_becp() / nbands / psi_in->npol;
-        nkb = 18;
-        std::cout << "at " << __FILE__ << ": " << __LINE__ << " output nbands: " << nbands << std::endl;
-        std::cout << "at " << __FILE__ << ": " << __LINE__ << " output nkb: " << nkb << std::endl;
+        //nkb = 18;
+        //std::cout << "at " << __FILE__ << ": " << __LINE__ << " output nbands: " << nbands << std::endl;
+        //std::cout << "at " << __FILE__ << ": " << __LINE__ << " output nkb: " << nkb << std::endl;
         for(int ib = 0;ib<nbands;ib++)
         {
             const double weight = wg_in(ik, ib);
