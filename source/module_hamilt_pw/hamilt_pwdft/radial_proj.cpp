@@ -163,11 +163,14 @@ void RadialProjection::RadialProjector::_build_sbt_tab(const std::vector<int>& n
             for (int iq = 0; iq < nq; iq++)
             {
                 tab(it, ip, iq) = _temp[iq];
+                std::cout << tab(it, ip, iq) << " ";
             }
             iproj++;
         }
         nchmax = std::max(nchmax, nch);
     }
+    std::cout << std::endl;
+    ModuleBase::WARNING_QUIT("RadialProjection", "The following code is not implemented yet.");
     
     nhtol.create(ntype, nchmax);
     nhtol.zero_out();

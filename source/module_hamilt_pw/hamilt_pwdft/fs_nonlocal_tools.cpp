@@ -378,7 +378,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
     // print all values of vkb
     for(int i = 0; i < vkb_size; i++)
     {
-        std::cout << vkb_ptr[i] << " ";
+        std::cout << this->ppcell_vkb[i] << " ";
     }
     std::cout << std::endl;
     ModuleBase::WARNING_QUIT("FS_Nonlocal_tools", "cal_becp");
