@@ -516,6 +516,7 @@ void ESolver_KS_PW<T, Device>::before_scf(const int istep) {
     if(GlobalV::onsite_radius > 0)
     {
         auto* onsite_p = projectors::OnsiteProjector<double, Device>::get_instance();
+        std::cout << "Initialize onsite projector in before_scf" << std::endl;
         onsite_p->init(PARAM.inp.orbital_dir,
                        &GlobalC::ucell,
                        *(this->kspw_psi),

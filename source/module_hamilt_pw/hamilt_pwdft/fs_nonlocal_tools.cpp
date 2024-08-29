@@ -320,21 +320,33 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
     int vkb_size = 0;
     for (int it = 0; it < this->ucell_->ntype; it++) // loop all elements
     {
+        // interpolate (it, 0..nproj[it], 0..npw) to get hd_vq
         cal_vq_op()(this->ctx,
-                    vq_tb,
-                    it,
+                    vq_tb, // its data is correct, dimension (ntype, nprojmax, GlobalV::NQX)
+                    it,    // but maybe it is (ntype, nprojmax*npol, GlobalV::NQX)
                     gk,
                     npw,
                     this->tabtpr->getBound2(),
                     this->tabtpr->getBound3(),
                     GlobalV::DQ,
                     nproj[it],
-                    hd_vq); // hd_vq has dimension (nprojmax, npwx)
-
+                    hd_vq); // hd_vq has dimension (nprojmax, npwx), this size will be the largest needed.
+        for(int ip = 0; ip < nproj[it]; ip++)
+        {
+            std::cout << "projector #" << ip << " of atom type " << it << std::endl;
+            for(int iq = 0; iq < npw; iq++)
+            {
+                std::cout << hd_vq[ip * npw + iq] << " ";
+            }
+            std::cout << std::endl;
+        }
+        std::cout << std::endl;
         // prepare（-i）^l, size: nh
         std::vector<std::complex<double>> pref = maths.cal_pref(it, h_atom_nh[it]);
         const int nh = pref.size();
         this->dvkb_indexes.resize(nh * 4);
+        // print the value of nhtol
+        nhtol->print(std::cout);
         maths.cal_dvkb_index(nproj[it],
                              this->nhtol->c,
                              this->nhtol->nc,
@@ -361,7 +373,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
             }
             cal_vkb_op()(this->ctx, nh, npw, d_dvkb_indexes, hd_vq, hd_ylm, d_sk, d_pref_in, vkb_ptr);
             // 2.b calculate becp = vkb * psi
-            vkb_ptr += nh * npw; // vkb_ptr has dimension (nhtot, npwx)
+            vkb_ptr += nh * npw; // vkb_ptr has dimension (nhtot, npwx), this size will be the largest needed.
             d_sk += npw;
             vkb_size += nh * npw;
         }

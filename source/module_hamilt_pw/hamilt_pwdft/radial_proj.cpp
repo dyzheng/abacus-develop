@@ -140,6 +140,7 @@ void RadialProjection::RadialProjector::_build_sbt_tab(const std::vector<int>& n
     const int ntype = nproj.size();
 
     tab.create(ntype, nprojmax*npol, nq);
+    std::cout << "refresh memory for tab: (" << ntype << ", " << nprojmax*npol << ", " << nq << ")" << std::endl;
     tab.zero_out();
 
     std::vector<double> qgrid(nq);

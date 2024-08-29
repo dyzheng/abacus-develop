@@ -4,12 +4,12 @@
 namespace hamilt
 {
 template <typename FPTYPE>
-static inline FPTYPE _polynomial_interpolation(const FPTYPE* table,
-                                               const int& dim1,
-                                               const int& dim2,
-                                               const int& tab_2,
-                                               const int& tab_3,
-                                               const FPTYPE& table_interval,
+static inline FPTYPE _polynomial_interpolation(const FPTYPE* table, // a three-dimensional table
+                                               const int& dim1, // index of the first dimension
+                                               const int& dim2, // index of the second dimension
+                                               const int& tab_2,// size of the second dimension
+                                               const int& tab_3,// size of the third dimension
+                                               const FPTYPE& table_interval, // interval of the third dimension
                                                const FPTYPE& x)
 {
     const FPTYPE position = x / table_interval;
@@ -19,10 +19,11 @@ static inline FPTYPE _polynomial_interpolation(const FPTYPE* table,
     const FPTYPE x1 = 1.0 - x0;
     const FPTYPE x2 = 2.0 - x0;
     const FPTYPE x3 = 3.0 - x0;
+    // dim1 * tab_2 * tab_3 + dim2 * tab_3 + iq <- (dim1, dim2, iq)
     const FPTYPE y = table[(dim1 * tab_2 + dim2) * tab_3 + iq + 0] * x1 * x2 * x3 / 6.0
-                     + table[(dim1 * tab_2 + dim2) * tab_3 + iq + 0 + 1] * x0 * x2 * x3 / 2.0
-                     - table[(dim1 * tab_2 + dim2) * tab_3 + iq + 0 + 2] * x1 * x0 * x3 / 2.0
-                     + table[(dim1 * tab_2 + dim2) * tab_3 + iq + 0 + 3] * x1 * x2 * x0 / 6.0;
+                   + table[(dim1 * tab_2 + dim2) * tab_3 + iq + 0 + 1] * x0 * x2 * x3 / 2.0
+                   - table[(dim1 * tab_2 + dim2) * tab_3 + iq + 0 + 2] * x1 * x0 * x3 / 2.0
+                   + table[(dim1 * tab_2 + dim2) * tab_3 + iq + 0 + 3] * x1 * x2 * x0 / 6.0;
 
     //	ModuleBase::timer::tick("PolyInt","Poly_Interpo_2");
     return y;
