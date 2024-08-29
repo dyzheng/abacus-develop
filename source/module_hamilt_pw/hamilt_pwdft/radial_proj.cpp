@@ -132,15 +132,14 @@ void RadialProjection::RadialProjector::_build_sbt_tab(const std::vector<int>& n
                                                        const int nq,                             //< GlobalV::DQ
                                                        const double& dq,                         //< GlobalV::NQX
                                                        const double& omega,
-                                                       const int npol, // for nspin 4
+                                                       const int npol,                           // for nspin 4
                                                        ModuleBase::realArray& tab,
-                                                       ModuleBase::matrix& nhtol)              // output table
+                                                       ModuleBase::matrix& nhtol)                // output table
 {
     int nprojmax = *std::max_element(nproj.begin(), nproj.end());
     const int ntype = nproj.size();
 
     tab.create(ntype, nprojmax*npol, nq);
-    std::cout << "refresh memory for tab: (" << ntype << ", " << nprojmax*npol << ", " << nq << ")" << std::endl;
     tab.zero_out();
 
     std::vector<double> qgrid(nq);

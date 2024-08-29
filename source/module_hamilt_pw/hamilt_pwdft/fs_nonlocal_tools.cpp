@@ -281,9 +281,6 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
     const int npol = this->ucell_->get_npol();
     const int size_becp = this->nbands * npol * this->nkb;
     const int size_becp_act = npm * npol * this->nkb;
-    // std::cout << "nbands: " << this->psi_->get_nbands() << " nbasis: " << this->psi_->get_nbasis() << std::endl;
-    // std::cout << "nkb: " << this->nkb << " npm: " << npm << std::endl;
-    // std::cout << "npol: " << npol << " size_becp: " << size_becp << std::endl;
     if (this->becp == nullptr)
     {
         resmem_complex_op()(this->ctx, becp, size_becp);
@@ -309,7 +306,8 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
     // prepare ylm，size: (lmax+1)^2 * this->max_npw
     const int lmax_ = this->lprojmax;
     maths.cal_ylm(lmax_, npw, g_plus_k.data(), hd_ylm);
-    // I doubt the sequence of Ylm of this function and the one I used...
+
+    // DEBUG: ONCE YOU CHECK ylm VALUES, YOU UNCOMMENT THE FOLLOW
     // std::vector<ModuleBase::Vector3<double>> qs(npw);
     // for (int ig = 0; ig < npw; ig++)
     // {
@@ -344,7 +342,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
         vq_tb = d_vq_tab;
     }
 
-    int vkb_size = 0;
+    // int vkb_size = 0;
     for (int it = 0; it < this->ucell_->ntype; it++) // loop all elements
     {
         // interpolate (it, 0..nproj[it], 0..npw) to get hd_vq
@@ -358,16 +356,19 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
                     GlobalV::DQ,
                     nproj[it],
                     hd_vq); // hd_vq has dimension (nprojmax, npwx), this size will be the largest needed.
-        for(int ip = 0; ip < nproj[it]; ip++)
-        {
-            std::cout << "projector #" << ip << " of atom type " << it << std::endl;
-            for(int iq = 0; iq < npw; iq++)
-            {
-                std::cout << hd_vq[ip * npw + iq] << " ";
-            }
-            std::cout << std::endl;
-        }
-        std::cout << std::endl;
+        
+        // DEBUG: ONCE YOU CHECK vq VALUES, YOU UNCOMMENT THE FOLLOWING LINE
+        // for(int ip = 0; ip < nproj[it]; ip++)
+        // {
+        //     std::cout << "projector #" << ip << " of atom type " << it << std::endl;
+        //     for(int iq = 0; iq < npw; iq++)
+        //     {
+        //         std::cout << hd_vq[ip * npw + iq] << " ";
+        //     }
+        //     std::cout << std::endl;
+        // }
+        // std::cout << std::endl;
+        
         // prepare（-i）^l, size: nh
         std::vector<std::complex<double>> pref = maths.cal_pref(it, h_atom_nh[it]);
         const int nh = pref.size();
@@ -391,43 +392,33 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
 
         for (int ia = 0; ia < h_atom_na[it]; ia++)
         {
-            // 1. calculate becp
-            // 1.a calculate vkb
-
             if (this->device == base_device::CpuDevice)
             {
                 d_pref_in = pref.data();
                 d_dvkb_indexes = dvkb_indexes.data();
             }
             cal_vkb_op()(this->ctx, nh, npw, d_dvkb_indexes, hd_vq, hd_ylm, d_sk, d_pref_in, vkb_ptr);
-            // 2.b calculate becp = vkb * psi
             vkb_ptr += nh * npw; // vkb_ptr has dimension (nhtot, npwx), this size will be the largest needed.
             d_sk += npw;
-            vkb_size += nh * npw;
+            // vkb_size += nh * npw;
         }
     }
-    // print all values of vkb
-    for(int i = 0; i < vkb_size; i++)
-    {
-        if (i % npw == 0)
-        {
-            std::cout << "The #" << i / npw << " projector" << std::endl;
-        }
-        std::cout << this->ppcell_vkb[i] << " ";
-    }
-    std::cout << std::endl;
-    ModuleBase::WARNING_QUIT("FS_Nonlocal_tools", "cal_becp");
+    // DEBUG: ONCE YOU CHECK vkb VALUES, YOU UNCOMMENT THE FOLLOWING LINE
+    // for(int i = 0; i < vkb_size; i++)
+    // {
+    //     if (i % npw == 0)
+    //     {
+    //         std::cout << "The #" << i / npw << " projector" << std::endl;
+    //     }
+    //     std::cout << this->ppcell_vkb[i] << " ";
+    // }
+    // std::cout << std::endl;
+    // ModuleBase::WARNING_QUIT("FS_Nonlocal_tools", "cal_becp");
 
-    // std::cout << "calculation of tab_atomic at" << __FILE__ << ": " << __LINE__ << std::endl;
-    // seperate the lower and upper into two parts, individually called.
+    // PLAN: seperate the lower and upper into two parts, individually called.
     const char transa = 'C';
     const char transb = 'N';
     int npm_npol = npm * npol;
-    // std::cout << "before gemm_op, check dimension..." << std::endl;
-    // std::cout << "nkb: " << this->nkb 
-    //           << " npm_npol: " << npm_npol 
-    //           << " npw: " << npw << std::endl;
-
     gemm_op()(this->ctx,
               transa,
               transb,
@@ -457,9 +448,9 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
     {
         Parallel_Reduce::reduce_pool(becp, size_becp_act);
     }
-    // check first ten value of becp
+    // DEBUG: ONCE YOU CHECK becp VALUES, YOU UNCOMMENT THE FOLLOWING LINE
     // std::cout << "ik: " << ik << std::endl;
-    // for (int i = 0; i < 50; i++)
+    // for (int i = 0; i < npm_npol*this->nkb; i++)
     // {
     //     std::cout << "becp[" << i << "]: " << becp[i] << std::endl;
     // }
