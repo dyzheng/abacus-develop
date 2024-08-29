@@ -139,7 +139,7 @@ FS_Nonlocal_tools<FPTYPE, Device>::FS_Nonlocal_tools(const std::vector<int>& npr
     this->nondiagonal = false;
 
     this->nkb = 0;
-    this->h_atom_nh.resize(this->ntype);
+    this->h_atom_nh.resize(this->ntype, 0);
     int iproj = 0;
     for (int it = 0; it < this->ntype; it++)
     {
