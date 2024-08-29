@@ -6,6 +6,8 @@
 #include "module_basis/module_pw/pw_basis_k.h"
 #include "module_hamilt_pw/hamilt_pwdft/radial_proj.h"
 #include "module_psi/psi.h"
+#include "module_hamilt_pw/hamilt_pwdft/fs_nonlocal_tools.h"
+
 #include <string>
 #include <vector>
 #include <complex>
@@ -16,20 +18,34 @@ namespace projectors
     {
         public:
 
+        /**
+         * @brief initialize the radial projector for real-space projection involving operators
+         * 
+         * @param orbital_dir You know what it is
+         * @param orb_files You know what it is
+         * @param nproj # of projectors for each type defined in UnitCell, can be zero
+         * @param lproj angular momentum for each projector
+         * @param iproj index of zeta function that each projector generated from
+         * @param onsite_r onsite-radius for all valid projectors
+         * @param rgrid [out] the radial grid shared by all projectors
+         * @param projs [out] projectors indexed by `iproj`
+         * @param it2iproj [out] for each type, the projector index (across all types)
+         */
         void init_proj(const std::string& orbital_dir,
-                    const std::vector<std::string>& orb_files,
-                    const std::vector<int>& nproj,           // for each type, the number of projectors
-                    const std::vector<int>& lproj,           // angular momentum of projectors within the type (l of zeta function)
-                    const std::vector<int>& iproj,           // index of projectors within the type (izeta)
-                    const std::vector<double>& onsite_r); // for each type, the projector index (across all types)
+                       const std::vector<std::string>& orb_files,
+                       const std::vector<int>& nproj,           // for each type, the number of projectors
+                       const std::vector<int>& lproj,           // angular momentum of projectors within the type (l of zeta function)
+                       const std::vector<int>& iproj,           // index of projectors within the type (izeta)
+                       const std::vector<double>& onsite_r); // for each type, the projector index (across all types)
 
         /**
          * @brief calculate the onsite projectors in reciprocal space(|G+K>) for all atoms
          */
-        void init_k(const int ik);
+        void tabulate_atomic(const int ik, const char grad = 'n');
         
         void overlap_proj_psi(
                     const int npm,
+                    const int npol,
                     const std::complex<double>* ppsi
                     );
         void read_abacus_orb(std::ifstream& ifs,
@@ -44,11 +60,15 @@ namespace projectors
         static OnsiteProjector<T, Device>* get_instance();
         void init(const std::string& orbital_dir,
                     const UnitCell* ucell_in,
+                    const psi::Psi<std::complex<T>, Device>& psi,
+                    const K_Vectors& kv,
                     const ModulePW::PW_Basis_K& pw_basis,             // level1: the plane wave basis, need ik
                     Structure_Factor& sf,                              // level2: the structure factor calculator
                     const double onsite_radius,
                     const int nq,
-                    const double dq);
+                    const double dq,
+                    const ModuleBase::matrix& wg,
+                    const ModuleBase::matrix& ekb);
         
         /// @brief calculate and print the occupations of all lm orbitals
         void cal_occupations(const psi::Psi<std::complex<double>>* psi, const ModuleBase::matrix& wg_in);
@@ -70,8 +90,11 @@ namespace projectors
         base_device::AbacusDevice_t device = {};
         static OnsiteProjector<T, Device> *instance;
 
-        std::complex<double>* becp = nullptr;  // nbands * nkb
+        hamilt::FS_Nonlocal_tools<T, Device>* fs_tools = nullptr;
+
         std::complex<double>* tab_atomic_ = nullptr;
+        std::complex<double>* becp = nullptr;  // nbands * nkb
+
         int size_becp = 0;
         int size_vproj = 0;
         int tot_nproj = 0;
@@ -97,6 +120,8 @@ namespace projectors
         std::vector<int> irow2m_;
         std::map<std::tuple<int, int, int, int>, int> itiaiprojm2irow_;
 
+        ModuleBase::realArray tab;
+        ModuleBase::matrix nhtol;
 
         bool initialed = false;
 

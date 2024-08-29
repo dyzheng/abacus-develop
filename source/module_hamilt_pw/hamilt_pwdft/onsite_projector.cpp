@@ -18,6 +18,7 @@
 #include "module_base/formatter.h"
 
 
+
 /**
  * ===============================================================================================
  * 
@@ -96,11 +97,15 @@ projectors::OnsiteProjector<T, Device>* projectors::OnsiteProjector<T, Device>::
 template<typename T, typename Device>
 void projectors::OnsiteProjector<T, Device>::init(const std::string& orbital_dir,
                                                   const UnitCell* ucell_in,
+                                                  const psi::Psi<std::complex<T>, Device>& psi,
+                                                  const K_Vectors& kv,
                                                   const ModulePW::PW_Basis_K& pw_basis,             // level1: the plane wave basis, need ik
                                                   Structure_Factor& sf,                              // level2: the structure factor calculator
                                                   const double onsite_radius,
                                                   const int nq,
-                                                  const double dq)
+                                                  const double dq,
+                                                  const ModuleBase::matrix& wg,
+                                                  const ModuleBase::matrix& ekb)
 {
     if(!this->initialed)
     {
@@ -151,15 +156,28 @@ void projectors::OnsiteProjector<T, Device>::init(const std::string& orbital_dir
                         iproj, 
                         onsite_r);
 
-        ModuleBase::timer::tick("OnsiteProj", "init_k_stage0");
+        ModuleBase::timer::tick("OnsiteProj", "cubspl_tabulate");
         // STAGE 0 - making the interpolation table
         // CACHE 0 - if cache the irow2it, irow2iproj, irow2m, itiaiprojm2irow, <G+k|p> can be reused for 
         //           SCF, RELAX and CELL-RELAX calculation
         // [in] rgrid, projs, lproj, it2ia, it2iproj, nq, dq
         RadialProjection::RadialProjector::_build_backward_map(it2iproj, lproj, irow2it_, irow2iproj_, irow2m_);
         RadialProjection::RadialProjector::_build_forward_map(it2ia, it2iproj, lproj, itiaiprojm2irow_);
-        rp_._build_sbt_tab(rgrid, projs, lproj, nq, dq);
-        ModuleBase::timer::tick("OnsiteProj", "init_k_stage0");
+        //rp_._build_sbt_tab(rgrid, projs, lproj, nq, dq);
+        rp_._build_sbt_tab(nproj, rgrid, projs, lproj, nq, dq, ucell_in->omega, tab, nhtol);
+        // For being compatible with present cal_force and cal_stress framework  
+        // uncomment the following code block if you want to use the FS_Nonlocal_tools
+        if(this->tab_atomic_ == nullptr) // fs_nonlocal_tools will borrow memory space here...
+        {
+            this->tot_nproj = itiaiprojm2irow_.size();
+            this->npwx_ = this->pw_basis_->npwk_max;
+            this->tab_atomic_ = new std::complex<double>[this->tot_nproj * this->npwx_];
+            this->size_vproj = this->tot_nproj * this->npwx_;
+        }
+        this->fs_tools = new hamilt::FS_Nonlocal_tools<T, Device>(
+            nproj, lproj, tab, nhtol, this->tab_atomic_, ucell_in, &psi, &kv, &pw_basis, &sf, wg, ekb);      
+        
+        ModuleBase::timer::tick("OnsiteProj", "cubspl_tabulate");
 
         this->initialed = true;
     }
@@ -168,23 +186,12 @@ void projectors::OnsiteProjector<T, Device>::init(const std::string& orbital_dir
 template<typename T, typename Device>
 projectors::OnsiteProjector<T, Device>::~OnsiteProjector()
 {
-    delete[] becp;
+    //delete[] becp;
     delete[] tab_atomic_;
+    delete fs_tools;
 }
 
-/**
- * @brief initialize the radial projector for real-space projection involving operators
- * 
- * @param orbital_dir You know what it is
- * @param orb_files You know what it is
- * @param nproj # of projectors for each type defined in UnitCell, can be zero
- * @param lproj angular momentum for each projector
- * @param iproj index of zeta function that each projector generated from
- * @param onsite_r onsite-radius for all valid projectors
- * @param rgrid [out] the radial grid shared by all projectors
- * @param projs [out] projectors indexed by `iproj`
- * @param it2iproj [out] for each type, the projector index (across all types)
- */
+
 template<typename T, typename Device>
 void projectors::OnsiteProjector<T, Device>::init_proj(const std::string& orbital_dir,
                      const std::vector<std::string>& orb_files,
@@ -262,70 +269,82 @@ void projectors::OnsiteProjector<T, Device>::init_proj(const std::string& orbita
 }
 
 template<typename T, typename Device>
-void projectors::OnsiteProjector<T, Device>::init_k(const int ik)
+void projectors::OnsiteProjector<T, Device>::tabulate_atomic(const int ik, const char grad)
 {
-    ModuleBase::timer::tick("OnsiteProj", "init_k");
-    ModuleBase::timer::tick("OnsiteProj", "init_k_stage1");
+    ModuleBase::timer::tick("OnsiteProj", "tabulate_atomic");
+    assert(grad == 'n' || grad == 'x' || grad == 'y' || grad == 'z');
+    // grad = 'n' means no gradient, grad = 'x' means gradient along x, etc.
+
     // STAGE 1 - calculate the <G+k|p> for the given G+k vector
     // CACHE 1 - if cache the tab_, <G+k|p> can be reused for SCF and RELAX calculation
     // [in] pw_basis, ik, omega, tpiba, irow2it
     this->ik_ = ik;
     this->npw_ = pw_basis_->npwk[ik];
     this->npwx_ = pw_basis_->npwk_max;
-    std::vector<ModuleBase::Vector3<double>> q(this->npw_);
-    for(int ig = 0; ig < this->npw_; ++ig)
-    {
-        q[ig] = pw_basis_->getgpluskcar(ik, ig); // get the G+k vector, G+k will change during CELL-RELAX
-    }
-    const int nrow = irow2it_.size();
-    std::vector<std::complex<double>> tab_(nrow*this->npw_);
-    rp_.sbtft(q, tab_, 'r', this->ucell->omega, this->ucell->tpiba); // l: <p|G+k>, r: <G+k|p>
-    q.clear();
-    q.shrink_to_fit(); // release memory
-    ModuleBase::timer::tick("OnsiteProj", "init_k_stage1");
+    // std::vector<ModuleBase::Vector3<double>> q(this->npw_);
+    // for(int ig = 0; ig < this->npw_; ++ig)
+    // {
+    //     q[ig] = pw_basis_->getgpluskcar(ik, ig); // get the G+k vector, G+k will change during CELL-RELAX
+    // }
+    // const int nrow = irow2it_.size();
+    // std::vector<std::complex<double>> tab_(nrow*this->npw_);
+    // // convention used here: 'l': <p|G+k>, 'r': <G+k|p>
+    // // denote q=G+k, <r|q> = exp(iqr), the routine Fourier Transform written as F(q) = <q|f>
+    // rp_.sbtft(q, tab_, 'l', this->ucell->omega, this->ucell->tpiba);
+    // // what is calculated is <p|q> here
 
-    ModuleBase::timer::tick("OnsiteProj", "init_k_stage2");
-    // STAGE 2 - make_atomic: multiply e^iqtau and extend the <G+k|p> to <G+k|pi> for each atom
-    // CACHE 2 - if cache the tab_atomic_, <G+k|p> can be reused for SCF calculation
-    // [in] it2ia, itiaiprojm2irow, tab_, npw, sf
-    std::vector<int> na(it2ia.size());
-    for(int it = 0; it < it2ia.size(); ++it)
-    {
-        na[it] = it2ia[it].size();
-    }
-    if(this->tab_atomic_ == nullptr)
-    {
-        this->tot_nproj = itiaiprojm2irow_.size();
-        this->tab_atomic_ = new std::complex<double>[this->tot_nproj * this->npwx_];
-        this->size_vproj = this->tot_nproj * this->npwx_;
-    }
-    for(int irow = 0; irow < nrow; ++irow)
-    {
-        const int it = irow2it_[irow];
-        const int iproj = irow2iproj_[irow];
-        const int m = irow2m_[irow];
-        for(int ia = 0; ia < na[it]; ++ia)
-        {
-            // why Structure_Factor needs the FULL pw_basis???
-            std::complex<double>* sk = this->sf_->get_sk(ik, it, ia, pw_basis_);
-            const int irow_out = itiaiprojm2irow_.at(std::make_tuple(it, ia, iproj, m));
-            for(int ig = 0; ig < this->npw_; ++ig)
-            {
-                this->tab_atomic_[irow_out*this->npw_ + ig] = sk[ig]*tab_[irow*this->npw_ + ig];
-            }
-            delete[] sk;
-        }
-    }
-    tab_.clear();
-    tab_.shrink_to_fit(); // release memory
-    ModuleBase::timer::tick("OnsiteProj", "init_k_stage2");
 
-    ModuleBase::timer::tick("OnsiteProj", "init_k");
+    // // STAGE 2 - make_atomic: multiply e^iqtau and extend the <G+k|p> to <G+k|pi> for each atom
+    // // CACHE 2 - if cache the tab_atomic_, <G+k|p> can be reused for SCF calculation
+    // // [in] it2ia, itiaiprojm2irow, tab_, npw, sf
+    // std::vector<int> na(it2ia.size());
+    // for(int it = 0; it < it2ia.size(); ++it)
+    // {
+    //     na[it] = it2ia[it].size();
+    // }
+    // if(this->tab_atomic_ == nullptr)
+    // {
+    //     this->tot_nproj = itiaiprojm2irow_.size();
+    //     this->tab_atomic_ = new std::complex<double>[this->tot_nproj * this->npwx_];
+    //     this->size_vproj = this->tot_nproj * this->npwx_;
+    // }
+    // for(int irow = 0; irow < nrow; ++irow)
+    // {
+    //     const int it = irow2it_[irow];
+    //     const int iproj = irow2iproj_[irow];
+    //     const int m = irow2m_[irow];
+    //     for(int ia = 0; ia < na[it]; ++ia)
+    //     {
+    //         // why Structure_Factor needs the FULL pw_basis???
+    //         std::complex<double>* sk = this->sf_->get_sk(ik, it, ia, pw_basis_); // exp(-iqtau)
+    //         // Note: idea on extending the param list of get_sk
+    //         // the get_sk should have an extra param 'grad' to calculate the gradient of S(q), which
+    //         // is actually very simple to be
+    //         // d(S(q))/dq = -i S(q) * tau, for one direction it is just -i S(q) * tau_x (if x is the direction)
+    //         const int irow_out = itiaiprojm2irow_.at(std::make_tuple(it, ia, iproj, m));
+    //         for(int ig = 0; ig < this->npw_; ++ig)
+    //         {
+    //             std::complex<double> deriv = (grad == 'n')? 1.0: ModuleBase::NEG_IMAG_UNIT; // because sk is exp(-iqtau)
+    //             deriv = (grad == 'n')? 1.0: (grad == 'x')? deriv * q[ig].x: (grad == 'y')? deriv * q[ig].y: deriv * q[ig].z;
+    //             // there must be something twisted in ABACUS
+    //             // because the tab_ is <p|G+k>, but the sk is exp(-iqtau). How can it get the 
+    //             // correct result?
+    //             this->tab_atomic_[irow_out*this->npw_ + ig] = sk[ig] * tab_[irow*this->npw_ + ig] * deriv;
+    //         }
+    //         delete[] sk;
+    //     }
+    // }
+    // q.clear();
+    // q.shrink_to_fit();    // release memory
+    // tab_.clear();
+    // tab_.shrink_to_fit(); // release memory
+    ModuleBase::timer::tick("OnsiteProj", "tabulate_atomic");
 }
 
 template<typename T, typename Device>
 void projectors::OnsiteProjector<T, Device>::overlap_proj_psi( 
                     const int npm,
+                    const int npol,
                     const std::complex<double>* ppsi
                     )
 {
@@ -333,37 +352,47 @@ void projectors::OnsiteProjector<T, Device>::overlap_proj_psi(
     // STAGE 3 - cal_becp
     // CACHE 3 - it is no use to cache becp, it will change in each SCF iteration
     // [in] psi, tab_atomic_, npw, becp, ik
-    const char transa = 'C';
-    const char transb = 'N';
-    const int ldb = this->npwx_;
-    const int ldc = this->tot_nproj;
-    const std::complex<double> alpha = 1.0;
-    const std::complex<double> beta = 0.0;
-    if(this->becp == nullptr || this->size_becp < npm*ldc)
-    {
-        delete[] this->becp;
-        this->becp = new std::complex<double>[npm*ldc];
-        this->size_becp = npm*ldc;
-    }
-    setmem_complex_op()(ctx, this->becp, 0.0, this->size_becp);
-    gemm_op()(
-        this->ctx,
-        transa,                 // const char transa
-        transb,                 // const char transb
-        ldc,                    // const int m
-        npm,                    // const int n
-        this->npw_,             // const int k
-        &alpha,                 // const std::complex<double> alpha
-        this->tab_atomic_,      // const std::complex<double>* a
-        this->npw_,             // const int lda
-        ppsi,      // const std::complex<double>* b
-        ldb,                    // const int ldb
-        &beta,                  // const std::complex<double> beta
-        becp,                   // std::complex<double>* c
-        ldc);                   // const int ldc
-#ifdef __MPI
-    Parallel_Reduce::reduce_pool(becp, size_becp);
-#endif
+//     const char transa = 'C';
+//     const char transb = 'N';
+//     const int ldb = this->npwx_;
+//     const int ldc = this->tot_nproj;
+//     const std::complex<double> alpha = 1.0;
+//     const std::complex<double> beta = 0.0;
+//     if(this->becp == nullptr || this->size_becp < npm*ldc)
+//     {
+//         delete[] this->becp;
+//         this->becp = new std::complex<double>[npm*ldc];
+//         this->size_becp = npm*ldc;
+//     }
+//     setmem_complex_op()(ctx, this->becp, 0.0, this->size_becp);
+//     gemm_op()(
+//         this->ctx,
+//         transa,                 // const char transa
+//         transb,                 // const char transb
+//         ldc,                    // const int m
+//         npm,                    // const int n
+//         this->npw_,             // const int k
+//         &alpha,                 // const std::complex<double> alpha
+//         this->tab_atomic_,      // const std::complex<double>* a
+//         this->npw_,             // const int lda
+//         ppsi,                   // const std::complex<double>* b
+//         ldb,                    // const int ldb
+//         &beta,                  // const std::complex<double> beta
+//         becp,                   // std::complex<double>* c
+//         ldc);                   // const int ldc
+// #ifdef __MPI
+//     Parallel_Reduce::reduce_pool(becp, size_becp);
+// #endif
+
+    // notes on refactor for DCU calculation
+    // the npm here is nbands(occ) * npol, for calling cal_becp, the npol should be divided.
+    // std::cout << "npm: " << npm << std::endl;
+    // std::cout << "at " << __FILE__ << ": " << __LINE__ << " output tot_nproj: " << this->tot_nproj << std::endl;
+    // std::cout << "at " << __FILE__ << ": " << __LINE__ << " output npm: " << npm << std::endl;
+    // std::cout << "at " << __FILE__ << ": " << __LINE__ << " ik_: " << ik_ << std::endl;
+    this->fs_tools->cal_becp(ik_, npm/npol); // in cal_becp, npm should be the one not multiplied by npol
+    this->size_becp = npm * this->tot_nproj;
+    this->becp = this->fs_tools->get_becp();
     ModuleBase::timer::tick("OnsiteProj", "overlap");
 }
 
@@ -486,7 +515,7 @@ template<typename T, typename Device>
 void projectors::OnsiteProjector<T, Device>::cal_occupations(const psi::Psi<std::complex<double>>* psi_in, const ModuleBase::matrix& wg_in)
 {
     ModuleBase::timer::tick("OnsiteProj", "cal_occupation");
-    this->init_k(0);
+    this->tabulate_atomic(0);
     std::vector<std::complex<double>> occs(this->tot_nproj * 4, 0.0);
 
     // loop over k-points to calculate Mi of \sum_{k,i,l,m}<Psi_{k,i}|alpha_{l,m}><alpha_{l,m}|Psi_{k,i}>
@@ -494,14 +523,19 @@ void projectors::OnsiteProjector<T, Device>::cal_occupations(const psi::Psi<std:
     for(int ik = 0; ik < psi_in->get_nk(); ik++)
     {
         psi_in->fix_k(ik);
-        if(ik!=0) this->init_k(ik);
+        if(ik!=0) this->tabulate_atomic(ik);
+        // std::cout << __FILE__ << ":" << __LINE__ << " nbands = " << nbands << std::endl;
         this->overlap_proj_psi(
-                        nbands * psi_in->npol,
+                        nbands,
+                        psi_in->npol,
                         psi_in->get_pointer());
         const std::complex<double>* becp = this->get_becp();
         // becp(nbands*npol , nkb)
         // mag = wg * \sum_{nh}becp * becp
         int nkb = this->get_size_becp() / nbands / psi_in->npol;
+        nkb = 18;
+        std::cout << "at " << __FILE__ << ": " << __LINE__ << " output nbands: " << nbands << std::endl;
+        std::cout << "at " << __FILE__ << ": " << __LINE__ << " output nkb: " << nkb << std::endl;
         for(int ib = 0;ib<nbands;ib++)
         {
             const double weight = wg_in(ik, ib);
