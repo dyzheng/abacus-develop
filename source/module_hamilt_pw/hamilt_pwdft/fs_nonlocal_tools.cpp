@@ -317,6 +317,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
         vq_tb = d_vq_tab;
     }
 
+    int vkb_size = 0;
     for (int it = 0; it < this->ucell_->ntype; it++) // loop all elements
     {
         cal_vq_op()(this->ctx,
@@ -362,6 +363,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
             // 2.b calculate becp = vkb * psi
             vkb_ptr += nh * npw; // vkb_ptr has dimension (nhtot, npwx)
             d_sk += npw;
+            vkb_size += nh * npw;
         }
     }
     // std::cout << "calculation of tab_atomic at" << __FILE__ << ": " << __LINE__ << std::endl;
@@ -373,11 +375,13 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
     // std::cout << "nkb: " << this->nkb 
     //           << " npm_npol: " << npm_npol 
     //           << " npw: " << npw << std::endl;
-    // print first then values of vkb
-    // for (int i = 0; i < 50; i++)
-    // {
-    //     std::cout << "vkb[" << i << "]: " << this->ppcell_vkb[i] << std::endl;
-    // }
+    // print all values of vkb
+    for(int i = 0; i < vkb_size; i++)
+    {
+        std::cout << vkb_ptr[i] << " ";
+    }
+    std::cout << std::endl;
+    ModuleBase::WARNING_QUIT("FS_Nonlocal_tools", "cal_becp");
 
     gemm_op()(this->ctx,
               transa,
