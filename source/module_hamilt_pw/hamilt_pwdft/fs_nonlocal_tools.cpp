@@ -373,6 +373,12 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
     // std::cout << "nkb: " << this->nkb 
     //           << " npm_npol: " << npm_npol 
     //           << " npw: " << npw << std::endl;
+    // print first then values of vkb
+    for (int i = 0; i < 50; i++)
+    {
+        std::cout << "vkb[" << i << "]: " << this->ppcell_vkb[i] << std::endl;
+    }
+
     gemm_op()(this->ctx,
               transa,
               transb,
@@ -403,10 +409,10 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
         Parallel_Reduce::reduce_pool(becp, size_becp_act);
     }
     // check first ten value of becp
-    for (int i = 0; i < 10; i++)
-    {
-        std::cout << "becp[" << i << "]: " << becp[i] << std::endl;
-    }
+    // for (int i = 0; i < 10; i++)
+    // {
+    //     std::cout << "becp[" << i << "]: " << becp[i] << std::endl;
+    // }
     ModuleBase::timer::tick("FS_Nonlocal_tools", "cal_becp");
 }
 
