@@ -383,7 +383,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
               transa,
               transb,
               this->nkb,
-              npm_npol,
+              npm_npol, // nbands(occ)*npol
               npw,
               &ModuleBase::ONE,
               this->ppcell_vkb,
@@ -406,14 +406,14 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
     }
     else
     {
-        Parallel_Reduce::reduce_pool(becp, size_becp);
+        Parallel_Reduce::reduce_pool(becp, size_becp_act);
     }
     // check first ten value of becp
-    std::cout << "ik: " << ik << std::endl;
-    for (int i = 0; i < 50; i++)
-    {
-        std::cout << "becp[" << i << "]: " << becp[i] << std::endl;
-    }
+    // std::cout << "ik: " << ik << std::endl;
+    // for (int i = 0; i < 50; i++)
+    // {
+    //     std::cout << "becp[" << i << "]: " << becp[i] << std::endl;
+    // }
     ModuleBase::timer::tick("FS_Nonlocal_tools", "cal_becp");
 }
 
