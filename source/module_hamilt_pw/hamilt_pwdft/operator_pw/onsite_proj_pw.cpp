@@ -39,7 +39,7 @@ void OnsiteProj<OperatorPW<T, Device>>::init(const int ik_in)
     this->ik = ik_in;
 
     auto* onsite_p = projectors::OnsiteProjector<double, Device>::get_instance();
-    //onsite_p->tabulate_atomic(ik_in);
+    onsite_p->tabulate_atomic(ik_in);
     this->tnp = onsite_p->get_tot_nproj();
 
     if(this->next_op != nullptr)

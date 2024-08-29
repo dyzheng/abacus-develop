@@ -167,13 +167,10 @@ void projectors::OnsiteProjector<T, Device>::init(const std::string& orbital_dir
         // uncomment the following code block if you want to use the FS_Nonlocal_tools
         if(this->tab_atomic_ == nullptr) // fs_nonlocal_tools will borrow memory space here...
         {
-            std::cout << "allocate of tab_atomic at " << __FILE__ << ": " << __LINE__ << std::endl;
             this->tot_nproj = itiaiprojm2irow_.size();
             this->npwx_ = this->pw_basis_->npwk_max;
             this->tab_atomic_ = new std::complex<double>[this->tot_nproj * this->npwx_];
             this->size_vproj = this->tot_nproj * this->npwx_;
-            std::cout << "allocate memory for tab_atomic_ with dimension " 
-                      << this->tot_nproj << " x " << this->npwx_ << std::endl;
         }
         this->fs_tools = new hamilt::FS_Nonlocal_tools<T, Device>(
             nproj, lproj, tab, nhtol, this->tab_atomic_, ucell_in, &psi, &kv, &pw_basis, &sf, wg, ekb);      
@@ -282,63 +279,63 @@ void projectors::OnsiteProjector<T, Device>::tabulate_atomic(const int ik, const
     this->ik_ = ik;
     this->npw_ = pw_basis_->npwk[ik];
     this->npwx_ = pw_basis_->npwk_max;
-    std::vector<ModuleBase::Vector3<double>> q(this->npw_);
-    for(int ig = 0; ig < this->npw_; ++ig)
-    {
-        q[ig] = pw_basis_->getgpluskcar(ik, ig); // get the G+k vector, G+k will change during CELL-RELAX
-    }
-    const int nrow = irow2it_.size();
-    std::vector<std::complex<double>> tab_(nrow*this->npw_);
-    // convention used here: 'l': <p|G+k>, 'r': <G+k|p>
-    // denote q=G+k, <r|q> = exp(iqr), the routine Fourier Transform written as F(q) = <q|f>
-    rp_.sbtft(q, tab_, 'l', this->ucell->omega, this->ucell->tpiba);
-    // what is calculated is <p|q> here
+    // std::vector<ModuleBase::Vector3<double>> q(this->npw_);
+    // for(int ig = 0; ig < this->npw_; ++ig)
+    // {
+    //     q[ig] = pw_basis_->getgpluskcar(ik, ig); // get the G+k vector, G+k will change during CELL-RELAX
+    // }
+    // const int nrow = irow2it_.size();
+    // std::vector<std::complex<double>> tab_(nrow*this->npw_);
+    // // convention used here: 'l': <p|G+k>, 'r': <G+k|p>
+    // // denote q=G+k, <r|q> = exp(iqr), the routine Fourier Transform written as F(q) = <q|f>
+    // rp_.sbtft(q, tab_, 'l', this->ucell->omega, this->ucell->tpiba);
+    // // what is calculated is <p|q> here
 
 
-    // STAGE 2 - make_atomic: multiply e^iqtau and extend the <G+k|p> to <G+k|pi> for each atom
-    // CACHE 2 - if cache the tab_atomic_, <G+k|p> can be reused for SCF calculation
-    // [in] it2ia, itiaiprojm2irow, tab_, npw, sf
-    std::vector<int> na(it2ia.size());
-    for(int it = 0; it < it2ia.size(); ++it)
-    {
-        na[it] = it2ia[it].size();
-    }
-    if(this->tab_atomic_ == nullptr)
-    {
-        this->tot_nproj = itiaiprojm2irow_.size();
-        this->tab_atomic_ = new std::complex<double>[this->tot_nproj * this->npwx_];
-        this->size_vproj = this->tot_nproj * this->npwx_;
-    }
-    for(int irow = 0; irow < nrow; ++irow)
-    {
-        const int it = irow2it_[irow];
-        const int iproj = irow2iproj_[irow];
-        const int m = irow2m_[irow];
-        for(int ia = 0; ia < na[it]; ++ia)
-        {
-            // why Structure_Factor needs the FULL pw_basis???
-            std::complex<double>* sk = this->sf_->get_sk(ik, it, ia, pw_basis_); // exp(-iqtau)
-            // Note: idea on extending the param list of get_sk
-            // the get_sk should have an extra param 'grad' to calculate the gradient of S(q), which
-            // is actually very simple to be
-            // d(S(q))/dq = -i S(q) * tau, for one direction it is just -i S(q) * tau_x (if x is the direction)
-            const int irow_out = itiaiprojm2irow_.at(std::make_tuple(it, ia, iproj, m));
-            for(int ig = 0; ig < this->npw_; ++ig)
-            {
-                std::complex<double> deriv = (grad == 'n')? 1.0: ModuleBase::NEG_IMAG_UNIT; // because sk is exp(-iqtau)
-                deriv = (grad == 'n')? 1.0: (grad == 'x')? deriv * q[ig].x: (grad == 'y')? deriv * q[ig].y: deriv * q[ig].z;
-                // there must be something twisted in ABACUS
-                // because the tab_ is <p|G+k>, but the sk is exp(-iqtau). How can it get the 
-                // correct result?
-                this->tab_atomic_[irow_out*this->npw_ + ig] = sk[ig] * tab_[irow*this->npw_ + ig] * deriv;
-            }
-            delete[] sk;
-        }
-    }
-    q.clear();
-    q.shrink_to_fit();    // release memory
-    tab_.clear();
-    tab_.shrink_to_fit(); // release memory
+    // // STAGE 2 - make_atomic: multiply e^iqtau and extend the <G+k|p> to <G+k|pi> for each atom
+    // // CACHE 2 - if cache the tab_atomic_, <G+k|p> can be reused for SCF calculation
+    // // [in] it2ia, itiaiprojm2irow, tab_, npw, sf
+    // std::vector<int> na(it2ia.size());
+    // for(int it = 0; it < it2ia.size(); ++it)
+    // {
+    //     na[it] = it2ia[it].size();
+    // }
+    // if(this->tab_atomic_ == nullptr)
+    // {
+    //     this->tot_nproj = itiaiprojm2irow_.size();
+    //     this->tab_atomic_ = new std::complex<double>[this->tot_nproj * this->npwx_];
+    //     this->size_vproj = this->tot_nproj * this->npwx_;
+    // }
+    // for(int irow = 0; irow < nrow; ++irow)
+    // {
+    //     const int it = irow2it_[irow];
+    //     const int iproj = irow2iproj_[irow];
+    //     const int m = irow2m_[irow];
+    //     for(int ia = 0; ia < na[it]; ++ia)
+    //     {
+    //         // why Structure_Factor needs the FULL pw_basis???
+    //         std::complex<double>* sk = this->sf_->get_sk(ik, it, ia, pw_basis_); // exp(-iqtau)
+    //         // Note: idea on extending the param list of get_sk
+    //         // the get_sk should have an extra param 'grad' to calculate the gradient of S(q), which
+    //         // is actually very simple to be
+    //         // d(S(q))/dq = -i S(q) * tau, for one direction it is just -i S(q) * tau_x (if x is the direction)
+    //         const int irow_out = itiaiprojm2irow_.at(std::make_tuple(it, ia, iproj, m));
+    //         for(int ig = 0; ig < this->npw_; ++ig)
+    //         {
+    //             std::complex<double> deriv = (grad == 'n')? 1.0: ModuleBase::NEG_IMAG_UNIT; // because sk is exp(-iqtau)
+    //             deriv = (grad == 'n')? 1.0: (grad == 'x')? deriv * q[ig].x: (grad == 'y')? deriv * q[ig].y: deriv * q[ig].z;
+    //             // there must be something twisted in ABACUS
+    //             // because the tab_ is <p|G+k>, but the sk is exp(-iqtau). How can it get the 
+    //             // correct result?
+    //             this->tab_atomic_[irow_out*this->npw_ + ig] = sk[ig] * tab_[irow*this->npw_ + ig] * deriv;
+    //         }
+    //         delete[] sk;
+    //     }
+    // }
+    // q.clear();
+    // q.shrink_to_fit();    // release memory
+    // tab_.clear();
+    // tab_.shrink_to_fit(); // release memory
     ModuleBase::timer::tick("OnsiteProj", "tabulate_atomic");
 }
 
@@ -388,8 +385,9 @@ void projectors::OnsiteProjector<T, Device>::overlap_proj_psi(
     // notes on refactor for DCU calculation
     // the npm here is nbands(occ) * npol, for calling cal_becp, the npol should be divided.
     // std::cout << "npm: " << npm << std::endl;
-    std::cout << "at " << __FILE__ << ": " << __LINE__ << " output tot_nproj: " << this->tot_nproj << std::endl;
-    std::cout << "at " << __FILE__ << ": " << __LINE__ << " output npm: " << npm << std::endl;
+    // std::cout << "at " << __FILE__ << ": " << __LINE__ << " output tot_nproj: " << this->tot_nproj << std::endl;
+    // std::cout << "at " << __FILE__ << ": " << __LINE__ << " output npm: " << npm << std::endl;
+    // std::cout << "at " << __FILE__ << ": " << __LINE__ << " ik_: " << ik_ << std::endl;
     this->fs_tools->cal_becp(ik_, npm/npol); // in cal_becp, npm should be the one not multiplied by npol
     this->size_becp = npm * this->tot_nproj;
     this->becp = this->fs_tools->get_becp();
@@ -515,7 +513,7 @@ template<typename T, typename Device>
 void projectors::OnsiteProjector<T, Device>::cal_occupations(const psi::Psi<std::complex<double>>* psi_in, const ModuleBase::matrix& wg_in)
 {
     ModuleBase::timer::tick("OnsiteProj", "cal_occupation");
-    //this->tabulate_atomic(0);
+    this->tabulate_atomic(0);
     std::vector<std::complex<double>> occs(this->tot_nproj * 4, 0.0);
 
     // loop over k-points to calculate Mi of \sum_{k,i,l,m}<Psi_{k,i}|alpha_{l,m}><alpha_{l,m}|Psi_{k,i}>
@@ -523,7 +521,7 @@ void projectors::OnsiteProjector<T, Device>::cal_occupations(const psi::Psi<std:
     for(int ik = 0; ik < psi_in->get_nk(); ik++)
     {
         psi_in->fix_k(ik);
-        //if(ik!=0) this->tabulate_atomic(ik);
+        if(ik!=0) this->tabulate_atomic(ik);
         // std::cout << __FILE__ << ":" << __LINE__ << " nbands = " << nbands << std::endl;
         this->overlap_proj_psi(
                         nbands,
@@ -533,6 +531,7 @@ void projectors::OnsiteProjector<T, Device>::cal_occupations(const psi::Psi<std:
         // becp(nbands*npol , nkb)
         // mag = wg * \sum_{nh}becp * becp
         int nkb = this->get_size_becp() / nbands / psi_in->npol;
+        nkb = 18;
         std::cout << "at " << __FILE__ << ": " << __LINE__ << " output nbands: " << nbands << std::endl;
         std::cout << "at " << __FILE__ << ": " << __LINE__ << " output nkb: " << nkb << std::endl;
         for(int ib = 0;ib<nbands;ib++)

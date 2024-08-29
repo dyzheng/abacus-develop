@@ -134,7 +134,6 @@ FS_Nonlocal_tools<FPTYPE, Device>::FS_Nonlocal_tools(const std::vector<int>& npr
     this->ntype = nproj.size();
     this->tabtpr = &tab;
 
-    std::cout << __FILE__ << ":" << __LINE__ << " tab(0, 0, 0) = " << this->tabtpr->operator()(0, 0, 0) << std::endl;
     this->nhtol = &nhtol;
     this->lprojmax = *std::max_element(lproj.begin(), lproj.end());
     this->nondiagonal = false;
@@ -330,13 +329,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
                     GlobalV::DQ,
                     nproj[it],
                     hd_vq); // hd_vq has dimension (nprojmax, npwx)
-        // comparing vq is comparing the polynormial interpolation and cubspl_
-        // print first ten values
-        // std::cout << "vq: ";
-        // for (int i = 0; i < 10; i++)
-        // {
-        //     std::cout << hd_vq[i] << " ";
-        // }
+
         // prepare（-i）^l, size: nh
         std::vector<std::complex<double>> pref = maths.cal_pref(it, h_atom_nh[it]);
         const int nh = pref.size();
@@ -409,7 +402,11 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
     {
         Parallel_Reduce::reduce_pool(becp, size_becp_act);
     }
-
+    // check first ten value of becp
+    for (int i = 0; i < 10; i++)
+    {
+        std::cout << "becp[" << i << "]: " << becp[i] << std::endl;
+    }
     ModuleBase::timer::tick("FS_Nonlocal_tools", "cal_becp");
 }
 

@@ -148,7 +148,7 @@ void RadialProjection::RadialProjector::_build_sbt_tab(const std::vector<int>& n
     ModuleBase::SphericalBesselTransformer sbt_(true); // bool: enable cache
     int iproj = 0;
     int nchmax = 0;
-    const double pref = 4*M_PI/std::sqrt(omega);
+    const double pref = 4*M_PI/std::sqrt(omega) / std::sqrt(2.0/std::acos(-1.0));
     for (int it = 0; it < ntype; it++)
     {
         int nch = 0;
