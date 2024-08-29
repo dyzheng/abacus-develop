@@ -133,6 +133,8 @@ FS_Nonlocal_tools<FPTYPE, Device>::FS_Nonlocal_tools(const std::vector<int>& npr
     this->max_npw = wfc_basis_->npwk_max;
     this->ntype = nproj.size();
     this->tabtpr = &tab;
+
+    std::cout << __FILE__ << ":" << __LINE__ << " tab(0, 0, 0) = " << this->tabtpr->operator()(0, 0, 0) << std::endl;
     this->nhtol = &nhtol;
     this->lprojmax = *std::max_element(lproj.begin(), lproj.end());
     this->nondiagonal = false;
@@ -278,12 +280,11 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
     ModuleBase::TITLE("FS_Nonlocal_tools", "cal_becp");
     ModuleBase::timer::tick("FS_Nonlocal_tools", "cal_becp");
     const int npol = this->ucell_->get_npol();
-    npm /= npol;
     const int size_becp = this->nbands * npol * this->nkb;
     const int size_becp_act = npm * npol * this->nkb;
-    std::cout << "nbands: " << this->psi_->get_nbands() << " nbasis: " << this->psi_->get_nbasis() << std::endl;
-    std::cout << "nkb: " << this->nkb << " npm: " << npm << std::endl;
-    std::cout << "npol: " << npol << " size_becp: " << size_becp << std::endl;
+    // std::cout << "nbands: " << this->psi_->get_nbands() << " nbasis: " << this->psi_->get_nbasis() << std::endl;
+    // std::cout << "nkb: " << this->nkb << " npm: " << npm << std::endl;
+    // std::cout << "npol: " << npol << " size_becp: " << size_becp << std::endl;
     if (this->becp == nullptr)
     {
         resmem_complex_op()(this->ctx, becp, size_becp);
@@ -362,7 +363,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
             d_sk += npw;
         }
     }
-
+    // seperate the lower and upper into two parts, individually called.
     const char transa = 'C';
     const char transb = 'N';
     int npm_npol = npm * npol;
@@ -381,6 +382,11 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
               this->becp,
               this->nkb);
 
+    // output becp
+    for (int i = 0; i < 10; i++)
+    {
+        std::cout << "becp[" << i << "] = " << this->becp[i] << std::endl;
+    }
     // becp calculate is over , now we should broadcast this data.
     if (this->device == base_device::GpuDevice)
     {

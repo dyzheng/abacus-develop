@@ -162,7 +162,7 @@ void projectors::OnsiteProjector<T, Device>::init(const std::string& orbital_dir
         RadialProjection::RadialProjector::_build_backward_map(it2iproj, lproj, irow2it_, irow2iproj_, irow2m_);
         RadialProjection::RadialProjector::_build_forward_map(it2ia, it2iproj, lproj, itiaiprojm2irow_);
         //rp_._build_sbt_tab(rgrid, projs, lproj, nq, dq);
-        rp_._build_sbt_tab(nproj, rgrid, projs, lproj, nq, dq, tab, nhtol);
+        rp_._build_sbt_tab(nproj, rgrid, projs, lproj, nq, dq, ucell_in->omega, tab, nhtol);
         // For being compatible with present cal_force and cal_stress framework  
         // uncomment the following code block if you want to use the FS_Nonlocal_tools
         if(this->tab_atomic_ == nullptr) // fs_nonlocal_tools will borrow memory space here...
@@ -172,6 +172,7 @@ void projectors::OnsiteProjector<T, Device>::init(const std::string& orbital_dir
             this->tab_atomic_ = new std::complex<double>[this->tot_nproj * this->npwx_];
             this->size_vproj = this->tot_nproj * this->npwx_;
         }
+        std::cout << __FILE__ << ":" << __LINE__ << " tab(0, 0, 0) = " << tab(0, 0, 0) << std::endl;
         this->fs_tools = new hamilt::FS_Nonlocal_tools<T, Device>(
             nproj, lproj, tab, nhtol, this->tab_atomic_, ucell_in, &psi, &kv, &pw_basis, &sf, wg, ekb);      
         
@@ -342,6 +343,7 @@ void projectors::OnsiteProjector<T, Device>::tabulate_atomic(const int ik, const
 template<typename T, typename Device>
 void projectors::OnsiteProjector<T, Device>::overlap_proj_psi( 
                     const int npm,
+                    const int npol,
                     const std::complex<double>* ppsi
                     )
 {
@@ -380,8 +382,11 @@ void projectors::OnsiteProjector<T, Device>::overlap_proj_psi(
 // #ifdef __MPI
 //     Parallel_Reduce::reduce_pool(becp, size_becp);
 // #endif
+
+    // notes on refactor for DCU calculation
+    // the npm here is nbands(occ) * npol, for calling cal_becp, the npol should be divided.
     std::cout << "npm: " << npm << std::endl;
-    this->fs_tools->cal_becp(ik_, npm); // in cal_becp, npm should be the one not multiplied by npol
+    this->fs_tools->cal_becp(ik_, npm/npol); // in cal_becp, npm should be the one not multiplied by npol
     this->becp = this->fs_tools->get_becp();
     ModuleBase::timer::tick("OnsiteProj", "overlap");
 }
@@ -517,6 +522,7 @@ void projectors::OnsiteProjector<T, Device>::cal_occupations(const psi::Psi<std:
         std::cout << __FILE__ << ":" << __LINE__ << " nbands = " << nbands << std::endl;
         this->overlap_proj_psi(
                         nbands,
+                        psi_in->npol,
                         psi_in->get_pointer());
         const std::complex<double>* becp = this->get_becp();
         // becp(nbands*npol , nkb)

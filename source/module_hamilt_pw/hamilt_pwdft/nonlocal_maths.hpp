@@ -370,6 +370,7 @@ void Nonlocal_maths<FPTYPE, Device>::cal_dvkb_index(const int nbeta,
         int l = nhtol[it * nhtol_nc + ih];
         for (int m = 0; m < 2 * l + 1; m++)
         {
+            std::cout << "in function cal_dvkb_index, nhtol(" << it << ", " << ih << ") = " << l << std::endl;
             int lm = l * l + m;
             indexes[ih * 4] = lm;
             indexes[ih * 4 + 1] = nb;

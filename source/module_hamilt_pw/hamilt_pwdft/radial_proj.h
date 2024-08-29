@@ -162,13 +162,14 @@ namespace RadialProjection
                                 const std::vector<int>& l,
                                 const int nq,                             //< GlobalV::DQ
                                 const double& dq);                        //< GlobalV::NQX
-            // compatibility concern: for FS_Nonlocal_tools
+            // compatibility concern: for FS_Nonlocal_tools. Will not call sbtft so need omega
             void _build_sbt_tab(const std::vector<int>& nproj,
                                 const std::vector<double>& r,
                                 const std::vector<std::vector<double>>& radials,
                                 const std::vector<int>& l,
                                 const int nq,                             //< GlobalV::DQ
                                 const double& dq,                         //< GlobalV::NQX
+                                const double& omega,
                                 ModuleBase::realArray& tab,
                                 ModuleBase::matrix& nhtol);
             /**

@@ -86,12 +86,12 @@ void OnsiteProj<OperatorPW<T, Device>>::add_onsite_proj(T *hpsi_in, const int np
 }
 
 template<typename T, typename Device>
-void OnsiteProj<OperatorPW<T, Device>>::update_becp(const T *psi_in, const int m) const
+void OnsiteProj<OperatorPW<T, Device>>::update_becp(const T *psi_in, const int npol, const int m) const
 {
     auto* onsite_p = projectors::OnsiteProjector<double, Device>::get_instance();
     // calculate <alpha|psi> 
     std::cout << __FILE__ << ":" << __LINE__ << " nbands = " << m << std::endl;
-    onsite_p->overlap_proj_psi(m, psi_in);
+    onsite_p->overlap_proj_psi(m, npol, psi_in);
 }
 
 template<typename T, typename Device>
@@ -229,7 +229,7 @@ template<>
 void OnsiteProj<OperatorPW<std::complex<float>, base_device::DEVICE_CPU>>::add_onsite_proj(std::complex<float> *hpsi_in, const int npol, const int m) const
 {}
 template<>
-void OnsiteProj<OperatorPW<std::complex<float>, base_device::DEVICE_CPU>>::update_becp(const std::complex<float> *psi_in, const int m) const
+void OnsiteProj<OperatorPW<std::complex<float>, base_device::DEVICE_CPU>>::update_becp(const std::complex<float> *psi_in, const int npol, const int m) const
 {}
 template<>
 void OnsiteProj<OperatorPW<std::complex<float>, base_device::DEVICE_CPU>>::cal_ps_delta_spin(const int npol, const int m) const
@@ -249,7 +249,7 @@ void OnsiteProj<OperatorPW<T, Device>>::act(
 {
     ModuleBase::timer::tick("Operator", "OnsiteProjPW");
 
-    this->update_becp(tmpsi_in, nbands);
+    this->update_becp(tmpsi_in, npol, nbands);
 
     this->cal_ps_delta_spin(npol, nbands);
     this->cal_ps_dftu(npol, nbands);

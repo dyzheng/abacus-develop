@@ -26,7 +26,7 @@ void DFTU::cal_occ_pw(const int iter, const psi::Psi<std::complex<double>>* psi_
         psi_in->fix_k(ik);
         //onsite_p->tabulate_atomic(ik);
         std::cout << __FILE__ << ":" << __LINE__ << " nbands = " << nbands << std::endl;
-        onsite_p->overlap_proj_psi(nbands, psi_in->get_pointer());
+        onsite_p->overlap_proj_psi(nbands, psi_in->npol, psi_in->get_pointer());
         const std::complex<double>* becp = onsite_p->get_becp();
         // becp(nbands*npol , nkb)
         // mag = wg * \sum_{nh}becp * becp

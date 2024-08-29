@@ -131,6 +131,7 @@ void RadialProjection::RadialProjector::_build_sbt_tab(const std::vector<int>& n
                                                        const std::vector<int>& l,
                                                        const int nq,                             //< GlobalV::DQ
                                                        const double& dq,                         //< GlobalV::NQX
+                                                       const double& omega,
                                                        ModuleBase::realArray& tab,
                                                        ModuleBase::matrix& nhtol)              // output table
 {
@@ -147,6 +148,7 @@ void RadialProjection::RadialProjector::_build_sbt_tab(const std::vector<int>& n
     ModuleBase::SphericalBesselTransformer sbt_(true); // bool: enable cache
     int iproj = 0;
     int nchmax = 0;
+    const double pref = 4*M_PI/std::sqrt(omega);
     for (int it = 0; it < ntype; it++)
     {
         int nch = 0;
@@ -157,7 +159,7 @@ void RadialProjection::RadialProjector::_build_sbt_tab(const std::vector<int>& n
             nch += 2*l_ + 1;
             std::vector<double> _temp(nq);
             sbt_.direct(l_, r.size(), r.data(), radials[iproj].data(), nq, qgrid.data(), _temp.data());
-            std::for_each(_temp.begin(), _temp.end(), [l_](double& x){x = x/std::sqrt(2.0*std::acos(-1.0));});
+            std::for_each(_temp.begin(), _temp.end(), [pref](double& x){x = x*pref;});
             for (int iq = 0; iq < nq; iq++)
             {
                 tab(it, ip, iq) = _temp[iq];
@@ -172,7 +174,7 @@ void RadialProjection::RadialProjector::_build_sbt_tab(const std::vector<int>& n
     iproj = 0;
     for (int it = 0; it < ntype; it++)
     {
-        int ih = 0;
+        int ih = 0; // channel index, across all projectors of present type
         for (int ip = 0; ip < nproj[it]; ip++)
         {
             const int l_ = l[iproj];

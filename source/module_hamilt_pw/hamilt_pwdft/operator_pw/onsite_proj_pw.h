@@ -48,7 +48,7 @@ class OnsiteProj<OperatorPW<T, Device>> : public OperatorPW<T, Device>
   private:
     void cal_ps_delta_spin(const int npol, const int m) const;
     void cal_ps_dftu(const int npol, const int m) const;
-    void update_becp(const T* psi_in, const int m) const;
+    void update_becp(const T* psi_in, const int npol, const int m) const;
     void add_onsite_proj(T *hpsi_in, const int npol, const int m) const;
 
     const int* isk = nullptr;
