@@ -170,6 +170,7 @@ namespace RadialProjection
                                 const int nq,                             //< GlobalV::DQ
                                 const double& dq,                         //< GlobalV::NQX
                                 const double& omega,
+                                const int npol,
                                 ModuleBase::realArray& tab,
                                 ModuleBase::matrix& nhtol);
             /**

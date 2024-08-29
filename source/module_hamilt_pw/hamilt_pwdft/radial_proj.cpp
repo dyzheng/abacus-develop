@@ -132,13 +132,14 @@ void RadialProjection::RadialProjector::_build_sbt_tab(const std::vector<int>& n
                                                        const int nq,                             //< GlobalV::DQ
                                                        const double& dq,                         //< GlobalV::NQX
                                                        const double& omega,
+                                                       const int npol, // for nspin 4
                                                        ModuleBase::realArray& tab,
                                                        ModuleBase::matrix& nhtol)              // output table
 {
-    const int nprojmax = *std::max_element(nproj.begin(), nproj.end());
+    int nprojmax = *std::max_element(nproj.begin(), nproj.end());
     const int ntype = nproj.size();
 
-    tab.create(ntype, nprojmax, nq);
+    tab.create(ntype, nprojmax*npol, nq);
     tab.zero_out();
 
     std::vector<double> qgrid(nq);
@@ -163,14 +164,14 @@ void RadialProjection::RadialProjector::_build_sbt_tab(const std::vector<int>& n
             for (int iq = 0; iq < nq; iq++)
             {
                 tab(it, ip, iq) = _temp[iq];
-                std::cout << tab(it, ip, iq) << " ";
+                //std::cout << tab(it, ip, iq) << " ";
             }
             iproj++;
         }
         nchmax = std::max(nchmax, nch);
     }
-    std::cout << std::endl;
-    ModuleBase::WARNING_QUIT("RadialProjection", "The following code is not implemented yet.");
+    //std::cout << std::endl;
+    //ModuleBase::WARNING_QUIT("RadialProjection", "The following code is not implemented yet.");
     
     nhtol.create(ntype, nchmax);
     nhtol.zero_out();

@@ -376,12 +376,13 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
     //           << " npm_npol: " << npm_npol 
     //           << " npw: " << npw << std::endl;
     // print all values of vkb
-    for(int i = 0; i < vkb_size; i++)
-    {
-        std::cout << this->ppcell_vkb[i] << " ";
-    }
-    std::cout << std::endl;
-    ModuleBase::WARNING_QUIT("FS_Nonlocal_tools", "cal_becp");
+
+    // for(int i = 0; i < vkb_size; i++)
+    // {
+    //     std::cout << this->ppcell_vkb[i] << " ";
+    // }
+    // std::cout << std::endl;
+    // ModuleBase::WARNING_QUIT("FS_Nonlocal_tools", "cal_becp");
 
     gemm_op()(this->ctx,
               transa,
