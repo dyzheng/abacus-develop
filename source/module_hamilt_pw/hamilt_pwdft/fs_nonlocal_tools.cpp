@@ -330,7 +330,13 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
                     GlobalV::DQ,
                     nproj[it],
                     hd_vq); // hd_vq has dimension (nprojmax, npwx)
-
+        // comparing vq is comparing the polynormial interpolation and cubspl_
+        // print first ten values
+        // std::cout << "vq: ";
+        // for (int i = 0; i < 10; i++)
+        // {
+        //     std::cout << hd_vq[i] << " ";
+        // }
         // prepare（-i）^l, size: nh
         std::vector<std::complex<double>> pref = maths.cal_pref(it, h_atom_nh[it]);
         const int nh = pref.size();
@@ -365,15 +371,15 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
             d_sk += npw;
         }
     }
-    std::cout << "calculation of tab_atomic at" << __FILE__ << ": " << __LINE__ << std::endl;
+    // std::cout << "calculation of tab_atomic at" << __FILE__ << ": " << __LINE__ << std::endl;
     // seperate the lower and upper into two parts, individually called.
     const char transa = 'C';
     const char transb = 'N';
     int npm_npol = npm * npol;
-    std::cout << "before gemm_op, check dimension..." << std::endl;
-    std::cout << "nkb: " << this->nkb 
-              << " npm_npol: " << npm_npol 
-              << " npw: " << npw << std::endl;
+    // std::cout << "before gemm_op, check dimension..." << std::endl;
+    // std::cout << "nkb: " << this->nkb 
+    //           << " npm_npol: " << npm_npol 
+    //           << " npw: " << npw << std::endl;
     gemm_op()(this->ctx,
               transa,
               transb,
@@ -389,12 +395,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
               this->becp,
               this->nkb);
 
-    // output becp
-    for (int i = 0; i < 10; i++)
-    {
-        std::cout << "becp[" << i << "] = " << this->becp[i] << std::endl;
-    }
-    // becp calculate is over , now we should broadcast this data.
+
     if (this->device == base_device::GpuDevice)
     {
         std::complex<FPTYPE>* h_becp = nullptr;
@@ -408,6 +409,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
     {
         Parallel_Reduce::reduce_pool(becp, size_becp_act);
     }
+
     ModuleBase::timer::tick("FS_Nonlocal_tools", "cal_becp");
 }
 

@@ -387,8 +387,11 @@ void projectors::OnsiteProjector<T, Device>::overlap_proj_psi(
 
     // notes on refactor for DCU calculation
     // the npm here is nbands(occ) * npol, for calling cal_becp, the npol should be divided.
-    std::cout << "npm: " << npm << std::endl;
+    // std::cout << "npm: " << npm << std::endl;
+    std::cout << "at " << __FILE__ << ": " << __LINE__ << " output tot_nproj: " << this->tot_nproj << std::endl;
+    std::cout << "at " << __FILE__ << ": " << __LINE__ << " output npm: " << npm << std::endl;
     this->fs_tools->cal_becp(ik_, npm/npol); // in cal_becp, npm should be the one not multiplied by npol
+    this->size_becp = npm * this->tot_nproj;
     this->becp = this->fs_tools->get_becp();
     ModuleBase::timer::tick("OnsiteProj", "overlap");
 }
@@ -521,7 +524,7 @@ void projectors::OnsiteProjector<T, Device>::cal_occupations(const psi::Psi<std:
     {
         psi_in->fix_k(ik);
         //if(ik!=0) this->tabulate_atomic(ik);
-        std::cout << __FILE__ << ":" << __LINE__ << " nbands = " << nbands << std::endl;
+        // std::cout << __FILE__ << ":" << __LINE__ << " nbands = " << nbands << std::endl;
         this->overlap_proj_psi(
                         nbands,
                         psi_in->npol,
@@ -530,6 +533,8 @@ void projectors::OnsiteProjector<T, Device>::cal_occupations(const psi::Psi<std:
         // becp(nbands*npol , nkb)
         // mag = wg * \sum_{nh}becp * becp
         int nkb = this->get_size_becp() / nbands / psi_in->npol;
+        std::cout << "at " << __FILE__ << ": " << __LINE__ << " output nbands: " << nbands << std::endl;
+        std::cout << "at " << __FILE__ << ": " << __LINE__ << " output nkb: " << nkb << std::endl;
         for(int ib = 0;ib<nbands;ib++)
         {
             const double weight = wg_in(ik, ib);

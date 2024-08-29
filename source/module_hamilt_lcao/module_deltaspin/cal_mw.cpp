@@ -124,7 +124,7 @@ void SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::cal_Mi_pw()
     {
         this->psi->fix_k(ik);
         //onsite_p->tabulate_atomic(ik); // tabulate for each atom at each k-point
-        std::cout << __FILE__ << ":" << __LINE__ << " nbands = " << nbands << std::endl;
+        // std::cout << __FILE__ << ":" << __LINE__ << " nbands = " << nbands << std::endl;
         onsite_p->overlap_proj_psi(nbands,
                                    this->psi->npol,
                                    this->psi->get_pointer());

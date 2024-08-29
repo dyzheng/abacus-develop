@@ -60,7 +60,7 @@ void OnsiteProj<OperatorPW<T, Device>>::add_onsite_proj(T *hpsi_in, const int np
 
     auto* onsite_p = projectors::OnsiteProjector<double, Device>::get_instance();
     // apply the operator to the wavefunction
-    std::cout << "use of tab_atomic at " << __FILE__ << ": " << __LINE__ << std::endl;
+    //std::cout << "use of tab_atomic at " << __FILE__ << ": " << __LINE__ << std::endl;
     const std::complex<double>* tab_atomic = onsite_p->get_tab_atomic();
     const int npw = onsite_p->get_npw();
     const int npwx = onsite_p->get_npwx();
@@ -91,7 +91,7 @@ void OnsiteProj<OperatorPW<T, Device>>::update_becp(const T *psi_in, const int n
 {
     auto* onsite_p = projectors::OnsiteProjector<double, Device>::get_instance();
     // calculate <alpha|psi> 
-    std::cout << __FILE__ << ":" << __LINE__ << " nbands = " << m << std::endl;
+    // std::cout << __FILE__ << ":" << __LINE__ << " nbands = " << m << std::endl;
     onsite_p->overlap_proj_psi(m, npol, psi_in);
 }
 
