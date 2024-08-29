@@ -255,7 +255,7 @@ struct cal_vkb_op<FPTYPE, base_device::DEVICE_CPU>
             std::complex<FPTYPE>* vkb_ptr = vkbs_out + ih * npw;
             const FPTYPE* ylm_ptr = ylms_in + indexes[ih * 4] * npw;
             const FPTYPE* vq_ptr = vqs_in + indexes[ih * 4 + 1] * npw;
-            // loop over all G-vectors
+            // loop over all G-vectors, calculate <G|beta>
             for (int ig = 0; ig < npw; ig++)
             {
                 vkb_ptr[ig] = ylm_ptr[ig] * vq_ptr[ig] * sk_in[ig] * pref_in[ih];

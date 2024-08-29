@@ -309,6 +309,33 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
     // prepare ylm，size: (lmax+1)^2 * this->max_npw
     const int lmax_ = this->lprojmax;
     maths.cal_ylm(lmax_, npw, g_plus_k.data(), hd_ylm);
+    // I doubt the sequence of Ylm of this function and the one I used...
+    // std::vector<ModuleBase::Vector3<double>> qs(npw);
+    // for (int ig = 0; ig < npw; ig++)
+    // {
+    //     qs[ig] = this->wfc_basis_->getgpluskcar(ik, ig);
+    // }
+    // const int total_lm = (lmax_ + 1) * (lmax_ + 1);
+    // ModuleBase::matrix ylmref(total_lm, npw);
+    // ModuleBase::YlmReal::Ylm_Real(total_lm, npw, qs.data(), ylmref);
+    // std::cout << "Compare the Ylm values of two methods:" << std::endl;
+    // int lm = 0;
+    // for(int l_ = 0; l_ < lmax_ + 1; l_++)
+    // {
+    //     for(int m_ = -l_; m_ <= l_; m_++)
+    //     {
+    //         std::cout << "l = " << l_ << " m = " << m_ << std::endl;
+    //         lm = l_ * l_ + l_ + m_;
+    //         for(int ig = 0; ig < npw; ig++)
+    //         {
+    //             std::cout << "[" << ylmref(lm, ig) << " " << hd_ylm[lm * npw + ig] << "]" << " ";
+    //         }
+    //         std::cout << std::endl;
+    //     }
+    //     std::cout << std::endl;
+    // }
+    // ModuleBase::WARNING_QUIT("FS_Nonlocal_tools", "cal_becp");
+
     if (this->device == base_device::GpuDevice)
     {
         syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, d_g_plus_k, g_plus_k.data(), g_plus_k.size());
@@ -346,7 +373,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
         const int nh = pref.size();
         this->dvkb_indexes.resize(nh * 4);
         // print the value of nhtol
-        nhtol->print(std::cout);
+        // nhtol->print(std::cout); // as checked, nhtol works as expected
         maths.cal_dvkb_index(nproj[it],
                              this->nhtol->c,
                              this->nhtol->nc,
@@ -355,6 +382,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
                              0,
                              0,
                              this->dvkb_indexes.data());
+        
         if (this->device == base_device::GpuDevice)
         {
             syncmem_int_h2d_op()(this->ctx, this->cpu_ctx, d_dvkb_indexes, dvkb_indexes.data(), nh * 4);
@@ -378,6 +406,18 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
             vkb_size += nh * npw;
         }
     }
+    // print all values of vkb
+    for(int i = 0; i < vkb_size; i++)
+    {
+        if (i % npw == 0)
+        {
+            std::cout << "The #" << i / npw << " projector" << std::endl;
+        }
+        std::cout << this->ppcell_vkb[i] << " ";
+    }
+    std::cout << std::endl;
+    ModuleBase::WARNING_QUIT("FS_Nonlocal_tools", "cal_becp");
+
     // std::cout << "calculation of tab_atomic at" << __FILE__ << ": " << __LINE__ << std::endl;
     // seperate the lower and upper into two parts, individually called.
     const char transa = 'C';
@@ -387,14 +427,6 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
     // std::cout << "nkb: " << this->nkb 
     //           << " npm_npol: " << npm_npol 
     //           << " npw: " << npw << std::endl;
-    // print all values of vkb
-
-    // for(int i = 0; i < vkb_size; i++)
-    // {
-    //     std::cout << this->ppcell_vkb[i] << " ";
-    // }
-    // std::cout << std::endl;
-    // ModuleBase::WARNING_QUIT("FS_Nonlocal_tools", "cal_becp");
 
     gemm_op()(this->ctx,
               transa,
