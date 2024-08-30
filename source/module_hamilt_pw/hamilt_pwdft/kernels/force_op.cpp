@@ -288,7 +288,7 @@ struct cal_force_nl_op<FPTYPE, base_device::DEVICE_CPU>
                     FPTYPE local_force[3] = {0, 0, 0};
                     FPTYPE fac = d_wg[ik * wg_nc + ib] * 2.0 * tpiba;
                     int iat = iat0 + ia;
-                    int sum = sum0 + ia * nprojs;
+                    int sum = sum0 + ia * nproj;
                     for (int ip = ip_begin; ip < ip_end; ip++)
                     {
                         const int inkb = sum + ip;
@@ -325,7 +325,7 @@ struct cal_force_nl_op<FPTYPE, base_device::DEVICE_CPU>
                 vu += 4 * tlp1_2;// step for vu
             } // end ia
             iat0 += atom_na[it];
-            sum0 += atom_na[it] * nprojs;
+            sum0 += atom_na[it] * nproj;
         } // end it
     };
 
@@ -354,7 +354,7 @@ struct cal_force_nl_op<FPTYPE, base_device::DEVICE_CPU>
             for (int ia = 0; ia < atom_na[it]; ia++)
             {
                 int iat = iat0 + ia;
-                int sum = sum0 + ia * nprojs;
+                int sum = sum0 + ia * nproj;
                 const std::complex<double> coefficients0(lambda[iat*3+2], 0.0);
                 const std::complex<double> coefficients1(lambda[iat*3] , lambda[iat*3+1]);
                 const std::complex<double> coefficients2(lambda[iat*3] , -1 * lambda[iat*3+1]);
@@ -367,7 +367,6 @@ struct cal_force_nl_op<FPTYPE, base_device::DEVICE_CPU>
                     for (int ip = 0; ip < nproj; ip++)
                     {
                         const int inkb = sum + ip;
-                        const int m = ip - ip_begin;
 
                         for (int ipol = 0; ipol < 3; ipol++)
                         {
@@ -388,7 +387,7 @@ struct cal_force_nl_op<FPTYPE, base_device::DEVICE_CPU>
                 } // end ib
             } // ia
             iat0 += atom_na[it];
-            sum0 += atom_na[it] * nprojs;
+            sum0 += atom_na[it] * nproj;
         }//it
     }
 };

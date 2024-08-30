@@ -45,7 +45,6 @@ namespace projectors
         
         void overlap_proj_psi(
                     const int npm,
-                    const int npol,
                     const std::complex<double>* ppsi
                     );
         void read_abacus_orb(std::ifstream& ifs,
@@ -80,6 +79,8 @@ namespace projectors
         int get_npw() const { return npw_; }
         int get_npwx() const { return npwx_; }
         int get_nh(int iat) const { return iat_nh[iat]; }
+
+        hamilt::FS_Nonlocal_tools<T, Device>* get_fs_tools() const { return fs_tools; }
 
         private:
         OnsiteProjector(){};

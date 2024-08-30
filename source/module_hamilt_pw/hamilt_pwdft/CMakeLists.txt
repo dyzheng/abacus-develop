@@ -10,6 +10,7 @@ list(APPEND objects
     operator_pw/operator_pw.cpp
     operator_pw/onsite_proj_pw.cpp
     forces_nl.cpp
+    forces_onsite.cpp
     forces_cc.cpp
     forces.cpp
     forces_us.cpp

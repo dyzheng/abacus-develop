@@ -92,7 +92,7 @@ void OnsiteProj<OperatorPW<T, Device>>::update_becp(const T *psi_in, const int n
     auto* onsite_p = projectors::OnsiteProjector<double, Device>::get_instance();
     // calculate <alpha|psi> 
     // std::cout << __FILE__ << ":" << __LINE__ << " nbands = " << m << std::endl;
-    onsite_p->overlap_proj_psi(m, npol, psi_in);
+    onsite_p->overlap_proj_psi(m, psi_in);
 }
 
 template<typename T, typename Device>
