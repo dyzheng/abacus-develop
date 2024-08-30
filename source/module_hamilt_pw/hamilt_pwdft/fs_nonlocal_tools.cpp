@@ -274,7 +274,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::delete_memory()
 // . the multiplication with sk should be within specific operator
 // because the atom selection task is operator-specific.
 template <typename FPTYPE, typename Device>
-void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
+void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm, std::complex<FPTYPE>* becp_in)
 {
     ModuleBase::TITLE("FS_Nonlocal_tools", "cal_becp");
     ModuleBase::timer::tick("FS_Nonlocal_tools", "cal_becp");
@@ -282,6 +282,11 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
     const int npol = this->ucell_->get_npol();
     const std::complex<FPTYPE>* ppsi = &(this->psi_[0](ik, 0, 0));
     const int npw = this->wfc_basis_->npwk[ik];
+    if(becp_in == nullptr && this->becp == nullptr)
+    {
+        resmem_complex_op()(this->ctx, becp, this->nbands * npol * this->nkb);
+    }
+    std::complex<FPTYPE>* becp_tmp = becp_in==nullptr? this->becp : becp_in;
     const int size_becp_act = npm * npol * this->nkb;
     if(ik != this->current_ik)// different ik, need to recalculate vkb
     { 
@@ -435,7 +440,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
               ppsi,
               this->max_npw,
               &ModuleBase::ZERO,
-              this->becp,
+              becp_tmp,
               this->nkb);
 
 
@@ -443,14 +448,14 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm)
     {
         std::complex<FPTYPE>* h_becp = nullptr;
         resmem_complex_h_op()(this->cpu_ctx, h_becp, size_becp_act);
-        syncmem_complex_d2h_op()(this->cpu_ctx, this->ctx, h_becp, becp, size_becp_act);
+        syncmem_complex_d2h_op()(this->cpu_ctx, this->ctx, h_becp, becp_tmp, size_becp_act);
         Parallel_Reduce::reduce_pool(h_becp, size_becp_act);
         syncmem_complex_h2d_op()(this->ctx, this->cpu_ctx, becp, h_becp, size_becp_act);
         delmem_complex_h_op()(this->cpu_ctx, h_becp);
     }
     else
     {
-        Parallel_Reduce::reduce_pool(becp, size_becp_act);
+        Parallel_Reduce::reduce_pool(becp_tmp, size_becp_act);
     }
     // DEBUG: ONCE YOU CHECK becp VALUES, YOU UNCOMMENT THE FOLLOWING LINE
     // std::cout << "ik: " << ik << std::endl;

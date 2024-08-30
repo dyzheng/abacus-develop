@@ -47,8 +47,7 @@ void Forces<FPTYPE, Device>::cal_force_onsite(ModuleBase::matrix& force_onsite,
             }
         }
         const int npm = nbands_occ;
-        onsite_p->tabulate_atomic(ik);
-        onsite_p->overlap_proj_psi(npm*ucell_in.get_npol(), &psi_in[0](ik, 0, 0));
+        onsite_p->get_fs_tools()->cal_becp(ik, npm);
         // calculate becp = <psi|beta> for all beta functions
         for (int ipol = 0; ipol < 3; ipol++)
         {
