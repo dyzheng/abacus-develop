@@ -86,7 +86,8 @@ class DFTU
     /// calculate the local DFT+U effective potential matrix for PW base.
     void cal_VU_pot_pw(const int spin);
     /// get effective potential matrix for PW base
-    const std::complex<double>* get_eff_pot_pw(const int iat) const { return eff_pot_pw[iat].data(); }
+    const std::complex<double>* get_eff_pot_pw(const int iat) const { return &(eff_pot_pw[this->eff_pot_pw_index[iat]]); }
+    int get_size_eff_pot_pw() const { return eff_pot_pw.size(); }
     
 
     // calculate the local occupation number matrix
@@ -101,7 +102,8 @@ class DFTU
     void zero_locale();
     void mix_locale(const double& mixing_beta);
 
-    std::vector<std::vector<std::complex<double>>> eff_pot_pw;
+    std::vector<std::complex<double>> eff_pot_pw;
+    std::vector<int> eff_pot_pw_index;
 
 public:
     // local occupancy matrix of the correlated subspace

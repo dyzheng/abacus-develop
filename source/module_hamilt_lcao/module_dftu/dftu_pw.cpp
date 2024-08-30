@@ -26,7 +26,7 @@ void DFTU::cal_occ_pw(const int iter, const psi::Psi<std::complex<double>>* psi_
         psi_in->fix_k(ik);
         onsite_p->tabulate_atomic(ik);
 
-        onsite_p->overlap_proj_psi(nbands, psi_in->npol, psi_in->get_pointer());
+        onsite_p->overlap_proj_psi(nbands*psi_in->npol, psi_in->get_pointer());
         const std::complex<double>* becp = onsite_p->get_becp();
         // becp(nbands*npol , nkb)
         // mag = wg * \sum_{nh}becp * becp
@@ -86,12 +86,13 @@ void DFTU::cal_occ_pw(const int iter, const psi::Psi<std::complex<double>>* psi_
         Parallel_Reduce::reduce_double_allpool(GlobalV::KPAR, GlobalV::NPROC_IN_POOL, this->locale[iat][target_l][0][0].c, size * GlobalV::NSPIN);
         //update effective potential
         const double u_value = this->U[it];
+        std::complex<double>* vu_iat = &(this->eff_pot_pw[this->eff_pot_pw_index[iat]]);
         const int m_size = 2 * target_l + 1;
         for (int m1 = 0; m1 < m_size; m1++)
         {
             for (int m2 = 0; m2 < m_size; m2++)
             {
-                this->eff_pot_pw[iat][m1 * m_size + m2] = u_value * (1.0 * (m1 == m2) - this->locale[iat][target_l][0][0].c[m2 * m_size + m1]);
+                vu_iat[m1 * m_size + m2] = u_value * (1.0 * (m1 == m2) - this->locale[iat][target_l][0][0].c[m2 * m_size + m1]);
                 this->EU += u_value * 0.25 * this->locale[iat][target_l][0][0].c[m2 * m_size + m1] * this->locale[iat][target_l][0][0].c[m1 * m_size + m2];
             }
         }
@@ -102,7 +103,7 @@ void DFTU::cal_occ_pw(const int iter, const psi::Psi<std::complex<double>>* psi_
             {
                 for (int m2 = 0; m2 < m_size; m2++)
                 {
-                    this->eff_pot_pw[iat][start + m1 * m_size + m2] = u_value * (0 - this->locale[iat][target_l][0][0].c[start + m2 * m_size + m1]);
+                    vu_iat[start + m1 * m_size + m2] = u_value * (0 - this->locale[iat][target_l][0][0].c[start + m2 * m_size + m1]);
                     this->EU += u_value * 0.25 * this->locale[iat][target_l][0][0].c[start + m2 * m_size + m1] * this->locale[iat][target_l][0][0].c[start + m1 * m_size + m2];
                 }
             }
@@ -120,12 +121,12 @@ void DFTU::cal_occ_pw(const int iter, const psi::Psi<std::complex<double>>* psi_
                 std::complex<double> vu_tmp[4];
                 for (int i = 0; i < 4; i++)
                 {
-                    vu_tmp[i] = this->eff_pot_pw[iat][index[i]];
+                    vu_tmp[i] = vu_iat[index[i]];
                 }
-                this->eff_pot_pw[iat][index[0]] = 0.5 * (vu_tmp[0] + vu_tmp[3]);
-                this->eff_pot_pw[iat][index[3]] = 0.5 * (vu_tmp[0] - vu_tmp[3]);
-                this->eff_pot_pw[iat][index[1]] = 0.5 * (vu_tmp[1] + std::complex<double>(0.0, 1.0) * vu_tmp[2]);
-                this->eff_pot_pw[iat][index[2]] = 0.5 * (vu_tmp[1] - std::complex<double>(0.0, 1.0) * vu_tmp[2]);
+                vu_iat[index[0]] = 0.5 * (vu_tmp[0] + vu_tmp[3]);
+                vu_iat[index[3]] = 0.5 * (vu_tmp[0] - vu_tmp[3]);
+                vu_iat[index[1]] = 0.5 * (vu_tmp[1] + std::complex<double>(0.0, 1.0) * vu_tmp[2]);
+                vu_iat[index[2]] = 0.5 * (vu_tmp[1] - std::complex<double>(0.0, 1.0) * vu_tmp[2]);
             }
         }
     }

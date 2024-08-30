@@ -235,7 +235,7 @@ struct cal_stress_nl_op<FPTYPE, base_device::DEVICE_CPU>
             const int nproj = atom_nh[it];
             if(orbital_l == -1)
             {
-                sum0 += nproj * atom_na[it];
+                sum += nproj * atom_na[it];
                 continue;
             }
             const int ip_begin = orbital_l * orbital_l;
@@ -296,7 +296,7 @@ struct cal_stress_nl_op<FPTYPE, base_device::DEVICE_CPU>
                     FPTYPE* stress)
     {
         FPTYPE local_stress = 0;
-        int iat = 0, sum = 0;
+        int iat0 = 0, sum = 0;
         for (int it = 0; it < ntype; it++)
         {
             const int nproj = atom_nh[it];
@@ -311,7 +311,7 @@ struct cal_stress_nl_op<FPTYPE, base_device::DEVICE_CPU>
                     const std::complex<double> coefficients1(lambda[iat*3] , lambda[iat*3+1]);
                     const std::complex<double> coefficients2(lambda[iat*3] , -1 * lambda[iat*3+1]);
                     const std::complex<double> coefficients3(-1 * lambda[iat*3+2], 0.0);
-                    for (int ip = ip_begin; ip < ip_end; ip++)
+                    for (int ip = 0; ip < nproj; ip++)
                     {
                         const int inkb1 = ib2 * nkb + sum + ia * nproj + ip;
 
@@ -324,7 +324,7 @@ struct cal_stress_nl_op<FPTYPE, base_device::DEVICE_CPU>
                 }     // ia
             }
             sum += atom_na[it] * nproj;
-            iat += atom_na[it];
+            iat0 += atom_na[it];
         } // end it
         stress[ipol * 3 + jpol] += local_stress;
     }

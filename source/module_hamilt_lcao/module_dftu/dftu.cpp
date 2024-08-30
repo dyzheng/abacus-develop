@@ -57,7 +57,8 @@ void DFTU::init(UnitCell& cell, // unitcell class
     this->locale.resize(cell.nat);
     this->locale_save.resize(cell.nat);
     // only for PW base
-    this->eff_pot_pw.resize(cell.nat);
+    this->eff_pot_pw_index.resize(cell.nat);
+    int pot_index = 0;
 
     this->iatlnmipol2iwt.resize(cell.nat);
 
@@ -78,7 +79,8 @@ void DFTU::init(UnitCell& cell, // unitcell class
             locale[iat].resize(cell.atoms[it].nwl + 1);
             locale_save[iat].resize(cell.atoms[it].nwl + 1);
             const int tlp1_npol = (this->orbital_corr[it]*2+1)*npol;
-            this->eff_pot_pw[iat].resize(tlp1_npol * tlp1_npol, 0.0);
+            this->eff_pot_pw_index[iat] = pot_index;
+            pot_index += tlp1_npol * tlp1_npol;
 
             for (int l = 0; l <= cell.atoms[it].nwl; l++)
             {
@@ -143,6 +145,8 @@ void DFTU::init(UnitCell& cell, // unitcell class
             }
         }
     }
+    // allocate memory for eff_pot_pw
+    this->eff_pot_pw.resize(pot_index, 0.0);
 
     if (Yukawa)
     {

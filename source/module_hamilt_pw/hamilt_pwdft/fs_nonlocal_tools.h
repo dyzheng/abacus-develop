@@ -72,6 +72,9 @@ class FS_Nonlocal_tools
      * @brief calculate the force^I_i = - \sum_{n,k}f_{nk} \sum_{lm,l'm'}D_{l,l'}^{I} becp * dbecp_i
      */
     void cal_force(int ik, int npm, FPTYPE* force);
+
+    void cal_force_dftu(int ik, int npm, FPTYPE* force, const int* orbital_corr, const std::complex<FPTYPE>* vu);
+    void cal_force_dspin(int ik, int npm, FPTYPE* force, const ModuleBase::Vector3<double>* lambda);
     
     std::complex<FPTYPE>* get_becp() { return becp; }
     std::complex<FPTYPE>* get_dbecp() { return dbecp; }
@@ -106,6 +109,8 @@ class FS_Nonlocal_tools
     int nbands;
     int deeq_dims[4] = {0, 0, 0, 0};    // deeq can be something other than that in pseudopotentials
     int deeq_nc_dims[4] = {0, 0, 0, 0};
+
+    int current_ik = -1;
 
     int max_nh = 0;
     int max_npw = 0;

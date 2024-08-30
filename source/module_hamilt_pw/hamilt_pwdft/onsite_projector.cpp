@@ -345,7 +345,6 @@ void projectors::OnsiteProjector<T, Device>::tabulate_atomic(const int ik, const
 template<typename T, typename Device>
 void projectors::OnsiteProjector<T, Device>::overlap_proj_psi( 
                     const int npm,
-                    const int npol,
                     const std::complex<double>* ppsi
                     )
 {
@@ -391,6 +390,7 @@ void projectors::OnsiteProjector<T, Device>::overlap_proj_psi(
     // std::cout << "at " << __FILE__ << ": " << __LINE__ << " output tot_nproj: " << this->tot_nproj << std::endl;
     // std::cout << "at " << __FILE__ << ": " << __LINE__ << " output npm: " << npm << std::endl;
     // std::cout << "at " << __FILE__ << ": " << __LINE__ << " ik_: " << ik_ << std::endl;
+    int npol = this->ucell->get_npol();
     this->fs_tools->cal_becp(ik_, npm/npol); // in cal_becp, npm should be the one not multiplied by npol
     this->size_becp = npm * this->tot_nproj;
     this->becp = this->fs_tools->get_becp();
@@ -530,13 +530,12 @@ void projectors::OnsiteProjector<T, Device>::cal_occupations(const psi::Psi<std:
         }
         // std::cout << __FILE__ << ":" << __LINE__ << " nbands = " << nbands << std::endl;
         this->overlap_proj_psi(
-                        nbands,
-                        psi_in->npol,
+                        nbands * psi_in->npol,
                         psi_in->get_pointer());
         const std::complex<double>* becp = this->get_becp();
         // becp(nbands*npol , nkb)
         // mag = wg * \sum_{nh}becp * becp
-        int nkb = this->get_size_becp() / nbands / psi_in->npol;
+        int nkb = this->tot_nproj;
         //nkb = 18;
         //std::cout << "at " << __FILE__ << ": " << __LINE__ << " output nbands: " << nbands << std::endl;
         //std::cout << "at " << __FILE__ << ": " << __LINE__ << " output nkb: " << nkb << std::endl;
