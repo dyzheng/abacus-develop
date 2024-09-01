@@ -290,7 +290,7 @@ struct cal_stress_nl_op<FPTYPE, base_device::DEVICE_CPU>
                     const int* atom_nh,
                     const int* atom_na,
                     const FPTYPE* d_wg,
-                    const double* lambda,
+                    const FPTYPE* lambda,
                     const std::complex<FPTYPE>* becp,
                     const std::complex<FPTYPE>* dbecp,
                     FPTYPE* stress)
@@ -307,10 +307,10 @@ struct cal_stress_nl_op<FPTYPE, base_device::DEVICE_CPU>
                 for (int ia = 0; ia < atom_na[it]; ia++)
                 {
                     int iat = iat0 + ia;
-                    const std::complex<double> coefficients0(lambda[iat*3+2], 0.0);
-                    const std::complex<double> coefficients1(lambda[iat*3] , lambda[iat*3+1]);
-                    const std::complex<double> coefficients2(lambda[iat*3] , -1 * lambda[iat*3+1]);
-                    const std::complex<double> coefficients3(-1 * lambda[iat*3+2], 0.0);
+                    const std::complex<FPTYPE> coefficients0(lambda[iat*3+2], 0.0);
+                    const std::complex<FPTYPE> coefficients1(lambda[iat*3] , lambda[iat*3+1]);
+                    const std::complex<FPTYPE> coefficients2(lambda[iat*3] , -1 * lambda[iat*3+1]);
+                    const std::complex<FPTYPE> coefficients3(-1 * lambda[iat*3+2], 0.0);
                     for (int ip = 0; ip < nproj; ip++)
                     {
                         const int inkb1 = ib2 * nkb + sum + ia * nproj + ip;

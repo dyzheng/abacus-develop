@@ -341,7 +341,7 @@ struct cal_force_nl_op<FPTYPE, base_device::DEVICE_CPU>
                     const int* atom_na,
                     const FPTYPE& tpiba,
                     const FPTYPE* d_wg,
-                    const double* lambda,
+                    const FPTYPE* lambda,
                     const std::complex<FPTYPE>* becp,
                     const std::complex<FPTYPE>* dbecp,
                     FPTYPE* force)
@@ -355,10 +355,10 @@ struct cal_force_nl_op<FPTYPE, base_device::DEVICE_CPU>
             {
                 int iat = iat0 + ia;
                 int sum = sum0 + ia * nproj;
-                const std::complex<double> coefficients0(lambda[iat*3+2], 0.0);
-                const std::complex<double> coefficients1(lambda[iat*3] , lambda[iat*3+1]);
-                const std::complex<double> coefficients2(lambda[iat*3] , -1 * lambda[iat*3+1]);
-                const std::complex<double> coefficients3(-1 * lambda[iat*3+2], 0.0);
+                const std::complex<FPTYPE> coefficients0(lambda[iat*3+2], 0.0);
+                const std::complex<FPTYPE> coefficients1(lambda[iat*3] , lambda[iat*3+1]);
+                const std::complex<FPTYPE> coefficients2(lambda[iat*3] , -1 * lambda[iat*3+1]);
+                const std::complex<FPTYPE> coefficients3(-1 * lambda[iat*3+2], 0.0);
                 for (int ib = 0; ib < nbands_occ; ib++)
                 {
                     const int ib2 = ib*2;

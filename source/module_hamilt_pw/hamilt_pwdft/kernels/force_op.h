@@ -246,7 +246,7 @@ struct cal_force_nl_op<FPTYPE, base_device::DEVICE_GPU>
                     const int* atom_na,
                     const FPTYPE& tpiba,
                     const FPTYPE* d_wg,
-                    const double* lambda,
+                    const FPTYPE* lambda,
                     const std::complex<FPTYPE>* becp,
                     const std::complex<FPTYPE>* dbecp,
                     FPTYPE* force);
