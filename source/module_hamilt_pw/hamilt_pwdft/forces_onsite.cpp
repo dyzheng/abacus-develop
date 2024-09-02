@@ -7,11 +7,6 @@
 #include "module_hamilt_lcao/module_dftu/dftu.h"
 #include "module_hamilt_lcao/module_deltaspin/spin_constrain.h"
 
-
-#ifdef _OPENMP
-#include <omp.h>
-#endif
-
 template <typename FPTYPE, typename Device>
 void Forces<FPTYPE, Device>::cal_force_onsite(ModuleBase::matrix& force_onsite,
                                           const ModuleBase::matrix& wg,

@@ -22,6 +22,7 @@ list(APPEND objects
     stress_func_kin.cpp
     stress_func_loc.cpp
     stress_func_nl.cpp
+    stress_func_onsite.cpp
     stress_func_us.cpp
     stress_pw.cpp
     VL_in_pw.cpp

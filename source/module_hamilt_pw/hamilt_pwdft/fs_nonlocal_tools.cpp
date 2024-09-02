@@ -7,6 +7,7 @@
 #include "module_base/tool_title.h"
 #include "module_hamilt_pw/hamilt_pwdft/kernels/force_op.h"
 #include "nonlocal_maths.hpp"
+
 #include <numeric>
 
 namespace hamilt
@@ -27,7 +28,7 @@ FS_Nonlocal_tools<FPTYPE, Device>::FS_Nonlocal_tools(const pseudopot_cell_vnl* n
 
     // seems kvec_c never used...
     this->kvec_c = this->wfc_basis_->template get_kvec_c_data<FPTYPE>();
-    // the following is important for calculating the whole contribution to 
+    // the following is important for calculating the whole contribution to
     // Hamiltonian or force, stress: sum{nk} fnk*sum_{ij}<psi_nk|ai>Dij<aj|psi_nk>
     // among, Dij is deeq.
     // For DFT+U and other projection involved operators, deeq also plays.
@@ -68,22 +69,24 @@ FS_Nonlocal_tools<FPTYPE, Device>::FS_Nonlocal_tools(const pseudopot_cell_vnl* n
     }
     // allocate memory
     this->allocate_memory(wg, ekb, this->nproj, nch);
-    this->ppcell_vkb = (this->device == base_device::GpuDevice)? this->nlpp_->template get_vkb_data<FPTYPE>() : this->nlpp_->vkb.c;
+    this->ppcell_vkb
+        = (this->device == base_device::GpuDevice) ? this->nlpp_->template get_vkb_data<FPTYPE>() : this->nlpp_->vkb.c;
 }
 
 template <typename FPTYPE, typename Device>
-FS_Nonlocal_tools<FPTYPE, Device>::FS_Nonlocal_tools(const std::vector<int>& nproj,     // number of projectors for each atom type
-                                                     const std::vector<int>& lproj,
-                                                     const ModuleBase::realArray& tab,  // radials' spherical bessel transform
-                                                     const ModuleBase::matrix& nhtol,   // (it, ich) -> l, the ich is (l, m)-distinctive index
-                                                     std::complex<FPTYPE>* vkb_buf, // the vkb buffer
-                                                     const UnitCell* ucell_in,
-                                                     const psi::Psi<std::complex<FPTYPE>, Device>* psi_in,
-                                                     const K_Vectors* kv_in,
-                                                     const ModulePW::PW_Basis_K* wfc_basis_in,
-                                                     const Structure_Factor* sf_in,
-                                                     const ModuleBase::matrix& wg,
-                                                     const ModuleBase::matrix& ekb)
+FS_Nonlocal_tools<FPTYPE, Device>::FS_Nonlocal_tools(
+    const std::vector<int>& nproj, // number of projectors for each atom type
+    const std::vector<int>& lproj,
+    const ModuleBase::realArray& tab, // radials' spherical bessel transform
+    const ModuleBase::matrix& nhtol,  // (it, ich) -> l, the ich is (l, m)-distinctive index
+    std::complex<FPTYPE>* vkb_buf,    // the vkb buffer
+    const UnitCell* ucell_in,
+    const psi::Psi<std::complex<FPTYPE>, Device>* psi_in,
+    const K_Vectors* kv_in,
+    const ModulePW::PW_Basis_K* wfc_basis_in,
+    const Structure_Factor* sf_in,
+    const ModuleBase::matrix& wg,
+    const ModuleBase::matrix& ekb)
 {
     // this is a constructor for general case, including vnl, dftu, deltaspin, deepks, etc.
     // what is needed for this kind of constructor?
@@ -95,7 +98,6 @@ FS_Nonlocal_tools<FPTYPE, Device>::FS_Nonlocal_tools(const std::vector<int>& npr
     // rgrid: radial grid
     // deeq: the Dij matrix, Hubbard parameters or other quantities...
 
-
     // what are already programmed to be needed?
 
     // tab: the spherical transform of radial functions, with q = linspace(0, GlobalV::NQX, GlobalV::DQ)
@@ -105,15 +107,14 @@ FS_Nonlocal_tools<FPTYPE, Device>::FS_Nonlocal_tools(const std::vector<int>& npr
     // h_atom_nh: counterpart of atom_nh on host
     // max_nh: std::max_element(atom_nh.begin(), atom_nh.end())
 
-
     // in conclusion, this constructor needs the following individual information:
-    
-    // nproj 
+
+    // nproj
     // tab (projs is not needed, should be calculated elsewhere)
-    // lproj 
+    // lproj
     // deeq, with its dims. it will be good to pass the whole realarray
 
-    // what can be built here 
+    // what can be built here
     // nhtol
     // nkb
     // atom_nh, h_atom_nh, max_nh
@@ -165,7 +166,7 @@ FS_Nonlocal_tools<FPTYPE, Device>::~FS_Nonlocal_tools()
 }
 
 template <typename FPTYPE, typename Device>
-void FS_Nonlocal_tools<FPTYPE, Device>::allocate_memory(const ModuleBase::matrix& wg, 
+void FS_Nonlocal_tools<FPTYPE, Device>::allocate_memory(const ModuleBase::matrix& wg,
                                                         const ModuleBase::matrix& ekb,
                                                         const std::vector<int>& nproj,
                                                         const std::vector<int>& nch)
@@ -274,22 +275,25 @@ void FS_Nonlocal_tools<FPTYPE, Device>::delete_memory()
 // . the multiplication with sk should be within specific operator
 // because the atom selection task is operator-specific.
 template <typename FPTYPE, typename Device>
-void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm, std::complex<FPTYPE>* becp_in, const std::complex<FPTYPE>* ppsi_in)
+void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik,
+                                                 int npm,
+                                                 std::complex<FPTYPE>* becp_in,
+                                                 const std::complex<FPTYPE>* ppsi_in)
 {
     ModuleBase::TITLE("FS_Nonlocal_tools", "cal_becp");
     ModuleBase::timer::tick("FS_Nonlocal_tools", "cal_becp");
-        
+
     const int npol = this->ucell_->get_npol();
-    const std::complex<FPTYPE>* ppsi = ppsi_in==nullptr? &(this->psi_[0](ik, 0, 0)) : ppsi_in;
+    const std::complex<FPTYPE>* ppsi = ppsi_in == nullptr ? &(this->psi_[0](ik, 0, 0)) : ppsi_in;
     const int npw = this->wfc_basis_->npwk[ik];
-    if(becp_in == nullptr && this->becp == nullptr)
+    if (becp_in == nullptr && this->becp == nullptr)
     {
         resmem_complex_op()(this->ctx, becp, this->nbands * npol * this->nkb);
     }
-    std::complex<FPTYPE>* becp_tmp = becp_in==nullptr? this->becp : becp_in;
+    std::complex<FPTYPE>* becp_tmp = becp_in == nullptr ? this->becp : becp_in;
     const int size_becp_act = npm * npol * this->nkb;
-    if(ik != this->current_ik)// different ik, need to recalculate vkb
-    { 
+    if (ik != this->current_ik) // different ik, need to recalculate vkb
+    {
         const int size_becp = this->nbands * npol * this->nkb;
         if (this->becp == nullptr)
         {
@@ -363,7 +367,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm, std::complex<F
                         GlobalV::DQ,
                         nproj[it],
                         hd_vq); // hd_vq has dimension (nprojmax, npwx), this size will be the largest needed.
-            
+
             // DEBUG: ONCE YOU CHECK vq VALUES, YOU UNCOMMENT THE FOLLOWING LINE
             // for(int ip = 0; ip < nproj[it]; ip++)
             // {
@@ -375,22 +379,15 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm, std::complex<F
             //     std::cout << std::endl;
             // }
             // std::cout << std::endl;
-            
+
             // prepare（-i）^l, size: nh
             std::vector<std::complex<double>> pref = maths.cal_pref(it, h_atom_nh[it]);
             const int nh = pref.size();
             this->dvkb_indexes.resize(nh * 4);
             // print the value of nhtol
             // nhtol->print(std::cout); // as checked, nhtol works as expected
-            maths.cal_dvkb_index(nproj[it],
-                                this->nhtol->c,
-                                this->nhtol->nc,
-                                npw,
-                                it,
-                                0,
-                                0,
-                                this->dvkb_indexes.data());
-            
+            maths.cal_dvkb_index(nproj[it], this->nhtol->c, this->nhtol->nc, npw, it, 0, 0, this->dvkb_indexes.data());
+
             if (this->device == base_device::GpuDevice)
             {
                 syncmem_int_h2d_op()(this->ctx, this->cpu_ctx, d_dvkb_indexes, dvkb_indexes.data(), nh * 4);
@@ -442,7 +439,6 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm, std::complex<F
               &ModuleBase::ZERO,
               becp_tmp,
               this->nkb);
-
 
     if (this->device == base_device::GpuDevice)
     {
@@ -595,54 +591,57 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, i
               dbecp,
               nkb);
     // calculate stress for target (ipol, jpol)
-    if(npol == 1)
+    if (stress != nullptr)
     {
-    const int current_spin = this->kv_->isk[ik];
-    cal_stress_nl_op()(this->ctx,
-                       nondiagonal,
-                       ipol,
-                       jpol,
-                       nkb,
-                       npm,
-                       this->ntype,
-                       current_spin, // uspp only
-                       this->nbands,
-                       ik,
-                       this->deeq_dims[1],
-                       this->deeq_dims[2],
-                       this->deeq_dims[3],
-                       atom_nh,
-                       atom_na,
-                       d_wg,
-                       d_ekb,
-                       qq_nt,
-                       deeq,
-                       becp,
-                       dbecp,
-                       stress);
-    }
-    else
-    {
-        cal_stress_nl_op()(this->ctx,
-                           ipol,
-                           jpol,
-                           nkb,
-                           npm,
-                           this->ntype,
-                           this->nbands,
-                           ik,
-                           this->deeq_nc_dims[1],
-                           this->deeq_nc_dims[2],
-                           this->deeq_nc_dims[3],
-                           atom_nh,
-                           atom_na,
-                           d_wg,
-                           d_ekb,
-                           qq_nt,
-                           this->deeq_nc,
-                           becp,
-                           dbecp,
-                           stress);
+        if (npol == 1)
+        {
+            const int current_spin = this->kv_->isk[ik];
+            cal_stress_nl_op()(this->ctx,
+                               nondiagonal,
+                               ipol,
+                               jpol,
+                               nkb,
+                               npm,
+                               this->ntype,
+                               current_spin, // uspp only
+                               this->nbands,
+                               ik,
+                               this->deeq_dims[1],
+                               this->deeq_dims[2],
+                               this->deeq_dims[3],
+                               atom_nh,
+                               atom_na,
+                               d_wg,
+                               d_ekb,
+                               qq_nt,
+                               deeq,
+                               becp,
+                               dbecp,
+                               stress);
+        }
+        else
+        {
+            cal_stress_nl_op()(this->ctx,
+                               ipol,
+                               jpol,
+                               nkb,
+                               npm,
+                               this->ntype,
+                               this->nbands,
+                               ik,
+                               this->deeq_nc_dims[1],
+                               this->deeq_nc_dims[2],
+                               this->deeq_nc_dims[3],
+                               atom_nh,
+                               atom_na,
+                               d_wg,
+                               d_ekb,
+                               qq_nt,
+                               this->deeq_nc,
+                               becp,
+                               dbecp,
+                               stress);
+        }
     }
     ModuleBase::timer::tick("FS_Nonlocal_tools", "cal_dbecp_s");
 }
@@ -700,7 +699,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_f(int ik, int npm, int ipol)
     const int npm_npol = npm * npol;
     const int size_becp = this->nbands * npol * this->nkb;
     if (this->dbecp == nullptr) // if it is the very first run, we allocate
-    { // why not judging whether dbecp == nullptr inside resmem_complex_op?
+    {                           // why not judging whether dbecp == nullptr inside resmem_complex_op?
         resmem_complex_op()(this->ctx, dbecp, 3 * size_becp);
     }
     // do gemm to get dbecp and revert the ppcell_vkb for next ipol
@@ -806,7 +805,8 @@ template <typename FPTYPE, typename Device>
 void FS_Nonlocal_tools<FPTYPE, Device>::transfer_gcar(int npw, int npw_max, const FPTYPE* gcar_in)
 {
     std::vector<FPTYPE> gcar_tmp(3 * npw_max); // [out], will overwritten this->gcar
-    gcar_tmp.assign(gcar_in, gcar_in + 3 * npw_max); // UNDEFINED BEHAVIOR!!! nobody always knows the memory layout of vector3
+    gcar_tmp.assign(gcar_in,
+                    gcar_in + 3 * npw_max); // UNDEFINED BEHAVIOR!!! nobody always knows the memory layout of vector3
     std::vector<int> gcar_zero_indexes_tmp(3 * npw_max); // a "checklist"
 
     int* gcar_zero_ptrs[3];
@@ -865,31 +865,31 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_force(int ik, int npm, FPTYPE* force
     const int current_spin = this->kv_->isk[ik];
     const int force_nc = 3;
     // calculate the force
-    if(this->ucell_->get_npol() == 1)
+    if (this->ucell_->get_npol() == 1)
     {
         cal_force_nl_op<FPTYPE, Device>()(this->ctx,
-                                        nondiagonal,
-                                        npm,
-                                        this->nbands,
-                                        this->ntype,
-                                        current_spin,
-                                        this->deeq_dims[1],
-                                        this->deeq_dims[2],
-                                        this->deeq_dims[3],
-                                        force_nc,
-                                        this->nbands,
-                                        ik,
-                                        nkb,
-                                        atom_nh,
-                                        atom_na,
-                                        this->ucell_->tpiba,
-                                        d_wg,
-                                        d_ekb,
-                                        qq_nt,
-                                        deeq,
-                                        becp,
-                                        dbecp,
-                                        force);
+                                          nondiagonal,
+                                          npm,
+                                          this->nbands,
+                                          this->ntype,
+                                          current_spin,
+                                          this->deeq_dims[1],
+                                          this->deeq_dims[2],
+                                          this->deeq_dims[3],
+                                          force_nc,
+                                          this->nbands,
+                                          ik,
+                                          nkb,
+                                          atom_nh,
+                                          atom_na,
+                                          this->ucell_->tpiba,
+                                          d_wg,
+                                          d_ekb,
+                                          qq_nt,
+                                          deeq,
+                                          becp,
+                                          dbecp,
+                                          force);
     }
     else
     {
@@ -918,85 +918,183 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_force(int ik, int npm, FPTYPE* force
 }
 
 template <typename FPTYPE, typename Device>
-void FS_Nonlocal_tools<FPTYPE, Device>::cal_force_dftu(int ik, int npm, FPTYPE* force, const int* orbital_corr, const std::complex<FPTYPE>* vu)
+void FS_Nonlocal_tools<FPTYPE, Device>::cal_force_dftu(int ik,
+                                                       int npm,
+                                                       FPTYPE* force,
+                                                       const int* orbital_corr,
+                                                       const std::complex<FPTYPE>* vu)
 {
-            int* orbital_corr_tmp = const_cast<int*>(orbital_corr);
-            std::complex<FPTYPE>* vu_tmp = const_cast<std::complex<FPTYPE>*>(vu);
+    int* orbital_corr_tmp = const_cast<int*>(orbital_corr);
+    std::complex<FPTYPE>* vu_tmp = const_cast<std::complex<FPTYPE>*>(vu);
 #if defined(__CUDA) || defined(__ROCM)
-            if (this->device == "gpu") {
-                resmem_int_op()(gpu_ctx, orbital_corr_tmp, this->ucell_->ntype);
-                syncmem_int_h2d_op()(gpu_ctx, cpu_ctx, orbital_corr_tmp, dftu->orbital_corr, this->ucell_->ntype);
-                resmem_cd_op()(gpu_ctx, vu_tmp, dftu->get_size_eff_pot_pw());
-                syncmem_cd_h2d_op()(gpu_ctx, cpu_ctx, vu_tmp, dftu->get_eff_pot_pw(0), dftu->get_size_eff_pot_pw());
-            }
+    if (this->device == "gpu")
+    {
+        resmem_int_op()(gpu_ctx, orbital_corr_tmp, this->ucell_->ntype);
+        syncmem_int_h2d_op()(gpu_ctx, cpu_ctx, orbital_corr_tmp, dftu->orbital_corr, this->ucell_->ntype);
+        resmem_cd_op()(gpu_ctx, vu_tmp, dftu->get_size_eff_pot_pw());
+        syncmem_cd_h2d_op()(gpu_ctx, cpu_ctx, vu_tmp, dftu->get_eff_pot_pw(0), dftu->get_size_eff_pot_pw());
+    }
 #endif
-            const int force_nc = 3;
-            cal_force_nl_op<FPTYPE, Device>()(this->ctx,
-                                          npm,
-                                          this->nbands,
-                                          this->ntype,
-                                          force_nc,
-                                          this->nbands,
-                                          ik,
-                                          nkb,
-                                          atom_nh,
-                                          atom_na,
-                                          this->ucell_->tpiba,
-                                          d_wg,
-                                          vu_tmp,
-                                          orbital_corr_tmp,
-                                          becp,
-                                          dbecp,
-                                          force);
+    const int force_nc = 3;
+    cal_force_nl_op<FPTYPE, Device>()(this->ctx,
+                                      npm,
+                                      this->nbands,
+                                      this->ntype,
+                                      force_nc,
+                                      this->nbands,
+                                      ik,
+                                      nkb,
+                                      atom_nh,
+                                      atom_na,
+                                      this->ucell_->tpiba,
+                                      d_wg,
+                                      vu_tmp,
+                                      orbital_corr_tmp,
+                                      becp,
+                                      dbecp,
+                                      force);
 #if defined(__CUDA) || defined(__ROCM)
-            if (this->device == "gpu") {
-                delmem_cd_op()(gpu_ctx, vu_tmp);
-                delmem_int_op()(gpu_ctx, orbital_corr_tmp);
-            }
+    if (this->device == "gpu")
+    {
+        delmem_cd_op()(gpu_ctx, vu_tmp);
+        delmem_int_op()(gpu_ctx, orbital_corr_tmp);
+    }
 #endif
 }
 
 template <typename FPTYPE, typename Device>
-void FS_Nonlocal_tools<FPTYPE, Device>::cal_force_dspin(int ik, int npm, FPTYPE* force, const ModuleBase::Vector3<double>* lambda)
+void FS_Nonlocal_tools<FPTYPE, Device>::cal_force_dspin(int ik,
+                                                        int npm,
+                                                        FPTYPE* force,
+                                                        const ModuleBase::Vector3<double>* lambda)
 {
-            FPTYPE* lambda_array = nullptr;
-            resmem_var_op()(this->cpu_ctx, lambda_array, this->ucell_->nat*3);
-            for(int iat = 0; iat < this->ucell_->nat; iat++)
-            {
-                lambda_array[iat*3] = lambda[iat].x;
-                lambda_array[iat*3+1] = lambda[iat].y;
-                lambda_array[iat*3+2] = lambda[iat].z;
-            }
-            FPTYPE* lambda_tmp = lambda_array;
+    FPTYPE* lambda_array = nullptr;
+    resmem_var_op()(this->cpu_ctx, lambda_array, this->ucell_->nat * 3);
+    for (int iat = 0; iat < this->ucell_->nat; iat++)
+    {
+        lambda_array[iat * 3] = lambda[iat].x;
+        lambda_array[iat * 3 + 1] = lambda[iat].y;
+        lambda_array[iat * 3 + 2] = lambda[iat].z;
+    }
+    FPTYPE* lambda_tmp = lambda_array;
 #if defined(__CUDA) || defined(__ROCM)
-            if (this->device == "gpu") {
-                resmem_var_op()(this->ctx, lambda_tmp, this->ucell_->nat*3);
-                syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, lambda_tmp, lambda_array, this->ucell_->nat*3);
-            }
+    if (this->device == "gpu")
+    {
+        resmem_var_op()(this->ctx, lambda_tmp, this->ucell_->nat * 3);
+        syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, lambda_tmp, lambda_array, this->ucell_->nat * 3);
+    }
 #endif
-            const int force_nc = 3;
-            cal_force_nl_op<FPTYPE, Device>()(this->ctx,
-                                          npm,
-                                          this->nbands,
-                                          this->ntype,
-                                          force_nc,
-                                          this->nbands,
-                                          ik,
-                                          nkb,
-                                          atom_nh,
-                                          atom_na,
-                                          this->ucell_->tpiba,
-                                          d_wg,
-                                          lambda_tmp,
-                                          becp,
-                                          dbecp,
-                                          force);
+    const int force_nc = 3;
+    cal_force_nl_op<FPTYPE, Device>()(this->ctx,
+                                      npm,
+                                      this->nbands,
+                                      this->ntype,
+                                      force_nc,
+                                      this->nbands,
+                                      ik,
+                                      nkb,
+                                      atom_nh,
+                                      atom_na,
+                                      this->ucell_->tpiba,
+                                      d_wg,
+                                      lambda_tmp,
+                                      becp,
+                                      dbecp,
+                                      force);
 
-            delmem_var_op()(this->ctx, lambda_array);
+    delmem_var_op()(this->ctx, lambda_array);
 #if defined(__CUDA) || defined(__ROCM)
-            if (this->device == "gpu") {
-                delmem_var_op()(this->cpu_ctx, lambda_tmp);
-            }
+    if (this->device == "gpu")
+    {
+        delmem_var_op()(this->cpu_ctx, lambda_tmp);
+    }
+#endif
+}
+
+template <typename FPTYPE, typename Device>
+void FS_Nonlocal_tools<FPTYPE, Device>::cal_stress_dftu(int ik,
+                                                        int npm,
+                                                        FPTYPE* stress,
+                                                        const int* orbital_corr,
+                                                        const std::complex<FPTYPE>* vu)
+{
+    int* orbital_corr_tmp = const_cast<int*>(orbital_corr);
+    std::complex<FPTYPE>* vu_tmp = const_cast<std::complex<FPTYPE>*>(vu);
+#if defined(__CUDA) || defined(__ROCM)
+    if (this->device == "gpu")
+    {
+        resmem_int_op()(gpu_ctx, orbital_corr_tmp, this->ucell_->ntype);
+        syncmem_int_h2d_op()(gpu_ctx, cpu_ctx, orbital_corr_tmp, dftu->orbital_corr, this->ucell_->ntype);
+        resmem_cd_op()(gpu_ctx, vu_tmp, dftu->get_size_eff_pot_pw());
+        syncmem_cd_h2d_op()(gpu_ctx, cpu_ctx, vu_tmp, dftu->get_eff_pot_pw(0), dftu->get_size_eff_pot_pw());
+    }
+#endif
+    cal_stress_nl_op()(this->ctx,
+                       nkb,
+                       npm,
+                       this->ntype,
+                       this->nbands,
+                       ik,
+                       atom_nh,
+                       atom_na,
+                       d_wg,
+                       vu_tmp,
+                       orbital_corr_tmp,
+                       becp,
+                       dbecp,
+                       stress);
+#if defined(__CUDA) || defined(__ROCM)
+    if (this->device == "gpu")
+    {
+        delmem_cd_op()(gpu_ctx, vu_tmp);
+        delmem_int_op()(gpu_ctx, orbital_corr_tmp);
+    }
+#endif
+}
+
+template <typename FPTYPE, typename Device>
+void FS_Nonlocal_tools<FPTYPE, Device>::cal_stress_dspin(int ik,
+                                                         int npm,
+                                                         FPTYPE* stress,
+                                                         const ModuleBase::Vector3<double>* lambda)
+{
+    FPTYPE* lambda_array = nullptr;
+    resmem_var_op()(this->cpu_ctx, lambda_array, this->ucell_->nat * 3);
+    for (int iat = 0; iat < this->ucell_->nat; iat++)
+    {
+        lambda_array[iat * 3] = lambda[iat].x;
+        lambda_array[iat * 3 + 1] = lambda[iat].y;
+        lambda_array[iat * 3 + 2] = lambda[iat].z;
+    }
+    FPTYPE* lambda_tmp = lambda_array;
+#if defined(__CUDA) || defined(__ROCM)
+    if (this->device == "gpu")
+    {
+        resmem_var_op()(this->ctx, lambda_tmp, this->ucell_->nat * 3);
+        syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, lambda_tmp, lambda_array, this->ucell_->nat * 3);
+    }
+#endif
+    const int force_nc = 3;
+    cal_stress_nl_op()(this->ctx,
+                       nkb,
+                       npm,
+                       this->ntype,
+                       this->nbands,
+                       ik,
+                       atom_nh,
+                       atom_na,
+                       d_wg,
+                       lambda_tmp,
+                       becp,
+                       dbecp,
+                       stress);
+
+    delmem_var_op()(this->ctx, lambda_array);
+#if defined(__CUDA) || defined(__ROCM)
+    if (this->device == "gpu")
+    {
+        delmem_var_op()(this->cpu_ctx, lambda_tmp);
+    }
 #endif
 }
 
@@ -1005,8 +1103,5 @@ template class FS_Nonlocal_tools<double, base_device::DEVICE_CPU>;
 #if ((defined __CUDA) || (defined __ROCM))
 template class FS_Nonlocal_tools<double, base_device::DEVICE_GPU>;
 #endif
-
-
-
 
 } // namespace hamilt

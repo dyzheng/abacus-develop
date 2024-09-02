@@ -56,8 +56,8 @@ template <typename FPTYPE, typename Device = base_device::DEVICE_CPU>
 class Stress_Func
 {
   public:
-    Stress_Func(){};
-    ~Stress_Func(){};
+    Stress_Func() {};
+    ~Stress_Func() {};
 
     // stress functions
     //  1) the stress from the electron kinetic energy
@@ -119,7 +119,7 @@ class Stress_Func
                      FPTYPE* drhocg,
                      ModulePW::PW_Basis* rho_basis,
                      int type); // used in nonlinear core correction stress
-                     
+
     // 6) the stress from the exchange-correlation functional term
     void stress_gga(ModuleBase::matrix& sigma,
                     ModulePW::PW_Basis* rho_basis,
@@ -134,7 +134,7 @@ class Stress_Func
 
     // 7) the stress from the non-local pseudopotentials
     /**
-     * @brief This routine computes the atomic force of non-local pseudopotential
+     * @brief This routine computes the stress contribution of non-local pseudopotential
      *    Stress^{NL}_{ij} = -1/\Omega \sum_{n,k}f_{nk}\sum_I \sum_{lm,l'm'}D_{l,l'}^{I} [
      *               \sum_G \langle c_{nk}(\mathbf{G+K})|\beta_{lm}^I(\mathbf{G+K})\rangle *
      *               \sum_{G'}\langle \partial \beta_{lm}^I(\mathbf{G+K})/\partial \varepsilon_{ij}
@@ -152,6 +152,24 @@ class Stress_Func
                    const psi::Psi<complex<FPTYPE>, Device>* psi_in,
                    pseudopot_cell_vnl* nlpp_in,
                    const UnitCell& ucell_in); // nonlocal part in PW basis
+
+    // 7) the stress from the DFT+U and DeltaSpin calculations
+    /**
+     * @brief This routine computes the stress contribution from the DFT+U and DeltaSpin calculations
+     *    Stress^{NL}_{ij} = -1/\Omega \sum_{n,k}f_{nk}\sum_I \sum_{lm,l'm'}(V^U_{lmm'\sigma\sigma'} +
+     * f(\lambda,\sigma\sigma')) [ \sum_G \langle c_{nk}(\mathbf{G+K})|\alpha_{lm}^I(\mathbf{G+K})\rangle *
+     *               \sum_{G'}\langle \partial \alpha_{lm}^I(\mathbf{G+K})/\partial \varepsilon_{ij}
+     * |c_{nk}(\mathbf{G+K})\rangle ] there would be three parts in the above equation: (1) sum over becp and dbecp with
+     * f(U+\lambda, \sigma\sigma', lmm')^{I} ----- first line in the above equation (2) calculate becp = <psi | alpha>
+     * ----- second line in the above equation (3) calculate dbecp = <psi | dalpha> ----- third line in the above
+     * equation
+     */
+    void stress_onsite(ModuleBase::matrix& sigma,
+                       const ModuleBase::matrix& wg,
+                       const ModulePW::PW_Basis_K* wfc_basis,
+                       const UnitCell& ucell_in,
+                       const psi::Psi<complex<FPTYPE>, Device>* psi_in,
+                       ModuleSymmetry::Symmetry* p_symm); // nonlocal part in PW basis
 
     void get_dvnl1(ModuleBase::ComplexMatrix& vkb,
                    const int ik,

@@ -63,7 +63,7 @@ class FS_Nonlocal_tools
      * @brief calculate the dbecp_{ij} = <psi|\partial beta/\partial varepsilon_{ij}> for all beta functions
      *       stress_{ij} = -1/omega \sum_{n,k}f_{nk} \sum_I \sum_{lm,l'm'}D_{l,l'}^{I} becp * dbecp_{ij} also calculated
      */
-    void cal_dbecp_s(int ik, int npm, int ipol, int jpol, FPTYPE* stress);
+    void cal_dbecp_s(int ik, int npm, int ipol, int jpol, FPTYPE* stress = nullptr);
     /**
      * @brief calculate the dbecp_i = <psi|\partial beta/\partial \tau^I_i> for all beta functions
      */
@@ -75,7 +75,10 @@ class FS_Nonlocal_tools
 
     void cal_force_dftu(int ik, int npm, FPTYPE* force, const int* orbital_corr, const std::complex<FPTYPE>* vu);
     void cal_force_dspin(int ik, int npm, FPTYPE* force, const ModuleBase::Vector3<double>* lambda);
-    
+    void cal_stress_dftu(int ik, int npm, FPTYPE* stress, const int* orbital_corr, const std::complex<FPTYPE>* vu);
+    void cal_stress_dspin(int ik, int npm, FPTYPE* stress, const ModuleBase::Vector3<double>* lambda);
+
+
     std::complex<FPTYPE>* get_becp() { return becp; }
     std::complex<FPTYPE>* get_dbecp() { return dbecp; }
 

@@ -126,8 +126,6 @@ struct cal_stress_nl_op
                     FPTYPE* stress);
     // kernel for DFT+U
     void operator()(const base_device::DEVICE_CPU* ctx,
-                    const int& ipol,
-                    const int& jpol,
                     const int& nkb,
                     const int& nbands_occ,
                     const int& ntype,
@@ -143,8 +141,6 @@ struct cal_stress_nl_op
                     FPTYPE* stress);
     // kernel for DeltaSpin
     void operator()(const base_device::DEVICE_CPU* ctx,
-                    const int& ipol,
-                    const int& jpol,
                     const int& nkb,
                     const int& nbands_occ,
                     const int& ntype,
