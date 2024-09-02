@@ -397,7 +397,7 @@ void projectors::OnsiteProjector<T, Device>::overlap_proj_psi(
         this->becp = new std::complex<double>[npm*this->tot_nproj];
         this->size_becp = npm*this->tot_nproj;
     }
-    this->fs_tools->cal_becp(ik_, npm/npol, this->becp); // in cal_becp, npm should be the one not multiplied by npol
+    this->fs_tools->cal_becp(ik_, npm/npol, this->becp, ppsi); // in cal_becp, npm should be the one not multiplied by npol
     ModuleBase::timer::tick("OnsiteProj", "overlap");
 }
 

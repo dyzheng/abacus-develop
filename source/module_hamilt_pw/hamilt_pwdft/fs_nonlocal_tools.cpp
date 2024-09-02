@@ -274,13 +274,13 @@ void FS_Nonlocal_tools<FPTYPE, Device>::delete_memory()
 // . the multiplication with sk should be within specific operator
 // because the atom selection task is operator-specific.
 template <typename FPTYPE, typename Device>
-void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm, std::complex<FPTYPE>* becp_in)
+void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik, int npm, std::complex<FPTYPE>* becp_in, const std::complex<FPTYPE>* ppsi_in)
 {
     ModuleBase::TITLE("FS_Nonlocal_tools", "cal_becp");
     ModuleBase::timer::tick("FS_Nonlocal_tools", "cal_becp");
         
     const int npol = this->ucell_->get_npol();
-    const std::complex<FPTYPE>* ppsi = &(this->psi_[0](ik, 0, 0));
+    const std::complex<FPTYPE>* ppsi = ppsi_in==nullptr? &(this->psi_[0](ik, 0, 0)) : ppsi_in;
     const int npw = this->wfc_basis_->npwk[ik];
     if(becp_in == nullptr && this->becp == nullptr)
     {
