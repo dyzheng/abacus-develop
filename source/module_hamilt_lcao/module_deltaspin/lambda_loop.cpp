@@ -198,7 +198,7 @@ void SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::run_lambda_lo
         inner_loop_duration += duration;
         if (this->check_rms_stop(outer_step, i_step, rms_error, duration, inner_loop_duration))
         {
-            add_scalar_multiply_2d(initial_lambda, dnu_last_step, 1.0, this->lambda_);
+            //add_scalar_multiply_2d(initial_lambda, dnu_last_step, 1.0, this->lambda_);
             break;
         }
 #ifdef __MPI
