@@ -43,6 +43,7 @@ list(APPEND device_srcs
 
   module_hamilt_pw/hamilt_pwdft/kernels/force_op.cpp
   module_hamilt_pw/hamilt_pwdft/kernels/stress_op.cpp
+  module_hamilt_pw/hamilt_pwdft/kernels/onsite_op.cpp
   module_hamilt_pw/hamilt_pwdft/kernels/wf_op.cpp
   module_hamilt_pw/hamilt_pwdft/kernels/vnl_op.cpp
   module_base/kernels/math_op.cpp
@@ -52,6 +53,7 @@ list(APPEND device_srcs
 if(USE_CUDA)
   list(APPEND device_srcs
     module_hamilt_pw/hamilt_pwdft/kernels/cuda/nonlocal_op.cu
+    module_hamilt_pw/hamilt_pwdft/kernels/cuda/onsite_op.cu
     module_hamilt_pw/hamilt_pwdft/kernels/cuda/veff_op.cu
     module_hamilt_pw/hamilt_pwdft/kernels/cuda/ekinetic_op.cu
     module_hamilt_pw/hamilt_pwdft/kernels/cuda/meta_op.cu
@@ -75,6 +77,7 @@ endif()
 if(USE_ROCM)
   hip_add_library(device_rocm STATIC
     module_hamilt_pw/hamilt_pwdft/kernels/rocm/nonlocal_op.hip.cu
+    module_hamilt_pw/hamilt_pwdft/kernels/rocm/onsite_op.hip.cu
     module_hamilt_pw/hamilt_pwdft/kernels/rocm/veff_op.hip.cu
     module_hamilt_pw/hamilt_pwdft/kernels/rocm/ekinetic_op.hip.cu
     module_hamilt_pw/hamilt_pwdft/kernels/rocm/meta_op.hip.cu

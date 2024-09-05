@@ -5,7 +5,7 @@
 #include <algorithm>
 
 template <>
-void SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::cal_h_lambda(
+void SpinConstrain<std::complex<double>>::cal_h_lambda(
     std::complex<double>* h_lambda,
     const std::complex<double>* Sloc2,
     bool column_major,

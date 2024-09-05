@@ -367,7 +367,7 @@ HamiltLCAO<TK, TR>::HamiltLCAO(Gint_Gamma* GG_in,
                     two_center_bundle.overlap_orb_onsite.get()
             );
             this->getOperator()->add(sc_lambda);
-            SpinConstrain<TK, base_device::DEVICE_CPU>& sc = SpinConstrain<TK, base_device::DEVICE_CPU>::getScInstance();
+            SpinConstrain<TK>& sc = SpinConstrain<TK>::getScInstance();
             sc.set_operator(sc_lambda);
         }
     }

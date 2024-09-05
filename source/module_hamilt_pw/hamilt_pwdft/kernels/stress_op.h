@@ -309,9 +309,7 @@ struct cal_stress_nl_op<FPTYPE, base_device::DEVICE_GPU>
                     const std::complex<FPTYPE>* dbecp,
                     FPTYPE* stress);
     // kernel for DFT+U
-    void operator()(const base_device::DEVICE_CPU* ctx,
-                    const int& ipol,
-                    const int& jpol,
+    void operator()(const base_device::DEVICE_GPU* ctx,
                     const int& nkb,
                     const int& nbands_occ,
                     const int& ntype,
@@ -326,9 +324,7 @@ struct cal_stress_nl_op<FPTYPE, base_device::DEVICE_GPU>
                     const std::complex<FPTYPE>* dbecp,
                     FPTYPE* stress);
     // kernel for DeltaSpin
-    void operator()(const base_device::DEVICE_CPU* ctx,
-                    const int& ipol,
-                    const int& jpol,
+    void operator()(const base_device::DEVICE_GPU* ctx,
                     const int& nkb,
                     const int& nbands_occ,
                     const int& ntype,
@@ -337,7 +333,7 @@ struct cal_stress_nl_op<FPTYPE, base_device::DEVICE_GPU>
                     const int* atom_nh,
                     const int* atom_na,
                     const FPTYPE* d_wg,
-                    const FPTYPE* lambda,
+                    const double* lambda,
                     const std::complex<FPTYPE>* becp,
                     const std::complex<FPTYPE>* dbecp,
                     FPTYPE* stress);

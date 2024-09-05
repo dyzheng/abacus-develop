@@ -56,13 +56,13 @@ void Stress_Func<FPTYPE, Device>::stress_onsite(ModuleBase::matrix& sigma,
                 if(PARAM.inp.dft_plus_u)
                 {
                     auto* dftu = ModuleDFTU::DFTU::get_instance();
-                    onsite_p->get_fs_tools()->cal_stress_dftu(ik, npm, stress_device_tmp, dftu->orbital_corr, dftu->get_eff_pot_pw(0));
+                    onsite_p->get_fs_tools()->cal_stress_dftu(ik, npm, stress_device_tmp, dftu->orbital_corr, dftu->get_eff_pot_pw(0), dftu->get_size_eff_pot_pw(), wg.c);
                 }
                 if(PARAM.inp.sc_mag_switch)
                 {
-                    SpinConstrain<std::complex<double>, Device>& sc = SpinConstrain<std::complex<double>, Device>::getScInstance();
+                    SpinConstrain<std::complex<double>>& sc = SpinConstrain<std::complex<double>>::getScInstance();
                     const std::vector<ModuleBase::Vector3<double>>& lambda = sc.get_sc_lambda();
-                    onsite_p->get_fs_tools()->cal_stress_dspin(ik, npm, stress_device_tmp, lambda.data());
+                    onsite_p->get_fs_tools()->cal_stress_dspin(ik, npm, stress_device_tmp, lambda.data(), wg.c);
                 }
             }
         }

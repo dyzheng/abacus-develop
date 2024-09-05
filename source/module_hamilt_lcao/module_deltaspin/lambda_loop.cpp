@@ -24,7 +24,7 @@
 }
 
 template <>
-void SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::run_lambda_loop(int outer_step)
+void SpinConstrain<std::complex<double>>::run_lambda_loop(int outer_step)
 {
     // init parameters
     int nat = this->get_nat();
@@ -98,7 +98,7 @@ void SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::run_lambda_lo
 
 
 template <>
-void SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::run_lambda_loop(int outer_step)
+void SpinConstrain<std::complex<double>>::run_lambda_loop(int outer_step)
 {
     // init controlling parameters
     int nat = this->get_nat();

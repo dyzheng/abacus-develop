@@ -523,16 +523,13 @@ void ElecStatePW<T, Device>::addusdens_g(const Real* becsum, T* rhog)
     delmem_var_op()(this->ctx, ylmk0);
 }
 
-template <>
-double ElecStatePW<std::complex<double>, base_device::DEVICE_CPU>::get_spin_constrain_energy()
+template <typename T, typename Device>
+double ElecStatePW<T, Device>::get_spin_constrain_energy()
 {
-    SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>& sc
+    SpinConstrain<std::complex<double>>& sc
         = SpinConstrain<std::complex<double>>::getScInstance();
     return sc.cal_escon();
 }
-template <>
-double ElecStatePW<std::complex<float>, base_device::DEVICE_CPU>::get_spin_constrain_energy()
-{}
 
 template class ElecStatePW<std::complex<float>, base_device::DEVICE_CPU>;
 template class ElecStatePW<std::complex<double>, base_device::DEVICE_CPU>;

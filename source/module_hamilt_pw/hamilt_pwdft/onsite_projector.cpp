@@ -107,6 +107,7 @@ void projectors::OnsiteProjector<T, Device>::init(const std::string& orbital_dir
                                                   const ModuleBase::matrix& wg,
                                                   const ModuleBase::matrix& ekb)
 {
+    this->device = base_device::get_device_type<Device>(this->ctx);
     if(!this->initialed)
     {
         this->ucell = ucell_in;
@@ -167,12 +168,12 @@ void projectors::OnsiteProjector<T, Device>::init(const std::string& orbital_dir
         rp_._build_sbt_tab(nproj, rgrid, projs, lproj, nq, dq, ucell_in->omega, psi.npol, tab, nhtol);
         // For being compatible with present cal_force and cal_stress framework  
         // uncomment the following code block if you want to use the FS_Nonlocal_tools
-        if(this->tab_atomic_ == nullptr) // fs_nonlocal_tools will borrow memory space here...
+        if(this->tab_atomic_ == nullptr)
         {
             this->tot_nproj = itiaiprojm2irow_.size();
             this->npwx_ = this->pw_basis_->npwk_max;
-            this->tab_atomic_ = new std::complex<double>[this->tot_nproj * this->npwx_];
             this->size_vproj = this->tot_nproj * this->npwx_;
+            resmem_complex_op()(this->ctx, this->tab_atomic_, this->size_vproj, "OnsiteP::tab_atomic_");
         }
 
         delete this->fs_tools; // it is okay to delete nullptr
@@ -189,8 +190,14 @@ template<typename T, typename Device>
 projectors::OnsiteProjector<T, Device>::~OnsiteProjector()
 {
     //delete[] becp;
-    delete[] tab_atomic_;
     delete fs_tools;
+    delmem_complex_op()(this->ctx, this->tab_atomic_);
+    if(this->device == base_device::GpuDevice)
+    {
+        delmem_complex_h_op()(this->cpu_ctx, this->h_becp);
+    }
+    delmem_complex_op()(this->ctx, this->becp);
+
 }
 
 
@@ -298,17 +305,6 @@ void projectors::OnsiteProjector<T, Device>::tabulate_atomic(const int ik, const
     // STAGE 2 - make_atomic: multiply e^iqtau and extend the <G+k|p> to <G+k|pi> for each atom
     // CACHE 2 - if cache the tab_atomic_, <G+k|p> can be reused for SCF calculation
     // [in] it2ia, itiaiprojm2irow, tab_, npw, sf
-    std::vector<int> na(it2ia.size());
-    for(int it = 0; it < it2ia.size(); ++it)
-    {
-        na[it] = it2ia[it].size();
-    }
-    if(this->tab_atomic_ == nullptr)
-    {
-        this->tot_nproj = itiaiprojm2irow_.size();
-        this->tab_atomic_ = new std::complex<double>[this->tot_nproj * this->npwx_];
-        this->size_vproj = this->tot_nproj * this->npwx_;
-    }
     // for(int irow = 0; irow < nrow; ++irow)
     // {
     //     const int it = irow2it_[irow];
@@ -393,11 +389,22 @@ void projectors::OnsiteProjector<T, Device>::overlap_proj_psi(
     int npol = this->ucell->get_npol();
     if(this->becp == nullptr || this->size_becp < npm*this->tot_nproj)
     {
-        delete[] this->becp;
-        this->becp = new std::complex<double>[npm*this->tot_nproj];
         this->size_becp = npm*this->tot_nproj;
+        resmem_complex_op()(this->ctx, this->becp, this->size_becp);
+        if(this->device == base_device::GpuDevice )
+        {
+            resmem_complex_h_op()(this->cpu_ctx, this->h_becp, this->size_becp);
+        }
+        else
+        {
+            this->h_becp = this->becp;
+        }
     }
     this->fs_tools->cal_becp(ik_, npm/npol, this->becp, ppsi); // in cal_becp, npm should be the one not multiplied by npol
+    if(this->device == base_device::GpuDevice)
+    {
+        syncmem_complex_d2h_op()(this->cpu_ctx, this->ctx, h_becp, this->becp, this->size_becp);
+    }
     ModuleBase::timer::tick("OnsiteProj", "overlap");
 }
 
@@ -517,7 +524,7 @@ void projectors::OnsiteProjector<T, Device>::read_abacus_orb(std::ifstream& ifs,
 } // end of read_abacus_orb
 
 template<typename T, typename Device>
-void projectors::OnsiteProjector<T, Device>::cal_occupations(const psi::Psi<std::complex<double>>* psi_in, const ModuleBase::matrix& wg_in)
+void projectors::OnsiteProjector<T, Device>::cal_occupations(const psi::Psi<std::complex<T>, Device>* psi_in, const ModuleBase::matrix& wg_in)
 {
     ModuleBase::timer::tick("OnsiteProj", "cal_occupation");
     this->tabulate_atomic(0);
@@ -536,7 +543,7 @@ void projectors::OnsiteProjector<T, Device>::cal_occupations(const psi::Psi<std:
         this->overlap_proj_psi(
                         nbands * psi_in->npol,
                         psi_in->get_pointer());
-        const std::complex<double>* becp = this->get_becp();
+        const std::complex<double>* becp_p = this->get_h_becp();
         // becp(nbands*npol , nkb)
         // mag = wg * \sum_{nh}becp * becp
         int nkb = this->tot_nproj;
@@ -554,10 +561,10 @@ void projectors::OnsiteProjector<T, Device>::cal_occupations(const psi::Psi<std:
                 {
                     const int occ_index = (begin_ih + ih) * 4;
                     const int index = ib*2*nkb + begin_ih + ih;
-                    occs[occ_index] += weight * conj(becp[index]) * becp[index];
-                    occs[occ_index + 1] += weight * conj(becp[index]) * becp[index + nkb];
-                    occs[occ_index + 2] += weight * conj(becp[index + nkb]) * becp[index];
-                    occs[occ_index + 3] += weight * conj(becp[index + nkb]) * becp[index + nkb];
+                    occs[occ_index] += weight * conj(becp_p[index]) * becp_p[index];
+                    occs[occ_index + 1] += weight * conj(becp_p[index]) * becp_p[index + nkb];
+                    occs[occ_index + 2] += weight * conj(becp_p[index + nkb]) * becp_p[index];
+                    occs[occ_index + 3] += weight * conj(becp_p[index + nkb]) * becp_p[index + nkb];
                 }
                 begin_ih += nh;
             }
@@ -630,3 +637,6 @@ void projectors::OnsiteProjector<T, Device>::cal_occupations(const psi::Psi<std:
 }
 
 template class projectors::OnsiteProjector<double, base_device::DEVICE_CPU>;
+#if ((defined __CUDA) || (defined __ROCM))
+template class projectors::OnsiteProjector<double, base_device::DEVICE_GPU>;
+#endif

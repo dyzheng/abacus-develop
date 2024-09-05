@@ -18,7 +18,7 @@ void DeltaSpin<OperatorLCAO<TK, TR>>::cal_force_stress(const bool cal_force,
     // begin the calculation of force and stress
     ModuleBase::timer::tick("DeltaSpin", "cal_force_stress");
 
-    SpinConstrain<TK, base_device::DEVICE_CPU>& sc = SpinConstrain<TK, base_device::DEVICE_CPU>::getScInstance();
+    SpinConstrain<TK>& sc = SpinConstrain<TK>::getScInstance();
     auto& constrain = sc.get_constrain();
     this->cal_constraint_atom_list(constrain);
     auto& lambda = sc.get_sc_lambda();

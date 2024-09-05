@@ -531,7 +531,7 @@ void ESolver_KS_PW<T, Device>::before_scf(const int istep) {
 
     if (PARAM.inp.sc_mag_switch)
     {
-        SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>& sc = SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::getScInstance();
+        SpinConstrain<std::complex<double>>& sc = SpinConstrain<std::complex<double>>::getScInstance();
         sc.init_sc(GlobalV::sc_thr,
                    PARAM.inp.nsc,
                    PARAM.inp.nsc_min,
@@ -545,9 +545,9 @@ void ESolver_KS_PW<T, Device>::before_scf(const int istep) {
                    GlobalV::NSPIN,
                    this->kv,
                    GlobalV::KS_SOLVER,
-                   reinterpret_cast<hsolver::HSolver<std::complex<double>, base_device::DEVICE_CPU> *>(this->phsol),
-                   reinterpret_cast<hamilt::Hamilt<std::complex<double>, base_device::DEVICE_CPU> *>(this->p_hamilt),
-                   this->psi,
+                   this->phsol,
+                   this->p_hamilt,
+                   this->kspw_psi,
                    this->pelec);
     }
     if(PARAM.inp.dft_plus_u)
@@ -609,7 +609,7 @@ void ESolver_KS_PW<T, Device>::iter_init(const int istep, const int iter) {
                 bool do_uramping = true;
                 if (PARAM.inp.sc_mag_switch)
                 {
-                    SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>& sc = SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::getScInstance();
+                    SpinConstrain<std::complex<double>>& sc = SpinConstrain<std::complex<double>>::getScInstance();
                     if(!sc.mag_converged())// skip uramping if mag not converged
                     {
                         do_uramping = false;
@@ -647,7 +647,7 @@ void ESolver_KS_PW<T, Device>::iter_init(const int istep, const int iter) {
         // new DFT+U method will calculate energy in calculating Hamiltonian
         if (dftu->omc != 2)
         {
-            dftu->cal_occ_pw(iter, this->psi, this->pelec->wg, GlobalC::ucell, PARAM.inp.mixing_beta);
+            dftu->cal_occ_pw(iter, this->kspw_psi, this->pelec->wg, GlobalC::ucell, PARAM.inp.mixing_beta);
         }
         dftu->output();
     }
@@ -655,7 +655,7 @@ void ESolver_KS_PW<T, Device>::iter_init(const int istep, const int iter) {
     // run the inner lambda loop to contrain atomic moments with the DeltaSpin method
     if (PARAM.inp.sc_mag_switch)
     {
-        SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>& sc = SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::getScInstance();
+        SpinConstrain<std::complex<double>>& sc = SpinConstrain<std::complex<double>>::getScInstance();
         if(!sc.mag_converged() && this->drho>0 && this->drho < PARAM.inp.sc_scf_thr)
         {
             // optimize lambda to get target magnetic moments, but the lambda is not near target
@@ -766,7 +766,7 @@ void ESolver_KS_PW<T, Device>::iter_finish(const int iter) {
 
     if (PARAM.inp.sc_mag_switch)
     {
-        SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>& sc = SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::getScInstance();
+        SpinConstrain<std::complex<double>>& sc = SpinConstrain<std::complex<double>>::getScInstance();
         sc.cal_Mi_pw();
     }
 
@@ -840,17 +840,17 @@ void ESolver_KS_PW<T, Device>::after_scf(const int istep) {
     // 15) write spin constrian results
     // spin constrain calculations, write atomic magnetization and magnetic force.
     if (PARAM.inp.sc_mag_switch) {
-        SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>& sc
-            = SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>::getScInstance();
+        SpinConstrain<std::complex<double>>& sc
+            = SpinConstrain<std::complex<double>>::getScInstance();
         sc.cal_Mi_pw();
         sc.print_Mag_Force(GlobalV::ofs_running);
     }
 
     // 16) write onsite occupations for charge and magnetizations
     if(GlobalV::onsite_radius > 0)
-    {
+    { // float type has not been implemented
         auto* onsite_p = projectors::OnsiteProjector<double, Device>::get_instance();
-        onsite_p->cal_occupations(this->psi, this->pelec->wg);
+        onsite_p->cal_occupations(reinterpret_cast<psi::Psi<std::complex<double>, Device>*>(this->kspw_psi), this->pelec->wg);
     }
 
     ModuleIO::output_convergence_after_scf(this->conv_elec,

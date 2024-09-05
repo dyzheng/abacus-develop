@@ -216,7 +216,7 @@ struct cal_force_nl_op<FPTYPE, base_device::DEVICE_GPU>
                     const std::complex<FPTYPE>* dbecp,
                     FPTYPE* force);
     /// kernel for DFT+U
-    void operator()(const base_device::DEVICE_CPU* ctx,
+    void operator()(const base_device::DEVICE_GPU* ctx,
                     const int& nbands_occ,
                     const int& wg_nc,
                     const int& ntype,
@@ -234,7 +234,7 @@ struct cal_force_nl_op<FPTYPE, base_device::DEVICE_GPU>
                     const std::complex<FPTYPE>* dbecp,
                     FPTYPE* force);
     /// kernel for DeltaSpin
-    void operator()(const base_device::DEVICE_CPU* ctx,
+    void operator()(const base_device::DEVICE_GPU* ctx,
                     const int& nbands_occ,
                     const int& wg_nc,
                     const int& ntype,

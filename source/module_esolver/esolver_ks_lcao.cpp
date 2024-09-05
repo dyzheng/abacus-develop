@@ -686,7 +686,7 @@ void ESolver_KS_LCAO<TK, TR>::iter_init(const int istep, const int iter)
     // run the inner lambda loop to contrain atomic moments with the DeltaSpin method
     if (PARAM.inp.sc_mag_switch)
     {
-        SpinConstrain<TK, base_device::DEVICE_CPU>& sc = SpinConstrain<TK, base_device::DEVICE_CPU>::getScInstance();
+        SpinConstrain<TK>& sc = SpinConstrain<TK>::getScInstance();
         if(!sc.mag_converged() && this->drho>0 && this->drho < PARAM.inp.sc_scf_thr)
         {
             // optimize lambda to get target magnetic moments, but the lambda is not near target
@@ -826,7 +826,7 @@ void ESolver_KS_LCAO<TK, TR>::hamilt2density(int istep, int iter, double ethr)
     // 8) for delta spin
     if (PARAM.inp.sc_mag_switch)
     {
-        SpinConstrain<TK, base_device::DEVICE_CPU>& sc = SpinConstrain<TK, base_device::DEVICE_CPU>::getScInstance();
+        SpinConstrain<TK>& sc = SpinConstrain<TK>::getScInstance();
         sc.cal_MW(iter);
     }
 
@@ -1052,7 +1052,7 @@ void ESolver_KS_LCAO<TK, TR>::iter_finish(int iter)
     // called after cal_MW
     if (PARAM.inp.sc_mag_switch)
     {
-        SpinConstrain<TK, base_device::DEVICE_CPU>& sc = SpinConstrain<TK, base_device::DEVICE_CPU>::getScInstance();
+        SpinConstrain<TK>& sc = SpinConstrain<TK>::getScInstance();
         sc.cal_MW(iter);
     }
 
@@ -1250,8 +1250,8 @@ void ESolver_KS_LCAO<TK, TR>::after_scf(const int istep)
     // 15) write spin constrian MW?
     // spin constrain calculations, added by Tianqi Zhao.
     if (PARAM.inp.sc_mag_switch) {
-        SpinConstrain<TK, base_device::DEVICE_CPU>& sc
-            = SpinConstrain<TK, base_device::DEVICE_CPU>::getScInstance();
+        SpinConstrain<TK>& sc
+            = SpinConstrain<TK>::getScInstance();
         sc.cal_MW(istep);
         sc.print_Mi(GlobalV::ofs_running);
         sc.print_Mag_Force(GlobalV::ofs_running);

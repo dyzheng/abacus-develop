@@ -55,10 +55,20 @@ class OnsiteProj<OperatorPW<T, Device>> : public OperatorPW<T, Device>
 
     const UnitCell* ucell = nullptr;
 
+    mutable int* ip_iat = nullptr;
+    mutable T* lambda_coeff = nullptr;
+    mutable int* orb_l_iat = nullptr;
+    mutable int* ip_m = nullptr;
+    mutable int* vu_begin_iat = nullptr;
+    mutable T* vu_device = nullptr;
+
     mutable int nkb_m = 0;
 
     bool has_delta_spin = false;
     bool has_dftu = false;
+
+    mutable bool init_dftu = false;
+    mutable bool init_delta_spin = false;
 
     mutable T *ps = nullptr;
     int tnp = 0;
@@ -71,6 +81,12 @@ class OnsiteProj<OperatorPW<T, Device>> : public OperatorPW<T, Device>
     using resmem_complex_op = base_device::memory::resize_memory_op<T, Device>;
     using delmem_complex_op = base_device::memory::delete_memory_op<T, Device>;
     using syncmem_complex_h2d_op = base_device::memory::synchronize_memory_op<T, Device, base_device::DEVICE_CPU>;
+    using resmem_int_op = base_device::memory::resize_memory_op<int, Device>;
+    using resmem_real_op = base_device::memory::resize_memory_op<Real, Device>;
+    using delmem_int_op = base_device::memory::delete_memory_op<int, Device>;
+    using delmem_real_op = base_device::memory::delete_memory_op<Real, Device>;
+    using syncmem_int_h2d_op = base_device::memory::synchronize_memory_op<int, Device, base_device::DEVICE_CPU>;
+    using syncmem_real_h2d_op = base_device::memory::synchronize_memory_op<Real, Device, base_device::DEVICE_CPU>;
 
     T one{1, 0};
     T zero{0, 0};

@@ -54,13 +54,13 @@ void Forces<FPTYPE, Device>::cal_force_onsite(ModuleBase::matrix& force_onsite,
         if(PARAM.inp.dft_plus_u)
         {
             auto* dftu = ModuleDFTU::DFTU::get_instance();
-            onsite_p->get_fs_tools()->cal_force_dftu(ik, npm, force, dftu->orbital_corr, dftu->get_eff_pot_pw(0));
+            onsite_p->get_fs_tools()->cal_force_dftu(ik, npm, force, dftu->orbital_corr, dftu->get_eff_pot_pw(0), dftu->get_size_eff_pot_pw(), wg.c);
         }
         if(PARAM.inp.sc_mag_switch)
         {
-            SpinConstrain<std::complex<double>, Device>& sc = SpinConstrain<std::complex<double>, Device>::getScInstance();
+            SpinConstrain<std::complex<double>>& sc = SpinConstrain<std::complex<double>>::getScInstance();
             const std::vector<ModuleBase::Vector3<double>>& lambda = sc.get_sc_lambda();
-            onsite_p->get_fs_tools()->cal_force_dspin(ik, npm, force, lambda.data());
+            onsite_p->get_fs_tools()->cal_force_dspin(ik, npm, force, lambda.data(), wg.c);
         }
         
     } // end ik

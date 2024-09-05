@@ -446,7 +446,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik,
         resmem_complex_h_op()(this->cpu_ctx, h_becp, size_becp_act);
         syncmem_complex_d2h_op()(this->cpu_ctx, this->ctx, h_becp, becp_tmp, size_becp_act);
         Parallel_Reduce::reduce_pool(h_becp, size_becp_act);
-        syncmem_complex_h2d_op()(this->ctx, this->cpu_ctx, becp, h_becp, size_becp_act);
+        syncmem_complex_h2d_op()(this->ctx, this->cpu_ctx, becp_tmp, h_becp, size_becp_act);
         delmem_complex_h_op()(this->cpu_ctx, h_becp);
     }
     else
@@ -922,19 +922,28 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_force_dftu(int ik,
                                                        int npm,
                                                        FPTYPE* force,
                                                        const int* orbital_corr,
-                                                       const std::complex<FPTYPE>* vu)
+                                                       const std::complex<FPTYPE>* vu,
+                                                       const int size_vu,
+                                                       const FPTYPE* h_wg)
 {
-    int* orbital_corr_tmp = const_cast<int*>(orbital_corr);
-    std::complex<FPTYPE>* vu_tmp = const_cast<std::complex<FPTYPE>*>(vu);
+    int* orbital_corr_tmp = nullptr;
+    std::complex<FPTYPE>* vu_tmp = nullptr;
 #if defined(__CUDA) || defined(__ROCM)
-    if (this->device == "gpu")
+    if (this->device == base_device::GpuDevice)
     {
-        resmem_int_op()(gpu_ctx, orbital_corr_tmp, this->ucell_->ntype);
-        syncmem_int_h2d_op()(gpu_ctx, cpu_ctx, orbital_corr_tmp, dftu->orbital_corr, this->ucell_->ntype);
-        resmem_cd_op()(gpu_ctx, vu_tmp, dftu->get_size_eff_pot_pw());
-        syncmem_cd_h2d_op()(gpu_ctx, cpu_ctx, vu_tmp, dftu->get_eff_pot_pw(0), dftu->get_size_eff_pot_pw());
+        resmem_int_op()(this->ctx, orbital_corr_tmp, this->ucell_->ntype);
+        syncmem_int_h2d_op()(this->ctx, cpu_ctx, orbital_corr_tmp, orbital_corr, this->ucell_->ntype);
+        resmem_complex_op()(this->ctx, vu_tmp, size_vu);
+        syncmem_complex_h2d_op()(this->ctx, cpu_ctx, vu_tmp, vu, size_vu);
+        syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, d_wg, h_wg, this->nbands * (ik+1));
     }
+    else
 #endif
+    {
+        orbital_corr_tmp = const_cast<int*>(orbital_corr);
+        vu_tmp = const_cast<std::complex<FPTYPE>*>(vu);
+        d_wg = const_cast<FPTYPE*>(h_wg);
+    }
     const int force_nc = 3;
     cal_force_nl_op<FPTYPE, Device>()(this->ctx,
                                       npm,
@@ -954,10 +963,10 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_force_dftu(int ik,
                                       dbecp,
                                       force);
 #if defined(__CUDA) || defined(__ROCM)
-    if (this->device == "gpu")
+    if (this->device == base_device::GpuDevice)
     {
-        delmem_cd_op()(gpu_ctx, vu_tmp);
-        delmem_int_op()(gpu_ctx, orbital_corr_tmp);
+        delmem_complex_op()(this->ctx, vu_tmp);
+        delmem_int_op()(this->ctx, orbital_corr_tmp);
     }
 #endif
 }
@@ -966,24 +975,30 @@ template <typename FPTYPE, typename Device>
 void FS_Nonlocal_tools<FPTYPE, Device>::cal_force_dspin(int ik,
                                                         int npm,
                                                         FPTYPE* force,
-                                                        const ModuleBase::Vector3<double>* lambda)
+                                                        const ModuleBase::Vector3<double>* lambda,
+                                                        const FPTYPE* h_wg)
 {
-    FPTYPE* lambda_array = nullptr;
-    resmem_var_op()(this->cpu_ctx, lambda_array, this->ucell_->nat * 3);
+    std::vector<FPTYPE> lambda_array(this->ucell_->nat * 3);
     for (int iat = 0; iat < this->ucell_->nat; iat++)
     {
         lambda_array[iat * 3] = lambda[iat].x;
         lambda_array[iat * 3 + 1] = lambda[iat].y;
         lambda_array[iat * 3 + 2] = lambda[iat].z;
     }
-    FPTYPE* lambda_tmp = lambda_array;
+    FPTYPE* lambda_tmp = nullptr;
 #if defined(__CUDA) || defined(__ROCM)
-    if (this->device == "gpu")
+    if (this->device == base_device::GpuDevice)
     {
         resmem_var_op()(this->ctx, lambda_tmp, this->ucell_->nat * 3);
-        syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, lambda_tmp, lambda_array, this->ucell_->nat * 3);
+        syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, lambda_tmp, lambda_array.data(), this->ucell_->nat * 3);
+        syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, d_wg, h_wg, this->nbands * (ik+1));
     }
+    else
 #endif
+    {
+        lambda_tmp = lambda_array.data();
+        d_wg = const_cast<FPTYPE*>(h_wg);
+    }
     const int force_nc = 3;
     cal_force_nl_op<FPTYPE, Device>()(this->ctx,
                                       npm,
@@ -1002,11 +1017,10 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_force_dspin(int ik,
                                       dbecp,
                                       force);
 
-    delmem_var_op()(this->ctx, lambda_array);
 #if defined(__CUDA) || defined(__ROCM)
-    if (this->device == "gpu")
+    if (this->device == base_device::GpuDevice)
     {
-        delmem_var_op()(this->cpu_ctx, lambda_tmp);
+        delmem_var_op()(this->ctx, lambda_tmp);
     }
 #endif
 }
@@ -1016,19 +1030,28 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_stress_dftu(int ik,
                                                         int npm,
                                                         FPTYPE* stress,
                                                         const int* orbital_corr,
-                                                        const std::complex<FPTYPE>* vu)
+                                                        const std::complex<FPTYPE>* vu,
+                                                        const int size_vu,
+                                                        const FPTYPE* h_wg)
 {
-    int* orbital_corr_tmp = const_cast<int*>(orbital_corr);
-    std::complex<FPTYPE>* vu_tmp = const_cast<std::complex<FPTYPE>*>(vu);
+    int* orbital_corr_tmp = nullptr;
+    std::complex<FPTYPE>* vu_tmp = nullptr;
 #if defined(__CUDA) || defined(__ROCM)
-    if (this->device == "gpu")
+    if (this->device == base_device::GpuDevice)
     {
-        resmem_int_op()(gpu_ctx, orbital_corr_tmp, this->ucell_->ntype);
-        syncmem_int_h2d_op()(gpu_ctx, cpu_ctx, orbital_corr_tmp, dftu->orbital_corr, this->ucell_->ntype);
-        resmem_cd_op()(gpu_ctx, vu_tmp, dftu->get_size_eff_pot_pw());
-        syncmem_cd_h2d_op()(gpu_ctx, cpu_ctx, vu_tmp, dftu->get_eff_pot_pw(0), dftu->get_size_eff_pot_pw());
+        resmem_int_op()(this->ctx, orbital_corr_tmp, this->ucell_->ntype);
+        syncmem_int_h2d_op()(this->ctx, cpu_ctx, orbital_corr_tmp, orbital_corr, this->ucell_->ntype);
+        resmem_complex_op()(this->ctx, vu_tmp, size_vu);
+        syncmem_complex_h2d_op()(this->ctx, cpu_ctx, vu_tmp, vu, size_vu);
+        syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, d_wg, h_wg, this->nbands * (ik+1));
     }
+    else
 #endif
+    {
+        orbital_corr_tmp = const_cast<int*>(orbital_corr);
+        vu_tmp = const_cast<std::complex<FPTYPE>*>(vu);
+        d_wg = const_cast<FPTYPE*>(h_wg);
+    }
     cal_stress_nl_op()(this->ctx,
                        nkb,
                        npm,
@@ -1044,10 +1067,10 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_stress_dftu(int ik,
                        dbecp,
                        stress);
 #if defined(__CUDA) || defined(__ROCM)
-    if (this->device == "gpu")
+    if (this->device == base_device::GpuDevice)
     {
-        delmem_cd_op()(gpu_ctx, vu_tmp);
-        delmem_int_op()(gpu_ctx, orbital_corr_tmp);
+        delmem_complex_op()(this->ctx, vu_tmp);
+        delmem_int_op()(this->ctx, orbital_corr_tmp);
     }
 #endif
 }
@@ -1056,24 +1079,30 @@ template <typename FPTYPE, typename Device>
 void FS_Nonlocal_tools<FPTYPE, Device>::cal_stress_dspin(int ik,
                                                          int npm,
                                                          FPTYPE* stress,
-                                                         const ModuleBase::Vector3<double>* lambda)
+                                                         const ModuleBase::Vector3<double>* lambda,
+                                                         const FPTYPE* h_wg)
 {
-    FPTYPE* lambda_array = nullptr;
-    resmem_var_op()(this->cpu_ctx, lambda_array, this->ucell_->nat * 3);
+    std::vector<FPTYPE> lambda_array(this->ucell_->nat * 3);
     for (int iat = 0; iat < this->ucell_->nat; iat++)
     {
         lambda_array[iat * 3] = lambda[iat].x;
         lambda_array[iat * 3 + 1] = lambda[iat].y;
         lambda_array[iat * 3 + 2] = lambda[iat].z;
     }
-    FPTYPE* lambda_tmp = lambda_array;
+    FPTYPE* lambda_tmp = nullptr;
 #if defined(__CUDA) || defined(__ROCM)
-    if (this->device == "gpu")
+    if (this->device == base_device::GpuDevice)
     {
         resmem_var_op()(this->ctx, lambda_tmp, this->ucell_->nat * 3);
-        syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, lambda_tmp, lambda_array, this->ucell_->nat * 3);
+        syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, lambda_tmp, lambda_array.data(), this->ucell_->nat * 3);
+        syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, d_wg, h_wg, this->nbands * (ik+1));
     }
+    else
 #endif
+    {
+        lambda_tmp = lambda_array.data();
+        d_wg = const_cast<FPTYPE*>(h_wg);
+    }
     const int force_nc = 3;
     cal_stress_nl_op()(this->ctx,
                        nkb,
@@ -1089,11 +1118,10 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_stress_dspin(int ik,
                        dbecp,
                        stress);
 
-    delmem_var_op()(this->ctx, lambda_array);
 #if defined(__CUDA) || defined(__ROCM)
-    if (this->device == "gpu")
+    if (this->device == base_device::GpuDevice)
     {
-        delmem_var_op()(this->cpu_ctx, lambda_tmp);
+        delmem_var_op()(this->ctx, lambda_tmp);
     }
 #endif
 }

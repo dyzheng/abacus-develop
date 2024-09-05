@@ -1,8 +1,8 @@
 #include "spin_constrain.h"
 
 // init sc
-template <typename FPTYPE, typename Device>
-void SpinConstrain<FPTYPE, Device>::init_sc(double sc_thr_in,
+template <typename FPTYPE>
+void SpinConstrain<FPTYPE>::init_sc(double sc_thr_in,
                                             int nsc_in,
                                             int nsc_min_in,
                                             double alpha_trial_in,
@@ -15,9 +15,9 @@ void SpinConstrain<FPTYPE, Device>::init_sc(double sc_thr_in,
                                             int nspin_in,
                                             K_Vectors& kv_in,
                                             std::string KS_SOLVER_in,
-                                            hsolver::HSolver<FPTYPE, Device>* phsol_in,
-                                            hamilt::Hamilt<FPTYPE, Device>* p_hamilt_in,
-                                            psi::Psi<FPTYPE>* psi_in,
+                                            void* phsol_in,
+                                            void* p_hamilt_in,
+                                            void* psi_in,
                                             elecstate::ElecState* pelec_in)
 {
     this->set_input_parameters(sc_thr_in, nsc_in, nsc_min_in, alpha_trial_in, sccut_in, decay_grad_switch_in);
@@ -35,5 +35,5 @@ void SpinConstrain<FPTYPE, Device>::init_sc(double sc_thr_in,
     this->set_solver_parameters(kv_in, phsol_in, p_hamilt_in, psi_in, pelec_in, KS_SOLVER_in);
 }
 
-template class SpinConstrain<std::complex<double>, base_device::DEVICE_CPU>;
-template class SpinConstrain<double, base_device::DEVICE_CPU>;
+template class SpinConstrain<std::complex<double>>;
+template class SpinConstrain<double>;

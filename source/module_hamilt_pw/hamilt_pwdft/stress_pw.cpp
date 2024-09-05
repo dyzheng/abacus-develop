@@ -114,7 +114,7 @@ void Stress_PW<FPTYPE, Device>::cal_stress(ModuleBase::matrix& sigmatot,
     // DFT+U and DeltaSpin stress
     if(PARAM.inp.dft_plus_u || PARAM.inp.sc_mag_switch)
     {
-        this->stress_onsite(sigmaonsite, this->pelec->wg, wfc_basis, ucell, psi_in, p_symm);
+        this->stress_onsite(sigmaonsite, this->pelec->wg, wfc_basis, ucell, d_psi_in, p_symm);
     }
 
     for (int ipol = 0; ipol < 3; ipol++)

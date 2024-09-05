@@ -16,7 +16,7 @@
 
 struct ScAtomData;
 
-template <typename FPTYPE, typename Device = base_device::DEVICE_CPU>
+template <typename FPTYPE>
 class SpinConstrain
 {
 public:
@@ -37,9 +37,9 @@ public:
                int nspin_in,
                K_Vectors& kv_in,
                std::string KS_SOLVER_in,
-               hsolver::HSolver<FPTYPE, Device>* phsol_in,
-               hamilt::Hamilt<FPTYPE, Device>* p_hamilt_in,
-               psi::Psi<FPTYPE>* psi_in,
+               void* phsol_in,
+               void* p_hamilt_in,
+               void* psi_in,
                elecstate::ElecState* pelec_in);
 
   /// calculate h_lambda operator for spin-constrained DFT
@@ -104,13 +104,16 @@ public:
      * important outter class pointers used in spin-constrained DFT
     */
     Parallel_Orbitals *ParaV = nullptr;
-    hsolver::HSolver<FPTYPE, Device>* phsol = nullptr;
-    hamilt::Hamilt<FPTYPE, Device>* p_hamilt = nullptr;
-    psi::Psi<FPTYPE>* psi = nullptr;
+    //--------------------------------------------------------------------------------
+    // pointers for solve Hamiltonian to get new Magnetization from Lambda
+    void* phsol = nullptr;
+    void* p_hamilt = nullptr;
+    void* psi = nullptr;
     elecstate::ElecState* pelec = nullptr;
     std::string KS_SOLVER;
     const double meV_to_Ry = 7.349864435130999e-05;
     K_Vectors kv_;
+    //--------------------------------------------------------------------------------
 
   public:
     /**
@@ -212,9 +215,9 @@ public:
     void set_ParaV(Parallel_Orbitals* ParaV_in);
     /// @brief set parameters for solver
     void set_solver_parameters(K_Vectors& kv_in,
-                               hsolver::HSolver<FPTYPE, Device>* phsol_in,
-                               hamilt::Hamilt<FPTYPE, Device>* p_hamilt_in,
-                               psi::Psi<FPTYPE>* psi_in,
+                               void* phsol_in,
+                               void* p_hamilt_in,
+                               void* psi_in,
                                elecstate::ElecState* pelec_in,
                                std::string KS_SOLVER_in);
     /// bcast sc data read from json file
