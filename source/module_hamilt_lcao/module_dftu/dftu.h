@@ -8,13 +8,14 @@
 #include "module_cell/klist.h"
 #include "module_cell/unitcell.h"
 #include "module_basis/module_ao/parallel_orbitals.h"
+#ifdef __LCAO
 #include "module_elecstate/module_charge/charge_mixing.h"
 #include "module_hamilt_general/hamilt.h"
 #include "module_elecstate/elecstate.h"
 #include "module_hamilt_lcao/module_hcontainer/hcontainer.h"
 #include "module_elecstate/module_dm/density_matrix.h"
 #include "module_hamilt_lcao/hamilt_lcaodft/force_stress_arrays.h" // mohan add 2024-06-15
-
+#endif
 #include <string>
 
 //==========================================================
@@ -64,6 +65,7 @@ class DFTU
     std::vector<std::vector<std::vector<std::vector<std::vector<int>>>>>
         iatlnmipol2iwt; // iatlnm2iwt[iat][l][n][m][ipol]
 
+#ifdef __LCAO
     //=============================================================
     // In dftu_hamilt.cpp
     // For calculating contribution to Hamiltonian matrices
@@ -73,7 +75,7 @@ class DFTU
     void cal_eff_pot_mat_real(const int ik, double* eff_pot, const std::vector<int>& isk, const double* sk);
     void cal_eff_pot_mat_R_double(const int ispin, double* SR, double* HR);
     void cal_eff_pot_mat_R_complex_double(const int ispin, std::complex<double>* SR, std::complex<double>* HR);
-
+#endif
     //=============================================================
     // In dftu_occup.cpp
     // For calculating occupation matrix and saving to locale
@@ -89,11 +91,11 @@ class DFTU
     const std::complex<double>* get_eff_pot_pw(const int iat) const { return &(eff_pot_pw[this->eff_pot_pw_index[iat]]); }
     int get_size_eff_pot_pw() const { return eff_pot_pw.size(); }
     
-
+#ifdef __LCAO
     // calculate the local occupation number matrix
     void cal_occup_m_k(const int iter, const std::vector<std::vector<std::complex<double>>>& dm_k, const K_Vectors& kv, const double& mixing_beta, hamilt::Hamilt<std::complex<double>>* p_ham);
     void cal_occup_m_gamma(const int iter, const std::vector<std::vector<double>>& dm_gamma, const double& mixing_beta, hamilt::Hamilt<double>* p_ham);
-
+#endif
     // dftu can be calculated only after locale has been initialed
     bool initialed_locale = false;
 
@@ -111,6 +113,7 @@ public:
     // locale_save: the input local occupation number matrix of correlated electrons in the current electronic step
     std::vector<std::vector<std::vector<std::vector<ModuleBase::matrix>>>> locale; // locale[iat][l][n][spin](m1,m2)
     std::vector<std::vector<std::vector<std::vector<ModuleBase::matrix>>>> locale_save; // locale_save[iat][l][n][spin](m1,m2)
+#ifdef __LCAO
 private:
     //=============================================================
     // In dftu_tools.cpp
@@ -218,6 +221,8 @@ private:
 			const double* rho_VU, 
 			ModuleBase::matrix& stress_dftu);
 
+#endif
+
     //=============================================================
     // In dftu_io.cpp
     // For reading/writing/broadcasting/copying relevant data structures
@@ -251,6 +256,7 @@ private:
     double spherical_Bessel(const int k, const double r, const double lambda);
     double spherical_Hankel(const int k, const double r, const double lambda);
 
+#ifdef __LCAO
   public:
     /**
      * @brief get the density matrix of target spin
@@ -268,6 +274,7 @@ private:
   private:
     const elecstate::DensityMatrix<double, double>* dm_in_dftu_d = nullptr;
     const elecstate::DensityMatrix<std::complex<double>, double>* dm_in_dftu_cd = nullptr;
+#endif
 };
 
 } // namespace ModuleDFTU

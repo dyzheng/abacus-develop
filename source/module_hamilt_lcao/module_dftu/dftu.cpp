@@ -213,6 +213,8 @@ void DFTU::init(UnitCell& cell, // unitcell class
     return;
 }
 
+#ifdef __LCAO
+
 void DFTU::cal_energy_correction(const int istep)
 {
     ModuleBase::TITLE("DFTU", "cal_energy_correction");
@@ -363,6 +365,8 @@ void DFTU::cal_energy_correction(const int istep)
     return;
 }
 
+#endif
+
 void DFTU::uramping_update()
 {
     // if uramping < 0.1, use the original U
@@ -395,6 +399,8 @@ bool DFTU::u_converged()
     return true;
 }
 
+#ifdef __LCAO
+
 void DFTU::set_dmr(const elecstate::DensityMatrix<std::complex<double>, double>* dmr)
 {
     this->dm_in_dftu_cd = dmr;
@@ -422,5 +428,7 @@ const hamilt::HContainer<double>* DFTU::get_dmr(int ispin) const
         return nullptr;
     }
 }
+
+#endif
 
 } // namespace ModuleDFTU

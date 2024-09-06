@@ -6,7 +6,7 @@
 #include <tuple>
 #include "module_hamilt_pw/hamilt_pwdft/onsite_projector.h"
 
-#include "module_basis/module_nao/projgen.h"
+#include "module_base/projgen.h"
 #include "module_base/blas_connector.h"
 #include "module_hsolver/kernels/math_kernel_op.h"
 #ifdef __MPI

@@ -1,3 +1,4 @@
+#ifdef __LCAO
 #include "spin_constrain.h"
 #include "module_base/timer.h"
 #include "module_base/tool_title.h"
@@ -103,3 +104,5 @@ void SpinConstrain<std::complex<double>>::cal_h_lambda(
     ModuleBase::timer::tick("SpinConstrain", "cal_h_lambda");
     return;
 }
+
+#endif

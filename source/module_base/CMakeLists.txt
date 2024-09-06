@@ -52,6 +52,7 @@ add_library(
     parallel_reduce.cpp
     spherical_bessel_transformer.cpp
     cubic_spline.cpp
+    projgen.cpp
     module_mixing/mixing_data.cpp
     module_mixing/mixing.cpp
     module_mixing/plain_mixing.cpp

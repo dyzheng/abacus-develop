@@ -1,3 +1,4 @@
+#ifdef __LCAO
 #include "spin_constrain.h"
 
 template <>
@@ -163,3 +164,5 @@ void SpinConstrain<std::complex<double>>::collect_MW(ModuleBase::matrix& MecMulP
         }
     }
 }
+
+#endif

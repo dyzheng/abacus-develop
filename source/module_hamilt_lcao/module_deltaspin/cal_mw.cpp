@@ -4,13 +4,15 @@
 #include "module_base/name_angular.h"
 #include "module_base/scalapack_connector.h"
 #include "module_base/tool_title.h"
-#include "module_elecstate/elecstate_lcao.h"
 #include "module_base/timer.h"
-#include "module_hamilt_lcao/hamilt_lcaodft/hamilt_lcao.h"
-#include "module_hamilt_lcao/hamilt_lcaodft/operator_lcao/dspin_lcao.h"
 #include "module_hamilt_pw/hamilt_pwdft/onsite_projector.h"
 #include "spin_constrain.h"
 #include "module_parameter/parameter.h"
+#ifdef __LCAO
+#include "module_elecstate/elecstate_lcao.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/hamilt_lcao.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/operator_lcao/dspin_lcao.h"
+
 
 template <>
 ModuleBase::matrix SpinConstrain<std::complex<double>>::cal_MW_k(
@@ -112,6 +114,8 @@ void SpinConstrain<std::complex<double>>::cal_MW(const int& step, bool print)
 
     ModuleBase::timer::tick("SpinConstrain", "cal_MW");
 }
+
+#endif
 
 template <>
 void SpinConstrain<std::complex<double>>::cal_Mi_pw()

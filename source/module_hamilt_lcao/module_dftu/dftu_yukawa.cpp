@@ -1,3 +1,4 @@
+#ifdef __LCAO
 //==========================================================
 // Author:Xin Qu
 // DATE : 2019-12-10
@@ -265,3 +266,5 @@ double DFTU::spherical_Hankel(const int k, const double r, const double lambda)
 }
 
 } // namespace ModuleDFTU
+
+#endif

@@ -1,3 +1,4 @@
+#ifdef __LCAO
 #include "dftu.h"
 #include "module_base/timer.h"
 #include "module_hamilt_pw/hamilt_pwdft/global.h"
@@ -300,3 +301,5 @@ void DFTU::folding_matrix_k_new(const int ik,
     
 
 } // namespace ModuleDFTU
+
+#endif // __LCAO

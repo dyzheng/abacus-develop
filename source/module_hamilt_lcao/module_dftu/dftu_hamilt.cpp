@@ -5,7 +5,7 @@
 
 namespace ModuleDFTU
 {
-
+#ifdef __LCAO
 void DFTU::cal_eff_pot_mat_complex(const int ik, std::complex<double>* eff_pot, const std::vector<int>& isk, const std::complex<double>* sk)
 {
     ModuleBase::TITLE("DFTU", "cal_eff_pot_mat");
@@ -165,5 +165,7 @@ void DFTU::cal_eff_pot_mat_R_complex_double(const int ispin, std::complex<double
 
     return;
 }
+
+#endif
 
 }

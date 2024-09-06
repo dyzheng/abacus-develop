@@ -1,12 +1,16 @@
 #include "module_base/timer.h"
 #include "module_base/tool_title.h"
-#include "module_elecstate/elecstate_lcao.h"
-#include "module_elecstate/module_dm/cal_dm_psi.h"
-#include "module_hamilt_lcao/hamilt_lcaodft/operator_lcao/dspin_lcao.h"
-#include "module_hamilt_pw/hamilt_pwdft/onsite_projector.h"
 #include "module_hsolver/diago_iter_assist.h"
 #include "module_parameter/parameter.h"
 #include "spin_constrain.h"
+#include "module_hamilt_pw/hamilt_pwdft/onsite_projector.h"
+#include "module_base/parallel_reduce.h"
+
+#ifdef __LCAO
+#include "module_elecstate/elecstate_lcao.h"
+#include "module_elecstate/module_dm/cal_dm_psi.h"
+#include "module_hamilt_lcao/hamilt_lcaodft/operator_lcao/dspin_lcao.h"
+#endif
 
 template <>
 void SpinConstrain<std::complex<double>>::cal_mw_from_lambda(int i_step)
@@ -14,6 +18,7 @@ void SpinConstrain<std::complex<double>>::cal_mw_from_lambda(int i_step)
     ModuleBase::TITLE("SpinConstrain", "cal_mw_from_lambda");
     ModuleBase::timer::tick("SpinConstrain", "cal_mw_from_lambda");
     // lambda has been updated in the lambda loop
+#ifdef __LCAO
     if (PARAM.inp.basis_type == "lcao")
     {
         psi::Psi<std::complex<double>>* psi_t = static_cast<psi::Psi<std::complex<double>>*>(this->psi);
@@ -45,6 +50,7 @@ void SpinConstrain<std::complex<double>>::cal_mw_from_lambda(int i_step)
         this->cal_MW(i_step);
     }
     else
+#endif
     {
         if (i_step == -1)
         {

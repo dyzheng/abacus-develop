@@ -3,7 +3,7 @@
 #include "module_base/math_integral.h"
 #include "module_base/parallel_common.h"
 #include "module_base/tool_quit.h"
-#include "projgen.h"
+#include "module_base/projgen.h"
 
 #include <fstream>
 #include <iostream>

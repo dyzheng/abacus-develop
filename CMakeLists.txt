@@ -704,7 +704,9 @@ target_link_libraries(
   vdw
   parameter
   device
-  container)
+  container
+  dftu
+  deltaspin)
 if(ENABLE_LCAO)
   target_link_libraries(
     ${ABACUS_BIN_NAME}
@@ -712,9 +714,7 @@ if(ENABLE_LCAO)
     tddft
     orb
     gint
-    dftu
     hcontainer
-    deltaspin
     numerical_atomic_orbitals
     lr)
   if(USE_ELPA)
