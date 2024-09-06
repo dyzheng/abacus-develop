@@ -41,12 +41,10 @@ double ElecState::get_solvent_model_Acav()
 {
     return 0.5;
 }
-#ifdef __LCAO
 double ElecState::get_dftu_energy()
 {
     return 0.6;
 }
-#endif
 } // namespace elecstate
 
 #include "module_cell/klist.h"
