@@ -292,7 +292,6 @@ __global__ void cal_stress_nl(
         ++iat;
         sum+=Nprojs;
     }//ia
-    __syncwarp();
     warp_reduce(stress_var);
     if (threadIdx.x % WARP_SIZE == 0) {
         atomicAdd(stress + ipol * 3 + jpol, stress_var);
@@ -642,7 +641,6 @@ __global__ void cal_stress_onsite(
         sum+=nprojs;
         vu += 4 * tlp1_2;
     }//ia
-    __syncwarp();
     warp_reduce(stress_var);
     if (threadIdx.x % WARP_SIZE == 0) {
         atomicAdd(stress, stress_var);
@@ -695,7 +693,6 @@ __global__ void cal_stress_onsite(
         ++iat;
         sum+=nprojs;
     }//ia
-    __syncwarp();
     warp_reduce(stress_var);
     if (threadIdx.x % WARP_SIZE == 0) {
         atomicAdd(stress, stress_var);
