@@ -620,7 +620,7 @@ void cal_force_nl_op<FPTYPE, base_device::DEVICE_GPU>::operator()(const base_dev
                        reinterpret_cast<const thrust::complex<FPTYPE>*>(dbecp),
                        force); // array of data
 
-    cudaCheckOnDebug();
+    hipCheckOnDebug();
 }
 
 // for revertVkbValues functions instantiation
