@@ -19,6 +19,10 @@
 #include "chrono"
 #include "module_base/formatter.h"
 
+#if defined(__CUDA) || defined(__ROCM)
+#include <base/macros/macros.h>
+#endif
+
 namespace ModuleBase
 {
 
@@ -74,6 +78,15 @@ void timer::tick(const std::string &class_name,const std::string &name)
 //----------------------------------------------------------
 	if (disabled)
 		return;
+
+	//add synchronization for CUDA or ROCM
+#ifdef __DEBUG
+#if defined(__CUDA) 
+cudaCheckOnDebug();
+#elif defined(__ROCM)
+hipCheckOnDebug();
+#endif
+#endif
 
 #ifdef _OPENMP
 	if(!omp_get_thread_num())
