@@ -119,12 +119,12 @@ int Diago_DavSubspace<T, Device>::diag_once(const HPsiFunc& hpsi_func,
                              this->dim);
     }
 
-    hpsi_func(this->hphi, this->psi_in_iter, this->nbase_x, this->dim, 0, this->nbase_x - 1);
+    hpsi_func(this->hphi, this->psi_in_iter, this->notconv, this->dim, 0, this->notconv - 1);
 
     this->cal_elem(this->dim, nbase, this->notconv, this->psi_in_iter, this->hphi, this->hcc, this->scc);
 
     this->diag_zhegvx(nbase,
-                      this->n_band,
+                      this->notconv,
                       this->hcc,
                       this->scc,
                       this->nbase_x,
@@ -174,15 +174,7 @@ int Diago_DavSubspace<T, Device>::diag_once(const HPsiFunc& hpsi_func,
         this->notconv = 0;
         for (int m = 0; m < this->n_band; m++)
         {
-            if (is_occupied[m]) // always true
-            {
-                convflag[m] = (std::abs(eigenvalue_iter[m] - eigenvalue_in_hsolver[m]) < this->diag_thr);
-            }
-            else
-            {
-                const double empty_ethr = std::max(this->diag_thr * 5.0, 1e-5);
-                convflag[m] = (std::abs(eigenvalue_iter[m] - eigenvalue_in_hsolver[m]) < empty_ethr);
-            }
+            convflag[m] = (std::abs(eigenvalue_iter[m] - eigenvalue_in_hsolver[m]) < this->diag_thr);
 
             if (!convflag[m])
             {
@@ -331,7 +323,7 @@ void Diago_DavSubspace<T, Device>::cal_grad(const HPsiFunc& hpsi_func,
     {
         for (size_t i = 0; i < this->dim; i++)
         {
-            double x = this->precondition[i] - (*eigenvalue_iter)[m];
+            double x = std::abs(this->precondition[i] - (*eigenvalue_iter)[m]);
             pre[i] = 0.5 * (1.0 + x + sqrt(1 + (x - 1.0) * (x - 1.0)));
         }
         vector_div_vector_op<T, Device>()(this->ctx,
