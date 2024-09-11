@@ -16,6 +16,7 @@
 #include <ATen/core/tensor_map.h>
 #include <ATen/core/tensor_types.h>
 #include <module_hamilt_general/module_xc/kernels/xc_functional_op.h>
+#include "module_parameter/parameter.h"
 
 // from gradcorr.f90
 void XC_Functional::gradcorr(double& etxc,
@@ -81,7 +82,6 @@ void XC_Functional::gradcorr(double& etxc,
     ModuleBase::Vector3<double>* gdr2 = nullptr; // gradient of rho_down
     ModuleBase::Vector3<double>* h1 = nullptr;   // for gradient correction
     ModuleBase::Vector3<double>* h2 = nullptr;   // for gradient correction
-    double* neg = nullptr;
     double** vsave = nullptr;
     double** vgg = nullptr;
 
@@ -151,7 +151,6 @@ void XC_Functional::gradcorr(double& etxc,
         mag_part.resize(rhopw->nrxx * 3, 0.0);
         rhotmp2 = new double[rhopw->nrxx];
         rhogsum2 = new std::complex<double>[rhopw->npw];
-        neg = new double[rhopw->nrxx];
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static, 1024)
 #endif
@@ -159,7 +158,6 @@ void XC_Functional::gradcorr(double& etxc,
         {
             rhotmp1[ir] = 0.0;
             rhotmp2[ir] = 0.0;
-            neg[ir] = 0.0;
         }
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static, 1024)
@@ -193,7 +191,7 @@ void XC_Functional::gradcorr(double& etxc,
                 vgg[is] = new double[rhopw->nrxx];
             }
         }
-        noncolin_rho(rhotmp1, rhotmp2, neg, chr->rho, rhopw->nrxx, ucell->magnet.ux_, false, mag_part.data());
+        noncolin_rho(rhotmp1, rhotmp2, chr->rho, rhopw->nrxx, mag_part.data());
         rhopw->real2recip(rhotmp1, rhogsum1);
         rhopw->real2recip(rhotmp2, rhogsum2);
 #ifdef _OPENMP
@@ -217,6 +215,8 @@ void XC_Functional::gradcorr(double& etxc,
         if (!is_stress)
             h2 = new ModuleBase::Vector3<double>[rhopw->nrxx];
 
+        if (PARAM.inp.gga_grad == 2)
+        {
         // for non-collinear case
         // calculate the gradient of
         // 1. rho' = rho_core+rho
@@ -249,9 +249,12 @@ void XC_Functional::gradcorr(double& etxc,
         }
         delete[] tmp_recip;
         delete[] gdr_mag;
-        // old method is:
-        // XC_Functional::grad_rho(rhogsum1, gdr1, rhopw, ucell->tpiba);
-        // XC_Functional::grad_rho(rhogsum2, gdr2, rhopw, ucell->tpiba);
+        }
+        else
+        {
+            XC_Functional::grad_rho(rhogsum1, gdr1, rhopw, ucell->tpiba);
+            XC_Functional::grad_rho(rhogsum2, gdr2, rhopw, ucell->tpiba);
+        }
     }
 
     const double epsr = 1.0e-6;
@@ -477,7 +480,7 @@ void XC_Functional::gradcorr(double& etxc,
                             double zeta = (rhotmp1[ir] - rhotmp2[ir]) / rh;
                             if (GlobalV::NSPIN == 4 && (GlobalV::DOMAG || GlobalV::DOMAG_Z))
                             {
-                                zeta = fabs(zeta) * neg[ir];
+                                zeta = fabs(zeta);
                             }
                             const double grh2 = (gdr1[ir] + gdr2[ir]).norm2();
                             XC_Functional::gcc_spin(rh, zeta, grh2, sc, v1cup, v1cdw, v2c);
@@ -568,7 +571,7 @@ void XC_Functional::gradcorr(double& etxc,
     // std::cout << "\n vtxcgc=" << vtxcgc;
     // std::cout << "\n etxcgc=" << etxcgc << std::endl;
 
-    if(!is_stress && GlobalV::NSPIN==4)
+    if(!is_stress && GlobalV::NSPIN==4 && PARAM.inp.gga_grad==2)
     {
         // calculate the grad(h1+h2) and grad((h1-h2)*mag_i/mag_part) respectively
         // and add them to v(0, ir) and v(1-3, ir) respectively.
@@ -580,7 +583,7 @@ void XC_Functional::gradcorr(double& etxc,
         {
             double vgg[2] = {v(0, ir), v(1, ir)};
             v(0, ir) = 0.5 * (vgg[0] + vgg[1]) + vsave[0][ir];
-            const double vgg_diff = neg[ir] * 0.5 * (vgg[0] - vgg[1]);
+            const double vgg_diff = 0.5 * (vgg[0] - vgg[1]);
             for (int i = 1; i < 4; i++)
             {
                 v(i, ir) = vgg_diff * mag_part[ir + (i - 1) * rhopw->nrxx] + vsave[i][ir];
@@ -592,54 +595,71 @@ void XC_Functional::gradcorr(double& etxc,
 
         // dh is in real sapce.
         double* dh = new double[rhopw->nrxx];
+        double* dh1 = new double[rhopw->nrxx];
         ModuleBase::Vector3<double>* tmp_h = new ModuleBase::Vector3<double>[rhopw->nrxx];
-        
-        for (int is = 0; is < 4; is++)
+        for (int ir = 0; ir < rhopw->nrxx; ir++)
         {
-            if (is == 0)
-            {
-                for (int ir = 0; ir < rhopw->nrxx; ir++)
-                {
-                    tmp_h[ir] = 0.5 * (h1[ir] + h2[ir]);
-                }
-            }
-            else
-            {
-                const double* mag_part_is = &mag_part[(is - 1) * rhopw->nrxx];
-                for (int ir = 0; ir < rhopw->nrxx; ir++)
-                {
-                    tmp_h[ir] = 0.5 * (h1[ir] - h2[ir]) * mag_part_is[ir];
-                }
-            }
-            XC_Functional::grad_dot(tmp_h, dh, rhopw, ucell->tpiba);
+            tmp_h[ir] = 0.5 * (h1[ir] + h2[ir]);
+            dh1[ir] = 0.0;
+        }
+        XC_Functional::grad_dot(tmp_h, dh, rhopw, ucell->tpiba);
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static, 1024)
 #endif
-            for (int ir = 0; ir < rhopw->nrxx; ir++)
-            {
-                v(is, ir) -= dh[ir];
-            }
-
-            double sum = 0.0;
+        for (int ir = 0; ir < rhopw->nrxx; ir++)
+        {
+            v(0, ir) -= dh[ir];
+        }
+        double sum = 0.0;
 #ifdef _OPENMP
 #pragma omp parallel for reduction(+ : sum) schedule(static, 256)
 #endif
+        for (int ir = 0; ir < rhopw->nrxx; ir++)
+        {
+            sum += dh[ir] * chr->rho[0][ir];
+        }
+        vtxcgc -= sum;
+
+        for(int is=1;is<4;is++)
+        {
+            const double* mag_part_is = &mag_part[(is - 1) * rhopw->nrxx];
             for (int ir = 0; ir < rhopw->nrxx; ir++)
             {
-                sum += dh[ir] * chr->rho[is][ir];
+                tmp_h[ir] = 0.5 * (h1[ir] - h2[ir]) * mag_part_is[ir];
             }
-            vtxcgc -= sum;
+            XC_Functional::grad_dot(tmp_h, dh, rhopw, ucell->tpiba);
+            for(int ir=0;ir<rhopw->nrxx;ir++)
+            {
+                dh1[ir] += dh[ir] * mag_part_is[ir];
+            }
         }
+        for(int is=1;is<4;is++)
+        {
+            const double* mag_part_is = &mag_part[(is - 1) * rhopw->nrxx];
+            for(int ir=0;ir<rhopw->nrxx;ir++)
+            {
+                v(is,ir) -= dh1[ir] * mag_part_is[ir];
+            }
+        }
+        sum = 0.0;
+#ifdef _OPENMP
+#pragma omp parallel for reduction(+ : sum) schedule(static, 256)
+#endif
+                for (int ir = 0; ir < rhopw->nrxx; ir++)
+                {
+                    sum += dh1[ir] * (rhotmp1[ir] - rhotmp2[ir]);
+                }
+                vtxcgc -= sum;
 
         delete[] dh;
+        delete[] dh1;
         delete[] tmp_h;
 
         vtxc += vtxcgc;
         etxc += etxcgc;
 
     }
-
-    if (!is_stress && GlobalV::NSPIN < 4)
+    else if (!is_stress)
     {
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static, 1024)
@@ -712,6 +732,37 @@ void XC_Functional::gradcorr(double& etxc,
         vtxc += vtxcgc;
         etxc += etxcgc;
     }
+
+    if(GlobalV::NSPIN == 4 && PARAM.inp.gga_grad == 1)
+	{
+#ifdef _OPENMP
+#pragma omp parallel for collapse(2) schedule(static, 1024)
+#endif
+        for(int is=0;is<GlobalV::NSPIN;is++)
+        {
+            for(int ir=0;ir<rhopw->nrxx;ir++)
+            {
+                if(is<nspin0) 
+                { 
+                    vgg[is][ir] = v(is,ir);
+                }
+                v(is,ir) = vsave[is][ir];
+            }
+        }
+        const double* mag_part_p[3] = {mag_part.data(), mag_part.data() + rhopw->nrxx, mag_part.data() + 2 * rhopw->nrxx};
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024)
+#endif
+        for(int ir=0;ir<rhopw->nrxx;ir++)
+        {
+            v(0,ir) += 0.5 * (vgg[0][ir] + vgg[1][ir]);
+            for(int i=1;i<4;i++) 
+            {
+                v(i,ir) += 0.5 *(vgg[0][ir]-vgg[1][ir]) * mag_part_p[i-1][ir];
+            }
+        }
+	}
+
     // deacllocate
     delete[] rhotmp1;
     delete[] rhogsum1;
@@ -733,7 +784,6 @@ void XC_Functional::gradcorr(double& etxc,
     }
     if (GlobalV::NSPIN == 4 && (GlobalV::DOMAG || GlobalV::DOMAG_Z))
     {
-        delete[] neg;
         if (!is_stress)
         {
             for (int i = 0; i < nspin0; i++)
@@ -900,49 +950,18 @@ void XC_Functional::grad_dot(const ModuleBase::Vector3<double>* h,
 
 void XC_Functional::noncolin_rho(double* rhoout1,
                                  double* rhoout2,
-                                 double* neg,
                                  const double* const* const rho,
                                  const int nrxx,
-                                 const double* ux_,
-                                 const bool lsign_,
                                  double* mag_part)
 {
-    // this function diagonalizes the spin density matrix and gives as output the
-    // spin up and spin down components of the charge.
-    // If lsign is true up and dw are with respect to the fixed quantization axis
-    // ux, otherwise rho + |m| is always rhoup and rho-|m| is always rhodw.
-#ifdef _OPENMP
-#pragma omp parallel for schedule(static, 1024)
-#endif
-    for (int ir = 0; ir < nrxx; ir++)
-    {
-        neg[ir] = 1.0;
-    }
-    if (lsign_)
-    {
-#ifdef _OPENMP
-#pragma omp parallel for schedule(static, 1024)
-#endif
-        for (int ir = 0; ir < nrxx; ir++)
-        {
-            if (rho[1][ir] * ux_[0] + rho[2][ir] * ux_[1] + rho[3][ir] * ux_[2] > 0)
-            {
-                neg[ir] = 1.0;
-            }
-            else
-            {
-                neg[ir] = -1.0;
-            }
-        }
-    }
 #ifdef _OPENMP
 #pragma omp parallel for
 #endif
     for (int ir = 0; ir < nrxx; ir++)
     {
         double mag_norm = sqrt(pow(rho[1][ir], 2) + pow(rho[2][ir], 2) + pow(rho[3][ir], 2));
-        rhoout1[ir] = 0.5 * (rho[0][ir] + neg[ir] * mag_norm);
-        rhoout2[ir] = 0.5 * (rho[0][ir] - neg[ir] * mag_norm);
+        rhoout1[ir] = 0.5 * (rho[0][ir] + mag_norm);
+        rhoout2[ir] = 0.5 * (rho[0][ir] - mag_norm);
         if(mag_norm > 1e-12)
         {
             mag_part[ir] = rho[1][ir] / mag_norm;

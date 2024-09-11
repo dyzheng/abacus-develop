@@ -26,6 +26,7 @@ struct Input_para
                                                     ///< use mesh, which is used in QE.
     int lmaxmax = 2;                                ///< maximum of l channels used
     std::string dft_functional = "default";         ///< input DFT functional.
+    int gga_grad = 1;                               ///< 1: use gradient of |m| for nspin=4, 2: use gradient of m * \hat{m}
     double xc_temperature = 0.0;                    ///< only relevant if finite temperature functional is used
     std::string calculation = "scf";                ///< "scf" : self consistent calculation.
                                                     ///< "nscf" : non-self consistent calculation.

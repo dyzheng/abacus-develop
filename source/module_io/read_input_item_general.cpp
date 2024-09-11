@@ -217,6 +217,18 @@ void ReadInput::item_general()
         this->add_item(item);
     }
     {
+        Input_Item item("gga_grad");
+        item.annotation = "1: gradient of |m|; 2: gradient of m * hat{m}; ";
+        read_sync_int(input.gga_grad);
+        item.check_value = [](const Input_Item& item, const Parameter& para) {
+            if (para.input.gga_grad != 1 && para.input.gga_grad != 2)
+            {
+                ModuleBase::WARNING_QUIT("ReadInput", "gga_grad should be 1, 2.");
+            }
+        };
+        this->add_item(item);
+    }
+    {
         Input_Item item("kspacing");
         item.annotation = "unit in 1/bohr, should be > 0, default is 0 which "
                           "means read KPT file";
