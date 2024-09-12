@@ -14,6 +14,7 @@
 #include "module_hamilt_pw/hamilt_pwdft/wavefunc.h"
 #include "module_hsolver/diag_comm_info.h"
 #include "module_hsolver/diago_iter_assist.h"
+#include "module_elecstate/potentials/pot_local.h"
 
 #include <algorithm>
 #include <vector>
@@ -214,27 +215,33 @@ void HSolverPW<T, Device>::paw_func_after_kloop(psi::Psi<T, Device>& psi, elecst
 #endif
 
 template <typename T, typename Device>
-void HSolverPW<T, Device>::set_isOccupied(std::vector<bool>& is_occupied,
-                                          elecstate::ElecState* pes,
-                                          const int i_scf,
-                                          const int nk,
-                                          const int nband,
-                                          const bool diago_full_acc_)
+void HSolverPW<T, Device>::cal_ethr_band(const double& wk, const double* wg, const double& ethr, std::vector<double>& ethrs)
 {
-    if (i_scf != 0 && diago_full_acc_ == false)
+    if(wk > 0.0)
     {
-        for (int i = 0; i < nk; i++)
+        const double ethr_unocc = std::max(1e-5, ethr);
+        for (int i = 0; i < ethrs.size(); i++)
         {
-            if (pes->klist->wk[i] > 0.0)
+            double band_weight = wg[i] / wk;
+            if (band_weight > 1e-2)
             {
-                for (int j = 0; j < nband; j++)
-                {
-                    if (pes->wg(i, j) / pes->klist->wk[i] < 0.01)
-                    {
-                        is_occupied[i * nband + j] = false;
-                    }
-                }
+                ethrs[i] = ethr; 
             }
+            else if(band_weight > 1e-5)
+            {// similar energy difference for difsferent bands
+                ethrs[i] = std::min(ethr_unocc, ethr / band_weight);
+            }
+            else
+            {
+                ethrs[i] = ethr_unocc;
+            }
+        }
+    }
+    else
+    {
+        for (int i = 0; i < ethrs.size(); i++)
+        {
+            ethrs[i] = ethr;
         }
     }
 }
@@ -262,16 +269,7 @@ void HSolverPW<T, Device>::solve(hamilt::Hamilt<T, Device>* pHamilt,
     // prepare for the precondition of diagonalization
     std::vector<Real> precondition(psi.get_nbasis(), 0.0);
     std::vector<Real> eigenvalues(pes->ekb.nr * pes->ekb.nc, 0.0);
-    std::vector<bool> is_occupied(psi.get_nk() * psi.get_nbands(), true);
-    if (this->method == "dav_subspace")
-    {
-        this->set_isOccupied(is_occupied,
-                             pes,
-                             DiagoIterAssist<T, Device>::SCF_ITER,
-                             psi.get_nk(),
-                             psi.get_nbands(),
-                             this->diago_full_acc);
-    }
+    ethr_band.resize(psi.get_nbands(), DiagoIterAssist<T, Device>::PW_DIAG_THR);
 
     /// Loop over k points for solve Hamiltonian to charge density
     for (int ik = 0; ik < this->wfc_basis->nks; ++ik)
@@ -287,6 +285,10 @@ void HSolverPW<T, Device>::solve(hamilt::Hamilt<T, Device>* pHamilt,
 
         // template add precondition calculating here
         update_precondition(precondition, ik, this->wfc_basis->npwk[ik]);
+        this->cal_ethr_band(pes->klist->wk[ik],
+                            &pes->wg(ik, 0),
+                            DiagoIterAssist<T, Device>::PW_DIAG_THR,
+                            ethr_band);
 
 #ifdef USE_PAW
         this->call_paw_cell_set_currentk(ik);
@@ -508,7 +510,7 @@ void HSolverPW<T, Device>::hamiltSolvePsiK(hamilt::Hamilt<T, Device>* hm,
                                                   comm_info);
 
         DiagoIterAssist<T, Device>::avg_iter
-            += static_cast<double>(dav_subspace.diag(hpsi_func, psi.get_pointer(), psi.get_nbasis(), eigenvalue, is_occupied, scf));
+            += static_cast<double>(dav_subspace.diag(hpsi_func, psi.get_pointer(), psi.get_nbasis(), eigenvalue, this->ethr_band.data(), scf));
     }
     else if (this->method == "dav")
     {
@@ -602,7 +604,7 @@ void HSolverPW<T, Device>::update_precondition(std::vector<Real>& h_diag, const 
 
             if (this->method == "dav_subspace")
             {
-                h_diag[ig] = g2kin;
+                h_diag[ig] = g2kin + Real(elecstate::PotLocal::get_vl_of_0());
             }
             else
             {

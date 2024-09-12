@@ -24,6 +24,12 @@ class PotLocal : public PotBase
 
     void cal_fixed_v(double* vl_pseudo) override;
 
+    static double get_vl_of_0() { return vl_of_0; }
+
+    private:
+
+    static double vl_of_0;
+
     // std::vector<double> vltot;
 
     const ModuleBase::matrix* vloc_ = nullptr; // local pseduopotentials

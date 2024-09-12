@@ -87,7 +87,7 @@ int Diago_DavSubspace<T, Device>::diag_once(const HPsiFunc& hpsi_func,
                                             T* psi_in,
                                             const int psi_in_dmax,
                                             Real* eigenvalue_in_hsolver,
-                                            const std::vector<bool>& is_occupied)
+                                            const double* ethr_band)
 {
     ModuleBase::timer::tick("Diago_DavSubspace", "diag_once");
 
@@ -174,7 +174,7 @@ int Diago_DavSubspace<T, Device>::diag_once(const HPsiFunc& hpsi_func,
         this->notconv = 0;
         for (int m = 0; m < this->n_band; m++)
         {
-            convflag[m] = (std::abs(eigenvalue_iter[m] - eigenvalue_in_hsolver[m]) < this->diag_thr);
+            convflag[m] = (std::abs(eigenvalue_iter[m] - eigenvalue_in_hsolver[m]) < ethr_band[m]);
 
             if (!convflag[m])
             {
@@ -323,6 +323,7 @@ void Diago_DavSubspace<T, Device>::cal_grad(const HPsiFunc& hpsi_func,
     {
         for (size_t i = 0; i < this->dim; i++)
         {
+            //pre[i] = std::abs(this->precondition[i] - (*eigenvalue_iter)[m]);
             double x = std::abs(this->precondition[i] - (*eigenvalue_iter)[m]);
             pre[i] = 0.5 * (1.0 + x + sqrt(1 + (x - 1.0) * (x - 1.0)));
         }
@@ -724,7 +725,7 @@ int Diago_DavSubspace<T, Device>::diag(const HPsiFunc& hpsi_func,
                                        T* psi_in,
                                        const int psi_in_dmax,
                                        Real* eigenvalue_in_hsolver,
-                                       const std::vector<bool>& is_occupied,
+                                       const double* ethr_band,
                                        const bool& scf_type)
 {
     /// record the times of trying iterative diagonalization
@@ -740,7 +741,7 @@ int Diago_DavSubspace<T, Device>::diag(const HPsiFunc& hpsi_func,
             this->diagH_subspace(psi_in, eigenvalue_in_hsolver, hpsi_func, this->n_band, this->dim, psi_in_dmax);
         }
 
-        sum_iter += this->diag_once(hpsi_func, psi_in, psi_in_dmax, eigenvalue_in_hsolver, is_occupied);
+        sum_iter += this->diag_once(hpsi_func, psi_in, psi_in_dmax, eigenvalue_in_hsolver, ethr_band);
 
         ++ntry;
 

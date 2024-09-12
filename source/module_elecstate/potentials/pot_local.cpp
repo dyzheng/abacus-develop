@@ -8,6 +8,8 @@
 namespace elecstate
 {
 
+double PotLocal::vl_of_0 = 0.0;
+
 //==========================================================
 // This routine computes the local potential in real space
 //==========================================================
@@ -28,6 +30,8 @@ void PotLocal::cal_fixed_v(double *vl_pseudo // store the local pseudopotential
             vg[ig] += this->vloc_[0](it, this->rho_basis_->ig2igg[ig]) * this->sf_[0](it, ig);
         }
     }
+
+    PotLocal::vl_of_0 = vg[0].real();
 
     // recip2real should be a const function, but now it isn't
     // a dangerous usage appears here, which should be fix in the future.

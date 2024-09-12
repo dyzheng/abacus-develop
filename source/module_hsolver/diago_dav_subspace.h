@@ -37,7 +37,7 @@ class Diago_DavSubspace : public DiagH<T, Device>
              T* psi_in,
              const int psi_in_dmax,
              Real* eigenvalue_in,
-             const std::vector<bool>& is_occupied,
+             const double* ethr_band,
              const bool& scf_type);
 
   private:
@@ -139,7 +139,7 @@ class Diago_DavSubspace : public DiagH<T, Device>
                   T* psi_in,
                   const int psi_in_dmax,
                   Real* eigenvalue_in,
-                  const std::vector<bool>& is_occupied);
+                  const double* ethr_band);
 
     bool test_exit_cond(const int& ntry, const int& notconv, const bool& scf);
 
