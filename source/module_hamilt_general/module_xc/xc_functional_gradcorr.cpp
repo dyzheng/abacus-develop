@@ -731,37 +731,37 @@ void XC_Functional::gradcorr(double& etxc,
 
         vtxc += vtxcgc;
         etxc += etxcgc;
-    }
 
-    if(GlobalV::NSPIN == 4 && PARAM.inp.gga_grad == 1)
-	{
+        if(GlobalV::NSPIN == 4 && PARAM.inp.gga_grad == 1)
+        {
 #ifdef _OPENMP
 #pragma omp parallel for collapse(2) schedule(static, 1024)
 #endif
-        for(int is=0;is<GlobalV::NSPIN;is++)
-        {
-            for(int ir=0;ir<rhopw->nrxx;ir++)
+            for(int is=0;is<GlobalV::NSPIN;is++)
             {
-                if(is<nspin0) 
-                { 
-                    vgg[is][ir] = v(is,ir);
+                for(int ir=0;ir<rhopw->nrxx;ir++)
+                {
+                    if(is<nspin0) 
+                    { 
+                        vgg[is][ir] = v(is,ir);
+                    }
+                    v(is,ir) = vsave[is][ir];
                 }
-                v(is,ir) = vsave[is][ir];
             }
-        }
-        const double* mag_part_p[3] = {mag_part.data(), mag_part.data() + rhopw->nrxx, mag_part.data() + 2 * rhopw->nrxx};
+            const double* mag_part_p[3] = {mag_part.data(), mag_part.data() + rhopw->nrxx, mag_part.data() + 2 * rhopw->nrxx};
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static, 1024)
 #endif
-        for(int ir=0;ir<rhopw->nrxx;ir++)
-        {
-            v(0,ir) += 0.5 * (vgg[0][ir] + vgg[1][ir]);
-            for(int i=1;i<4;i++) 
+            for(int ir=0;ir<rhopw->nrxx;ir++)
             {
-                v(i,ir) += 0.5 *(vgg[0][ir]-vgg[1][ir]) * mag_part_p[i-1][ir];
+                v(0,ir) += 0.5 * (vgg[0][ir] + vgg[1][ir]);
+                for(int i=1;i<4;i++) 
+                {
+                    v(i,ir) += 0.5 *(vgg[0][ir]-vgg[1][ir]) * mag_part_p[i-1][ir];
+                }
             }
         }
-	}
+    }
 
     // deacllocate
     delete[] rhotmp1;
