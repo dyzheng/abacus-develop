@@ -130,7 +130,7 @@ int Diago_DavSubspace<T, Device>::diag_once(const HPsiFunc& hpsi_func,
                       this->nbase_x,
                       &eigenvalue_iter,
                       this->vcc,
-                      true,
+                      false,
                       this->is_subspace);
 
     for (size_t m = 0; m < this->n_band; m++)
@@ -736,10 +736,6 @@ int Diago_DavSubspace<T, Device>::diag(const HPsiFunc& hpsi_func,
 
     do
     {
-        if (this->is_subspace || ntry > 0)
-        {
-            this->diagH_subspace(psi_in, eigenvalue_in_hsolver, hpsi_func, this->n_band, this->dim, psi_in_dmax);
-        }
 
         sum_iter += this->diag_once(hpsi_func, psi_in, psi_in_dmax, eigenvalue_in_hsolver, ethr_band);
 
