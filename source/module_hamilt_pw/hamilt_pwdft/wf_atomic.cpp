@@ -8,6 +8,7 @@
 #include <complex>
 #include "module_base/timer.h"
 #include "module_base/tool_quit.h"
+#include "module_base/libm/libm.h"
 
 WF_atomic::WF_atomic()
 {
@@ -397,6 +398,9 @@ void WF_atomic::atomic_wfc(const int ik,
                                 //gamma = -1 * GlobalC::ucell.magnet.angle2_[it] + 0.5 * ModuleBase::PI;
                                 alpha = GlobalC::ucell.atoms[it].angle1[ia];
                                 gamma = -1 * GlobalC::ucell.atoms[it].angle2[ia] + 0.5 * ModuleBase::PI;
+                                const double arg1 = 0.5 * alpha;
+                                const double arg2 = 0.5 * gamma;
+                                const double arg3 = 0.5 * (alpha + ModuleBase::PI);
 
                                 for(int m = 0;m<2*l+1;m++)
                                 {
@@ -411,17 +415,22 @@ void WF_atomic::atomic_wfc(const int ik,
                                     //first rotation with angle alpha around (OX)
                                     for(int ig = 0;ig<np;ig++)
                                     {
-                                        fup = cos(0.5 * alpha) * aux[ig];
-                                        fdown = ModuleBase::IMAG_UNIT * sin(0.5* alpha) * aux[ig];
+                                        double sinp, cosp;
+                                        ModuleBase::libm::sincos(arg1, &sinp, &cosp);
+                                        fup = cosp * aux[ig];
+                                        fdown = ModuleBase::IMAG_UNIT * sinp * aux[ig];
                                         //build the orthogonal wfc
                                         //first rotation with angle (alpha + ModuleBase::PI) around (OX)
-                                        wfcatom(index,ig) = (cos(0.5 * gamma) + ModuleBase::IMAG_UNIT * sin(0.5*gamma)) * fup;
-                                        wfcatom(index,ig+ this->npwx) = (cos(0.5 * gamma) - ModuleBase::IMAG_UNIT * sin(0.5*gamma)) * fdown;
+                                        ModuleBase::libm::sincos(arg2, &sinp, &cosp);
+                                        wfcatom(index,ig) = (cosp + ModuleBase::IMAG_UNIT * sinp) * fup;
+                                        wfcatom(index,ig+ this->npwx) = (cosp - ModuleBase::IMAG_UNIT * sinp) * fdown;
                                         //second rotation with angle gamma around(OZ)
-                                        fup = cos(0.5 * (alpha + ModuleBase::PI))*aux[ig];
-                                        fdown = ModuleBase::IMAG_UNIT * sin(0.5 * (alpha + ModuleBase::PI))*aux[ig];
-                                        wfcatom(index+2*l+1,ig) = (cos(0.5*gamma) + ModuleBase::IMAG_UNIT*sin(0.5*gamma))*fup;
-                                        wfcatom(index+2*l+1,ig+ this->npwx) = (cos(0.5*gamma) - ModuleBase::IMAG_UNIT*sin(0.5*gamma))*fdown;
+                                        double sinp0, cosp0;
+                                        ModuleBase::libm::sincos(arg3, &sinp0, &cosp0);
+                                        fup = cosp0 * aux[ig];
+                                        fdown = ModuleBase::IMAG_UNIT * sinp0 * aux[ig];
+                                        wfcatom(index+2*l+1,ig) = (cosp + ModuleBase::IMAG_UNIT*sinp)*fup;
+                                        wfcatom(index+2*l+1,ig+ this->npwx) = (cosp - ModuleBase::IMAG_UNIT*sinp)*fdown;
                                     }
                                     index++;
                                 }
@@ -436,6 +445,9 @@ void WF_atomic::atomic_wfc(const int ik,
                             //gamman = -GlobalC::ucell.magnet.angle2_[it] + 0.5*ModuleBase::PI;
                             alpha = GlobalC::ucell.atoms[it].angle1[ia];
                             gamman = -1 * GlobalC::ucell.atoms[it].angle2[ia] + 0.5 * ModuleBase::PI;
+                            const double arg1 = 0.5 * alpha;
+                            const double arg2 = 0.5 * gamman;
+                            const double arg3 = 0.5 * (alpha + ModuleBase::PI);
                             for(int m = 0;m<2*l+1;m++)
                             {
                                 const int lm = l*l +m;
@@ -449,17 +461,22 @@ void WF_atomic::atomic_wfc(const int ik,
                                 //first, rotation with angle alpha around(OX)
                                 for(int ig = 0;ig<np;ig++)
                                 {
-                                     fup = cos(0.5*alpha) * aux[ig];
-                                     fdown = ModuleBase::IMAG_UNIT * sin(0.5* alpha) * aux[ig];
-                                     //build the orthogonal wfc
-                                     //first rotation with angle(alpha+ModuleBase::PI) around(OX)
-                                     wfcatom(index,ig) = (cos(0.5 * gamman) + ModuleBase::IMAG_UNIT * sin(0.5*gamman)) * fup;
-                                     wfcatom(index,ig+ this->npwx) = (cos(0.5 * gamman) - ModuleBase::IMAG_UNIT * sin(0.5*gamman)) * fdown;
-                                     //second rotation with angle gamma around(OZ)
-                                     fup = cos(0.5 * (alpha + ModuleBase::PI)) * aux[ig];
-                                     fdown = ModuleBase::IMAG_UNIT * sin(0.5 * (alpha + ModuleBase::PI)) * aux[ig];
-                                     wfcatom(index+2*l+1,ig) = (cos(0.5*gamman) + ModuleBase::IMAG_UNIT*sin(0.5*gamman))*fup;
-                                     wfcatom(index+2*l+1,ig+ this->npwx) = (cos(0.5*gamman) - ModuleBase::IMAG_UNIT*sin(0.5*gamman))*fdown;
+                                    double sinp, cosp;
+                                    ModuleBase::libm::sincos(arg1, &sinp, &cosp);
+                                    fup = cosp * aux[ig];
+                                    fdown = ModuleBase::IMAG_UNIT * sinp * aux[ig];
+                                    //build the orthogonal wfc
+                                    //first rotation with angle(alpha+ModuleBase::PI) around(OX)
+                                    ModuleBase::libm::sincos(arg2, &sinp, &cosp);
+                                    wfcatom(index,ig) = (cosp + ModuleBase::IMAG_UNIT * sinp) * fup;
+                                    wfcatom(index,ig+ this->npwx) = (cosp - ModuleBase::IMAG_UNIT * sinp) * fdown;
+                                    //second rotation with angle gamma around(OZ)
+                                    double sinp0, cosp0;
+                                    ModuleBase::libm::sincos(arg3, &sinp0, &cosp0);
+                                    fup = cosp0 * aux[ig];
+                                    fdown = ModuleBase::IMAG_UNIT * sinp0 * aux[ig];
+                                    wfcatom(index+2*l+1,ig) = (cosp + ModuleBase::IMAG_UNIT*sinp)*fup;
+                                    wfcatom(index+2*l+1,ig+ this->npwx) = (cosp - ModuleBase::IMAG_UNIT*sinp)*fdown;
                                 }
                                 index++;
                             }
@@ -640,7 +657,9 @@ void WF_atomic::random_t(std::complex<FPTYPE>* psi,
                     const FPTYPE rr = tmprr[wfc_basis->getigl2isz(ik,ig)];
                     const FPTYPE arg= ModuleBase::TWO_PI * tmparg[wfc_basis->getigl2isz(ik,ig)];
                     const FPTYPE gk2 = wfc_basis->getgk2(ik,ig);
-                    ppsi[ig+startig] = std::complex<FPTYPE>(rr * cos(arg), rr * sin(arg)) / FPTYPE(gk2 + 1.0);
+                    FPTYPE sinp, cosp;
+                    ModuleBase::libm::sincos(arg, &sinp, &cosp);
+                    ppsi[ig+startig] = std::complex<FPTYPE>(rr * cosp, rr * sinp) / FPTYPE(gk2 + 1.0);
                 }
                 startig += npwx;
             }
@@ -667,14 +686,18 @@ void WF_atomic::random_t(std::complex<FPTYPE>* psi,
                 const FPTYPE rr = std::rand()/FPTYPE(RAND_MAX); //qianrui add RAND_MAX
                 const FPTYPE arg= ModuleBase::TWO_PI * std::rand()/FPTYPE(RAND_MAX);
                 const FPTYPE gk2 = wfc_basis->getgk2(ik,ig);
-                ppsi[ig] = std::complex<FPTYPE>(rr * cos(arg), rr * sin(arg)) / FPTYPE(gk2 + 1.0);
+                FPTYPE sinp, cosp;
+                ModuleBase::libm::sincos(arg, &sinp, &cosp);
+                ppsi[ig] = std::complex<FPTYPE>(rr * cosp, rr * sinp) / FPTYPE(gk2 + 1.0);
             }
             if(GlobalV::NPOL==2) {for (int ig = this->npwx;ig < this->npwx + ng;ig++)
             {
                 const FPTYPE rr = std::rand()/FPTYPE(RAND_MAX);
                 const FPTYPE arg= ModuleBase::TWO_PI * std::rand()/FPTYPE(RAND_MAX);
                 const FPTYPE gk2 = wfc_basis->getgk2(ik,ig-this->npwx);
-                ppsi[ig] = std::complex<FPTYPE>(rr * cos(arg), rr * sin(arg)) / FPTYPE(gk2 + 1.0);
+                FPTYPE sinp, cosp;
+                ModuleBase::libm::sincos(arg, &sinp, &cosp);
+                ppsi[ig] = std::complex<FPTYPE>(rr * cosp, rr * sinp) / FPTYPE(gk2 + 1.0);
             }
 }
         }
@@ -731,7 +754,9 @@ void WF_atomic::atomicrandom(ModuleBase::ComplexMatrix& psi,
                 {
                     const double rr = tmprr[wfc_basis->ig2isz[ig]];
                     const double arg= ModuleBase::TWO_PI * tmparg[wfc_basis->ig2isz[ig]];
-                    psi(iw,startig+ig) *= (1.0 + 0.05 * std::complex<double>(rr * cos(arg), rr * sin(arg)));
+                    double sinp, cosp;
+                    ModuleBase::libm::sincos(arg, &sinp, &cosp);
+                    psi(iw,startig+ig) *= (1.0 + 0.05 * std::complex<double>(rr * cosp, rr * sinp));
                 }
                 startig += npwx;
             }
@@ -759,7 +784,9 @@ void WF_atomic::atomicrandom(ModuleBase::ComplexMatrix& psi,
 				{
 					rr = rand()/double(RAND_MAX);
 					arg = ModuleBase::TWO_PI * rand()/double(RAND_MAX);
-					psi(iw,startig+ig) *= (1.0 + 0.05 * std::complex<double>(rr * cos(arg), rr * sin(arg)));
+                    double sinp, cosp;
+                    ModuleBase::libm::sincos(arg, &sinp, &cosp);
+					psi(iw,startig+ig) *= (1.0 + 0.05 * std::complex<double>(rr * cosp, rr * sinp));
 				}
 				startig += npwx;
 			}
