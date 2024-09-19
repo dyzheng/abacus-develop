@@ -137,7 +137,7 @@ void psi_initializer_atomic<T, Device>::tabulate()
             int n_rgrid = (PARAM.inp.pseudo_mesh)?atom->ncpp.mesh:atom->ncpp.msh;
             std::vector<double> pswfcr(n_rgrid);
             for (int ir=0; ir<n_rgrid; ir++) { pswfcr[ir] = atom->ncpp.chi(ic, ir); }
-            normalize(n_rgrid, pswfcr, atom->ncpp.rab.data());
+            normalize(n_rgrid, pswfcr, atom->ncpp.rab);
             if (atom->ncpp.oc[ic] >= 0.0) // reasonable occupation number, but is it always true?
             {
                 const int l = atom->ncpp.lchi[ic];

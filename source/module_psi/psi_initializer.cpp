@@ -90,7 +90,7 @@ psi::Psi<std::complex<double>>* psi_initializer<T, Device>::allocate(const bool 
     }
 
 	  const int nks_psi = (PARAM.inp.calculation == "nscf" && this->mem_saver_ == 1)? 1 : this->pw_wfc_->nks;
-    const int nbasis_actual = this->pw_wfc_->npwk_max * PARAM.globalv.npol;
+    const int nbasis_actual = this->pw_wfc_->npwk_max * GlobalV::NPOL;
     psi::Psi<std::complex<double>>* psi_out = nullptr;
     if(!only_psig)
     {
@@ -98,7 +98,7 @@ psi::Psi<std::complex<double>>* psi_initializer<T, Device>::allocate(const bool 
                                                      GlobalV::NBANDS, // because no matter what, the wavefunction finally needed has GlobalV::NBANDS bands
                                                      nbasis_actual, 
                                                      this->pw_wfc_->npwk);
-        double memory_cost_psi = nks_psi * GlobalV::NBANDS * this->pw_wfc_->npwk_max * PARAM.globalv.npol*
+        double memory_cost_psi = nks_psi * GlobalV::NBANDS * this->pw_wfc_->npwk_max * GlobalV::NPOL*
                         sizeof(std::complex<double>);
 #ifdef __MPI
         // get the correct memory cost for psi by all-reduce sum
@@ -117,7 +117,7 @@ psi::Psi<std::complex<double>>* psi_initializer<T, Device>::allocate(const bool 
                                                         this->pw_wfc_->npwk);
 
     double memory_cost_psig = 
-            nks_psig * nbands_actual * this->pw_wfc_->npwk_max * PARAM.globalv.npol * sizeof(T);
+            nks_psig * nbands_actual * this->pw_wfc_->npwk_max * GlobalV::NPOL * sizeof(T);
 #ifdef __MPI
     // get the correct memory cost for psig by all-reduce sum
     Parallel_Reduce::reduce_all(memory_cost_psig);
@@ -213,7 +213,7 @@ void psi_initializer<T, Device>::random_t(T* psi, const int iw_start, const int 
     {
         for (int iw = iw_start ;iw < iw_end; iw++)
         {
-            T* psi_slice = &(psi[iw * this->pw_wfc_->npwk_max * PARAM.globalv.npol]); // get the memory to write directly. For nspin 4, nbasis*2
+            T* psi_slice = &(psi[iw * this->pw_wfc_->npwk_max * GlobalV::NPOL]); // get the memory to write directly. For nspin 4, nbasis*2
             for (int ig = 0; ig < ng; ig++)
             {
                 const double rr = std::rand()/double(RAND_MAX); //qianrui add RAND_MAX
@@ -221,7 +221,7 @@ void psi_initializer<T, Device>::random_t(T* psi, const int iw_start, const int 
                 const double gk2 = this->pw_wfc_->getgk2(ik, ig);
                 psi_slice[ig] = this->template cast_to_T<T>(std::complex<double>(rr*cos(arg)/(gk2 + 1.0), rr*sin(arg)/(gk2 + 1.0)));
             }
-            if(PARAM.globalv.npol==2) // additionally for nspin 4...
+            if(GlobalV::NPOL==2) // additionally for nspin 4...
             {
                 for (int ig = this->pw_wfc_->npwk_max; ig < this->pw_wfc_->npwk_max + ng; ig++)
                 {
