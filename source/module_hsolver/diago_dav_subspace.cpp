@@ -59,7 +59,7 @@ Diago_DavSubspace<T, Device>::Diago_DavSubspace(const std::vector<Real>& precond
     if (this->device == base_device::GpuDevice)
     {
         resmem_real_op()(this->ctx, this->d_precondition, nbasis_in);
-        syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, this->d_precondition, this->precondition.data(), nbasis_in);
+        // syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, this->d_precondition, this->precondition.data(), nbasis_in);
     }
 #endif
 }
@@ -123,13 +123,7 @@ int Diago_DavSubspace<T, Device>::diag_once(const HPsiFunc& hpsi_func,
 
     this->cal_elem(this->dim, nbase, this->notconv, this->psi_in_iter, this->hphi, this->hcc, this->scc);
 
-    this->diag_zhegvx(nbase,
-                      this->notconv,
-                      this->hcc,
-                      this->scc,
-                      this->nbase_x,
-                      &eigenvalue_iter,
-                      this->vcc);
+    this->diag_zhegvx(nbase, this->notconv, this->hcc, this->scc, this->nbase_x, &eigenvalue_iter, this->vcc);
 
     for (size_t m = 0; m < this->n_band; m++)
     {
@@ -156,13 +150,7 @@ int Diago_DavSubspace<T, Device>::diag_once(const HPsiFunc& hpsi_func,
 
         this->cal_elem(this->dim, nbase, this->notconv, this->psi_in_iter, this->hphi, this->hcc, this->scc);
 
-        this->diag_zhegvx(nbase,
-                          this->n_band,
-                          this->hcc,
-                          this->scc,
-                          this->nbase_x,
-                          &eigenvalue_iter,
-                          this->vcc);
+        this->diag_zhegvx(nbase, this->n_band, this->hcc, this->scc, this->nbase_x, &eigenvalue_iter, this->vcc);
 
         // check convergence and update eigenvalues
         ModuleBase::timer::tick("Diago_DavSubspace", "check_update");
@@ -319,15 +307,29 @@ void Diago_DavSubspace<T, Device>::cal_grad(const HPsiFunc& hpsi_func,
     {
         for (size_t i = 0; i < this->dim; i++)
         {
-            //pre[i] = std::abs(this->precondition[i] - (*eigenvalue_iter)[m]);
+            // pre[i] = std::abs(this->precondition[i] - (*eigenvalue_iter)[m]);
             double x = std::abs(this->precondition[i] - (*eigenvalue_iter)[m]);
             pre[i] = 0.5 * (1.0 + x + sqrt(1 + (x - 1.0) * (x - 1.0)));
         }
-        vector_div_vector_op<T, Device>()(this->ctx,
-                                          this->dim,
-                                          psi_iter + (nbase + m) * this->dim,
-                                          psi_iter + (nbase + m) * this->dim,
-                                          pre.data());
+#if defined(__CUDA) || defined(__ROCM)
+        if (this->device == base_device::GpuDevice)
+        {
+            syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, this->d_precondition, pre.data(), this->dim);
+            vector_div_vector_op<T, Device>()(this->ctx,
+                                              this->dim,
+                                              psi_iter + (nbase + m) * this->dim,
+                                              psi_iter + (nbase + m) * this->dim,
+                                              this->d_precondition);
+        }
+        else
+#endif
+        {
+            vector_div_vector_op<T, Device>()(this->ctx,
+                                              this->dim,
+                                              psi_iter + (nbase + m) * this->dim,
+                                              psi_iter + (nbase + m) * this->dim,
+                                              pre.data());
+        }
     }
 
     // "normalize!!!" in order to improve numerical stability of subspace diagonalization
@@ -504,68 +506,58 @@ void Diago_DavSubspace<T, Device>::diag_zhegvx(const int& nbase,
     {
         assert(nbase_x >= std::max(1, nbase));
 
-        std::vector<std::vector<T>> h_diag(nbase, std::vector<T>(nbase, cs.zero));
-        std::vector<std::vector<T>> s_diag(nbase, std::vector<T>(nbase, cs.zero));
-
-        for (size_t i = 0; i < nbase; i++)
-        {
-            for (size_t j = 0; j < nbase; j++)
-            {
-                h_diag[i][j] = hcc[i * this->nbase_x + j];
-                s_diag[i][j] = scc[i * this->nbase_x + j];
-            }
-        }
-
         if (this->device == base_device::GpuDevice)
         {
 #if defined(__CUDA) || defined(__ROCM)
             Real* eigenvalue_gpu = nullptr;
             resmem_real_op()(this->ctx, eigenvalue_gpu, this->nbase_x);
 
-            syncmem_var_h2d_op()(this->ctx,
-                                    this->cpu_ctx,
-                                    eigenvalue_gpu,
-                                    (*eigenvalue_iter).data(),
-                                    this->nbase_x);
+            syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, eigenvalue_gpu, (*eigenvalue_iter).data(), this->nbase_x);
 
-            dnevx_op<T, Device>()(this->ctx, nbase, this->nbase_x, this->hcc, nband, eigenvalue_gpu, this->vcc);
+            dngvd_op<T, Device>()(this->ctx, nbase, this->nbase_x, hcc, scc, eigenvalue_gpu, vcc);
 
-            syncmem_var_d2h_op()(this->cpu_ctx,
-                                    this->ctx,
-                                    (*eigenvalue_iter).data(),
-                                    eigenvalue_gpu,
-                                    this->nbase_x);
+            syncmem_var_d2h_op()(this->cpu_ctx, this->ctx, (*eigenvalue_iter).data(), eigenvalue_gpu, this->nbase_x);
 
             delmem_real_op()(this->ctx, eigenvalue_gpu);
 #endif
         }
         else
         {
-            dngvx_op<T, Device>()(this->ctx,
-                                    nbase,
-                                    this->nbase_x,
-                                    this->hcc,
-                                    this->scc,
-                                    nband,
-                                    (*eigenvalue_iter).data(),
-                                    this->vcc);
-        }
+            std::vector<std::vector<T>> h_diag(nbase, std::vector<T>(nbase, cs.zero));
+            std::vector<std::vector<T>> s_diag(nbase, std::vector<T>(nbase, cs.zero));
 
-        // reset:
-        for (size_t i = 0; i < nbase; i++)
-        {
-            for (size_t j = 0; j < nbase; j++)
+            for (size_t i = 0; i < nbase; i++)
             {
-                hcc[i * this->nbase_x + j] = h_diag[i][j];
-                scc[i * this->nbase_x + j] = s_diag[i][j];
+                for (size_t j = 0; j < nbase; j++)
+                {
+                    h_diag[i][j] = hcc[i * this->nbase_x + j];
+                    s_diag[i][j] = scc[i * this->nbase_x + j];
+                }
             }
-
-            for (size_t j = nbase; j < this->nbase_x; j++)
+            dngvx_op<T, Device>()(this->ctx,
+                                  nbase,
+                                  this->nbase_x,
+                                  this->hcc,
+                                  this->scc,
+                                  nband,
+                                  (*eigenvalue_iter).data(),
+                                  this->vcc);
+            // reset:
+            for (size_t i = 0; i < nbase; i++)
             {
-                hcc[i * this->nbase_x + j] = cs.zero;
-                hcc[j * this->nbase_x + i] = cs.zero;
-                scc[i * this->nbase_x + j] = cs.zero;
-                scc[j * this->nbase_x + i] = cs.zero;
+                for (size_t j = 0; j < nbase; j++)
+                {
+                    hcc[i * this->nbase_x + j] = h_diag[i][j];
+                    scc[i * this->nbase_x + j] = s_diag[i][j];
+                }
+
+                for (size_t j = nbase; j < this->nbase_x; j++)
+                {
+                    hcc[i * this->nbase_x + j] = cs.zero;
+                    hcc[j * this->nbase_x + i] = cs.zero;
+                    scc[i * this->nbase_x + j] = cs.zero;
+                    scc[j * this->nbase_x + i] = cs.zero;
+                }
             }
         }
     }
