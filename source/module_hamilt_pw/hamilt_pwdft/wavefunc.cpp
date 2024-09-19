@@ -340,6 +340,7 @@ void diago_PAO_in_pw_k2(const int &ik,
                         hamilt::Hamilt<std::complex<double>> *phm_in)
 {
     ModuleBase::TITLE("wavefunc", "diago_PAO_in_pw_k2");
+    ModuleBase::timer::tick("wavefunc", "diago_PAO_in_pw_k2");
 
     const int nbasis = wvf.get_nbasis();
     const int nbands = wvf.get_nbands();
@@ -365,10 +366,12 @@ void diago_PAO_in_pw_k2(const int &ik,
                                                                                         wfcatom.nc,
                                                                                         wvf,
                                                                                         etfile.data());
+                    ModuleBase::timer::tick("wavefunc", "diago_PAO_in_pw_k2");
                     return;
                 }
                 else
                 {
+                    ModuleBase::timer::tick("wavefunc", "diago_PAO_in_pw_k2");
                     ModuleBase::WARNING_QUIT("wavefunc", "Hamiltonian does not exist!");
                 }
             }
@@ -409,6 +412,7 @@ void diago_PAO_in_pw_k2(const int &ik,
     const int starting_nw = p_wf->get_starting_nw();
 	if (starting_nw == 0)
 	{
+        ModuleBase::timer::tick("wavefunc", "diago_PAO_in_pw_k2");
 		return;
 	}
 
@@ -423,10 +427,12 @@ void diago_PAO_in_pw_k2(const int &ik,
             if (phm_in != nullptr)
             {
                 hsolver::DiagoIterAssist<std::complex<double>>::diagH_subspace(phm_in, wvf, wvf, etatom.data());
+                ModuleBase::timer::tick("wavefunc", "diago_PAO_in_pw_k2");
                 return;
             }
             else
             {
+                ModuleBase::timer::tick("wavefunc", "diago_PAO_in_pw_k2");
                 ModuleBase::WARNING_QUIT("wavefunc", "Hamiltonian does not exist!");
             }
         }
@@ -472,10 +478,12 @@ void diago_PAO_in_pw_k2(const int &ik,
 							wfcatom.nc,
 							wvf,
 							etatom.data());
+                ModuleBase::timer::tick("wavefunc", "diago_PAO_in_pw_k2");
 				return;
 			}
 			else
 			{
+                ModuleBase::timer::tick("wavefunc", "diago_PAO_in_pw_k2");
 				ModuleBase::WARNING_QUIT("wavefunc","Hamiltonian does not exist!");
 			}
 		}
@@ -489,6 +497,7 @@ void diago_PAO_in_pw_k2(const int &ik,
 			}
 		}
     }
+    ModuleBase::timer::tick("wavefunc", "diago_PAO_in_pw_k2");
 }
 
 template <>
