@@ -129,9 +129,7 @@ int Diago_DavSubspace<T, Device>::diag_once(const HPsiFunc& hpsi_func,
                       this->scc,
                       this->nbase_x,
                       &eigenvalue_iter,
-                      this->vcc,
-                      false,
-                      this->is_subspace);
+                      this->vcc);
 
     for (size_t m = 0; m < this->n_band; m++)
     {
@@ -164,9 +162,7 @@ int Diago_DavSubspace<T, Device>::diag_once(const HPsiFunc& hpsi_func,
                           this->scc,
                           this->nbase_x,
                           &eigenvalue_iter,
-                          this->vcc,
-                          false,
-                          false);
+                          this->vcc);
 
         // check convergence and update eigenvalues
         ModuleBase::timer::tick("Diago_DavSubspace", "check_update");
@@ -500,126 +496,91 @@ void Diago_DavSubspace<T, Device>::diag_zhegvx(const int& nbase,
                                                T* scc,
                                                const int& nbase_x,
                                                std::vector<Real>* eigenvalue_iter,
-                                               T* vcc,
-                                               bool init,
-                                               bool is_subspace)
+                                               T* vcc)
 {
     ModuleBase::timer::tick("Diago_DavSubspace", "diag_zhegvx");
 
-    if (is_subspace == false)
+    if (this->diag_comm.rank == 0)
     {
-        if (this->diag_comm.rank == 0)
+        assert(nbase_x >= std::max(1, nbase));
+
+        std::vector<std::vector<T>> h_diag(nbase, std::vector<T>(nbase, cs.zero));
+        std::vector<std::vector<T>> s_diag(nbase, std::vector<T>(nbase, cs.zero));
+
+        for (size_t i = 0; i < nbase; i++)
         {
-            assert(nbase_x >= std::max(1, nbase));
-
-            std::vector<std::vector<T>> h_diag(nbase, std::vector<T>(nbase, cs.zero));
-            std::vector<std::vector<T>> s_diag(nbase, std::vector<T>(nbase, cs.zero));
-
-            for (size_t i = 0; i < nbase; i++)
+            for (size_t j = 0; j < nbase; j++)
             {
-                for (size_t j = 0; j < nbase; j++)
-                {
-                    h_diag[i][j] = hcc[i * this->nbase_x + j];
-                    s_diag[i][j] = scc[i * this->nbase_x + j];
-                }
+                h_diag[i][j] = hcc[i * this->nbase_x + j];
+                s_diag[i][j] = scc[i * this->nbase_x + j];
             }
+        }
 
-            if (this->device == base_device::GpuDevice)
-            {
+        if (this->device == base_device::GpuDevice)
+        {
 #if defined(__CUDA) || defined(__ROCM)
-                Real* eigenvalue_gpu = nullptr;
-                resmem_real_op()(this->ctx, eigenvalue_gpu, this->nbase_x);
+            Real* eigenvalue_gpu = nullptr;
+            resmem_real_op()(this->ctx, eigenvalue_gpu, this->nbase_x);
 
-                syncmem_var_h2d_op()(this->ctx,
-                                     this->cpu_ctx,
-                                     eigenvalue_gpu,
-                                     (*eigenvalue_iter).data(),
-                                     this->nbase_x);
+            syncmem_var_h2d_op()(this->ctx,
+                                    this->cpu_ctx,
+                                    eigenvalue_gpu,
+                                    (*eigenvalue_iter).data(),
+                                    this->nbase_x);
 
-                dnevx_op<T, Device>()(this->ctx, nbase, this->nbase_x, this->hcc, nband, eigenvalue_gpu, this->vcc);
+            dnevx_op<T, Device>()(this->ctx, nbase, this->nbase_x, this->hcc, nband, eigenvalue_gpu, this->vcc);
 
-                syncmem_var_d2h_op()(this->cpu_ctx,
-                                     this->ctx,
-                                     (*eigenvalue_iter).data(),
-                                     eigenvalue_gpu,
-                                     this->nbase_x);
+            syncmem_var_d2h_op()(this->cpu_ctx,
+                                    this->ctx,
+                                    (*eigenvalue_iter).data(),
+                                    eigenvalue_gpu,
+                                    this->nbase_x);
 
-                delmem_real_op()(this->ctx, eigenvalue_gpu);
+            delmem_real_op()(this->ctx, eigenvalue_gpu);
 #endif
-            }
-            else
-            {
-                if (init)
-                {
-                    dnevx_op<T, Device>()(this->ctx,
-                                          nbase,
-                                          this->nbase_x,
-                                          this->hcc,
-                                          nband,
-                                          (*eigenvalue_iter).data(),
-                                          this->vcc);
-                }
-                else
-                {
+        }
+        else
+        {
+            dngvx_op<T, Device>()(this->ctx,
+                                    nbase,
+                                    this->nbase_x,
+                                    this->hcc,
+                                    this->scc,
+                                    nband,
+                                    (*eigenvalue_iter).data(),
+                                    this->vcc);
+        }
 
-                    dngvx_op<T, Device>()(this->ctx,
-                                          nbase,
-                                          this->nbase_x,
-                                          this->hcc,
-                                          this->scc,
-                                          nband,
-                                          (*eigenvalue_iter).data(),
-                                          this->vcc);
-                }
+        // reset:
+        for (size_t i = 0; i < nbase; i++)
+        {
+            for (size_t j = 0; j < nbase; j++)
+            {
+                hcc[i * this->nbase_x + j] = h_diag[i][j];
+                scc[i * this->nbase_x + j] = s_diag[i][j];
             }
 
-            // reset:
-            for (size_t i = 0; i < nbase; i++)
+            for (size_t j = nbase; j < this->nbase_x; j++)
             {
-                for (size_t j = 0; j < nbase; j++)
-                {
-                    hcc[i * this->nbase_x + j] = h_diag[i][j];
-                    scc[i * this->nbase_x + j] = s_diag[i][j];
-                }
-
-                for (size_t j = nbase; j < this->nbase_x; j++)
-                {
-                    hcc[i * this->nbase_x + j] = cs.zero;
-                    hcc[j * this->nbase_x + i] = cs.zero;
-                    scc[i * this->nbase_x + j] = cs.zero;
-                    scc[j * this->nbase_x + i] = cs.zero;
-                }
+                hcc[i * this->nbase_x + j] = cs.zero;
+                hcc[j * this->nbase_x + i] = cs.zero;
+                scc[i * this->nbase_x + j] = cs.zero;
+                scc[j * this->nbase_x + i] = cs.zero;
             }
         }
+    }
 
 #ifdef __MPI
-        if (this->diag_comm.nproc > 1)
-        {
-            // vcc: nbase * nband
-            for (int i = 0; i < nband; i++)
-            {
-                MPI_Bcast(&vcc[i * this->nbase_x], nbase, MPI_DOUBLE_COMPLEX, 0, this->diag_comm.comm);
-            }
-            MPI_Bcast((*eigenvalue_iter).data(), nband, MPI_DOUBLE, 0, this->diag_comm.comm);
-        }
-#endif
-    }
-    else if (is_subspace == true)
+    if (this->diag_comm.nproc > 1)
     {
-        for (size_t m = 0; m < nband; m++)
+        // vcc: nbase * nband
+        for (int i = 0; i < nband; i++)
         {
-            (*eigenvalue_iter)[m] = get_real(hcc[m * this->nbase_x + m]);
-
-            vcc[m * this->nbase_x + m] = set_real_tocomplex(1.0);
+            MPI_Bcast(&vcc[i * this->nbase_x], nbase, MPI_DOUBLE_COMPLEX, 0, this->diag_comm.comm);
         }
-
-#ifdef __MPI
-        if (this->diag_comm.nproc > 1)
-        {
-            MPI_Bcast((*eigenvalue_iter).data(), this->n_band, MPI_DOUBLE, 0, this->diag_comm.comm);
-        }
-#endif
+        MPI_Bcast((*eigenvalue_iter).data(), nband, MPI_DOUBLE, 0, this->diag_comm.comm);
     }
+#endif
 
     ModuleBase::timer::tick("Diago_DavSubspace", "diag_zhegvx");
     return;
@@ -764,111 +725,10 @@ bool Diago_DavSubspace<T, Device>::test_exit_cond(const int& ntry, const int& no
     // In non-self consistent calculation, do until totally converged.
     const bool f2 = ((!scf && (notconv > 0)));
 
-    // if self consistent calculation, if not converged > 5,
-    // using diagH_subspace and cg method again. ntry++
+    // if self consistent calculation, if not converged > 5
     const bool f3 = ((scf && (notconv > 5)));
 
     return (f1 && (f2 || f3));
-}
-
-template <typename T, typename Device>
-void Diago_DavSubspace<T, Device>::diagH_subspace(T* psi_pointer, // [in] & [out] wavefunction
-                                                  Real* en,       // [out] eigenvalues
-                                                  const HPsiFunc hpsi_func,
-                                                  const int n_band,
-                                                  const int dmin,
-                                                  const int dmax)
-{
-    ModuleBase::TITLE("Diago_DavSubspace", "subspace");
-    ModuleBase::timer::tick("Diago_DavSubspace", "subspace");
-
-    const int nstart = n_band;
-    assert(n_band > 0);
-
-    T* hcc = nullptr;
-    T* scc = nullptr;
-    T* vcc = nullptr;
-    resmem_complex_op()(ctx, hcc, nstart * nstart, "DAV::hcc");
-    resmem_complex_op()(ctx, scc, nstart * nstart, "DAV::scc");
-    resmem_complex_op()(ctx, vcc, nstart * nstart, "DAV::vcc");
-    setmem_complex_op()(ctx, hcc, 0, nstart * nstart);
-    setmem_complex_op()(ctx, scc, 0, nstart * nstart);
-    setmem_complex_op()(ctx, vcc, 0, nstart * nstart);
-
-    T* hphi = nullptr;
-    resmem_complex_op()(ctx, hphi, nstart * dmax, "DAV::hphi");
-    setmem_complex_op()(ctx, hphi, 0, nstart * dmax);
-
-    {
-        // do hPsi for all bands
-        hpsi_func(hphi, psi_pointer, n_band, dmax, 0, nstart - 1);
-
-        gemm_op<T, Device>()(ctx,
-                             'C',
-                             'N',
-                             nstart,
-                             nstart,
-                             dmin,
-                             this->one,
-                             psi_pointer,
-                             dmax,
-                             hphi,
-                             dmax,
-                             this->zero,
-                             hcc,
-                             nstart);
-
-        gemm_op<T, Device>()(ctx,
-                             'C',
-                             'N',
-                             nstart,
-                             nstart,
-                             dmin,
-                             this->one,
-                             psi_pointer,
-                             dmax,
-                             psi_pointer,
-                             dmax,
-                             this->zero,
-                             scc,
-                             nstart);
-    }
-
-    if (GlobalV::NPROC_IN_POOL > 1)
-    {
-        Parallel_Reduce::reduce_pool(hcc, nstart * nstart);
-        Parallel_Reduce::reduce_pool(scc, nstart * nstart);
-    }
-
-    // after generation of H and S matrix, diag them
-    DiagoIterAssist<T, Device>::diagH_LAPACK(nstart, n_band, hcc, scc, nstart, en, vcc);
-
-    { // code block to calculate evc
-        gemm_op<T, Device>()(ctx,
-                             'N',
-                             'N',
-                             dmin,
-                             n_band,
-                             nstart,
-                             this->one,
-                             psi_pointer, // dmin * nstart
-                             dmax,
-                             vcc, // nstart * n_band
-                             nstart,
-                             this->zero,
-                             hphi,
-                             dmin);
-    }
-
-    matrixSetToAnother<T, Device>()(ctx, n_band, hphi, dmin, psi_pointer, dmax);
-
-    delmem_complex_op()(ctx, hphi);
-
-    delmem_complex_op()(ctx, hcc);
-    delmem_complex_op()(ctx, scc);
-    delmem_complex_op()(ctx, vcc);
-
-    ModuleBase::timer::tick("Diago_DavSubspace", "diagH_subspace");
 }
 
 namespace hsolver
