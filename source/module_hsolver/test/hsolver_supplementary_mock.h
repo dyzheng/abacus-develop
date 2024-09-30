@@ -1,5 +1,6 @@
 #pragma once
 #include "module_elecstate/elecstate.h"
+#include "module_elecstate/potentials/pot_local.h"
 
 namespace elecstate
 {
@@ -56,6 +57,8 @@ void ElecState::init_ks(Charge* chg_in, // pointer for class Charge
 {
     return;
 }
+
+double PotLocal::vl_of_0 = 0.0;
 
 } // namespace elecstate
 
