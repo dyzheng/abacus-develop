@@ -37,7 +37,7 @@ class Diago_DavSubspace : public DiagH<T, Device>
              T* psi_in,
              const int psi_in_dmax,
              Real* eigenvalue_in,
-             const std::vector<bool>& is_occupied,
+             const double* ethr_band,
              const bool& scf_type);
 
   private:
@@ -110,13 +110,6 @@ class Diago_DavSubspace : public DiagH<T, Device>
                  T* scc,
                  T* vcc);
 
-    void diagH_subspace(T* psi_pointer, // [in] & [out] wavefunction
-                        Real* en,       // [out] eigenvalues
-                        const HPsiFunc hpsi_func,
-                        const int n_band,
-                        const int dmin,
-                        const int dmax);
-
     // void diagH_LAPACK(const int nstart,
     //                   const int nbands,
     //                   const T* hcc,
@@ -131,15 +124,13 @@ class Diago_DavSubspace : public DiagH<T, Device>
                      T* scc,
                      const int& nbase_x,
                      std::vector<Real>* eigenvalue_iter,
-                     T* vcc,
-                     bool init,
-                     bool is_subspace);
+                     T* vcc);
 
     int diag_once(const HPsiFunc& hpsi_func,
                   T* psi_in,
                   const int psi_in_dmax,
                   Real* eigenvalue_in,
-                  const std::vector<bool>& is_occupied);
+                  const double* ethr_band);
 
     bool test_exit_cond(const int& ntry, const int& notconv, const bool& scf);
 

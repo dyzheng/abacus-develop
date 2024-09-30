@@ -48,7 +48,6 @@ class HSolverPW
                psi::Psi<T, Device>& psi,
                elecstate::ElecState* pes,
                double* out_eigenvalues,
-               const std::vector<bool>& is_occupied_in,
                const int rank_in_pool_in,
                const int nproc_in_pool_in,
                const bool skip_charge);
@@ -91,6 +90,11 @@ class HSolverPW
     int rank_in_pool = 0;
     int nproc_in_pool = 1;
 
+    /// @brief calculate the threshold for iterative-diagonalization for each band
+    void cal_ethr_band(const double& wk, const double* wg, const double& ethr, std::vector<double>& ethrs);
+
+    std::vector<double> ethr_band;
+                  
 #ifdef USE_PAW
     void paw_func_in_kloop(const int ik);
 
