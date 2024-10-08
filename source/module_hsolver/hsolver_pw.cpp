@@ -214,6 +214,8 @@ void HSolverPW<T, Device>::cal_ethr_band(const double& wk, const double* wg, con
 {
     if(wk > 0.0)
     {
+        // Note: the idea of threshold for unoccupied bands (1e-5) comes from QE
+        // In ABACUS, We applied a smoothing process to this truncation to avoid abrupt changes in energy errors between different bands.
         const double ethr_unocc = std::max(1e-5, ethr);
         for (int i = 0; i < ethrs.size(); i++)
         {
@@ -223,7 +225,7 @@ void HSolverPW<T, Device>::cal_ethr_band(const double& wk, const double* wg, con
                 ethrs[i] = ethr; 
             }
             else if(band_weight > 1e-5)
-            {// similar energy difference for difsferent bands
+            {// similar energy difference for different bands when band_weight in range [1e-5, 1e-2]
                 ethrs[i] = std::min(ethr_unocc, ethr / band_weight);
             }
             else
@@ -282,10 +284,16 @@ void HSolverPW<T, Device>::solve(hamilt::Hamilt<T, Device>* pHamilt,
 
         // template add precondition calculating here
         update_precondition(precondition, ik, this->wfc_basis->npwk[ik]);
-        this->cal_ethr_band(pes->klist->wk[ik],
+        
+        // only dav_subspace method used smooth threshold for all bands now,
+        // for other methods, this trick can be added in the future to accelerate calculation without accuracy loss.
+        if (this->method == "dav_subspace") 
+        {
+            this->cal_ethr_band(pes->klist->wk[ik],
                             &pes->wg(ik, 0),
                             DiagoIterAssist<T, Device>::PW_DIAG_THR,
                             ethr_band);
+        }
 
 #ifdef USE_PAW
         this->call_paw_cell_set_currentk(ik);
