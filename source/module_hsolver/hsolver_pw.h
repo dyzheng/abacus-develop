@@ -63,7 +63,7 @@ class HSolverPW
     void updatePsiK(hamilt::Hamilt<T, Device>* pHamilt, psi::Psi<T, Device>& psi, const int ik);
 
     // calculate the precondition array for diagonalization in PW base
-    void update_precondition(std::vector<Real>& h_diag, const int ik, const int npw);
+    void update_precondition(std::vector<Real>& h_diag, const int ik, const int npw, const Real vl_of_0);
 
     void output_iterInfo();
 

@@ -15,7 +15,6 @@
 #include "module_hsolver/diago_dav_subspace.h"
 #include "module_hsolver/diago_david.h"
 #include "module_hsolver/diago_iter_assist.h"
-#include "module_elecstate/potentials/pot_local.h"
 
 #include <algorithm>
 #include <vector>
@@ -212,19 +211,23 @@ void HSolverPW<T, Device>::paw_func_after_kloop(psi::Psi<T, Device>& psi, elecst
 template <typename T, typename Device>
 void HSolverPW<T, Device>::cal_ethr_band(const double& wk, const double* wg, const double& ethr, std::vector<double>& ethrs)
 {
+    // threshold for classifying occupied and unoccupied bands
+    const double occ_threshold = 1e-2;
+    // diagonalization threshold limitation for unoccupied bands
+    const double ethr_limit = 1e-5;
     if(wk > 0.0)
     {
         // Note: the idea of threshold for unoccupied bands (1e-5) comes from QE
         // In ABACUS, We applied a smoothing process to this truncation to avoid abrupt changes in energy errors between different bands.
-        const double ethr_unocc = std::max(1e-5, ethr);
+        const double ethr_unocc = std::max(ethr_limit, ethr);
         for (int i = 0; i < ethrs.size(); i++)
         {
             double band_weight = wg[i] / wk;
-            if (band_weight > 1e-2)
+            if (band_weight > occ_threshold)
             {
                 ethrs[i] = ethr; 
             }
-            else if(band_weight > 1e-5)
+            else if(band_weight > ethr_limit)
             {// similar energy difference for different bands when band_weight in range [1e-5, 1e-2]
                 ethrs[i] = std::min(ethr_unocc, ethr / band_weight);
             }
@@ -283,7 +286,7 @@ void HSolverPW<T, Device>::solve(hamilt::Hamilt<T, Device>* pHamilt,
         this->updatePsiK(pHamilt, psi, ik);
 
         // template add precondition calculating here
-        update_precondition(precondition, ik, this->wfc_basis->npwk[ik]);
+        update_precondition(precondition, ik, this->wfc_basis->npwk[ik], Real(pes->pot->get_vl_of_0()));
         
         // only dav_subspace method used smooth threshold for all bands now,
         // for other methods, this trick can be added in the future to accelerate calculation without accuracy loss.
@@ -589,7 +592,7 @@ void HSolverPW<T, Device>::hamiltSolvePsiK(hamilt::Hamilt<T, Device>* hm,
 }
 
 template <typename T, typename Device>
-void HSolverPW<T, Device>::update_precondition(std::vector<Real>& h_diag, const int ik, const int npw)
+void HSolverPW<T, Device>::update_precondition(std::vector<Real>& h_diag, const int ik, const int npw, const Real vl_of_0)
 {
     h_diag.assign(h_diag.size(), 1.0);
     int precondition_type = 2;
@@ -616,7 +619,7 @@ void HSolverPW<T, Device>::update_precondition(std::vector<Real>& h_diag, const 
 
             if (this->method == "dav_subspace")
             {
-                h_diag[ig] = g2kin + Real(elecstate::PotLocal::get_vl_of_0());
+                h_diag[ig] = g2kin + vl_of_0;
             }
             else
             {
