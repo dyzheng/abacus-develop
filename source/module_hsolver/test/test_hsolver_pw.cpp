@@ -84,6 +84,7 @@ class TestHSolverPW : public ::testing::Test {
 TEST_F(TestHSolverPW, solve) {
     // initial memory and data
     elecstate_test.ekb.create(1, 2);
+    elecstate_test.pot = new elecstate::Potential;
     this->ekb_f.resize(2);
     psi_test_cf.resize(1, 2, 3);
     psi_test_cd.resize(1, 2, 3);
@@ -216,6 +217,7 @@ TEST_F(TestHSolverPW, SolveLcaoInPW) {
     pwbk.nks = 1;
     // initial memory and data
     elecstate_test.ekb.create(1, 2);
+    elecstate_test.pot = new elecstate::Potential;
     // 1 kpt, 2 bands, 3 basis
     psi_test_cf.resize(1, 2, 3);
     psi_test_cd.resize(1, 2, 3);
