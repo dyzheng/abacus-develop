@@ -497,7 +497,7 @@ void DensityMatrix<std::complex<double>, double>::cal_DMR()
                 throw std::string("Atom-pair not belong this process");
             }
             std::vector<std::complex<double>> tmp_DMR;
-            if (PARAM.inp.nspin == 4)
+            if (GlobalV::NSPIN == 4)
             {
                 tmp_DMR.resize(tmp_ap.get_size());
             }
