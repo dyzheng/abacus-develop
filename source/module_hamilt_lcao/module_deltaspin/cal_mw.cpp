@@ -132,7 +132,8 @@ void SpinConstrain<std::complex<double>>::cal_Mi_pw()
         const int npol = psi_t->npol;
         for(int ik = 0; ik < nks; ik++)
         {
-            psi_pointer = psi_t->get_pointer(ik);
+            psi_t->fix_k(ik);
+            psi_pointer = psi_t->get_pointer();
             onsite_p->tabulate_atomic(ik); // tabulate for each atom at each k-point
             // std::cout << __FILE__ << ":" << __LINE__ << " nbands = " << nbands << std::endl;
             onsite_p->overlap_proj_psi(nbands * npol, psi_pointer);
@@ -177,7 +178,8 @@ void SpinConstrain<std::complex<double>>::cal_Mi_pw()
         const int npol = psi_t->npol;
         for(int ik = 0; ik < nks; ik++)
         {
-            psi_pointer = psi_t->get_pointer(ik);
+            psi_t->fix_k(ik);
+            psi_pointer = psi_t->get_pointer();
             onsite_p->tabulate_atomic(ik); // tabulate for each atom at each k-point
             // std::cout << __FILE__ << ":" << __LINE__ << " nbands = " << nbands << std::endl;
             onsite_p->overlap_proj_psi(nbands * npol, psi_pointer);

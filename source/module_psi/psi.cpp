@@ -226,8 +226,7 @@ template <typename T, typename Device> T* Psi<T, Device>::get_pointer(const int&
 {
     assert(ikb >= 0);
     assert(this->k_first ? ikb < this->nbands : ikb < this->nk);
-    T* p = this->k_first ? &this->psi[ikb * this->nbands * this->nbasis] : &this->psi[ikb * this->nk * this->nbasis];
-    return p;
+    return &this->psi_current[ikb * this->nbasis];
 }
 
 template <typename T, typename Device> const int* Psi<T, Device>::get_ngk_pointer() const
