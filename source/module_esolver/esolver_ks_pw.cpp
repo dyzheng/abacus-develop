@@ -651,23 +651,6 @@ void ESolver_KS_PW<T, Device>::iter_init(const int istep, const int iter) {
         }
         dftu->output();
     }
-
-    // run the inner lambda loop to contrain atomic moments with the DeltaSpin method
-    if (PARAM.inp.sc_mag_switch)
-    {
-        SpinConstrain<std::complex<double>>& sc = SpinConstrain<std::complex<double>>::getScInstance();
-        if(!sc.mag_converged() && this->drho>0 && this->drho < PARAM.inp.sc_scf_thr)
-        {
-            // optimize lambda to get target magnetic moments, but the lambda is not near target
-            sc.run_lambda_loop(iter-1);
-            sc.set_mag_converged(true);
-        }
-        else if(sc.mag_converged())
-        {
-            // optimize lambda to get target magnetic moments, but the lambda is not near target
-            sc.run_lambda_loop(iter-1);
-        }
-    }
 }
 
 // Temporary, it should be replaced by hsolver later.
@@ -691,10 +674,32 @@ void ESolver_KS_PW<T, Device>::hamilt2density(const int istep,
         hsolver::DiagoIterAssist<T, Device>::PW_DIAG_NMAX
             = GlobalV::PW_DIAG_NMAX;
 
-        this->phsol->solve(this->p_hamilt,      // hamilt::Hamilt<T, Device>* pHamilt,
-            this->kspw_psi[0],   // psi::Psi<T, Device>& psi,
-            this->pelec,         // elecstate::ElecState<T, Device>* pelec,
-            GlobalV::KS_SOLVER); // const std::string method_in,
+        // run the inner lambda loop to contrain atomic moments with the DeltaSpin method
+        bool skip_solve = false;
+        if (PARAM.inp.sc_mag_switch)
+        {
+            SpinConstrain<std::complex<double>>& sc = SpinConstrain<std::complex<double>>::getScInstance();
+            if(!sc.mag_converged() && this->drho>0 && this->drho < PARAM.inp.sc_scf_thr)
+            {
+                // optimize lambda to get target magnetic moments, but the lambda is not near target
+                sc.run_lambda_loop(iter-1);
+                sc.set_mag_converged(true);
+                skip_solve = true;
+            }
+            else if(sc.mag_converged())
+            {
+                // optimize lambda to get target magnetic moments, but the lambda is not near target
+                sc.run_lambda_loop(iter-1);
+                skip_solve = true;
+            }
+        }
+        if(!skip_solve)
+        {
+            this->phsol->solve(this->p_hamilt,      // hamilt::Hamilt<T, Device>* pHamilt,
+                this->kspw_psi[0],   // psi::Psi<T, Device>& psi,
+                this->pelec,         // elecstate::ElecState<T, Device>* pelec,
+                GlobalV::KS_SOLVER); // const std::string method_in,
+        }
 
         if (PARAM.inp.out_bandgap)
         {

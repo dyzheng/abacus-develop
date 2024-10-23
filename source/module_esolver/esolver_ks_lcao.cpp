@@ -683,39 +683,6 @@ void ESolver_KS_LCAO<TK, TR>::iter_init(const int istep, const int iter)
         this->p_hamilt->refresh();
     }
 
-    // run the inner lambda loop to contrain atomic moments with the DeltaSpin method
-    if (PARAM.inp.sc_mag_switch)
-    {
-        SpinConstrain<TK>& sc = SpinConstrain<TK>::getScInstance();
-        if(!sc.mag_converged() && this->drho>0 && this->drho < PARAM.inp.sc_scf_thr)
-        {
-            // optimize lambda to get target magnetic moments, but the lambda is not near target
-            sc.run_lambda_loop(iter-1);
-            // calculate the near target magnetic density
-            //this->hamilt2density(istep, iter, /*useless value*/0.0);
-            // revert rho to rho_save
-            //this->pelec->charge->revert_rho(0);
-            // update potential from the new charge density and magnetic density
-            //this->update_pot(istep, iter);
-            // recalculate the Hamiltonian of real space
-            //if(GlobalV::VL_IN_H)
-            //{
-            //    this->GK.renew();
-            //    this->p_hamilt->refresh();
-            //}
-            // optimize lambda to get target magnetic moments, and the lambda is near target
-            //sc.run_lambda_loop(iter-1);
-            sc.set_mag_converged(true);
-            // init mixing for the next iteration
-            //this->p_chgmix->init_mixing(); //mixing_restart is equal to sc_scf_thr, skip this line
-        }
-        else if(sc.mag_converged())
-        {
-            // optimize lambda to get target magnetic moments, but the lambda is not near target
-            sc.run_lambda_loop(iter-1);
-        }
-
-    }
 }
 
 //------------------------------------------------------------------------------
@@ -756,7 +723,29 @@ void ESolver_KS_LCAO<TK, TR>::hamilt2density(int istep, int iter, double ethr)
         this->pelec->f_en.eband = 0.0;
         this->pelec->f_en.demet = 0.0;
 
-        this->phsol->solve(this->p_hamilt, this->psi[0], this->pelec, GlobalV::KS_SOLVER);
+        // run the inner lambda loop to contrain atomic moments with the DeltaSpin method
+        bool skip_solve = false;
+        if (PARAM.inp.sc_mag_switch)
+        {
+            SpinConstrain<TK>& sc = SpinConstrain<TK>::getScInstance();
+            if(!sc.mag_converged() && this->drho>0 && this->drho < PARAM.inp.sc_scf_thr)
+            {
+                // optimize lambda to get target magnetic moments, but the lambda is not near target
+                sc.run_lambda_loop(iter-1);
+                sc.set_mag_converged(true);
+                skip_solve = true;
+            }
+            else if(sc.mag_converged())
+            {
+                // optimize lambda to get target magnetic moments, but the lambda is not near target
+                sc.run_lambda_loop(iter-1);
+                skip_solve = true;
+            }
+        }
+        if(!skip_solve)
+        {
+            this->phsol->solve(this->p_hamilt, this->psi[0], this->pelec, GlobalV::KS_SOLVER);
+        }
 
         if (PARAM.inp.out_bandgap)
         {

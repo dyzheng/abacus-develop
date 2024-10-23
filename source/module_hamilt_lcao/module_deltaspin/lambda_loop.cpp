@@ -150,12 +150,13 @@ void SpinConstrain<std::complex<double>>::run_lambda_loop(int outer_step)
         {
             where_fill_scalar_else_2d(this->constrain_, 0, zero, delta_lambda, delta_lambda);
             add_scalar_multiply_2d(initial_lambda, delta_lambda, one, this->lambda_);
-            this->cal_mw_from_lambda(i_step);
+            this->cal_mw_from_lambda(i_step, delta_lambda.data());
             new_spin = this->Mi_;
             bool GradLessThanBound = this->check_gradient_decay(new_spin, spin, delta_lambda, dnu_last_step);
             if (i_step >= this->nsc_min_ && GradLessThanBound)
             {
                 add_scalar_multiply_2d(initial_lambda, dnu_last_step, one, this->lambda_);
+                this->update_psi_charge(dnu_last_step.data());
 #ifdef __MPI
 		        duration = (double)(MPI_Wtime() - iterstart);
 #else
@@ -199,6 +200,7 @@ void SpinConstrain<std::complex<double>>::run_lambda_loop(int outer_step)
         if (this->check_rms_stop(outer_step, i_step, rms_error, duration, inner_loop_duration))
         {
             //add_scalar_multiply_2d(initial_lambda, dnu_last_step, 1.0, this->lambda_);
+            this->update_psi_charge(dnu_last_step.data());
             break;
         }
 #ifdef __MPI
@@ -220,7 +222,7 @@ void SpinConstrain<std::complex<double>>::run_lambda_loop(int outer_step)
 
         where_fill_scalar_else_2d(this->constrain_, 0, zero, delta_lambda, delta_lambda);
         add_scalar_multiply_2d(initial_lambda, delta_lambda, one, this->lambda_);
-        this->cal_mw_from_lambda(i_step);
+        this->cal_mw_from_lambda(i_step, delta_lambda.data());
 
         spin_plus = this->Mi_;
 

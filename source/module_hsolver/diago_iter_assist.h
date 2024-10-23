@@ -35,11 +35,23 @@ class DiagoIterAssist
                                Real* en,
                                int n_band = 0);
     
-    static void diag_responce(hamilt::Hamilt<T, Device>* pHamilt,
-                              const psi::Psi<T, Device>& psi, 
+    static void cal_hs_subspace(const hamilt::Hamilt<T, Device>* pHamilt, // hamiltonian operator carrier
+                                                const psi::Psi<T, Device>& psi,     // [in] wavefunction
+                                                T *hcc, 
+                                                T *scc);
+
+    static void diag_responce(const T* hcc,
+                              const T* scc,
+                              const int nbands,
                               const T* mat_in, 
                               T* mat_out, 
                               int mat_col, 
+                              Real* en);
+    
+    static void diag_subspace_psi(const T* hcc,
+                              const T* scc,
+                              const int dim_subspace,
+                              psi::Psi<T, Device>& evc,
                               Real* en);
 
     /// @brief use LAPACK to diagonalize the Hamiltonian matrix

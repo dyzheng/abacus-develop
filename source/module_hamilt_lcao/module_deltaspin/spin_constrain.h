@@ -51,7 +51,7 @@ public:
 
   ModuleBase::matrix cal_MW_k(const std::vector<std::vector<std::complex<double>>>& dm);
 
-  void cal_mw_from_lambda(int i_step);
+  void cal_mw_from_lambda(int i_step, const ModuleBase::Vector3<double>* delta_lambda = nullptr);
 
   /**
    * @brief calculate the energy of \sum_i \lambda_i * Mi
@@ -65,6 +65,12 @@ public:
   std::vector<std::vector<std::vector<double>>> convert(const ModuleBase::matrix& orbMulP);
 
   void run_lambda_loop(int outer_step);
+
+  /// @brief update the charge density for LCAO base with new lambda
+  /// update the charge density and psi for PW base with new lambda
+  void update_psi_charge(const ModuleBase::Vector3<double>* delta_lambda);
+
+  void calculate_delta_hcc(std::complex<double>* h_tmp, const std::complex<double>* becp_k, const ModuleBase::Vector3<double>* delta_lambda, const int nbands, const int nkb, const int* nh_iat);
 
   /// lambda loop helper functions
   bool check_rms_stop(int outer_step, int i_step, double rms_error, double duration, double total_duration);
@@ -267,6 +273,10 @@ public:
     hamilt::Operator<FPTYPE>* p_operator = nullptr;
     /// @brief if atomic magnetic moment is converged
     bool is_Mi_converged = false;
+
+    FPTYPE* sub_h_save;
+    FPTYPE* sub_s_save;
+    FPTYPE* becp_save;
 };
 
 

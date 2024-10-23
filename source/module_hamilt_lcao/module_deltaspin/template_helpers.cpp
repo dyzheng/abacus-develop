@@ -9,7 +9,7 @@ void SpinConstrain<double>::cal_h_lambda(std::complex<double>* h_lambda,
 }
 
 template <>
-void SpinConstrain<double>::cal_mw_from_lambda(int i_step)
+void SpinConstrain<double>::cal_mw_from_lambda(int i_step, const ModuleBase::Vector3<double>* delta_lambda)
 {
 }
 
