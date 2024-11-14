@@ -228,7 +228,7 @@ void XC_Functional::gradcorr(double& etxc,
         // rho' has been calculated in rhotmp1, rhog' has been calculated in rhogsum1, \nabla rho' has been calculated
         // in gdr1
         tmp_recip = new std::complex<double>[rhopw->npw];
-        gdr_mag = new ModuleBase::Vector3<double>[rhopw->nrxx];
+        gdr_mag = new ModuleBase::Vector3<double>[rhopw->nrxx * 3];
         for (int ir = 0; ir < rhopw->nrxx; ir++)
         {
             gdr_mag[ir] = gdr1[ir];
@@ -238,17 +238,17 @@ void XC_Functional::gradcorr(double& etxc,
         for (int is = 1; is < 4; is++)
         {
             rhopw->real2recip(chr->rho[is], tmp_recip);
-            XC_Functional::grad_rho(tmp_recip, gdr_mag, rhopw, ucell->tpiba);
+            auto* gdr_mag_is = gdr_mag + (is - 1) * rhopw->nrxx;
+            XC_Functional::grad_rho(tmp_recip, gdr_mag_is, rhopw, ucell->tpiba);
             const double* mag_part_is = mag_part.data() + (is-1) * rhopw->nrxx;
             for (int ir = 0; ir < rhopw->nrxx; ir++)
             {
-                const ModuleBase::Vector3<double> grad_is = 0.5 * gdr_mag[ir] * mag_part_is[ir];
+                const ModuleBase::Vector3<double> grad_is = 0.5 * gdr_mag_is[ir] * mag_part_is[ir];
                 gdr1[ir] += grad_is;
                 gdr2[ir] -= grad_is;
             }
         }
         delete[] tmp_recip;
-        delete[] gdr_mag;
         }
         else
         {
@@ -533,8 +533,19 @@ void XC_Functional::gradcorr(double& etxc,
                         v(1, ir) = v(1, ir) + ModuleBase::e2 * (v1xdw + v1cdw);
 
                         // h contains D(rho*Exc)/D(|grad rho|) * (grad rho) / |grad rho|
-                        h1[ir] = ModuleBase::e2 * ((v2xup + v2cup) * gdr1[ir] + v2cud * gdr2[ir]);
-                        h2[ir] = ModuleBase::e2 * ((v2xdw + v2cdw) * gdr2[ir] + v2cud * gdr1[ir]);
+                        //h1[ir] = ModuleBase::e2 * ((v2xup + v2cup) * gdr1[ir] + v2cud * gdr2[ir]);
+                        //h2[ir] = ModuleBase::e2 * ((v2xdw + v2cdw) * gdr2[ir] + v2cud * gdr1[ir]);
+                        if(GlobalV::NSPIN == 4 && PARAM.inp.gga_grad == 2)
+                        {
+                            h2[ir].x = 0.5 * ModuleBase::e2 * (v2xup + v2cup + v2xdw + v2cdw + 2 * v2cud);
+                            h2[ir].y = 0.5 * ModuleBase::e2 * (v2xup + v2cup - v2xdw - v2cdw);
+                            h2[ir].z = 0.5 * ModuleBase::e2 * (v2xup + v2cup + v2xdw + v2cdw - 2 * v2cud);
+                        }
+                        else
+                        {
+                            h1[ir] = ModuleBase::e2 * ((v2xup + v2cup) * gdr1[ir] + v2cud * gdr2[ir]);
+                            h2[ir] = ModuleBase::e2 * ((v2xdw + v2cdw) * gdr2[ir] + v2cud * gdr1[ir]);
+                        }
 
                         local_vtxcgc
                             = local_vtxcgc + ModuleBase::e2 * (v1xup + v1cup) * (rhotmp1[ir] - chr->rho_core[ir] * fac);
@@ -599,10 +610,10 @@ void XC_Functional::gradcorr(double& etxc,
         ModuleBase::Vector3<double>* tmp_h = new ModuleBase::Vector3<double>[rhopw->nrxx];
         for (int ir = 0; ir < rhopw->nrxx; ir++)
         {
-            tmp_h[ir] = 0.5 * (h1[ir] + h2[ir]);
+            h1[ir] = h2[ir].x * 0.5 * (gdr1[ir] + gdr2[ir]) + h2[ir].y * 0.5 * (gdr1[ir] - gdr2[ir]);
             dh1[ir] = 0.0;
         }
-        XC_Functional::grad_dot(tmp_h, dh, rhopw, ucell->tpiba);
+        XC_Functional::grad_dot(h1, dh, rhopw, ucell->tpiba);
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static, 1024)
 #endif
@@ -620,35 +631,23 @@ void XC_Functional::gradcorr(double& etxc,
         }
         vtxcgc -= sum;
 
+        sum = 0.0;
         for(int is=1;is<4;is++)
         {
             const double* mag_part_is = &mag_part[(is - 1) * rhopw->nrxx];
+            auto* gdr_mag_is = gdr_mag + (is - 1) * rhopw->nrxx;
             for (int ir = 0; ir < rhopw->nrxx; ir++)
             {
-                tmp_h[ir] = 0.5 * (h1[ir] - h2[ir]) * mag_part_is[ir];
+                tmp_h[ir] = (h2[ir].z * 0.5 * (gdr1[ir] - gdr2[ir]) + h2[ir].y * 0.5 * (gdr1[ir] + gdr2[ir])) * mag_part_is[ir];
             }
             XC_Functional::grad_dot(tmp_h, dh, rhopw, ucell->tpiba);
             for(int ir=0;ir<rhopw->nrxx;ir++)
             {
-                dh1[ir] += dh[ir] * mag_part_is[ir];
+                //dh1[ir] += dh[ir] * mag_part_is[ir];
+                v(is,ir) -= dh[ir];
+                sum += dh[ir] * chr->rho[is][ir];
             }
         }
-        for(int is=1;is<4;is++)
-        {
-            const double* mag_part_is = &mag_part[(is - 1) * rhopw->nrxx];
-            for(int ir=0;ir<rhopw->nrxx;ir++)
-            {
-                v(is,ir) -= dh1[ir] * mag_part_is[ir];
-            }
-        }
-        sum = 0.0;
-#ifdef _OPENMP
-#pragma omp parallel for reduction(+ : sum) schedule(static, 256)
-#endif
-                for (int ir = 0; ir < rhopw->nrxx; ir++)
-                {
-                    sum += dh1[ir] * (rhotmp1[ir] - rhotmp2[ir]);
-                }
                 vtxcgc -= sum;
 
         delete[] dh;
@@ -767,6 +766,10 @@ void XC_Functional::gradcorr(double& etxc,
     delete[] rhotmp1;
     delete[] rhogsum1;
     delete[] gdr1;
+    if(GlobalV::NSPIN == 4 && (GlobalV::DOMAG || GlobalV::DOMAG_Z))
+    {
+        delete[] gdr_mag;
+    }
     if (!is_stress)
     {
         delete[] h1;
