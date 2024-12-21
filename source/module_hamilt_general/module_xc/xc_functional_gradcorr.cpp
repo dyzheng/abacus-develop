@@ -622,6 +622,8 @@ void XC_Functional::gradcorr(double& etxc,
         }
         vtxcgc -= sum;
 
+        sum = 0.0;
+
         for(int is=1;is<4;is++)
         {
             const double* mag_part_is = &mag_part[(is - 1) * rhopw->nrxx];
@@ -632,10 +634,23 @@ void XC_Functional::gradcorr(double& etxc,
             XC_Functional::grad_dot(tmp_h, dh, rhopw, ucell->tpiba);
             for(int ir=0;ir<rhopw->nrxx;ir++)
             {
-                dh1[ir] += dh[ir] * mag_part_is[ir];
+                //double v_is_ir = 0.0;
+                //double m_norm = rhotmp1[ir] - rhotmp2[ir];
+                //if(m_norm > epsr)
+                //for(int t=0;t<3;t++)
+                //{
+                    //v_is_ir += 0.5 * (gdr_mag[ir + (is-1) * rhopw->nrxx][t] / m_norm * (h1[ir] + h2[ir])[t] - mag_part_is[ir] / m_norm * (h1[ir] - h2[ir])[t] * (gdr1[ir][t] - gdr2[ir][t])); 
+                    //std::cout<<__FILE__<<__LINE__<<" "<<is<<" "<<ir<<" "<<t<<" "<<v_is_ir<<std::endl;
+                //}
+                //std::cout<<__FILE__<<__LINE__<<" "<<is<<" "<<ir<<" "<<v_is_ir<<" "<<dh[ir]<<std::endl;
+                //v_is_ir -= dh[ir];
+                //v(is,ir) += v_is_ir;
+                v(is,ir) -= dh[ir];
+                sum -= dh[ir] * chr->rho[is][ir];
+                //dh1[ir] += dh[ir] * mag_part_is[ir];
             }
         }
-        for(int is=1;is<4;is++)
+        /*for(int is=1;is<4;is++)
         {
             const double* mag_part_is = &mag_part[(is - 1) * rhopw->nrxx];
             for(int ir=0;ir<rhopw->nrxx;ir++)
@@ -643,15 +658,14 @@ void XC_Functional::gradcorr(double& etxc,
                 v(is,ir) -= dh1[ir] * mag_part_is[ir];
             }
         }
-        sum = 0.0;
 #ifdef _OPENMP
 #pragma omp parallel for reduction(+ : sum) schedule(static, 256)
 #endif
                 for (int ir = 0; ir < rhopw->nrxx; ir++)
                 {
                     sum += dh1[ir] * (rhotmp1[ir] - rhotmp2[ir]);
-                }
-                vtxcgc -= sum;
+                }*/
+        vtxcgc += sum;
 
         delete[] dh;
         delete[] dh1;
