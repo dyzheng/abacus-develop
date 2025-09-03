@@ -113,13 +113,13 @@ public:
 
   public:
     template <typename FPTYPE>
-    void real2recip(const FPTYPE* in,
+    void real2recip(FPTYPE* in,
                     std::complex<FPTYPE>* out,
                     const int ik,
                     const bool add = false,
                     const FPTYPE factor = 1.0) const; // in:(nplane,nx*ny)  ; out(nz, ns)
     template <typename FPTYPE>
-    void real2recip(const std::complex<FPTYPE>* in,
+    void real2recip(std::complex<FPTYPE>* in,
                     std::complex<FPTYPE>* out,
                     const int ik,
                     const bool add = false,
@@ -139,7 +139,7 @@ public:
 
     template <typename FPTYPE, typename Device>
     void real_to_recip(const Device* ctx,
-                       const std::complex<FPTYPE>* in,
+                       std::complex<FPTYPE>* in,
                        std::complex<FPTYPE>* out,
                        const int ik,
                        const bool add = false,
@@ -152,6 +152,28 @@ public:
                        const bool add = false,
                        const FPTYPE factor = 1.0) const; // in:(nz, ns)  ; out(nplane,nx*ny)
 
+#if defined(__CUDA) || defined(__ROCM)
+    template <typename FPTYPE, typename Device>
+    void real_to_recip_batch(const Device* ctx,
+                       std::complex<FPTYPE>* in,
+                       const int ld_in,
+                       std::complex<FPTYPE>* out,
+                       const int ld_out,
+                       const int ik,
+                       const int batchSize,
+                       const bool add = false,
+                       const FPTYPE factor = 1.0) const; // in:(nplane,nx*ny)  ; out(nz, ns)
+    template <typename FPTYPE, typename Device>
+    void recip_to_real_batch(const Device* ctx,
+                       const std::complex<FPTYPE>* in,
+                       const int ld_in,
+                       std::complex<FPTYPE>* out,
+                       const int ld_out,
+                       const int ik,
+                       const int batchSize,
+                       const bool add = false,
+                       const FPTYPE factor = 1.0)const; // in:(nz, ns)  ; out(nplane,nx*ny)
+#endif
   public:
     //operator:
     //get (G+K)^2:

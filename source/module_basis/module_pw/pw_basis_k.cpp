@@ -84,7 +84,7 @@ void PW_Basis_K:: initparameters(
     this->xprime = xprime_in;
     this->fftny = this->ny;
     this->fftnx = this->nx;
-    if (this->gamma_only)   
+    if (this->gamma_only)
     {
         if(this->xprime) this->fftnx = int(this->nx / 2) + 1;
         else            this->fftny = int(this->ny / 2) + 1;
@@ -125,7 +125,7 @@ void PW_Basis_K::setupIndGk()
         int ng = 0;
         for (int ig = 0; ig < this->npw ; ig++)
         {
-            const double gk2 = this->cal_GplusK_cartesian(ik, ig).norm2();       
+            const double gk2 = this->cal_GplusK_cartesian(ik, ig).norm2();
             if (gk2 <= this->gk_ecut)
             {
                 ++ng;
@@ -138,7 +138,7 @@ void PW_Basis_K::setupIndGk()
             this->npwk_max = ng;
         }
     }
-    
+
 
     //get igl2isz_k and igl2ig_k
     if(this->npwk_max <= 0) return;
@@ -149,7 +149,7 @@ void PW_Basis_K::setupIndGk()
         int igl = 0;
         for (int ig = 0; ig < this->npw ; ig++)
         {
-            const double gk2 = this->cal_GplusK_cartesian(ik, ig).norm2();       
+            const double gk2 = this->cal_GplusK_cartesian(ik, ig).norm2();
             if (gk2 <= this->gk_ecut)
             {
                 this->igl2isz_k[ik*npwk_max + igl] = this->ig2isz[ig];
@@ -167,7 +167,7 @@ void PW_Basis_K::setupIndGk()
     return;
 }
 
-/// 
+///
 /// distribute plane wave basis and real-space grids to different processors
 /// set up maps for fft and create arrays for MPI_Alltoall
 /// set up ffts
@@ -183,6 +183,10 @@ void PW_Basis_K::setuptransform()
     if(this->xprime)    this->ft.initfft(this->nx,this->ny,this->nz,this->lix,this->rix,this->nst,this->nplane,this->poolnproc,this->gamma_only, this->xprime);
     else                this->ft.initfft(this->nx,this->ny,this->nz,this->liy,this->riy,this->nst,this->nplane,this->poolnproc,this->gamma_only, this->xprime);
     this->ft.setupFFT();
+#if defined(__CUDA) || defined(__ROCM)
+    this->batched_ft_float.initFFT(this->nx, this->ny, this->nz);
+    this->batched_ft_double.initFFT(this->nx, this->ny, this->nz);
+#endif
     ModuleBase::timer::tick(this->classname, "setuptransform");
 }
 

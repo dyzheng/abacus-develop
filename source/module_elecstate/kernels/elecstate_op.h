@@ -7,7 +7,7 @@
 
 namespace elecstate{
 
-template <typename FPTYPE, typename Device> 
+template <typename FPTYPE, typename Device>
 struct elecstate_pw_op {
   /// @brief Calculate psiToRho output within the band-by-band loop, NSPIN != 4
   ///
@@ -52,6 +52,37 @@ struct elecstate_pw_op {
       const std::complex<FPTYPE>* wfcr_another_spin);
 };
 
+template <typename FPTYPE, typename Device>
+struct elecstate_pw_batch_op {
+  /// @brief Calculate psiToRho output within the band-by-band loop, NSPIN == 4
+  ///
+  /// Input Parameters
+  /// @param ctx - which device this function runs on
+  /// @param DOMAG - GlobalV::DOMAG
+  /// @param DOMAG_Z - GlobalV::DOMAG_Z
+  /// @param nrxx - number of planewaves
+  /// @param weight - weight vector
+  /// @param wfcr - input array, psi in real space
+  /// @param wfcr_another_spin - input array, psi in real space
+  /// @param ld_wfcr - leading dimension of wfcr and wfcr_another_spin
+  ///
+  /// Output Parameters
+  /// @param rho - electronic densities
+  void operator() (
+      const Device* ctx,
+      const bool& DOMAG,
+      const bool& DOMAG_Z,
+      const int& nrxx,
+      const double* weight,
+      const double volume,
+      FPTYPE** rho,
+      const std::complex<FPTYPE>* wfcr,
+      const std::complex<FPTYPE>* wfcr_another_spin,
+      const int ld_wfcr,
+      const int batchSize);
+};
+
+
 #if __CUDA || __UT_USE_CUDA || __ROCM || __UT_USE_ROCM
 template <typename FPTYPE>
 struct elecstate_pw_op<FPTYPE, base_device::DEVICE_GPU>
@@ -71,6 +102,22 @@ struct elecstate_pw_op<FPTYPE, base_device::DEVICE_GPU>
                     FPTYPE** rho,
                     const std::complex<FPTYPE>* wfcr,
                     const std::complex<FPTYPE>* wfcr_another_spin);
+};
+
+template <typename FPTYPE>
+struct elecstate_pw_batch_op<FPTYPE, base_device::DEVICE_GPU>
+{
+    void operator()(const base_device::DEVICE_GPU* ctx,
+                    const bool& DOMAG,
+                    const bool& DOMAG_Z,
+                    const int& nrxx,
+                    const double* w1,
+                    const double volume,
+                    FPTYPE** rho,
+                    const std::complex<FPTYPE>* wfcr,
+                    const std::complex<FPTYPE>* wfcr_another_spin,
+                    const int ld_wfcr,
+                    const int batchSize);
 };
 #endif
 } // namespace elecstate

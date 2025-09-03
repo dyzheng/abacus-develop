@@ -31,7 +31,7 @@ ElecStatePW<T, Device>::ElecStatePW(ModulePW::PW_Basis_K* wfc_basis_in,
 }
 
 template<typename T, typename Device>
-ElecStatePW<T, Device>::~ElecStatePW() 
+ElecStatePW<T, Device>::~ElecStatePW()
 {
     if (base_device::get_device_type<Device>(this->ctx) == base_device::GpuDevice)
     {
@@ -47,7 +47,7 @@ ElecStatePW<T, Device>::~ElecStatePW()
 }
 
 template<typename T, typename Device>
-void ElecStatePW<T, Device>::init_rho_data() 
+void ElecStatePW<T, Device>::init_rho_data()
 {
     if (GlobalV::device_flag == "gpu" || GlobalV::precision_flag == "single") {
         this->rho = new Real*[this->charge->nspin];
@@ -171,30 +171,54 @@ void ElecStatePW<T, Device>::rhoBandK(const psi::Psi<T, Device>& psi)
     if (GlobalV::NSPIN == 4)
     {
         int npwx = npw / 2;
-        for (int ibnd = 0; ibnd < nbands; ibnd++)
+
+        // additional memeory : wfcr, wfcr_another_spin, fft data, fft workarea
+        int batchSize = ModulePW::BatchedFFT<double>::estimate_batch_size(4 * this->basis->nmaxgr * sizeof(T));
+        if (std::is_same<Device, base_device::DEVICE_GPU>::value && batchSize > 1 && nbands > 1)
         {
-            ///
-            /// only occupied band should be calculated.
-            /// be care of when smearing_sigma is large, wg would less than 0
-            ///
+            base_device::DEVICE_CPU *cpu_ctx;
+            double *wg_gpu = nullptr;
+            base_device::memory::resize_memory_op<double, Device>()(this->ctx, wg_gpu, nbands);
+            base_device::memory::synchronize_memory_op<double, Device, base_device::DEVICE_CPU>()(this->ctx, cpu_ctx, wg_gpu, &this->wg(ik, 0), nbands);
 
-            this->basis->recip_to_real(this->ctx, &psi(ibnd,0), this->wfcr, ik);
+            resmem_complex_op()(this->ctx, this->wfcr, this->basis->nmaxgr * batchSize, "ElecSPW::wfcr");
+            resmem_complex_op()(this->ctx, this->wfcr_another_spin, this->basis->nrxx * batchSize, "ElecSPW::wfcr_a");
 
-            this->basis->recip_to_real(this->ctx, &psi(ibnd,npwx), this->wfcr_another_spin, ik);
-
-            const auto w1 = static_cast<Real>(this->wg(ik, ibnd) / get_ucell_omega());
-
-            if (w1 != 0.0)
+            for (int i = 0; i < nbands; i += batchSize)
             {
-                // replaced by denghui at 20221110
-                elecstate_pw_op()(this->ctx,
-                                  GlobalV::DOMAG,
-                                  GlobalV::DOMAG_Z,
-                                  this->basis->nrxx,
-                                  w1,
-                                  this->rho,
-                                  this->wfcr,
-                                  this->wfcr_another_spin);
+                int remaining = nbands - i;
+                int current_batch = std::min(remaining, batchSize);
+                this->rhoBandK_spin4_batch(psi, wg_gpu + i, i, current_batch);
+            }
+            base_device::memory::delete_memory_op<double, Device>()(this->ctx, wg_gpu);
+        }
+        else
+        {
+            for (int ibnd = 0; ibnd < nbands; ibnd++)
+            {
+                ///
+                /// only occupied band should be calculated.
+                /// be care of when smearing_sigma is large, wg would less than 0
+                ///
+
+                this->basis->recip_to_real(this->ctx, &psi(ibnd,0), this->wfcr, ik);
+
+                this->basis->recip_to_real(this->ctx, &psi(ibnd,npwx), this->wfcr_another_spin, ik);
+
+                const auto w1 = static_cast<Real>(this->wg(ik, ibnd) / get_ucell_omega());
+
+                if (w1 != 0.0)
+                {
+                    // replaced by denghui at 20221110
+                    elecstate_pw_op()(this->ctx,
+                                    GlobalV::DOMAG,
+                                    GlobalV::DOMAG_Z,
+                                    this->basis->nrxx,
+                                    w1,
+                                    this->rho,
+                                    this->wfcr,
+                                    this->wfcr_another_spin);
+                }
             }
         }
     }
@@ -241,6 +265,23 @@ void ElecStatePW<T, Device>::rhoBandK(const psi::Psi<T, Device>& psi)
             }
         }
     }
+}
+
+template <typename T, typename Device>
+void ElecStatePW<T, Device>::rhoBandK_spin4_batch(const psi::Psi<T, Device>& psi,
+                                                  double* wg_gpu,
+                                                  const int current_band,
+                                                  const int batchSize)
+{
+    int ik = psi.get_current_k();
+    int npw = psi.get_current_nbas();
+    int npwx = npw / 2;
+
+    this->basis->recip_to_real_batch(this->ctx, &psi(current_band,0), psi.get_nbasis(), this->wfcr, this->basis->nmaxgr, ik, batchSize);
+    this->basis->recip_to_real_batch(this->ctx, &psi(current_band,npwx), psi.get_nbasis(), this->wfcr_another_spin, this->basis->nrxx, ik, batchSize);
+
+    elecstate_pw_batch_op()(this->ctx, GlobalV::DOMAG, GlobalV::DOMAG_Z, this->basis->nrxx, wg_gpu, get_ucell_omega(), this->rho,
+    this->wfcr, this->wfcr_another_spin, this->basis->nmaxgr, batchSize);
 }
 
 template <typename T, typename Device>
@@ -536,6 +577,6 @@ template class ElecStatePW<std::complex<double>, base_device::DEVICE_CPU>;
 #if ((defined __CUDA) || (defined __ROCM))
 template class ElecStatePW<std::complex<float>, base_device::DEVICE_GPU>;
 template class ElecStatePW<std::complex<double>, base_device::DEVICE_GPU>;
-#endif 
+#endif
 
 } // namespace elecstate
