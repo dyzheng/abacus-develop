@@ -152,7 +152,6 @@ public:
                        const bool add = false,
                        const FPTYPE factor = 1.0) const; // in:(nz, ns)  ; out(nplane,nx*ny)
 
-#if defined(__CUDA) || defined(__ROCM)
     template <typename FPTYPE, typename Device>
     void real_to_recip_batch(const Device* ctx,
                        std::complex<FPTYPE>* in,
@@ -173,7 +172,6 @@ public:
                        const int batchSize,
                        const bool add = false,
                        const FPTYPE factor = 1.0)const; // in:(nz, ns)  ; out(nplane,nx*ny)
-#endif
   public:
     //operator:
     //get (G+K)^2:

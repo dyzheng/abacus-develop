@@ -172,6 +172,7 @@ void ElecStatePW<T, Device>::rhoBandK(const psi::Psi<T, Device>& psi)
     {
         int npwx = npw / 2;
 
+#if defined(__CUDA) || defined(__ROCM)
         // additional memeory : wfcr, wfcr_another_spin, fft data, fft workarea
         int batchSize = ModulePW::BatchedFFT<double>::estimate_batch_size(4 * this->basis->nmaxgr * sizeof(T));
         if (std::is_same<Device, base_device::DEVICE_GPU>::value && batchSize > 1 && nbands > 1)
@@ -193,6 +194,7 @@ void ElecStatePW<T, Device>::rhoBandK(const psi::Psi<T, Device>& psi)
             base_device::memory::delete_memory_op<double, Device>()(this->ctx, wg_gpu);
         }
         else
+#endif
         {
             for (int ibnd = 0; ibnd < nbands; ibnd++)
             {
