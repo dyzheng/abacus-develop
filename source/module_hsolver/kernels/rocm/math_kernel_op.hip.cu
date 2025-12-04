@@ -365,14 +365,14 @@ __global__ void upate_psi_by_precondition_kernel(const int m, const int n, T *ps
     psi[j * lda + i] = psi[j * lda + i] / pre;
 }
 
-__device__ double complexAbsSquared(cuDoubleComplex z) {
+__device__ double complexAbsSquared(hipDoubleComplex z) {
     return z.x * z.x + z.y * z.y;
 }
 
 template <typename Real>
 __device__ Real warpReduceSum(Real val) {
     for (int offset = 32; offset > 0; offset /= 2)
-        val += __shfl_down_sync(0xffffffffffffffff, val, offset);
+        val += __shfl_down(0xffffffffffffffff, val, offset);
     return val;
 }
 
