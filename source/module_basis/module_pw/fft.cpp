@@ -1,9 +1,10 @@
 #include "fft.h"
-
+#include "module_base/module_device/memory_op.h"
 #include "module_base/memory.h"
 #include "module_base/tool_quit.h"
 #include "module_hamilt_pw/hamilt_pwdft/global.h"
 #include "module_parameter/parameter.h"
+
 
 namespace ModulePW
 {
@@ -987,10 +988,10 @@ void BatchedFFT<FPTYPE>::fft3D_backward(const base_device::DEVICE_GPU* /*ctx*/, 
     hipfftHandle plan = this->get_plan_from_cache(batchSize);
     if (this->fftType == HIPFFT_C2C){
         CHECK_CUFFT(hipfftExecC2C(plan, reinterpret_cast<hipfftComplex*>(in), reinterpret_cast<hipfftComplex*>(out),
-         HIPFFT_INVERSE));
+         HIPFFT_BACKWARD));
     }else{
-        CHECK_CUFFT(cufftExecZ2Z(plan, reinterpret_cast<hipfftDoubleComplex*>(in), reinterpret_cast<hipfftDoubleComplex*>(out),
-         HIPFFT_INVERSE));
+        CHECK_CUFFT(hipfftExecZ2Z(plan, reinterpret_cast<hipfftDoubleComplex*>(in), reinterpret_cast<hipfftDoubleComplex*>(out),
+         HIPFFT_BACKWARD));
     }
 #endif
 
@@ -1059,7 +1060,6 @@ typename BatchedFFT<FPTYPE>::fftHandleType BatchedFFT<FPTYPE>::get_plan_from_cac
     this->plans[batchSize] = plan;
     return plan;
 }
-
 template class BatchedFFT<float>;
 template class BatchedFFT<double>;
 

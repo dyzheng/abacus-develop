@@ -346,6 +346,7 @@ template struct resize_memory_op<float, base_device::DEVICE_GPU>;
 template struct resize_memory_op<double, base_device::DEVICE_GPU>;
 template struct resize_memory_op<std::complex<float>, base_device::DEVICE_GPU>;
 template struct resize_memory_op<std::complex<double>, base_device::DEVICE_GPU>;
+template struct resize_memory_op<char, base_device::DEVICE_GPU>;
 
 template struct set_memory_op<int, base_device::DEVICE_GPU>;
 template struct set_memory_op<float, base_device::DEVICE_GPU>;
@@ -457,7 +458,10 @@ template struct delete_memory_op<float, base_device::DEVICE_GPU>;
 template struct delete_memory_op<double, base_device::DEVICE_GPU>;
 template struct delete_memory_op<std::complex<float>, base_device::DEVICE_GPU>;
 template struct delete_memory_op<std::complex<double>, base_device::DEVICE_GPU>;
+template struct delete_memory_op<char, base_device::DEVICE_GPU>;
 #endif
 
 } // namespace memory
 } // namespace base_device
+
+
