@@ -767,7 +767,7 @@ __global__ void cal_stress_onsite(
             const thrust::complex<FPTYPE> dbb1 = conj(dbecp[inkb1]) * becp[inkb2 + nkb];
             const thrust::complex<FPTYPE> dbb2 = conj(dbecp[inkb1 + nkb]) * becp[inkb2];
             const thrust::complex<FPTYPE> dbb3 = conj(dbecp[inkb1 + nkb]) * becp[inkb2 + nkb];
-            stress_var -= fac * (ps[0] * dbb0 + ps[1] * dbb1 + ps[2] * dbb2 + ps[3] * dbb3).real();
+            stress_var -= fac * (ps[0] * dbb0 + ps[1] * dbb2 + ps[2] * dbb1 + ps[3] * dbb3).real();
         }
         ++iat;
         sum+=nprojs;
@@ -882,7 +882,7 @@ __global__ void cal_stress_onsite(
             const thrust::complex<FPTYPE> dbb1 = conj(dbecp[inkb]) * becp[inkb + nkb];
             const thrust::complex<FPTYPE> dbb2 = conj(dbecp[inkb + nkb]) * becp[inkb];
             const thrust::complex<FPTYPE> dbb3 = conj(dbecp[inkb + nkb]) * becp[inkb + nkb];
-            stress_var -= fac * (coefficients0 * dbb0 + coefficients1 * dbb1 + coefficients2 * dbb2 + coefficients3 * dbb3).real();
+            stress_var -= fac * (coefficients0 * dbb0 + coefficients1 * dbb2 + coefficients2 * dbb1 + coefficients3 * dbb3).real();
         }
         ++iat;
         sum+=nprojs;
