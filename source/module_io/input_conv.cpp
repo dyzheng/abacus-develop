@@ -452,6 +452,8 @@ void Input_Conv::Convert()
         ModuleSymmetry::Symmetry::symm_flag = -1;
     }
     // end of symmetry reset
+    //nspin = 4, set gga_grad
+    XC_Functional::gga_grad = PARAM.inp.gga_grad;
 
     //----------------------------------------------------------
     // main parameters / electrons / spin ( 2/16 )
