@@ -16,7 +16,7 @@
 #include "module_hamilt_general/module_surchem/surchem.h"
 #include "module_hamilt_general/module_vdw/vdw.h"
 #include "kernels/force_op.h"
-
+#include <type_traits>
 #ifdef _OPENMP
 #include <omp.h>
 #endif
@@ -579,7 +579,7 @@ void Forces<FPTYPE, Device>::cal_force_loc(const UnitCell& ucell,
         syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, forcelc_d, forcelc.c, this->nat * 3);
         syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, vloc_d, vloc.c, vloc.nr * vloc.nc);
 
-        hamilt::cal_force_loc_op<FPTYPE, Device>()(
+       /* hamilt::cal_force_loc_op<FPTYPE, Device>()(
             this->nat,
             rho_basis->npw,
             ucell.tpiba * ucell.omega,
@@ -590,7 +590,34 @@ void Forces<FPTYPE, Device>::cal_force_loc(const UnitCell& ucell,
             aux_d,
             vloc_d,
             vloc.nc,
-            forcelc_d);
+            forcelc_d);*/
+        if constexpr (std::is_same<Device, base_device::DEVICE_GPU>::value) {
+            hamilt::cal_force_loc_sincos_op<FPTYPE, Device>()(
+                    this->ctx,
+                    this->nat,
+                    rho_basis->npw,
+                    ucell.ntype,
+                    gcar_d,
+                    tau_d,
+                    vloc_d,
+                    aux_d,
+                    static_cast<FPTYPE>(ucell.tpiba * ucell.omega),
+                    forcelc_d);
+        } else {
+            hamilt::cal_force_loc_op<FPTYPE, Device>()(
+                    this->nat,
+                    rho_basis->npw,
+                    ucell.tpiba * ucell.omega,
+                    iat2it_d,
+                    ig2gg_d,
+                    gcar_d,
+                    tau_d,
+                    aux_d,
+                    vloc_d,
+                    vloc.nc,
+                    forcelc_d);
+        }
+
         syncmem_var_d2h_op()(this->cpu_ctx, this->ctx, forcelc.c, forcelc_d, this->nat * 3);
 
         delmem_int_op()(this->ctx,iat2it_d);
@@ -788,7 +815,7 @@ void Forces<FPTYPE, Device>::cal_force_ew(const UnitCell& ucell,
         syncmem_complex_h2d_op()(this->ctx, this->cpu_ctx, aux_d, aux.data(), rho_basis->npw);
         syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, forceion_d, forceion.c, this->nat * 3);
 
-        hamilt::cal_force_ew_op<FPTYPE, Device>()(
+       /* hamilt::cal_force_ew_op<FPTYPE, Device>()(
             this->nat,
             rho_basis->npw,
             rho_basis->ig_gge0,
@@ -798,7 +825,31 @@ void Forces<FPTYPE, Device>::cal_force_ew(const UnitCell& ucell,
             it_fact_d,
             aux_d,
             forceion_d);
-        
+        */
+        if constexpr (std::is_same<Device, base_device::DEVICE_GPU>::value) {
+            hamilt::cal_force_ew_sincos_op<FPTYPE, Device>()(
+                    this->ctx,
+                    this->nat,
+                    rho_basis->npw,
+                    rho_basis->ig_gge0,
+                    gcar_d,
+                    tau_d,
+                    it_fact_d,
+                    aux_d,
+                    forceion_d);
+        } else {
+            hamilt::cal_force_ew_op<FPTYPE, Device>()(
+                    this->nat,
+                    rho_basis->npw,
+                    rho_basis->ig_gge0,
+                    iat2it_d,
+                    gcar_d,
+                    tau_d,
+                    it_fact_d,
+                    aux_d,
+                    forceion_d);
+        }
+
         syncmem_var_d2h_op()(this->cpu_ctx, this->ctx, forceion.c, forceion_d, this->nat * 3);
         delmem_int_op()(this->ctx,iat2it_d);
         delmem_var_op()(this->ctx,gcar_d);

@@ -10,6 +10,8 @@
 
 namespace hamilt {
 
+__device__ __forceinline__ void sincos_(float x, float* s, float* c) { sincosf(x, s, c); }
+__device__ __forceinline__ void sincos_(double x, double* s, double* c) { sincos(x, s, c); }
 template <typename FPTYPE>
 __global__ void cal_vkb1_nl(
         const int npwx,
@@ -658,7 +660,7 @@ __global__ void cal_force_loc_sincos_kernel(
         
         // Use HIP intrinsic for sincos
         FPTYPE sinp, cosp;
-        sincos(phase, &sinp, &cosp);
+        sincos_(phase, &sinp, &cosp);
         
         // Calculate force factor
         const FPTYPE vloc_factor = vloc_per_type[iat * npw + ig];
@@ -718,7 +720,7 @@ __global__ void cal_force_ew_sincos_kernel(
         
         // Use HIP intrinsic for sincos
         FPTYPE sinp, cosp;
-        sincos(phase, &sinp, &cosp);
+        sincos_(phase, &sinp, &cosp);
         
         // Calculate Ewald sum contribution (fixed sign error)
         const FPTYPE factor = it_fact * (-cosp * aux[ig].imag() + sinp * aux[ig].real());
