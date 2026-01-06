@@ -199,7 +199,7 @@ void DFTU::init(UnitCell& cell, // unitcell class
         if (GlobalV::init_chg == "file")
         {
             std::stringstream sst;
-            sst << GlobalV::global_out_dir << "onsite.dm";
+            sst << GlobalV::global_readin_dir << "onsite.dm";
             this->read_occup_m(sst.str());
 #ifdef __MPI
             this->local_occup_bcast();
