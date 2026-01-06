@@ -870,6 +870,26 @@ void ESolver_KS_LCAO<TK, TR>::iter_finish(UnitCell& ucell, const int istep, int&
         this->p_chgmix->mix_dmr(dm);
     }
 
+    // output the first H(R) when out_mat_hr0 is true
+    if(PARAM.inp.out_mat_hr0 == true && istep == 0 && iter == 1)
+    {
+        ModuleIO::output_mat_sparse(false,
+                                    PARAM.inp.out_mat_hr0,
+                                    false,
+                                    false,
+                                    false,
+                                    istep,
+                                    this->pelec->pot->get_effective_v(),
+                                    this->pv,
+                                    this->GK,
+                                    two_center_bundle_,
+                                    orb_,
+                                    ucell,
+                                    this->gd,
+                                    this->kv,
+                                    this->p_hamilt);
+    }
+
     // 2) save charge density
     // Peize Lin add 2020.04.04
     if (GlobalC::restart.info_save.save_charge)
@@ -1159,6 +1179,7 @@ void ESolver_KS_LCAO<TK, TR>::after_scf(UnitCell& ucell, const int istep)
     {
         //! Print out sparse matrix
         ModuleIO::output_mat_sparse(PARAM.inp.out_mat_hs2,
+                                    false,
                                     PARAM.inp.out_mat_dh,
                                     PARAM.inp.out_mat_t,
                                     PARAM.inp.out_mat_r,

@@ -150,6 +150,7 @@
     - [out\_mat\_hs](#out_mat_hs)
     - [out\_mat\_tk](#out_mat_tk)
     - [out\_mat\_r](#out_mat_r)
+    - [out\_mat\_hr0](#out_mat_hr0)
     - [out\_mat\_hs2](#out_mat_hs2)
     - [out\_mat\_t](#out_mat_t)
     - [out\_mat\_dh](#out_mat_dh)
@@ -1754,6 +1755,13 @@ These variables are used to control the output of properties.
 - **Type**: Boolean
 - **Availability**: Numerical atomic orbital basis (not gamma-only algorithm)
 - **Description**: Whether to print the matrix representation of the position matrix (in Bohr) into a file named `data-rR-tr` in the directory `OUT.${suffix}`. If [calculation](#calculation) is set to `get_S`, the position matrix can be obtained without scf iterations. For more information, please refer to [position_matrix.md](../elec_properties/position_matrix.md#extracting-position-matrices).
+- **Default**: False
+
+### out_mat_hr0
+
+- **Type**: Boolean
+- **Availability**: Numerical atomic orbital basis (not gamma-only algorithm)
+- **Description**: Whether to print files containing the initial Hamiltonian matrix $H(R)$ (in Ry) into files `data-HR0.dat` in the directory `OUT.${suffix}`. 
 - **Default**: False
 
 ### out_mat_hs2

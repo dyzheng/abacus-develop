@@ -268,13 +268,25 @@ void ReadInput::item_output()
         this->add_item(item);
     }
     {
+        Input_Item item("out_mat_hr0");
+        item.annotation = "output initial H(R) matrix";
+        read_sync_bool(input.out_mat_hr0);
+        item.check_value = [](const Input_Item& item, const Parameter& para) {
+            if (para.input.out_mat_hr0 && para.sys.gamma_only_local)
+            {
+                ModuleBase::WARNING_QUIT("ReadInput", "out_mat_r is not available for gamma only calculations");
+            }
+        };
+        this->add_item(item);
+    }
+    {
         Input_Item item("out_mat_hs2");
         item.annotation = "output H(R) and S(R) matrix";
         read_sync_bool(input.out_mat_hs2);
         item.check_value = [](const Input_Item& item, const Parameter& para) {
-            if (para.input.out_mat_r && para.sys.gamma_only_local)
+            if (para.input.out_mat_hs2 && para.sys.gamma_only_local)
             {
-                ModuleBase::WARNING_QUIT("ReadInput", "out_mat_r is not available for gamma only calculations");
+                ModuleBase::WARNING_QUIT("ReadInput", "out_mat_hs2 is not available for gamma only calculations");
             }
         };
         this->add_item(item);

@@ -337,6 +337,7 @@ struct Input_para
     std::vector<int> out_mat_tk = {0, 8}; ///< output T(k) matrix in local basis.
     bool out_mat_hs2 = false;             ///< LiuXh add 2019-07-16, output H(R) matrix and
                                           ///< S(R) matrix in local basis.
+    bool out_mat_hr0 = false;             ///< output H(R) with atomic charge
     bool out_mat_dh = false;
     bool out_mat_xc = false;      ///< output exchange-correlation matrix in
                                   ///< KS-orbital representation.

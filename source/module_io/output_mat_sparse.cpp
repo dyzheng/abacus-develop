@@ -8,6 +8,7 @@ namespace ModuleIO
 
 template <>
 void output_mat_sparse(const bool& out_mat_hsR,
+                       const bool& out_mat_hr0,
                        const bool& out_mat_dh,
                        const bool& out_mat_t,
                        const bool& out_mat_r,
@@ -26,6 +27,7 @@ void output_mat_sparse(const bool& out_mat_hsR,
 
 template <>
 void output_mat_sparse(const bool& out_mat_hsR,
+                       const bool& out_mat_hr0,
                        const bool& out_mat_dh,
                        const bool& out_mat_t,
                        const bool& out_mat_r,
@@ -47,6 +49,27 @@ void output_mat_sparse(const bool& out_mat_hsR,
     {
         output_HSR(ucell,istep, v_eff, pv, HS_Arrays, grid, kv, p_ham);
     }
+    else if (out_mat_hr0)
+    {
+        output_HSR(
+            ucell,
+            istep, 
+            v_eff, 
+            pv, 
+            HS_Arrays, 
+            grid, 
+            kv, 
+            p_ham,
+#ifdef _EXX
+            nullptr,
+            nullptr,
+#endif 
+            "data-SR-sparse_SPIN0.csr", 
+            "data-HR0_SPIN0.csr", 
+            "data-HR0_SPIN1.csr"
+        );
+    }
+    
 
     //! generate a file containing the kinetic energy matrix
     if (out_mat_t)
