@@ -49,6 +49,7 @@ class Charge_Mixing
                     const double& mixing_angle_in,
                     const bool& mixing_dmr_in,
                     const bool& mixing_uom_in = false);
+    void conserve_setting(){this->mixing_beta = 0.01;this->mixing_beta_mag = 0.04;}
 
     /**
      * @brief initialize mixing, including constructing mixing and allocating memory for mixing data

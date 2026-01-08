@@ -677,6 +677,7 @@ void ESolver_KS_PW<T, Device>::hamilt2density(const int istep,
     if(PARAM.inp.dft_plus_u)
     {
         auto* dftu = ModuleDFTU::DFTU::get_instance();
+        //dftu->cal_occup_ensemble_pw(this->kspw_psi, this->pelec, GlobalC::ucell, nullptr, 50, 1e-5);
         if(this->drho>0 && iter != this->p_chgmix->mixing_restart_step) // if drho==0, skip mixing occupation, or mixing_restart step
         {
             dftu->cal_occ_pw(iter, this->kspw_psi, this->pelec->wg, GlobalC::ucell, this->p_chgmix);
@@ -852,6 +853,7 @@ void ESolver_KS_PW<T, Device>::iter_finish(const int iter, const bool conv_elec)
                     // allocate memory for uom_mdata
                     this->p_chgmix->allocate_mixing_uom(GlobalC::dftu.get_size_eff_pot_pw());
                     GlobalC::dftu.mixing_dftu = true;
+                    this->p_chgmix->conserve_setting();
                 }
             }
         }
