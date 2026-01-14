@@ -56,6 +56,15 @@ void DFTU::copy_locale()
             {
                 locale_save[iat][target_l][0][0] = locale[iat][target_l][0][0];
                 locale_save[iat][target_l][0][1] = locale[iat][target_l][0][1];
+                if(this->uom_save.size() != 0)
+                {
+                    const int size = locale[iat][target_l][0][0].nr * locale[iat][target_l][0][0].nc;
+                    for(int mm=0; mm<size; mm++)
+                    {
+                        this->uom_save[eff_pot_pw_index[iat]+mm] = locale[iat][target_l][0][0].c[mm];
+                        this->uom_save[eff_pot_pw_index[iat]+mm+size] = locale[iat][target_l][0][1].c[mm];
+                    }
+                }
             }
         }
     }

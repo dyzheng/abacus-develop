@@ -1241,6 +1241,12 @@ void ESolver_KS_PW<T, Device>::after_all_runners() {
 
 template <typename T, typename Device>
 void ESolver_KS_PW<T, Device>::hamilt2estates(const double ethr) {
+    if(PARAM.inp.dft_plus_u)
+    {
+        auto* dftu = ModuleDFTU::DFTU::get_instance();
+        dftu->cal_occ_pw(0, this->kspw_psi, this->pelec->wg, GlobalC::ucell, nullptr);
+        dftu->output();
+    }
     if (this->phsol != nullptr) {
         hsolver::DiagoIterAssist<T, Device>::need_subspace = false;
         hsolver::DiagoIterAssist<T, Device>::PW_DIAG_THR = ethr;
