@@ -10,11 +10,18 @@ namespace hsolver {
     static hipsolverHandle_t hipsolver_H = nullptr;
 
     void createGpuSolverHandle() {
-        return;
+        if (hipsolver_H == nullptr)
+        {
+            hipsolverErrcheck(hipsolverCreate(&hipsolver_H));
+        }
     }
 
     void destroyGpuSolverHandle() {
-        return;
+        if (hipsolver_H != nullptr)
+        {
+            hipsolverErrcheck(hipsolverDestroy(hipsolver_H));
+            hipsolver_H = nullptr;
+        }
     }
 
     const int N_DCU=234;
