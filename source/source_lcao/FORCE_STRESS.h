@@ -18,6 +18,7 @@
 #include "source_lcao/setup_deepks.h" // for deepks, mohan add 20251010
 #include "source_lcao/setup_dm.h" // mohan add 2025-11-03
 #include "source_lcao/module_dftu/dftu.h" // mohan add 2025-11-07
+#include "source_hamilt/module_vdw/vdw.h" // mohan add 2026-01-22
 
 
 template <typename T>
@@ -114,13 +115,222 @@ class Force_Stress_LCAO
                          const pseudopot_cell_vl& locpp,
                          const Structure_Factor& sf);
 
+    void calculate_operator_force_stress(
+        const bool isforce,
+        const bool isstress,
+        const UnitCell& ucell,
+        const Grid_Driver& gd,
+        const K_Vectors& kv,
+        const TwoCenterBundle& two_center_bundle,
+        const LCAO_Orbitals& orb,
+        LCAO_domain::Setup_DM<T>& dmat,
+        const elecstate::DensityMatrix<T, double>& edm,
+        ModuleBase::matrix& foverlap,
+        ModuleBase::matrix& ftvnl_dphi,
+        ModuleBase::matrix& fvnl_dbeta,
+        ModuleBase::matrix& fvl_dphi,
+        ModuleBase::matrix& soverlap,
+        ModuleBase::matrix& stvnl_dphi,
+        ModuleBase::matrix& svnl_dbeta,
+        ModuleBase::matrix& svl_dphi);
+
+    void calculate_operator_force_stress_spin12(
+        const bool isforce,
+        const bool isstress,
+        const UnitCell& ucell,
+        const Grid_Driver& gd,
+        const K_Vectors& kv,
+        const TwoCenterBundle& two_center_bundle,
+        const LCAO_Orbitals& orb,
+        LCAO_domain::Setup_DM<T>& dmat,
+        const elecstate::DensityMatrix<T, double>& edm,
+        ModuleBase::matrix& foverlap,
+        ModuleBase::matrix& ftvnl_dphi,
+        ModuleBase::matrix& fvnl_dbeta,
+        ModuleBase::matrix& fvl_dphi,
+        ModuleBase::matrix& soverlap,
+        ModuleBase::matrix& stvnl_dphi,
+        ModuleBase::matrix& svnl_dbeta,
+        ModuleBase::matrix& svl_dphi);
+
+    void calculate_operator_force_stress_spin4(
+        const bool isforce,
+        const bool isstress,
+        const UnitCell& ucell,
+        const Grid_Driver& gd,
+        const K_Vectors& kv,
+        const TwoCenterBundle& two_center_bundle,
+        const LCAO_Orbitals& orb,
+        LCAO_domain::Setup_DM<T>& dmat,
+        const elecstate::DensityMatrix<T, double>& edm,
+        ModuleBase::matrix& foverlap,
+        ModuleBase::matrix& ftvnl_dphi,
+        ModuleBase::matrix& fvnl_dbeta,
+        ModuleBase::matrix& fvl_dphi,
+        ModuleBase::matrix& soverlap,
+        ModuleBase::matrix& stvnl_dphi,
+        ModuleBase::matrix& svnl_dbeta,
+        ModuleBase::matrix& svl_dphi);
+
+    void calculate_deepks_force_stress(
+        const UnitCell& ucell,
+        const bool isforce,
+        const bool isstress,
+        const Grid_Driver& gd,
+        const K_Vectors& kv,
+        const LCAO_Orbitals& orb,
+        Setup_DeePKS<T>& deepks,
+        ModuleBase::matrix& fvnl_dalpha,
+        ModuleBase::matrix& svnl_dalpha);
+
+    void calculate_vdw_force_stress(
+        const UnitCell& ucell,
+        const bool isforce,
+        const bool isstress,
+        ModuleBase::matrix& force_vdw,
+        ModuleBase::matrix& stress_vdw);
+
+    void calculate_efield_force(
+        const UnitCell& ucell,
+        const bool isforce,
+        ModuleBase::matrix& fefield);
+
+    void calculate_tddft_efield_force(
+        const UnitCell& ucell,
+        const bool isforce,
+        ModuleBase::matrix& fefield_tddft);
+
+    void calculate_gatefield_force(
+        const UnitCell& ucell,
+        const bool isforce,
+        ModuleBase::matrix& fgate);
+
+    void calculate_solvent_force(
+        UnitCell& ucell,
+        const bool isforce,
+        ModulePW::PW_Basis* rhopw,
+        const pseudopot_cell_vl& locpp,
+        surchem& solvent,
+        ModuleBase::matrix& fsol);
+
+    void calculate_dftu_force_stress(
+        const UnitCell& ucell,
+        const Grid_Driver& gd,
+        LCAO_domain::Setup_DM<T>& dmat,
+        Parallel_Orbitals& pv,
+        const K_Vectors& kv,
+        const bool isforce,
+        const bool isstress,
+        const TwoCenterBundle& two_center_bundle,
+        const LCAO_Orbitals& orb,
+        Plus_U& dftu,
+        ModuleBase::matrix& force_u,
+        ModuleBase::matrix& stress_u);
+
+    void calculate_deltaspin_force_stress(
+        const UnitCell& ucell,
+        const Grid_Driver& gd,
+        LCAO_domain::Setup_DM<T>& dmat,
+        const K_Vectors& kv,
+        const bool isforce,
+        const bool isstress,
+        const TwoCenterBundle& two_center_bundle,
+        const LCAO_Orbitals& orb,
+        ModuleBase::matrix& force_dspin,
+        ModuleBase::matrix& stress_dspin);
+
+    void calculate_exx_force_stress(
+        const UnitCell& ucell,
+        const bool isforce,
+        const bool isstress,
+        Exx_NAO<T>& exx_nao,
+        ModuleBase::matrix& force_exx,
+        ModuleBase::matrix& stress_exx);
+
+    void aggregate_forces(
+        const UnitCell& ucell,
+        const int nat,
+        ModuleBase::matrix& fcs,
+        const ModuleBase::matrix& foverlap,
+        const ModuleBase::matrix& ftvnl_dphi,
+        const ModuleBase::matrix& fvnl_dbeta,
+        const ModuleBase::matrix& fvl_dphi,
+        const ModuleBase::matrix& fvl_dvl,
+        const ModuleBase::matrix& fewalds,
+        const ModuleBase::matrix& fcc,
+        const ModuleBase::matrix& fscc,
+        const ModuleBase::matrix& force_vdw,
+        const ModuleBase::matrix& fefield,
+        const ModuleBase::matrix& fefield_tddft,
+        const ModuleBase::matrix& fgate,
+        const ModuleBase::matrix& fsol,
+        const ModuleBase::matrix& force_u,
+        const ModuleBase::matrix& force_dspin,
+        const ModuleBase::matrix& force_exx,
+        const ModuleBase::matrix& fvnl_dalpha);
+
+    void aggregate_stresses(
+        ModuleBase::matrix& scs,
+        const ModuleBase::matrix& soverlap,
+        const ModuleBase::matrix& stvnl_dphi,
+        const ModuleBase::matrix& svnl_dbeta,
+        const ModuleBase::matrix& svl_dphi,
+        const ModuleBase::matrix& sigmadvl,
+        const ModuleBase::matrix& sigmaewa,
+        const ModuleBase::matrix& sigmacc,
+        const ModuleBase::matrix& sigmaxc,
+        const ModuleBase::matrix& sigmahar,
+        const ModuleBase::matrix& stress_vdw,
+        const ModuleBase::matrix& stress_u,
+        const ModuleBase::matrix& stress_dspin,
+        const ModuleBase::matrix& stress_exx,
+        const ModuleBase::matrix& svnl_dalpha);
+
+    void print_force_test_output(
+        const UnitCell& ucell,
+        const int nat,
+        const bool istestf,
+        const ModuleBase::matrix& foverlap,
+        const ModuleBase::matrix& ftvnl_dphi,
+        const ModuleBase::matrix& fvnl_dbeta,
+        const ModuleBase::matrix& fvl_dphi,
+        const ModuleBase::matrix& fvl_dvl,
+        const ModuleBase::matrix& fewalds,
+        const ModuleBase::matrix& fcc,
+        const ModuleBase::matrix& fscc,
+        const ModuleBase::matrix& fefield,
+        const ModuleBase::matrix& fefield_tddft,
+        const ModuleBase::matrix& fgate,
+        const ModuleBase::matrix& fsol,
+        const ModuleBase::matrix& force_vdw,
+        const ModuleBase::matrix& force_u,
+        const ModuleBase::matrix& force_dspin,
+        const ModuleBase::matrix& fvnl_dalpha,
+        const std::unique_ptr<vdw::Vdw>& vdw_solver);
+
+    void print_stress_test_output(
+        const int istests,
+        const ModuleBase::matrix& soverlap,
+        const ModuleBase::matrix& stvnl_dphi,
+        const ModuleBase::matrix& svnl_dbeta,
+        const ModuleBase::matrix& svl_dphi,
+        const ModuleBase::matrix& sigmadvl,
+        const ModuleBase::matrix& sigmahar,
+        const ModuleBase::matrix& sigmaewa,
+        const ModuleBase::matrix& sigmacc,
+        const ModuleBase::matrix& sigmaxc,
+        const ModuleBase::matrix& stress_vdw,
+        const ModuleBase::matrix& stress_u,
+        const ModuleBase::matrix& stress_dspin,
+        const ModuleBase::matrix& scs,
+        const std::unique_ptr<vdw::Vdw>& vdw_solver);
+
     static double force_invalid_threshold_ev;
 };
 
 template <typename T>
 double Force_Stress_LCAO<T>::force_invalid_threshold_ev = 0.00;
 
-// only for DFT+U, mohan add 2025-11-04
 template <typename T>
 void assign_dmk_ptr(
     elecstate::DensityMatrix<T,double>* dm,

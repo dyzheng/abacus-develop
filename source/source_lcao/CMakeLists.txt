@@ -25,6 +25,11 @@ if(ENABLE_LCAO)
         module_operator_lcao/operator_force_stress_utils.cpp
         pulay_fs_center2.cpp
         FORCE_STRESS.cpp
+        force_stress_pw.cpp
+        force_stress_symmetry.cpp
+        force_stress_lcao_contributions.cpp
+        force_stress_lcao_operator.cpp
+        force_stress_lcao_output.cpp
         FORCE_gamma.cpp
         FORCE_k.cpp
         stress_tools.cpp
