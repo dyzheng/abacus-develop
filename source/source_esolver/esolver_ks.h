@@ -28,7 +28,12 @@ class ESolver_KS : public ESolver_FP
 
     virtual void after_all_runners(UnitCell& ucell) override;
 
-  protected:
+    //! Public accessors for Python bindings
+    hamilt::Hamilt<T, Device>* get_p_hamilt() const { return p_hamilt; }
+    psi::Psi<T>* get_psi() const { return psi; }
+    double get_drho() const { return drho; }
+    double get_diag_ethr() const { return diag_ethr; }
+
     //! Something to do before SCF iterations.
     virtual void before_scf(UnitCell& ucell, const int istep) override;
 
@@ -46,6 +51,8 @@ class ESolver_KS : public ESolver_FP
 
     //! Something to do after SCF iterations when SCF is converged or comes to the max iter step.
     virtual void after_scf(UnitCell& ucell, const int istep, const bool conv_esolver) override;
+
+    protected:
 
     //! Hamiltonian
     hamilt::Hamilt<T, Device>* p_hamilt = nullptr;

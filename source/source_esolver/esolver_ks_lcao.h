@@ -109,6 +109,9 @@ class ESolver_KS_LCAO : public ESolver_KS<TK>
     const ModuleBase::matrix & get_scs() const { return scs; }
     const Setup_DeePKS<TK> & get_deepks() const { return deepks; }
     const Exx_NAO<TK> & get_exx_nao() const { return exx_nao; }
+
+    //! Public accessor for density matrix (for Python bindings)
+    const LCAO_domain::Setup_DM<TK>& get_dmat() const { return dmat; }
 };
 } // namespace ModuleESolver
 #endif

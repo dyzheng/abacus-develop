@@ -12,6 +12,7 @@
 #include <vector>
 #include <map>
 #include <tuple>
+#include <fstream>
 
 #include "../utils/pybind_utils.h"
 #include "interfaces/i_scf_controller.hpp"
@@ -87,6 +88,60 @@ private:
     int nspin_ = 0;
     int nrxx_ = 0;
     int ngmc_ = 0;
+};
+
+/**
+ * @brief Accessor class for force data
+ *
+ * Provides Python access to atomic forces
+ */
+class PyForceAccessor
+{
+public:
+    PyForceAccessor() = default;
+
+    /// Set force data from raw pointer
+    void set_from_matrix(const double* force_ptr, int nat);
+
+    /// Get forces as numpy array with shape (nat, 3)
+    py::array_t<double> get_forces() const;
+
+    /// Get number of atoms
+    int get_nat() const { return nat_; }
+
+    /// Check if data is valid
+    bool is_valid() const { return nat_ > 0 && !forces_.empty(); }
+
+private:
+    std::vector<double> forces_;
+    int nat_ = 0;
+};
+
+/**
+ * @brief Accessor class for stress tensor data
+ *
+ * Provides Python access to stress tensor
+ */
+class PyStressAccessor
+{
+public:
+    PyStressAccessor() = default;
+
+    /// Set stress data from raw pointer (3x3 matrix)
+    void set_from_matrix(const double* stress_ptr);
+
+    /// Get stress tensor as numpy array with shape (3, 3)
+    py::array_t<double> get_stress() const;
+
+    /// Get stress in Voigt notation (6,): xx, yy, zz, yz, xz, xy
+    py::array_t<double> get_stress_voigt() const;
+
+    /// Check if data is valid
+    bool is_valid() const { return valid_; }
+
+private:
+    std::array<double, 9> stress_;
+    bool valid_ = false;
 };
 
 /**
@@ -367,43 +422,61 @@ public:
     /// Get number of atoms
     int get_nat() const;
 
+    // ==================== Force and Stress ====================
+
+    /// Calculate forces on atoms
+    void cal_force();
+
+    /// Calculate stress tensor
+    void cal_stress();
+
+    /// Get force accessor (call cal_force first)
+    PyForceAccessor get_force() const;
+
+    /// Get stress accessor (call cal_stress first)
+    PyStressAccessor get_stress() const;
+
+    // ==================== Position and Cell Update ====================
+
+    /// Update atomic positions (Angstrom, Cartesian)
+    void update_positions(py::array_t<double> positions);
+
+    /// Update cell vectors (Angstrom)
+    void update_cell(py::array_t<double> cell);
+
+    /// Get atomic positions (Angstrom, Cartesian)
+    py::array_t<double> get_positions() const;
+
+    /// Get cell vectors (Angstrom)
+    py::array_t<double> get_cell() const;
+
     // ==================== Component Access (New API) ====================
 
     /// Get SCF controller component
     pyabacus::esolver::ISCFController* get_scf_controller()
     {
-        return scf_controller_.get();
+        // Phase 3 placeholder: requires full ABACUS library linkage
+        return nullptr;
     }
 
     /// Get Hamiltonian builder component
     pyabacus::esolver::IHamiltonianBuilder<TK, TR>* get_hamiltonian_builder()
     {
-        if (scf_controller_)
-        {
-            return static_cast<pyabacus::esolver::IHamiltonianBuilder<TK, TR>*>(
-                scf_controller_->get_hamiltonian_builder());
-        }
+        // Phase 3 placeholder: requires full ABACUS library linkage
         return nullptr;
     }
 
     /// Get charge mixer component
     pyabacus::esolver::IChargeMixer* get_charge_mixer()
     {
-        if (scf_controller_)
-        {
-            return scf_controller_->get_charge_mixer();
-        }
+        // Phase 3 placeholder: requires full ABACUS library linkage
         return nullptr;
     }
 
     /// Get diagonalizer component
     pyabacus::esolver::IDiagonalizer<TK>* get_diagonalizer()
     {
-        if (scf_controller_)
-        {
-            return static_cast<pyabacus::esolver::IDiagonalizer<TK>*>(
-                scf_controller_->get_diagonalizer());
-        }
+        // Phase 3 placeholder: requires full ABACUS library linkage
         return nullptr;
     }
 
@@ -412,33 +485,19 @@ public:
     /// Set SCF convergence criteria
     void set_convergence_criteria(double drho_threshold, double energy_threshold, int max_iter)
     {
-        pyabacus::esolver::SCFConvergenceCriteria criteria;
-        criteria.drho_threshold = drho_threshold;
-        criteria.energy_threshold = energy_threshold;
-        criteria.max_iterations = max_iter;
-
-        if (auto* ctrl = dynamic_cast<pyabacus::esolver::SCFControllerLCAO<TK, TR>*>(scf_controller_.get()))
-        {
-            ctrl->set_convergence_criteria(criteria);
-        }
+        // Phase 3 placeholder: requires full ABACUS library linkage
     }
 
     /// Set mixing parameters
     void set_mixing_beta(double beta)
     {
-        if (auto* mixer = get_charge_mixer())
-        {
-            mixer->set_mixing_beta(beta);
-        }
+        // Phase 3 placeholder: requires full ABACUS library linkage
     }
 
     /// Set mixing method
     void set_mixing_method(const std::string& method)
     {
-        if (auto* mixer = get_charge_mixer())
-        {
-            mixer->set_mixing_method(pyabacus::esolver::string_to_mixing_method(method));
-        }
+        // Phase 3 placeholder: requires full ABACUS library linkage
     }
 
 private:
@@ -451,16 +510,33 @@ private:
     double drho_ = 0.0;
     double diag_ethr_ = 1e-2;
 
-    // ABACUS objects - will be properly initialized in Phase 3
-    // For now, these are placeholders that will be connected to actual ABACUS instances
-    ModuleESolver::ESolver_KS_LCAO<TK, TR>* esolver_ = nullptr;
-    UnitCell* ucell_ = nullptr;
+    // Note: ABACUS objects removed - Phase 3 requires full library linkage
+    // For now, ESolver mode uses placeholder implementations
+    // Use Driver mode for actual calculations
 
-    // Flag to indicate if we own the esolver (for cleanup)
-    bool owns_esolver_ = false;
+    // Output stream management
+    std::ofstream ofs_running_;
+    std::ofstream ofs_warning_;
 
-    // Component-based SCF controller (new architecture)
-    std::unique_ptr<pyabacus::esolver::SCFControllerLCAO<TK, TR>> scf_controller_;
+    // Cached system dimensions
+    int nat_ = 0;
+    int ntype_ = 0;
+    int nks_ = 0;
+    int nbasis_ = 0;
+    int nbands_ = 0;
+    int nspin_ = 1;
+
+    // Force and stress accessors
+    PyForceAccessor force_accessor_;
+    PyStressAccessor stress_accessor_;
+    bool force_calculated_ = false;
+    bool stress_calculated_ = false;
+
+    // Helper methods
+    void setup_output_streams(const std::string& output_dir);
+    void cleanup_output_streams();
+    void cache_system_info();
+    void update_accessors();
 };
 
 // Type aliases for common use cases

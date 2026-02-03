@@ -29,9 +29,11 @@ Example
 """
 
 from .workflow import LCAOWorkflow
-from .data_types import ChargeData, EnergyData, HamiltonianData, DensityMatrixData, SCFResult
+from .data_types import ChargeData, EnergyData, HamiltonianData, DensityMatrixData, SCFResult, ForceData, StressData
 
 # Import C++ bindings
+ForceAccessor = None
+StressAccessor = None
 try:
     from ._esolver_pack import (
         ESolverLCAO_gamma,
@@ -43,6 +45,11 @@ try:
         DensityMatrixAccessor_gamma,
         DensityMatrixAccessor_multi_k,
     )
+    # Try to import new accessors (may not be available in older builds)
+    try:
+        from ._esolver_pack import ForceAccessor, StressAccessor
+    except ImportError:
+        pass  # ForceAccessor/StressAccessor not available in this build
 except ImportError as e:
     import warnings
     warnings.warn(f"Could not import _esolver_pack: {e}. "
@@ -68,12 +75,16 @@ __all__ = [
     'HamiltonianData',
     'DensityMatrixData',
     'SCFResult',
+    'ForceData',
+    'StressData',
 
     # Low-level C++ bindings
     'ESolverLCAO_gamma',
     'ESolverLCAO_multi_k',
     'ChargeAccessor',
     'EnergyAccessor',
+    'ForceAccessor',
+    'StressAccessor',
     'HamiltonianAccessor_gamma',
     'HamiltonianAccessor_multi_k',
     'DensityMatrixAccessor_gamma',

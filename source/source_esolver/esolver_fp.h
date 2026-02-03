@@ -38,6 +38,11 @@ class ESolver_FP: public ESolver
 
     virtual void after_all_runners(UnitCell& ucell) override;
 
+    //! Public accessors for Python bindings
+    elecstate::ElecState* get_pelec() const { return pelec; }
+    const K_Vectors& get_kv() const { return kv; }
+    const Charge& get_chr() const { return chr; }
+
   protected:
     virtual void before_scf(UnitCell& ucell, const int istep);
 

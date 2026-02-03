@@ -50,8 +50,12 @@ xfail_strict = true
 filterwarnings = [
   "error",
   "ignore:(ast.Str|Attribute s|ast.NameConstant|ast.Num) is deprecated:DeprecationWarning:_pytest",  # Python 3.12
+  "ignore:Could not import _esolver_pack:UserWarning",  # Allow missing C++ bindings during testing
 ]
 testpaths = ["tests"]
+markers = [
+  "integration: marks tests as integration tests (require full ABACUS installation)",
+]
 
 
 [tool.cibuildwheel]

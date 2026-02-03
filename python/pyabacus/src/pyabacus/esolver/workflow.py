@@ -14,6 +14,8 @@ from .data_types import (
     HamiltonianData,
     DensityMatrixData,
     SCFResult,
+    ForceData,
+    StressData,
 )
 
 
@@ -496,3 +498,133 @@ class LCAOWorkflow:
             K-point weights with shape (nks,)
         """
         return self._esolver.get_wk()
+
+    # ==================== Force and Stress ====================
+
+    def cal_force(self) -> None:
+        """
+        Calculate forces on atoms.
+
+        Must be called after SCF convergence before accessing force property.
+        """
+        if not self._initialized:
+            raise RuntimeError("Workflow not initialized. Call initialize() first.")
+        self._esolver.cal_force()
+
+    def cal_stress(self) -> None:
+        """
+        Calculate stress tensor.
+
+        Must be called after SCF convergence before accessing stress property.
+        """
+        if not self._initialized:
+            raise RuntimeError("Workflow not initialized. Call initialize() first.")
+        self._esolver.cal_stress()
+
+    @property
+    def force(self) -> ForceData:
+        """
+        Get force data (call cal_force first).
+
+        Returns
+        -------
+        ForceData
+            Force data container with forces in Ry/Bohr
+        """
+        accessor = self._esolver.get_force()
+        return ForceData(
+            forces=accessor.get_forces(),
+            nat=accessor.nat,
+        )
+
+    @property
+    def stress(self) -> StressData:
+        """
+        Get stress data (call cal_stress first).
+
+        Returns
+        -------
+        StressData
+            Stress data container with stress tensor in kbar
+        """
+        accessor = self._esolver.get_stress()
+        return StressData(stress=accessor.get_stress())
+
+    # ==================== Position and Cell Update ====================
+
+    def update_positions(self, positions: np.ndarray) -> None:
+        """
+        Update atomic positions.
+
+        After updating positions, you must call before_scf() and run_scf()
+        to recalculate the electronic structure.
+
+        Parameters
+        ----------
+        positions : np.ndarray
+            Atomic positions with shape (nat, 3) in Angstrom (Cartesian)
+        """
+        if not self._initialized:
+            raise RuntimeError("Workflow not initialized. Call initialize() first.")
+        self._esolver.update_positions(positions)
+
+    def update_cell(self, cell: np.ndarray) -> None:
+        """
+        Update cell vectors.
+
+        After updating the cell, you must call before_scf() and run_scf()
+        to recalculate the electronic structure.
+
+        Parameters
+        ----------
+        cell : np.ndarray
+            Cell vectors with shape (3, 3) in Angstrom
+        """
+        if not self._initialized:
+            raise RuntimeError("Workflow not initialized. Call initialize() first.")
+        self._esolver.update_cell(cell)
+
+    def get_positions(self) -> np.ndarray:
+        """
+        Get atomic positions.
+
+        Returns
+        -------
+        np.ndarray
+            Atomic positions with shape (nat, 3) in Angstrom (Cartesian)
+        """
+        if not self._initialized:
+            raise RuntimeError("Workflow not initialized. Call initialize() first.")
+        return self._esolver.get_positions()
+
+    def get_cell(self) -> np.ndarray:
+        """
+        Get cell vectors.
+
+        Returns
+        -------
+        np.ndarray
+            Cell vectors with shape (3, 3) in Angstrom
+        """
+        if not self._initialized:
+            raise RuntimeError("Workflow not initialized. Call initialize() first.")
+        return self._esolver.get_cell()
+
+    @property
+    def nat(self) -> int:
+        """Get number of atoms."""
+        return self._esolver.nat
+
+    def cleanup(self) -> None:
+        """
+        Release ESolver resources and reset state.
+
+        This method should be called when the workflow is no longer needed
+        to free up memory and resources. After cleanup, the workflow can
+        be reinitialized by calling initialize() again.
+        """
+        if self._esolver is not None:
+            self._esolver = None
+        self._initialized = False
+        self._scf_running = False
+        self.clear_callbacks()

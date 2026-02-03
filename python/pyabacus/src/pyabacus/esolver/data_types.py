@@ -192,6 +192,99 @@ class DensityMatrixData:
 
 
 @dataclass
+class ForceData:
+    """
+    Container for force data.
+
+    Forces are stored in Rydberg/Bohr units internally.
+
+    Attributes
+    ----------
+    forces : np.ndarray
+        Forces on atoms with shape (nat, 3) in Ry/Bohr
+    nat : int
+        Number of atoms
+    """
+    forces: np.ndarray
+    nat: int
+
+    # Unit conversion constants
+    RY_TO_EV = 13.605693122994        # 1 Ry = 13.6057 eV
+    BOHR_TO_ANG = 0.529177249         # 1 Bohr = 0.529177 Å
+    RY_BOHR_TO_EV_ANG = RY_TO_EV / BOHR_TO_ANG  # ~25.7112
+
+    def to_eV_Ang(self) -> np.ndarray:
+        """
+        Convert forces from Ry/Bohr to eV/Angstrom.
+
+        Returns
+        -------
+        np.ndarray
+            Forces in eV/Angstrom with shape (nat, 3)
+        """
+        return self.forces * self.RY_BOHR_TO_EV_ANG
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary."""
+        return {
+            'forces': self.forces,
+            'forces_eV_Ang': self.to_eV_Ang(),
+            'nat': self.nat,
+        }
+
+
+@dataclass
+class StressData:
+    """
+    Container for stress tensor data.
+
+    Stress is stored in kbar units internally.
+
+    Attributes
+    ----------
+    stress : np.ndarray
+        Stress tensor with shape (3, 3) in kbar
+    """
+    stress: np.ndarray
+
+    # Unit conversion constant
+    KBAR_TO_EV_ANG3 = 1.0 / 1602.1766208  # kbar -> eV/Å³
+
+    def to_voigt(self) -> np.ndarray:
+        """
+        Return stress in Voigt notation.
+
+        Returns
+        -------
+        np.ndarray
+            Stress in Voigt notation (6,): xx, yy, zz, yz, xz, xy
+        """
+        s = self.stress
+        return np.array([s[0, 0], s[1, 1], s[2, 2], s[1, 2], s[0, 2], s[0, 1]])
+
+    def to_eV_Ang3(self) -> np.ndarray:
+        """
+        Convert stress to eV/Angstrom^3 in Voigt notation.
+
+        This is the format expected by ASE.
+
+        Returns
+        -------
+        np.ndarray
+            Stress in eV/Å³ with Voigt notation (6,)
+        """
+        return self.to_voigt() * self.KBAR_TO_EV_ANG3
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary."""
+        return {
+            'stress': self.stress,
+            'stress_voigt': self.to_voigt(),
+            'stress_eV_Ang3': self.to_eV_Ang3(),
+        }
+
+
+@dataclass
 class SCFResult:
     """
     Container for SCF calculation results.
