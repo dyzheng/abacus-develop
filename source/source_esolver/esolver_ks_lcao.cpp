@@ -20,6 +20,7 @@
 #include "source_io/module_output/print_info.h"
 #include "source_lcao/rho_tau_lcao.h" // mohan add 20251024
 #include "source_lcao/LCAO_set.h" // mohan add 20251111
+#include "source_lcao/module_orbital_mag/orbital_mag.h"
 
 namespace ModuleESolver
 {
@@ -561,6 +562,26 @@ void ESolver_KS_LCAO<TK, TR>::after_scf(UnitCell& ucell, const int istep, const 
     if (!PARAM.inp.cal_force && !PARAM.inp.cal_stress)
     {
         this->RA.delete_grid();
+    }
+
+    //! 4) Calculate orbital magnetic moment if requested (multi-k LCAO only)
+    if constexpr (std::is_same<TK, std::complex<double>>::value && std::is_same<TR, double>::value)
+    {
+        if (PARAM.inp.out_orbital_mag)
+        {
+            hamilt::OrbitalMag orbital_mag(ucell,
+                                           this->kv,
+                                           *this->pelec,
+                                           hamilt_lcao->getHR(),
+                                           hamilt_lcao->getSR(),
+                                           this->psi,
+                                           &this->pv);
+            ModuleBase::Vector3<double> M_orb = orbital_mag.calculate_orbital_moment();
+            GlobalV::ofs_running << "\n ORBITAL MAGNETIC MOMENT (Bohr magneton):" << std::endl;
+            GlobalV::ofs_running << " M_x = " << M_orb.x << std::endl;
+            GlobalV::ofs_running << " M_y = " << M_orb.y << std::endl;
+            GlobalV::ofs_running << " M_z = " << M_orb.z << std::endl;
+        }
     }
 
     ModuleBase::timer::tick("ESolver_KS_LCAO", "after_scf");

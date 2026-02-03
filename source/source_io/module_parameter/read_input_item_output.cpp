@@ -152,6 +152,18 @@ void ReadInput::item_output()
         this->add_item(item);
     }
     {
+        Input_Item item("out_orbital_mag");
+        item.annotation = "output orbital magnetic moment (LCAO multi-k only)";
+        read_sync_bool(input.out_orbital_mag);
+        item.check_value = [](const Input_Item& item, const Parameter& para) {
+            if (para.input.basis_type != "lcao" && para.input.out_orbital_mag)
+            {
+                ModuleBase::WARNING_QUIT("ReadInput", "out_orbital_mag is only for lcao");
+            }
+        };
+        this->add_item(item);
+    }
+    {
         Input_Item item("out_proj_band");
         item.annotation = "output projected band structure";
         read_sync_bool(input.out_proj_band);

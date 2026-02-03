@@ -401,6 +401,7 @@ struct Input_para
     bool out_element_info = false;        ///< output information of all elements
     bool out_mat_r = false;               ///< jingan add 2019-8-14, output r(R) matrix.
     int out_wfc_lcao = 0;                 ///< output the wave functions in local basis.
+    bool out_orbital_mag = false;         ///< output orbital magnetic moment (LCAO multi-k only)
     bool out_dipole = false;              ///< output the dipole or not
     bool out_efield = false;              ///< output the efield or not
     int out_current = 0;                  ///< output the current or not
