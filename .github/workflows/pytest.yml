@@ -16,10 +16,16 @@ jobs:
         uses: actions/setup-python@v6
         with:
             python-version: 3.8
-      - name: Build Pyabacus
+      - name: Build ABACUS
         run: |
+          cmake -B build -DENABLE_LCAO=ON
+          cmake --build build -j4
+          cmake --install build --prefix $HOME/.local/abacus
+      - name: Build Pyabacus with ESolver
+        run: |
+          export ABACUS_INSTALL_DIR=$HOME/.local/abacus
           cd python/pyabacus
-          python -m pip install -v .[test]
+          python -m pip install -v .[test] --no-build-isolation
       - name: Test Pyabacus
         run: |
           cd python/pyabacus/tests

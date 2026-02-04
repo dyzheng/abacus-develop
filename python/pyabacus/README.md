@@ -10,10 +10,13 @@ Now, `pyabacus` provides the following modules:
 - `ModuleBase`: a module for basic math functions.
 - `ModuleNAO`: a module for numerical atomic orbitals (NAO).
 - `hsolver`: a module for solving the Hamiltonian.
+- `esolver`: a module for ESolver bindings (requires `libabacus_core`).
+- `ase`: ASE Calculator integration for geometry optimization and MD.
 
 <!-- toc -->
 
 - [Installation](#installation)
+- [Building with ESolver Module](#building-with-esolver-module)
 - [CI Examples](#ci-examples)
 - [License](#license)
 - [Test call](#test-call)
@@ -25,6 +28,48 @@ Now, `pyabacus` provides the following modules:
 - Create and activate a new conda env, e.g. `conda create -n myenv python=3.8 & conda activate myenv`.
 - Clone ABACUS main repository and `cd abacus-develop/python/pyabacus`.
 - Build pyabacus by `pip install -v .` or install test dependencies & build  pyabacus by `pip install .[test]`. (Use `pip install -v .[test] -i https://pypi.tuna.tsinghua.edu.cn/simple` to accelerate installation process.)
+
+## Building with ESolver Module
+
+The ESolver module provides Python bindings for ABACUS's electronic structure solver, enabling:
+- Python-controlled SCF workflows with breakpoint support
+- ASE (Atomic Simulation Environment) Calculator integration
+- Direct access to Hamiltonian, density matrix, and other internal data
+
+**The ESolver module requires `libabacus_core.so`** from a compiled ABACUS installation.
+
+### Step 1: Build and install ABACUS
+
+```bash
+cd /path/to/abacus-develop
+cmake -B build -DENABLE_LCAO=ON
+cmake --build build -j8
+cmake --install build --prefix /path/to/install
+```
+
+### Step 2: Set environment variable and build pyabacus
+
+```bash
+export ABACUS_INSTALL_DIR=/path/to/install
+cd python/pyabacus
+pip install -e . --no-build-isolation
+```
+
+### Build behavior
+
+- **With `libabacus_core`**: ESolver module is built with full ABACUS functionality
+- **Without `libabacus_core`**: ESolver module is skipped (other modules still work)
+
+### Verify ESolver module
+
+```python
+# Check if ESolver module is available
+try:
+    from pyabacus.esolver._esolver_pack import ESolverLCAO_gamma
+    print("ESolver module is available")
+except ImportError:
+    print("ESolver module not built - libabacus_core not found during build")
+```
 
 ## CI Examples
 
@@ -61,25 +106,25 @@ $ cd examples/
 $ python diago_matrix.py
 
 ====== Calculating eigenvalues using davidson method... ======
-eigenvalues calculated by pyabacus-davidson is: 
+eigenvalues calculated by pyabacus-davidson is:
  [-0.38440611  0.24221155  0.31593272  0.53144616  0.85155108  1.06950154
   1.11142053  1.12462153]
-eigenvalues calculated by scipy is: 
+eigenvalues calculated by scipy is:
  [-0.38440611  0.24221155  0.31593272  0.53144616  0.85155108  1.06950154
   1.11142051  1.12462151]
-eigenvalues difference: 
+eigenvalues difference:
  [4.47258897e-12 5.67104697e-12 8.48299209e-12 1.08900666e-11
  1.87927451e-12 3.15688586e-10 2.11438165e-08 2.68884972e-08]
 
 ====== Calculating eigenvalues using dav_subspace method... ======
 enter diag... is_subspace = 0, ntry = 0
-eigenvalues calculated by pyabacus-dav_subspace is: 
+eigenvalues calculated by pyabacus-dav_subspace is:
  [-0.38440611  0.24221155  0.31593272  0.53144616  0.85155108  1.06950154
   1.11142051  1.12462153]
-eigenvalues calculated by scipy is: 
+eigenvalues calculated by scipy is:
  [-0.38440611  0.24221155  0.31593272  0.53144616  0.85155108  1.06950154
   1.11142051  1.12462151]
-eigenvalues difference: 
+eigenvalues difference:
  [ 4.64694949e-12  2.14706031e-12  1.09236509e-11  4.66293670e-13
  -8.94295749e-12  4.71351846e-11  5.39378986e-10  1.97244101e-08]
 ```

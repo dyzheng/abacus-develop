@@ -13,7 +13,8 @@ Example
 >>> print(f"Converged: {result.converged}")
 """
 
-from .runner import abacus, CalculationResult
+from .runner import abacus, run_scf, run_relax
+from .result import CalculationResult, RY_TO_EV, BOHR_TO_ANG
 
 # Try to import C++ bindings
 try:
@@ -26,6 +27,10 @@ except ImportError:
 
 __all__ = [
     'abacus',
+    'run_scf',
+    'run_relax',
     'CalculationResult',
+    'RY_TO_EV',
+    'BOHR_TO_ANG',
     'PyDriver',
 ]

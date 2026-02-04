@@ -19,7 +19,85 @@ set(PSI_PATH "${ABACUS_SOURCE_DIR}/source_psi")
 set(ENABLE_LCAO ON)
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/../../cmake")
 
-# add math_libs
+# =============================================================================
+# Try to find pre-built libabacus_core for fast incremental builds
+# =============================================================================
+if(DEFINED ENV{ABACUS_INSTALL_DIR})
+    set(ABACUS_INSTALL_DIR "$ENV{ABACUS_INSTALL_DIR}")
+endif()
+
+# Try find_package first (preferred method)
+if(ABACUS_INSTALL_DIR)
+    list(APPEND CMAKE_PREFIX_PATH "${ABACUS_INSTALL_DIR}")
+endif()
+
+find_package(abacus_core QUIET CONFIG)
+
+if(abacus_core_FOUND)
+    set(PYABACUS_BUILD_MODE "DYNAMIC")
+    message(STATUS "")
+    message(STATUS "========================================================================")
+    message(STATUS "Found pre-built libabacus_core - using DYNAMIC build mode")
+    message(STATUS "========================================================================")
+    message(STATUS "Library: ${ABACUS_CORE_LIBRARIES}")
+    message(STATUS "Include: ${ABACUS_CORE_INCLUDE_DIRS}")
+    message(STATUS "")
+    message(STATUS "This enables fast incremental builds!")
+    message(STATUS "Only binding code will be recompiled on subsequent installs.")
+    message(STATUS "========================================================================")
+    message(STATUS "")
+else()
+    # Fallback: try to find library directly
+    find_library(ABACUS_CORE_LIB
+        NAMES abacus_core
+        HINTS
+            ${ABACUS_INSTALL_DIR}/lib
+            ${ABACUS_INSTALL_DIR}/lib64
+            ${CMAKE_INSTALL_PREFIX}/lib
+            ${CMAKE_INSTALL_PREFIX}/lib64
+        PATH_SUFFIXES lib lib64
+    )
+
+    if(ABACUS_CORE_LIB)
+        set(PYABACUS_BUILD_MODE "DYNAMIC")
+        # Set include dirs manually
+        if(ABACUS_INSTALL_DIR)
+            set(ABACUS_CORE_INCLUDE_DIRS "${ABACUS_INSTALL_DIR}/include/abacus")
+        endif()
+        message(STATUS "")
+        message(STATUS "========================================================================")
+        message(STATUS "Found libabacus_core directly - using DYNAMIC build mode")
+        message(STATUS "========================================================================")
+        message(STATUS "Library: ${ABACUS_CORE_LIB}")
+        message(STATUS "Include: ${ABACUS_CORE_INCLUDE_DIRS}")
+        message(STATUS "========================================================================")
+        message(STATUS "")
+    else()
+        message(FATAL_ERROR "
+========================================================================
+libabacus_core not found!
+
+PyABACUS requires pre-built libabacus_core. Please build ABACUS first:
+
+  cd /path/to/abacus-develop
+  cmake -B build -DENABLE_LCAO=ON
+  cmake --build build -j\$(nproc)
+  cmake --install build --prefix \$HOME/.local/abacus
+
+Then set environment and rebuild pyabacus:
+  export ABACUS_INSTALL_DIR=\$HOME/.local/abacus
+  pip install -e . --no-build-isolation
+========================================================================
+")
+    endif()
+endif()
+
+# Export build mode for submodules
+set(PYABACUS_BUILD_MODE ${PYABACUS_BUILD_MODE} CACHE STRING "PyABACUS build mode (DYNAMIC only)")
+
+# =============================================================================
+# Setup math libraries (needed for both build modes)
+# =============================================================================
 if(DEFINED ENV{MKLROOT} AND NOT DEFINED MKLROOT)
     set(MKLROOT "$ENV{MKLROOT}")
 endif()
@@ -29,7 +107,6 @@ if(MKLROOT)
   if (ENABLE_MPI)
     find_package(MPI REQUIRED)
     include_directories(${MPI_CXX_INCLUDE_PATH})
-    #add_compile_definitions(__MPI)
   endif()
 
   set(USE_OPENMP ON)
@@ -42,8 +119,6 @@ if(MKLROOT)
   add_definitions(-D__MKL)
   include_directories(${MKL_INCLUDE} ${MKL_INCLUDE}/fftw)
 
-# Since libtorch will find its own MKL, the fftw part conflicts with the original one.
-# When enable deepks, mkl will be linked within ${TORCH_LIBRARIES}.
   if(NOT ENABLE_MLALGO)
     list(APPEND math_libs IntelMKL::MKL)
   endif()
@@ -65,25 +140,31 @@ else()
   endif()
 endif()
 
-# add include directories
-include_directories(
-    ${BASE_PATH} 
-    ${ABACUS_SOURCE_DIR}
-    ${ABACUS_SOURCE_DIR}/source_base/module_container
+# =============================================================================
+# Include directories setup
+# =============================================================================
+if(PYABACUS_BUILD_MODE STREQUAL "DYNAMIC" AND ABACUS_CORE_INCLUDE_DIRS)
+    # Use installed headers
+    include_directories(${ABACUS_CORE_INCLUDE_DIRS})
+    include_directories(${ABACUS_CORE_INCLUDE_DIRS}/source_base/module_container)
+else()
+    # Use source headers
+    include_directories(
+        ${BASE_PATH}
+        ${ABACUS_SOURCE_DIR}
+        ${ABACUS_SOURCE_DIR}/source_base/module_container
     )
+endif()
 
-# add basic libraries
+# Add LCAO compile definition globally for all ABACUS modules
+if(ENABLE_LCAO)
+    add_compile_definitions(__LCAO)
+endif()
+
+# =============================================================================
+# Add basic libraries
+# =============================================================================
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-# add base
-set(BASE_BINARY_DIR "${PROJECT_SOURCE_DIR}/build/base")
-add_subdirectory(${ABACUS_SOURCE_DIR}/source_base ${BASE_BINARY_DIR})
-# add parameter
-set(PARAMETER_BINARY_DIR "${PROJECT_SOURCE_DIR}/build/parameter")
-add_subdirectory(${ABACUS_SOURCE_DIR}/source_io/module_parameter ${PARAMETER_BINARY_DIR})
-# add orb
-set(ORB_BINARY_DIR "${PROJECT_SOURCE_DIR}/build/orb")
-add_subdirectory(${ABACUS_SOURCE_DIR}/source_basis/module_ao ${ORB_BINARY_DIR})
-# set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 # set RPATH
 execute_process(
@@ -110,4 +191,3 @@ if(BUILD_PYABACUS_DRIVER)
     message(STATUS "Building PyABACUS driver module")
     add_subdirectory(${PROJECT_SOURCE_DIR}/src/ModuleDriver)
 endif()
-

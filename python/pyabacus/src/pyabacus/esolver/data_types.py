@@ -9,6 +9,12 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Tuple, Optional, Any
 import numpy as np
 
+# Unit conversion constants (module-level for easy import)
+RY_TO_EV = 13.605693122994        # 1 Ry = 13.6057 eV
+BOHR_TO_ANG = 0.529177249         # 1 Bohr = 0.529177 Å
+RY_BOHR_TO_EV_ANG = RY_TO_EV / BOHR_TO_ANG  # ~25.7112
+KBAR_TO_EV_ANG3 = 1.0 / 1602.1766208  # kbar -> eV/Å³
+
 
 @dataclass
 class ChargeData:

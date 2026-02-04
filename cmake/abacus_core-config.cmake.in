@@ -1,0 +1,56 @@
+@PACKAGE_INIT@
+
+# ABACUS Core Library CMake Config File
+# This file is used by find_package(abacus_core) to locate the ABACUS shared library
+
+include(CMakeFindDependencyMacro)
+
+# Build configuration options that were used
+set(ABACUS_CORE_ENABLE_MPI @ENABLE_MPI@)
+set(ABACUS_CORE_ENABLE_LCAO @ENABLE_LCAO@)
+set(ABACUS_CORE_USE_OPENMP @USE_OPENMP@)
+set(ABACUS_CORE_USE_ELPA @USE_ELPA@)
+set(ABACUS_CORE_ENABLE_LIBXC @ENABLE_LIBXC@)
+
+# Find required dependencies
+if(ABACUS_CORE_ENABLE_MPI)
+    find_dependency(MPI)
+endif()
+
+if(ABACUS_CORE_USE_OPENMP)
+    find_dependency(OpenMP)
+endif()
+
+# Find FFTW3 (required)
+list(APPEND CMAKE_MODULE_PATH "@CMAKE_SOURCE_DIR@/cmake")
+find_dependency(FFTW3)
+
+# Find LAPACK/BLAS
+find_dependency(LAPACK)
+find_dependency(BLAS)
+
+# Find ScaLAPACK if LCAO is enabled
+if(ABACUS_CORE_ENABLE_LCAO)
+    find_dependency(ScaLAPACK)
+endif()
+
+# Find ELPA if enabled
+if(ABACUS_CORE_USE_ELPA)
+    find_dependency(ELPA)
+endif()
+
+# Set include directories
+set_and_check(ABACUS_CORE_INCLUDE_DIR "@PACKAGE_CMAKE_INSTALL_INCLUDEDIR@/abacus")
+
+# Include the targets file
+include("${CMAKE_CURRENT_LIST_DIR}/abacus_core-targets.cmake")
+
+# Convenience variables for users
+set(ABACUS_CORE_LIBRARIES abacus::abacus_core)
+set(ABACUS_CORE_INCLUDE_DIRS ${ABACUS_CORE_INCLUDE_DIR})
+
+# Check that all required components are found
+check_required_components(abacus_core)
+
+# Provide version information
+set(ABACUS_CORE_VERSION "@PROJECT_VERSION@")

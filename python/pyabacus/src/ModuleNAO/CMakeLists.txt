@@ -1,4 +1,4 @@
-# add nao shared library  
+# add nao shared library
 list(APPEND _naos
     ${NAO_PATH}/atomic_radials.cpp
     ${NAO_PATH}/beta_radials.cpp
@@ -20,25 +20,24 @@ list(APPEND _naos
     ${ABACUS_SOURCE_DIR}/source_base/module_device/memory_op.cpp
     ${ABACUS_SOURCE_DIR}/source_base/module_device/device.cpp
 )
-add_library(naopack SHARED 
+add_library(naopack SHARED
     ${_naos}
 )
 
-# link math_libs
-if(MKLROOT)
+# Link against libabacus_core in DYNAMIC mode
+if(TARGET abacus::abacus_core)
     target_link_libraries(naopack
-        MPI::MPI_CXX
-        OpenMP::OpenMP_CXX
+        abacus::abacus_core
+        ${math_libs}
     )
+elseif(ABACUS_CORE_LIB)
+    target_link_libraries(naopack
+        ${ABACUS_CORE_LIB}
+        ${math_libs}
+    )
+else()
+    message(FATAL_ERROR "libabacus_core not found for ModuleNAO")
 endif()
-
-target_link_libraries(naopack
-    base
-    parameter
-    container
-    orb
-    ${math_libs}
-)
 
 list(APPEND pymodule_nao
     ${PROJECT_SOURCE_DIR}/src/ModuleNAO/py_m_nao.cpp
@@ -48,7 +47,19 @@ pybind11_add_module(_nao_pack MODULE ${pymodule_nao})
 target_link_libraries(_nao_pack PRIVATE pybind11::headers naopack)
 target_compile_definitions(_nao_pack PRIVATE VERSION_INFO=${PROJECT_VERSION})
 
-set_target_properties(naopack PROPERTIES INSTALL_RPATH "$ORIGIN")
-set_target_properties(_nao_pack PROPERTIES INSTALL_RPATH "$ORIGIN")
+# Set RPATH to find libabacus_core at runtime
+if(ABACUS_INSTALL_DIR)
+    set_target_properties(naopack PROPERTIES
+        INSTALL_RPATH "$ORIGIN;${ABACUS_INSTALL_DIR}/lib;${ABACUS_INSTALL_DIR}/lib64"
+        BUILD_WITH_INSTALL_RPATH TRUE
+    )
+    set_target_properties(_nao_pack PROPERTIES
+        INSTALL_RPATH "$ORIGIN;${ABACUS_INSTALL_DIR}/lib;${ABACUS_INSTALL_DIR}/lib64"
+        BUILD_WITH_INSTALL_RPATH TRUE
+    )
+else()
+    set_target_properties(naopack PROPERTIES INSTALL_RPATH "$ORIGIN")
+    set_target_properties(_nao_pack PROPERTIES INSTALL_RPATH "$ORIGIN")
+endif()
 
 install(TARGETS _nao_pack naopack DESTINATION ${TARGET_PACK}/ModuleNAO)

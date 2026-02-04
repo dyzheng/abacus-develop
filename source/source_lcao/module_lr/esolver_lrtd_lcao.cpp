@@ -65,7 +65,7 @@ inline void setup_2center_table(TwoCenterBundle& two_center_bundle, LCAO_Orbital
 #ifdef USE_NEW_TWO_CENTER
     two_center_bundle.tabulate();
 #else
-    two_center_bundle.tabulate(inp.lcao_ecut, inp.lcao_dk, inp.lcao_dr, inp.lcao_rmax);
+    two_center_bundle.tabulate(PARAM.inp.lcao_ecut, PARAM.inp.lcao_dk, PARAM.inp.lcao_dr, PARAM.inp.lcao_rmax);
 #endif
     if (PARAM.inp.vnl_in_h)
     {

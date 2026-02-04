@@ -9,20 +9,33 @@ list(APPEND pymodule_base
 
 pybind11_add_module(_base_pack MODULE ${pymodule_base})
 
-target_link_libraries(_base_pack
-    PRIVATE
-    base
-    parameter
-    container
-    orb
-    ${math_libs}
-    ${OpenBLAS_LIBRARIES} 
-    ${LAPACK_LIBRARIES}
+# Link against libabacus_core in DYNAMIC mode
+if(TARGET abacus::abacus_core)
+    target_link_libraries(_base_pack PRIVATE
+        pybind11::headers
+        abacus::abacus_core
+        ${math_libs}
     )
+elseif(ABACUS_CORE_LIB)
+    target_link_libraries(_base_pack PRIVATE
+        pybind11::headers
+        ${ABACUS_CORE_LIB}
+        ${math_libs}
+    )
+else()
+    message(FATAL_ERROR "libabacus_core not found for ModuleBase")
+endif()
 
-target_link_libraries(_base_pack PRIVATE pybind11::headers)
 target_compile_definitions(_base_pack PRIVATE VERSION_INFO=${PROJECT_VERSION})
 
-set_target_properties(_base_pack PROPERTIES INSTALL_RPATH "$ORIGIN")
+# Set RPATH to find libabacus_core at runtime
+if(ABACUS_INSTALL_DIR)
+    set_target_properties(_base_pack PROPERTIES
+        INSTALL_RPATH "$ORIGIN;${ABACUS_INSTALL_DIR}/lib;${ABACUS_INSTALL_DIR}/lib64"
+        BUILD_WITH_INSTALL_RPATH TRUE
+    )
+else()
+    set_target_properties(_base_pack PROPERTIES INSTALL_RPATH "$ORIGIN")
+endif()
 
 install(TARGETS _base_pack DESTINATION ${TARGET_PACK}/ModuleBase)

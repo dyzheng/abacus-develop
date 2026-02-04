@@ -690,6 +690,9 @@ endif()
 
 include(cmake/Testing.cmake)
 
+# Option to build shared library for pyabacus
+option(BUILD_SHARED_LIBS_CORE "Build libabacus_core shared library for pyabacus" ON)
+
 add_subdirectory(source)
 
 include(cmake/BuildInfo.cmake)
@@ -766,4 +769,170 @@ install(PROGRAMS ${ABACUS_BIN_PATH}
 
 if(ENABLE_COVERAGE)
   coverage_evaluate()
+endif()
+
+# =============================================================================
+# Build shared library for pyabacus (libabacus_core.so)
+# =============================================================================
+if(BUILD_SHARED_LIBS_CORE)
+    message(STATUS "Building libabacus_core shared library for pyabacus")
+
+    # Collect all OBJECT libraries
+    set(ABACUS_CORE_OBJECTS
+        $<TARGET_OBJECTS:base>
+        $<TARGET_OBJECTS:parameter>
+        $<TARGET_OBJECTS:cell>
+        $<TARGET_OBJECTS:symmetry>
+        $<TARGET_OBJECTS:md>
+        $<TARGET_OBJECTS:planewave>
+        $<TARGET_OBJECTS:surchem>
+        $<TARGET_OBJECTS:neighbor>
+        $<TARGET_OBJECTS:io_input>
+        $<TARGET_OBJECTS:io_basic>
+        $<TARGET_OBJECTS:io_advanced>
+        $<TARGET_OBJECTS:relax>
+        $<TARGET_OBJECTS:driver>
+        $<TARGET_OBJECTS:xc_>
+        $<TARGET_OBJECTS:hsolver>
+        $<TARGET_OBJECTS:elecstate>
+        $<TARGET_OBJECTS:hamilt_general>
+        $<TARGET_OBJECTS:module_pwdft>
+        $<TARGET_OBJECTS:module_ofdft>
+        $<TARGET_OBJECTS:module_stodft>
+        $<TARGET_OBJECTS:psi>
+        $<TARGET_OBJECTS:psi_initializer>
+        $<TARGET_OBJECTS:psi_overall_init>
+        $<TARGET_OBJECTS:esolver>
+        $<TARGET_OBJECTS:vdw>
+        $<TARGET_OBJECTS:device>
+        $<TARGET_OBJECTS:container>
+        $<TARGET_OBJECTS:dftu>
+        $<TARGET_OBJECTS:deltaspin>
+    )
+
+    # Add LCAO objects if enabled
+    if(ENABLE_LCAO)
+        list(APPEND ABACUS_CORE_OBJECTS
+            $<TARGET_OBJECTS:hamilt_lcao>
+            $<TARGET_OBJECTS:tddft>
+            $<TARGET_OBJECTS:orb>
+            $<TARGET_OBJECTS:gint>
+            $<TARGET_OBJECTS:hcontainer>
+            $<TARGET_OBJECTS:numerical_atomic_orbitals>
+            $<TARGET_OBJECTS:lr>
+            $<TARGET_OBJECTS:rdmft>
+        )
+        if(USE_ELPA)
+            list(APPEND ABACUS_CORE_OBJECTS $<TARGET_OBJECTS:genelpa>)
+        endif()
+    endif()
+
+    # Create shared library
+    add_library(abacus_core SHARED ${ABACUS_CORE_OBJECTS})
+    set_target_properties(abacus_core PROPERTIES
+        VERSION 1.0.0
+        SOVERSION 1
+        POSITION_INDEPENDENT_CODE ON
+        INSTALL_RPATH "$ORIGIN"
+        BUILD_WITH_INSTALL_RPATH TRUE
+    )
+
+    # Link dependencies
+    target_link_libraries(abacus_core PUBLIC ${math_libs})
+    if(ENABLE_MPI)
+        target_link_libraries(abacus_core PUBLIC MPI::MPI_CXX)
+    endif()
+    if(USE_OPENMP)
+        target_link_libraries(abacus_core PUBLIC OpenMP::OpenMP_CXX)
+    endif()
+    if(USE_ELPA AND ENABLE_LCAO)
+        target_link_libraries(abacus_core PUBLIC ELPA::ELPA)
+    endif()
+    if(ENABLE_LIBXC)
+        target_link_libraries(abacus_core PUBLIC Libxc::xc)
+    endif()
+
+    # Install library
+    include(GNUInstallDirs)
+    install(TARGETS abacus_core
+        EXPORT abacus_core-targets
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    )
+
+    # Install headers from all source_* directories
+    set(ABACUS_HEADER_DIRS
+        source_base
+        source_cell
+        source_esolver
+        source_estate
+        source_hamilt
+        source_hsolver
+        source_io
+        source_lcao
+        source_psi
+        source_pw
+        source_basis
+        source_md
+        source_relax
+        source_main
+    )
+
+    foreach(module ${ABACUS_HEADER_DIRS})
+        if(EXISTS ${ABACUS_SOURCE_DIR}/${module})
+            install(DIRECTORY ${ABACUS_SOURCE_DIR}/${module}/
+                DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/abacus/${module}
+                FILES_MATCHING
+                PATTERN "*.h"
+                PATTERN "*.hpp"
+                PATTERN "test*" EXCLUDE
+                PATTERN "Test*" EXCLUDE
+            )
+        endif()
+    endforeach()
+
+    # Install module_container headers separately (nested in source_base)
+    install(DIRECTORY ${ABACUS_SOURCE_DIR}/source_base/module_container/
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/abacus/source_base/module_container
+        FILES_MATCHING
+        PATTERN "*.h"
+        PATTERN "*.hpp"
+        PATTERN "test*" EXCLUDE
+        PATTERN "Test*" EXCLUDE
+    )
+
+    # Install generated build_info.h
+    install(FILES ${CMAKE_BINARY_DIR}/source/source_io/build_info.h
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/abacus/source_io
+    )
+
+    # Export CMake targets
+    install(EXPORT abacus_core-targets
+        FILE abacus_core-targets.cmake
+        NAMESPACE abacus::
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/abacus_core
+    )
+
+    # Generate config files
+    include(CMakePackageConfigHelpers)
+    set(CMAKE_INSTALL_INCLUDEDIR "include")
+    configure_package_config_file(
+        ${CMAKE_SOURCE_DIR}/cmake/abacus_core-config.cmake.in
+        ${CMAKE_BINARY_DIR}/abacus_core-config.cmake
+        INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/abacus_core
+        PATH_VARS CMAKE_INSTALL_INCLUDEDIR
+    )
+    write_basic_package_version_file(
+        ${CMAKE_BINARY_DIR}/abacus_core-config-version.cmake
+        VERSION 1.0.0
+        COMPATIBILITY SameMajorVersion
+    )
+    install(FILES
+        ${CMAKE_BINARY_DIR}/abacus_core-config.cmake
+        ${CMAKE_BINARY_DIR}/abacus_core-config-version.cmake
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/abacus_core
+    )
+
+    message(STATUS "libabacus_core will be installed to: ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}")
+    message(STATUS "Headers will be installed to: ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_INCLUDEDIR}/abacus")
 endif()
