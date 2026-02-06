@@ -516,6 +516,55 @@ ModuleBase::Vector3<double> cal_r_overlap_R::get_psi_r_psi(const ModuleBase::Vec
     return temp_prp;
 }
 
+ModuleBase::Vector3<std::complex<double>> cal_r_overlap_R::get_psi_L_psi(
+    const ModuleBase::Vector3<double>& R1,
+    const int& T1,
+    const int& L1,
+    const int& m1,
+    const int& N1,
+    const ModuleBase::Vector3<double>& R2,
+    const int& T2,
+    const int& L2,
+    const int& m2,
+    const int& N2)
+{
+    ModuleBase::Vector3<double> origin_point(0.0, 0.0, 0.0);
+    double factor = sqrt(ModuleBase::FOUR_PI / 3.0);
+    const ModuleBase::Vector3<double>& distance = R2 - R1;
+
+    // grad_r_beta[beta] = ∂/∂R · ⟨φ_μ|(r-R_B)_beta|φ_ν⟩  (a Vector3<double> for each beta)
+    // Following the same sign convention as get_psi_r_psi:
+    //   mA2=0 → z component (positive factor)
+    //   mA2=1 → x component (negative factor)
+    //   mA2=2 → y component (negative factor)
+
+    // grad of ⟨φ|(r-R_B)_x|φ⟩ w.r.t. R
+    ModuleBase::Vector3<double> grad_rx
+        = -1.0 * factor
+          * center2_orb21_r[T1][T2][L1][N1][L2].at(N2).cal_grad_overlap(origin_point, distance, m1, 1, m2);
+
+    // grad of ⟨φ|(r-R_B)_y|φ⟩ w.r.t. R
+    ModuleBase::Vector3<double> grad_ry
+        = -1.0 * factor
+          * center2_orb21_r[T1][T2][L1][N1][L2].at(N2).cal_grad_overlap(origin_point, distance, m1, 2, m2);
+
+    // grad of ⟨φ|(r-R_B)_z|φ⟩ w.r.t. R
+    ModuleBase::Vector3<double> grad_rz
+        = factor
+          * center2_orb21_r[T1][T2][L1][N1][L2].at(N2).cal_grad_overlap(origin_point, distance, m1, 0, m2);
+
+    // L_x = i * [∂/∂R_y ⟨r_z⟩ - ∂/∂R_z ⟨r_y⟩]
+    // L_y = i * [∂/∂R_z ⟨r_x⟩ - ∂/∂R_x ⟨r_z⟩]
+    // L_z = i * [∂/∂R_x ⟨r_y⟩ - ∂/∂R_y ⟨r_x⟩]
+    const std::complex<double> imag_i(0.0, 1.0);
+
+    std::complex<double> Lx = imag_i * (grad_rz.y - grad_ry.z);
+    std::complex<double> Ly = imag_i * (grad_rx.z - grad_rz.x);
+    std::complex<double> Lz = imag_i * (grad_ry.x - grad_rx.y);
+
+    return ModuleBase::Vector3<std::complex<double>>(Lx, Ly, Lz);
+}
+
 void cal_r_overlap_R::get_psi_r_beta(const UnitCell& ucell,
                                      std::vector<std::vector<double>>& nlm,
                                      const ModuleBase::Vector3<double>& R1,

@@ -279,6 +279,25 @@ AddTest(
 )
 endif()
 
+if(ENABLE_LCAO)
+AddTest(
+  TARGET MODULE_IO_cal_r_overlap_R_L_test
+  LIBS parameter base ${math_libs} device numerical_atomic_orbitals container orb
+  SOURCES
+  cal_r_overlap_R_L_test.cpp
+  ../cal_r_overlap_R.cpp
+  ../single_R_io.cpp
+  ../../source_cell/atom_spec.cpp
+  ../../source_cell/parallel_kpoints.cpp
+  ../../source_cell/test/support/mock_unitcell.cpp
+  ../../source_lcao/center2_orb.cpp
+  ../../source_lcao/center2_orb-orb11.cpp
+  ../../source_lcao/center2_orb-orb21.cpp
+  ../../source_lcao/center2_orb-orb22.cpp
+  ../orb_io.cpp
+)
+endif()
+
 AddTest(
   TARGET MODULE_IO_write_elf_logic_test
   SOURCES write_elf_logic_test.cpp

@@ -21,6 +21,7 @@
 #include "source_lcao/rho_tau_lcao.h" // mohan add 20251024
 #include "source_lcao/LCAO_set.h" // mohan add 20251111
 #include "source_lcao/module_orbital_mag/orbital_mag.h"
+#include "source_lcao/module_orbital_mag/orbital_mag_dm.h"
 
 namespace ModuleESolver
 {
@@ -581,6 +582,35 @@ void ESolver_KS_LCAO<TK, TR>::after_scf(UnitCell& ucell, const int istep, const 
             GlobalV::ofs_running << " M_x = " << M_orb.x << std::endl;
             GlobalV::ofs_running << " M_y = " << M_orb.y << std::endl;
             GlobalV::ofs_running << " M_z = " << M_orb.z << std::endl;
+        }
+
+        //! 5) Calculate orbital magnetic moment using density matrix method if requested
+        if (PARAM.inp.out_orbital_mag_dm)
+        {
+            hamilt::OrbitalMagDM<TK> orbital_mag_dm(ucell,
+                                                    this->kv,
+                                                    *this->dmat.dm,
+                                                    hamilt_lcao->getHR(),
+                                                    hamilt_lcao->getSR(),
+                                                    &this->pv,
+                                                    this->orb_);
+            ModuleBase::Vector3<double> M_itin = orbital_mag_dm.calculate_orbital_moment();
+            ModuleBase::Vector3<double> M_local = orbital_mag_dm.calculate_local_moment();
+            ModuleBase::Vector3<double> M_total = M_itin + M_local;
+
+            GlobalV::ofs_running << "\n ORBITAL MAGNETIC MOMENT (DM method, Bohr magneton):" << std::endl;
+            GlobalV::ofs_running << " --- Itinerant contribution ---" << std::endl;
+            GlobalV::ofs_running << " M_x = " << M_itin.x << std::endl;
+            GlobalV::ofs_running << " M_y = " << M_itin.y << std::endl;
+            GlobalV::ofs_running << " M_z = " << M_itin.z << std::endl;
+            GlobalV::ofs_running << " --- Local (on-site) contribution ---" << std::endl;
+            GlobalV::ofs_running << " M_x = " << M_local.x << std::endl;
+            GlobalV::ofs_running << " M_y = " << M_local.y << std::endl;
+            GlobalV::ofs_running << " M_z = " << M_local.z << std::endl;
+            GlobalV::ofs_running << " --- Total orbital moment ---" << std::endl;
+            GlobalV::ofs_running << " M_x = " << M_total.x << std::endl;
+            GlobalV::ofs_running << " M_y = " << M_total.y << std::endl;
+            GlobalV::ofs_running << " M_z = " << M_total.z << std::endl;
         }
     }
 

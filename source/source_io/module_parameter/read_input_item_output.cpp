@@ -164,6 +164,18 @@ void ReadInput::item_output()
         this->add_item(item);
     }
     {
+        Input_Item item("out_orbital_mag_dm");
+        item.annotation = "output orbital magnetic moment using density matrix method (LCAO multi-k only)";
+        read_sync_bool(input.out_orbital_mag_dm);
+        item.check_value = [](const Input_Item& item, const Parameter& para) {
+            if (para.input.basis_type != "lcao" && para.input.out_orbital_mag_dm)
+            {
+                ModuleBase::WARNING_QUIT("ReadInput", "out_orbital_mag_dm is only for lcao");
+            }
+        };
+        this->add_item(item);
+    }
+    {
         Input_Item item("out_proj_band");
         item.annotation = "output projected band structure";
         read_sync_bool(input.out_proj_band);

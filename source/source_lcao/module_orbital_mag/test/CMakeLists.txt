@@ -12,4 +12,19 @@ if(ENABLE_LCAO)
                 ../../../source_basis/module_ao/parallel_orbitals.cpp
                 tmp_mocks.cpp
     )
+
+    AddTest(
+        TARGET orbital_mag_dm_test
+        LIBS parameter ${math_libs} psi base device container
+        SOURCES orbital_mag_dm_test.cpp
+                ../orbital_mag_dm.cpp
+                ../../module_hcontainer/func_folding.cpp
+                ../../module_hcontainer/base_matrix.cpp
+                ../../module_hcontainer/hcontainer.cpp
+                ../../module_hcontainer/atom_pair.cpp
+                ../../module_rt/td_folding.cpp
+                ../../../source_basis/module_ao/parallel_orbitals.cpp
+                tmp_mocks.cpp
+                tmp_mocks_dm.cpp
+    )
 endif()

@@ -5,6 +5,7 @@
 #include "source_base/sph_bessel_recursive.h"
 #include "source_base/vector3.h"
 #include "source_base/ylm.h"
+#include <complex>
 #include "source_basis/module_ao/ORB_atomic_lm.h"
 #include "source_basis/module_ao/ORB_gaunt_table.h"
 #include "source_basis/module_ao/ORB_read.h"
@@ -35,6 +36,18 @@ class cal_r_overlap_R
     void init(const UnitCell& ucell,const Parallel_Orbitals& pv, const LCAO_Orbitals& orb);
     void init_nonlocal(const UnitCell& ucell,const Parallel_Orbitals& pv, const LCAO_Orbitals& orb);
     ModuleBase::Vector3<double> get_psi_r_psi(
+      const ModuleBase::Vector3<double>& R1,
+      const int& T1,
+      const int& L1,
+      const int& m1,
+      const int& N1,
+      const ModuleBase::Vector3<double>& R2,
+      const int& T2,
+      const int& L2,
+      const int& m2,
+      const int& N2
+    );
+    ModuleBase::Vector3<std::complex<double>> get_psi_L_psi(
       const ModuleBase::Vector3<double>& R1,
       const int& T1,
       const int& L1,
