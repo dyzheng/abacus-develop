@@ -6,6 +6,7 @@ with support for callbacks and breakpoints.
 """
 
 from typing import Callable, Optional
+import os
 import numpy as np
 
 from .callbacks import CallbackMixin
@@ -24,8 +25,10 @@ class LCAOWorkflow(CallbackMixin, DataAccessMixin):
     ----------
     input_dir : str
         Directory containing INPUT, STRU, and other input files
-    gamma_only : bool, optional
-        Whether to use gamma-only calculation (default: True)
+    gamma_only : bool or None, optional
+        Whether to use gamma-only calculation.  When ``None`` (the default),
+        the value is read from the INPUT file in *input_dir* during
+        ``initialize()``.
 
     Example
     -------
@@ -42,7 +45,7 @@ class LCAOWorkflow(CallbackMixin, DataAccessMixin):
     >>> print(result.summary())
     """
 
-    def __init__(self, input_dir: str, gamma_only: bool = True):
+    def __init__(self, input_dir: str, gamma_only: Optional[bool] = None):
         """
         Initialize LCAOWorkflow.
 
@@ -50,8 +53,9 @@ class LCAOWorkflow(CallbackMixin, DataAccessMixin):
         ----------
         input_dir : str
             Directory containing input files
-        gamma_only : bool
-            Use gamma-only calculation if True, multi-k if False
+        gamma_only : bool or None
+            Use gamma-only calculation if True, multi-k if False.
+            If None, auto-detect from the INPUT file in *input_dir*.
         """
         self._input_dir = input_dir
         self._gamma_only = gamma_only
@@ -62,12 +66,25 @@ class LCAOWorkflow(CallbackMixin, DataAccessMixin):
         # Initialize callback registry from mixin
         self._init_callbacks()
 
+    @staticmethod
+    def _read_gamma_only(input_dir: str) -> bool:
+        """Read gamma_only from the INPUT file in *input_dir*."""
+        from pyabacus.prepare import read_input
+        inp = read_input(os.path.join(input_dir, "INPUT"))
+        return bool(inp.get("gamma_only", 1))
+
     def initialize(self) -> None:
         """
         Initialize the calculation.
 
         This must be called before running any SCF calculations.
+        If ``gamma_only`` was not specified at construction time, it is
+        determined from the INPUT file in *input_dir*.
         """
+        # Auto-detect gamma_only from INPUT file when not explicitly set
+        if self._gamma_only is None:
+            self._gamma_only = self._read_gamma_only(self._input_dir)
+
         # Import the appropriate ESolver class
         try:
             if self._gamma_only:
@@ -120,34 +137,12 @@ class LCAOWorkflow(CallbackMixin, DataAccessMixin):
 
         self._scf_running = True
 
-        # before_scf
-        self._esolver.before_scf(istep)
-        self._fire_callbacks('before_scf')
+        # Use the C++ run_scf() method which properly matches ESolver_KS::runner()
+        # This ensures diag_ethr is set correctly and all SCF logic matches
+        self._esolver.run_scf(max_iter)
 
-        # SCF loop
-        for iter_num in range(1, max_iter + 1):
-            self._esolver.run_scf_iteration(iter_num)
-
-            # Fire after_iter callbacks
-            self._fire_callbacks('after_iter', iter_num)
-
-            # Call user-provided callback
-            if callback is not None:
-                callback(self, iter_num)
-
-            # Check convergence
-            if self._esolver.is_converged():
-                break
-
-        # Breakpoint before after_scf - this is the main inspection point
-        self._fire_callbacks('before_after_scf')
-
-        # Collect result before after_scf
+        # Collect result after SCF
         result = self._collect_result()
-
-        # after_scf
-        self._esolver.after_scf(istep)
-        self._fire_callbacks('after_scf')
 
         self._scf_running = False
 
@@ -304,6 +299,7 @@ class LCAOWorkflow(CallbackMixin, DataAccessMixin):
         be reinitialized by calling initialize() again.
         """
         if self._esolver is not None:
+            self._esolver.cleanup()
             self._esolver = None
         self._initialized = False
         self._scf_running = False

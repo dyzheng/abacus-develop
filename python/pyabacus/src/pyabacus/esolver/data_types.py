@@ -10,7 +10,7 @@ from typing import Dict, List, Tuple, Optional, Any
 import numpy as np
 
 # Unit conversion constants (module-level for easy import)
-RY_TO_EV = 13.605693122994        # 1 Ry = 13.6057 eV
+RY_TO_EV = 13.605698                  # Must match source/source_base/constants.h
 BOHR_TO_ANG = 0.529177249         # 1 Bohr = 0.529177 Å
 RY_BOHR_TO_EV_ANG = RY_TO_EV / BOHR_TO_ANG  # ~25.7112
 KBAR_TO_EV_ANG3 = 1.0 / 1602.1766208  # kbar -> eV/Å³
@@ -109,7 +109,7 @@ class EnergyData:
 
         Returns a new EnergyData instance with energies in eV.
         """
-        Ry_to_eV = 13.605693122994  # 1 Ry = 13.6057 eV
+        Ry_to_eV = 13.605698  # Must match source/source_base/constants.h
         return EnergyData(
             etot=self.etot * Ry_to_eV,
             eband=self.eband * Ry_to_eV,
@@ -215,7 +215,7 @@ class ForceData:
     nat: int
 
     # Unit conversion constants
-    RY_TO_EV = 13.605693122994        # 1 Ry = 13.6057 eV
+    RY_TO_EV = 13.605698                  # Must match source/source_base/constants.h
     BOHR_TO_ANG = 0.529177249         # 1 Bohr = 0.529177 Å
     RY_BOHR_TO_EV_ANG = RY_TO_EV / BOHR_TO_ANG  # ~25.7112
 

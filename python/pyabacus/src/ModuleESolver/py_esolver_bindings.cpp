@@ -14,6 +14,7 @@
 #include <pybind11/functional.h>
 
 #include "py_esolver_lcao.hpp"
+#include "py_esolver_pw.hpp"
 
 namespace py = pybind11;
 using namespace pybind11::literals;
@@ -340,6 +341,8 @@ void bind_esolver_lcao(py::module& m, const std::string& suffix)
         // Status
         .def("is_converged", &ESolver::is_converged,
             "Check if SCF is converged")
+        .def("is_oscillating", &ESolver::is_oscillating,
+            "Check if density oscillation is detected")
         .def_property_readonly("niter", &ESolver::get_niter,
             "Current iteration number")
         .def_property_readonly("drho", &ESolver::get_drho,
@@ -415,6 +418,169 @@ void bind_esolver_lcao(py::module& m, const std::string& suffix)
         .def("get_positions", &ESolver::get_positions,
             "Get atomic positions in Angstrom")
         .def("get_cell", &ESolver::get_cell,
+            "Get cell vectors in Angstrom")
+        .def("cleanup", &ESolver::cleanup,
+            "Cleanup resources (calls after_all_runners)");
+}
+
+// ============================================================================
+// ESolver PW Bindings
+// ============================================================================
+
+template <typename T>
+void bind_esolver_pw(py::module& m, const std::string& suffix)
+{
+    using ESolver = py_esolver::PyESolverPW<T>;
+
+    std::string class_name = "ESolverPW" + suffix;
+
+    py::class_<ESolver>(m, class_name.c_str(),
+        R"pbdoc(
+        Python wrapper for ESolver_KS_PW.
+
+        This class provides a Python interface for plane wave calculations
+        with support for breakpoints and state inspection during SCF.
+
+        Example
+        -------
+        >>> esolver = ESolverPW_cd()
+        >>> esolver.initialize("./")
+        >>> esolver.before_all_runners()
+        >>> esolver.run_scf(100)
+        >>> energy = esolver.get_energy()
+        >>> print(f"Total energy: {energy.etot}")
+        )pbdoc")
+        .def(py::init<>())
+
+        // Initialization
+        .def("initialize", &ESolver::initialize,
+            R"pbdoc(
+            Initialize ESolver from INPUT file.
+
+            Parameters
+            ----------
+            input_dir : str
+                Directory containing INPUT, STRU, and other input files
+            )pbdoc", "input_dir"_a)
+        .def("before_all_runners", &ESolver::before_all_runners,
+            "Initialize calculation environment")
+        .def("cleanup", &ESolver::cleanup,
+            "Cleanup resources (calls after_all_runners)")
+
+        // SCF Control
+        .def("before_scf", &ESolver::before_scf,
+            R"pbdoc(
+            Prepare for SCF calculation.
+
+            Parameters
+            ----------
+            istep : int, optional
+                Ion step index (default: 0)
+            )pbdoc", "istep"_a = 0)
+        .def("run_scf_iteration", &ESolver::run_scf_iteration,
+            R"pbdoc(
+            Run a single SCF iteration.
+
+            Parameters
+            ----------
+            iter : int
+                Iteration number (1-based)
+            )pbdoc", "iter"_a)
+        .def("run_scf", &ESolver::run_scf,
+            R"pbdoc(
+            Run complete SCF loop.
+
+            Parameters
+            ----------
+            max_iter : int, optional
+                Maximum number of iterations (default: 100)
+            )pbdoc", "max_iter"_a = 100)
+        .def("after_scf", &ESolver::after_scf,
+            R"pbdoc(
+            Finalize SCF calculation.
+
+            Parameters
+            ----------
+            istep : int, optional
+                Ion step index (default: 0)
+            )pbdoc", "istep"_a = 0)
+
+        // Status
+        .def("is_converged", &ESolver::is_converged,
+            "Check if SCF is converged")
+        .def_property_readonly("niter", &ESolver::get_niter,
+            "Current iteration number")
+        .def_property_readonly("drho", &ESolver::get_drho,
+            "Charge density difference")
+        .def_property_readonly("istep", &ESolver::get_istep,
+            "Current ion step")
+
+        // Data Accessors
+        .def("get_charge", &ESolver::get_charge,
+            "Get charge density accessor")
+        .def("get_energy", &ESolver::get_energy,
+            "Get energy accessor")
+
+        // Wave functions
+        .def("get_psi", &ESolver::get_psi,
+            "Get wave function coefficients for k-point ik", "ik"_a)
+        .def("get_eigenvalues", &ESolver::get_eigenvalues,
+            "Get eigenvalues for k-point ik", "ik"_a)
+        .def("get_occupations", &ESolver::get_occupations,
+            "Get occupation numbers for k-point ik", "ik"_a)
+
+        // K-points
+        .def_property_readonly("nks", &ESolver::get_nks,
+            "Number of k-points")
+        .def("get_kvec_d", &ESolver::get_kvec_d,
+            "Get k-vector in direct coordinates", "ik"_a)
+        .def("get_wk", &ESolver::get_wk,
+            "Get k-point weights")
+
+        // System info
+        .def("get_npw", &ESolver::get_npw,
+            "Get number of plane waves for k-point ik", "ik"_a)
+        .def_property_readonly("npwx", &ESolver::get_npwx,
+            "Maximum number of plane waves")
+        .def_property_readonly("nbands", &ESolver::get_nbands,
+            "Number of bands")
+        .def_property_readonly("nspin", &ESolver::get_nspin,
+            "Number of spin channels")
+        .def_property_readonly("nat", &ESolver::get_nat,
+            "Number of atoms")
+
+        // Force and stress
+        .def("cal_force", &ESolver::cal_force,
+            "Calculate forces on atoms")
+        .def("cal_stress", &ESolver::cal_stress,
+            "Calculate stress tensor")
+        .def("get_force", &ESolver::get_force,
+            "Get force accessor (call cal_force first)")
+        .def("get_stress", &ESolver::get_stress,
+            "Get stress accessor (call cal_stress first)")
+
+        // Position and cell update
+        .def("update_positions", &ESolver::update_positions,
+            R"pbdoc(
+            Update atomic positions.
+
+            Parameters
+            ----------
+            positions : numpy.ndarray
+                Atomic positions with shape (nat, 3) in Angstrom
+            )pbdoc", "positions"_a)
+        .def("update_cell", &ESolver::update_cell,
+            R"pbdoc(
+            Update cell vectors.
+
+            Parameters
+            ----------
+            cell : numpy.ndarray
+                Cell vectors with shape (3, 3) in Angstrom
+            )pbdoc", "cell"_a)
+        .def("get_positions", &ESolver::get_positions,
+            "Get atomic positions in Angstrom")
+        .def("get_cell", &ESolver::get_cell,
             "Get cell vectors in Angstrom");
 }
 
@@ -428,37 +594,42 @@ PYBIND11_MODULE(_esolver_pack, m)
         PyABACUS ESolver Module
         -----------------------
 
-        This module provides Python bindings for ABACUS ESolver_KS_LCAO,
+        This module provides Python bindings for ABACUS ESolver classes,
         enabling Python-controlled SCF workflows with breakpoint support.
 
         Main Classes
         ------------
-        ESolverLCAO_gamma : ESolver for gamma-only calculations
-        ESolverLCAO_multi_k : ESolver for multi-k calculations
+        ESolverLCAO_gamma : ESolver for gamma-only LCAO calculations
+        ESolverLCAO_multi_k : ESolver for multi-k LCAO calculations
+        ESolverPW_cf : ESolver for plane wave calculations (single precision)
+        ESolverPW_cd : ESolver for plane wave calculations (double precision)
 
         Accessor Classes
         ----------------
         ChargeAccessor : Access charge density data
         EnergyAccessor : Access energy components
-        HamiltonianAccessor_gamma/multi_k : Access Hamiltonian matrices
-        DensityMatrixAccessor_gamma/multi_k : Access density matrices
+        HamiltonianAccessor_gamma/multi_k : Access Hamiltonian matrices (LCAO only)
+        DensityMatrixAccessor_gamma/multi_k : Access density matrices (LCAO only)
 
-        Example
-        -------
+        Example (LCAO)
+        --------------
         >>> from pyabacus.esolver import ESolverLCAO_gamma
         >>> esolver = ESolverLCAO_gamma()
         >>> esolver.initialize("./")
         >>> esolver.before_all_runners()
-        >>> esolver.before_scf(0)
-        >>> # Run SCF with breakpoint support
-        >>> for iter in range(1, 101):
-        ...     esolver.run_scf_iteration(iter)
-        ...     if esolver.is_converged():
-        ...         break
-        >>> # Inspect state before after_scf
-        >>> charge = esolver.get_charge()
+        >>> esolver.run_scf(100)
         >>> energy = esolver.get_energy()
-        >>> esolver.after_scf(0)
+        >>> esolver.cleanup()
+
+        Example (PW)
+        ------------
+        >>> from pyabacus.esolver import ESolverPW_cd
+        >>> esolver = ESolverPW_cd()
+        >>> esolver.initialize("./")
+        >>> esolver.before_all_runners()
+        >>> esolver.run_scf(100)
+        >>> energy = esolver.get_energy()
+        >>> esolver.cleanup()
     )pbdoc";
 
     // Bind accessor classes
@@ -471,7 +642,11 @@ PYBIND11_MODULE(_esolver_pack, m)
     bind_density_matrix_accessor<double>(m, "_gamma");
     bind_density_matrix_accessor<std::complex<double>>(m, "_multi_k");
 
-    // Bind ESolver classes
+    // Bind LCAO ESolver classes
     bind_esolver_lcao<double, double>(m, "_gamma");
     bind_esolver_lcao<std::complex<double>, double>(m, "_multi_k");
+
+    // Bind PW ESolver classes
+    bind_esolver_pw<std::complex<float>>(m, "_cf");
+    bind_esolver_pw<std::complex<double>>(m, "_cd");
 }

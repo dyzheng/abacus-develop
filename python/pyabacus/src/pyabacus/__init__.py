@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-__submodules__ = ["ModuleBase", "ModuleNAO", "hsolver", "Cell", "IntegralCalculator", "io", "esolver", "driver", "ase"]
+__submodules__ = ["ModuleBase", "ModuleNAO", "hsolver", "Cell", "IntegralCalculator", "io", "esolver", "driver", "ase", "prepare"]
 __all__ = list(__submodules__) + ["abacus", "CalculationResult"]
 
 # Import the main abacus() function for convenience
@@ -29,6 +29,9 @@ def __getattr__(attr):
     elif attr == "ase":
         import pyabacus.ase as ase
         return ase
+    elif attr == "prepare":
+        import pyabacus.prepare as prepare
+        return prepare
     elif attr == "abacus":
         from pyabacus.driver import abacus
         return abacus

@@ -540,8 +540,12 @@ void PyDensityMatrixAccessor<TK, TR>::set_from_dm(elecstate::DensityMatrix<TK, T
     nrow_ = dm->get_DMK_nrow();
     ncol_ = dm->get_DMK_ncol();
 
-    // Initialize pointer arrays for compatibility mode
-    dmk_ptrs_.resize(nks_, nullptr);
+    // Populate pointer array from DensityMatrix object
+    dmk_ptrs_.resize(nks_);
+    for (int ik = 0; ik < nks_; ++ik)
+    {
+        dmk_ptrs_[ik] = dm->get_DMK_pointer(ik);
+    }
 }
 
 template <typename TK, typename TR>

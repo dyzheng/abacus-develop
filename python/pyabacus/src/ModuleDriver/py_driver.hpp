@@ -70,7 +70,7 @@ struct CalculationResult
     std::map<std::string, std::string> output_files;  // filename -> full path
 
     // Unit conversion constants
-    static constexpr double Ry_to_eV = 13.605693122994;
+    static constexpr double Ry_to_eV = 13.605698;  // Must match source/source_base/constants.h
     static constexpr double Bohr_to_Ang = 0.529177249;
 
     // Convenience methods

@@ -33,6 +33,12 @@ class ESolver_KS : public ESolver_FP
     psi::Psi<T>* get_psi() const { return psi; }
     double get_drho() const { return drho; }
     double get_diag_ethr() const { return diag_ethr; }
+    void set_diag_ethr(double ethr) { diag_ethr = ethr; }
+    bool get_oscillate_esolver() const { return oscillate_esolver; }
+    bool get_scf_nmax_flag() const { return scf_nmax_flag; }
+    void set_scf_nmax_flag(bool flag) { scf_nmax_flag = flag; }
+    int get_niter() const { return niter; }
+    int get_maxniter() const { return maxniter; }
 
     //! Something to do before SCF iterations.
     virtual void before_scf(UnitCell& ucell, const int istep) override;

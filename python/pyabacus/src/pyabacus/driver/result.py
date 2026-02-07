@@ -11,7 +11,7 @@ import os
 
 
 # Unit conversion constants
-RY_TO_EV = 13.605693122994  # 1 Ry = 13.6057 eV
+RY_TO_EV = 13.605698  # Must match source/source_base/constants.h
 BOHR_TO_ANG = 0.529177249   # 1 Bohr = 0.529 Angstrom
 
 

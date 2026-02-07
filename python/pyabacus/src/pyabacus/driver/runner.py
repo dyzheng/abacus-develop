@@ -78,7 +78,7 @@ def abacus(
     CalculationResult
         Object containing all calculation results including:
         - converged: Whether SCF converged
-        - etot: Total energy (Ry)
+        - etot: Total energy (eV)
         - etot_ev: Total energy (eV)
         - forces: Forces on atoms (if calculate_force=True)
         - stress: Stress tensor (if calculate_stress=True)
@@ -170,18 +170,20 @@ def abacus(
         )
 
         # Convert C++ result to Python dataclass
+        # C++ CalculationResult stores energies in Rydberg;
+        # Python CalculationResult stores energies in eV.
         result = CalculationResult(
             converged=cpp_result.converged,
             niter=cpp_result.niter,
             drho=cpp_result.drho,
-            etot=cpp_result.etot,
-            eband=cpp_result.eband,
-            hartree_energy=cpp_result.hartree_energy,
-            etxc=cpp_result.etxc,
-            ewald_energy=cpp_result.ewald_energy,
-            demet=cpp_result.demet,
-            exx=cpp_result.exx,
-            evdw=cpp_result.evdw,
+            etot=cpp_result.etot * RY_TO_EV,
+            eband=cpp_result.eband * RY_TO_EV,
+            hartree_energy=cpp_result.hartree_energy * RY_TO_EV,
+            etxc=cpp_result.etxc * RY_TO_EV,
+            ewald_energy=cpp_result.ewald_energy * RY_TO_EV,
+            demet=cpp_result.demet * RY_TO_EV,
+            exx=cpp_result.exx * RY_TO_EV,
+            evdw=cpp_result.evdw * RY_TO_EV,
             fermi_energy=cpp_result.fermi_energy,
             bandgap=cpp_result.bandgap,
             nat=cpp_result.nat,

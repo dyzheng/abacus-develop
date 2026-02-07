@@ -1,8 +1,9 @@
 /**
- * @file py_esolver_lcao_impl.cpp
- * @brief Implementation of PyESolverLCAO class methods
+ * @file py_esolver_pw_impl.cpp
+ * @brief Implementation of PyESolverPW class methods
  *
- * This file contains the implementation of the main PyESolverLCAO wrapper class.
+ * This file contains the implementation of the main PyESolverPW wrapper class
+ * for plane wave calculations.
  */
 
 #include <pybind11/pybind11.h>
@@ -10,19 +11,16 @@
 #include <pybind11/stl.h>
 #include <pybind11/complex.h>
 
-#include "py_esolver_lcao.hpp"
+#include "py_esolver_pw.hpp"
+#include "py_esolver_lcao.hpp"  // For py_esolver_constants
 
 // ABACUS headers for actual implementation
 #include "source_estate/module_charge/charge.h"
 #include "source_estate/fp_energy.h"
 #include "source_estate/elecstate.h"
-#include "source_estate/module_dm/density_matrix.h"
-#include "source_lcao/hamilt_lcao.h"
-#include "source_lcao/module_hcontainer/hcontainer.h"
-#include "source_basis/module_ao/parallel_orbitals.h"
 
-// Additional ABACUS headers for Phase 3 implementation
-#include "source_esolver/esolver_ks_lcao.h"
+// Additional ABACUS headers for PW implementation
+#include "source_esolver/esolver_ks_pw.h"
 #include "source_esolver/esolver.h"
 #include "source_cell/unitcell.h"
 #include "source_cell/check_atomic_stru.h"
@@ -51,9 +49,6 @@
 #include <iomanip>
 #include <filesystem>
 
-// For ElecStateLCAO::need_psi_grid reset
-#include "source_estate/elecstate_lcao.h"
-
 namespace py = pybind11;
 namespace fs = std::filesystem;
 
@@ -61,17 +56,17 @@ namespace py_esolver
 {
 
 // ============================================================================
-// PyESolverLCAO Implementation (template)
+// PyESolverPW Implementation (template)
 // ============================================================================
 
-template <typename TK, typename TR>
-PyESolverLCAO<TK, TR>::PyESolverLCAO()
+template <typename T>
+PyESolverPW<T>::PyESolverPW()
 {
     // Constructor - initialization deferred to initialize()
 }
 
-template <typename TK, typename TR>
-PyESolverLCAO<TK, TR>::~PyESolverLCAO()
+template <typename T>
+PyESolverPW<T>::~PyESolverPW()
 {
     // Clean up ESolver if not already cleaned by cleanup()
     if (esolver_ != nullptr)
@@ -83,8 +78,8 @@ PyESolverLCAO<TK, TR>::~PyESolverLCAO()
     cleanup_output_streams();
 }
 
-template <typename TK, typename TR>
-void PyESolverLCAO<TK, TR>::setup_output_streams(const std::string& output_dir)
+template <typename T>
+void PyESolverPW<T>::setup_output_streams(const std::string& output_dir)
 {
     // Create output directory if it doesn't exist
     if (!fs::exists(output_dir))
@@ -101,8 +96,8 @@ void PyESolverLCAO<TK, TR>::setup_output_streams(const std::string& output_dir)
     ofs_warning_.open(warning_log, std::ios::out);
 }
 
-template <typename TK, typename TR>
-void PyESolverLCAO<TK, TR>::cleanup_output_streams()
+template <typename T>
+void PyESolverPW<T>::cleanup_output_streams()
 {
     // Close files
     if (ofs_running_.is_open())
@@ -115,8 +110,8 @@ void PyESolverLCAO<TK, TR>::cleanup_output_streams()
     }
 }
 
-template <typename TK, typename TR>
-void PyESolverLCAO<TK, TR>::cache_system_info()
+template <typename T>
+void PyESolverPW<T>::cache_system_info()
 {
     if (ucell_ != nullptr)
     {
@@ -129,23 +124,11 @@ void PyESolverLCAO<TK, TR>::cache_system_info()
         // Get dimensions from ESolver's internal state
         nks_ = esolver_->get_kv().get_nks();
         nbands_ = PARAM.inp.nbands;
-        // nbasis_ will be set after orbital setup
     }
 }
 
-template <typename TK, typename TR>
-void PyESolverLCAO<TK, TR>::update_accessors()
-{
-    // Update accessors with current data from ESolver
-    if (esolver_ != nullptr && esolver_->get_pelec() != nullptr)
-    {
-        // Energy accessor will be updated when get_energy() is called
-        // Charge accessor will be updated when get_charge() is called
-    }
-}
-
-template <typename TK, typename TR>
-void PyESolverLCAO<TK, TR>::initialize(const std::string& input_dir)
+template <typename T>
+void PyESolverPW<T>::initialize(const std::string& input_dir)
 {
     // Store input directory for later use
     input_dir_ = input_dir;
@@ -157,7 +140,7 @@ void PyESolverLCAO<TK, TR>::initialize(const std::string& input_dir)
         fs::current_path(input_dir);
     }
 
-    std::cout << "[PyABACUS] Initializing LCAO ESolver..." << std::endl;
+    std::cout << "[PyABACUS] Initializing PW ESolver..." << std::endl;
     std::cout << "[PyABACUS] Input directory: " << fs::current_path().string() << std::endl;
 
     // Initialize MPI parameters (MPI should already be initialized by mpi4py)
@@ -184,7 +167,7 @@ void PyESolverLCAO<TK, TR>::initialize(const std::string& input_dir)
     std::string info_file = PARAM.globalv.global_out_dir + "INPUT.info";
     ri.write_parameters(PARAM, info_file);
 
-    // CRITICAL: Call Input_Conv::Convert() to set global variables like symm_flag
+    // CRITICAL: Call Input_Conv::Convert() to set global variables
     // (matching Driver::reading() step 4)
     Input_Conv::Convert();
 
@@ -202,7 +185,7 @@ void PyESolverLCAO<TK, TR>::initialize(const std::string& input_dir)
     std::cout << "[PyABACUS] STRU file: " << PARAM.globalv.global_in_stru << std::endl;
     std::cout << "[PyABACUS] Output directory: " << output_dir_ << std::endl;
 
-    // Initialize MPI pools (required for LCAO calculations)
+    // Initialize MPI pools (required for PW calculations)
 #ifdef __MPI
     Parallel_Global::init_pools(GlobalV::NPROC,
                                 GlobalV::MY_RANK,
@@ -215,7 +198,7 @@ void PyESolverLCAO<TK, TR>::initialize(const std::string& input_dir)
                                 GlobalV::RANK_IN_POOL,
                                 GlobalV::MY_POOL);
 
-    // Initialize DIAG_WORLD and GRID_WORLD (required for LCAO basis initialization)
+    // Initialize DIAG_WORLD and GRID_WORLD
     Parallel_Global::split_diag_world(PARAM.inp.diago_proc,
                                       GlobalV::NPROC,
                                       GlobalV::MY_RANK,
@@ -246,8 +229,8 @@ void PyESolverLCAO<TK, TR>::initialize(const std::string& input_dir)
     // Initialize hardware (GPU/DSP)
     init_hardware();
 
-    // Create ESolver based on gamma_only flag
-    esolver_ = new ModuleESolver::ESolver_KS_LCAO<TK, TR>();
+    // Create ESolver for plane wave calculations
+    esolver_ = new ModuleESolver::ESolver_KS_PW<T, base_device::DEVICE_CPU>();
 
     // Cache system information
     cache_system_info();
@@ -261,8 +244,8 @@ void PyESolverLCAO<TK, TR>::initialize(const std::string& input_dir)
     initialized_ = true;
 }
 
-template <typename TK, typename TR>
-void PyESolverLCAO<TK, TR>::before_all_runners()
+template <typename T>
+void PyESolverPW<T>::before_all_runners()
 {
     if (!initialized_)
     {
@@ -288,8 +271,116 @@ void PyESolverLCAO<TK, TR>::before_all_runners()
     }
 }
 
-template <typename TK, typename TR>
-void PyESolverLCAO<TK, TR>::before_scf(int istep)
+template <typename T>
+void PyESolverPW<T>::cleanup()
+{
+    std::cout << "[PyABACUS] Cleaning up PW ESolver..." << std::endl;
+
+    // 1. Finalize ESolver computation (writes output files, etc.)
+    if (esolver_ != nullptr && ucell_ != nullptr)
+    {
+        esolver_->after_all_runners(*ucell_);
+    }
+
+    // 2. Delete ESolver and UnitCell to release ALL owned resources
+    //    (K_Vectors, Hamiltonian, Charge, psi, PW_Basis, etc.)
+    //    This must happen while timer is still active (destructors may call timer::tick)
+    if (esolver_ != nullptr)
+    {
+        delete esolver_;
+        esolver_ = nullptr;
+    }
+    ucell_.reset();
+
+    // 3. Finalize hardware (GPU/DSP handles)
+    finalize_hardware();
+
+    // 4. Clear timer pool for next run (skip timer::finish / Memory::finish
+    //    which produce NaN output when ofs_running is already closed)
+    ModuleBase::timer::timer_pool.clear();
+
+    // 5. Close GlobalV log files
+    ModuleBase::Global_File::close_all_log(GlobalV::MY_RANK,
+                                           PARAM.inp.out_alllog,
+                                           PARAM.inp.calculation);
+
+    // 6. Free MPI communicators created by init_pools/split_diag_world/split_grid_world
+    //    They will be recreated in the next initialize() call.
+#ifdef __MPI
+    if (initialized_)
+    {
+        if (POOL_WORLD != MPI_COMM_NULL)  { MPI_Comm_free(&POOL_WORLD); }
+        if (KP_WORLD != MPI_COMM_NULL)    { MPI_Comm_free(&KP_WORLD); }
+        if (INT_BGROUP != MPI_COMM_NULL)  { MPI_Comm_free(&INT_BGROUP); }
+        if (BP_WORLD != MPI_COMM_NULL)    { MPI_Comm_free(&BP_WORLD); }
+        if (GRID_WORLD != MPI_COMM_NULL)  { MPI_Comm_free(&GRID_WORLD); }
+        if (DIAG_WORLD != MPI_COMM_NULL)  { MPI_Comm_free(&DIAG_WORLD); }
+    }
+#endif
+
+    // 7. Reset member state for potential reuse or clean destruction
+    initialized_ = false;
+    scf_started_ = false;
+    conv_esolver_ = false;
+    force_calculated_ = false;
+    stress_calculated_ = false;
+    nat_ = 0;
+    ntype_ = 0;
+    nks_ = 0;
+    npwx_ = 0;
+    nbands_ = 0;
+    nspin_ = 1;
+
+    std::cout << "[PyABACUS] Cleanup complete. Output log: "
+              << output_dir_ << "/running_scf.log" << std::endl;
+}
+
+template <typename T>
+void PyESolverPW<T>::init_hardware()
+{
+#if ((defined __CUDA) || (defined __ROCM))
+    if (PARAM.inp.device == "gpu")
+    {
+        ModuleBase::createGpuBlasHandle();
+        hsolver::createGpuSolverHandle();
+        container::kernels::createGpuBlasHandle();
+        container::kernels::createGpuSolverHandle();
+    }
+#endif
+
+#ifdef __DSP
+    if (GlobalV::NPROC > PARAM.inp.kpar)
+    {
+        ModuleBase::WARNING_QUIT(
+            "PyESolverPW::init_hardware",
+            "Number of processors must be equal to KPAR for DSP hardware initialization.");
+    }
+    std::cout << " ** Initializing DSP Hardware..." << std::endl;
+    mtfunc::dspInitHandle(GlobalV::MY_RANK % PARAM.inp.dsp_count);
+#endif
+}
+
+template <typename T>
+void PyESolverPW<T>::finalize_hardware()
+{
+#if defined(__CUDA) || defined(__ROCM)
+    if (PARAM.inp.device == "gpu")
+    {
+        ModuleBase::destoryBLAShandle();
+        hsolver::destroyGpuSolverHandle();
+        container::kernels::destroyGpuBlasHandle();
+        container::kernels::destroyGpuSolverHandle();
+    }
+#endif
+
+#ifdef __DSP
+    std::cout << " ** Closing DSP Hardware..." << std::endl;
+    mtfunc::dspDestoryHandle(GlobalV::MY_RANK);
+#endif
+}
+
+template <typename T>
+void PyESolverPW<T>::before_scf(int istep)
 {
     if (!initialized_)
     {
@@ -303,15 +394,17 @@ void PyESolverLCAO<TK, TR>::before_scf(int istep)
     if (esolver_ != nullptr && ucell_ != nullptr)
     {
         // Use base class pointer to access public methods
-        auto* base_esolver = static_cast<ModuleESolver::ESolver_KS<TK>*>(esolver_);
+        auto* base_esolver = static_cast<ModuleESolver::ESolver_KS<T>*>(esolver_);
 
-        // Call before_scf (do NOT set diag_ethr here - it's set in run_scf() after this)
+        // Initialize diag_ethr in ESolver (same as runner() does before SCF loop)
+        base_esolver->set_diag_ethr(PARAM.inp.pw_diag_thr);
+
         base_esolver->before_scf(*ucell_, istep);
     }
 }
 
-template <typename TK, typename TR>
-void PyESolverLCAO<TK, TR>::run_scf_iteration(int iter)
+template <typename T>
+void PyESolverPW<T>::run_scf_iteration(int iter)
 {
     if (!scf_started_)
     {
@@ -321,7 +414,7 @@ void PyESolverLCAO<TK, TR>::run_scf_iteration(int iter)
     if (esolver_ != nullptr && ucell_ != nullptr)
     {
         // Use base class pointer to access public methods
-        auto* base_esolver = static_cast<ModuleESolver::ESolver_KS<TK>*>(esolver_);
+        auto* base_esolver = static_cast<ModuleESolver::ESolver_KS<T>*>(esolver_);
 
         // Run iter_init
         base_esolver->iter_init(*ucell_, istep_, iter);
@@ -338,27 +431,23 @@ void PyESolverLCAO<TK, TR>::run_scf_iteration(int iter)
     }
 }
 
-template <typename TK, typename TR>
-void PyESolverLCAO<TK, TR>::run_scf(int max_iter)
+template <typename T>
+void PyESolverPW<T>::run_scf(int max_iter)
 {
     if (!initialized_)
     {
         throw std::runtime_error("ESolver not initialized. Call initialize() first.");
     }
 
-    std::cout << "[PyABACUS] Starting SCF (LCAO, max_iter=" << max_iter << ")" << std::endl;
+    std::cout << "[PyABACUS] Starting SCF (PW, max_iter=" << max_iter << ")" << std::endl;
 
     // Use base class pointer to access public methods
-    auto* base_esolver = static_cast<ModuleESolver::ESolver_KS<TK>*>(esolver_);
+    auto* base_esolver = static_cast<ModuleESolver::ESolver_KS<T>*>(esolver_);
 
     // 1) before_scf
     before_scf(istep_);
 
-    // 2) Initialize diag_ethr like runner() does AFTER before_scf but BEFORE the loop
-    // This is critical - runner() sets diag_ethr = PARAM.inp.pw_diag_thr here
-    base_esolver->set_diag_ethr(PARAM.inp.pw_diag_thr);
-
-    // 3) SCF loop with oscillation check (matching ESolver_KS::runner())
+    // 2) SCF loop with oscillation check (matching ESolver_KS::runner())
     niter_ = max_iter;
     base_esolver->set_scf_nmax_flag(false);
 
@@ -387,7 +476,7 @@ void PyESolverLCAO<TK, TR>::run_scf(int max_iter)
     // 3) Always call after_scf (matching ESolver_KS::runner())
     after_scf(istep_);
 
-    // 4) Print correct total energy via cal_energy() (in Ry, same as ESolver_KS_LCAO::cal_energy)
+    // 4) Print correct total energy via cal_energy() (in Ry, same as ESolver_KS_PW::cal_energy)
     double etot_ry = esolver_->cal_energy();
     std::cout << "[PyABACUS] SCF finished: converged=" << (conv_esolver_ ? "yes" : "no")
               << ", niter=" << niter_
@@ -395,8 +484,8 @@ void PyESolverLCAO<TK, TR>::run_scf(int max_iter)
               << " (" << etot_ry * py_esolver_constants::RY_TO_EV << " eV)" << std::endl;
 }
 
-template <typename TK, typename TR>
-void PyESolverLCAO<TK, TR>::after_scf(int istep)
+template <typename T>
+void PyESolverPW<T>::after_scf(int istep)
 {
     if (!scf_started_)
     {
@@ -405,25 +494,14 @@ void PyESolverLCAO<TK, TR>::after_scf(int istep)
     if (esolver_ != nullptr && ucell_ != nullptr)
     {
         // Use base class pointer to access public methods
-        auto* base_esolver = static_cast<ModuleESolver::ESolver_KS<TK>*>(esolver_);
+        auto* base_esolver = static_cast<ModuleESolver::ESolver_KS<T>*>(esolver_);
         base_esolver->after_scf(*ucell_, istep, conv_esolver_);
     }
     scf_started_ = false;
 }
 
-template <typename TK, typename TR>
-bool PyESolverLCAO<TK, TR>::is_oscillating() const
-{
-    if (esolver_ != nullptr)
-    {
-        auto* base_esolver = static_cast<ModuleESolver::ESolver_KS<TK>*>(esolver_);
-        return base_esolver->get_oscillate_esolver();
-    }
-    return false;
-}
-
-template <typename TK, typename TR>
-PyChargeAccessor PyESolverLCAO<TK, TR>::get_charge() const
+template <typename T>
+PyChargeAccessor PyESolverPW<T>::get_charge() const
 {
     PyChargeAccessor accessor;
     if (esolver_ != nullptr && esolver_->get_pelec() != nullptr)
@@ -434,8 +512,8 @@ PyChargeAccessor PyESolverLCAO<TK, TR>::get_charge() const
     return accessor;
 }
 
-template <typename TK, typename TR>
-PyEnergyAccessor PyESolverLCAO<TK, TR>::get_energy() const
+template <typename T>
+PyEnergyAccessor PyESolverPW<T>::get_energy() const
 {
     PyEnergyAccessor accessor;
     if (esolver_ != nullptr && esolver_->get_pelec() != nullptr)
@@ -446,46 +524,12 @@ PyEnergyAccessor PyESolverLCAO<TK, TR>::get_energy() const
     return accessor;
 }
 
-template <typename TK, typename TR>
-PyHamiltonianAccessor<TK, TR> PyESolverLCAO<TK, TR>::get_hamiltonian() const
-{
-    PyHamiltonianAccessor<TK, TR> accessor;
-    if (esolver_ != nullptr)
-    {
-        // Get Hamiltonian from ESolver
-        auto* p_hamilt = dynamic_cast<hamilt::HamiltLCAO<TK, TR>*>(esolver_->get_p_hamilt());
-        if (p_hamilt != nullptr)
-        {
-            accessor.set_from_hamilt(p_hamilt, nks_, &(esolver_->get_pv()));
-        }
-    }
-    return accessor;
-}
-
-template <typename TK, typename TR>
-PyDensityMatrixAccessor<TK, TR> PyESolverLCAO<TK, TR>::get_density_matrix() const
-{
-    PyDensityMatrixAccessor<TK, TR> accessor;
-    if (esolver_ != nullptr)
-    {
-        // Get density matrix from ESolver's dmat
-        const auto& dmat = esolver_->get_dmat();
-        // Access the dm pointer directly from Setup_DM
-        auto* dm = dmat.dm;
-        if (dm != nullptr)
-        {
-            accessor.set_from_dm(dm);
-        }
-    }
-    return accessor;
-}
-
-template <typename TK, typename TR>
-py::array_t<TK> PyESolverLCAO<TK, TR>::get_psi(int ik) const
+template <typename T>
+py::array_t<T> PyESolverPW<T>::get_psi(int ik) const
 {
     if (esolver_ != nullptr)
     {
-        psi::Psi<TK>* psi_ptr = esolver_->get_psi();
+        psi::Psi<T>* psi_ptr = esolver_->get_psi();
         if (psi_ptr != nullptr && ik >= 0 && ik < nks_)
         {
             psi_ptr->fix_k(ik);
@@ -493,22 +537,22 @@ py::array_t<TK> PyESolverLCAO<TK, TR>::get_psi(int ik) const
             int nbasis = psi_ptr->get_current_nbas();
 
             std::vector<ssize_t> shape = {static_cast<ssize_t>(nbands), static_cast<ssize_t>(nbasis)};
-            auto result = py::array_t<TK>(shape);
+            auto result = py::array_t<T>(shape);
             auto buf = result.request();
-            TK* ptr = static_cast<TK*>(buf.ptr);
+            T* ptr = static_cast<T*>(buf.ptr);
 
             // Copy wave function coefficients
-            const TK* psi_data = psi_ptr->get_pointer();
+            const T* psi_data = psi_ptr->get_pointer();
             std::copy(psi_data, psi_data + nbands * nbasis, ptr);
 
             return result;
         }
     }
-    return py::array_t<TK>();
+    return py::array_t<T>();
 }
 
-template <typename TK, typename TR>
-py::array_t<double> PyESolverLCAO<TK, TR>::get_eigenvalues(int ik) const
+template <typename T>
+py::array_t<double> PyESolverPW<T>::get_eigenvalues(int ik) const
 {
     if (esolver_ != nullptr && esolver_->get_pelec() != nullptr)
     {
@@ -533,8 +577,8 @@ py::array_t<double> PyESolverLCAO<TK, TR>::get_eigenvalues(int ik) const
     return py::array_t<double>();
 }
 
-template <typename TK, typename TR>
-py::array_t<double> PyESolverLCAO<TK, TR>::get_occupations(int ik) const
+template <typename T>
+py::array_t<double> PyESolverPW<T>::get_occupations(int ik) const
 {
     if (esolver_ != nullptr && esolver_->get_pelec() != nullptr)
     {
@@ -559,8 +603,8 @@ py::array_t<double> PyESolverLCAO<TK, TR>::get_occupations(int ik) const
     return py::array_t<double>();
 }
 
-template <typename TK, typename TR>
-int PyESolverLCAO<TK, TR>::get_nks() const
+template <typename T>
+int PyESolverPW<T>::get_nks() const
 {
     if (esolver_ != nullptr)
     {
@@ -569,8 +613,8 @@ int PyESolverLCAO<TK, TR>::get_nks() const
     return nks_;
 }
 
-template <typename TK, typename TR>
-py::array_t<double> PyESolverLCAO<TK, TR>::get_kvec_d(int ik) const
+template <typename T>
+py::array_t<double> PyESolverPW<T>::get_kvec_d(int ik) const
 {
     std::vector<ssize_t> shape = {3};
     auto result = py::array_t<double>(shape);
@@ -593,8 +637,8 @@ py::array_t<double> PyESolverLCAO<TK, TR>::get_kvec_d(int ik) const
     return result;
 }
 
-template <typename TK, typename TR>
-py::array_t<double> PyESolverLCAO<TK, TR>::get_wk() const
+template <typename T>
+py::array_t<double> PyESolverPW<T>::get_wk() const
 {
     if (esolver_ != nullptr)
     {
@@ -618,19 +662,37 @@ py::array_t<double> PyESolverLCAO<TK, TR>::get_wk() const
     return py::array_t<double>();
 }
 
-template <typename TK, typename TR>
-int PyESolverLCAO<TK, TR>::get_nbasis() const
+template <typename T>
+int PyESolverPW<T>::get_npw(int ik) const
 {
     if (esolver_ != nullptr)
     {
-        const auto& pv = esolver_->get_pv();
-        return pv.get_global_row_size();
+        psi::Psi<T>* psi_ptr = esolver_->get_psi();
+        if (psi_ptr != nullptr && ik >= 0 && ik < nks_)
+        {
+            psi_ptr->fix_k(ik);
+            return psi_ptr->get_current_nbas();
+        }
     }
-    return nbasis_;
+    return 0;
 }
 
-template <typename TK, typename TR>
-int PyESolverLCAO<TK, TR>::get_nbands() const
+template <typename T>
+int PyESolverPW<T>::get_npwx() const
+{
+    if (esolver_ != nullptr)
+    {
+        psi::Psi<T>* psi_ptr = esolver_->get_psi();
+        if (psi_ptr != nullptr)
+        {
+            return psi_ptr->get_nbasis();
+        }
+    }
+    return npwx_;
+}
+
+template <typename T>
+int PyESolverPW<T>::get_nbands() const
 {
     if (esolver_ != nullptr && esolver_->get_psi() != nullptr)
     {
@@ -639,8 +701,8 @@ int PyESolverLCAO<TK, TR>::get_nbands() const
     return nbands_;
 }
 
-template <typename TK, typename TR>
-int PyESolverLCAO<TK, TR>::get_nspin() const
+template <typename T>
+int PyESolverPW<T>::get_nspin() const
 {
     if (esolver_ != nullptr)
     {
@@ -649,8 +711,8 @@ int PyESolverLCAO<TK, TR>::get_nspin() const
     return nspin_;
 }
 
-template <typename TK, typename TR>
-int PyESolverLCAO<TK, TR>::get_nat() const
+template <typename T>
+int PyESolverPW<T>::get_nat() const
 {
     if (ucell_ != nullptr)
     {
@@ -663,8 +725,8 @@ int PyESolverLCAO<TK, TR>::get_nat() const
 // Force and Stress Methods
 // ============================================================================
 
-template <typename TK, typename TR>
-void PyESolverLCAO<TK, TR>::cal_force()
+template <typename T>
+void PyESolverPW<T>::cal_force()
 {
     if (!initialized_)
     {
@@ -679,8 +741,8 @@ void PyESolverLCAO<TK, TR>::cal_force()
     force_calculated_ = true;
 }
 
-template <typename TK, typename TR>
-void PyESolverLCAO<TK, TR>::cal_stress()
+template <typename T>
+void PyESolverPW<T>::cal_stress()
 {
     if (!initialized_)
     {
@@ -695,8 +757,8 @@ void PyESolverLCAO<TK, TR>::cal_stress()
     stress_calculated_ = true;
 }
 
-template <typename TK, typename TR>
-PyForceAccessor PyESolverLCAO<TK, TR>::get_force() const
+template <typename T>
+PyForceAccessor PyESolverPW<T>::get_force() const
 {
     if (!force_calculated_)
     {
@@ -705,8 +767,8 @@ PyForceAccessor PyESolverLCAO<TK, TR>::get_force() const
     return force_accessor_;
 }
 
-template <typename TK, typename TR>
-PyStressAccessor PyESolverLCAO<TK, TR>::get_stress() const
+template <typename T>
+PyStressAccessor PyESolverPW<T>::get_stress() const
 {
     if (!stress_calculated_)
     {
@@ -719,8 +781,8 @@ PyStressAccessor PyESolverLCAO<TK, TR>::get_stress() const
 // Position and Cell Update Methods
 // ============================================================================
 
-template <typename TK, typename TR>
-void PyESolverLCAO<TK, TR>::update_positions(py::array_t<double> positions)
+template <typename T>
+void PyESolverPW<T>::update_positions(py::array_t<double> positions)
 {
     if (!initialized_)
     {
@@ -780,8 +842,8 @@ void PyESolverLCAO<TK, TR>::update_positions(py::array_t<double> positions)
     stress_calculated_ = false;
 }
 
-template <typename TK, typename TR>
-void PyESolverLCAO<TK, TR>::update_cell(py::array_t<double> cell)
+template <typename T>
+void PyESolverPW<T>::update_cell(py::array_t<double> cell)
 {
     if (!initialized_)
     {
@@ -799,7 +861,6 @@ void PyESolverLCAO<TK, TR>::update_cell(py::array_t<double> cell)
         double* ptr = static_cast<double*>(buf.ptr);
 
         // Update lattice vectors (convert from Angstrom to Bohr)
-        // Matrix3 uses e11, e12, etc. instead of e[i][j]
         double* latvec_ptr = &(ucell_->latvec.e11);
         for (int i = 0; i < 9; ++i)
         {
@@ -832,8 +893,8 @@ void PyESolverLCAO<TK, TR>::update_cell(py::array_t<double> cell)
     stress_calculated_ = false;
 }
 
-template <typename TK, typename TR>
-py::array_t<double> PyESolverLCAO<TK, TR>::get_positions() const
+template <typename T>
+py::array_t<double> PyESolverPW<T>::get_positions() const
 {
     if (ucell_ != nullptr && nat_ > 0)
     {
@@ -866,8 +927,8 @@ py::array_t<double> PyESolverLCAO<TK, TR>::get_positions() const
     return result;
 }
 
-template <typename TK, typename TR>
-py::array_t<double> PyESolverLCAO<TK, TR>::get_cell() const
+template <typename T>
+py::array_t<double> PyESolverPW<T>::get_cell() const
 {
     if (ucell_ != nullptr)
     {
@@ -877,7 +938,6 @@ py::array_t<double> PyESolverLCAO<TK, TR>::get_cell() const
         double* ptr = static_cast<double*>(buf.ptr);
 
         // Convert lattice vectors from Bohr to Angstrom
-        // Matrix3 uses e11, e12, etc. instead of e[i][j]
         const double* latvec_ptr = &(ucell_->latvec.e11);
         for (int i = 0; i < 9; ++i)
         {
@@ -897,122 +957,8 @@ py::array_t<double> PyESolverLCAO<TK, TR>::get_cell() const
     return result;
 }
 
-template <typename TK, typename TR>
-void PyESolverLCAO<TK, TR>::cleanup()
-{
-    std::cout << "[PyABACUS] Cleaning up LCAO ESolver..." << std::endl;
-
-    // 1. Finalize ESolver computation (writes output files, etc.)
-    if (esolver_ != nullptr && ucell_ != nullptr)
-    {
-        esolver_->after_all_runners(*ucell_);
-    }
-
-    // 2. Delete ESolver and UnitCell to release ALL owned resources
-    //    (K_Vectors, Hamiltonian, Charge, DensityMatrix, psi, etc.)
-    //    This must happen while timer is still active (destructors may call timer::tick)
-    if (esolver_ != nullptr)
-    {
-        delete esolver_;
-        esolver_ = nullptr;
-    }
-    ucell_.reset();
-
-    // 3. Finalize hardware (GPU/DSP handles)
-    finalize_hardware();
-
-    // 4. Clear timer pool for next run (skip timer::finish / Memory::finish
-    //    which produce NaN output when ofs_running is already closed)
-    ModuleBase::timer::timer_pool.clear();
-
-    // 5. Close GlobalV log files
-    ModuleBase::Global_File::close_all_log(GlobalV::MY_RANK,
-                                           PARAM.inp.out_alllog,
-                                           PARAM.inp.calculation);
-
-    // 6. Free MPI communicators created by init_pools/split_diag_world/split_grid_world
-    //    They will be recreated in the next initialize() call.
-    //    (Without this, MPI_Comm_split in the next run leaks communicators)
-#ifdef __MPI
-    if (initialized_)
-    {
-        if (POOL_WORLD != MPI_COMM_NULL)  { MPI_Comm_free(&POOL_WORLD); }
-        if (KP_WORLD != MPI_COMM_NULL)    { MPI_Comm_free(&KP_WORLD); }
-        if (INT_BGROUP != MPI_COMM_NULL)  { MPI_Comm_free(&INT_BGROUP); }
-        if (BP_WORLD != MPI_COMM_NULL)    { MPI_Comm_free(&BP_WORLD); }
-        if (GRID_WORLD != MPI_COMM_NULL)  { MPI_Comm_free(&GRID_WORLD); }
-        if (DIAG_WORLD != MPI_COMM_NULL)  { MPI_Comm_free(&DIAG_WORLD); }
-    }
-#endif
-
-    // 7. Reset static variables that Input_Conv::Convert() only sets conditionally
-    //    need_psi_grid is set to false for nscf but never reset to true
-    elecstate::ElecStateLCAO<double>::need_psi_grid = true;
-    elecstate::ElecStateLCAO<std::complex<double>>::need_psi_grid = true;
-
-    // 8. Reset member state for potential reuse or clean destruction
-    initialized_ = false;
-    scf_started_ = false;
-    conv_esolver_ = false;
-    force_calculated_ = false;
-    stress_calculated_ = false;
-    nat_ = 0;
-    ntype_ = 0;
-    nks_ = 0;
-    nbasis_ = 0;
-    nbands_ = 0;
-    nspin_ = 1;
-
-    std::cout << "[PyABACUS] Cleanup complete. Output log: "
-              << output_dir_ << "/running_scf.log" << std::endl;
-}
-
-template <typename TK, typename TR>
-void PyESolverLCAO<TK, TR>::init_hardware()
-{
-#if ((defined __CUDA) || (defined __ROCM))
-    if (PARAM.inp.device == "gpu")
-    {
-        ModuleBase::createGpuBlasHandle();
-        hsolver::createGpuSolverHandle();
-        container::kernels::createGpuBlasHandle();
-        container::kernels::createGpuSolverHandle();
-    }
-#endif
-
-#ifdef __DSP
-    if (GlobalV::NPROC > PARAM.inp.kpar)
-    {
-        ModuleBase::WARNING_QUIT(
-            "PyESolverLCAO::init_hardware",
-            "Number of processors must be equal to KPAR for DSP hardware initialization.");
-    }
-    std::cout << " ** Initializing DSP Hardware..." << std::endl;
-    mtfunc::dspInitHandle(GlobalV::MY_RANK % PARAM.inp.dsp_count);
-#endif
-}
-
-template <typename TK, typename TR>
-void PyESolverLCAO<TK, TR>::finalize_hardware()
-{
-#if defined(__CUDA) || defined(__ROCM)
-    if (PARAM.inp.device == "gpu")
-    {
-        ModuleBase::destoryBLAShandle();
-        hsolver::destroyGpuSolverHandle();
-        container::kernels::destroyGpuBlasHandle();
-        container::kernels::destroyGpuSolverHandle();
-    }
-#endif
-
-#ifdef __DSP
-    std::cout << " ** Closing DSP Hardware..." << std::endl;
-    mtfunc::dspDestoryHandle(GlobalV::MY_RANK);
-#endif
-}
-
-// Explicit template instantiations
-template class PyESolverLCAO<double, double>;
-template class PyESolverLCAO<std::complex<double>, double>;
+// Explicit template instantiations for PW (complex types only)
+template class PyESolverPW<std::complex<float>>;
+template class PyESolverPW<std::complex<double>>;
 
 } // namespace py_esolver

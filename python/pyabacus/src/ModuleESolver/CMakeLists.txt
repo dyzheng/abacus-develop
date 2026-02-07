@@ -21,6 +21,7 @@ set(ACCESSOR_SOURCES
 # ESolver implementation and binding sources
 set(ESOLVER_SOURCES
     ${PROJECT_SOURCE_DIR}/src/ModuleESolver/py_esolver_lcao_impl.cpp
+    ${PROJECT_SOURCE_DIR}/src/ModuleESolver/py_esolver_pw_impl.cpp
     ${PROJECT_SOURCE_DIR}/src/ModuleESolver/py_esolver_bindings.cpp
 )
 
