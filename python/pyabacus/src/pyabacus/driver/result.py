@@ -9,10 +9,7 @@ from typing import Optional, Dict, List
 import numpy as np
 import os
 
-
-# Unit conversion constants
-RY_TO_EV = 13.605698  # Must match source/source_base/constants.h
-BOHR_TO_ANG = 0.529177249   # 1 Bohr = 0.529 Angstrom
+from ..constants import RY_TO_EV, BOHR_TO_ANG
 
 
 @dataclass

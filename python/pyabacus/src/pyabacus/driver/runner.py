@@ -13,8 +13,9 @@ from typing import Optional
 from pathlib import Path
 import numpy as np
 
-from .result import CalculationResult, RY_TO_EV, BOHR_TO_ANG
+from .result import CalculationResult
 from .subprocess_runner import run_abacus_subprocess
+from ..constants import RY_TO_EV, BOHR_TO_ANG, ENERGY_FIELDS
 
 
 def abacus(
@@ -172,18 +173,12 @@ def abacus(
         # Convert C++ result to Python dataclass
         # C++ CalculationResult stores energies in Rydberg;
         # Python CalculationResult stores energies in eV.
+        energy_kwargs = {f: getattr(cpp_result, f) * RY_TO_EV for f in ENERGY_FIELDS}
         result = CalculationResult(
             converged=cpp_result.converged,
             niter=cpp_result.niter,
             drho=cpp_result.drho,
-            etot=cpp_result.etot * RY_TO_EV,
-            eband=cpp_result.eband * RY_TO_EV,
-            hartree_energy=cpp_result.hartree_energy * RY_TO_EV,
-            etxc=cpp_result.etxc * RY_TO_EV,
-            ewald_energy=cpp_result.ewald_energy * RY_TO_EV,
-            demet=cpp_result.demet * RY_TO_EV,
-            exx=cpp_result.exx * RY_TO_EV,
-            evdw=cpp_result.evdw * RY_TO_EV,
+            **energy_kwargs,
             fermi_energy=cpp_result.fermi_energy,
             bandgap=cpp_result.bandgap,
             nat=cpp_result.nat,

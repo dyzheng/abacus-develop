@@ -9,11 +9,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Tuple, Optional, Any
 import numpy as np
 
-# Unit conversion constants (module-level for easy import)
-RY_TO_EV = 13.605698                  # Must match source/source_base/constants.h
-BOHR_TO_ANG = 0.529177249         # 1 Bohr = 0.529177 Å
-RY_BOHR_TO_EV_ANG = RY_TO_EV / BOHR_TO_ANG  # ~25.7112
-KBAR_TO_EV_ANG3 = 1.0 / 1602.1766208  # kbar -> eV/Å³
+from ..constants import RY_TO_EV, BOHR_TO_ANG, RY_BOHR_TO_EV_ANG, KBAR_TO_EV_ANG3
 
 
 @dataclass
@@ -109,16 +105,15 @@ class EnergyData:
 
         Returns a new EnergyData instance with energies in eV.
         """
-        Ry_to_eV = 13.605698  # Must match source/source_base/constants.h
         return EnergyData(
-            etot=self.etot * Ry_to_eV,
-            eband=self.eband * Ry_to_eV,
-            hartree_energy=self.hartree_energy * Ry_to_eV,
-            etxc=self.etxc * Ry_to_eV,
-            ewald_energy=self.ewald_energy * Ry_to_eV,
-            demet=self.demet * Ry_to_eV,
-            exx=self.exx * Ry_to_eV,
-            evdw=self.evdw * Ry_to_eV,
+            etot=self.etot * RY_TO_EV,
+            eband=self.eband * RY_TO_EV,
+            hartree_energy=self.hartree_energy * RY_TO_EV,
+            etxc=self.etxc * RY_TO_EV,
+            ewald_energy=self.ewald_energy * RY_TO_EV,
+            demet=self.demet * RY_TO_EV,
+            exx=self.exx * RY_TO_EV,
+            evdw=self.evdw * RY_TO_EV,
         )
 
 
@@ -214,11 +209,6 @@ class ForceData:
     forces: np.ndarray
     nat: int
 
-    # Unit conversion constants
-    RY_TO_EV = 13.605698                  # Must match source/source_base/constants.h
-    BOHR_TO_ANG = 0.529177249         # 1 Bohr = 0.529177 Å
-    RY_BOHR_TO_EV_ANG = RY_TO_EV / BOHR_TO_ANG  # ~25.7112
-
     def to_eV_Ang(self) -> np.ndarray:
         """
         Convert forces from Ry/Bohr to eV/Angstrom.
@@ -228,7 +218,7 @@ class ForceData:
         np.ndarray
             Forces in eV/Angstrom with shape (nat, 3)
         """
-        return self.forces * self.RY_BOHR_TO_EV_ANG
+        return self.forces * RY_BOHR_TO_EV_ANG
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
@@ -253,9 +243,6 @@ class StressData:
     """
     stress: np.ndarray
 
-    # Unit conversion constant
-    KBAR_TO_EV_ANG3 = 1.0 / 1602.1766208  # kbar -> eV/Å³
-
     def to_voigt(self) -> np.ndarray:
         """
         Return stress in Voigt notation.
@@ -279,7 +266,7 @@ class StressData:
         np.ndarray
             Stress in eV/Å³ with Voigt notation (6,)
         """
-        return self.to_voigt() * self.KBAR_TO_EV_ANG3
+        return self.to_voigt() * KBAR_TO_EV_ANG3
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
@@ -328,5 +315,5 @@ class SCFResult:
             f"  Iterations: {self.niter}\n"
             f"  Final drho: {self.drho:.2e}\n"
             f"  Total energy: {self.energy.etot:.8f} Ry "
-            f"({self.energy.etot * 13.6057:.8f} eV)"
+            f"({self.energy.etot * RY_TO_EV:.8f} eV)"
         )

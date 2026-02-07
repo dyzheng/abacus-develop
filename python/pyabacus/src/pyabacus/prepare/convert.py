@@ -6,8 +6,7 @@ import json
 import os
 from typing import Any, Dict, Optional
 
-BOHR_TO_ANG = 0.529177249
-ANG_TO_BOHR = 1.0 / BOHR_TO_ANG
+from ..constants import BOHR_TO_ANG, ANG_TO_BOHR
 
 
 # ---------------------------------------------------------------------------

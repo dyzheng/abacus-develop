@@ -40,14 +40,19 @@ class DataAccessMixin:
             Charge density data container
         """
         accessor = self._esolver.get_charge()
-        if not accessor.is_valid():
+        if hasattr(accessor, 'is_valid') and not accessor.is_valid():
             return ChargeData(rho=np.array([]), nspin=0, nrxx=0)
 
-        return ChargeData(
+        kwargs = dict(
             rho=accessor.get_rho(),
             nspin=accessor.nspin,
             nrxx=accessor.nrxx,
         )
+        if hasattr(accessor, 'get_rhog'):
+            kwargs['rhog'] = accessor.get_rhog()
+        if hasattr(accessor, 'ngmc'):
+            kwargs['ngmc'] = accessor.ngmc
+        return ChargeData(**kwargs)
 
     @property
     def energy(self) -> EnergyData:

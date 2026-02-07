@@ -29,6 +29,7 @@ except ImportError:
 
 from ..esolver import LCAOWorkflow
 from ..esolver.data_types import StressData
+from ..constants import RY_TO_EV, BOHR_TO_ANG, RY_BOHR_TO_EV_ANG, KBAR_TO_EV_ANG3, ENERGY_FIELDS
 
 
 class CalculatorMode(Enum):
@@ -50,13 +51,6 @@ class CalculatorMode(Enum):
     """
     DRIVER = auto()
     ESOLVER = auto()
-
-
-# Unit conversion constants
-RY_TO_EV = 13.605698                  # Must match source/source_base/constants.h
-BOHR_TO_ANG = 0.529177249         # 1 Bohr = 0.529177 Å
-RY_BOHR_TO_EV_ANG = RY_TO_EV / BOHR_TO_ANG  # ~25.7112 for force conversion
-KBAR_TO_EV_ANG3 = 1.0 / 1602.1766208  # Stress: kbar -> eV/Å³
 
 
 class AbacusCalculator(Calculator):
@@ -416,13 +410,4 @@ class AbacusCalculator(Calculator):
             raise RuntimeError("Calculator not initialized. Run a calculation first.")
 
         energy_data = self._workflow.energy
-        return {
-            'etot': energy_data.etot * RY_TO_EV,
-            'eband': energy_data.eband * RY_TO_EV,
-            'hartree_energy': energy_data.hartree_energy * RY_TO_EV,
-            'etxc': energy_data.etxc * RY_TO_EV,
-            'ewald_energy': energy_data.ewald_energy * RY_TO_EV,
-            'demet': energy_data.demet * RY_TO_EV,
-            'exx': energy_data.exx * RY_TO_EV,
-            'evdw': energy_data.evdw * RY_TO_EV,
-        }
+        return {f: getattr(energy_data, f) * RY_TO_EV for f in ENERGY_FIELDS}
