@@ -223,6 +223,7 @@ The ESolver module provides direct Python bindings to ABACUS internals, enabling
 ### LCAOWorkflow Class
 
 High-level Python interface for LCAO calculations with callback support.
+Inherits from `_BaseWorkflow`, which provides shared methods for both LCAO and PW.
 
 **Constructor:**
 
@@ -321,6 +322,50 @@ ham = workflow.hamiltonian
 print(f"H(k) shape: {ham.Hk[0].shape}")
 
 # Cleanup
+workflow.cleanup()
+```
+
+### PWWorkflow Class
+
+High-level Python interface for plane wave calculations, also inheriting from
+`_BaseWorkflow`. All shared methods (force, stress, position/cell update, cleanup,
+data access properties) are available identically to `LCAOWorkflow`.
+
+**Constructor:**
+
+```python
+PWWorkflow(input_dir: str, precision: str = "double")
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `input_dir` | str | - | Directory containing INPUT, STRU, KPT files |
+| `precision` | str | "double" | "single" (complex\<float\>) or "double" (complex\<double\>) |
+
+**PW-specific Properties and Methods:**
+
+| Member | Type | Description |
+|--------|------|-------------|
+| `npwx` | int (property) | Maximum number of plane waves |
+| `get_npw(ik)` | int | Number of plane waves for k-point ik |
+
+**Example:**
+
+```python
+from pyabacus.esolver import PWWorkflow
+
+workflow = PWWorkflow("./Si_scf/", precision="double")
+workflow.initialize()
+
+# Run SCF (Python-side loop with convergence check)
+result = workflow.run_scf(max_iter=100)
+print(f"Converged: {result.converged}")
+print(f"Energy: {result.energy.etot} Ry")
+
+# PW-specific: get plane wave counts
+print(f"npwx: {workflow.npwx}")
+print(f"npw(k=0): {workflow.get_npw(0)}")
+
 workflow.cleanup()
 ```
 
@@ -521,28 +566,34 @@ class SCFResult:
 
 ### Unit Conversion Constants
 
-PyABACUS uses atomic units internally. The following constants are available for unit conversion:
+PyABACUS uses atomic units internally. All conversion constants are defined in
+`pyabacus.constants` (single source of truth):
 
 ```python
-from pyabacus.esolver.data_types import (
+from pyabacus.constants import (
     RY_TO_EV,
     BOHR_TO_ANG,
+    ANG_TO_BOHR,
     RY_BOHR_TO_EV_ANG,
     KBAR_TO_EV_ANG3,
+    ENERGY_FIELDS,
 )
 
 # Constants
-RY_TO_EV = 13.605693122994        # 1 Ry = 13.6057 eV
+RY_TO_EV = 13.605698              # 1 Ry = 13.605698 eV
 BOHR_TO_ANG = 0.529177249         # 1 Bohr = 0.529177 Å
-RY_BOHR_TO_EV_ANG = 25.7112       # Force: Ry/Bohr → eV/Å
-KBAR_TO_EV_ANG3 = 1/1602.1766208  # Stress: kbar → eV/Å³
+ANG_TO_BOHR = 1.0 / BOHR_TO_ANG  # 1 Å in Bohr
+RY_BOHR_TO_EV_ANG = RY_TO_EV / BOHR_TO_ANG  # ~25.7112 Force: Ry/Bohr → eV/Å
+KBAR_TO_EV_ANG3 = 1/1602.1766208 # Stress: kbar → eV/Å³
+ENERGY_FIELDS = ['etot', 'eband', 'hartree_energy', 'etxc',
+                 'ewald_energy', 'demet', 'exx', 'evdw']
 ```
 
 **Example:**
 
 ```python
 from pyabacus.esolver import LCAOWorkflow
-from pyabacus.esolver.data_types import RY_TO_EV
+from pyabacus.constants import RY_TO_EV
 
 workflow = LCAOWorkflow("./Si_scf/")
 workflow.initialize()
@@ -838,8 +889,10 @@ Remember that internal ABACUS units differ from ASE units:
 - Length: Bohr (ABACUS) vs Angstrom (ASE)
 - Force: Ry/Bohr (ABACUS) vs eV/Å (ASE)
 
-Use the provided conversion methods:
+Use the provided conversion methods or import constants from `pyabacus.constants`:
 ```python
+from pyabacus.constants import RY_TO_EV
+
 # Forces
 forces_eV_Ang = workflow.force.to_eV_Ang()
 
@@ -848,4 +901,7 @@ stress_voigt = workflow.stress.to_eV_Ang3()
 
 # Energy
 energy_eV = workflow.energy.to_eV()
+
+# Or manual conversion
+energy_eV_manual = workflow.energy.etot * RY_TO_EV
 ```
