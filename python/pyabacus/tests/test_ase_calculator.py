@@ -23,6 +23,7 @@ from pyabacus.esolver.data_types import (
     ChargeData,
     SCFResult,
 )
+from pyabacus.constants import RY_BOHR_TO_EV_ANG, KBAR_TO_EV_ANG3
 
 
 # ============================================================================
@@ -50,11 +51,11 @@ class TestForceData:
         forces_eV_Ang = force_data.to_eV_Ang()
 
         # Check conversion factor
-        expected = forces_ry_bohr * ForceData.RY_BOHR_TO_EV_ANG
+        expected = forces_ry_bohr * RY_BOHR_TO_EV_ANG
         np.testing.assert_allclose(forces_eV_Ang, expected, rtol=1e-6)
 
         # Verify the conversion factor is approximately 25.7112
-        assert 25.7 < ForceData.RY_BOHR_TO_EV_ANG < 25.8
+        assert 25.7 < RY_BOHR_TO_EV_ANG < 25.8
 
     def test_force_to_dict(self):
         """Test ForceData.to_dict() method."""
@@ -135,8 +136,8 @@ class TestEnergyData:
         energy_eV = energy.to_eV()
 
         # 1 Ry = 13.6057 eV
-        assert energy_eV.etot == pytest.approx(-10.0 * 13.605693122994)
-        assert energy_eV.eband == pytest.approx(-5.0 * 13.605693122994)
+        assert energy_eV.etot == pytest.approx(-10.0 * 13.605698)
+        assert energy_eV.eband == pytest.approx(-5.0 * 13.605698)
 
 
 # ============================================================================
@@ -248,7 +249,7 @@ class TestAbacusCalculatorWithMock:
         energy = mock_atoms.get_potential_energy()
 
         # Energy should be converted from Ry to eV
-        expected_energy = -10.0 * 13.605693122994
+        expected_energy = -10.0 * 13.605698
         assert energy == pytest.approx(expected_energy, rel=1e-6)
 
     @patch('pyabacus.ase.calculator.LCAOWorkflow')
@@ -269,7 +270,7 @@ class TestAbacusCalculatorWithMock:
         # Forces should be converted from Ry/Bohr to eV/Ang
         assert forces.shape == (2, 3)
         # First atom force in x direction: 0.1 Ry/Bohr * 25.7112 = 2.57112 eV/Ang
-        expected_fx = 0.1 * ForceData.RY_BOHR_TO_EV_ANG
+        expected_fx = 0.1 * RY_BOHR_TO_EV_ANG
         assert forces[0, 0] == pytest.approx(expected_fx, rel=1e-6)
 
     @patch('pyabacus.ase.calculator.LCAOWorkflow')
@@ -290,7 +291,7 @@ class TestAbacusCalculatorWithMock:
         # Stress should be in Voigt notation (6,)
         assert stress.shape == (6,)
         # Diagonal elements should be 10 kbar converted to eV/Ang^3
-        expected_diag = 10.0 * StressData.KBAR_TO_EV_ANG3
+        expected_diag = 10.0 * KBAR_TO_EV_ANG3
         assert stress[0] == pytest.approx(expected_diag, rel=1e-6)
 
 

@@ -347,8 +347,8 @@ class TestESolverMode:
         energy = mock_atoms.get_potential_energy()
 
         # Energy should be converted from Ry to eV
-        # -10.0 Ry * 13.605693122994 = -136.05693122994 eV
-        expected_energy = -10.0 * 13.605693122994
+        # -10.0 Ry * 13.605698 = -136.05698 eV
+        expected_energy = -10.0 * 13.605698
         assert energy == pytest.approx(expected_energy, rel=1e-6)
 
 

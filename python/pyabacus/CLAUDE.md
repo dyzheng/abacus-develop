@@ -27,16 +27,21 @@ python/pyabacus/
 ├── src/
 │   ├── pyabacus/                 # Python package
 │   │   ├── __init__.py           # Main package init
+│   │   ├── constants.py          # Unit conversion constants (single source of truth)
 │   │   ├── ase/                  # ASE Calculator integration
 │   │   │   ├── __init__.py
 │   │   │   └── calculator.py     # AbacusCalculator class
 │   │   ├── esolver/              # ESolver Python interface
 │   │   │   ├── __init__.py
+│   │   │   ├── callbacks.py      # CallbackMixin for SCF event hooks
+│   │   │   ├── data_access.py    # DataAccessMixin for charge, energy, etc.
 │   │   │   ├── data_types.py     # Data containers (ForceData, StressData, etc.)
-│   │   │   └── workflow.py       # LCAOWorkflow high-level interface
+│   │   │   ├── workflow.py       # _BaseWorkflow + LCAOWorkflow
+│   │   │   └── pw_workflow.py    # PWWorkflow for plane wave calculations
 │   │   ├── cell/                 # Unit cell handling
 │   │   ├── driver/               # ABACUS driver interface
 │   │   ├── hsolver/              # Hamiltonian solver
+│   │   ├── prepare/              # Input preparation and conversion utilities
 │   │   └── io/                   # Input/output utilities
 │   └── ModuleESolver/            # C++ pybind11 bindings (requires libabacus_core)
 │       ├── py_esolver_lcao.hpp   # ESolver C++ header
@@ -184,7 +189,23 @@ void bind_new_accessor(py::module& m) {
 bind_new_accessor(m);
 ```
 
-### 2. Data Types (`esolver/data_types.py`)
+### 2. Unit Conversion Constants (`constants.py`)
+
+All unit conversion constants are defined in a single module `pyabacus/constants.py`.
+Every other module imports from here -- never define constants locally.
+
+```python
+from pyabacus.constants import (
+    RY_TO_EV,           # 13.605698 (1 Ry = 13.605698 eV)
+    BOHR_TO_ANG,        # 0.529177249 (1 Bohr = 0.529177 Å)
+    ANG_TO_BOHR,        # 1 / BOHR_TO_ANG
+    RY_BOHR_TO_EV_ANG,  # ~25.7112 (Force: Ry/Bohr → eV/Å)
+    KBAR_TO_EV_ANG3,    # 1/1602.1766208 (Stress: kbar → eV/Å³)
+    ENERGY_FIELDS,       # ['etot', 'eband', 'hartree_energy', ...]
+)
+```
+
+### 3. Data Types (`esolver/data_types.py`)
 
 Python dataclasses for structured data with unit conversion methods.
 
@@ -197,19 +218,21 @@ Python dataclasses for structured data with unit conversion methods.
 - `DensityMatrixData` - DM(k), DM(R) matrices
 - `SCFResult` - SCF calculation results
 
-**Unit Conversion Constants:**
-```python
-RY_TO_EV = 13.605693122994        # 1 Ry = 13.6057 eV
-BOHR_TO_ANG = 0.529177249         # 1 Bohr = 0.529177 Å
-RY_BOHR_TO_EV_ANG = 25.7112       # Force: Ry/Bohr → eV/Å
-KBAR_TO_EV_ANG3 = 1/1602.1766208  # Stress: kbar → eV/Å³
-```
+### 4. Workflow Classes (`esolver/workflow.py`, `esolver/pw_workflow.py`)
 
-### 3. LCAOWorkflow (`esolver/workflow.py`)
+The workflow layer is organized as:
 
-High-level Python interface for LCAO calculations with callback support.
+- **`_BaseWorkflow(CallbackMixin, DataAccessMixin)`** -- base class in `workflow.py`
+  containing all shared methods: `run_scf_step`, `before_scf`, `after_scf`,
+  `_collect_result`, `cal_force`, `cal_stress`, `update_positions`, `update_cell`,
+  `get_positions`, `get_cell`, `cleanup`.
+- **`LCAOWorkflow(_BaseWorkflow)`** -- LCAO-specific `initialize()` and `run_scf()`.
+- **`PWWorkflow(_BaseWorkflow)`** -- PW-specific `initialize()`, `run_scf()` (Python-side
+  SCF loop), plus PW-only `npwx` property and `get_npw()` method.
 
-**Key Methods:**
+When adding methods that apply to both LCAO and PW, add them to `_BaseWorkflow`.
+
+**Key Methods (inherited from `_BaseWorkflow`):**
 - `initialize()` - Initialize calculation
 - `run_scf()` - Run SCF with callbacks
 - `cal_force()` / `cal_stress()` - Calculate forces/stress
@@ -221,7 +244,7 @@ High-level Python interface for LCAO calculations with callback support.
 - `before_after_scf` - Before `after_scf()` (main breakpoint)
 - `after_scf` - After `after_scf()` call
 
-### 4. ASE Calculator (`ase/calculator.py`)
+### 5. ASE Calculator (`ase/calculator.py`)
 
 ASE-compatible Calculator using pyabacus ESolver directly.
 
@@ -279,7 +302,8 @@ class NewData:
    - Header: `ModuleESolver/py_esolver_lcao.hpp`
    - Implementation: `ModuleESolver/py_esolver_lcao_impl.cpp` or `ModuleESolver/accessors/py_accessors_impl.cpp`
 
-4. **Add workflow methods** (`esolver/workflow.py`):
+4. **Add workflow methods** (in `esolver/workflow.py` `_BaseWorkflow` for shared,
+   or in `LCAOWorkflow`/`PWWorkflow` for mode-specific):
 ```python
 def new_method(self) -> NewData:
     accessor = self._esolver.get_new_data()
@@ -315,13 +339,15 @@ pytest tests/test_new_feature.py -v
 
 ### Adding Unit Conversion
 
-1. Define conversion constant in `data_types.py`:
+1. Define conversion constant in `constants.py`:
 ```python
 NEW_UNIT_CONVERSION = 1.234  # old_unit → new_unit
 ```
 
-2. Add conversion method to data class:
+2. Add conversion method to the relevant data class in `data_types.py`:
 ```python
+from ..constants import NEW_UNIT_CONVERSION
+
 def to_new_units(self) -> np.ndarray:
     return self.data * NEW_UNIT_CONVERSION
 ```
@@ -342,6 +368,7 @@ python -c "from pyabacus.esolver._esolver_pack import ESolverLCAO_gamma; print(d
 - **Memory management**: Use pybind11's return value policies correctly
 - **Thread safety**: ABACUS uses MPI; be careful with parallel access
 - **Unit consistency**: Always document units in docstrings
+- **Unit constants**: All conversion constants live in `constants.py` -- never duplicate them in other modules
 - **ESolver module dependency**: The ESolver module requires `libabacus_core.so`. Without it, the module is not built (no placeholder mode).
 
 ## Resources
