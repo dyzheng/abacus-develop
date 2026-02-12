@@ -45,7 +45,8 @@ namespace projectors
         
         void overlap_proj_psi(
                     const int npm,
-                    const std::complex<double>* ppsi
+                    const std::complex<double>* ppsi,
+                    int npwx = 0
                     );
         void read_abacus_orb(std::ifstream& ifs,
                             std::string& elem,
@@ -70,7 +71,7 @@ namespace projectors
                     const ModuleBase::matrix& ekb);
         
         /// @brief calculate and print the occupations of all lm orbitals
-        void cal_occupations(const psi::Psi<std::complex<T>, Device>* psi, const ModuleBase::matrix& wg_in);
+        void cal_occupations(const psi::Psi<std::complex<T>, Device>* psi, const ModuleBase::matrix& wg_in, const int* isk_in);
 
         int get_size_becp() const { return size_becp; }
         std::complex<double>* get_becp() const { return becp; }

@@ -337,9 +337,11 @@ void projectors::OnsiteProjector<T, Device>::tabulate_atomic(const int ik, const
 }
 
 template<typename T, typename Device>
-void projectors::OnsiteProjector<T, Device>::overlap_proj_psi( 
+void projectors::OnsiteProjector<T, Device>::overlap_proj_psi(
                     const int npm,
-                    const std::complex<double>* ppsi)
+                    const std::complex<double>* ppsi,
+                    int npwx
+                    )
 {
     ModuleBase::timer::tick("OnsiteProj", "overlap");
     // STAGE 3 - cal_becp
@@ -384,6 +386,7 @@ void projectors::OnsiteProjector<T, Device>::overlap_proj_psi(
     // std::cout << "at " << __FILE__ << ": " << __LINE__ << " output npm: " << npm << std::endl;
     // std::cout << "at " << __FILE__ << ": " << __LINE__ << " ik_: " << ik_ << std::endl;
     int npol = this->ucell->get_npol();
+    if(npwx == 0) npwx = this->npwx_;
     if(this->becp == nullptr || this->size_becp < npm*this->tot_nproj)
     {
         this->size_becp = npm*this->tot_nproj;
@@ -397,7 +400,7 @@ void projectors::OnsiteProjector<T, Device>::overlap_proj_psi(
             this->h_becp = this->becp;
         }
     }
-    this->fs_tools->cal_becp(ik_, npm/npol, this->becp, ppsi); // in cal_becp, npm should be the one not multiplied by npol
+    this->fs_tools->cal_becp(ik_, npm/npol, this->becp, ppsi, npwx); // in cal_becp, npm should be the one not multiplied by npol
     if(this->device == base_device::GpuDevice)
     {
         syncmem_complex_d2h_op()(h_becp, this->becp, this->size_becp);
@@ -522,8 +525,9 @@ void projectors::OnsiteProjector<T, Device>::read_abacus_orb(std::ifstream& ifs,
 
 template<typename T, typename Device>
 void projectors::OnsiteProjector<T, Device>::cal_occupations(
-		const psi::Psi<std::complex<T>, Device>* psi_in, 
-		const ModuleBase::matrix& wg_in)
+		const psi::Psi<std::complex<T>, Device>* psi_in,
+		const ModuleBase::matrix& wg_in,
+		const int* isk_in)
 {
     ModuleBase::timer::tick("OnsiteProj", "cal_occupation");
     this->tabulate_atomic(0);
@@ -534,6 +538,7 @@ void projectors::OnsiteProjector<T, Device>::cal_occupations(
     for(int ik = 0; ik < psi_in->get_nk(); ik++)
     {
         psi_in->fix_k(ik);
+        const int sign = isk_in[ik] == 0? 1: -1;
         if(ik != 0)
         {
             this->tabulate_atomic(ik);
@@ -556,6 +561,7 @@ void projectors::OnsiteProjector<T, Device>::cal_occupations(
             for(int iat = 0; iat < this->iat_nh.size(); iat++)
             {
                 const int nh = this->get_nh(iat);
+                if(this->ucell->get_npol() == 2)
                 for(int ih = 0; ih < nh; ih++)
                 {
                     const int occ_index = (begin_ih + ih) * 4;
@@ -564,6 +570,16 @@ void projectors::OnsiteProjector<T, Device>::cal_occupations(
                     occs[occ_index + 1] += weight * conj(becp_p[index]) * becp_p[index + nkb];
                     occs[occ_index + 2] += weight * conj(becp_p[index + nkb]) * becp_p[index];
                     occs[occ_index + 3] += weight * conj(becp_p[index + nkb]) * becp_p[index + nkb];
+                }
+                else if(this->ucell->get_npol() == 1)
+                {
+                    for(int ih = 0; ih < nh; ih++)
+                    {
+                        const int occ_index = (begin_ih + ih) * 4;
+                        const int index = ib*nkb + begin_ih + ih;
+                        occs[occ_index] += weight * conj(becp_p[index]) * becp_p[index];
+                        occs[occ_index + 3] += sign * weight * conj(becp_p[index]) * becp_p[index];
+                    }
                 }
                 begin_ih += nh;
             }
@@ -608,10 +624,18 @@ void projectors::OnsiteProjector<T, Device>::cal_occupations(
         std::vector<double> charge_mag(4, 0.0);
         for(int ih=0;ih<this->iat_nh[iat];ih++)
         {
-            charge_mag[3] += (occs[occ_index] - occs[occ_index + 3]).real();
-            charge_mag[1] += (occs[occ_index + 1] + occs[occ_index + 2]).real();
-            charge_mag[2] += (occs[occ_index + 1] - occs[occ_index + 2]).imag();
-            charge_mag[0] += (occs[occ_index] + occs[occ_index + 3]).real();
+            if(this->ucell->get_npol() == 2)
+            {
+                charge_mag[3] += (occs[occ_index] - occs[occ_index + 3]).real();
+                charge_mag[1] += (occs[occ_index + 1] + occs[occ_index + 2]).real();
+                charge_mag[2] += (occs[occ_index + 1] - occs[occ_index + 2]).imag();
+                charge_mag[0] += (occs[occ_index] + occs[occ_index + 3]).real();
+            }
+            else if (this->ucell->get_npol() == 1)
+            {
+                charge_mag[0] += occs[occ_index].real();
+                charge_mag[3] += occs[occ_index + 3].real();
+            }
             if(ih == current_l * current_l - 1)
             {
                 sum[0] += charge_mag[0];

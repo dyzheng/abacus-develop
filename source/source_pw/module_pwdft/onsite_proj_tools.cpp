@@ -278,12 +278,14 @@ template <typename FPTYPE, typename Device>
 void Onsite_Proj_tools<FPTYPE, Device>::cal_becp(int ik,
                                                  int npm,
                                                  std::complex<FPTYPE>* becp_in,
-                                                 const std::complex<FPTYPE>* ppsi_in)
+                                                 const std::complex<FPTYPE>* ppsi_in,
+                                                 int npwx)
 {
     ModuleBase::TITLE("Onsite_Proj_tools", "cal_becp");
     ModuleBase::timer::tick("Onsite_Proj_tools", "cal_becp");
 
     const int npol = this->ucell_->get_npol();
+    if(npwx == 0) npwx = this->wfc_basis_->npwk_max;
     const std::complex<FPTYPE>* ppsi = ppsi_in == nullptr ? &(this->psi_[0](ik, 0, 0)) : ppsi_in;
     const int npw = this->wfc_basis_->npwk[ik];
     if (becp_in == nullptr && this->becp == nullptr)
@@ -434,7 +436,7 @@ void Onsite_Proj_tools<FPTYPE, Device>::cal_becp(int ik,
               this->ppcell_vkb,
               npw,
               ppsi,
-              this->max_npw,
+              npwx,
               &ModuleBase::ZERO,
               becp_tmp,
               this->nkb);
