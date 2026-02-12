@@ -161,6 +161,10 @@ class Plus_U
 
     std::vector<std::complex<double>> eff_pot_pw;
     std::vector<int> eff_pot_pw_index;
+    std::vector<double> uom_array;
+    std::vector<double> uom_save;
+
+    void set_locale(const UnitCell& ucell);
 
   public:
 	// local occupancy matrix of the correlated subspace

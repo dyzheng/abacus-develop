@@ -123,6 +123,37 @@ void Plus_U::mix_locale(const UnitCell& ucell,
     ModuleBase::timer::tick("Plus_U", "mix_locale");
 }
 
+void Plus_U::set_locale(const UnitCell& ucell)
+{
+    ModuleBase::TITLE("Plus_U", "set_locale");
+    ModuleBase::timer::tick("Plus_U", "set_locale");
+
+    for (int T = 0; T < ucell.ntype; T++)
+    {
+        if (orbital_corr[T] == -1) continue;
+        const int l = orbital_corr[T];
+        for (int I = 0; I < ucell.atoms[T].na; I++)
+        {
+            const int iat = ucell.itia2iat(T, I);
+            if (PARAM.inp.nspin == 4)
+            {
+                for(int mm = 0; mm < locale[iat][l][0][0].nr * locale[iat][l][0][0].nc; mm++)
+                    locale[iat][l][0][0].c[mm] = this->uom_array[eff_pot_pw_index[iat] + mm];
+            }
+            else if (PARAM.inp.nspin == 1 || PARAM.inp.nspin == 2)
+            {
+                for(int mm = 0; mm < locale[iat][l][0][0].nr * locale[iat][l][0][0].nc; mm++)
+                {
+                    locale[iat][l][0][0].c[mm] = this->uom_array[eff_pot_pw_index[iat] + mm];
+                    locale[iat][l][0][1].c[mm] = this->uom_array[eff_pot_pw_index[iat] + mm + locale[iat][l][0][0].nr * locale[iat][l][0][0].nc];
+                }
+            }
+        }
+    }
+
+    ModuleBase::timer::tick("Plus_U", "set_locale");
+}
+
 #ifdef __LCAO
 
 void Plus_U::cal_occup_m_k(const int iter, 

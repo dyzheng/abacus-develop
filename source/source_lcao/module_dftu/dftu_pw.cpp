@@ -6,14 +6,17 @@
 
 
 /// calculate occupation matrix for DFT+U
-void Plus_U::cal_occ_pw(const int iter, 
-		const void* psi_in, 
-		const ModuleBase::matrix& wg_in, 
-		const UnitCell& cell, 
+void Plus_U::cal_occ_pw(const int iter,
+		const void* psi_in,
+		const ModuleBase::matrix& wg_in,
+		const UnitCell& cell,
 		const double& mixing_beta)
 {
     ModuleBase::timer::tick("Plus_U", "cal_occ_pw");
     this->copy_locale(cell);
+
+    if(this->initialed_locale == false)
+    {
     this->zero_locale(cell);
 
     if(PARAM.inp.device == "cpu")
@@ -24,6 +27,11 @@ void Plus_U::cal_occ_pw(const int iter,
         const int nbands = psi_p->get_nbands();
         for(int ik = 0; ik < psi_p->get_nk(); ik++)
         {
+            int is = 0;
+            if(PARAM.inp.nspin == 2 && ik >= psi_p->get_nk()/2)
+            {
+                is = 1;
+            }
             psi_p->fix_k(ik);
             onsite_p->tabulate_atomic(ik);
 
@@ -47,6 +55,8 @@ void Plus_U::cal_occ_pw(const int iter,
                 const int m_begin = target_l * target_l;
                 const int tlp1 = 2 * target_l + 1;
                 const int tlp1_2 = tlp1 * tlp1;
+                if(PARAM.inp.nspin == 4)
+                {
                 for(int ib = 0;ib<nbands;ib++)
                 {
                     const double weight = wg_in(ik, ib);
@@ -70,6 +80,25 @@ void Plus_U::cal_occ_pw(const int iter,
                         }
                     }
                 }// ib
+                }
+                else
+                {
+                for(int ib = 0;ib<nbands;ib++)
+                {
+                    const double weight = wg_in(ik, ib);
+                    int ind_m1m2 = 0;
+                    for(int m1 = 0; m1 < tlp1; m1++)
+                    {
+                        const int index_m1 = ib*nkb + begin_ih + m_begin + m1;
+                        for(int m2 = 0; m2 < tlp1; m2++)
+                        {
+                            const int index_m2 = ib*nkb + begin_ih + m_begin + m2;
+                            this->locale[iat][target_l][0][is].c[ind_m1m2] += weight * (conj(becp[index_m1]) * becp[index_m2]).real();
+                            ind_m1m2++;
+                        }
+                    }
+                }// ib
+                }
                 begin_ih += nh;
             }// iat
         }// ik
@@ -83,6 +112,11 @@ void Plus_U::cal_occ_pw(const int iter,
         const int nbands = psi_p->get_nbands();
         for(int ik = 0; ik < psi_p->get_nk(); ik++)
         {
+            int is = 0;
+            if(PARAM.inp.nspin == 2 && ik >= psi_p->get_nk()/2)
+            {
+                is = 1;
+            }
             psi_p->fix_k(ik);
             onsite_p->tabulate_atomic(ik);
 
@@ -106,37 +140,124 @@ void Plus_U::cal_occ_pw(const int iter,
                 const int m_begin = target_l * target_l;
                 const int tlp1 = 2 * target_l + 1;
                 const int tlp1_2 = tlp1 * tlp1;
-                for(int ib = 0;ib<nbands;ib++)
+                if(PARAM.inp.nspin == 4)
                 {
-                    const double weight = wg_in(ik, ib);
-                    int ind_m1m2 = 0;
-                    for(int m1 = 0; m1 < tlp1; m1++)
+                    for(int ib = 0;ib<nbands;ib++)
                     {
-                        const int index_m1 = ib*2*nkb + begin_ih + m_begin + m1;
-                        for(int m2 = 0; m2 < tlp1; m2++)
+                        const double weight = wg_in(ik, ib);
+                        int ind_m1m2 = 0;
+                        for(int m1 = 0; m1 < tlp1; m1++)
                         {
-                            const int index_m2 = ib*2*nkb + begin_ih + m_begin + m2;
-                            std::complex<double> occ[4];
-                            occ[0] = weight * conj(becp[index_m1]) * becp[index_m2];
-                            occ[1] = weight * conj(becp[index_m1]) * becp[index_m2 + nkb];
-                            occ[2] = weight * conj(becp[index_m1 + nkb]) * becp[index_m2];
-                            occ[3] = weight * conj(becp[index_m1 + nkb]) * becp[index_m2 + nkb];
-                            this->locale[iat][target_l][0][0].c[ind_m1m2] += (occ[0] + occ[3]).real();
-                            this->locale[iat][target_l][0][0].c[ind_m1m2 + tlp1_2] += (occ[1] + occ[2]).real();
-                            this->locale[iat][target_l][0][0].c[ind_m1m2 + 2 * tlp1_2] += (occ[1] - occ[2]).imag();
-                            this->locale[iat][target_l][0][0].c[ind_m1m2 + 3 * tlp1_2] += (occ[0] - occ[3]).real();
-                            ind_m1m2++;
+                            const int index_m1 = ib*2*nkb + begin_ih + m_begin + m1;
+                            for(int m2 = 0; m2 < tlp1; m2++)
+                            {
+                                const int index_m2 = ib*2*nkb + begin_ih + m_begin + m2;
+                                std::complex<double> occ[4];
+                                occ[0] = weight * conj(becp[index_m1]) * becp[index_m2];
+                                occ[1] = weight * conj(becp[index_m1]) * becp[index_m2 + nkb];
+                                occ[2] = weight * conj(becp[index_m1 + nkb]) * becp[index_m2];
+                                occ[3] = weight * conj(becp[index_m1 + nkb]) * becp[index_m2 + nkb];
+                                this->locale[iat][target_l][0][0].c[ind_m1m2] += (occ[0] + occ[3]).real();
+                                this->locale[iat][target_l][0][0].c[ind_m1m2 + tlp1_2] += (occ[1] + occ[2]).real();
+                                this->locale[iat][target_l][0][0].c[ind_m1m2 + 2 * tlp1_2] += (occ[1] - occ[2]).imag();
+                                this->locale[iat][target_l][0][0].c[ind_m1m2 + 3 * tlp1_2] += (occ[0] - occ[3]).real();
+                                ind_m1m2++;
+                            }
                         }
-                    }
-                }// ib
+                    }// ib
+                }
+                else
+                {
+                    for(int ib = 0;ib<nbands;ib++)
+                    {
+                        const double weight = wg_in(ik, ib);
+                        int ind_m1m2 = 0;
+                        for(int m1 = 0; m1 < tlp1; m1++)
+                        {
+                            const int index_m1 = ib*nkb + begin_ih + m_begin + m1;
+                            for(int m2 = 0; m2 < tlp1; m2++)
+                            {
+                                const int index_m2 = ib*nkb + begin_ih + m_begin + m2;
+                                this->locale[iat][target_l][0][is].c[ind_m1m2] += weight * (conj(becp[index_m1]) * becp[index_m2]).real();
+                                ind_m1m2++;
+                            }
+                        }
+                    }// ib
+                }
                 begin_ih += nh;
             }// iat
         }// ik
     }
 #endif
 
+    // reduce locale from all k-pools
+    for(int iat = 0; iat < cell.nat; iat++)
+    {
+        const int it = cell.iat2it[iat];
+        const int target_l = this->orbital_corr[it];
+        if(target_l == -1)
+        {
+            continue;
+        }
+        const int fold = PARAM.inp.nspin == 4 ? 4 : 1;
+        const int size = (2 * target_l + 1) * (2 * target_l + 1);
+
+        Parallel_Reduce::reduce_double_allpool(PARAM.inp.kpar,
+            PARAM.globalv.nproc_in_pool,
+            this->locale[iat][target_l][0][0].c,
+            size * fold);
+
+        // save to uom_array
+        if(this->uom_array.size() != 0)
+        {
+            for(int mm = 0; mm < size * fold; mm++)
+                this->uom_array[eff_pot_pw_index[iat] + mm] = this->locale[iat][target_l][0][0].c[mm];
+        }
+
+        if(PARAM.inp.nspin == 2)
+        {
+            Parallel_Reduce::reduce_double_allpool(PARAM.inp.kpar,
+                PARAM.globalv.nproc_in_pool,
+                this->locale[iat][target_l][0][1].c, size);
+            if(this->uom_array.size() != 0)
+            {
+                for(int mm = 0; mm < size; mm++)
+                    this->uom_array[eff_pot_pw_index[iat] + mm + size] = this->locale[iat][target_l][0][1].c[mm];
+            }
+        }
+    }
+    } // end if(initialed_locale == false)
+    else
+    {
+        for(int iat = 0; iat < cell.nat; iat++)
+        {
+            const int it = cell.iat2it[iat];
+            const int target_l = this->orbital_corr[it];
+            if(target_l == -1)
+            {
+                continue;
+            }
+            const int fold = PARAM.inp.nspin == 4 ? 4 : 1;
+            const int size = (2 * target_l + 1) * (2 * target_l + 1);
+            if(this->uom_array.size() != 0)
+            {
+                for(int mm = 0; mm < size * fold; mm++)
+                {
+                    this->uom_array[eff_pot_pw_index[iat] + mm] = this->locale[iat][target_l][0][0].c[mm];
+                    if(PARAM.inp.nspin == 2)
+                        this->uom_array[eff_pot_pw_index[iat] + mm + locale[iat][target_l][0][0].nr * locale[iat][target_l][0][0].nc] = this->locale[iat][target_l][0][1].c[mm];
+                }
+            }
+        }
+    }
+
+    if(mixing_dftu && initialed_locale)
+    {
+        this->mix_locale(cell, mixing_beta);
+    }
+
     Plus_U::energy_u = 0.0;
-    // reduce mag from all k-pools
+    // calculate effective potential and energy
     for(int iat = 0; iat < cell.nat; iat++)
     {
         const int it = cell.iat2it[iat];
@@ -146,26 +267,47 @@ void Plus_U::cal_occ_pw(const int iter,
             continue;
         }
         const int size = (2 * target_l + 1) * (2 * target_l + 1);
-
-		Parallel_Reduce::reduce_double_allpool(PARAM.inp.kpar, 
-				PARAM.globalv.nproc_in_pool, 
-				this->locale[iat][target_l][0][0].c, 
-				size * PARAM.inp.nspin);
-
         //update effective potential
         const double u_value = this->U[it];
         std::complex<double>* vu_iat = &(this->eff_pot_pw[this->eff_pot_pw_index[iat]]);
         const int m_size = 2 * target_l + 1;
+
+        double weight_eu = 1;
+        switch(PARAM.inp.nspin)
+        {
+            case 1: weight_eu = 1.0; break;
+            case 2: weight_eu = 0.5; break;
+            case 4: weight_eu = 0.25; break;
+            default: break;
+        }
+        const double diag_coeff = PARAM.inp.nspin == 4 ? 1.0 : 0.5;
+
         for (int m1 = 0; m1 < m_size; m1++)
         {
             for (int m2 = 0; m2 < m_size; m2++)
             {
-                vu_iat[m1 * m_size + m2] = u_value * 
-                  (1.0 * (m1 == m2) - this->locale[iat][target_l][0][0].c[m2 * m_size + m1]);
-                Plus_U::energy_u += u_value * 0.25 * this->locale[iat][target_l][0][0].c[m2 * m_size + m1] 
+                vu_iat[m1 * m_size + m2] = u_value *
+                  (diag_coeff * (m1 == m2) - this->locale[iat][target_l][0][0].c[m2 * m_size + m1]);
+                Plus_U::energy_u += u_value * weight_eu * this->locale[iat][target_l][0][0].c[m2 * m_size + m1]
                          * this->locale[iat][target_l][0][0].c[m1 * m_size + m2];
             }
         }
+        if(PARAM.inp.nspin == 2)
+        {
+            std::complex<double>* vu_iat1 = &(this->eff_pot_pw[this->eff_pot_pw.size()/2 + this->eff_pot_pw_index[iat]]);
+            for (int m1 = 0; m1 < m_size; m1++)
+            {
+                for (int m2 = 0; m2 < m_size; m2++)
+                {
+                    vu_iat1[m1 * m_size + m2] = u_value *
+                      (diag_coeff * (m1 == m2) - this->locale[iat][target_l][0][1].c[m2 * m_size + m1]);
+                    Plus_U::energy_u += u_value * weight_eu * this->locale[iat][target_l][0][1].c[m2 * m_size + m1]
+                             * this->locale[iat][target_l][0][1].c[m1 * m_size + m2];
+                }
+            }
+        }
+        if(PARAM.inp.nspin == 4)
+        {
         for (int is = 1; is < 4; ++is)
         {
             int start = is * m_size * m_size;
@@ -173,15 +315,15 @@ void Plus_U::cal_occ_pw(const int iter,
             {
                 for (int m2 = 0; m2 < m_size; m2++)
                 {
-                    vu_iat[start + m1 * m_size + m2] = u_value * 
+                    vu_iat[start + m1 * m_size + m2] = u_value *
                       (0 - this->locale[iat][target_l][0][0].c[start + m2 * m_size + m1]);
-                    Plus_U::energy_u += u_value * 0.25 
-                             * this->locale[iat][target_l][0][0].c[start + m2 * m_size + m1] 
+                    Plus_U::energy_u += u_value * weight_eu
+                             * this->locale[iat][target_l][0][0].c[start + m2 * m_size + m1]
                              * this->locale[iat][target_l][0][0].c[start + m1 * m_size + m2];
                 }
             }
         }
-        // transfer from Pauli matrix representation to spin representation 
+        // transfer from Pauli matrix representation to spin representation
         for (int m1 = 0; m1 < m_size; m1++)
         {
             for (int m2 = 0; m2 < m_size; m2++)
@@ -202,12 +344,11 @@ void Plus_U::cal_occ_pw(const int iter,
                 vu_iat[index[2]] = 0.5 * (vu_tmp[1] - std::complex<double>(0.0, 1.0) * vu_tmp[2]);
             }
         }
+        }
     }
 
-    if(mixing_dftu && initialed_locale)
-    {
-        this->mix_locale(cell, mixing_beta);
-    }
+    initialed_locale = false;
+
     // update effective potential
     ModuleBase::timer::tick("Plus_U", "cal_occ_pw");
 }
@@ -216,4 +357,3 @@ void Plus_U::cal_VU_pot_pw(const int spin)
 {
 
 }
-
