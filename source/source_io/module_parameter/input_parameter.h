@@ -403,6 +403,7 @@ struct Input_para
     int out_wfc_lcao = 0;                 ///< output the wave functions in local basis.
     bool out_orbital_mag = false;         ///< output orbital magnetic moment (LCAO multi-k only)
     bool out_orbital_mag_dm = false;      ///< output orbital magnetic moment using density matrix method
+    bool out_ecd = false;                 ///< output ECD (electronic circular dichroism) spectrum in LR-TDDFT
     bool out_dipole = false;              ///< output the dipole or not
     bool out_efield = false;              ///< output the efield or not
     int out_current = 0;                  ///< output the current or not

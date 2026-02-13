@@ -176,6 +176,12 @@ void ReadInput::item_output()
         this->add_item(item);
     }
     {
+        Input_Item item("out_ecd");
+        item.annotation = "output ECD (electronic circular dichroism) spectrum in LR-TDDFT";
+        read_sync_bool(input.out_ecd);
+        this->add_item(item);
+    }
+    {
         Input_Item item("out_proj_band");
         item.annotation = "output projected band structure";
         read_sync_bool(input.out_proj_band);

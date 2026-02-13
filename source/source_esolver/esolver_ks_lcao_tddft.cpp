@@ -1,4 +1,5 @@
 #include "esolver_ks_lcao_tddft.h"
+#include "source_lcao/module_orbital_mag/orbital_mag_dm.h"
 
 //----------------IO-----------------
 #include "source_io/module_ctrl/ctrl_output_td.h"
@@ -15,6 +16,48 @@
 #include "source_hsolver/hsolver_lcao.h"
 #include "source_lcao/module_rt/evolve_elec.h"
 #include "source_lcao/rho_tau_lcao.h"
+
+namespace
+{
+/// Overload for TR=double: actually compute orbital magnetic moment
+void run_orbital_mag_dm(const UnitCell& ucell,
+                        const K_Vectors& kv,
+                        elecstate::DensityMatrix<std::complex<double>, double>& dm,
+                        hamilt::HamiltLCAO<std::complex<double>, double>* hamilt_lcao,
+                        const Parallel_Orbitals& pv,
+                        const LCAO_Orbitals& orb,
+                        const int istep)
+{
+    hamilt::OrbitalMagDM<std::complex<double>> orbital_mag_dm(ucell,
+                                                               kv,
+                                                               dm,
+                                                               hamilt_lcao->getHR(),
+                                                               hamilt_lcao->getSR(),
+                                                               &pv,
+                                                               orb,
+                                                               TD_info::cart_At);
+    ModuleBase::Vector3<double> M_orb = orbital_mag_dm.calculate_orbital_moment();
+    if (GlobalV::MY_RANK == 0)
+    {
+        std::ofstream ofs(PARAM.globalv.global_out_dir + "magnetic_dipole.dat",
+                          istep == 0 ? std::ios::out : std::ios::app);
+        ofs << istep << "\t" << M_orb.x << "\t" << M_orb.y << "\t" << M_orb.z << std::endl;
+        ofs.close();
+    }
+}
+
+/// Overload for TR=complex<double>: not supported, do nothing
+void run_orbital_mag_dm(const UnitCell& /*ucell*/,
+                        const K_Vectors& /*kv*/,
+                        elecstate::DensityMatrix<std::complex<double>, double>& /*dm*/,
+                        hamilt::HamiltLCAO<std::complex<double>, std::complex<double>>* /*hamilt_lcao*/,
+                        const Parallel_Orbitals& /*pv*/,
+                        const LCAO_Orbitals& /*orb*/,
+                        const int /*istep*/)
+{
+    // OrbitalMagDM requires real-space HContainer<double>, not available for complex TR
+}
+} // anonymous namespace
 
 namespace ModuleESolver
 {
@@ -498,6 +541,13 @@ void ESolver_KS_LCAO_TDDFT<TR, Device>::after_scf(UnitCell& ucell, const int ist
                                  this->td_p,
                                  this->exx_nao
                                 );
+
+    // Output orbital magnetic moment using density matrix method if requested
+    // OrbitalMagDM requires HContainer<double>, only available when TR=double
+    if (PARAM.inp.out_orbital_mag_dm)
+    {
+        run_orbital_mag_dm(ucell, this->kv, *this->dmat.dm, hamilt_lcao, this->pv, this->orb_, istep);
+    }
 
     ModuleBase::timer::tick(this->classname, "after_scf");
 }

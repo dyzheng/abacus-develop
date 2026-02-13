@@ -140,6 +140,7 @@ protected:
     hamilt::HContainer<double>* hR = nullptr;
     hamilt::HContainer<double>* sR = nullptr;
     Parallel_Orbitals pv;
+    LCAO_Orbitals orb;
 
     int nlocal = 4;
     int nks = 27;
@@ -151,7 +152,7 @@ protected:
  * Verify that OrbitalMagDM constructor properly initializes members
  */
 TEST_F(OrbitalMagDMTest, ConstructorInitialization) {
-    hamilt::OrbitalMagDM<std::complex<double>> orbital_mag_dm(ucell, kv, *dm, hR, sR, &pv);
+    hamilt::OrbitalMagDM<std::complex<double>> orbital_mag_dm(ucell, kv, *dm, hR, sR, &pv, orb);
 
     // If we get here without crashing, constructor works
     EXPECT_TRUE(true);
@@ -164,7 +165,7 @@ TEST_F(OrbitalMagDMTest, ConstructorInitialization) {
  */
 TEST_F(OrbitalMagDMTest, ConstructorWithVectorPotential) {
     ModuleBase::Vector3<double> At(0.1, 0.2, 0.3);
-    hamilt::OrbitalMagDM<std::complex<double>> orbital_mag_dm(ucell, kv, *dm, hR, sR, &pv, At);
+    hamilt::OrbitalMagDM<std::complex<double>> orbital_mag_dm(ucell, kv, *dm, hR, sR, &pv, orb, At);
 
     // If we get here without crashing, constructor works with A(t)
     EXPECT_TRUE(true);
@@ -176,7 +177,7 @@ TEST_F(OrbitalMagDMTest, ConstructorWithVectorPotential) {
  * Verify that set_vector_potential method works
  */
 TEST_F(OrbitalMagDMTest, SetVectorPotential) {
-    hamilt::OrbitalMagDM<std::complex<double>> orbital_mag_dm(ucell, kv, *dm, hR, sR, &pv);
+    hamilt::OrbitalMagDM<std::complex<double>> orbital_mag_dm(ucell, kv, *dm, hR, sR, &pv, orb);
 
     ModuleBase::Vector3<double> At(0.5, 0.5, 0.5);
     orbital_mag_dm.set_vector_potential(At);
@@ -191,7 +192,7 @@ TEST_F(OrbitalMagDMTest, SetVectorPotential) {
  * With empty H(R) and S(R), the orbital moment should be zero
  */
 TEST_F(OrbitalMagDMTest, CalculateOrbitalMomentEmpty) {
-    hamilt::OrbitalMagDM<std::complex<double>> orbital_mag_dm(ucell, kv, *dm, hR, sR, &pv);
+    hamilt::OrbitalMagDM<std::complex<double>> orbital_mag_dm(ucell, kv, *dm, hR, sR, &pv, orb);
 
     ModuleBase::Vector3<double> M_orb = orbital_mag_dm.calculate_orbital_moment();
 
@@ -207,7 +208,7 @@ TEST_F(OrbitalMagDMTest, CalculateOrbitalMomentEmpty) {
  * For non-magnetic systems, orbital moment should be zero
  */
 TEST_F(OrbitalMagDMTest, TimeReversalSymmetry) {
-    hamilt::OrbitalMagDM<std::complex<double>> orbital_mag_dm(ucell, kv, *dm, hR, sR, &pv);
+    hamilt::OrbitalMagDM<std::complex<double>> orbital_mag_dm(ucell, kv, *dm, hR, sR, &pv, orb);
 
     ModuleBase::Vector3<double> M_orb = orbital_mag_dm.calculate_orbital_moment();
 
@@ -223,7 +224,7 @@ TEST_F(OrbitalMagDMTest, TimeReversalSymmetry) {
  * Orbital moment should be invariant under global translation
  */
 TEST_F(OrbitalMagDMTest, GaugeInvariance) {
-    hamilt::OrbitalMagDM<std::complex<double>> orbital_mag_dm(ucell, kv, *dm, hR, sR, &pv);
+    hamilt::OrbitalMagDM<std::complex<double>> orbital_mag_dm(ucell, kv, *dm, hR, sR, &pv, orb);
 
     // Calculate M_orb with original positions
     ModuleBase::Vector3<double> M_orb_before = orbital_mag_dm.calculate_orbital_moment();
@@ -235,7 +236,7 @@ TEST_F(OrbitalMagDMTest, GaugeInvariance) {
     }
 
     // Create new OrbitalMagDM object with shifted positions
-    hamilt::OrbitalMagDM<std::complex<double>> orbital_mag_dm_shifted(ucell, kv, *dm, hR, sR, &pv);
+    hamilt::OrbitalMagDM<std::complex<double>> orbital_mag_dm_shifted(ucell, kv, *dm, hR, sR, &pv, orb);
 
     // Calculate M_orb again
     ModuleBase::Vector3<double> M_orb_after = orbital_mag_dm_shifted.calculate_orbital_moment();
@@ -258,12 +259,12 @@ TEST_F(OrbitalMagDMTest, GaugeInvariance) {
  */
 TEST_F(OrbitalMagDMTest, VectorPotentialEffect) {
     // Calculate with zero A(t)
-    hamilt::OrbitalMagDM<std::complex<double>> orbital_mag_dm_zero(ucell, kv, *dm, hR, sR, &pv);
+    hamilt::OrbitalMagDM<std::complex<double>> orbital_mag_dm_zero(ucell, kv, *dm, hR, sR, &pv, orb);
     ModuleBase::Vector3<double> M_orb_zero = orbital_mag_dm_zero.calculate_orbital_moment();
 
     // Calculate with non-zero A(t)
     ModuleBase::Vector3<double> At(0.1, 0.0, 0.0);
-    hamilt::OrbitalMagDM<std::complex<double>> orbital_mag_dm_nonzero(ucell, kv, *dm, hR, sR, &pv, At);
+    hamilt::OrbitalMagDM<std::complex<double>> orbital_mag_dm_nonzero(ucell, kv, *dm, hR, sR, &pv, orb, At);
     ModuleBase::Vector3<double> M_orb_nonzero = orbital_mag_dm_nonzero.calculate_orbital_moment();
 
     // With empty HContainer, both should be zero regardless of A(t)

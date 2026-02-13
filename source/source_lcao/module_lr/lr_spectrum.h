@@ -17,12 +17,14 @@ namespace LR
             const TwoCenterBundle& two_center_bundle_,
             const std::vector<Parallel_2D>& pX_in, const Parallel_2D& pc_in, const Parallel_Orbitals& pmat_in,
             const double* eig, const T* X, const int& nstate, const bool& openshell,
-            const std::string& gauge = "length") :
+            const std::string& gauge = "length",
+            const double* eig_ks = nullptr, const int nbands_ks = 0) :
             nspin_x(openshell ? 2 : 1), naos(naos), nocc(nocc), nvirt(nvirt), nk(kv_in.get_nks() / nspin_global),
             rho_basis(rho_basis), ucell(ucell), kv(kv_in), gd_(gd),
             orb_cutoff_(orb_cutoff), two_center_bundle_(two_center_bundle_),
             pX(pX_in), pc(pc_in), pmat(pmat_in),
             eig(eig), X(X), nstate(nstate),
+            eig_ks_(eig_ks), nbands_ks_(nbands_ks),
             ldim(nk* (nspin_x == 2 ? pX_in[0].get_local_size() + pX_in[1].get_local_size() : pX_in[0].get_local_size())),
             gdim(nk* std::inner_product(nocc.begin(), nocc.end(), nvirt.begin(), 0))
         {
@@ -36,6 +38,13 @@ namespace LR
         void optical_absorption_method2(const std::vector<double>& freq, const double eta);
         /// @brief print out the transition dipole moment and the main contributions to the transition amplitude
         void transition_analysis(const std::string& spintype);
+
+        /// @brief calculate magnetic dipole transition moments and rotatory strengths for ECD
+        void cal_magnetic_transition_dipoles();
+        /// @brief compute rotatory strengths R_S = Im[<0|mu|S> . <S|m|0>]
+        void cal_rotatory_strength();
+        /// @brief output ECD spectrum with Lorentzian broadening
+        void ecd_spectrum(const std::vector<double>& freq, const double eta);
 
         //========================================== test functions ==============================================
         /// @brief write transition dipole
@@ -79,6 +88,8 @@ namespace LR
         const UnitCell& ucell;
         const std::vector<double>& orb_cutoff_;
         const TwoCenterBundle& two_center_bundle_;
+        const double* eig_ks_ = nullptr;  ///< KS eigenvalues [nks * nbands_ks], needed for ECD SOS formula
+        int nbands_ks_ = 0;               ///< total KS bands (nocc + nvirt)
 
         void cal_gint_rho(double** rho, const int& nrxx);
         std::map<std::string, int> get_pair_info(const int i); ///< given the index in X, return its ispin, ik, iocc, ivirt
@@ -86,5 +97,7 @@ namespace LR
         std::vector<ModuleBase::Vector3<T>> transition_dipole_;   ///< $\braket{ \psi_{i} | \mathbf{r} | \psi_{a} }$
         std::vector<double> mean_squared_transition_dipole_;    /// $|dipole|^2/3$, atomic unit (Hartree)
         std::vector<double> oscillator_strength_;///< $2/3\Omega |\sum_{ia\sigma} \braket{\psi_{i}|\mathbf{r}|\psi_{a}} |^2$, atomic unit (Hartree)
+        std::vector<ModuleBase::Vector3<T>> magnetic_transition_dipole_;  ///< magnetic dipole transition moment <S|m|0>
+        std::vector<double> rotatory_strength_;  ///< R_S = Im[<0|mu|S> . <S|m|0>]
     };
 }

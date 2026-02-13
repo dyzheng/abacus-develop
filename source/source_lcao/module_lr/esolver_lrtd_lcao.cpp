@@ -272,7 +272,7 @@ LR::ESolver_LR<T, TR>::ESolver_LR(ModuleESolver::ESolver_KS_LCAO<T, TR>&& ks_sol
 #endif
     this->pelec = new elecstate::ElecStateLCAO<T>();
     orb_cutoff_ = ks_sol.orb_.cutoffs();
-    if (LR_Util::tolower(input.abs_gauge) == "velocity")
+    if (LR_Util::tolower(input.abs_gauge) == "velocity" || input.out_ecd)
     {
         this->two_center_bundle_ = std::move(ks_sol.two_center_bundle_);
     }
@@ -543,11 +543,13 @@ void LR::ESolver_LR<T, TR>::after_all_runners(UnitCell& ucell)
             this->ucell, this->kv, this->gd, this->orb_cutoff_, this->two_center_bundle_,
             this->paraX_, this->paraC_, this->paraMat_,
             &this->pelec->ekb.c[is * nstates], this->X[is].template data<T>(), nstates, openshell,
-            LR_Util::tolower(input.abs_gauge));
+            LR_Util::tolower(input.abs_gauge),
+            input.out_ecd ? this->eig_ks.c : nullptr, input.out_ecd ? this->nbands : 0);
         spectrum.transition_analysis(spin_types[is]);
         if (spin_types[is] != "triplet")        // triplets has no transition dipole and no contribution to the spectrum
         {
             spectrum.optical_absorption_method1(freq, input.abs_broadening);
+            if (input.out_ecd) { spectrum.ecd_spectrum(freq, input.abs_broadening); }
             // =============================================== for test ====================================================
             // spectrum.optical_absorption_method2(freq, input.abs_broadening);
             // spectrum.test_transition_dipoles_velocity_ks(eig_ks.c);

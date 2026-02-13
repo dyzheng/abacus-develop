@@ -7,7 +7,7 @@
 namespace LR
 {
     /// get the velocity matrix v(R)
-    inline Velocity_op<std::complex<double>> get_velocity_matrix_R(const UnitCell& ucell,
+    Velocity_op<std::complex<double>> get_velocity_matrix_R(const UnitCell& ucell,
         const Grid_Driver& gd,
         const Parallel_Orbitals& pmat,
         const TwoCenterBundle& two_center_bundle)
