@@ -3,6 +3,7 @@
 #include "source_base/timer.h"
 #include "source_base/parallel_reduce.h"
 #include "source_base/tool_quit.h"
+#include "source_io/module_parameter/parameter.h"
 #include "source_lcao/module_deltaspin/spin_constrain.h"
 #include "source_lcao/module_dftu/dftu.h"
 #include "source_pw/module_pwdft/onsite_projector.h"
@@ -212,10 +213,10 @@ void OnsiteProj<OperatorPW<T, Device>>::cal_ps_delta_spin(const int npol, const 
 
 template<typename T, typename Device>
 void OnsiteProj<OperatorPW<T, Device>>::cal_ps_dftu(
-		const int npol, 
+		const int npol,
 		const int m) const
 {
-	if(!this->has_dftu) 
+	if(!this->has_dftu)
 	{
 		return;
 	}
@@ -269,7 +270,8 @@ void OnsiteProj<OperatorPW<T, Device>>::cal_ps_dftu(
             {
                 const int tlp1 = 2 * target_l + 1;
                 vu_begin_iat0[iat] = vu_begin;
-                vu_begin += tlp1 * tlp1 * 4;
+                const int vu_fold = (npol == 2) ? 4 : 1;
+                vu_begin += tlp1 * tlp1 * vu_fold;
                 const int m_begin = target_l * target_l;
                 const int m_end  = (target_l + 1) * (target_l + 1);
                 for(int ip=0;ip<nproj;ip++)
@@ -294,17 +296,27 @@ void OnsiteProj<OperatorPW<T, Device>>::cal_ps_dftu(
         resmem_complex_op()(this->vu_device, dftu->get_size_eff_pot_pw());
     }
 
-    syncmem_complex_h2d_op()(this->vu_device, dftu->get_eff_pot_pw(0), dftu->get_size_eff_pot_pw());
+    // For nspin=2, select the correct spin half of eff_pot_pw
+    if(npol == 1 && PARAM.inp.nspin == 2)
+    {
+        const int current_spin = this->isk[this->ik];
+        const int half_size = dftu->get_size_eff_pot_pw() / 2;
+        syncmem_complex_h2d_op()(this->vu_device, dftu->get_eff_pot_pw(0) + current_spin * half_size, half_size);
+    }
+    else
+    {
+        syncmem_complex_h2d_op()(this->vu_device, dftu->get_eff_pot_pw(0), dftu->get_size_eff_pot_pw());
+    }
 
     hamilt::onsite_ps_op<Real, Device>()(
         this->ctx,   // device context
-        m, 
+        m,
         npol,
         this->orb_l_iat,
         this->ip_iat,
         this->ip_m,
-        this->vu_begin_iat, 
-        tnp,  
+        this->vu_begin_iat,
+        tnp,
         this->vu_device,
         this->ps, becp);
 
