@@ -15,10 +15,18 @@ function Dialog({ open, onOpenChange, children }: DialogProps) {
 
   return (
     <div className="fixed inset-0 z-50">
-      <div className="fixed inset-0 bg-black/50" onClick={() => onOpenChange(false)} />
+      <div
+        className="fixed inset-0 bg-ink/40 backdrop-blur-sm"
+        onClick={() => onOpenChange(false)}
+        style={{ animation: "fadeIn 0.2s ease-out" }}
+      />
       <div className="fixed inset-0 flex items-center justify-center p-4">
         {children}
       </div>
+      <style>{`
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(12px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+      `}</style>
     </div>
   );
 }
@@ -28,15 +36,16 @@ const DialogContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTML
     <div
       ref={ref}
       className={cn(
-        "relative z-50 w-full max-w-lg rounded-lg border bg-background p-6 shadow-lg",
+        "relative z-50 w-full max-w-lg rounded-xl border border-border bg-card p-6 shadow-2xl shadow-ink/10",
         className
       )}
+      style={{ animation: "slideUp 0.3s ease-out" }}
       {...props}
     >
       {onClose && (
         <button
           onClick={onClose}
-          className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100"
+          className="absolute right-4 top-4 rounded-lg p-1 opacity-50 transition-all hover:opacity-100 hover:bg-accent"
         >
           <X className="h-4 w-4" />
         </button>
@@ -52,7 +61,7 @@ function DialogHeader({ className, ...props }: React.HTMLAttributes<HTMLDivEleme
 }
 
 function DialogTitle({ className, ...props }: React.HTMLAttributes<HTMLHeadingElement>) {
-  return <h2 className={cn("text-lg font-semibold leading-none tracking-tight", className)} {...props} />;
+  return <h2 className={cn("text-lg font-semibold leading-none tracking-tight font-display", className)} {...props} />;
 }
 
 function DialogDescription({ className, ...props }: React.HTMLAttributes<HTMLParagraphElement>) {

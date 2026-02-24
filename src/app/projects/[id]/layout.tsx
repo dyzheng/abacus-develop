@@ -22,7 +22,11 @@ export default async function ProjectLayout({
   return (
     <div className="flex min-h-screen">
       <Sidebar projectId={project.id} projectName={project.name} />
-      <main className="flex-1 p-6">{children}</main>
+      <main className="flex-1 p-8 page-enter overflow-auto">
+        <div className="max-w-6xl mx-auto">
+          {children}
+        </div>
+      </main>
     </div>
   );
 }

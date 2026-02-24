@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -9,9 +9,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PageLoading, LoadingSpinner } from "@/components/ui/loading";
 import { formatAmount, formatDate } from "@/lib/utils";
-import { ArrowLeft, Send, CheckCircle, Clock, FileText } from "lucide-react";
+import { ArrowLeft, Send, CheckCircle, FileText, Pencil } from "lucide-react";
 import { toast } from "sonner";
 
 const STATUS_TIMELINE = ["draft", "generated", "sent", "received", "reconciled"];
@@ -33,6 +34,12 @@ export default function ConfirmationDetailPage() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
+  const [generating, setGenerating] = useState(false);
+
+  // Letter edit dialog
+  const [editLetterOpen, setEditLetterOpen] = useState(false);
+  const [editLetterContent, setEditLetterContent] = useState("");
+  const [savingLetter, setSavingLetter] = useState(false);
 
   // Response form
   const [responseForm, setResponseForm] = useState({
@@ -45,10 +52,30 @@ export default function ConfirmationDetailPage() {
   });
 
   useEffect(() => {
+    const controller = new AbortController();
+    async function fetchData() {
+      try {
+        const res = await fetch(`/api/confirmations?projectId=${projectId}`, { signal: controller.signal });
+        const rows = await res.json();
+        const row = rows.find((r: any) => r.confirmation.id === confirmationId);
+        if (row) {
+          setData(row);
+          setResponseForm((f) => ({
+            ...f,
+            respondedAmount: String(row.arRecord?.totalBalance || 0),
+          }));
+        }
+      } catch (err) {
+        if (!controller.signal.aborted) toast.error("加载失败");
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    }
     fetchData();
-  }, []);
+    return () => controller.abort();
+  }, [projectId, confirmationId]);
 
-  async function fetchData() {
+  const refetchData = useCallback(async () => {
     try {
       const res = await fetch(`/api/confirmations?projectId=${projectId}`);
       const rows = await res.json();
@@ -62,10 +89,8 @@ export default function ConfirmationDetailPage() {
       }
     } catch {
       toast.error("加载失败");
-    } finally {
-      setLoading(false);
     }
-  }
+  }, [projectId, confirmationId]);
 
   async function updateStatus(status: string) {
     setUpdating(true);
@@ -81,11 +106,53 @@ export default function ConfirmationDetailPage() {
         body: JSON.stringify(body),
       });
       toast.success("状态已更新");
-      await fetchData();
+      await refetchData();
     } catch {
       toast.error("更新失败");
     } finally {
       setUpdating(false);
+    }
+  }
+
+  async function generateLetter() {
+    setGenerating(true);
+    try {
+      const res = await fetch("/api/confirmations/generate-letter", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId, confirmationIds: [confirmationId] }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success("函证信函已生成");
+      await refetchData();
+    } catch {
+      toast.error("生成失败");
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  function openEditLetter() {
+    setEditLetterContent(data?.confirmation?.letterContent || "");
+    setEditLetterOpen(true);
+  }
+
+  async function saveLetter() {
+    setSavingLetter(true);
+    try {
+      const res = await fetch("/api/confirmations/generate-letter", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmationId, letterContent: editLetterContent }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success("信函已保存");
+      setEditLetterOpen(false);
+      await refetchData();
+    } catch {
+      toast.error("保存失败");
+    } finally {
+      setSavingLetter(false);
     }
   }
 
@@ -109,7 +176,7 @@ export default function ConfirmationDetailPage() {
       });
       if (!res.ok) throw new Error();
       toast.success("回函登记成功");
-      await fetchData();
+      await refetchData();
     } catch {
       toast.error("登记失败");
     } finally {
@@ -179,6 +246,45 @@ export default function ConfirmationDetailPage() {
             <div><span className="text-muted-foreground">收到日期：</span>{formatDate(c.receivedDate)}</div>
             <div><span className="text-muted-foreground">创建时间：</span>{formatDate(c.createdAt)}</div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Letter Content */}
+      <Card className="mb-6">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <FileText className="h-4 w-4" /> 函证信函
+            </CardTitle>
+            {c.letterContent && (
+              <div className="flex items-center gap-2">
+                {c.letterGeneratedAt && (
+                  <span className="text-xs text-muted-foreground">生成于 {formatDate(c.letterGeneratedAt)}</span>
+                )}
+                <Button size="sm" variant="outline" onClick={openEditLetter}>
+                  <Pencil className="h-3 w-3 mr-1" /> 编辑信函
+                </Button>
+              </div>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          {c.letterContent ? (
+            <div className="bg-white border rounded-lg p-6 whitespace-pre-wrap text-sm leading-relaxed font-serif">
+              {c.letterContent}
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+              <p className="text-muted-foreground mb-4">尚未生成函证信函</p>
+              {c.status === "draft" && (
+                <Button onClick={generateLetter} disabled={generating}>
+                  {generating ? <LoadingSpinner className="mr-2" /> : <FileText className="h-4 w-4 mr-2" />}
+                  生成函证信函
+                </Button>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -265,6 +371,29 @@ export default function ConfirmationDetailPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Edit Letter Dialog */}
+      <Dialog open={editLetterOpen} onOpenChange={setEditLetterOpen}>
+        <DialogContent onClose={() => setEditLetterOpen(false)} className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>编辑函证信函</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Textarea
+              value={editLetterContent}
+              onChange={(e) => setEditLetterContent(e.target.value)}
+              className="min-h-[400px] font-mono text-sm"
+            />
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setEditLetterOpen(false)}>取消</Button>
+              <Button onClick={saveLetter} disabled={savingLetter || !editLetterContent.trim()}>
+                {savingLetter ? <LoadingSpinner className="mr-2" /> : null}
+                保存
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

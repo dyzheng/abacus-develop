@@ -28,12 +28,23 @@ export const arRecords = sqliteTable("ar_records", {
   isRelatedParty: integer("is_related_party", { mode: "boolean" }).default(false),
   selectionStatus: text("selection_status", { enum: ["unselected", "ai_suggested", "confirmed", "excluded"] }).default("unselected"),
   selectionReason: text("selection_reason"),
+  contactPerson: text("contact_person"),
+  contactPhone: text("contact_phone"),
+  contactEmail: text("contact_email"),
+  address: text("address"),
+  city: text("city"),
+  province: text("province"),
+  postalCode: text("postal_code"),
+  verificationStatus: text("verification_status", { enum: ["unverified", "verified", "suspicious", "flagged"] }).default("unverified"),
+  verificationDetail: text("verification_detail"),
+  verificationScore: real("verification_score"),
   createdAt: text("created_at").notNull(),
 }, (table) => [
   index("idx_ar_records_project_id").on(table.projectId),
   index("idx_ar_records_import_batch_id").on(table.importBatchId),
   index("idx_ar_records_customer_name").on(table.customerName),
   index("idx_ar_records_selection_status").on(table.selectionStatus),
+  index("idx_ar_records_verification_status").on(table.verificationStatus),
 ]);
 
 export const confirmations = sqliteTable("confirmations", {
@@ -45,6 +56,8 @@ export const confirmations = sqliteTable("confirmations", {
   status: text("status", {
     enum: ["draft", "generated", "sent", "received", "reconciled", "alternative_procedure"],
   }).notNull().default("draft"),
+  letterContent: text("letter_content"),
+  letterGeneratedAt: text("letter_generated_at"),
   pdfPath: text("pdf_path"),
   sentDate: text("sent_date"),
   dueDate: text("due_date"),

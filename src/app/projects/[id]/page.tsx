@@ -17,7 +17,6 @@ import {
   Send,
   MailCheck,
   AlertTriangle,
-  ArrowLeft,
   TrendingUp,
   CheckCircle2,
   Clock,
@@ -82,12 +81,12 @@ const STATUS_LABEL_MAP: Record<string, string> = {
 };
 
 const STATUS_COLOR_MAP: Record<string, string> = {
-  draft: "#94a3b8",
-  generated: "#60a5fa",
-  sent: "#fbbf24",
-  received: "#34d399",
-  reconciled: "#a78bfa",
-  alternative_procedure: "#f87171",
+  draft: "#a8a29e",
+  generated: "#78716c",
+  sent: "#d97706",
+  received: "#15803d",
+  reconciled: "#7c3aed",
+  alternative_procedure: "#b91c1c",
 };
 
 const AGING_LABELS = [
@@ -112,13 +111,13 @@ export default function ProjectDashboard() {
 
   useEffect(() => {
     if (!id) return;
+    const controller = new AbortController();
 
     async function fetchData() {
       setLoading(true);
       setError(null);
       try {
-        // Fetch the main report
-        const reportRes = await fetch(`/api/report?projectId=${id}`);
+        const reportRes = await fetch(`/api/report?projectId=${id}`, { signal: controller.signal });
         if (!reportRes.ok) {
           const errBody = await reportRes.json().catch(() => ({}));
           throw new Error(errBody.error || "加载项目报告失败");
@@ -126,8 +125,7 @@ export default function ProjectDashboard() {
         const report: ReportData = await reportRes.json();
         setReportData(report);
 
-        // Fetch AR records for aging analysis
-        const arRes = await fetch(`/api/ar-records?projectId=${id}`);
+        const arRes = await fetch(`/api/ar-records?projectId=${id}`, { signal: controller.signal });
         if (arRes.ok) {
           const arRecords = await arRes.json();
           const agingAgg: Record<string, number> = {};
@@ -144,15 +142,10 @@ export default function ProjectDashboard() {
             }
           }
 
-          const aging = AGING_LABELS.map((a) => ({
-            name: a.label,
-            amount: agingAgg[a.key],
-          }));
-          setAgingData(aging);
+          setAgingData(AGING_LABELS.map((a) => ({ name: a.label, amount: agingAgg[a.key] })));
         }
 
-        // Fetch confirmations for overdue alerts
-        const confRes = await fetch(`/api/confirmations?projectId=${id}`);
+        const confRes = await fetch(`/api/confirmations?projectId=${id}`, { signal: controller.signal });
         if (confRes.ok) {
           const confirmationsList = await confRes.json();
           const today = new Date();
@@ -164,23 +157,18 @@ export default function ProjectDashboard() {
             : confirmationsList.confirmations || [];
 
           for (const conf of items) {
-            if (
-              conf.dueDate &&
-              conf.status !== "received" &&
-              conf.status !== "reconciled"
-            ) {
+            if (conf.dueDate && conf.status !== "received" && conf.status !== "reconciled") {
               const due = new Date(conf.dueDate);
               due.setHours(0, 0, 0, 0);
               if (due < today) {
                 const diffTime = today.getTime() - due.getTime();
-                const daysPastDue = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
                 overdue.push({
                   id: conf.id,
                   confirmationNumber: conf.confirmationNumber,
                   customerName: conf.customerName || conf.arRecord?.customerName || "-",
                   dueDate: conf.dueDate,
                   status: conf.status,
-                  daysPastDue,
+                  daysPastDue: Math.ceil(diffTime / (1000 * 60 * 60 * 24)),
                 });
               }
             }
@@ -190,28 +178,26 @@ export default function ProjectDashboard() {
           setOverdueList(overdue);
         }
       } catch (err: any) {
-        setError(err.message || "加载数据失败");
+        if (err.name !== "AbortError") setError(err.message || "加载数据失败");
       } finally {
         setLoading(false);
       }
     }
 
     fetchData();
+    return () => controller.abort();
   }, [id]);
 
-  if (loading) {
-    return <PageLoading />;
-  }
+  if (loading) return <PageLoading />;
 
   if (error || !reportData) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
-        <AlertTriangle className="h-12 w-12 text-destructive" />
-        <p className="text-lg text-muted-foreground">{error || "数据加载失败"}</p>
-        <button
-          className="text-primary underline text-sm"
-          onClick={() => router.push("/projects")}
-        >
+        <div className="w-16 h-16 rounded-2xl bg-destructive/10 flex items-center justify-center">
+          <AlertTriangle className="h-8 w-8 text-destructive" />
+        </div>
+        <p className="text-lg text-muted-foreground font-display">{error || "数据加载失败"}</p>
+        <button className="text-seal underline text-sm" onClick={() => router.push("/projects")}>
           返回项目列表
         </button>
       </div>
@@ -220,20 +206,18 @@ export default function ProjectDashboard() {
 
   const { project, summary } = reportData;
 
-  // Build pie chart data from statusCounts
   const statusPieData = Object.entries(summary.statusCounts)
     .filter(([, count]) => count > 0)
     .map(([status, count]) => ({
       name: STATUS_LABEL_MAP[status] || status,
       value: count,
-      color: STATUS_COLOR_MAP[status] || "#8884d8",
+      color: STATUS_COLOR_MAP[status] || "#78716c",
     }));
 
-  // Response distribution for a secondary metric view
   const responsePieData = [
-    { name: "相符", value: summary.agreeCount, color: "#34d399" },
-    { name: "不符", value: summary.disagreeCount, color: "#f87171" },
-    { name: "未回函", value: summary.noResponseCount, color: "#94a3b8" },
+    { name: "相符", value: summary.agreeCount, color: "#15803d" },
+    { name: "不符", value: summary.disagreeCount, color: "#b91c1c" },
+    { name: "未回函", value: summary.noResponseCount, color: "#a8a29e" },
   ].filter((d) => d.value > 0);
 
   const unresolvedDifferences = summary.differenceCount - summary.resolvedCount;
@@ -241,131 +225,68 @@ export default function ProjectDashboard() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-4">
-        <button
-          onClick={() => router.push("/projects")}
-          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          返回
-        </button>
-        <div className="flex-1">
-          <h1 className="text-2xl font-bold">{project.name}</h1>
-          <p className="text-sm text-muted-foreground">
-            {project.clientCompany} | 基准日: {project.balanceDate}
-          </p>
-        </div>
+      <div className="animate-fade-in">
+        <h1 className="text-2xl font-bold tracking-tight">{project.name}</h1>
+        <p className="text-sm text-muted-foreground mt-1">
+          {project.clientCompany} · 基准日 {project.balanceDate}
+        </p>
       </div>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* 应收账款总数 */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">应收账款总数</CardTitle>
-            <FileText className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{summary.totalARCount}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              余额合计 {formatAmount(summary.totalARBalance)}
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* 函证数量 */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">函证数量</CardTitle>
-            <Send className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{summary.confirmationCount}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              覆盖率{" "}
-              <span className="font-semibold text-foreground">
-                {summary.coverageRate}%
-              </span>{" "}
-              | {formatAmount(summary.confirmedBalance)}
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* 回函数量 */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">回函数量</CardTitle>
-            <MailCheck className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{summary.responseCount}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              回函率{" "}
-              <span className="font-semibold text-foreground">
-                {summary.responseRate}%
-              </span>{" "}
-              | 相符 {summary.agreeCount} 笔
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* 差异数量 */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">差异数量</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{summary.differenceCount}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              差异金额 {formatAmount(summary.totalDifferenceAmount)}
-              {unresolvedDifferences > 0 && (
-                <Badge variant="warning" className="ml-2 text-[10px]">
-                  {unresolvedDifferences} 待解决
-                </Badge>
-              )}
-            </p>
-          </CardContent>
-        </Card>
+        <StatCard
+          title="应收账款总数"
+          icon={<FileText className="h-4 w-4" />}
+          value={summary.totalARCount}
+          sub={`余额合计 ${formatAmount(summary.totalARBalance)}`}
+          delay={1}
+        />
+        <StatCard
+          title="函证数量"
+          icon={<Send className="h-4 w-4" />}
+          value={summary.confirmationCount}
+          sub={`覆盖率 ${summary.coverageRate}%`}
+          accent
+          delay={2}
+        />
+        <StatCard
+          title="回函数量"
+          icon={<MailCheck className="h-4 w-4" />}
+          value={summary.responseCount}
+          sub={`回函率 ${summary.responseRate}% · 相符 ${summary.agreeCount} 笔`}
+          delay={3}
+        />
+        <StatCard
+          title="差异数量"
+          icon={<AlertTriangle className="h-4 w-4" />}
+          value={summary.differenceCount}
+          sub={`差异金额 ${formatAmount(summary.totalDifferenceAmount)}`}
+          badge={unresolvedDifferences > 0 ? `${unresolvedDifferences} 待解决` : undefined}
+          delay={4}
+        />
       </div>
 
-      {/* Progress Overview Bar */}
-      <Card>
+      {/* Progress Overview */}
+      <Card className="animate-fade-in animate-delay-5">
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
-            <TrendingUp className="h-4 w-4" />
+            <TrendingUp className="h-4 w-4 text-seal" />
             流程进度概览
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <ProgressItem
-              label="函证覆盖率"
-              value={parseFloat(summary.coverageRate)}
-              color="bg-blue-500"
-            />
-            <ProgressItem
-              label="回函率"
-              value={parseFloat(summary.responseRate)}
-              color="bg-green-500"
-            />
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            <ProgressItem label="函证覆盖率" value={parseFloat(summary.coverageRate)} color="bg-seal" />
+            <ProgressItem label="回函率" value={parseFloat(summary.responseRate)} color="bg-success" />
             <ProgressItem
               label="相符率"
-              value={
-                summary.responseCount > 0
-                  ? (summary.agreeCount / summary.responseCount) * 100
-                  : 0
-              }
-              color="bg-emerald-500"
+              value={summary.responseCount > 0 ? (summary.agreeCount / summary.responseCount) * 100 : 0}
+              color="bg-emerald-600"
             />
             <ProgressItem
               label="差异解决率"
-              value={
-                summary.differenceCount > 0
-                  ? (summary.resolvedCount / summary.differenceCount) * 100
-                  : 0
-              }
-              color="bg-purple-500"
+              value={summary.differenceCount > 0 ? (summary.resolvedCount / summary.differenceCount) * 100 : 0}
+              color="bg-violet-600"
             />
           </div>
         </CardContent>
@@ -373,11 +294,10 @@ export default function ProjectDashboard() {
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Confirmation Status Pie Chart */}
-        <Card>
+        <Card className="animate-fade-in animate-delay-5">
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
-              <PieChartIcon className="h-4 w-4" />
+              <PieChartIcon className="h-4 w-4 text-seal" />
               函证状态分布
             </CardTitle>
             <CardDescription>各状态函证数量占比</CardDescription>
@@ -394,20 +314,13 @@ export default function ProjectDashboard() {
                     outerRadius={100}
                     paddingAngle={2}
                     dataKey="value"
-                    label={({ name, percent }: any) =>
-                      `${name || ''} ${((percent || 0) * 100).toFixed(0)}%`
-                    }
+                    label={({ name, percent }: any) => `${name || ""} ${((percent || 0) * 100).toFixed(0)}%`}
                   >
                     {statusPieData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
-                  <Tooltip
-                    formatter={(value: any, name: any) => [
-                      `${value} 笔`,
-                      name,
-                    ]}
-                  />
+                  <Tooltip formatter={(value: any, name: any) => [`${value} 笔`, name]} />
                   <Legend />
                 </PieChart>
               </ResponsiveContainer>
@@ -417,11 +330,10 @@ export default function ProjectDashboard() {
           </CardContent>
         </Card>
 
-        {/* Aging Analysis Bar Chart */}
-        <Card>
+        <Card className="animate-fade-in animate-delay-6">
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
-              <BarChart3 className="h-4 w-4" />
+              <BarChart3 className="h-4 w-4 text-seal" />
               账龄分析
             </CardTitle>
             <CardDescription>应收账款账龄结构分布</CardDescription>
@@ -430,28 +342,15 @@ export default function ProjectDashboard() {
             {agingData.some((d) => d.amount > 0) ? (
               <ResponsiveContainer width="100%" height={280}>
                 <BarChart data={agingData}>
-                  <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-                  <XAxis
-                    dataKey="name"
-                    tick={{ fontSize: 12 }}
-                    tickLine={false}
-                  />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#d6d0c4" strokeOpacity={0.5} />
+                  <XAxis dataKey="name" tick={{ fontSize: 12, fill: "#78716c" }} tickLine={false} />
                   <YAxis
-                    tick={{ fontSize: 12 }}
+                    tick={{ fontSize: 12, fill: "#78716c" }}
                     tickLine={false}
-                    tickFormatter={(v) =>
-                      v >= 10000 ? `${(v / 10000).toFixed(0)}万` : `${v}`
-                    }
+                    tickFormatter={(v) => (v >= 10000 ? `${(v / 10000).toFixed(0)}万` : `${v}`)}
                   />
-                  <Tooltip
-                    formatter={(value: any) => [formatAmount(value), "金额"]}
-                  />
-                  <Bar
-                    dataKey="amount"
-                    fill="#3b82f6"
-                    radius={[4, 4, 0, 0]}
-                    maxBarSize={48}
-                  />
+                  <Tooltip formatter={(value: any) => [formatAmount(value), "金额"]} />
+                  <Bar dataKey="amount" fill="#b91c1c" radius={[4, 4, 0, 0]} maxBarSize={48} fillOpacity={0.85} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -461,13 +360,12 @@ export default function ProjectDashboard() {
         </Card>
       </div>
 
-      {/* Response Distribution + Difference Summary Row */}
+      {/* Response Distribution + Difference Summary */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Response Distribution Pie */}
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4" />
+              <CheckCircle2 className="h-4 w-4 text-seal" />
               回函结果分布
             </CardTitle>
             <CardDescription>回函相符与不符占比</CardDescription>
@@ -489,12 +387,7 @@ export default function ProjectDashboard() {
                       <Cell key={`resp-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
-                  <Tooltip
-                    formatter={(value: any, name: any) => [
-                      `${value} 笔`,
-                      name,
-                    ]}
-                  />
+                  <Tooltip formatter={(value: any, name: any) => [`${value} 笔`, name]} />
                   <Legend />
                 </PieChart>
               </ResponsiveContainer>
@@ -504,11 +397,10 @@ export default function ProjectDashboard() {
           </CardContent>
         </Card>
 
-        {/* Difference Summary */}
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
-              <ShieldAlert className="h-4 w-4" />
+              <ShieldAlert className="h-4 w-4 text-seal" />
               差异汇总
             </CardTitle>
             <CardDescription>差异调查与解决情况</CardDescription>
@@ -517,22 +409,16 @@ export default function ProjectDashboard() {
             {summary.differenceCount > 0 ? (
               <div className="space-y-6">
                 <div className="grid grid-cols-3 gap-4 text-center">
-                  <div>
-                    <div className="text-3xl font-bold text-orange-500">
-                      {summary.differenceCount}
-                    </div>
+                  <div className="p-3 rounded-lg bg-warning-light">
+                    <div className="text-3xl font-bold text-warning">{summary.differenceCount}</div>
                     <div className="text-xs text-muted-foreground mt-1">差异总数</div>
                   </div>
-                  <div>
-                    <div className="text-3xl font-bold text-green-500">
-                      {summary.resolvedCount}
-                    </div>
+                  <div className="p-3 rounded-lg bg-success-light">
+                    <div className="text-3xl font-bold text-success">{summary.resolvedCount}</div>
                     <div className="text-xs text-muted-foreground mt-1">已解决</div>
                   </div>
-                  <div>
-                    <div className="text-3xl font-bold text-red-500">
-                      {unresolvedDifferences}
-                    </div>
+                  <div className="p-3 rounded-lg bg-seal-light">
+                    <div className="text-3xl font-bold text-seal">{unresolvedDifferences}</div>
                     <div className="text-xs text-muted-foreground mt-1">待解决</div>
                   </div>
                 </div>
@@ -541,32 +427,20 @@ export default function ProjectDashboard() {
                   <div className="flex items-center justify-between text-sm mb-2">
                     <span className="text-muted-foreground">解决进度</span>
                     <span className="font-medium">
-                      {summary.differenceCount > 0
-                        ? (
-                            (summary.resolvedCount / summary.differenceCount) *
-                            100
-                          ).toFixed(1)
-                        : 0}
-                      %
+                      {((summary.resolvedCount / summary.differenceCount) * 100).toFixed(1)}%
                     </span>
                   </div>
-                  <div className="h-2.5 bg-muted rounded-full overflow-hidden">
+                  <div className="progress-bar">
                     <div
-                      className="h-full bg-green-500 rounded-full transition-all duration-500"
-                      style={{
-                        width: `${
-                          summary.differenceCount > 0
-                            ? (summary.resolvedCount / summary.differenceCount) * 100
-                            : 0
-                        }%`,
-                      }}
+                      className="progress-bar-fill bg-success"
+                      style={{ width: `${(summary.resolvedCount / summary.differenceCount) * 100}%` }}
                     />
                   </div>
                 </div>
 
-                <div className="p-3 bg-muted/50 rounded-lg">
-                  <div className="text-sm text-muted-foreground">差异金额合计</div>
-                  <div className="text-lg font-semibold mt-1">
+                <div className="p-4 bg-paper-dark rounded-lg">
+                  <div className="text-xs text-muted-foreground">差异金额合计</div>
+                  <div className="text-lg font-semibold mt-1 font-display">
                     {formatAmount(summary.totalDifferenceAmount)}
                   </div>
                 </div>
@@ -582,12 +456,10 @@ export default function ProjectDashboard() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
-            <Clock className="h-4 w-4" />
+            <Clock className="h-4 w-4 text-seal" />
             逾期函证提醒
             {overdueList.length > 0 && (
-              <Badge variant="destructive" className="ml-1">
-                {overdueList.length}
-              </Badge>
+              <Badge variant="destructive" className="ml-1">{overdueList.length}</Badge>
             )}
           </CardTitle>
           <CardDescription>已超过回函截止日期但尚未收到回函的函证</CardDescription>
@@ -597,44 +469,27 @@ export default function ProjectDashboard() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b text-left">
-                    <th className="pb-2 pr-4 font-medium text-muted-foreground">
-                      函证编号
-                    </th>
-                    <th className="pb-2 pr-4 font-medium text-muted-foreground">
-                      客户名称
-                    </th>
-                    <th className="pb-2 pr-4 font-medium text-muted-foreground">
-                      截止日期
-                    </th>
-                    <th className="pb-2 pr-4 font-medium text-muted-foreground">
-                      逾期天数
-                    </th>
-                    <th className="pb-2 font-medium text-muted-foreground">当前状态</th>
+                  <tr className="border-b border-border">
+                    <th className="pb-3 pr-4 text-left font-medium text-muted-foreground text-xs uppercase tracking-wider">函证编号</th>
+                    <th className="pb-3 pr-4 text-left font-medium text-muted-foreground text-xs uppercase tracking-wider">客户名称</th>
+                    <th className="pb-3 pr-4 text-left font-medium text-muted-foreground text-xs uppercase tracking-wider">截止日期</th>
+                    <th className="pb-3 pr-4 text-left font-medium text-muted-foreground text-xs uppercase tracking-wider">逾期天数</th>
+                    <th className="pb-3 text-left font-medium text-muted-foreground text-xs uppercase tracking-wider">当前状态</th>
                   </tr>
                 </thead>
                 <tbody>
                   {overdueList.map((item) => (
-                    <tr
-                      key={item.id}
-                      className="border-b last:border-0 hover:bg-muted/50 transition-colors"
-                    >
-                      <td className="py-3 pr-4 font-mono text-xs">
-                        {item.confirmationNumber}
-                      </td>
+                    <tr key={item.id} className="border-b border-border/50 last:border-0 table-row-hover">
+                      <td className="py-3 pr-4 font-mono text-xs">{item.confirmationNumber}</td>
                       <td className="py-3 pr-4">{item.customerName}</td>
-                      <td className="py-3 pr-4">{item.dueDate}</td>
+                      <td className="py-3 pr-4 text-muted-foreground">{item.dueDate}</td>
                       <td className="py-3 pr-4">
-                        <Badge
-                          variant={item.daysPastDue > 14 ? "destructive" : "warning"}
-                        >
+                        <Badge variant={item.daysPastDue > 14 ? "destructive" : "warning"}>
                           {item.daysPastDue} 天
                         </Badge>
                       </td>
                       <td className="py-3">
-                        <Badge variant="outline">
-                          {STATUS_LABEL_MAP[item.status] || item.status}
-                        </Badge>
+                        <Badge variant="outline">{STATUS_LABEL_MAP[item.status] || item.status}</Badge>
                       </td>
                     </tr>
                   ))}
@@ -642,8 +497,8 @@ export default function ProjectDashboard() {
               </table>
             </div>
           ) : (
-            <div className="text-center py-8 text-muted-foreground">
-              <CheckCircle2 className="h-8 w-8 mx-auto mb-2 text-green-500" />
+            <div className="text-center py-10 text-muted-foreground">
+              <CheckCircle2 className="h-8 w-8 mx-auto mb-2 text-success" />
               <p className="text-sm">所有函证均在截止日期内，暂无逾期提醒</p>
             </div>
           )}
@@ -655,27 +510,54 @@ export default function ProjectDashboard() {
 
 /* ---------- Helper Components ---------- */
 
-function ProgressItem({
-  label,
+function StatCard({
+  title,
+  icon,
   value,
-  color,
+  sub,
+  accent,
+  badge,
+  delay,
 }: {
-  label: string;
+  title: string;
+  icon: React.ReactNode;
   value: number;
-  color: string;
+  sub: string;
+  accent?: boolean;
+  badge?: string;
+  delay: number;
 }) {
+  return (
+    <Card className={`animate-fade-in animate-delay-${delay} ${accent ? "border-seal/20" : ""}`}>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="text-sm font-medium">{title}</CardTitle>
+        <div className={`p-1.5 rounded-lg ${accent ? "bg-seal-light text-seal" : "bg-muted text-muted-foreground"}`}>
+          {icon}
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className={`text-2xl font-bold font-display ${accent ? "text-seal" : ""}`}>{value}</div>
+        <p className="text-xs text-muted-foreground mt-1">
+          {sub}
+          {badge && (
+            <Badge variant="warning" className="ml-2 text-[10px]">{badge}</Badge>
+          )}
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ProgressItem({ label, value, color }: { label: string; value: number; color: string }) {
   const clamped = Math.min(Math.max(value, 0), 100);
   return (
     <div>
-      <div className="flex items-center justify-between text-sm mb-1">
+      <div className="flex items-center justify-between text-sm mb-2">
         <span className="text-muted-foreground">{label}</span>
-        <span className="font-semibold">{clamped.toFixed(1)}%</span>
+        <span className="font-semibold text-ink">{clamped.toFixed(1)}%</span>
       </div>
-      <div className="h-2 bg-muted rounded-full overflow-hidden">
-        <div
-          className={`h-full rounded-full transition-all duration-700 ${color}`}
-          style={{ width: `${clamped}%` }}
-        />
+      <div className="progress-bar">
+        <div className={`progress-bar-fill ${color}`} style={{ width: `${clamped}%` }} />
       </div>
     </div>
   );

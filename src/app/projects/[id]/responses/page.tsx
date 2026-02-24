@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -65,24 +65,38 @@ export default function ResponsesPage() {
   });
 
   useEffect(() => {
+    const controller = new AbortController();
+    async function fetchData() {
+      try {
+        const [respRes, confRes] = await Promise.all([
+          fetch(`/api/responses?projectId=${projectId}`, { signal: controller.signal }),
+          fetch(`/api/confirmations?projectId=${projectId}`, { signal: controller.signal }),
+        ]);
+        setRows(await respRes.json());
+        const confData = await confRes.json();
+        setConfirmations(confData);
+      } catch (err) {
+        if (!controller.signal.aborted) toast.error("加载失败");
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    }
     fetchData();
-  }, []);
+    return () => controller.abort();
+  }, [projectId]);
 
-  async function fetchData() {
+  const refetchData = useCallback(async () => {
     try {
       const [respRes, confRes] = await Promise.all([
         fetch(`/api/responses?projectId=${projectId}`),
         fetch(`/api/confirmations?projectId=${projectId}`),
       ]);
       setRows(await respRes.json());
-      const confData = await confRes.json();
-      setConfirmations(confData);
+      setConfirmations(await confRes.json());
     } catch {
       toast.error("加载失败");
-    } finally {
-      setLoading(false);
     }
-  }
+  }, [projectId]);
 
   function openDialog(confirmationId?: string) {
     const conf = confirmations.find((c: any) => c.confirmation.id === confirmationId);
@@ -127,7 +141,7 @@ export default function ResponsesPage() {
         toast.info(`检测到差异: ${formatAmount(data.differenceAmount)}，已自动创建差异记录`);
       }
       setDialogOpen(false);
-      await fetchData();
+      await refetchData();
     } catch {
       toast.error("登记失败");
     } finally {

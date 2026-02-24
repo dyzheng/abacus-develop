@@ -45,20 +45,21 @@ export default function ReportPage() {
   const [generating, setGenerating] = useState(false);
 
   useEffect(() => {
-    fetchReport();
-  }, []);
-
-  async function fetchReport() {
-    try {
-      const res = await fetch(`/api/report?projectId=${projectId}`);
-      const data = await res.json();
-      setReport(data);
-    } catch {
-      toast.error("加载报告失败");
-    } finally {
-      setLoading(false);
+    const controller = new AbortController();
+    async function fetchReport() {
+      try {
+        const res = await fetch(`/api/report?projectId=${projectId}`, { signal: controller.signal });
+        const data = await res.json();
+        setReport(data);
+      } catch (err) {
+        if (!controller.signal.aborted) toast.error("加载报告失败");
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
     }
-  }
+    fetchReport();
+    return () => controller.abort();
+  }, [projectId]);
 
   async function generateNarrative() {
     setGenerating(true);

@@ -19,6 +19,13 @@ const COLUMN_VARIANTS: Record<string, string[]> = {
   year4to5: ["4-5年", "4至5年", "四到五年", "year_4_to_5"],
   over5Years: ["5年以上", "五年以上", "over_5_years"],
   isRelatedParty: ["关联方", "是否关联方", "related_party"],
+  contactPerson: ["联系人", "联系人姓名", "负责人"],
+  contactPhone: ["联系电话", "电话", "手机"],
+  contactEmail: ["邮箱", "电子邮箱", "email"],
+  address: ["地址", "通讯地址", "邮寄地址", "联系地址"],
+  city: ["城市", "所在城市"],
+  province: ["省份", "省", "所在省份"],
+  postalCode: ["邮编", "邮政编码"],
 };
 
 function autoMapColumns(headers: string[]): Record<string, string> {
@@ -146,6 +153,13 @@ export async function POST(request: Request) {
           year4to5: Number(mapped.year4to5) || 0,
           over5Years: Number(mapped.over5Years) || 0,
           isRelatedParty: mapped.isRelatedParty === "是" || mapped.isRelatedParty === true || mapped.isRelatedParty === 1,
+          contactPerson: mapped.contactPerson ? String(mapped.contactPerson) : null,
+          contactPhone: mapped.contactPhone ? String(mapped.contactPhone) : null,
+          contactEmail: mapped.contactEmail ? String(mapped.contactEmail) : null,
+          address: mapped.address ? String(mapped.address) : null,
+          city: mapped.city ? String(mapped.city) : null,
+          province: mapped.province ? String(mapped.province) : null,
+          postalCode: mapped.postalCode ? String(mapped.postalCode) : null,
         };
 
         const riskLevel = classifyRisk(record);

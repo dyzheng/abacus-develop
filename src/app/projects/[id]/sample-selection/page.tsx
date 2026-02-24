@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -54,25 +54,39 @@ export default function SampleSelectionPage() {
   });
 
   useEffect(() => {
+    const controller = new AbortController();
+    async function fetchRecords() {
+      try {
+        const res = await fetch(`/api/ar-records?projectId=${projectId}`, { signal: controller.signal });
+        const data = await res.json();
+        setRecords(data);
+        const alreadySelected = new Set<string>(
+          data.filter((r: ARRecord) => r.selectionStatus === "ai_suggested" || r.selectionStatus === "confirmed").map((r: ARRecord) => r.id)
+        );
+        setConfirmed(alreadySelected);
+      } catch (err) {
+        if (!controller.signal.aborted) toast.error("加载记录失败");
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    }
     fetchRecords();
-  }, []);
+    return () => controller.abort();
+  }, [projectId]);
 
-  async function fetchRecords() {
+  const refetchRecords = useCallback(async () => {
     try {
       const res = await fetch(`/api/ar-records?projectId=${projectId}`);
       const data = await res.json();
       setRecords(data);
-      // Pre-select already selected ones
       const alreadySelected = new Set<string>(
         data.filter((r: ARRecord) => r.selectionStatus === "ai_suggested" || r.selectionStatus === "confirmed").map((r: ARRecord) => r.id)
       );
       setConfirmed(alreadySelected);
     } catch {
       toast.error("加载记录失败");
-    } finally {
-      setLoading(false);
     }
-  }
+  }, [projectId]);
 
   async function runSelection(useAI: boolean) {
     setRunning(true);
@@ -86,7 +100,7 @@ export default function SampleSelectionPage() {
       const data: SelectionResult = await res.json();
       setResult(data);
       setConfirmed(new Set(data.selections.map((s) => s.id)));
-      await fetchRecords();
+      await refetchRecords();
       toast.success(`选择了 ${data.selectedCount} 条记录，覆盖率 ${data.coverageRate}%`);
     } catch (err: any) {
       toast.error(err.message || "样本选择失败");

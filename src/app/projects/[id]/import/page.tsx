@@ -27,6 +27,13 @@ const FIELD_LABELS: Record<string, string> = {
   year4to5: "4-5年",
   over5Years: "5年以上",
   isRelatedParty: "关联方",
+  contactPerson: "联系人",
+  contactPhone: "联系电话",
+  contactEmail: "邮箱",
+  address: "地址",
+  city: "城市",
+  province: "省份",
+  postalCode: "邮编",
 };
 
 export default function ImportPage() {

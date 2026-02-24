@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -47,19 +47,29 @@ export default function DifferencesPage() {
   const [saving, setSaving] = useState<string | null>(null);
 
   useEffect(() => {
+    const controller = new AbortController();
+    async function fetchData() {
+      try {
+        const res = await fetch(`/api/differences?projectId=${projectId}`, { signal: controller.signal });
+        setRows(await res.json());
+      } catch (err) {
+        if (!controller.signal.aborted) toast.error("加载失败");
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    }
     fetchData();
-  }, []);
+    return () => controller.abort();
+  }, [projectId]);
 
-  async function fetchData() {
+  const refetchData = useCallback(async () => {
     try {
       const res = await fetch(`/api/differences?projectId=${projectId}`);
       setRows(await res.json());
     } catch {
       toast.error("加载失败");
-    } finally {
-      setLoading(false);
     }
-  }
+  }, [projectId]);
 
   async function runAnalysis(differenceId: string) {
     setAnalyzing(differenceId);
@@ -71,7 +81,7 @@ export default function DifferencesPage() {
       });
       if (!res.ok) throw new Error();
       toast.success("AI分析完成");
-      await fetchData();
+      await refetchData();
     } catch {
       toast.error("分析失败");
     } finally {
@@ -90,7 +100,7 @@ export default function DifferencesPage() {
       });
       if (!res.ok) throw new Error();
       toast.success("已保存审计师结论");
-      await fetchData();
+      await refetchData();
     } catch {
       toast.error("保存失败");
     } finally {

@@ -1,30 +1,204 @@
 @import "tailwindcss";
 
 @theme {
-  --color-background: #ffffff;
-  --color-foreground: #0a0a0a;
-  --color-muted: #f5f5f5;
-  --color-muted-foreground: #737373;
-  --color-border: #e5e5e5;
-  --color-input: #e5e5e5;
-  --color-ring: #2563eb;
-  --color-primary: #2563eb;
-  --color-primary-foreground: #ffffff;
-  --color-secondary: #f5f5f5;
-  --color-secondary-foreground: #171717;
-  --color-destructive: #ef4444;
+  --color-background: #f8f6f1;
+  --color-foreground: #1a1814;
+  --color-muted: #eee9df;
+  --color-muted-foreground: #78716c;
+  --color-border: #d6d0c4;
+  --color-input: #d6d0c4;
+  --color-ring: #b91c1c;
+  --color-primary: #b91c1c;
+  --color-primary-foreground: #fef2f2;
+  --color-secondary: #eee9df;
+  --color-secondary-foreground: #1a1814;
+  --color-destructive: #dc2626;
   --color-destructive-foreground: #ffffff;
-  --color-accent: #f5f5f5;
-  --color-accent-foreground: #171717;
-  --color-card: #ffffff;
-  --color-card-foreground: #0a0a0a;
-  --color-popover: #ffffff;
-  --color-popover-foreground: #0a0a0a;
+  --color-accent: #e8e2d6;
+  --color-accent-foreground: #1a1814;
+  --color-card: #fffefa;
+  --color-card-foreground: #1a1814;
+  --color-popover: #fffefa;
+  --color-popover-foreground: #1a1814;
+  --color-sidebar: #1a1814;
+  --color-sidebar-foreground: #d6d0c4;
+  --color-sidebar-accent: #2a2620;
+  --color-sidebar-muted: #78716c;
+  --color-seal: #b91c1c;
+  --color-seal-light: #fef2f2;
+  --color-ink: #1a1814;
+  --color-ink-light: #44403c;
+  --color-paper: #fffefa;
+  --color-paper-dark: #f5f0e8;
+  --color-success: #15803d;
+  --color-success-light: #f0fdf4;
+  --color-warning: #a16207;
+  --color-warning-light: #fefce8;
+  --color-info: #1d4ed8;
+  --color-info-light: #eff6ff;
   --radius-sm: 0.25rem;
-  --radius-md: 0.375rem;
-  --radius-lg: 0.5rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+}
+
+@font-face {
+  font-family: 'Noto Serif SC';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@600;700&display=swap');
 }
 
 body {
-  font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  background-color: var(--color-background);
+  background-image:
+    radial-gradient(ellipse at 20% 50%, rgba(185, 28, 28, 0.02) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 20%, rgba(26, 24, 20, 0.02) 0%, transparent 50%);
+}
+
+/* Display headings — serif for authority */
+h1, h2, .font-display {
+  font-family: "Noto Serif SC", "Songti SC", "SimSun", serif;
+}
+
+/* Ink-wash card effect */
+.card-ink {
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  box-shadow:
+    0 1px 2px rgba(26, 24, 20, 0.04),
+    0 4px 12px rgba(26, 24, 20, 0.03);
+  transition: box-shadow 0.3s ease, transform 0.3s ease;
+}
+
+.card-ink:hover {
+  box-shadow:
+    0 2px 4px rgba(26, 24, 20, 0.06),
+    0 8px 24px rgba(26, 24, 20, 0.06);
+  transform: translateY(-1px);
+}
+
+/* Seal stamp accent */
+.seal-accent {
+  position: relative;
+}
+
+.seal-accent::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg, var(--color-seal), transparent);
+  border-radius: 1px;
+}
+
+/* Sidebar ink gradient */
+.sidebar-ink {
+  background: linear-gradient(180deg, #1a1814 0%, #0f0e0c 100%);
+}
+
+/* Subtle paper texture overlay */
+.paper-texture {
+  position: relative;
+}
+
+.paper-texture::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%231a1814' fill-opacity='0.015'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+/* Progress bar base */
+.progress-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--color-muted);
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Staggered fade-in animation */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeInUp 0.5s ease-out forwards;
+  opacity: 0;
+}
+
+.animate-delay-1 { animation-delay: 0.05s; }
+.animate-delay-2 { animation-delay: 0.1s; }
+.animate-delay-3 { animation-delay: 0.15s; }
+.animate-delay-4 { animation-delay: 0.2s; }
+.animate-delay-5 { animation-delay: 0.25s; }
+.animate-delay-6 { animation-delay: 0.3s; }
+
+/* Smooth page transitions */
+@keyframes pageEnter {
+  from {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.page-enter {
+  animation: pageEnter 0.4s ease-out forwards;
+}
+
+/* Table row hover */
+.table-row-hover {
+  transition: background-color 0.15s ease;
+}
+
+.table-row-hover:hover {
+  background-color: var(--color-paper-dark);
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-muted-foreground);
+}
+
+/* Print styles */
+@media print {
+  .no-print { display: none !important; }
+  body { background: white; }
+  .sidebar-ink { display: none; }
 }
