@@ -1,6 +1,6 @@
 import { db, sqlite } from "@/db";
 import { arRecords } from "@/db/schema";
-import { eq, desc, and, gte, lte, like } from "drizzle-orm";
+import { eq, desc, and, gte, lte, like, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { v4 as uuid } from "uuid";
 import { handleApiError } from "@/lib/api-error";
@@ -51,10 +51,32 @@ export async function GET(request: Request) {
     if (!isNaN(val)) conditions.push(lte(arRecords.totalBalance, val));
   }
 
+  const whereClause = and(...conditions);
+
+  const page = Number(searchParams.get("page")) || 0;
+  const pageSize = Number(searchParams.get("pageSize")) || 0;
+
+  if (page > 0 && pageSize > 0) {
+    const [{ total }] = await db
+      .select({ total: sql<number>`count(*)` })
+      .from(arRecords)
+      .where(whereClause);
+
+    const records = await db
+      .select()
+      .from(arRecords)
+      .where(whereClause)
+      .orderBy(desc(arRecords.totalBalance))
+      .limit(pageSize)
+      .offset((page - 1) * pageSize);
+
+    return NextResponse.json({ data: records, total, page, pageSize });
+  }
+
   const records = await db
     .select()
     .from(arRecords)
-    .where(and(...conditions))
+    .where(whereClause)
     .orderBy(desc(arRecords.totalBalance));
 
   return NextResponse.json(records);

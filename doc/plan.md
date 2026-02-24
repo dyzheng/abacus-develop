@@ -59,9 +59,9 @@ differences/analyze 外层 catch 中将状态回退为 "pending"。内层 AI JSO
 
 schema.ts 已为所有外键列和常用查询列添加索引，confirmations 加了 `(projectId, confirmationNumber)` 唯一索引。
 
-### 11. 无分页（待做）
+### 11. ✅ 分页支持
 
-需要前后端联动改造，留待后续迭代。
+`ar-records` 和 `confirmations` GET 接口已支持 `page`/`pageSize` 查询参数。传参时返回 `{ data, total, page, pageSize }`，不传则返回全量数组（向后兼容）。
 
 ---
 

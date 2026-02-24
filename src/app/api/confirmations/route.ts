@@ -13,6 +13,31 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "projectId is required" }, { status: 400 });
   }
 
+  const whereClause = eq(confirmations.projectId, projectId);
+  const page = Number(searchParams.get("page")) || 0;
+  const pageSize = Number(searchParams.get("pageSize")) || 0;
+
+  if (page > 0 && pageSize > 0) {
+    const [{ total }] = await db
+      .select({ total: sql<number>`count(*)` })
+      .from(confirmations)
+      .where(whereClause);
+
+    const results = await db
+      .select({
+        confirmation: confirmations,
+        arRecord: arRecords,
+      })
+      .from(confirmations)
+      .leftJoin(arRecords, eq(confirmations.arRecordId, arRecords.id))
+      .where(whereClause)
+      .orderBy(desc(confirmations.createdAt))
+      .limit(pageSize)
+      .offset((page - 1) * pageSize);
+
+    return NextResponse.json({ data: results, total, page, pageSize });
+  }
+
   const results = await db
     .select({
       confirmation: confirmations,
@@ -20,7 +45,7 @@ export async function GET(request: Request) {
     })
     .from(confirmations)
     .leftJoin(arRecords, eq(confirmations.arRecordId, arRecords.id))
-    .where(eq(confirmations.projectId, projectId))
+    .where(whereClause)
     .orderBy(desc(confirmations.createdAt));
 
   return NextResponse.json(results);
