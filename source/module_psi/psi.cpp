@@ -49,14 +49,18 @@ Psi<T, Device>::~Psi()
         delete[] psi_cpu_;
         psi_cpu_ = nullptr;
     }
-#if defined(__CUDA) || defined(__ROCM)
-    // GPU buffer cleanup will use cudaFree/hipFree when allocated (Phase 2)
-    // For now these are always nullptr
+
+    // psi_gpu_buffer_ aliases this->psi (already freed above), just null it
     psi_gpu_buffer_ = nullptr;
-    psi_gpu_transfer_buffer_ = nullptr;
-    compute_stream_ = nullptr;
-    transfer_stream_ = nullptr;
-#endif
+
+    // Free the transfer buffer separately (it was allocated independently)
+    if (psi_gpu_transfer_buffer_ != nullptr)
+    {
+        base_device::memory::delete_memory_op<T, Device>()(this->ctx, psi_gpu_transfer_buffer_);
+        psi_gpu_transfer_buffer_ = nullptr;
+    }
+
+    current_k_gpu_ = -1;
 }
 
 template <typename T, typename Device>
@@ -259,14 +263,43 @@ template <typename T, typename Device>
 void Psi<T, Device>::resize(const int nks_in, const int nbands_in, const int nbasis_in)
 {
     assert(nks_in > 0 && nbands_in >= 0 && nbasis_in > 0);
-    // This function will delete the psi array first(if psi exist), then malloc a new memory for it.
-    resize_memory_op()(this->ctx, this->psi, nks_in * static_cast<std::size_t>(nbands_in) * nbasis_in, "no_record");
+
+    if (storage_mode_ == PsiStorageMode::PAGED_GPU)
+    {
+        // Allocate CPU storage for ALL k-points
+        const size_t total_size = static_cast<size_t>(nks_in) * nbands_in * nbasis_in;
+        if (psi_cpu_ != nullptr)
+        {
+            delete[] psi_cpu_;
+        }
+        psi_cpu_ = new T[total_size](); // value-initialize to zero
+
+        // Allocate GPU buffer for ONE k-point using device memory ops
+        const size_t k_size = static_cast<size_t>(nbands_in) * nbasis_in;
+        resize_memory_op()(this->ctx, this->psi, k_size, "no_record");
+
+        // Also allocate transfer buffer for double buffering
+        resize_memory_op()(this->ctx, psi_gpu_transfer_buffer_, k_size, "no_record");
+
+        // Point gpu_buffer to the main psi pointer for convenience
+        psi_gpu_buffer_ = this->psi;
+
+        current_k_gpu_ = -1;
+    }
+    else
+    {
+        // Original behavior: allocate full storage on device
+        resize_memory_op()(this->ctx,
+                           this->psi,
+                           nks_in * static_cast<std::size_t>(nbands_in) * nbasis_in,
+                           "no_record");
+    }
+
     this->nk = nks_in;
     this->nbands = nbands_in;
     this->nbasis = nbasis_in;
     this->current_nbasis = nbasis_in;
     this->psi_current = this->psi;
-    // GlobalV::ofs_device << "allocated xxx MB memory for psi" << std::endl;
 }
 
 template <typename T, typename Device>

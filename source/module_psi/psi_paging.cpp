@@ -66,23 +66,78 @@ const T* Psi<T, Device>::get_cpu_pointer(int ik) const
     }
 }
 
-// Stub implementations for GPU methods (full implementation in Task batch 2)
+// Load k-point data from CPU to GPU device buffer
 template <typename T, typename Device>
 void Psi<T, Device>::load_k_to_gpu(int ik)
 {
-    // Will be implemented in Tasks 6-10
+    if (storage_mode_ != PsiStorageMode::PAGED_GPU)
+    {
+        return; // No-op if not in paged mode
+    }
+
+    if (ik < 0 || ik >= this->nk)
+    {
+        ModuleBase::WARNING_QUIT("Psi::load_k_to_gpu", "Invalid k-point index");
+    }
+
+    if (psi_cpu_ == nullptr)
+    {
+        ModuleBase::WARNING_QUIT("Psi::load_k_to_gpu", "CPU buffer not allocated");
+    }
+
+    const size_t k_size = static_cast<size_t>(this->nbands) * this->nbasis;
+    const T* src = psi_cpu_ + static_cast<size_t>(ik) * this->nbands * this->nbasis;
+
+    // Transfer from CPU to Device
+    base_device::DEVICE_CPU* cpu_ctx = {};
+    base_device::memory::synchronize_memory_op<T, Device, base_device::DEVICE_CPU>()(
+        this->ctx, cpu_ctx, this->psi, src, k_size);
+
+    current_k_gpu_ = ik;
+    this->psi_current = this->psi;
 }
 
+// Store k-point data from GPU device buffer back to CPU
 template <typename T, typename Device>
 void Psi<T, Device>::store_k_from_gpu(int ik)
 {
-    // Will be implemented in Tasks 6-10
+    if (storage_mode_ != PsiStorageMode::PAGED_GPU)
+    {
+        return; // No-op if not in paged mode
+    }
+
+    if (ik < 0 || ik >= this->nk)
+    {
+        ModuleBase::WARNING_QUIT("Psi::store_k_from_gpu", "Invalid k-point index");
+    }
+
+    if (psi_cpu_ == nullptr)
+    {
+        ModuleBase::WARNING_QUIT("Psi::store_k_from_gpu", "CPU buffer not allocated");
+    }
+
+    const size_t k_size = static_cast<size_t>(this->nbands) * this->nbasis;
+    T* dst = psi_cpu_ + static_cast<size_t>(ik) * this->nbands * this->nbasis;
+
+    // Transfer from Device to CPU
+    base_device::DEVICE_CPU* cpu_ctx = {};
+    base_device::memory::synchronize_memory_op<T, base_device::DEVICE_CPU, Device>()(
+        cpu_ctx, this->ctx, dst, this->psi, k_size);
 }
 
+// Ensure the specified k-point is loaded on GPU, loading if necessary
 template <typename T, typename Device>
 void Psi<T, Device>::ensure_k_on_gpu(int ik)
 {
-    // Will be implemented in Tasks 6-10
+    if (storage_mode_ != PsiStorageMode::PAGED_GPU)
+    {
+        return; // No-op if not in paged mode
+    }
+
+    if (current_k_gpu_ != ik)
+    {
+        load_k_to_gpu(ik);
+    }
 }
 
 // Explicit instantiations for paging methods only (full class instantiated in psi.cpp)
