@@ -777,6 +777,19 @@ void ReadInput::item_system()
         read_sync_string(input.precision);
         this->add_item(item);
     }
+    {
+        Input_Item item("device_memory_mode");
+        item.annotation = "GPU memory mode: full_gpu, paged, or auto (empty string)";
+        read_sync_string(input.device_memory_mode);
+        item.check_value = [](const Input_Item& item, const Parameter& para) {
+            const std::string& mode = para.input.device_memory_mode;
+            if (!mode.empty() && mode != "full_gpu" && mode != "paged")
+            {
+                ModuleBase::WARNING_QUIT("Input", "device_memory_mode must be '', 'full_gpu', or 'paged'");
+            }
+        };
+        this->add_item(item);
+    }
 }
 
 } // namespace ModuleIO
