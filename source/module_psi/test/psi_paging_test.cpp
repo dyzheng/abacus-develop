@@ -9,14 +9,7 @@ class PsiPagingTest : public ::testing::Test
   protected:
     void SetUp() override
     {
-        nk = 10;
-        nband = 20;
-        nbasis = 1000;
     }
-
-    int nk;
-    int nband;
-    int nbasis;
 };
 
 TEST_F(PsiPagingTest, DefaultStorageMode)

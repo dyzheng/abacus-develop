@@ -42,6 +42,21 @@ Psi<T, Device>::~Psi()
     {
         delete_memory_op()(this->ctx, this->psi);
     }
+
+    // Cleanup paging-mode resources
+    if (psi_cpu_ != nullptr)
+    {
+        delete[] psi_cpu_;
+        psi_cpu_ = nullptr;
+    }
+#if defined(__CUDA) || defined(__ROCM)
+    // GPU buffer cleanup will use cudaFree/hipFree when allocated (Phase 2)
+    // For now these are always nullptr
+    psi_gpu_buffer_ = nullptr;
+    psi_gpu_transfer_buffer_ = nullptr;
+    compute_stream_ = nullptr;
+    transfer_stream_ = nullptr;
+#endif
 }
 
 template <typename T, typename Device>
@@ -117,6 +132,8 @@ Psi<T, Device>::Psi(const Psi& psi_in, const int nk_in, int nband_in)
     }
     this->k_first = psi_in.get_k_first();
     this->device = psi_in.device;
+    this->storage_mode_ = psi_in.get_storage_mode();
+    this->current_k_gpu_ = -1; // New copy starts with no k on GPU
     this->resize(nk_in, nband_in, psi_in.get_nbasis());
     this->ngk = psi_in.ngk;
     this->npol = psi_in.npol;
@@ -157,6 +174,10 @@ Psi<T, Device>::Psi(T* psi_pointer, const Psi& psi_in, const int nk_in, int nban
 template <typename T, typename Device>
 Psi<T, Device>::Psi(const Psi& psi_in)
 {
+    if (psi_in.get_storage_mode() == PsiStorageMode::PAGED_GPU)
+    {
+        ModuleBase::WARNING("Psi::Psi(copy)", "Copying Psi in PAGED_GPU mode - paging state not deep-copied");
+    }
     this->ngk = psi_in.get_ngk_pointer();
     this->npol = psi_in.npol;
     this->nk = psi_in.get_nk();
@@ -165,6 +186,8 @@ Psi<T, Device>::Psi(const Psi& psi_in)
     this->current_k = psi_in.get_current_k();
     this->current_b = psi_in.get_current_b();
     this->k_first = psi_in.get_k_first();
+    this->storage_mode_ = psi_in.get_storage_mode();
+    this->current_k_gpu_ = -1; // New copy starts with no k on GPU
     // this function will copy psi_in.psi to this->psi no matter the device types of each other.
     this->device = base_device::get_device_type<Device>(this->ctx);
     this->resize(psi_in.get_nk(), psi_in.get_nbands(), psi_in.get_nbasis());
@@ -190,6 +213,8 @@ Psi<T, Device>::Psi(const Psi<T_in, Device_in>& psi_in)
     this->current_k = psi_in.get_current_k();
     this->current_b = psi_in.get_current_b();
     this->k_first = psi_in.get_k_first();
+    this->storage_mode_ = psi_in.get_storage_mode();
+    this->current_k_gpu_ = -1; // New copy starts with no k on GPU
     // this function will copy psi_in.psi to this->psi no matter the device types of each other.
     this->device = base_device::get_device_type<Device>(this->ctx);
     this->resize(psi_in.get_nk(), psi_in.get_nbands(), psi_in.get_nbasis());
