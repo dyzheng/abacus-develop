@@ -1,9 +1,18 @@
 AddTest(
     TARGET psi_UT
-    LIBS parameter ${math_libs} base device 
-    SOURCES 
+    LIBS parameter ${math_libs} base device
+    SOURCES
         psi_test.cpp
-        ../psi.cpp 
+        ../psi.cpp
+)
+
+AddTest(
+    TARGET psi_paging_test
+    LIBS parameter ${math_libs} base device
+    SOURCES
+        psi_paging_test.cpp
+        ../psi.cpp
+        ../psi_paging.cpp
 )
 
 if(ENABLE_LCAO)

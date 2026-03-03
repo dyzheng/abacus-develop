@@ -10,6 +10,13 @@
 namespace psi
 {
 
+/// Storage mode for Psi wavefunction data
+enum class PsiStorageMode {
+    ALL_GPU,      // Current behavior: all k-points on GPU
+    ALL_CPU,      // All k-points on CPU
+    PAGED_GPU     // CPU storage + single k-point GPU buffer
+};
+
 // structure for getting range of Psi
 // two display method: k index first or bands index first
 struct Range
@@ -138,6 +145,18 @@ class Psi
     std::tuple<const T*, int> to_range(const Range& range) const;
     int npol = 1;
 
+    // Memory optimization methods
+    void set_storage_mode(PsiStorageMode mode);
+    PsiStorageMode get_storage_mode() const { return storage_mode_; }
+
+    void load_k_to_gpu(int ik);
+    void store_k_from_gpu(int ik);
+    void ensure_k_on_gpu(int ik);
+
+    int get_current_k_gpu() const { return current_k_gpu_; }
+    T* get_cpu_pointer(int ik = 0);
+    const T* get_cpu_pointer(int ik = 0) const;
+
   private:
     T* psi = nullptr; // avoid using C++ STL
 
@@ -163,6 +182,18 @@ class Psi
     bool k_first = true;
 
     bool allocate_inside = true; ///< whether allocate psi inside Psi class
+
+    // Memory optimization members
+    PsiStorageMode storage_mode_ = PsiStorageMode::ALL_GPU;
+    T* psi_cpu_ = nullptr;           // CPU storage for all k-points (used in PAGED_GPU mode)
+    T* psi_gpu_buffer_ = nullptr;    // GPU buffer for current k-point
+    T* psi_gpu_transfer_buffer_ = nullptr;  // Second buffer for double buffering
+    int current_k_gpu_ = -1;         // Which k-point is on GPU (-1 = none)
+
+#if defined(__CUDA) || defined(__ROCM)
+    void* compute_stream_ = nullptr;  // CUDA/HIP stream for computation
+    void* transfer_stream_ = nullptr; // CUDA/HIP stream for transfers
+#endif
 
 #ifdef __DSP
     using delete_memory_op = base_device::memory::delete_memory_op_mt<T, Device>;
