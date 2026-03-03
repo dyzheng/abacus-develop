@@ -275,6 +275,7 @@ void Psi<T, Device>::resize(const int nks_in, const int nbands_in, const int nba
         psi_cpu_ = new T[total_size](); // value-initialize to zero
 
         // Allocate GPU buffer for ONE k-point using device memory ops
+        // Note: resize_memory_op frees existing allocation before re-allocating
         const size_t k_size = static_cast<size_t>(nbands_in) * nbasis_in;
         resize_memory_op()(this->ctx, this->psi, k_size, "no_record");
 

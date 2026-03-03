@@ -125,7 +125,10 @@ void Psi<T, Device>::store_k_from_gpu(int ik)
         cpu_ctx, this->ctx, dst, this->psi, k_size);
 }
 
-// Ensure the specified k-point is loaded on GPU, loading if necessary
+// Ensure the specified k-point is loaded on GPU, loading if necessary.
+// NOTE: Callers must call store_k_from_gpu(current_k_gpu_) before switching
+// k-points if the GPU buffer has been modified (e.g., by a diagonalization solver),
+// otherwise modifications will be lost.
 template <typename T, typename Device>
 void Psi<T, Device>::ensure_k_on_gpu(int ik)
 {
