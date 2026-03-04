@@ -33,3 +33,11 @@ AddTest(
 	LIBS ${math_libs}
 	SOURCES vkb_batch_test.cpp ../vkb_batch_manager.cpp
 )
+
+AddTest(
+	TARGET reciprocal_projector_test
+	LIBS parameter base device ${math_libs}
+	SOURCES reciprocal_projector_test.cpp
+		../reciprocal_projector.cpp
+		../vkb_batch_manager.cpp
+)

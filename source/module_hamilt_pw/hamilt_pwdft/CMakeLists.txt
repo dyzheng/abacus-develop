@@ -41,6 +41,7 @@ list(APPEND objects
     onsite_projector.cpp 
     onsite_proj_tools.cpp
     vkb_batch_manager.cpp
+    reciprocal_projector.cpp
 )
 
 add_library(
