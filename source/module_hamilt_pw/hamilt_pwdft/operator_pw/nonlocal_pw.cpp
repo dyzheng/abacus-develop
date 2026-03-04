@@ -9,6 +9,8 @@
 #include "module_cell/module_paw/paw_cell.h"
 #endif
 
+#include <algorithm>
+
 namespace hamilt {
 
 template<typename T, typename Device>
@@ -31,12 +33,69 @@ Nonlocal<OperatorPW<T, Device>>::Nonlocal(const int* isk_in,
     this->deeq_nc = this->ppcell->template get_deeq_nc_data<Real>();
     this->vkb = this->ppcell->template get_vkb_data<Real>();
 
+    // Initialize VKB batching if requested
+    const int vkb_batch_atoms = PARAM.inp.vkb_batch_atoms;
+    if ((vkb_batch_atoms > 0 || PARAM.inp.device_memory_mode == "paged")
+        && this->ppcell->nkb > 0 && ucell_in->nat > 0)
+    {
+        // Build nproj per atom array
+        std::vector<int> nproj_per_atom(ucell_in->nat);
+        for (int iat = 0; iat < ucell_in->nat; iat++)
+        {
+            const int it = ucell_in->iat2it[iat];
+            nproj_per_atom[iat] = ucell_in->atoms[it].ncpp.nh;
+        }
+
+        const int npwx = this->ppcell->vkb.nc;
+
+        // Use 25% of a conservative 4GB estimate for auto-detection
+        const size_t gpu_mem_budget = 4ULL * 1024 * 1024 * 1024;
+
+        vkb_manager_.init(ucell_in->nat, nproj_per_atom.data(), npwx,
+                          gpu_mem_budget, vkb_batch_atoms);
+
+        // Only enable batching if it actually creates multiple batches
+        if (vkb_manager_.get_nbatch() > 1)
+        {
+            use_vkb_batching_ = true;
+
+            // Allocate CPU buffer for full VKB
+            const int nkb = this->ppcell->nkb;
+            vkb_cpu_ = new T[static_cast<size_t>(nkb) * npwx]();
+
+            // Allocate GPU buffer for largest batch
+            resmem_complex_op()(this->ctx, vkb_batch_gpu_,
+                               vkb_manager_.get_max_batch_elements(), "Nonlocal::vkb_batch");
+        }
+    }
 }
 
 template<typename T, typename Device>
 Nonlocal<OperatorPW<T, Device>>::~Nonlocal() {
     delmem_complex_op()(this->ctx, this->ps);
     delmem_complex_op()(this->ctx, this->becp);
+
+    // Cleanup VKB batching resources
+    if (becp_batch_ != nullptr)
+    {
+        delmem_complex_op()(this->ctx, becp_batch_);
+        becp_batch_ = nullptr;
+    }
+    if (ps_batch_ != nullptr)
+    {
+        delmem_complex_op()(this->ctx, ps_batch_);
+        ps_batch_ = nullptr;
+    }
+    if (vkb_cpu_ != nullptr)
+    {
+        delete[] vkb_cpu_;
+        vkb_cpu_ = nullptr;
+    }
+    if (vkb_batch_gpu_ != nullptr)
+    {
+        delmem_complex_op()(this->ctx, vkb_batch_gpu_);
+        vkb_batch_gpu_ = nullptr;
+    }
 }
 
 template<typename T, typename Device>
@@ -45,10 +104,20 @@ void Nonlocal<OperatorPW<T, Device>>::init(const int ik_in)
     ModuleBase::timer::tick("Nonlocal", "getvnl");
     this->ik = ik_in;
     // Calculate nonlocal pseudopotential vkb
-	if(this->ppcell->nkb > 0) //xiaohui add 2013-09-02. Attention...
-	{
-		this->ppcell->getvnl(this->ctx, *this->ucell, this->ik, this->vkb);
-	}
+    if(this->ppcell->nkb > 0)
+    {
+        if (use_vkb_batching_)
+        {
+            // Compute full VKB on CPU; will be transferred batch-by-batch in act_batched()
+            this->ppcell->template getvnl<Real, base_device::DEVICE_CPU>(
+                this->cpu_ctx, *this->ucell, this->ik, this->vkb_cpu_);
+        }
+        else
+        {
+            // Original: compute full VKB on device (GPU or CPU)
+            this->ppcell->getvnl(this->ctx, *this->ucell, this->ik, this->vkb);
+        }
+    }
 
     if(this->next_op != nullptr)
     {
@@ -231,60 +300,65 @@ void Nonlocal<OperatorPW<T, Device>>::act(
 
         if (this->ppcell->nkb > 0)
         {
-            //<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-            // qianrui optimize 2021-3-31
-            int nkb = this->ppcell->nkb;
-            if (this->nkb_m < nbands * nkb) {
-                resmem_complex_op()(this->ctx, this->becp, nbands * nkb, "Nonlocal<PW>::becp");
-            }
-            // ModuleBase::ComplexMatrix becp(nbands, nkb, false);
-            char transa = 'C';
-            char transb = 'N';
-            if (nbands == 1)
+            if (use_vkb_batching_)
             {
-                int inc = 1;
-                // denghui replace 2022-10-20
-                // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-                gemv_op()(
-                    this->ctx,
-                    transa,
-                    this->npw,
-                    nkb,
-                    &this->one,
-                    this->vkb,
-                    this->ppcell->vkb.nc,
-                    tmpsi_in,
-                    inc,
-                    &this->zero,
-                    this->becp,
-                    inc);
+                // ===== BATCHED PATH =====
+                this->act_batched(nbands, nbasis, npol, tmpsi_in, tmhpsi);
             }
             else
             {
-                int npm = nbands;
+                // ===== ORIGINAL PATH =====
                 //<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-                // denghui replace 2022-10-20
-                gemm_op()(
-                    this->ctx,
-                    transa,
-                    transb,
-                    nkb,
-                    npm,
-                    this->npw,
-                    &this->one,
-                    this->vkb,
-                    this->ppcell->vkb.nc,
-                    tmpsi_in,
-                    max_npw,
-                    &this->zero,
-                    this->becp,
-                    nkb
-                );
+                // qianrui optimize 2021-3-31
+                int nkb = this->ppcell->nkb;
+                if (this->nkb_m < nbands * nkb) {
+                    resmem_complex_op()(this->ctx, this->becp, nbands * nkb, "Nonlocal<PW>::becp");
+                }
+                // ModuleBase::ComplexMatrix becp(nbands, nkb, false);
+                char transa = 'C';
+                char transb = 'N';
+                if (nbands == 1)
+                {
+                    int inc = 1;
+                    gemv_op()(
+                        this->ctx,
+                        transa,
+                        this->npw,
+                        nkb,
+                        &this->one,
+                        this->vkb,
+                        this->ppcell->vkb.nc,
+                        tmpsi_in,
+                        inc,
+                        &this->zero,
+                        this->becp,
+                        inc);
+                }
+                else
+                {
+                    int npm = nbands;
+                    gemm_op()(
+                        this->ctx,
+                        transa,
+                        transb,
+                        nkb,
+                        npm,
+                        this->npw,
+                        &this->one,
+                        this->vkb,
+                        this->ppcell->vkb.nc,
+                        tmpsi_in,
+                        max_npw,
+                        &this->zero,
+                        this->becp,
+                        nkb
+                    );
+                }
+
+                Parallel_Reduce::reduce_pool(becp, nkb * nbands);
+
+                this->add_nonlocal_pp(tmhpsi, becp, nbands);
             }
-
-            Parallel_Reduce::reduce_pool(becp, nkb * nbands);
-
-            this->add_nonlocal_pp(tmhpsi, becp, nbands);
         }
     }
     else
@@ -309,6 +383,167 @@ void Nonlocal<OperatorPW<T, Device>>::act(
     ModuleBase::timer::tick("Operator", "NonlocalPW");
 }
 
+//--------------------------------------------------------------------------
+// Batched VKB path: compute VKB projectors batch-by-batch on GPU
+// to reduce GPU memory from nkb*npwx to max_nkb_batch*npwx
+//--------------------------------------------------------------------------
+template<typename T, typename Device>
+void Nonlocal<OperatorPW<T, Device>>::act_batched(
+    const int nbands,
+    const int nbasis,
+    const int npol,
+    const T* tmpsi_in,
+    T* tmhpsi) const
+{
+    ModuleBase::timer::tick("Nonlocal", "act_batched");
+
+    const int npwx = this->ppcell->vkb.nc;
+    const int max_nkb_batch = vkb_manager_.get_max_nkb_batch();
+
+    // Lazy pre-allocation: allocate once at max_nkb_batch * nbands, reuse across batches and calls.
+    // Only reallocate if nbands changes (unlikely but handled).
+    const size_t needed = static_cast<size_t>(max_nkb_batch) * nbands;
+    if (needed > this->batch_alloc_size_)
+    {
+        if (this->becp_batch_ != nullptr)
+        {
+            delmem_complex_op()(this->ctx, this->becp_batch_);
+        }
+        if (this->ps_batch_ != nullptr)
+        {
+            delmem_complex_op()(this->ctx, this->ps_batch_);
+        }
+        resmem_complex_op()(this->ctx, this->becp_batch_, needed, "Nonlocal::becp_batch");
+        resmem_complex_op()(this->ctx, this->ps_batch_, needed, "Nonlocal::ps_batch");
+        this->batch_alloc_size_ = needed;
+    }
+
+    for (int ibatch = 0; ibatch < vkb_manager_.get_nbatch(); ibatch++)
+    {
+        int atom_start = 0, atom_end = 0, nkb_batch = 0;
+        vkb_manager_.get_batch_info(ibatch, atom_start, atom_end, nkb_batch);
+        const int jkb_offset = vkb_manager_.get_jkb_offset(ibatch);
+
+        if (nkb_batch == 0)
+        {
+            continue;
+        }
+
+        // 1. Copy batch rows from CPU VKB to GPU buffer
+        syncmem_complex_h2d_op()(this->ctx, this->cpu_ctx,
+            vkb_batch_gpu_,
+            vkb_cpu_ + static_cast<size_t>(jkb_offset) * npwx,
+            static_cast<size_t>(nkb_batch) * npwx);
+
+        // 2. Zero-fill batch temporaries (pre-allocated above the loop)
+        setmem_complex_op()(this->ctx, this->ps_batch_, 0, nkb_batch * nbands);
+
+        // 3. becp_batch = vkb_batch^H * psi
+        char transa = 'C';
+        char transb = 'N';
+        if (nbands == 1)
+        {
+            int inc = 1;
+            gemv_op()(this->ctx, transa, this->npw, nkb_batch,
+                     &this->one, vkb_batch_gpu_, npwx,
+                     tmpsi_in, inc,
+                     &this->zero, this->becp_batch_, inc);
+        }
+        else
+        {
+            gemm_op()(this->ctx, transa, transb,
+                     nkb_batch, nbands, this->npw,
+                     &this->one, vkb_batch_gpu_, npwx,
+                     tmpsi_in, this->max_npw,
+                     &this->zero, this->becp_batch_, nkb_batch);
+        }
+
+        Parallel_Reduce::reduce_pool(this->becp_batch_, nkb_batch * nbands);
+
+        // 4. ps_batch = D * becp_batch (apply nonlocal D coefficients)
+        //    Iterate over atom types, but only process atoms in [atom_start, atom_end)
+        int sum_batch = 0;
+        int iat_scan = 0; // global atom index scanner
+        if (this->npol == 1)
+        {
+            const int current_spin = this->isk[this->ik];
+            for (int it = 0; it < this->ucell->ntype; it++)
+            {
+                const int na_type = this->ucell->atoms[it].na;
+                const int nproj = this->ucell->atoms[it].ncpp.nh;
+                // Determine overlap of this type's atoms with the batch range
+                const int type_start = iat_scan;
+                const int type_end = iat_scan + na_type;
+                const int batch_type_start = std::max(type_start, atom_start);
+                const int batch_type_end = std::min(type_end, atom_end);
+                if (batch_type_start < batch_type_end)
+                {
+                    const int na_in_batch = batch_type_end - batch_type_start;
+                    int iat_local = batch_type_start;
+                    nonlocal_op()(
+                        this->ctx,
+                        na_in_batch, nbands, nproj,
+                        sum_batch, iat_local, current_spin, nkb_batch,
+                        this->ppcell->deeq.getBound2(),
+                        this->ppcell->deeq.getBound3(),
+                        this->ppcell->deeq.getBound4(),
+                        this->deeq,
+                        this->ps_batch_, this->becp_batch_);
+                }
+                iat_scan += na_type;
+            }
+        }
+        else
+        {
+            // Non-collinear case (npol == 2)
+            for (int it = 0; it < this->ucell->ntype; it++)
+            {
+                const int na_type = this->ucell->atoms[it].na;
+                const int nproj = this->ucell->atoms[it].ncpp.nh;
+                const int type_start = iat_scan;
+                const int type_end = iat_scan + na_type;
+                const int batch_type_start = std::max(type_start, atom_start);
+                const int batch_type_end = std::min(type_end, atom_end);
+                if (batch_type_start < batch_type_end)
+                {
+                    const int na_in_batch = batch_type_end - batch_type_start;
+                    int iat_local = batch_type_start;
+                    nonlocal_op()(
+                        this->ctx,
+                        na_in_batch, nbands, nproj,
+                        sum_batch, iat_local, nkb_batch,
+                        this->ppcell->deeq_nc.getBound2(),
+                        this->ppcell->deeq_nc.getBound3(),
+                        this->ppcell->deeq_nc.getBound4(),
+                        this->deeq_nc,
+                        this->ps_batch_, this->becp_batch_);
+                }
+                iat_scan += na_type;
+            }
+        }
+
+        // 5. hpsi += vkb_batch * ps_batch (accumulate to output)
+        if (nbands == 1)
+        {
+            int inc = 1;
+            gemv_op()(this->ctx, 'N', this->npw, nkb_batch,
+                     &this->one, vkb_batch_gpu_, npwx,
+                     this->ps_batch_, inc,
+                     &this->one, tmhpsi, inc);
+        }
+        else
+        {
+            gemm_op()(this->ctx, 'N', 'T',
+                     this->npw, nbands, nkb_batch,
+                     &this->one, vkb_batch_gpu_, npwx,
+                     this->ps_batch_, nbands,
+                     &this->one, tmhpsi, this->max_npw);
+        }
+    }
+
+    ModuleBase::timer::tick("Nonlocal", "act_batched");
+}
+
 template<typename T, typename Device>
 template<typename T_in, typename Device_in>
 hamilt::Nonlocal<OperatorPW<T, Device>>::Nonlocal(const Nonlocal<OperatorPW<T_in, Device_in>> *nonlocal)
@@ -325,6 +560,42 @@ hamilt::Nonlocal<OperatorPW<T, Device>>::Nonlocal(const Nonlocal<OperatorPW<T_in
     if( this->isk == nullptr || this->ppcell == nullptr || this->ucell == nullptr)
     {
         ModuleBase::WARNING_QUIT("NonlocalPW", "Constuctor of Operator::NonlocalPW is failed, please check your code!");
+    }
+
+    // Initialize VKB batching (same logic as primary constructor)
+    const int vkb_batch_atoms = PARAM.inp.vkb_batch_atoms;
+    if ((vkb_batch_atoms > 0 || PARAM.inp.device_memory_mode == "paged")
+        && this->ppcell->nkb > 0 && this->ucell->nat > 0)
+    {
+        // Build nproj per atom array
+        std::vector<int> nproj_per_atom(this->ucell->nat);
+        for (int iat = 0; iat < this->ucell->nat; iat++)
+        {
+            const int it = this->ucell->iat2it[iat];
+            nproj_per_atom[iat] = this->ucell->atoms[it].ncpp.nh;
+        }
+
+        const int npwx = this->ppcell->vkb.nc;
+
+        // Use 25% of a conservative 4GB estimate for auto-detection
+        const size_t gpu_mem_budget = 4ULL * 1024 * 1024 * 1024;
+
+        vkb_manager_.init(this->ucell->nat, nproj_per_atom.data(), npwx,
+                          gpu_mem_budget, vkb_batch_atoms);
+
+        // Only enable batching if it actually creates multiple batches
+        if (vkb_manager_.get_nbatch() > 1)
+        {
+            use_vkb_batching_ = true;
+
+            // Allocate CPU buffer for full VKB
+            const int nkb = this->ppcell->nkb;
+            vkb_cpu_ = new T[static_cast<size_t>(nkb) * npwx]();
+
+            // Allocate GPU buffer for largest batch
+            resmem_complex_op()(this->ctx, vkb_batch_gpu_,
+                               vkb_manager_.get_max_batch_elements(), "Nonlocal::vkb_batch");
+        }
     }
 }
 

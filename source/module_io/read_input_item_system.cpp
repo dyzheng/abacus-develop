@@ -790,6 +790,18 @@ void ReadInput::item_system()
         };
         this->add_item(item);
     }
+    {
+        Input_Item item("vkb_batch_atoms");
+        item.annotation = "Number of atoms per VKB batch on GPU (0 for auto)";
+        read_sync_int(input.vkb_batch_atoms);
+        item.check_value = [](const Input_Item& item, const Parameter& para) {
+            if (para.input.vkb_batch_atoms < 0)
+            {
+                ModuleBase::WARNING_QUIT("ReadInput", "vkb_batch_atoms must be >= 0");
+            }
+        };
+        this->add_item(item);
+    }
 }
 
 } // namespace ModuleIO

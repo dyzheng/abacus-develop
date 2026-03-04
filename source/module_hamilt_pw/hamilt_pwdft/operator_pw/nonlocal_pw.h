@@ -8,6 +8,7 @@
 #include "module_hsolver/kernels/math_kernel_op.h"
 
 #include "module_hamilt_pw/hamilt_pwdft/VNL_in_pw.h"
+#include "module_hamilt_pw/hamilt_pwdft/vkb_batch_manager.h"
 
 namespace hamilt {
 
@@ -95,6 +96,21 @@ class Nonlocal<OperatorPW<T, Device>> : public OperatorPW<T, Device>
 
     T one{1, 0};
     T zero{0, 0};
+
+    // VKB batching support
+    bool use_vkb_batching_ = false;
+    VKBBatchManager<T> vkb_manager_;
+    T* vkb_cpu_ = nullptr;          ///< Full VKB on CPU (nkb * npwx)
+    T* vkb_batch_gpu_ = nullptr;    ///< Batch VKB on GPU (max_nkb_batch * npwx)
+    mutable T* becp_batch_ = nullptr;   ///< Pre-allocated batch becp on device
+    mutable T* ps_batch_ = nullptr;     ///< Pre-allocated batch ps on device
+    mutable size_t batch_alloc_size_ = 0; ///< Current allocation size (max_nkb_batch * nbands)
+
+    void act_batched(const int nbands,
+                     const int nbasis,
+                     const int npol,
+                     const T* tmpsi_in,
+                     T* tmhpsi) const;
 };
 
 } // namespace hamilt

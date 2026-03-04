@@ -69,6 +69,7 @@ struct Input_para
     std::string device = "auto";
     std::string precision = "double";
     std::string device_memory_mode = "";  ///< GPU memory mode: "full_gpu", "paged", or "" (auto)
+    int vkb_batch_atoms = 0;              ///< Number of atoms per VKB batch (0 = auto-detect)
 
     // ==============   #Parameters (2.Electronic structure) ===========================
     std::string ks_solver = "default"; ///< xiaohui add 2013-09-01

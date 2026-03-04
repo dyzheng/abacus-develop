@@ -40,6 +40,7 @@ list(APPEND objects
     radial_proj.cpp
     onsite_projector.cpp 
     onsite_proj_tools.cpp
+    vkb_batch_manager.cpp
 )
 
 add_library(

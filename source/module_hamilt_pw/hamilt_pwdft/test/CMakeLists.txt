@@ -27,3 +27,9 @@ AddTest(
 	LIBS parameter  base device ${math_libs}
 	SOURCES radial_proj_test.cpp ../radial_proj.cpp
 )
+
+AddTest(
+	TARGET vkb_batch_test
+	LIBS ${math_libs}
+	SOURCES vkb_batch_test.cpp ../vkb_batch_manager.cpp
+)
