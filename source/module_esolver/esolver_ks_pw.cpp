@@ -212,7 +212,7 @@ void ESolver_KS_PW<T, Device>::before_all_runners(UnitCell& ucell, const Input_p
     // Determine GPU memory storage mode for psi and set on CPU psi before copy construction.
     // The storage_mode_ flag propagates through the copy constructor to kspw_psi.
     const bool is_gpu_build = (PARAM.inp.device == "gpu" || PARAM.inp.precision == "single");
-    if (is_gpu_build)
+    if (PARAM.inp.device == "gpu")
     {
         psi::PsiStorageMode target_mode = psi::PsiStorageMode::ALL_GPU;
         const int nks = this->kv.get_nks();

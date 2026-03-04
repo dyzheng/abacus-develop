@@ -195,11 +195,28 @@ Psi<T, Device>::Psi(const Psi& psi_in)
     // this function will copy psi_in.psi to this->psi no matter the device types of each other.
     this->device = base_device::get_device_type<Device>(this->ctx);
     this->resize(psi_in.get_nk(), psi_in.get_nbands(), psi_in.get_nbasis());
-    base_device::memory::synchronize_memory_op<T, Device, Device>()(this->ctx,
-                                                                    psi_in.get_device(),
-                                                                    this->psi,
-                                                                    psi_in.get_pointer() - psi_in.get_psi_bias(),
-                                                                    psi_in.size());
+
+    if (this->storage_mode_ == PsiStorageMode::PAGED_GPU)
+    {
+        // In PAGED_GPU mode, resize() allocated psi_cpu_ for all k-points on CPU
+        // and this->psi for only 1 k-point on GPU. Copy all data to CPU buffer.
+        const size_t total_size = static_cast<size_t>(this->nk) * this->nbands * this->nbasis;
+        // Copy from source device to CPU buffer
+        base_device::DEVICE_CPU* cpu_ctx = {};
+        base_device::memory::synchronize_memory_op<T, base_device::DEVICE_CPU, Device>()(
+            cpu_ctx, psi_in.get_device(), this->psi_cpu_, psi_in.get_pointer() - psi_in.get_psi_bias(), total_size);
+        // GPU buffer left empty, load_k_to_gpu() will populate it when needed
+        this->current_k_gpu_ = -1;
+    }
+    else
+    {
+        // Original: copy all data to device
+        base_device::memory::synchronize_memory_op<T, Device, Device>()(this->ctx,
+                                                                        psi_in.get_device(),
+                                                                        this->psi,
+                                                                        psi_in.get_pointer() - psi_in.get_psi_bias(),
+                                                                        psi_in.size());
+    }
     this->psi_bias = psi_in.get_psi_bias();
     this->current_nbasis = psi_in.get_current_nbas();
     this->psi_current = this->psi + psi_in.get_psi_bias();
@@ -230,20 +247,35 @@ Psi<T, Device>::Psi(const Psi<T_in, Device_in>& psi_in)
     // This could help to reduce the peak memory usage of device.
     if (std::is_same<Device, base_device::DEVICE_GPU>::value && std::is_same<Device_in, base_device::DEVICE_CPU>::value)
     {
-        auto* arr = (T*)malloc(sizeof(T) * psi_in.size());
+        const size_t total_size = psi_in.size();
+        auto* arr = (T*)malloc(sizeof(T) * total_size);
         // cast the memory from T_in to T in CPU
         base_device::memory::cast_memory_op<T, T_in, Device_in, Device_in>()(psi_in.get_device(),
                                                                              psi_in.get_device(),
                                                                              arr,
                                                                              psi_in.get_pointer()
                                                                                  - psi_in.get_psi_bias(),
-                                                                             psi_in.size());
-        // synchronize the memory from CPU to GPU
-        base_device::memory::synchronize_memory_op<T, Device, Device_in>()(this->ctx,
-                                                                           psi_in.get_device(),
-                                                                           this->psi,
-                                                                           arr,
-                                                                           psi_in.size());
+                                                                             total_size);
+
+        if (this->storage_mode_ == PsiStorageMode::PAGED_GPU)
+        {
+            // In PAGED_GPU mode, resize() allocated psi_cpu_ for all k-points on CPU
+            // and this->psi for only 1 k-point on GPU. Copy all data to CPU buffer.
+            base_device::DEVICE_CPU* cpu_ctx = {};
+            base_device::memory::synchronize_memory_op<T, base_device::DEVICE_CPU, Device_in>()(
+                cpu_ctx, psi_in.get_device(), this->psi_cpu_, arr, total_size);
+            // GPU buffer left empty, load_k_to_gpu() will populate it when needed
+            this->current_k_gpu_ = -1;
+        }
+        else
+        {
+            // Original: synchronize the memory from CPU to GPU
+            base_device::memory::synchronize_memory_op<T, Device, Device_in>()(this->ctx,
+                                                                               psi_in.get_device(),
+                                                                               this->psi,
+                                                                               arr,
+                                                                               total_size);
+        }
         free(arr);
     }
     else

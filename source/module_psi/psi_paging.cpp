@@ -14,13 +14,17 @@ void Psi<T, Device>::set_storage_mode(PsiStorageMode mode)
 
     if (this->psi != nullptr)
     {
-        // Allow setting mode on already-allocated Psi (e.g., CPU psi used as source
-        // for copy construction to GPU). The flag will be propagated to the copy
-        // constructor which calls resize() with the correct mode. The current Psi's
-        // memory layout is NOT changed - only the flag is updated.
-        ModuleBase::WARNING("Psi::set_storage_mode",
-                            "Setting storage mode flag on already-allocated Psi. "
-                            "Memory layout unchanged; flag used for copy construction propagation.");
+        if (storage_mode_ == PsiStorageMode::ALL_GPU && mode == PsiStorageMode::PAGED_GPU)
+        {
+            // Allow: pre-copy-construction flag propagation
+            ModuleBase::WARNING("Psi::set_storage_mode",
+                                "Setting storage mode flag on already-allocated Psi for copy construction propagation.");
+        }
+        else
+        {
+            ModuleBase::WARNING_QUIT("Psi::set_storage_mode",
+                                     "Cannot change storage mode after allocation");
+        }
     }
 
     storage_mode_ = mode;
