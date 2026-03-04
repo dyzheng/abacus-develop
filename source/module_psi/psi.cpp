@@ -2,7 +2,6 @@
 
 #include "module_base/global_variable.h"
 #include "module_base/module_device/device.h"
-#include "module_base/tool_quit.h"
 #include "module_parameter/parameter.h"
 
 #include <cassert>
@@ -150,7 +149,23 @@ Psi<T, Device>::Psi(const Psi& psi_in, const int nk_in, int nband_in)
             // current_k for this Psi only keep the spin index same as the copied Psi
             this->current_k = psi_in.get_current_k();
         }
-        synchronize_memory_op()(this->ctx, psi_in.get_device(), this->psi, psi_in.get_pointer(), this->size());
+        if (this->storage_mode_ == PsiStorageMode::PAGED_GPU)
+        {
+            // In PAGED_GPU mode, resize() allocated psi_cpu_ for all k-points on CPU
+            // and this->psi for only 1 k-point on GPU. Copy data to CPU buffer.
+            const size_t copy_size = static_cast<size_t>(nk_in) * nband_in * psi_in.get_nbasis();
+            base_device::DEVICE_CPU* cpu_ctx = {};
+            base_device::memory::synchronize_memory_op<T, base_device::DEVICE_CPU, Device>()(
+                cpu_ctx, psi_in.get_device(), this->psi_cpu_, psi_in.get_pointer(), copy_size);
+            // GPU buffer left empty, load_k_to_gpu() will populate it when needed
+            this->current_k_gpu_ = -1;
+            this->psi_bias = 0;
+            this->psi_current = this->psi;
+        }
+        else
+        {
+            synchronize_memory_op()(this->ctx, psi_in.get_device(), this->psi, psi_in.get_pointer(), this->size());
+        }
     }
 }
 
@@ -178,10 +193,6 @@ Psi<T, Device>::Psi(T* psi_pointer, const Psi& psi_in, const int nk_in, int nban
 template <typename T, typename Device>
 Psi<T, Device>::Psi(const Psi& psi_in)
 {
-    if (psi_in.get_storage_mode() == PsiStorageMode::PAGED_GPU)
-    {
-        ModuleBase::WARNING("Psi::Psi(copy)", "Copying Psi in PAGED_GPU mode - paging state not deep-copied");
-    }
     this->ngk = psi_in.get_ngk_pointer();
     this->npol = psi_in.npol;
     this->nk = psi_in.get_nk();
@@ -207,6 +218,9 @@ Psi<T, Device>::Psi(const Psi& psi_in)
             cpu_ctx, psi_in.get_device(), this->psi_cpu_, psi_in.get_pointer() - psi_in.get_psi_bias(), total_size);
         // GPU buffer left empty, load_k_to_gpu() will populate it when needed
         this->current_k_gpu_ = -1;
+        // In PAGED_GPU mode, GPU buffer is exactly one k-point at offset 0
+        this->psi_bias = 0;
+        this->psi_current = this->psi;
     }
     else
     {
@@ -216,10 +230,10 @@ Psi<T, Device>::Psi(const Psi& psi_in)
                                                                         this->psi,
                                                                         psi_in.get_pointer() - psi_in.get_psi_bias(),
                                                                         psi_in.size());
+        this->psi_bias = psi_in.get_psi_bias();
+        this->psi_current = this->psi + psi_in.get_psi_bias();
     }
-    this->psi_bias = psi_in.get_psi_bias();
     this->current_nbasis = psi_in.get_current_nbas();
-    this->psi_current = this->psi + psi_in.get_psi_bias();
 }
 
 template <typename T, typename Device>
@@ -266,6 +280,9 @@ Psi<T, Device>::Psi(const Psi<T_in, Device_in>& psi_in)
                 cpu_ctx, psi_in.get_device(), this->psi_cpu_, arr, total_size);
             // GPU buffer left empty, load_k_to_gpu() will populate it when needed
             this->current_k_gpu_ = -1;
+            // In PAGED_GPU mode, GPU buffer is exactly one k-point at offset 0
+            this->psi_bias = 0;
+            this->psi_current = this->psi;
         }
         else
         {
@@ -275,6 +292,8 @@ Psi<T, Device>::Psi(const Psi<T_in, Device_in>& psi_in)
                                                                                this->psi,
                                                                                arr,
                                                                                total_size);
+            this->psi_bias = psi_in.get_psi_bias();
+            this->psi_current = this->psi + psi_in.get_psi_bias();
         }
         free(arr);
     }
@@ -285,10 +304,10 @@ Psi<T, Device>::Psi(const Psi<T_in, Device_in>& psi_in)
                                                                           this->psi,
                                                                           psi_in.get_pointer() - psi_in.get_psi_bias(),
                                                                           psi_in.size());
+        this->psi_bias = psi_in.get_psi_bias();
+        this->psi_current = this->psi + psi_in.get_psi_bias();
     }
-    this->psi_bias = psi_in.get_psi_bias();
     this->current_nbasis = psi_in.get_current_nbas();
-    this->psi_current = this->psi + psi_in.get_psi_bias();
 }
 
 template <typename T, typename Device>
@@ -310,9 +329,6 @@ void Psi<T, Device>::resize(const int nks_in, const int nbands_in, const int nba
         // Note: resize_memory_op frees existing allocation before re-allocating
         const size_t k_size = static_cast<size_t>(nbands_in) * nbasis_in;
         resize_memory_op()(this->ctx, this->psi, k_size, "no_record");
-
-        // Also allocate transfer buffer for double buffering
-        resize_memory_op()(this->ctx, psi_gpu_transfer_buffer_, k_size, "no_record");
 
         // Point gpu_buffer to the main psi pointer for convenience
         psi_gpu_buffer_ = this->psi;
@@ -419,6 +435,16 @@ void Psi<T, Device>::fix_k(const int ik) const
     {
         this->current_b = 0;
     }
+
+    // In PAGED_GPU mode, GPU buffer holds exactly one k-point starting at offset 0
+    if (storage_mode_ == PsiStorageMode::PAGED_GPU)
+    {
+        this->psi_bias = 0;
+        this->psi_current = const_cast<T*>(this->psi);
+        return;
+    }
+
+    // Original logic for non-paged modes
     int base = this->current_b * this->nk * this->nbasis;
     if (ik >= this->nk)
     {
