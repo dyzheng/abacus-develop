@@ -12,11 +12,15 @@ void Psi<T, Device>::set_storage_mode(PsiStorageMode mode)
         return; // Already in requested mode
     }
 
-    // For now, only support setting mode before allocation
     if (this->psi != nullptr)
     {
-        ModuleBase::WARNING_QUIT("Psi::set_storage_mode",
-                                 "Cannot change storage mode after allocation");
+        // Allow setting mode on already-allocated Psi (e.g., CPU psi used as source
+        // for copy construction to GPU). The flag will be propagated to the copy
+        // constructor which calls resize() with the correct mode. The current Psi's
+        // memory layout is NOT changed - only the flag is updated.
+        ModuleBase::WARNING("Psi::set_storage_mode",
+                            "Setting storage mode flag on already-allocated Psi. "
+                            "Memory layout unchanged; flag used for copy construction propagation.");
     }
 
     storage_mode_ = mode;

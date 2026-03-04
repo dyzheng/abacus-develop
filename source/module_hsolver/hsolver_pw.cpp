@@ -292,7 +292,7 @@ void HSolverPW<T, Device>::solve(hamilt::Hamilt<T, Device>* pHamilt,
         for (int i = 0; i < this->wfc_basis->nks; ++i)
         {
             const int ik = k_order[i];
-            
+
             // update H(k) for each k point
             pHamilt->updateHk(ik);
 
@@ -300,11 +300,18 @@ void HSolverPW<T, Device>::solve(hamilt::Hamilt<T, Device>* pHamilt,
             this->paw_func_in_kloop(ik, tpiba);
 #endif
 
+            // Load k-point data from CPU to GPU (no-op if not PAGED_GPU mode)
+            psi.load_k_to_gpu(ik);
+
             // update psi pointer for each k point
             psi.fix_k(ik);
 
-            // If using k-point continuity and not first k-point, propagate from parent
-            if (ik > 0 && count == 0 && k_parent.find(ik) != k_parent.end()) {
+            // If using k-point continuity and not first k-point, propagate from parent.
+            // NOTE: propagate_psi accesses psi(from_ik, ib, 0) directly, which requires
+            // the source k-point data in GPU memory. In PAGED_GPU mode only one k-point
+            // is on GPU at a time, so we skip propagation to avoid accessing invalid memory.
+            if (ik > 0 && count == 0 && k_parent.find(ik) != k_parent.end()
+                && psi.get_storage_mode() != psi::PsiStorageMode::PAGED_GPU) {
                 propagate_psi(psi, k_parent[ik], ik);
             }
 
@@ -327,6 +334,9 @@ void HSolverPW<T, Device>::solve(hamilt::Hamilt<T, Device>* pHamilt,
             // solve eigenvector and eigenvalue for H(k)
             this->hamiltSolvePsiK(pHamilt, psi, precondition, eigenvalues.data() + ik * psi.get_nbands(), this->wfc_basis->nks);
 
+            // Store k-point data from GPU back to CPU (no-op if not PAGED_GPU mode)
+            psi.store_k_from_gpu(ik);
+
             if (skip_charge)
             {
                 GlobalV::ofs_running << "Average iterative diagonalization steps for k-points " << ik
@@ -346,6 +356,9 @@ void HSolverPW<T, Device>::solve(hamilt::Hamilt<T, Device>* pHamilt,
 #ifdef USE_PAW
             this->paw_func_in_kloop(ik, tpiba);
 #endif
+
+            // Load k-point data from CPU to GPU (no-op if not PAGED_GPU mode)
+            psi.load_k_to_gpu(ik);
 
             // update psi pointer for each k point
             psi.fix_k(ik);
@@ -368,6 +381,9 @@ void HSolverPW<T, Device>::solve(hamilt::Hamilt<T, Device>* pHamilt,
 
             // solve eigenvector and eigenvalue for H(k)
             this->hamiltSolvePsiK(pHamilt, psi, precondition, eigenvalues.data() + ik * psi.get_nbands(), this->wfc_basis->nks);
+
+            // Store k-point data from GPU back to CPU (no-op if not PAGED_GPU mode)
+            psi.store_k_from_gpu(ik);
 
             if (skip_charge)
             {

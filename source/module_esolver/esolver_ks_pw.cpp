@@ -209,7 +209,43 @@ void ESolver_KS_PW<T, Device>::before_all_runners(UnitCell& ucell, const Input_p
     allocate_psi(this->psi, this->kv.get_nks(), this->kv.ngk.data(), PARAM.inp.nbands, this->pw_wfc->npwk_max);
     this->p_psi_init->prepare_init(PARAM.inp.pw_seed);
 
-    this->kspw_psi = PARAM.inp.device == "gpu" || PARAM.inp.precision == "single"
+    // Determine GPU memory storage mode for psi and set on CPU psi before copy construction.
+    // The storage_mode_ flag propagates through the copy constructor to kspw_psi.
+    const bool is_gpu_build = (PARAM.inp.device == "gpu" || PARAM.inp.precision == "single");
+    if (is_gpu_build)
+    {
+        psi::PsiStorageMode target_mode = psi::PsiStorageMode::ALL_GPU;
+        const int nks = this->kv.get_nks();
+
+        if (PARAM.inp.device_memory_mode == "paged")
+        {
+            target_mode = psi::PsiStorageMode::PAGED_GPU;
+        }
+        else if (PARAM.inp.device_memory_mode == "full_gpu")
+        {
+            target_mode = psi::PsiStorageMode::ALL_GPU;
+        }
+        else // auto-detect (device_memory_mode == "")
+        {
+            if (nks > 10)
+            {
+                target_mode = psi::PsiStorageMode::PAGED_GPU;
+            }
+        }
+
+        if (target_mode != psi::PsiStorageMode::ALL_GPU)
+        {
+            // Set the storage mode flag on CPU psi so it propagates to the GPU copy
+            this->psi->set_storage_mode(target_mode);
+        }
+
+        const char* mode_str = (target_mode == psi::PsiStorageMode::PAGED_GPU) ? "PAGED_GPU" : "ALL_GPU";
+        GlobalV::ofs_running << " GPU memory mode for Psi: " << mode_str
+                             << " (nks=" << nks << ", device_memory_mode=\""
+                             << PARAM.inp.device_memory_mode << "\")" << std::endl;
+    }
+
+    this->kspw_psi = is_gpu_build
                          ? new psi::Psi<T, Device>(this->psi[0])
                          : reinterpret_cast<psi::Psi<T, Device>*>(this->psi);
 
