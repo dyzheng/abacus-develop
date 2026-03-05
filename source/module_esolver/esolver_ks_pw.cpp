@@ -684,10 +684,12 @@ void ESolver_KS_PW<T, Device>::after_scf(UnitCell& ucell, const int istep)
             const int nbands_local = this->psi[0].get_nbands();
             const int nbasis_local = this->psi[0].get_nbasis();
             const size_t k_size = static_cast<size_t>(nbands_local) * nbasis_local;
+            // Get base pointer (without psi_bias offset)
+            auto* base_dst = this->psi[0].get_pointer() - this->psi[0].get_psi_bias();
             for (int ik = 0; ik < nks; ik++)
             {
                 const auto* src = this->kspw_psi->get_cpu_pointer(ik);
-                auto* dst = this->psi[0].get_pointer() + static_cast<size_t>(ik) * k_size;
+                auto* dst = base_dst + static_cast<size_t>(ik) * k_size;
                 for (size_t i = 0; i < k_size; i++)
                 {
                     dst[i] = static_cast<std::complex<double>>(src[i]);

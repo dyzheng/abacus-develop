@@ -132,6 +132,9 @@ void ElecStatePW<T, Device>::psiToRho(const psi::Psi<T, Device>& psi)
 
     for (int ik = 0; ik < psi.get_nk(); ++ik)
     {
+        // Ensure k-point data is on GPU for PAGED_GPU mode
+        // This is a no-op for ALL_GPU and ALL_CPU modes
+        const_cast<psi::Psi<T, Device>&>(psi).load_k_to_gpu(ik);
         psi.fix_k(ik);
         this->updateRhoK(psi);
     }
