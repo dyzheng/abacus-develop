@@ -677,11 +677,31 @@ void ESolver_KS_PW<T, Device>::after_scf(UnitCell& ucell, const int istep)
     // 4) Transfer data from GPU to CPU
     if (this->device == base_device::GpuDevice)
     {
-        castmem_2d_d2h_op()(this->psi[0].get_device(),
-                            this->kspw_psi[0].get_device(),
-                            this->psi[0].get_pointer() - this->psi[0].get_psi_bias(),
-                            this->kspw_psi[0].get_pointer() - this->kspw_psi[0].get_psi_bias(),
-                            this->psi[0].size());
+        if (this->kspw_psi->get_storage_mode() == psi::PsiStorageMode::PAGED_GPU)
+        {
+            // PAGED_GPU: data is on CPU in kspw_psi->psi_cpu_. Copy CPU-to-CPU.
+            const int nks = this->kv.get_nks();
+            const int nbands_local = this->psi[0].get_nbands();
+            const int nbasis_local = this->psi[0].get_nbasis();
+            const size_t k_size = static_cast<size_t>(nbands_local) * nbasis_local;
+            for (int ik = 0; ik < nks; ik++)
+            {
+                const auto* src = this->kspw_psi->get_cpu_pointer(ik);
+                auto* dst = this->psi[0].get_pointer() + static_cast<size_t>(ik) * k_size;
+                for (size_t i = 0; i < k_size; i++)
+                {
+                    dst[i] = static_cast<std::complex<double>>(src[i]);
+                }
+            }
+        }
+        else
+        {
+            castmem_2d_d2h_op()(this->psi[0].get_device(),
+                                this->kspw_psi[0].get_device(),
+                                this->psi[0].get_pointer() - this->psi[0].get_psi_bias(),
+                                this->kspw_psi[0].get_pointer() - this->kspw_psi[0].get_psi_bias(),
+                                this->psi[0].size());
+        }
     }
 
     // 5) Calculate band-decomposed (partial) charge density

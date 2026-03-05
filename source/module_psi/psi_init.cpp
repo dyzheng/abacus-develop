@@ -162,6 +162,10 @@ void PSIInit<T, Device>::initialize_psi(Psi<std::complex<double>>* psi,
                 syncmem_complex_op()(ctx, ctx, kspw_psi->get_pointer(), psi_device->get_pointer(), nbands * nbasis);
             }
         }
+
+        // Persist initialized k-point data from GPU buffer to CPU storage.
+        // This is a no-op if kspw_psi is not in PAGED_GPU mode.
+        kspw_psi->store_k_from_gpu(ik);
     } // end k-point loop
 
     if (another_psi_space)

@@ -6,6 +6,7 @@
 
 #include <cassert>
 #include <complex>
+#include <cstring>
 #include <type_traits>
 
 namespace psi
@@ -488,6 +489,23 @@ void Psi<T, Device>::fix_kb(const int ik, const int ib) const
     assert(ik >= 0 && ib >= 0);
     this->current_k = ik;
     this->current_b = ib;
+
+    // In PAGED_GPU mode, GPU buffer holds exactly one k-point starting at offset 0
+    if (storage_mode_ == PsiStorageMode::PAGED_GPU)
+    {
+        if (ik >= this->nk || ib >= this->nbands)
+        {
+            this->psi_bias = 0;
+            this->psi_current = const_cast<T*>(this->psi);
+        }
+        else
+        {
+            this->psi_bias = ib * this->nbasis;
+            this->psi_current = const_cast<T*>(this->psi) + this->psi_bias;
+        }
+        return;
+    }
+
     if (ik >= this->nk || ib >= this->nbands)
     { // fix to 0
         this->psi_bias = 0;
@@ -505,6 +523,16 @@ T& Psi<T, Device>::operator()(const int ikb1, const int ikb2, const int ibasis) 
 {
     assert(ikb1 >= 0 && ikb2 >= 0 && ibasis >= 0);
     assert(this->k_first ? ikb1 < this->nk && ikb2 < this->nbands : ikb1 < this->nbands && ikb2 < this->nk);
+
+    if (storage_mode_ == PsiStorageMode::PAGED_GPU)
+    {
+        // In PAGED_GPU mode, GPU buffer holds only the current k-point.
+        // For k_first: ikb1=ik, ikb2=iband -> offset within single-k buffer.
+        // For !k_first: ikb1=iband, ikb2=ik -> offset within single-k buffer.
+        const int ib = this->k_first ? ikb2 : ikb1;
+        return this->psi[ib * this->nbasis + ibasis];
+    }
+
     return this->k_first ? this->psi[(ikb1 * this->nbands + ikb2) * this->nbasis + ibasis]
                          : this->psi[(ikb1 * this->nk + ikb2) * this->nbasis + ibasis];
 }
@@ -556,8 +584,23 @@ const int& Psi<T, Device>::get_ngk(const int ik_in) const
 template <typename T, typename Device>
 void Psi<T, Device>::zero_out()
 {
-    // this->psi.assign(this->psi.size(), T(0));
-    set_memory_op()(this->ctx, this->psi, 0, this->size());
+    if (storage_mode_ == PsiStorageMode::PAGED_GPU)
+    {
+        // Zero the single-k GPU buffer only
+        const size_t k_size = static_cast<size_t>(this->nbands) * this->nbasis;
+        set_memory_op()(this->ctx, this->psi, 0, k_size);
+        // Zero the full CPU buffer
+        if (psi_cpu_ != nullptr)
+        {
+            const size_t total = static_cast<size_t>(this->nk) * this->nbands * this->nbasis;
+            std::memset(psi_cpu_, 0, sizeof(T) * total);
+        }
+        current_k_gpu_ = -1;
+    }
+    else
+    {
+        set_memory_op()(this->ctx, this->psi, 0, this->size());
+    }
 }
 
 template <typename T, typename Device>
