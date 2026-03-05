@@ -20,6 +20,10 @@ void Stress_Func<FPTYPE, Device>::stress_kin(ModuleBase::matrix& sigma,
 	hamilt::FS_Kin_tools<FPTYPE, Device> kin_tool(*this->ucell, p_kv, wfc_basis, wg);
     for (int ik = 0; ik < wfc_basis->nks; ++ik)
     {
+        // Ensure k-point data is on GPU for PAGED_GPU mode
+        // This is a no-op for ALL_GPU and ALL_CPU modes
+        const_cast<psi::Psi<complex<FPTYPE>, Device>*>(psi_in)->load_k_to_gpu(ik);
+
         int nbands_occ = wg.nc;
         while (wg(ik, nbands_occ - 1) == 0.0)
         {

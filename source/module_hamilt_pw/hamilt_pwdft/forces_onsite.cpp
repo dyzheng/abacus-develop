@@ -31,6 +31,10 @@ void Forces<FPTYPE, Device>::cal_force_onsite(ModuleBase::matrix& force_onsite,
     const int nks = wfc_basis->nks;
     for (int ik = 0; ik < nks; ik++) // loop k points
     {
+        // Ensure k-point data is on GPU for PAGED_GPU mode
+        // This is a no-op for ALL_GPU and ALL_CPU modes
+        const_cast<psi::Psi<complex<FPTYPE>, Device>*>(psi_in)->load_k_to_gpu(ik);
+
         // skip zero weights to speed up
         int nbands_occ = wg.nc;
         while (wg(ik, nbands_occ - 1) == 0.0)
