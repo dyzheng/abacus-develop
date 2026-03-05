@@ -63,6 +63,9 @@ Nonlocal<OperatorPW<T, Device>>::Nonlocal(const int* isk_in,
             const int nkb = this->ppcell->nkb;
             vkb_cpu_ = new T[static_cast<size_t>(nkb) * npwx]();
 
+            // Note: this->vkb points to ppcell's VKB buffer (allocated by ppcell)
+            // We keep it on GPU for force/stress calculations
+
             // Allocate GPU buffer for largest batch
             resmem_complex_op()(this->ctx, vkb_batch_gpu_,
                                vkb_manager_.get_max_batch_elements(), "Nonlocal::vkb_batch");
@@ -108,9 +111,21 @@ void Nonlocal<OperatorPW<T, Device>>::init(const int ik_in)
     {
         if (use_vkb_batching_)
         {
-            // Compute full VKB on CPU; will be transferred batch-by-batch in act_batched()
-            this->ppcell->template getvnl<Real, base_device::DEVICE_CPU>(
-                this->cpu_ctx, *this->ucell, this->ik, this->vkb_cpu_);
+            // Compute full VKB on GPU and keep it for force/stress calculations
+            // Also copy to CPU for batched transfer in act()
+            const int nkb = this->ppcell->nkb;
+            const int npwx = this->ppcell->vkb.nc;
+
+            // Compute on GPU (this->vkb already points to ppcell's VKB buffer)
+            this->ppcell->getvnl(this->ctx, *this->ucell, this->ik, this->vkb);
+
+            // Copy from GPU to CPU for batched operations
+            using syncmem_d2h_op = base_device::memory::synchronize_memory_op<T, base_device::DEVICE_CPU, Device>;
+            syncmem_d2h_op()(this->cpu_ctx, this->ctx,
+                            this->vkb_cpu_, this->vkb,
+                            static_cast<size_t>(nkb) * npwx);
+
+            // Keep GPU VKB for force/stress calculations (don't free it)
         }
         else
         {
@@ -479,16 +494,18 @@ void Nonlocal<OperatorPW<T, Device>>::act_batched(
                 if (batch_type_start < batch_type_end)
                 {
                     const int na_in_batch = batch_type_end - batch_type_start;
-                    int iat_local = batch_type_start;
+                    // iat_batch must start at batch_type_start for correct deeq indexing
+                    int iat_batch = batch_type_start;
                     nonlocal_op()(
                         this->ctx,
                         na_in_batch, nbands, nproj,
-                        sum_batch, iat_local, current_spin, nkb_batch,
+                        sum_batch, iat_batch, current_spin, nkb_batch,
                         this->ppcell->deeq.getBound2(),
                         this->ppcell->deeq.getBound3(),
                         this->ppcell->deeq.getBound4(),
                         this->deeq,
                         this->ps_batch_, this->becp_batch_);
+                    // sum_batch is updated by nonlocal_op() via reference
                 }
                 iat_scan += na_type;
             }
@@ -507,16 +524,18 @@ void Nonlocal<OperatorPW<T, Device>>::act_batched(
                 if (batch_type_start < batch_type_end)
                 {
                     const int na_in_batch = batch_type_end - batch_type_start;
-                    int iat_local = batch_type_start;
+                    // iat_batch must start at batch_type_start for correct deeq indexing
+                    int iat_batch = batch_type_start;
                     nonlocal_op()(
                         this->ctx,
                         na_in_batch, nbands, nproj,
-                        sum_batch, iat_local, nkb_batch,
+                        sum_batch, iat_batch, nkb_batch,
                         this->ppcell->deeq_nc.getBound2(),
                         this->ppcell->deeq_nc.getBound3(),
                         this->ppcell->deeq_nc.getBound4(),
                         this->deeq_nc,
                         this->ps_batch_, this->becp_batch_);
+                    // sum_batch is updated by nonlocal_op() via reference
                 }
                 iat_scan += na_type;
             }
@@ -591,6 +610,9 @@ hamilt::Nonlocal<OperatorPW<T, Device>>::Nonlocal(const Nonlocal<OperatorPW<T_in
             // Allocate CPU buffer for full VKB
             const int nkb = this->ppcell->nkb;
             vkb_cpu_ = new T[static_cast<size_t>(nkb) * npwx]();
+
+            // Note: this->vkb will be allocated temporarily in init() for getvnl,
+            // then freed immediately after copying to CPU
 
             // Allocate GPU buffer for largest batch
             resmem_complex_op()(this->ctx, vkb_batch_gpu_,
