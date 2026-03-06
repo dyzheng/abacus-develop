@@ -130,17 +130,6 @@ class HSolverPW
                         const diag_comm_info& comm_info,
                         const int ik);
 
-    /// @brief Check if eigenvalues of current k-point are outliers compared to completed k-points.
-    /// Uses median + MAD (median absolute deviation) for robust outlier detection.
-    /// @param eigenvalues pointer to all eigenvalues (nks * nbands)
-    /// @param nbands number of bands
-    /// @param completed_iks list of k-point indices that have been completed
-    /// @param current_ik the k-point index to check
-    /// @return true if the current k-point's eigenvalues are abnormal.
-    bool check_eigenvalue_outlier(const Real* eigenvalues,
-                                  const int nbands,
-                                  const std::vector<int>& completed_iks,
-                                  const int current_ik) const;
 };
 
 } // namespace hsolver
