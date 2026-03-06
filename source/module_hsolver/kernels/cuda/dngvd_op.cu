@@ -52,10 +52,10 @@ void xhegvd_wrapper(
         A, lda, B, ldb, W, work, lwork, devInfo));
 
     cudaErrcheck(cudaMemcpy(&info_gpu, devInfo, sizeof(int), cudaMemcpyDeviceToHost));
-    assert(0 == info_gpu);
-    // free the buffer
+    // free the buffer before checking info_gpu to avoid memory leak
     cudaErrcheck(cudaFree(work));
     cudaErrcheck(cudaFree(devInfo));
+    if (0 != info_gpu) { throw DiagoCudaException("Dsygvd", info_gpu); }
 }
 
 static inline
@@ -84,10 +84,9 @@ void xhegvd_wrapper (
                                       reinterpret_cast<float2 *>(A), lda, reinterpret_cast<float2 *>(B), ldb, W, work, lwork, devInfo));
 
     cudaErrcheck(cudaMemcpy(&info_gpu, devInfo, sizeof(int), cudaMemcpyDeviceToHost));
-    assert(0 == info_gpu);
-    // free the buffer
     cudaErrcheck(cudaFree(work));
     cudaErrcheck(cudaFree(devInfo));
+    if (0 != info_gpu) { throw DiagoCudaException("Chegvd", info_gpu); }
 }
 
 static inline
@@ -116,10 +115,9 @@ void xhegvd_wrapper (
                                       reinterpret_cast<double2 *>(A), lda, reinterpret_cast<double2 *>(B), ldb, W, work, lwork, devInfo));
 
     cudaErrcheck(cudaMemcpy(&info_gpu, devInfo, sizeof(int), cudaMemcpyDeviceToHost));
-    assert(0 == info_gpu);
-    // free the buffer
     cudaErrcheck(cudaFree(work));
     cudaErrcheck(cudaFree(devInfo));
+    if (0 != info_gpu) { throw DiagoCudaException("Zhegvd", info_gpu); }
 }
 
 static inline
@@ -144,9 +142,9 @@ void xheevd_wrapper(
     cusolverErrcheck(cusolverDnDsyevd(cusolver_H, CUSOLVER_EIG_MODE_VECTOR, uplo, n, A, lda, W, work, lwork, devInfo));
 
     cudaErrcheck(cudaMemcpy(&info_gpu, devInfo, sizeof(int), cudaMemcpyDeviceToHost));
-    assert(0 == info_gpu);
     cudaErrcheck(cudaFree(work));
     cudaErrcheck(cudaFree(devInfo));
+    if (0 != info_gpu) { throw DiagoCudaException("Dsyevd", info_gpu); }
 }
 
 static inline
@@ -171,9 +169,9 @@ void xheevd_wrapper (
     cusolverErrcheck(cusolverDnCheevd(cusolver_H, CUSOLVER_EIG_MODE_VECTOR, uplo, n, reinterpret_cast<float2 *>(A), lda, W, work, lwork, devInfo));
 
     cudaErrcheck(cudaMemcpy(&info_gpu, devInfo, sizeof(int), cudaMemcpyDeviceToHost));
-    assert(0 == info_gpu);
     cudaErrcheck(cudaFree(work));
     cudaErrcheck(cudaFree(devInfo));
+    if (0 != info_gpu) { throw DiagoCudaException("Cheevd", info_gpu); }
 }
 
 static inline
@@ -199,9 +197,9 @@ void xheevd_wrapper (
                                       reinterpret_cast<double2 *>(A), lda, W, work, lwork, devInfo));
 
     cudaErrcheck(cudaMemcpy(&info_gpu, devInfo, sizeof(int), cudaMemcpyDeviceToHost));
-    assert(0 == info_gpu);
     cudaErrcheck(cudaFree(work));
     cudaErrcheck(cudaFree(devInfo));
+    if (0 != info_gpu) { throw DiagoCudaException("Zheevd", info_gpu); }
 }
 
 template <typename T>

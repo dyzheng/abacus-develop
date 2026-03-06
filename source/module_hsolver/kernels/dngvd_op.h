@@ -8,8 +8,22 @@
 #include "module_base/parallel_reduce.h"
 #include "module_base/module_device/types.h"
 
+#include <stdexcept>
+#include <string>
+
 namespace hsolver
 {
+
+/// @brief Exception thrown when GPU cusolver diagonalization fails (info_gpu != 0).
+/// This typically indicates numerical convergence failure in cusolverDn*hegvd / *heevd.
+class DiagoCudaException : public std::runtime_error
+{
+  public:
+    DiagoCudaException(const std::string& func_name, int info)
+        : std::runtime_error("cusolver " + func_name + " failed with info_gpu=" + std::to_string(info)),
+          info_gpu(info) {}
+    int info_gpu;
+};
 
 inline double get_real(const std::complex<double> &x) { return x.real(); }
 

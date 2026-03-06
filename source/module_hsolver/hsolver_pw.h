@@ -5,6 +5,7 @@
 #include "module_hamilt_general/hamilt.h"
 #include "module_base/macros.h"
 #include "module_basis/module_pw/pw_basis_k.h"
+#include "module_hsolver/diag_comm_info.h"
 #include <unordered_map>
 #include "module_base/memory.h"
 
@@ -64,7 +65,8 @@ class HSolverPW
                          psi::Psi<T, Device>& psi,
                          std::vector<Real>& pre_condition,
                          Real* eigenvalue,
-                         const int& nk_nums);
+                         const int& nk_nums,
+                         const int ik);
 
     // calculate the precondition array for diagonalization in PW base
     void update_precondition(std::vector<Real>& h_diag, const int ik, const int npw, const Real vl_of_0);
@@ -116,6 +118,17 @@ class HSolverPW
     
     void build_k_neighbors();
     void propagate_psi(psi::Psi<T, Device>& psi, const int from_ik, const int to_ik);
+
+    /// @brief Fallback to CG diagonalization when dav/dav_subspace cusolver fails.
+    /// CG is used without subspace rotation to avoid re-triggering the same cusolver issue.
+    /// Psi is restored before CG: reload from CPU in paged mode, or propagate from neighbor k-point.
+    void fallback_to_cg(hamilt::Hamilt<T, Device>* hm,
+                        psi::Psi<T, Device>& psi,
+                        std::vector<Real>& pre_condition,
+                        Real* eigenvalue,
+                        const std::vector<int>& ngk_vector,
+                        const diag_comm_info& comm_info,
+                        const int ik);
 };
 
 } // namespace hsolver

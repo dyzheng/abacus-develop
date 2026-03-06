@@ -11,8 +11,10 @@
 #include "module_hsolver/diago_dav_subspace.h"
 #include "module_hsolver/diago_david.h"
 #include "module_hsolver/diago_iter_assist.h"
+#include "module_hsolver/kernels/dngvd_op.h"
 #include "module_parameter/parameter.h"
 #include "module_psi/psi.h"
+#include "module_base/global_variable.h"
 
 #include <algorithm>
 #include <vector>
@@ -332,7 +334,7 @@ void HSolverPW<T, Device>::solve(hamilt::Hamilt<T, Device>* pHamilt,
 #endif
 
             // solve eigenvector and eigenvalue for H(k)
-            this->hamiltSolvePsiK(pHamilt, psi, precondition, eigenvalues.data() + ik * psi.get_nbands(), this->wfc_basis->nks);
+            this->hamiltSolvePsiK(pHamilt, psi, precondition, eigenvalues.data() + ik * psi.get_nbands(), this->wfc_basis->nks, ik);
 
             // Store k-point data from GPU back to CPU (no-op if not PAGED_GPU mode)
             psi.store_k_from_gpu(ik);
@@ -380,7 +382,7 @@ void HSolverPW<T, Device>::solve(hamilt::Hamilt<T, Device>* pHamilt,
 #endif
 
             // solve eigenvector and eigenvalue for H(k)
-            this->hamiltSolvePsiK(pHamilt, psi, precondition, eigenvalues.data() + ik * psi.get_nbands(), this->wfc_basis->nks);
+            this->hamiltSolvePsiK(pHamilt, psi, precondition, eigenvalues.data() + ik * psi.get_nbands(), this->wfc_basis->nks, ik);
 
             // Store k-point data from GPU back to CPU (no-op if not PAGED_GPU mode)
             psi.store_k_from_gpu(ik);
@@ -438,7 +440,8 @@ void HSolverPW<T, Device>::hamiltSolvePsiK(hamilt::Hamilt<T, Device>* hm,
                                            psi::Psi<T, Device>& psi,
                                            std::vector<Real>& pre_condition,
                                            Real* eigenvalue,
-                                           const int& nk_nums)
+                                           const int& nk_nums,
+                                           const int ik)
 {
 #ifdef __MPI
     const diag_comm_info comm_info = {POOL_WORLD, this->rank_in_pool, this->nproc_in_pool};
@@ -599,18 +602,33 @@ void HSolverPW<T, Device>::hamiltSolvePsiK(hamilt::Hamilt<T, Device>* hm,
         };
         bool scf = this->calculation_type == "nscf" ? false : true;
 
-        Diago_DavSubspace<T, Device> dav_subspace(pre_condition,
-                                                  psi.get_nbands(),
-                                                  psi.get_k_first() ? psi.get_current_nbas()
-                                                                    : psi.get_nk() * psi.get_nbasis(),
-                                                  PARAM.inp.pw_diag_ndim,
-                                                  this->diag_thr,
-                                                  this->diag_iter_max,
-                                                  this->need_subspace,
-                                                  comm_info);
+        bool dav_subspace_ok = true;
+        try
+        {
+            Diago_DavSubspace<T, Device> dav_subspace(pre_condition,
+                                                      psi.get_nbands(),
+                                                      psi.get_k_first() ? psi.get_current_nbas()
+                                                                        : psi.get_nk() * psi.get_nbasis(),
+                                                      PARAM.inp.pw_diag_ndim,
+                                                      this->diag_thr,
+                                                      this->diag_iter_max,
+                                                      this->need_subspace,
+                                                      comm_info);
 
-        DiagoIterAssist<T, Device>::avg_iter += static_cast<double>(
-            dav_subspace.diag(hpsi_func, psi.get_pointer(), psi.get_nbasis(), eigenvalue, this->ethr_band, scf));
+            DiagoIterAssist<T, Device>::avg_iter += static_cast<double>(
+                dav_subspace.diag(hpsi_func, psi.get_pointer(), psi.get_nbasis(), eigenvalue, this->ethr_band, scf));
+        }
+        catch (const DiagoCudaException& e)
+        {
+            dav_subspace_ok = false;
+            GlobalV::ofs_warning << "WARNING: dav_subspace cusolver failed (" << e.what()
+                                 << "), falling back to CG for this k-point." << std::endl;
+        }
+
+        if (!dav_subspace_ok)
+        {
+            this->fallback_to_cg(hm, psi, pre_condition, eigenvalue, ngk_vector, comm_info, ik);
+        }
     }
     else if (this->method == "dav")
     {
@@ -664,19 +682,133 @@ void HSolverPW<T, Device>::hamiltSolvePsiK(hamilt::Hamilt<T, Device>* hm,
             ModuleBase::timer::tick("David", "spsi_func");
         };
 
-        DiagoDavid<T, Device> david(pre_condition.data(), nband, dim, PARAM.inp.pw_diag_ndim, this->use_paw, comm_info);
-        // do diag and add davidson iteration counts up to avg_iter
-        DiagoIterAssist<T, Device>::avg_iter += static_cast<double>(david.diag(hpsi_func,
-                                                                               spsi_func,
-                                                                               ld_psi,
-                                                                               psi.get_pointer(),
-                                                                               eigenvalue,
-                                                                               this->ethr_band,
-                                                                               david_maxiter,
-                                                                               ntry_max,
-                                                                               notconv_max));
+        bool dav_ok = true;
+        try
+        {
+            DiagoDavid<T, Device> david(pre_condition.data(), nband, dim, PARAM.inp.pw_diag_ndim, this->use_paw, comm_info);
+            // do diag and add davidson iteration counts up to avg_iter
+            DiagoIterAssist<T, Device>::avg_iter += static_cast<double>(david.diag(hpsi_func,
+                                                                                   spsi_func,
+                                                                                   ld_psi,
+                                                                                   psi.get_pointer(),
+                                                                                   eigenvalue,
+                                                                                   this->ethr_band,
+                                                                                   david_maxiter,
+                                                                                   ntry_max,
+                                                                                   notconv_max));
+        }
+        catch (const DiagoCudaException& e)
+        {
+            dav_ok = false;
+            GlobalV::ofs_warning << "WARNING: davidson cusolver failed (" << e.what()
+                                 << "), falling back to CG for this k-point." << std::endl;
+        }
+
+        if (!dav_ok)
+        {
+            this->fallback_to_cg(hm, psi, pre_condition, eigenvalue, ngk_vector, comm_info, ik);
+        }
     }
     return;
+}
+
+template <typename T, typename Device>
+void HSolverPW<T, Device>::fallback_to_cg(hamilt::Hamilt<T, Device>* hm,
+                                           psi::Psi<T, Device>& psi,
+                                           std::vector<Real>& pre_condition,
+                                           Real* eigenvalue,
+                                           const std::vector<int>& ngk_vector,
+                                           const diag_comm_info& comm_info,
+                                           const int ik)
+{
+    using ct_Device = typename ct::PsiToContainer<Device>::type;
+
+    // Step 1: Restore psi to a valid state before CG.
+    // The cusolver failure may have left psi in a corrupted state.
+    if (psi.get_storage_mode() == psi::PsiStorageMode::PAGED_GPU)
+    {
+        // Paged mode: CPU has a clean copy, reload it to GPU
+        psi.load_k_to_gpu(ik);
+        psi.fix_k(ik);
+        GlobalV::ofs_warning << "  Psi restored from CPU copy (paged mode) for k=" << ik << std::endl;
+    }
+    else if (ik > 0)
+    {
+        // Non-paged mode: propagate from a neighbor k-point to get a reasonable starting point.
+        // Use k_parent if k-continuity is enabled, otherwise use the previous k-point.
+        int from_ik = ik - 1;
+        if (this->use_k_continuity && k_parent.find(ik) != k_parent.end())
+        {
+            from_ik = k_parent[ik];
+        }
+        this->propagate_psi(psi, from_ik, ik);
+        psi.fix_k(ik);
+        GlobalV::ofs_warning << "  Psi restored from k=" << from_ik << " via propagate_psi for k=" << ik << std::endl;
+    }
+    // else: ik == 0 and non-paged — psi retains its initialization, proceed with CG as-is
+
+    // Step 2: Run CG without subspace rotation to avoid re-triggering cusolver failure
+    DiagoCG<T, Device> cg(this->basis_type,
+                          this->calculation_type,
+                          false, // need_subspace = false
+                          nullptr, // no subspace_func
+                          this->diag_thr,
+                          this->diag_iter_max,
+                          this->nproc_in_pool);
+
+    auto hpsi_func = [hm, ngk_vector](const ct::Tensor& psi_in, ct::Tensor& hpsi_out) {
+        const auto ndim = psi_in.shape().ndim();
+        REQUIRES_OK(ndim <= 2, "dims of psi_in should be less than or equal to 2");
+        auto psi_wrapper = psi::Psi<T, Device>(psi_in.data<T>(),
+                                               1,
+                                               ndim == 1 ? 1 : psi_in.shape().dim_size(0),
+                                               ndim == 1 ? psi_in.NumElements() : psi_in.shape().dim_size(1),
+                                               ngk_vector);
+        psi::Range all_bands_range(true, psi_wrapper.get_current_k(), 0, psi_wrapper.get_nbands() - 1);
+        using hpsi_info = typename hamilt::Operator<T, Device>::hpsi_info;
+        hpsi_info info(&psi_wrapper, all_bands_range, hpsi_out.data<T>());
+        hm->ops->hPsi(info);
+    };
+    auto spsi_func = [this, hm](const ct::Tensor& psi_in, ct::Tensor& spsi_out) {
+        const auto ndim = psi_in.shape().ndim();
+        REQUIRES_OK(ndim <= 2, "dims of psi_in should be less than or equal to 2");
+        if (this->use_uspp)
+        {
+            hm->sPsi(psi_in.data<T>(),
+                     spsi_out.data<T>(),
+                     ndim == 1 ? psi_in.NumElements() : psi_in.shape().dim_size(1),
+                     ndim == 1 ? psi_in.NumElements() : psi_in.shape().dim_size(1),
+                     ndim == 1 ? 1 : psi_in.shape().dim_size(0));
+        }
+        else
+        {
+            base_device::memory::synchronize_memory_op<T, Device, Device>()(
+                this->ctx,
+                this->ctx,
+                spsi_out.data<T>(),
+                psi_in.data<T>(),
+                static_cast<size_t>((ndim == 1 ? 1 : psi_in.shape().dim_size(0))
+                                    * (ndim == 1 ? psi_in.NumElements() : psi_in.shape().dim_size(1))));
+        }
+    };
+
+    auto psi_tensor = ct::TensorMap(psi.get_pointer(),
+                                    ct::DataTypeToEnum<T>::value,
+                                    ct::DeviceTypeToEnum<ct_Device>::value,
+                                    ct::TensorShape({psi.get_nbands(), psi.get_nbasis()}));
+    auto eigen_tensor = ct::TensorMap(eigenvalue,
+                                      ct::DataTypeToEnum<Real>::value,
+                                      ct::DeviceTypeToEnum<ct::DEVICE_CPU>::value,
+                                      ct::TensorShape({psi.get_nbands()}));
+    auto prec_tensor = ct::TensorMap(pre_condition.data(),
+                                     ct::DataTypeToEnum<Real>::value,
+                                     ct::DeviceTypeToEnum<ct::DEVICE_CPU>::value,
+                                     ct::TensorShape({static_cast<int>(pre_condition.size())}))
+                           .to_device<ct_Device>()
+                           .slice({0}, {psi.get_current_nbas()});
+
+    cg.diag(hpsi_func, spsi_func, psi_tensor, eigen_tensor, this->ethr_band, prec_tensor);
+    ct::TensorMap(psi.get_pointer(), psi_tensor, {psi.get_nbands(), psi.get_nbasis()}).sync(psi_tensor);
 }
 
 template <typename T, typename Device>
