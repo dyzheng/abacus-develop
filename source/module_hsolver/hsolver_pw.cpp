@@ -17,6 +17,7 @@
 #include "module_base/global_variable.h"
 
 #include <algorithm>
+#include <cmath>
 #include <vector>
 
 #ifdef USE_PAW
@@ -288,6 +289,14 @@ void HSolverPW<T, Device>::solve(hamilt::Hamilt<T, Device>* pHamilt,
         build_k_neighbors();
     }
 
+    // Track k-points for eigenvalue outlier detection:
+    // k_finished: k-points whose eigenvalues passed statistical verification
+    // k_need_rerun: k-points detected as outliers retroactively (after store_k_from_gpu)
+    std::vector<int> k_finished;
+    std::vector<int> k_need_rerun;
+    k_finished.reserve(this->wfc_basis->nks);
+    const bool use_outlier_check = (this->method == "dav" || this->method == "dav_subspace");
+
     // Loop over k points for solve Hamiltonian to charge density
     if (use_k_continuity) {
         // K-point continuity case
@@ -336,8 +345,54 @@ void HSolverPW<T, Device>::solve(hamilt::Hamilt<T, Device>* pHamilt,
             // solve eigenvector and eigenvalue for H(k)
             this->hamiltSolvePsiK(pHamilt, psi, precondition, eigenvalues.data() + ik * psi.get_nbands(), this->wfc_basis->nks, ik);
 
+            // Before store: check current k-point against k_finished (CPU copy still clean)
+            if (use_outlier_check
+                && this->check_eigenvalue_outlier(eigenvalues.data(), psi.get_nbands(),
+                                                  k_finished, ik))
+            {
+                GlobalV::ofs_warning << "Re-running k-point " << ik
+                                     << " with CG due to abnormal eigenvalues (pre-store)." << std::endl;
+#ifdef __MPI
+                const diag_comm_info comm_info_rerun = {POOL_WORLD, this->rank_in_pool, this->nproc_in_pool};
+#else
+                const diag_comm_info comm_info_rerun = {this->rank_in_pool, this->nproc_in_pool};
+#endif
+                auto ngk_ptr = psi.get_ngk_pointer();
+                std::vector<int> ngk_vec(this->wfc_basis->nks, 0);
+                for (int j = 0; j < this->wfc_basis->nks; j++) { ngk_vec[j] = ngk_ptr[j]; }
+                this->fallback_to_cg(pHamilt, psi, precondition,
+                                     eigenvalues.data() + ik * psi.get_nbands(),
+                                     ngk_vec, comm_info_rerun, ik);
+            }
+
             // Store k-point data from GPU back to CPU (no-op if not PAGED_GPU mode)
             psi.store_k_from_gpu(ik);
+            k_finished.push_back(ik);
+
+            // Retroactive check: when k_finished grows, re-verify all members.
+            // Earlier k-points added without enough baseline may now be detectable as outliers.
+            if (use_outlier_check && k_finished.size() >= 3)
+            {
+                auto it = k_finished.begin();
+                while (it != k_finished.end())
+                {
+                    const int fk = *it;
+                    // Build comparison set excluding fk
+                    std::vector<int> others;
+                    others.reserve(k_finished.size() - 1);
+                    for (int ok : k_finished) { if (ok != fk) { others.push_back(ok); } }
+                    if (others.size() >= 3
+                        && this->check_eigenvalue_outlier(eigenvalues.data(), psi.get_nbands(), others, fk))
+                    {
+                        k_need_rerun.push_back(fk);
+                        it = k_finished.erase(it);
+                    }
+                    else
+                    {
+                        ++it;
+                    }
+                }
+            }
 
             if (skip_charge)
             {
@@ -384,8 +439,52 @@ void HSolverPW<T, Device>::solve(hamilt::Hamilt<T, Device>* pHamilt,
             // solve eigenvector and eigenvalue for H(k)
             this->hamiltSolvePsiK(pHamilt, psi, precondition, eigenvalues.data() + ik * psi.get_nbands(), this->wfc_basis->nks, ik);
 
+            // Before store: check current k-point against k_finished (CPU copy still clean)
+            if (use_outlier_check
+                && this->check_eigenvalue_outlier(eigenvalues.data(), psi.get_nbands(),
+                                                  k_finished, ik))
+            {
+                GlobalV::ofs_warning << "Re-running k-point " << ik
+                                     << " with CG due to abnormal eigenvalues (pre-store)." << std::endl;
+#ifdef __MPI
+                const diag_comm_info comm_info_rerun = {POOL_WORLD, this->rank_in_pool, this->nproc_in_pool};
+#else
+                const diag_comm_info comm_info_rerun = {this->rank_in_pool, this->nproc_in_pool};
+#endif
+                auto ngk_ptr = psi.get_ngk_pointer();
+                std::vector<int> ngk_vec(this->wfc_basis->nks, 0);
+                for (int j = 0; j < this->wfc_basis->nks; j++) { ngk_vec[j] = ngk_ptr[j]; }
+                this->fallback_to_cg(pHamilt, psi, precondition,
+                                     eigenvalues.data() + ik * psi.get_nbands(),
+                                     ngk_vec, comm_info_rerun, ik);
+            }
+
             // Store k-point data from GPU back to CPU (no-op if not PAGED_GPU mode)
             psi.store_k_from_gpu(ik);
+            k_finished.push_back(ik);
+
+            // Retroactive check: when k_finished grows, re-verify all members.
+            if (use_outlier_check && k_finished.size() >= 3)
+            {
+                auto it = k_finished.begin();
+                while (it != k_finished.end())
+                {
+                    const int fk = *it;
+                    std::vector<int> others;
+                    others.reserve(k_finished.size() - 1);
+                    for (int ok : k_finished) { if (ok != fk) { others.push_back(ok); } }
+                    if (others.size() >= 3
+                        && this->check_eigenvalue_outlier(eigenvalues.data(), psi.get_nbands(), others, fk))
+                    {
+                        k_need_rerun.push_back(fk);
+                        it = k_finished.erase(it);
+                    }
+                    else
+                    {
+                        ++it;
+                    }
+                }
+            }
 
             if (skip_charge)
             {
@@ -395,6 +494,36 @@ void HSolverPW<T, Device>::solve(hamilt::Hamilt<T, Device>* pHamilt,
                 DiagoIterAssist<T, Device>::avg_iter = 0.0;
             }
             /// calculate the contribution of Psi for charge density rho
+        }
+    }
+
+    // Post-loop: re-run k-points detected as outliers retroactively.
+    // Their psi on CPU may be corrupted (store_k_from_gpu already happened),
+    // but CG can still converge from any starting point.
+    if (!k_need_rerun.empty())
+    {
+#ifdef __MPI
+        const diag_comm_info comm_info_post = {POOL_WORLD, this->rank_in_pool, this->nproc_in_pool};
+#else
+        const diag_comm_info comm_info_post = {this->rank_in_pool, this->nproc_in_pool};
+#endif
+        auto ngk_ptr = psi.get_ngk_pointer();
+        std::vector<int> ngk_vec(this->wfc_basis->nks, 0);
+        for (int j = 0; j < this->wfc_basis->nks; j++) { ngk_vec[j] = ngk_ptr[j]; }
+
+        for (int bad_ik : k_need_rerun)
+        {
+            GlobalV::ofs_warning << "Re-running k-point " << bad_ik
+                                 << " with CG due to abnormal eigenvalues (retroactive)." << std::endl;
+            pHamilt->updateHk(bad_ik);
+            psi.load_k_to_gpu(bad_ik);
+            psi.fix_k(bad_ik);
+            update_precondition(precondition, bad_ik, this->wfc_basis->npwk[bad_ik],
+                                Real(pes->pot->get_vl_of_0()));
+            this->fallback_to_cg(pHamilt, psi, precondition,
+                                 eigenvalues.data() + bad_ik * psi.get_nbands(),
+                                 ngk_vec, comm_info_post, bad_ik);
+            psi.store_k_from_gpu(bad_ik);
         }
     }
     
@@ -747,11 +876,43 @@ void HSolverPW<T, Device>::fallback_to_cg(hamilt::Hamilt<T, Device>* hm,
     }
     // else: ik == 0 and non-paged — psi retains its initialization, proceed with CG as-is
 
-    // Step 2: Run CG without subspace rotation to avoid re-triggering cusolver failure
+    // Step 2: Run CG with a safe subspace_func.
+    // CG internally calls subspace_func even when need_subspace=false (on ntry > 0),
+    // so we must provide a real function. Wrap diagH_subspace in try-catch to handle
+    // potential cusolver failures gracefully during the fallback.
+    auto subspace_func = [hm, ngk_vector](const ct::Tensor& psi_in, ct::Tensor& psi_out) {
+        const auto ndim = psi_in.shape().ndim();
+        REQUIRES_OK(ndim == 2, "dims of psi_in should be less than or equal to 2");
+        auto psi_in_wrapper = psi::Psi<T, Device>(psi_in.data<T>(),
+                                                   1,
+                                                   psi_in.shape().dim_size(0),
+                                                   psi_in.shape().dim_size(1),
+                                                   ngk_vector);
+        auto psi_out_wrapper = psi::Psi<T, Device>(psi_out.data<T>(),
+                                                    1,
+                                                    psi_out.shape().dim_size(0),
+                                                    psi_out.shape().dim_size(1),
+                                                    ngk_vector);
+        auto eigen = ct::Tensor(ct::DataTypeToEnum<Real>::value,
+                                ct::DeviceType::CpuDevice,
+                                ct::TensorShape({psi_in.shape().dim_size(0)}));
+        try
+        {
+            DiagoIterAssist<T, Device>::diagH_subspace(hm, psi_in_wrapper, psi_out_wrapper, eigen.data<Real>());
+        }
+        catch (const DiagoCudaException&)
+        {
+            // Subspace rotation failed again — just copy input to output as identity fallback
+            base_device::memory::synchronize_memory_op<T, Device, Device>()(
+                nullptr, nullptr,
+                psi_out.data<T>(), psi_in.data<T>(),
+                static_cast<size_t>(psi_in.NumElements()));
+        }
+    };
     DiagoCG<T, Device> cg(this->basis_type,
                           this->calculation_type,
-                          false, // need_subspace = false
-                          nullptr, // no subspace_func
+                          this->need_subspace,
+                          subspace_func,
                           this->diag_thr,
                           this->diag_iter_max,
                           this->nproc_in_pool);
@@ -858,6 +1019,68 @@ void HSolverPW<T, Device>::update_precondition(std::vector<Real>& h_diag,
             h_diag[ig + size / 2] = h_diag[ig];
         }
     }
+}
+
+template <typename T, typename Device>
+bool HSolverPW<T, Device>::check_eigenvalue_outlier(const Real* eigenvalues,
+                                                     const int nbands,
+                                                     const std::vector<int>& completed_iks,
+                                                     const int current_ik) const
+{
+    const int n_completed = static_cast<int>(completed_iks.size());
+    // Need at least 3 completed k-points as baseline for meaningful statistics
+    if (n_completed < 3)
+    {
+        return false;
+    }
+
+    const double detection_sigma = 10.0;
+    const double min_mad = 0.1; // Ry, floor to avoid false positives when dispersion is tiny
+
+    std::vector<double> vals(n_completed);
+    std::vector<double> abs_devs(n_completed);
+
+    for (int ib = 0; ib < nbands; ib++)
+    {
+        const double current_val = static_cast<double>(eigenvalues[current_ik * nbands + ib]);
+
+        // Gather completed k-points' eigenvalues for this band
+        for (int idx = 0; idx < n_completed; idx++)
+        {
+            vals[idx] = static_cast<double>(eigenvalues[completed_iks[idx] * nbands + ib]);
+        }
+
+        // Compute median of completed k-points
+        std::vector<double> sorted_vals(vals);
+        std::sort(sorted_vals.begin(), sorted_vals.end());
+        double median = (n_completed % 2 == 1)
+                            ? sorted_vals[n_completed / 2]
+                            : 0.5 * (sorted_vals[n_completed / 2 - 1] + sorted_vals[n_completed / 2]);
+
+        // Compute MAD (median absolute deviation)
+        for (int idx = 0; idx < n_completed; idx++)
+        {
+            abs_devs[idx] = std::abs(vals[idx] - median);
+        }
+        std::sort(abs_devs.begin(), abs_devs.end());
+        double mad = (n_completed % 2 == 1)
+                         ? abs_devs[n_completed / 2]
+                         : 0.5 * (abs_devs[n_completed / 2 - 1] + abs_devs[n_completed / 2]);
+        double effective_mad = std::max(mad, min_mad);
+
+        // Check if current k-point's eigenvalue is an outlier
+        double deviation = std::abs(current_val - median);
+        if (deviation > detection_sigma * effective_mad)
+        {
+            GlobalV::ofs_warning << "WARNING: eigenvalue outlier at k=" << current_ik
+                                 << " band=" << ib << ": value=" << current_val
+                                 << " median=" << median << " MAD=" << mad
+                                 << " (deviation=" << deviation / effective_mad << " sigma)"
+                                 << std::endl;
+            return true;
+        }
+    }
+    return false;
 }
 
 template <typename T, typename Device>
