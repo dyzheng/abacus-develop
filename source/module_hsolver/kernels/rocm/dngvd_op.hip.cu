@@ -2,6 +2,7 @@
 
 #include <hip/hip_runtime.h>
 #include <base/macros/macros.h>
+#include <iostream>
 
 namespace hsolver {
 
@@ -39,18 +40,16 @@ void dngvd_op<double, base_device::DEVICE_GPU>::operator()(const base_device::DE
     // copied from ../cuda/dngvd_op.cu, "dngvd_op"
     assert(nstart == ldh);
 
+    bool gpu_succeeded = false;
     if (nstart > N_DCU){
         hipErrcheck(hipMemcpy(_vcc, _hcc, sizeof(double) * ldh * nstart, hipMemcpyDeviceToDevice));
-        // now vcc contains hcc
 
-        // prepare some values for hipsolverDnZhegvd_bufferSize
         int * devInfo = nullptr;
         int lwork = 0, info_gpu = 0;
         double * work = nullptr;
         hipErrcheck(hipMalloc((void**)&devInfo, sizeof(int)));
         hipsolverFillMode_t uplo = HIPSOLVER_FILL_MODE_UPPER;
 
-        // calculate the sizes needed for pre-allocated buffer.
         hipsolverErrcheck(hipsolverDnDsygvd_bufferSize(
             hipsolver_H, HIPSOLVER_EIG_TYPE_1, HIPSOLVER_EIG_MODE_VECTOR, uplo,
             nstart,
@@ -59,10 +58,8 @@ void dngvd_op<double, base_device::DEVICE_GPU>::operator()(const base_device::DE
             _eigenvalue,
             &lwork));
 
-        // allocate memery
         hipErrcheck(hipMalloc((void**)&work, sizeof(double) * lwork));
 
-        // compute eigenvalues and eigenvectors.
         hipsolverErrcheck(hipsolverDnDsygvd(
             hipsolver_H, HIPSOLVER_EIG_TYPE_1, HIPSOLVER_EIG_MODE_VECTOR, uplo,
             nstart,
@@ -72,13 +69,18 @@ void dngvd_op<double, base_device::DEVICE_GPU>::operator()(const base_device::DE
             work, lwork, devInfo));
 
         hipErrcheck(hipMemcpy(&info_gpu, devInfo, sizeof(int), hipMemcpyDeviceToHost));
-
-        // free the buffer
         hipErrcheck(hipFree(work));
         hipErrcheck(hipFree(devInfo));
+
+        if (info_gpu == 0) {
+            gpu_succeeded = true;
+        } else {
+            std::cerr << "WARNING: hipsolver Dsygvd failed with info_gpu=" << info_gpu
+                      << ", falling back to CPU LAPACK (n=" << nstart << ")" << std::endl;
+        }
     }
-    // if(fail_info != nullptr) *fail_info = info_gpu;
-    else{
+
+    if (!gpu_succeeded) {
         std::vector<double> hcc(nstart * nstart, 0.0);
         std::vector<double> scc(nstart * nstart, 0.0);
         std::vector<double> vcc(nstart * nstart, 0.0);
@@ -96,8 +98,6 @@ void dngvd_op<double, base_device::DEVICE_GPU>::operator()(const base_device::DE
         hipErrcheck(hipMemcpy(_vcc, vcc.data(), sizeof(double) * vcc.size(), hipMemcpyHostToDevice));
         hipErrcheck(hipMemcpy(_eigenvalue, eigenvalue.data(), sizeof(double) * eigenvalue.size(), hipMemcpyHostToDevice));
     }
-
-    
 }
 #endif // __LCAO
 
@@ -110,21 +110,18 @@ void dngvd_op<std::complex<float>, base_device::DEVICE_GPU>::operator()(const ba
                                                                         float* _eigenvalue,
                                                                         std::complex<float>* _vcc)
 {
-    // copied from ../cuda/dngvd_op.cu, "dngvd_op"
     assert(nstart == ldh);
-    
+
+    bool gpu_succeeded = false;
     if (nstart > N_DCU){
         hipErrcheck(hipMemcpy(_vcc, _hcc, sizeof(std::complex<float>) * ldh * nstart, hipMemcpyDeviceToDevice));
-        // now vcc contains hcc
 
-        // prepare some values for hipsolverDnZhegvd_bufferSize
         int * devInfo = nullptr;
         int lwork = 0, info_gpu = 0;
         float2 * work = nullptr;
         hipErrcheck(hipMalloc((void**)&devInfo, sizeof(int)));
         hipsolverFillMode_t uplo = HIPSOLVER_FILL_MODE_UPPER;
 
-        // calculate the sizes needed for pre-allocated buffer.
         hipsolverErrcheck(hipsolverDnChegvd_bufferSize(
             hipsolver_H, HIPSOLVER_EIG_TYPE_1, HIPSOLVER_EIG_MODE_VECTOR, uplo,
             nstart,
@@ -133,10 +130,8 @@ void dngvd_op<std::complex<float>, base_device::DEVICE_GPU>::operator()(const ba
             _eigenvalue,
             &lwork));
 
-        // allocate memery
         hipErrcheck(hipMalloc((void**)&work, sizeof(float2) * lwork));
 
-        // compute eigenvalues and eigenvectors.
         hipsolverErrcheck(hipsolverDnChegvd(
             hipsolver_H, HIPSOLVER_EIG_TYPE_1, HIPSOLVER_EIG_MODE_VECTOR, uplo,
             nstart,
@@ -146,12 +141,18 @@ void dngvd_op<std::complex<float>, base_device::DEVICE_GPU>::operator()(const ba
             work, lwork, devInfo));
 
         hipErrcheck(hipMemcpy(&info_gpu, devInfo, sizeof(int), hipMemcpyDeviceToHost));
-        // free the buffer
         hipErrcheck(hipFree(work));
         hipErrcheck(hipFree(devInfo));
+
+        if (info_gpu == 0) {
+            gpu_succeeded = true;
+        } else {
+            std::cerr << "WARNING: hipsolver Chegvd failed with info_gpu=" << info_gpu
+                      << ", falling back to CPU LAPACK (n=" << nstart << ")" << std::endl;
+        }
     }
-    // if(fail_info != nullptr) *fail_info = info_gpu;
-    else{
+
+    if (!gpu_succeeded) {
         std::vector<std::complex<float>> hcc(nstart * nstart, {0, 0});
         std::vector<std::complex<float>> scc(nstart * nstart, {0, 0});
         std::vector<std::complex<float>> vcc(nstart * nstart, {0, 0});
@@ -169,8 +170,6 @@ void dngvd_op<std::complex<float>, base_device::DEVICE_GPU>::operator()(const ba
         hipErrcheck(hipMemcpy(_vcc, vcc.data(), sizeof(std::complex<float>) * vcc.size(), hipMemcpyHostToDevice));
         hipErrcheck(hipMemcpy(_eigenvalue, eigenvalue.data(), sizeof(float) * eigenvalue.size(), hipMemcpyHostToDevice));
     }
-
-    
 }
 
 template <>
@@ -183,26 +182,18 @@ void dngvd_op<std::complex<double>, base_device::DEVICE_GPU>::operator()(const b
                                                                          std::complex<double>* _vcc
                                                                         )
 {
-    // copied from ../cuda/dngvd_op.cu, "dngvd_op"
     assert(nstart == ldh);
 
-    // save a copy of scc in case the diagonalization fails
+    bool gpu_succeeded = false;
     if (nstart > N_DCU){
-        std::vector<std::complex<double>> scc(nstart * nstart, {0, 0});
-        hipErrcheck(hipMemcpy(scc.data(), _scc, sizeof(std::complex<double>) * scc.size(), hipMemcpyDeviceToHost));
-
         hipErrcheck(hipMemcpy(_vcc, _hcc, sizeof(std::complex<double>) * ldh * nstart, hipMemcpyDeviceToDevice));
 
-        // now vcc contains hcc
-
-        // prepare some values for hipsolverDnZhegvd_bufferSize
         int * devInfo = nullptr;
         int lwork = 0, info_gpu = 0;
         double2 * work = nullptr;
         hipErrcheck(hipMalloc((void**)&devInfo, sizeof(int)));
         hipsolverFillMode_t uplo = HIPSOLVER_FILL_MODE_UPPER;
 
-        // calculate the sizes needed for pre-allocated buffer.
         hipsolverErrcheck(hipsolverDnZhegvd_bufferSize(
             hipsolver_H, HIPSOLVER_EIG_TYPE_1, HIPSOLVER_EIG_MODE_VECTOR, uplo,
             nstart,
@@ -211,10 +202,8 @@ void dngvd_op<std::complex<double>, base_device::DEVICE_GPU>::operator()(const b
             _eigenvalue,
             &lwork));
 
-        // allocate memery
         hipErrcheck(hipMalloc((void**)&work, sizeof(double2) * lwork));
 
-        // compute eigenvalues and eigenvectors.
         hipsolverErrcheck(hipsolverDnZhegvd(
             hipsolver_H, HIPSOLVER_EIG_TYPE_1, HIPSOLVER_EIG_MODE_VECTOR, uplo,
             nstart,
@@ -224,12 +213,18 @@ void dngvd_op<std::complex<double>, base_device::DEVICE_GPU>::operator()(const b
             work, lwork, devInfo));
 
         hipErrcheck(hipMemcpy(&info_gpu, devInfo, sizeof(int), hipMemcpyDeviceToHost));
-        // free the buffer
         hipErrcheck(hipFree(work));
         hipErrcheck(hipFree(devInfo));
+
+        if (info_gpu == 0) {
+            gpu_succeeded = true;
+        } else {
+            std::cerr << "WARNING: hipsolver Zhegvd failed with info_gpu=" << info_gpu
+                      << ", falling back to CPU LAPACK (n=" << nstart << ")" << std::endl;
+        }
     }
-    // if(fail_info != nullptr) *fail_info = info_gpu;
-    else{
+
+    if (!gpu_succeeded) {
         std::vector<std::complex<double>> hcc(nstart * nstart, {0, 0});
         std::vector<std::complex<double>> scc(nstart * nstart, {0, 0});
         std::vector<std::complex<double>> vcc(nstart * nstart, {0, 0});
@@ -247,13 +242,6 @@ void dngvd_op<std::complex<double>, base_device::DEVICE_GPU>::operator()(const b
         hipErrcheck(hipMemcpy(_vcc, vcc.data(), sizeof(std::complex<double>) * vcc.size(), hipMemcpyHostToDevice));
         hipErrcheck(hipMemcpy(_eigenvalue, eigenvalue.data(), sizeof(double) * eigenvalue.size(), hipMemcpyHostToDevice));
     }
-
-
-
-
-
-
-    
 }
 
 #ifdef __LCAO

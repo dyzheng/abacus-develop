@@ -4,6 +4,8 @@
 #include <base/macros/macros.h>
 
 #include <cusolverDn.h>
+#include <vector>
+#include <iostream>
 
 namespace hsolver
 {
@@ -217,8 +219,38 @@ struct dngvd_op<T, base_device::DEVICE_GPU>
         assert(nstart == ldh);
         // A to V
         cudaErrcheck(cudaMemcpy(V, A, sizeof(T) * ldh * nstart, cudaMemcpyDeviceToDevice));
-        xhegvd_wrapper(CUBLAS_FILL_MODE_UPPER, nstart, V, ldh,
-            (T*)B, ldh, W);
+        try
+        {
+            xhegvd_wrapper(CUBLAS_FILL_MODE_UPPER, nstart, V, ldh,
+                (T*)B, ldh, W);
+        }
+        catch (const DiagoCudaException& e)
+        {
+            // GPU cusolver failed, fall back to CPU LAPACK transparently
+            std::cerr << "WARNING: " << e.what()
+                      << ", falling back to CPU LAPACK for this subspace diagonalization (n="
+                      << nstart << ")" << std::endl;
+
+            const int mat_size = nstart * ldh;
+            std::vector<T> h_A(mat_size);
+            std::vector<T> h_B(mat_size);
+            std::vector<T> h_V(mat_size);
+            std::vector<Real> h_W(nstart);
+
+            // D2H: copy original A and B from GPU to CPU
+            cudaErrcheck(cudaMemcpy(h_A.data(), A, sizeof(T) * mat_size, cudaMemcpyDeviceToHost));
+            cudaErrcheck(cudaMemcpy(h_B.data(), B, sizeof(T) * mat_size, cudaMemcpyDeviceToHost));
+
+            // Call CPU LAPACK version
+            base_device::DEVICE_CPU* cpu_ctx = {};
+            dngvd_op<T, base_device::DEVICE_CPU>()(cpu_ctx, nstart, ldh,
+                                                    h_A.data(), h_B.data(),
+                                                    h_W.data(), h_V.data());
+
+            // H2D: copy results back to GPU
+            cudaErrcheck(cudaMemcpy(V, h_V.data(), sizeof(T) * mat_size, cudaMemcpyHostToDevice));
+            cudaErrcheck(cudaMemcpy(W, h_W.data(), sizeof(Real) * nstart, cudaMemcpyHostToDevice));
+        }
     }
 };
 
@@ -237,7 +269,35 @@ struct dnevx_op<T, base_device::DEVICE_GPU>
         assert(nstart <= ldh);
         // A to V
         cudaErrcheck(cudaMemcpy(V, A, sizeof(T) * nstart * ldh, cudaMemcpyDeviceToDevice));
-        xheevd_wrapper(CUBLAS_FILL_MODE_LOWER, nstart, V, ldh, W);
+        try
+        {
+            xheevd_wrapper(CUBLAS_FILL_MODE_LOWER, nstart, V, ldh, W);
+        }
+        catch (const DiagoCudaException& e)
+        {
+            // GPU cusolver failed, fall back to CPU LAPACK transparently
+            std::cerr << "WARNING: " << e.what()
+                      << ", falling back to CPU LAPACK for this standard diagonalization (n="
+                      << nstart << ")" << std::endl;
+
+            const int mat_size = nstart * ldh;
+            std::vector<T> h_A(mat_size);
+            std::vector<T> h_V(mat_size);
+            std::vector<Real> h_W(nstart);
+
+            // D2H: copy original A from GPU to CPU
+            cudaErrcheck(cudaMemcpy(h_A.data(), A, sizeof(T) * mat_size, cudaMemcpyDeviceToHost));
+
+            // Call CPU LAPACK version
+            base_device::DEVICE_CPU* cpu_ctx = {};
+            dnevx_op<T, base_device::DEVICE_CPU>()(cpu_ctx, nstart, ldh,
+                                                    h_A.data(), m,
+                                                    h_W.data(), h_V.data());
+
+            // H2D: copy results back to GPU
+            cudaErrcheck(cudaMemcpy(V, h_V.data(), sizeof(T) * mat_size, cudaMemcpyHostToDevice));
+            cudaErrcheck(cudaMemcpy(W, h_W.data(), sizeof(Real) * nstart, cudaMemcpyHostToDevice));
+        }
     }
 };
 
