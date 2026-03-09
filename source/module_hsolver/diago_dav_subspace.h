@@ -171,11 +171,11 @@ class Diago_DavSubspace
     const T *one = nullptr, *zero = nullptr, *neg_one = nullptr;
     const T one_ = static_cast<T>(1.0), zero_ = static_cast<T>(0.0), neg_one_ = static_cast<T>(-1.0);
 
+  public:
     // Static variables for condition number check caching
     static bool use_cpu_dngvd_;
     static bool cond_check_done_;
 
-  public:
     // Static method to reset state
     static void reset_cond_check() {
         cond_check_done_ = false;

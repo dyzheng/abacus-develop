@@ -1,4 +1,5 @@
 #include "diago_dav_subspace.h"
+#include "diago_cond_check.h"
 
 #include "diago_iter_assist.h"
 #include "module_base/memory.h"
@@ -7,70 +8,8 @@
 #include "module_hsolver/kernels/dngvd_op.h"
 #include "module_hsolver/kernels/math_kernel_op.h"
 #include "module_base/kernels/dsp/dsp_connector.h"
-#include "module_base/lapack_connector.h"
 
 #include <vector>
-#include <iostream>
-
-namespace hsolver
-{
-
-// Helper function to check matrix condition number
-// Uses Cholesky decomposition to test if scc matrix is well-conditioned
-template <typename T>
-bool check_matrix_condition_number(const T* scc_gpu,
-                                   const int nbase,
-                                   const double threshold = 1e12)
-{
-    using Real = typename GetTypeReal<T>::type;
-
-    // 1. D2H copy scc matrix
-    std::vector<T> scc_cpu(nbase * nbase);
-#if defined(__CUDA) || defined(__ROCM)
-    cudaMemcpy(scc_cpu.data(), scc_gpu,
-               sizeof(T) * nbase * nbase,
-               cudaMemcpyDeviceToHost);
-#else
-    // If not GPU, scc_gpu is already on CPU
-    std::copy(scc_gpu, scc_gpu + nbase * nbase, scc_cpu.begin());
-#endif
-
-    // 2. Try Cholesky decomposition (scc should be positive definite)
-    // If it fails, matrix is not positive definite -> use CPU
-    int info = 0;
-    LapackConnector::potrf('U', nbase, scc_cpu.data(), nbase, info);
-
-    if (info != 0) {
-        // Cholesky failed - matrix is not positive definite or is ill-conditioned
-        std::cout << "WARNING: scc matrix Cholesky decomposition failed (info=" << info
-                  << "), using CPU dngvd for numerical stability" << std::endl;
-        return true;  // Use CPU
-    }
-
-    // 3. Estimate condition number from diagonal elements of Cholesky factor
-    // For a positive definite matrix A = L*L^T, cond(A) >= (max(diag(L))/min(diag(L)))^2
-    Real max_diag = 0.0;
-    Real min_diag = 1e100;
-    for (int i = 0; i < nbase; i++) {
-        Real diag_val = std::abs(scc_cpu[i * nbase + i]);
-        max_diag = std::max(max_diag, diag_val);
-        min_diag = std::min(min_diag, diag_val);
-    }
-
-    double cond_estimate = (min_diag > 1e-16) ? (max_diag / min_diag) * (max_diag / min_diag) : 1e16;
-
-    if (cond_estimate > threshold) {
-        std::cout << "WARNING: scc matrix estimated condition number "
-                  << cond_estimate << " exceeds threshold " << threshold
-                  << ", using CPU dngvd for numerical stability"
-                  << std::endl;
-        return true;  // Use CPU
-    }
-
-    return false;  // Use GPU
-}
-
-} // namespace hsolver
 
 using namespace hsolver;
 

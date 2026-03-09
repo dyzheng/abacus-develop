@@ -1,4 +1,6 @@
 #include "diago_iter_assist.h"
+#include "diago_dav_subspace.h"
+#include "diago_cond_check.h"
 #include "module_parameter/parameter.h"
 #include "module_base/blas_connector.h"
 #include "module_base/complexmatrix.h"
@@ -378,7 +380,53 @@ void DiagoIterAssist<T, Device>::diagH_LAPACK(const int nstart,
     resmem_var_op()(ctx, eigenvalues, nstart);
     setmem_var_op()(ctx, eigenvalues, 0, nstart);
 
-    dngvd_op<T, Device>()(ctx, nstart, ldh, hcc, scc, eigenvalues, vcc);
+    // Determine if condition number check is needed
+    bool should_check = false;
+    if (PARAM.inp.diago_cond_check == "always") {
+        should_check = true;
+    } else if (PARAM.inp.diago_cond_check == "first" && !Diago_DavSubspace<T, Device>::cond_check_done_) {
+        should_check = true;
+    }
+
+    // Perform check if needed and on GPU device
+    if (should_check && base_device::get_device_type<Device>(ctx) == base_device::GpuDevice) {
+        Diago_DavSubspace<T, Device>::use_cpu_dngvd_ =
+            check_matrix_condition_number(scc, nstart, 1e12);
+        Diago_DavSubspace<T, Device>::cond_check_done_ = true;
+    }
+
+    // Select execution path based on decision
+    if (Diago_DavSubspace<T, Device>::use_cpu_dngvd_ &&
+        base_device::get_device_type<Device>(ctx) == base_device::GpuDevice) {
+        // Use CPU path
+        std::vector<T> scc_cpu(nstart * ldh);
+        std::vector<T> hcc_cpu(nstart * ldh);
+        std::vector<T> vcc_cpu(nstart * ldh);
+        std::vector<Real> eigenvalue_cpu(nstart);
+
+        // D2H copy
+#if ((defined __CUDA) || (defined __ROCM))
+        cudaMemcpy(scc_cpu.data(), scc, sizeof(T) * nstart * ldh, cudaMemcpyDeviceToHost);
+        cudaMemcpy(hcc_cpu.data(), hcc, sizeof(T) * nstart * ldh, cudaMemcpyDeviceToHost);
+#endif
+
+        // Call CPU dngvd
+        base_device::DEVICE_CPU* cpu_ctx_local = {};
+        dngvd_op<T, base_device::DEVICE_CPU>()(
+            cpu_ctx_local, nstart, ldh,
+            hcc_cpu.data(), scc_cpu.data(),
+            eigenvalue_cpu.data(), vcc_cpu.data()
+        );
+
+        // H2D copy results
+#if ((defined __CUDA) || (defined __ROCM))
+        cudaMemcpy(vcc, vcc_cpu.data(), sizeof(T) * nstart * ldh, cudaMemcpyHostToDevice);
+        cudaMemcpy(eigenvalues, eigenvalue_cpu.data(), sizeof(Real) * nstart, cudaMemcpyHostToDevice);
+#endif
+    } else {
+        // Original GPU path (keep existing code)
+        dngvd_op<T, Device>()(ctx, nstart, ldh, hcc, scc, eigenvalues, vcc);
+    }
 
     if (base_device::get_device_type<Device>(ctx) == base_device::GpuDevice)
     {
