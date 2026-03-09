@@ -41,7 +41,7 @@ bool check_matrix_condition_number(const T* scc_gpu,
 
     if (info != 0) {
         // Cholesky failed - matrix is not positive definite or is ill-conditioned
-        std::cout << "WARNING: scc matrix Cholesky decomposition failed (info=" << info
+        std::cout << "DIAGO_COND_CHECK: scc matrix Cholesky decomposition failed (info=" << info
                   << "), using CPU dngvd for numerical stability" << std::endl;
         return true;  // Use CPU
     }
@@ -58,14 +58,19 @@ bool check_matrix_condition_number(const T* scc_gpu,
 
     double cond_estimate = (min_diag > 1e-16) ? (max_diag / min_diag) * (max_diag / min_diag) : 1e16;
 
+    std::cout << "DIAGO_COND_CHECK: scc matrix condition number estimate = " << cond_estimate
+              << " (threshold = " << threshold << ")" << std::endl;
+    std::cout.flush();
+
     if (cond_estimate > threshold) {
-        std::cout << "WARNING: scc matrix estimated condition number "
-                  << cond_estimate << " exceeds threshold " << threshold
-                  << ", using CPU dngvd for numerical stability"
+        std::cout << "DIAGO_COND_CHECK: condition number exceeds threshold, using CPU dngvd"
                   << std::endl;
+        std::cout.flush();
         return true;  // Use CPU
     }
 
+    std::cout << "DIAGO_COND_CHECK: condition number OK, using GPU dngvd" << std::endl;
+    std::cout.flush();
     return false;  // Use GPU
 }
 

@@ -8,6 +8,7 @@
 #include "module_hsolver/kernels/dngvd_op.h"
 #include "module_hsolver/kernels/math_kernel_op.h"
 #include "module_base/kernels/dsp/dsp_connector.h"
+#include "module_parameter/parameter.h"
 
 #include <vector>
 
@@ -563,7 +564,49 @@ void Diago_DavSubspace<T, Device>::diag_zhegvx(const int& nbase,
                 base_device::memory::synchronize_memory_op<T, Device, Device>()(this->ctx, this->ctx, hcc_gpu + i * nbase, hcc + i * nbase_x, nbase);
                 base_device::memory::synchronize_memory_op<T, Device, Device>()(this->ctx, this->ctx, scc_gpu + i * nbase, scc + i * nbase_x, nbase);
             }
-            dngvd_op<T, Device>()(this->ctx, nbase, nbase, hcc_gpu, scc_gpu, eigenvalue_gpu, vcc_gpu);
+
+            // Determine if condition number check is needed
+            bool should_check = false;
+            if (PARAM.inp.diago_cond_check == "always") {
+                should_check = true;
+            } else if (PARAM.inp.diago_cond_check == "first" && !Diago_DavSubspace<T, Device>::cond_check_done_) {
+                should_check = true;
+            }
+
+            // Perform check if needed
+            if (should_check) {
+                Diago_DavSubspace<T, Device>::use_cpu_dngvd_ =
+                    check_matrix_condition_number(scc_gpu, nbase, 1e12);
+                Diago_DavSubspace<T, Device>::cond_check_done_ = true;
+            }
+
+            // Select execution path based on decision
+            if (Diago_DavSubspace<T, Device>::use_cpu_dngvd_) {
+                // Use CPU path
+                std::vector<T> hcc_cpu(nbase * nbase);
+                std::vector<T> scc_cpu(nbase * nbase);
+                std::vector<T> vcc_cpu(nbase * nbase);
+                std::vector<Real> eigenvalue_cpu(nbase);
+
+                // D2H copy
+                cudaMemcpy(hcc_cpu.data(), hcc_gpu, sizeof(T) * nbase * nbase, cudaMemcpyDeviceToHost);
+                cudaMemcpy(scc_cpu.data(), scc_gpu, sizeof(T) * nbase * nbase, cudaMemcpyDeviceToHost);
+
+                // Call CPU dngvd
+                base_device::DEVICE_CPU* cpu_ctx_local = {};
+                dngvd_op<T, base_device::DEVICE_CPU>()(
+                    cpu_ctx_local, nbase, nbase,
+                    hcc_cpu.data(), scc_cpu.data(),
+                    eigenvalue_cpu.data(), vcc_cpu.data()
+                );
+
+                // H2D copy results
+                cudaMemcpy(vcc_gpu, vcc_cpu.data(), sizeof(T) * nbase * nbase, cudaMemcpyHostToDevice);
+                cudaMemcpy(eigenvalue_gpu, eigenvalue_cpu.data(), sizeof(Real) * nbase, cudaMemcpyHostToDevice);
+            } else {
+                // Original GPU path
+                dngvd_op<T, Device>()(this->ctx, nbase, nbase, hcc_gpu, scc_gpu, eigenvalue_gpu, vcc_gpu);
+            }
             for(int i=0;i<nbase;i++)
             {
                 base_device::memory::synchronize_memory_op<T, Device, Device>()(this->ctx, this->ctx, vcc + i * nbase_x, vcc_gpu + i * nbase, nbase);

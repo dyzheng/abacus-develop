@@ -282,10 +282,10 @@ void HSolverPW<T, Device>::solve(hamilt::Hamilt<T, Device>* pHamilt,
     std::vector<Real> eigenvalues(this->wfc_basis->nks * psi.get_nbands(), 0.0);
     ethr_band.resize(psi.get_nbands(), this->diag_thr);
 
-    // Initialize k-point continuity if enabled
-    static int count = 0;
-    if (use_k_continuity) {
+    // Initialize k-point continuity if enabled (only once)
+    if (use_k_continuity && !k_neighbors_built_) {
         build_k_neighbors();
+        k_neighbors_built_ = true;
     }
 
     // Loop over k points for solve Hamiltonian to charge density
@@ -308,13 +308,20 @@ void HSolverPW<T, Device>::solve(hamilt::Hamilt<T, Device>* pHamilt,
             // update psi pointer for each k point
             psi.fix_k(ik);
 
-            // If using k-point continuity and not first k-point, propagate from parent.
-            // NOTE: propagate_psi accesses psi(from_ik, ib, 0) directly, which requires
-            // the source k-point data in GPU memory. In PAGED_GPU mode only one k-point
-            // is on GPU at a time, so we skip propagation to avoid accessing invalid memory.
-            if (ik > 0 && count == 0 && k_parent.find(ik) != k_parent.end()
-                && psi.get_storage_mode() != psi::PsiStorageMode::PAGED_GPU) {
-                propagate_psi(psi, k_parent[ik], ik);
+            // Propagate wavefunction from parent k-point (only in first SCF step)
+            if (scf_step_ == 0 && ik > 0 && k_parent.find(ik) != k_parent.end()) {
+                int from_ik = k_parent[ik];
+                if (psi.get_storage_mode() == psi::PsiStorageMode::PAGED_GPU) {
+                    // In PAGED_GPU mode, need to load parent k-point first
+                    psi.load_k_to_gpu(from_ik);
+                    propagate_psi(psi, from_ik, ik);
+                    // Reload current k-point after propagation
+                    psi.load_k_to_gpu(ik);
+                    psi.fix_k(ik);
+                } else {
+                    // In non-PAGED mode, all k-points are in memory
+                    propagate_psi(psi, from_ik, ik);
+                }
             }
 
             // template add precondition calculating here
@@ -398,8 +405,7 @@ void HSolverPW<T, Device>::solve(hamilt::Hamilt<T, Device>* pHamilt,
         }
     }
 
-
-    count++;
+    scf_step_++;
     // END Loop over k points
 
     // copy eigenvalues to ekb in ElecState
@@ -935,36 +941,47 @@ template <typename T, typename Device>
 void HSolverPW<T, Device>::propagate_psi(psi::Psi<T, Device>& psi, const int from_ik, const int to_ik) {
     const int nbands = psi.get_nbands();
     const int npwk = this->wfc_basis->npwk[to_ik];
-    
+
     // Get k-point difference
     ModuleBase::Vector3<double> dk = kvecs_c[to_ik] - kvecs_c[from_ik];
-    
-    // Allocate porter locally
+
+    // Allocate porter for real-space wavefunction
     T* porter = nullptr;
     resmem_complex_op()(this->ctx, porter, this->wfc_basis->nmaxgr, "HSolverPW::porter");
-    
+
     // Process each band
     for (int ib = 0; ib < nbands; ib++)
     {
-        // Fix current k-point and band
-        // psi.fix_k(from_ik);
-        
-        // FFT to real space
-        // this->wfc_basis->recip_to_real(this->ctx, psi.get_pointer(ib), porter, from_ik);
+        // FFT from reciprocal space to real space
         this->wfc_basis->recip_to_real(this->ctx, &psi(from_ik, ib, 0), porter, from_ik);
-        
-        // Apply phase factor
-        //     // TODO: Check how to get the r vector
-        //     ModuleBase::Vector3<double> r = this->wfc_basis->get_ir2r(ir);
-        //     double phase = this->wfc_basis->tpiba * (dk.x * r.x + dk.y * r.y + dk.z * r.z);
-        //     psi_real[ir] *= std::exp(std::complex<double>(0.0, phase));
-        // }
-        
-        // Fix k-point for target
-        // psi.fix_k(to_ik);
-        
+
+        // Apply phase factor exp(i*dk·r) in real space
+        // For plane wave basis: psi_k2(r) = exp(i*(k2-k1)·r) * psi_k1(r)
+        const int nrxx = this->wfc_basis->nrxx;
+
+        for (int ir = 0; ir < nrxx; ir++) {
+            // Calculate grid indices from linear index
+            const int iz = ir / (this->wfc_basis->nx * this->wfc_basis->ny);
+            const int ixy = ir % (this->wfc_basis->nx * this->wfc_basis->ny);
+            const int iy = ixy / this->wfc_basis->nx;
+            const int ix = ixy % this->wfc_basis->nx;
+
+            // Calculate fractional coordinates
+            const double fx = static_cast<double>(ix) / this->wfc_basis->nx;
+            const double fy = static_cast<double>(iy) / this->wfc_basis->ny;
+            const double fz = static_cast<double>(iz + this->wfc_basis->startz[this->wfc_basis->poolrank]) / this->wfc_basis->nz;
+
+            // dk is in Cartesian coordinates (2pi/a units)
+            // phase = 2π * dk · f where f is fractional coordinate
+            double phase = dk.x * fx + dk.y * fy + dk.z * fz;
+            phase *= ModuleBase::TWO_PI;
+
+            // Apply phase factor: exp(i*phase)
+            T phase_factor = T(std::cos(phase), std::sin(phase));
+            porter[ir] *= phase_factor;
+        }
+
         // FFT back to reciprocal space
-        // this->wfc_basis->real_to_recip(this->ctx, porter, psi.get_pointer(ib), to_ik, true);
         this->wfc_basis->real_to_recip(this->ctx, porter, &psi(to_ik, ib, 0), to_ik);
     }
 

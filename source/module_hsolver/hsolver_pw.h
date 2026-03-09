@@ -115,7 +115,9 @@ class HSolverPW
     std::vector<int> k_order;
     std::unordered_map<int, int> k_parent;
     std::vector<ModuleBase::Vector3<double>> kvecs_c;
-    
+    bool k_neighbors_built_ = false;
+    int scf_step_ = 0;
+
     void build_k_neighbors();
     void propagate_psi(psi::Psi<T, Device>& psi, const int from_ik, const int to_ik);
 
