@@ -2,6 +2,7 @@
 
 #include "module_base/global_variable.h"
 #include "module_base/module_device/device.h"
+#include "module_base/tool_quit.h"
 #include "module_parameter/parameter.h"
 
 #include <cassert>
@@ -628,9 +629,28 @@ std::tuple<const T*, int> Psi<T, Device>::to_range(const Range& range) const
     }
     else // [r1, r2] is the range of index2 with length m
     {
-        const T* p = &this->psi[(i1 * (k_first ? this->nbands : this->nk) + r1) * this->nbasis];
-        int m = (r2 - r1 + 1) * this->npol;
-        return std::tuple<const T*, int>(p, m);
+        // In PAGED_GPU mode, GPU buffer only contains current k-point data at offset 0
+        if (storage_mode_ == PsiStorageMode::PAGED_GPU)
+        {
+            if (k_first && i1 != current_k)
+            {
+                // Requested k-point is not the one currently loaded
+                // This should not happen if fix_k() was called correctly
+                ModuleBase::WARNING_QUIT("Psi::to_range",
+                    "In PAGED_GPU mode, requested k-point must match current_k");
+            }
+            // In PAGED_GPU mode, data starts at offset 0 regardless of k index
+            const T* p = &this->psi[r1 * this->nbasis];
+            int m = (r2 - r1 + 1) * this->npol;
+            return std::tuple<const T*, int>(p, m);
+        }
+        else
+        {
+            // Original logic for non-paged modes
+            const T* p = &this->psi[(i1 * (k_first ? this->nbands : this->nk) + r1) * this->nbasis];
+            int m = (r2 - r1 + 1) * this->npol;
+            return std::tuple<const T*, int>(p, m);
+        }
     }
 }
 
