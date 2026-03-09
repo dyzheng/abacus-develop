@@ -24,6 +24,7 @@
 #include "module_hamilt_pw/hamilt_pwdft/elecond.h"
 #include "module_hamilt_pw/hamilt_pwdft/hamilt_pw.h"
 #include "module_hsolver/diago_iter_assist.h"
+#include "module_hsolver/diago_dav_subspace.h"
 #include "module_hsolver/hsolver_pw.h"
 #include "module_hsolver/kernels/dngvd_op.h"
 #include "module_hsolver/kernels/math_kernel_op.h"
@@ -267,6 +268,12 @@ void ESolver_KS_PW<T, Device>::before_scf(UnitCell& ucell, const int istep)
 {
     ModuleBase::TITLE("ESolver_KS_PW", "before_scf");
     ModuleBase::timer::tick("ESolver_KS_PW", "before_scf");
+
+    // Reset condition number check state at the start of each ionic/MD step
+    if (istep == 0) {
+        hsolver::Diago_DavSubspace<std::complex<double>, base_device::DEVICE_GPU>::reset_cond_check();
+        hsolver::Diago_DavSubspace<std::complex<float>, base_device::DEVICE_GPU>::reset_cond_check();
+    }
 
     //! 1) call before_scf() of ESolver_KS
     ESolver_KS<T, Device>::before_scf(ucell, istep);

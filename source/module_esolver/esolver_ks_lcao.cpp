@@ -6,6 +6,7 @@
 #include "module_elecstate/module_dm/cal_dm_psi.h"
 #include "module_hamilt_lcao/module_deltaspin/spin_constrain.h"
 #include "module_hamilt_lcao/module_dftu/dftu.h"
+#include "module_hsolver/diago_dav_subspace.h"
 #include "module_io/berryphase.h"
 #include "module_io/cube_io.h"
 #include "module_io/dos_nao.h"
@@ -523,6 +524,12 @@ template <typename TK, typename TR>
 void ESolver_KS_LCAO<TK, TR>::iter_init(UnitCell& ucell, const int istep, const int iter)
 {
     ModuleBase::TITLE("ESolver_KS_LCAO", "iter_init");
+
+    // Reset condition number check state at the start of each ionic/MD step
+    if (istep == 0 && iter == 1) {
+        hsolver::Diago_DavSubspace<double, base_device::DEVICE_GPU>::reset_cond_check();
+        hsolver::Diago_DavSubspace<std::complex<double>, base_device::DEVICE_GPU>::reset_cond_check();
+    }
 
     // call iter_init() of ESolver_KS
     ESolver_KS<TK>::iter_init(ucell, istep, iter);
