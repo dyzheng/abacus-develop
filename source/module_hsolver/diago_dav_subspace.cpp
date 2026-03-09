@@ -12,6 +12,13 @@
 
 using namespace hsolver;
 
+// Initialize static variables
+template <typename T, typename Device>
+bool Diago_DavSubspace<T, Device>::use_cpu_dngvd_ = false;
+
+template <typename T, typename Device>
+bool Diago_DavSubspace<T, Device>::cond_check_done_ = false;
+
 template <typename T, typename Device>
 Diago_DavSubspace<T, Device>::Diago_DavSubspace(const std::vector<Real>& precondition_in,
                                                 const int& nband_in,
