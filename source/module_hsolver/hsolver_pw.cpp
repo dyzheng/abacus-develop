@@ -283,13 +283,23 @@ void HSolverPW<T, Device>::solve(hamilt::Hamilt<T, Device>* pHamilt,
     ethr_band.resize(psi.get_nbands(), this->diag_thr);
 
     // Initialize k-point continuity if enabled (only once)
-    if (use_k_continuity && !k_neighbors_built_) {
+    // Note: K-point continuity is only supported on CPU due to the need for direct memory access
+    bool use_k_continuity_actual = use_k_continuity;
+#if ((defined __CUDA) || (defined __ROCM))
+    if (std::is_same<Device, base_device::DEVICE_GPU>::value && use_k_continuity) {
+        if (!k_neighbors_built_) {
+            std::cout << "Warning: use_k_continuity is not supported on GPU, disabling it." << std::endl;
+        }
+        use_k_continuity_actual = false;
+    }
+#endif
+    if (use_k_continuity_actual && !k_neighbors_built_) {
         build_k_neighbors();
         k_neighbors_built_ = true;
     }
 
     // Loop over k points for solve Hamiltonian to charge density
-    if (use_k_continuity) {
+    if (use_k_continuity_actual) {
         // K-point continuity case
         for (int i = 0; i < this->wfc_basis->nks; ++i)
         {
