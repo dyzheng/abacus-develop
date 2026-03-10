@@ -390,6 +390,10 @@ void DiagoIterAssist<T, Device>::diagH_LAPACK(const int nstart,
 
     // Perform check if needed and on GPU device
     if (should_check && base_device::get_device_type<Device>(ctx) == base_device::GpuDevice) {
+#if defined(__CUDA) || defined(__ROCM)
+        // Ensure all GPU operations complete before reading matrix for condition check
+        cudaDeviceSynchronize();
+#endif
         Diago_DavSubspace<T, Device>::use_cpu_dngvd_ =
             check_matrix_condition_number(scc, nstart, 1e12);
         Diago_DavSubspace<T, Device>::cond_check_done_ = true;

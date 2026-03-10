@@ -565,6 +565,9 @@ void Diago_DavSubspace<T, Device>::diag_zhegvx(const int& nbase,
                 base_device::memory::synchronize_memory_op<T, Device, Device>()(this->ctx, this->ctx, scc_gpu + i * nbase, scc + i * nbase_x, nbase);
             }
 
+            // Ensure all GPU memory operations complete before condition check
+            cudaDeviceSynchronize();
+
             // Determine if condition number check is needed
             bool should_check = false;
             if (PARAM.inp.diago_cond_check == "always") {
