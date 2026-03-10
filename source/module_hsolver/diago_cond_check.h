@@ -15,7 +15,8 @@ namespace hsolver
 {
 
 // Helper function to check matrix condition number
-// Uses Cholesky decomposition to test if scc matrix is well-conditioned
+// Uses diagonal ratio to estimate if scc matrix is well-conditioned
+// More robust than Cholesky for near-singular matrices
 template <typename T>
 bool check_matrix_condition_number(const T* scc_gpu,
                                    const int nbase,
@@ -34,49 +35,46 @@ bool check_matrix_condition_number(const T* scc_gpu,
     std::copy(scc_gpu, scc_gpu + nbase * nbase, scc_cpu.begin());
 #endif
 
-    // 2. Save original diagonal elements before Cholesky destroys the matrix
-    std::vector<Real> original_diag(nbase);
-    for (int i = 0; i < nbase; i++) {
-        original_diag[i] = std::abs(scc_cpu[i * nbase + i]);
-    }
-
-    // 3. Try Cholesky decomposition (scc should be positive definite)
-    // If it fails, matrix is not positive definite -> use CPU
-    int info = 0;
-    LapackConnector::potrf('U', nbase, scc_cpu.data(), nbase, info);
-
-    if (info != 0) {
-        // Cholesky failed - matrix is not positive definite or is ill-conditioned
-        std::cout << "DIAGO_COND_CHECK: scc matrix Cholesky decomposition failed (info=" << info
-                  << "), using CPU dngvd for numerical stability" << std::endl;
-        return true;  // Use CPU
-    }
-
-    // 4. Estimate condition number from diagonal elements of Cholesky factor
-    // For a positive definite matrix A = L*L^T, cond(A) >= (max(diag(L))/min(diag(L)))^2
+    // 2. Check diagonal elements for near-zero or negative values
     Real max_diag = 0.0;
     Real min_diag = 1e100;
+    bool has_negative = false;
+    bool has_zero = false;
+
     for (int i = 0; i < nbase; i++) {
-        Real diag_val = std::abs(scc_cpu[i * nbase + i]);
-        max_diag = std::max(max_diag, diag_val);
-        min_diag = std::min(min_diag, diag_val);
+        Real diag_val = std::real(scc_cpu[i * nbase + i]);
+        if (diag_val <= 0.0) {
+            if (diag_val < -1e-10) {
+                has_negative = true;
+            } else {
+                has_zero = true;
+            }
+        }
+        Real abs_diag = std::abs(diag_val);
+        max_diag = std::max(max_diag, abs_diag);
+        if (abs_diag > 1e-16) {
+            min_diag = std::min(min_diag, abs_diag);
+        }
     }
 
-    double cond_estimate = (min_diag > 1e-16) ? (max_diag / min_diag) * (max_diag / min_diag) : 1e16;
+    // 3. Estimate condition number from diagonal ratio
+    // For overlap matrix S, cond(S) is roughly bounded by max_diag/min_diag
+    double diag_ratio = (min_diag > 1e-16) ? (max_diag / min_diag) : 1e16;
 
-    std::cout << "DIAGO_COND_CHECK: scc matrix condition number estimate = " << cond_estimate
-              << " (threshold = " << threshold << ")" << std::endl;
-    std::cout.flush();
-
-    if (cond_estimate > threshold) {
-        std::cout << "DIAGO_COND_CHECK: condition number exceeds threshold, using CPU dngvd"
-                  << std::endl;
-        std::cout.flush();
-        return true;  // Use CPU
+    // 4. Decision: only fall back to CPU for severe numerical issues
+    // GPU cusolver is more robust than Cholesky for near-singular matrices
+    if (has_negative) {
+        std::cout << "WARNING: scc matrix has negative diagonal, falling back to CPU dngvd for numerical stability" << std::endl;
+        return true;
     }
 
-    std::cout << "DIAGO_COND_CHECK: condition number OK, using GPU dngvd" << std::endl;
-    std::cout.flush();
+    if (diag_ratio > threshold) {
+        std::cout << "WARNING: scc matrix diagonal ratio " << diag_ratio
+                  << " exceeds threshold " << threshold
+                  << ", falling back to CPU dngvd for numerical stability" << std::endl;
+        return true;
+    }
+
     return false;  // Use GPU
 }
 

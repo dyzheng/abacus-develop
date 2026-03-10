@@ -386,17 +386,30 @@ void DiagoIterAssist<T, Device>::diagH_LAPACK(const int nstart,
         should_check = true;
     } else if (PARAM.inp.diago_cond_check == "first" && !Diago_DavSubspace<T, Device>::cond_check_done_) {
         should_check = true;
+    } else if (PARAM.inp.diago_cond_check == "always-false") {
+        // Force CPU path without checking
+        Diago_DavSubspace<T, Device>::use_cpu_dngvd_ = true;
+        Diago_DavSubspace<T, Device>::cond_check_done_ = true;
     }
 
     // Perform check if needed and on GPU device
     if (should_check && base_device::get_device_type<Device>(ctx) == base_device::GpuDevice) {
 #if defined(__CUDA) || defined(__ROCM)
-        // Ensure all GPU operations complete before reading matrix for condition check
+        // Copy strided scc matrix to contiguous buffer for condition check
+        T* scc_contig = nullptr;
+        base_device::memory::resize_memory_op<T, Device>()(ctx, scc_contig, nstart * nstart);
+        for (int i = 0; i < nstart; i++) {
+            base_device::memory::synchronize_memory_op<T, Device, Device>()(
+                ctx, ctx, scc_contig + i * nstart, scc + i * ldh, nstart);
+        }
         cudaDeviceSynchronize();
-#endif
+
         Diago_DavSubspace<T, Device>::use_cpu_dngvd_ =
-            check_matrix_condition_number(scc, nstart, 1e12);
+            check_matrix_condition_number(scc_contig, nstart, 1e12);
         Diago_DavSubspace<T, Device>::cond_check_done_ = true;
+
+        base_device::memory::delete_memory_op<T, Device>()(ctx, scc_contig);
+#endif
     }
 
     // Select execution path based on decision

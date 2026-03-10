@@ -712,13 +712,13 @@ void ReadInput::item_system()
     }
     {
         Input_Item item("diago_cond_check");
-        item.annotation = "condition number check for GPU dngvd: first, always, off";
+        item.annotation = "condition number check for GPU dngvd: first, always, always-false, off";
         read_sync_string(input.diago_cond_check);
         item.check_value = [](const Input_Item& item, const Parameter& para) {
             const std::string& mode = para.input.diago_cond_check;
-            if (mode != "first" && mode != "always" && mode != "off")
+            if (mode != "first" && mode != "always" && mode != "always-false" && mode != "off")
             {
-                ModuleBase::WARNING_QUIT("ReadInput", "diago_cond_check must be 'first', 'always', or 'off'");
+                ModuleBase::WARNING_QUIT("ReadInput", "diago_cond_check must be 'first', 'always', 'always-false', or 'off'");
             }
         };
         this->add_item(item);

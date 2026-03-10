@@ -574,6 +574,10 @@ void Diago_DavSubspace<T, Device>::diag_zhegvx(const int& nbase,
                 should_check = true;
             } else if (PARAM.inp.diago_cond_check == "first" && !Diago_DavSubspace<T, Device>::cond_check_done_) {
                 should_check = true;
+            } else if (PARAM.inp.diago_cond_check == "always-false") {
+                // Force CPU path without checking
+                Diago_DavSubspace<T, Device>::use_cpu_dngvd_ = true;
+                Diago_DavSubspace<T, Device>::cond_check_done_ = true;
             }
 
             // Perform check if needed
