@@ -12,6 +12,7 @@
 #include "module_hsolver/diago_david.h"
 #include "module_hsolver/diago_iter_assist.h"
 #include "module_hsolver/kernels/dngvd_op.h"
+#include "module_hsolver/kernels/apply_phase_op.h"
 #include "module_parameter/parameter.h"
 #include "module_psi/psi.h"
 #include "module_base/global_variable.h"
@@ -283,23 +284,13 @@ void HSolverPW<T, Device>::solve(hamilt::Hamilt<T, Device>* pHamilt,
     ethr_band.resize(psi.get_nbands(), this->diag_thr);
 
     // Initialize k-point continuity if enabled (only once)
-    // Note: K-point continuity is only supported on CPU due to the need for direct memory access
-    bool use_k_continuity_actual = use_k_continuity;
-#if ((defined __CUDA) || (defined __ROCM))
-    if (std::is_same<Device, base_device::DEVICE_GPU>::value && use_k_continuity) {
-        if (!k_neighbors_built_) {
-            std::cout << "Warning: use_k_continuity is not supported on GPU, disabling it." << std::endl;
-        }
-        use_k_continuity_actual = false;
-    }
-#endif
-    if (use_k_continuity_actual && !k_neighbors_built_) {
+    if (use_k_continuity && !k_neighbors_built_) {
         build_k_neighbors();
         k_neighbors_built_ = true;
     }
 
     // Loop over k points for solve Hamiltonian to charge density
-    if (use_k_continuity_actual) {
+    if (use_k_continuity) {
         // K-point continuity case
         for (int i = 0; i < this->wfc_basis->nks; ++i)
         {
@@ -325,7 +316,9 @@ void HSolverPW<T, Device>::solve(hamilt::Hamilt<T, Device>* pHamilt,
                     // In PAGED_GPU mode, need to load parent k-point first
                     psi.load_k_to_gpu(from_ik);
                     propagate_psi(psi, from_ik, ik);
-                    // Reload current k-point after propagation
+                    // Store the propagated result back to CPU
+                    psi.store_k_from_gpu(ik);
+                    // Now reload it to GPU for the solver
                     psi.load_k_to_gpu(ik);
                     psi.fix_k(ik);
                 } else {
@@ -965,31 +958,22 @@ void HSolverPW<T, Device>::propagate_psi(psi::Psi<T, Device>& psi, const int fro
         // FFT from reciprocal space to real space
         this->wfc_basis->recip_to_real(this->ctx, &psi(from_ik, ib, 0), porter, from_ik);
 
-        // Apply phase factor exp(i*dk·r) in real space
+        // Apply phase factor exp(i*dk·r) in real space using kernel operation
         // For plane wave basis: psi_k2(r) = exp(i*(k2-k1)·r) * psi_k1(r)
         const int nrxx = this->wfc_basis->nrxx;
 
-        for (int ir = 0; ir < nrxx; ir++) {
-            // Calculate grid indices from linear index
-            const int iz = ir / (this->wfc_basis->nx * this->wfc_basis->ny);
-            const int ixy = ir % (this->wfc_basis->nx * this->wfc_basis->ny);
-            const int iy = ixy / this->wfc_basis->nx;
-            const int ix = ixy % this->wfc_basis->nx;
-
-            // Calculate fractional coordinates
-            const double fx = static_cast<double>(ix) / this->wfc_basis->nx;
-            const double fy = static_cast<double>(iy) / this->wfc_basis->ny;
-            const double fz = static_cast<double>(iz + this->wfc_basis->startz[this->wfc_basis->poolrank]) / this->wfc_basis->nz;
-
-            // dk is in Cartesian coordinates (2pi/a units)
-            // phase = 2π * dk · f where f is fractional coordinate
-            double phase = dk.x * fx + dk.y * fy + dk.z * fz;
-            phase *= ModuleBase::TWO_PI;
-
-            // Apply phase factor: exp(i*phase)
-            T phase_factor = T(std::cos(phase), std::sin(phase));
-            porter[ir] *= phase_factor;
-        }
+        apply_phase_op<T, Device>()(
+            this->ctx,
+            nrxx,
+            this->wfc_basis->nx,
+            this->wfc_basis->ny,
+            this->wfc_basis->nz,
+            this->wfc_basis->startz[this->wfc_basis->poolrank],
+            dk.x,
+            dk.y,
+            dk.z,
+            porter
+        );
 
         // FFT back to reciprocal space
         this->wfc_basis->real_to_recip(this->ctx, porter, &psi(to_ik, ib, 0), to_ik);

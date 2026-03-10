@@ -34,7 +34,13 @@ bool check_matrix_condition_number(const T* scc_gpu,
     std::copy(scc_gpu, scc_gpu + nbase * nbase, scc_cpu.begin());
 #endif
 
-    // 2. Try Cholesky decomposition (scc should be positive definite)
+    // 2. Save original diagonal elements before Cholesky destroys the matrix
+    std::vector<Real> original_diag(nbase);
+    for (int i = 0; i < nbase; i++) {
+        original_diag[i] = std::abs(scc_cpu[i * nbase + i]);
+    }
+
+    // 3. Try Cholesky decomposition (scc should be positive definite)
     // If it fails, matrix is not positive definite -> use CPU
     int info = 0;
     LapackConnector::potrf('U', nbase, scc_cpu.data(), nbase, info);
@@ -46,7 +52,7 @@ bool check_matrix_condition_number(const T* scc_gpu,
         return true;  // Use CPU
     }
 
-    // 3. Estimate condition number from diagonal elements of Cholesky factor
+    // 4. Estimate condition number from diagonal elements of Cholesky factor
     // For a positive definite matrix A = L*L^T, cond(A) >= (max(diag(L))/min(diag(L)))^2
     Real max_diag = 0.0;
     Real min_diag = 1e100;
