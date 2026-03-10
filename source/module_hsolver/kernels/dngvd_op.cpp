@@ -74,11 +74,14 @@ struct dngvd_op<T, base_device::DEVICE_CPU>
             }
             ofs.close();
         }
-        assert(0 == info);
 
         delete[] work;
         delete[] rwork;
         delete[] iwork;
+
+        if (0 != info) {
+            throw std::runtime_error("CPU LAPACK zhegvd failed with info=" + std::to_string(info));
+        }
     }
 };
 

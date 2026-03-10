@@ -81,22 +81,31 @@ void dngvd_op<double, base_device::DEVICE_GPU>::operator()(const base_device::DE
     }
 
     if (!gpu_succeeded) {
+        std::cerr << "Attempting CPU LAPACK fallback for n=" << nstart << std::endl;
         std::vector<double> hcc(nstart * nstart, 0.0);
         std::vector<double> scc(nstart * nstart, 0.0);
         std::vector<double> vcc(nstart * nstart, 0.0);
         std::vector<double> eigenvalue(nstart, 0);
         hipErrcheck(hipMemcpy(hcc.data(), _hcc, sizeof(double) * hcc.size(), hipMemcpyDeviceToHost));
         hipErrcheck(hipMemcpy(scc.data(), _scc, sizeof(double) * scc.size(), hipMemcpyDeviceToHost));
-        base_device::DEVICE_CPU* cpu_ctx = {};
-        dngvd_op<double, base_device::DEVICE_CPU>()(cpu_ctx,
-                                                   nstart,
-                                                   ldh,
-                                                   hcc.data(),
-                                                   scc.data(),
-                                                   eigenvalue.data(),
-                                                   vcc.data());
-        hipErrcheck(hipMemcpy(_vcc, vcc.data(), sizeof(double) * vcc.size(), hipMemcpyHostToDevice));
-        hipErrcheck(hipMemcpy(_eigenvalue, eigenvalue.data(), sizeof(double) * eigenvalue.size(), hipMemcpyHostToDevice));
+
+        try {
+            base_device::DEVICE_CPU* cpu_ctx = {};
+            dngvd_op<double, base_device::DEVICE_CPU>()(cpu_ctx,
+                                                       nstart,
+                                                       ldh,
+                                                       hcc.data(),
+                                                       scc.data(),
+                                                       eigenvalue.data(),
+                                                       vcc.data());
+            hipErrcheck(hipMemcpy(_vcc, vcc.data(), sizeof(double) * vcc.size(), hipMemcpyHostToDevice));
+            hipErrcheck(hipMemcpy(_eigenvalue, eigenvalue.data(), sizeof(double) * eigenvalue.size(), hipMemcpyHostToDevice));
+            std::cerr << "CPU LAPACK fallback succeeded for n=" << nstart << std::endl;
+        }
+        catch (const std::exception& cpu_error) {
+            std::cerr << "ERROR: CPU LAPACK fallback also failed: " << cpu_error.what() << std::endl;
+            throw std::runtime_error("Both GPU hipsolver and CPU LAPACK failed for dngvd with n=" + std::to_string(nstart));
+        }
     }
 }
 #endif // __LCAO
@@ -225,22 +234,31 @@ void dngvd_op<std::complex<double>, base_device::DEVICE_GPU>::operator()(const b
     }
 
     if (!gpu_succeeded) {
+        std::cerr << "Attempting CPU LAPACK fallback for n=" << nstart << std::endl;
         std::vector<std::complex<double>> hcc(nstart * nstart, {0, 0});
         std::vector<std::complex<double>> scc(nstart * nstart, {0, 0});
         std::vector<std::complex<double>> vcc(nstart * nstart, {0, 0});
         std::vector<double> eigenvalue(nstart, 0);
         hipErrcheck(hipMemcpy(hcc.data(), _hcc, sizeof(std::complex<double>) * hcc.size(), hipMemcpyDeviceToHost));
         hipErrcheck(hipMemcpy(scc.data(), _scc, sizeof(std::complex<double>) * scc.size(), hipMemcpyDeviceToHost));
-        base_device::DEVICE_CPU* cpu_ctx = {};
-        dngvd_op<std::complex<double>, base_device::DEVICE_CPU>()(cpu_ctx,
-                                                                nstart,
-                                                                ldh,
-                                                                hcc.data(),
-                                                                scc.data(),
-                                                                eigenvalue.data(),
-                                                                vcc.data());
-        hipErrcheck(hipMemcpy(_vcc, vcc.data(), sizeof(std::complex<double>) * vcc.size(), hipMemcpyHostToDevice));
-        hipErrcheck(hipMemcpy(_eigenvalue, eigenvalue.data(), sizeof(double) * eigenvalue.size(), hipMemcpyHostToDevice));
+
+        try {
+            base_device::DEVICE_CPU* cpu_ctx = {};
+            dngvd_op<std::complex<double>, base_device::DEVICE_CPU>()(cpu_ctx,
+                                                                    nstart,
+                                                                    ldh,
+                                                                    hcc.data(),
+                                                                    scc.data(),
+                                                                    eigenvalue.data(),
+                                                                    vcc.data());
+            hipErrcheck(hipMemcpy(_vcc, vcc.data(), sizeof(std::complex<double>) * vcc.size(), hipMemcpyHostToDevice));
+            hipErrcheck(hipMemcpy(_eigenvalue, eigenvalue.data(), sizeof(double) * eigenvalue.size(), hipMemcpyHostToDevice));
+            std::cerr << "CPU LAPACK fallback succeeded for n=" << nstart << std::endl;
+        }
+        catch (const std::exception& cpu_error) {
+            std::cerr << "ERROR: CPU LAPACK fallback also failed: " << cpu_error.what() << std::endl;
+            throw std::runtime_error("Both GPU hipsolver and CPU LAPACK failed for dngvd with n=" + std::to_string(nstart));
+        }
     }
 }
 

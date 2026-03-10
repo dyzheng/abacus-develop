@@ -226,9 +226,9 @@ struct dngvd_op<T, base_device::DEVICE_GPU>
         }
         catch (const DiagoCudaException& e)
         {
-            // GPU cusolver failed, fall back to CPU LAPACK transparently
+            // GPU cusolver failed, try CPU LAPACK fallback
             std::cerr << "WARNING: " << e.what()
-                      << ", falling back to CPU LAPACK for this subspace diagonalization (n="
+                      << ", attempting CPU LAPACK fallback for this subspace diagonalization (n="
                       << nstart << ")" << std::endl;
 
             const int mat_size = nstart * ldh;
@@ -241,15 +241,25 @@ struct dngvd_op<T, base_device::DEVICE_GPU>
             cudaErrcheck(cudaMemcpy(h_A.data(), A, sizeof(T) * mat_size, cudaMemcpyDeviceToHost));
             cudaErrcheck(cudaMemcpy(h_B.data(), B, sizeof(T) * mat_size, cudaMemcpyDeviceToHost));
 
-            // Call CPU LAPACK version
-            base_device::DEVICE_CPU* cpu_ctx = {};
-            dngvd_op<T, base_device::DEVICE_CPU>()(cpu_ctx, nstart, ldh,
-                                                    h_A.data(), h_B.data(),
-                                                    h_W.data(), h_V.data());
+            try {
+                // Call CPU LAPACK version
+                base_device::DEVICE_CPU* cpu_ctx = {};
+                dngvd_op<T, base_device::DEVICE_CPU>()(cpu_ctx, nstart, ldh,
+                                                        h_A.data(), h_B.data(),
+                                                        h_W.data(), h_V.data());
 
-            // H2D: copy results back to GPU
-            cudaErrcheck(cudaMemcpy(V, h_V.data(), sizeof(T) * mat_size, cudaMemcpyHostToDevice));
-            cudaErrcheck(cudaMemcpy(W, h_W.data(), sizeof(Real) * nstart, cudaMemcpyHostToDevice));
+                // H2D: copy results back to GPU
+                cudaErrcheck(cudaMemcpy(V, h_V.data(), sizeof(T) * mat_size, cudaMemcpyHostToDevice));
+                cudaErrcheck(cudaMemcpy(W, h_W.data(), sizeof(Real) * nstart, cudaMemcpyHostToDevice));
+
+                std::cerr << "CPU LAPACK fallback succeeded for n=" << nstart << std::endl;
+            }
+            catch (const std::exception& cpu_error) {
+                // CPU fallback also failed, re-throw original GPU exception to trigger CG fallback
+                std::cerr << "ERROR: CPU LAPACK fallback also failed: " << cpu_error.what() << std::endl;
+                std::cerr << "Re-throwing original GPU exception to trigger CG fallback" << std::endl;
+                throw e;  // Re-throw original GPU exception
+            }
         }
     }
 };
@@ -275,9 +285,9 @@ struct dnevx_op<T, base_device::DEVICE_GPU>
         }
         catch (const DiagoCudaException& e)
         {
-            // GPU cusolver failed, fall back to CPU LAPACK transparently
+            // GPU cusolver failed, try CPU LAPACK fallback
             std::cerr << "WARNING: " << e.what()
-                      << ", falling back to CPU LAPACK for this standard diagonalization (n="
+                      << ", attempting CPU LAPACK fallback for this standard diagonalization (n="
                       << nstart << ")" << std::endl;
 
             const int mat_size = nstart * ldh;
@@ -288,15 +298,25 @@ struct dnevx_op<T, base_device::DEVICE_GPU>
             // D2H: copy original A from GPU to CPU
             cudaErrcheck(cudaMemcpy(h_A.data(), A, sizeof(T) * mat_size, cudaMemcpyDeviceToHost));
 
-            // Call CPU LAPACK version
-            base_device::DEVICE_CPU* cpu_ctx = {};
-            dnevx_op<T, base_device::DEVICE_CPU>()(cpu_ctx, nstart, ldh,
-                                                    h_A.data(), m,
-                                                    h_W.data(), h_V.data());
+            try {
+                // Call CPU LAPACK version
+                base_device::DEVICE_CPU* cpu_ctx = {};
+                dnevx_op<T, base_device::DEVICE_CPU>()(cpu_ctx, nstart, ldh,
+                                                        h_A.data(), m,
+                                                        h_W.data(), h_V.data());
 
-            // H2D: copy results back to GPU
-            cudaErrcheck(cudaMemcpy(V, h_V.data(), sizeof(T) * mat_size, cudaMemcpyHostToDevice));
-            cudaErrcheck(cudaMemcpy(W, h_W.data(), sizeof(Real) * nstart, cudaMemcpyHostToDevice));
+                // H2D: copy results back to GPU
+                cudaErrcheck(cudaMemcpy(V, h_V.data(), sizeof(T) * mat_size, cudaMemcpyHostToDevice));
+                cudaErrcheck(cudaMemcpy(W, h_W.data(), sizeof(Real) * nstart, cudaMemcpyHostToDevice));
+
+                std::cerr << "CPU LAPACK fallback succeeded for n=" << nstart << std::endl;
+            }
+            catch (const std::exception& cpu_error) {
+                // CPU fallback also failed, re-throw original GPU exception to trigger CG fallback
+                std::cerr << "ERROR: CPU LAPACK fallback also failed: " << cpu_error.what() << std::endl;
+                std::cerr << "Re-throwing original GPU exception to trigger CG fallback" << std::endl;
+                throw e;  // Re-throw original GPU exception
+            }
         }
     }
 };
