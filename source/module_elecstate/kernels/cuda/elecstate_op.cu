@@ -57,6 +57,52 @@ __global__ void elecstate_pw(
   }
 }
 
+template<typename FPTYPE>
+__global__ void elecstate_pw_batch(
+    const bool DOMAG,
+    const bool DOMAG_Z,
+    const int nrxx,
+    const double* weight,
+    const double volume,
+    FPTYPE* rho,
+    const thrust::complex<FPTYPE>* wfcr_batch,
+    const thrust::complex<FPTYPE>* wfcr_another_spin_batch,
+    const int ld_wfcr,
+    const int batchSize)
+{
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  int batch = blockIdx.z;
+  if(idx >= nrxx || batch >= batchSize) {return;}
+
+  FPTYPE w1 = weight[batch] / volume;
+  const thrust::complex<FPTYPE>* wfcr = wfcr_batch + batch * ld_wfcr;
+  const thrust::complex<FPTYPE>* wfcr_another_spin = wfcr_another_spin_batch + batch * ld_wfcr;
+  if (w1 == 0.0) return;
+
+  atomicAdd(&rho[0 * nrxx + idx], w1 * (norm(wfcr[idx]) + norm(wfcr_another_spin[idx])));
+
+  if (DOMAG) {
+    atomicAdd(&rho[1 * nrxx + idx], w1 * 2.0
+                  * (wfcr[idx].real() * wfcr_another_spin[idx].real()
+                  +  wfcr[idx].imag() * wfcr_another_spin[idx].imag()));
+    atomicAdd(&rho[2 * nrxx + idx], w1 * 2.0
+                  * (wfcr[idx].real() * wfcr_another_spin[idx].imag()
+                  - wfcr_another_spin[idx].real() * wfcr[idx].imag()));
+    atomicAdd(&rho[3 * nrxx + idx], w1 * (norm(wfcr[idx]) - norm(wfcr_another_spin[idx])));
+  }
+  else if(DOMAG_Z) {
+    rho[1 * nrxx + idx] = 0;
+    rho[2 * nrxx + idx] = 0;
+    atomicAdd(&rho[3 * nrxx + idx], w1 * (norm(wfcr[idx]) - norm(wfcr_another_spin[idx])));
+  }
+  else {
+    rho[0 * nrxx + idx] = 0;
+    rho[1 * nrxx + idx] = 0;
+    rho[2 * nrxx + idx] = 0;
+    rho[3 * nrxx + idx] = 0;
+  }
+}
+
 template <typename FPTYPE>
 void elecstate_pw_op<FPTYPE, base_device::DEVICE_GPU>::operator()(const base_device::DEVICE_GPU* ctx,
                                                                   const int& spin,
@@ -94,7 +140,34 @@ void elecstate_pw_op<FPTYPE, base_device::DEVICE_GPU>::operator()(const base_dev
   cudaCheckOnDebug();
 }
 
+template <typename FPTYPE>
+void elecstate_pw_batch_op<FPTYPE, base_device::DEVICE_GPU>::operator()(const base_device::DEVICE_GPU* ctx,
+                                                                  const bool& DOMAG,
+                                                                  const bool& DOMAG_Z,
+                                                                  const int& nrxx,
+                                                                  const double* w1,
+                                                                  const double volume,
+                                                                  FPTYPE** rho,
+                                                                  const std::complex<FPTYPE>* wfcr,
+                                                                  const std::complex<FPTYPE>* wfcr_another_spin,
+                                                                  const int ld_wfcr,
+                                                                  const int batchSize)
+{
+  dim3 block((nrxx + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK, 1, batchSize);
+  elecstate_pw_batch<FPTYPE><<<block, THREADS_PER_BLOCK>>>(
+    DOMAG, DOMAG_Z, nrxx, w1, volume,  rho[0],
+    reinterpret_cast<const thrust::complex<FPTYPE>*>(wfcr),
+    reinterpret_cast<const thrust::complex<FPTYPE>*>(wfcr_another_spin),
+    ld_wfcr, batchSize
+  );
+
+  cudaCheckOnDebug();
+}
+
 template struct elecstate_pw_op<float, base_device::DEVICE_GPU>;
 template struct elecstate_pw_op<double, base_device::DEVICE_GPU>;
+
+template struct elecstate_pw_batch_op<float, base_device::DEVICE_GPU>;
+template struct elecstate_pw_batch_op<double, base_device::DEVICE_GPU>;
 
 }  // namespace elecstate

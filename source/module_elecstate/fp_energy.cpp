@@ -36,7 +36,9 @@ double fenergy::calculate_etot()
         etot += (ecore + epawdc);
     }
 #endif
+#ifdef __MPI
     Parallel_Common::bcast_double(etot);
+#endif
     return etot;
 }
 
@@ -61,7 +63,9 @@ double fenergy::calculate_harris()
         etot_harris += (ecore + epawdc);
     }
 #endif
+#ifdef __MPI
     Parallel_Common::bcast_double(etot_harris);
+#endif
     return etot_harris;
 }
 

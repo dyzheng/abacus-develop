@@ -61,6 +61,8 @@ class ElecStatePW : public ElecState
 
     void init_rho_data();
 
+    void rhoBandK_spin4_batch(const psi::Psi<T, Device>& psi, double *wg_gpu, const int current_band, const int batchSize);
+
     Device * ctx = {};
     bool init_rho = false;
     mutable T* vkb = nullptr;
@@ -70,6 +72,7 @@ class ElecStatePW : public ElecState
 
     using meta_op = hamilt::meta_pw_op<Real, Device>;
     using elecstate_pw_op = elecstate::elecstate_pw_op<Real, Device>;
+    using elecstate_pw_batch_op = elecstate::elecstate_pw_batch_op<Real, Device>;
 
     using setmem_var_op = base_device::memory::set_memory_op<Real, Device>;
     using resmem_var_op = base_device::memory::resize_memory_op<Real, Device>;

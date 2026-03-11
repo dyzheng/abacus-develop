@@ -40,8 +40,44 @@ struct veff_pw_op<FPTYPE, base_device::DEVICE_CPU>
     }
 };
 
+template <typename FPTYPE>
+struct veff_pw_batch_op<FPTYPE, base_device::DEVICE_CPU>
+{
+    void operator()(
+        const base_device::DEVICE_CPU* dev,
+        const int& size,
+        std::complex<FPTYPE>* out,
+        int ld_out,
+        const FPTYPE* in,
+        int batchSize)
+    {
+        for(int i = 0; i < batchSize; ++i)
+        {
+            veff_pw_op<FPTYPE, base_device::DEVICE_CPU>()(dev, size, out + ld_out * i, in);
+        }
+    }
+
+    void operator() (
+        const base_device::DEVICE_CPU* dev,
+        const int& size,
+        std::complex<FPTYPE>* out,
+        int ld_out,
+        std::complex<FPTYPE>* out1,
+        int ld_out1,
+        const FPTYPE** in,
+        int batchSize)
+    {
+        for(int i = 0; i < batchSize; ++i)
+        {
+            veff_pw_op<FPTYPE, base_device::DEVICE_CPU>()(dev, size, out + ld_out * i, out1 + ld_out1 * i, in);
+        }
+    }
+};
+
 template struct veff_pw_op<float, base_device::DEVICE_CPU>;
 template struct veff_pw_op<double, base_device::DEVICE_CPU>;
+template struct veff_pw_batch_op<float, base_device::DEVICE_CPU>;
+template struct veff_pw_batch_op<double, base_device::DEVICE_CPU>;
 
 }  // namespace hamilt
 

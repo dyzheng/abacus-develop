@@ -3,6 +3,7 @@
 #include "module_base/memory.h"
 #include "module_base/tool_quit.h"
 #include "module_hamilt_pw/hamilt_pwdft/global.h"
+#include "module_parameter/parameter.h"
 
 namespace ModulePW
 {
@@ -808,7 +809,8 @@ void FFT::fft3D_backward(const base_device::DEVICE_GPU* /*ctx*/, std::complex<fl
 #endif
 }
 template <>
-void FFT::fft3D_backward(const base_device::DEVICE_GPU* /*ctx*/, std::complex<double>* in,
+void FFT::fft3D_backward(const base_device::DEVICE_GPU* /*ctx*/,
+                         std::complex<double>* in,
                          std::complex<double>* out) const
 {
 #if defined(__CUDA)
@@ -877,4 +879,189 @@ void FFT::set_precision(std::string precision_)
     this->precision = std::move(precision_);
 }
 
+#if defined(__CUDA) || defined(__ROCM)
+template <typename FPTYPE>
+BatchedFFT<FPTYPE>::BatchedFFT(int nx_, int ny_, int nz_): nx(nx_), ny(ny_), nz(nz_)
+{
+}
+
+template <typename FPTYPE>
+BatchedFFT<FPTYPE>::BatchedFFT(): nx(0), ny(0), nz(0)
+{
+}
+
+template <typename FPTYPE>
+void BatchedFFT<FPTYPE>::initFFT(int nx_, int ny_, int nz_)
+{
+    nx = nx_;
+    ny = ny_;
+    nz = nz_;
+    this->cleanFFT();
+    this->clear_data();
+}
+
+template <typename FPTYPE>
+BatchedFFT<FPTYPE>::~BatchedFFT()
+{
+    this->cleanFFT();
+    this->clear_data();
+}
+
+template <typename FPTYPE>
+void BatchedFFT<FPTYPE>::cleanFFT()
+{
+    for (auto& pair : this->plans) {
+#if defined(__CUDA)
+        CHECK_CUFFT(cufftDestroy(pair.second));
+#elif defined(__ROCM)
+        CHECK_CUFFT(hipfftDestroy(pair.second));
+#endif
+    }
+}
+
+template <typename FPTYPE>
+void BatchedFFT<FPTYPE>::clear_data() const
+{
+    if (this->auxr_3d){
+        base_device::memory::delete_memory_op<std::complex<FPTYPE>, base_device::DEVICE_GPU>()(gpu_ctx, this->auxr_3d);
+        this->auxr_3d = nullptr;
+        this->auxr_3d_size = 0;
+    }
+
+    if (this->sharedWorkArea){
+        base_device::memory::delete_memory_op<char, base_device::DEVICE_GPU>()(gpu_ctx, this->sharedWorkArea);
+        this->sharedWorkArea = nullptr;
+        this->sharedWorkAreaSize = 0;
+    }
+}
+
+template <typename FPTYPE>
+std::complex<FPTYPE>* BatchedFFT<FPTYPE>::get_auxr_3d_data(int batchSize) const
+{
+    if(this->auxr_3d_size >= sizeof(std::complex<FPTYPE>) * batchSize * this->nx * this->ny * this->nz && this->auxr_3d != nullptr){
+        return this->auxr_3d;
+    }
+
+    base_device::memory::resize_memory_op<std::complex<FPTYPE>, base_device::DEVICE_GPU>()(gpu_ctx, this->auxr_3d, this->nx * this->ny * this->nz * batchSize);
+    this->auxr_3d_size = sizeof(std::complex<FPTYPE>) * batchSize * this->nx * this->ny * this->nz;
+    return this->auxr_3d;
+}
+
+template <typename FPTYPE>
+void BatchedFFT<FPTYPE>::fft3D_forward(const base_device::DEVICE_GPU* /*ctx*/, std::complex<FPTYPE>* in, std::complex<FPTYPE>* out, const int batchSize)const
+{
+#if defined(__CUDA)
+    cufftHandle plan = this->get_plan_from_cache(batchSize);
+    if (this->fftType == CUFFT_C2C){
+        CHECK_CUFFT(cufftExecC2C(plan, reinterpret_cast<cufftComplex*>(in), reinterpret_cast<cufftComplex*>(out),
+         CUFFT_FORWARD));
+    }else{
+        CHECK_CUFFT(cufftExecZ2Z(plan, reinterpret_cast<cufftDoubleComplex*>(in), reinterpret_cast<cufftDoubleComplex*>(out),
+         CUFFT_FORWARD));
+    }
+#elif defined(__ROCM)
+    hipfftHandle plan = this->get_plan_from_cache(batchSize);
+    if (this->fftType == HIPFFT_C2C){
+        CHECK_CUFFT(hipfftExecC2C(plan, reinterpret_cast<hipfftComplex*>(in), reinterpret_cast<hipfftComplex*>(out),
+         HIPFFT_FORWARD));
+    }else{
+        CHECK_CUFFT(hipfftExecZ2Z(plan, reinterpret_cast<hipfftDoubleComplex*>(in), reinterpret_cast<hipfftDoubleComplex*>(out),
+         HIPFFT_FORWARD));
+    }
+#endif
+}
+
+template <typename FPTYPE>
+void BatchedFFT<FPTYPE>::fft3D_backward(const base_device::DEVICE_GPU* /*ctx*/, std::complex<FPTYPE>* in, std::complex<FPTYPE>* out, const int batchSize)const
+{
+#if defined(__CUDA)
+    cufftHandle plan = this->get_plan_from_cache(batchSize);
+    if (this->fftType == CUFFT_C2C){
+        CHECK_CUFFT(cufftExecC2C(plan, reinterpret_cast<cufftComplex*>(in), reinterpret_cast<cufftComplex*>(out),
+         CUFFT_INVERSE));
+    }else{
+        CHECK_CUFFT(cufftExecZ2Z(plan, reinterpret_cast<cufftDoubleComplex*>(in), reinterpret_cast<cufftDoubleComplex*>(out),
+         CUFFT_INVERSE));
+    }
+#elif defined(__ROCM)
+    hipfftHandle plan = this->get_plan_from_cache(batchSize);
+    if (this->fftType == HIPFFT_C2C){
+        CHECK_CUFFT(hipfftExecC2C(plan, reinterpret_cast<hipfftComplex*>(in), reinterpret_cast<hipfftComplex*>(out),
+         HIPFFT_INVERSE));
+    }else{
+        CHECK_CUFFT(cufftExecZ2Z(plan, reinterpret_cast<hipfftDoubleComplex*>(in), reinterpret_cast<hipfftDoubleComplex*>(out),
+         HIPFFT_INVERSE));
+    }
+#endif
+
+}
+
+template <typename FPTYPE>
+int BatchedFFT<FPTYPE>::estimate_batch_size(size_t addtional_memory)
+{
+    int input_batchSize = PARAM.inp.fft_batch_size;
+    if (input_batchSize ==  0){
+        size_t free_mem, total_mem;
+#if defined(__CUDA)
+        cudaMemGetInfo(&free_mem, &total_mem);
+#elif defined(__ROCM)
+        hipMemGetInfo(&free_mem, &total_mem);
+#endif
+        input_batchSize = free_mem * FREE_MEM_COEFF_FFT / addtional_memory;
+    }
+    return std::max(1, std::min(MAX_BATCH_SIZE_FFT, input_batchSize));
+}
+
+template <typename FPTYPE>
+typename BatchedFFT<FPTYPE>::fftHandleType BatchedFFT<FPTYPE>::get_plan_from_cache(int batchSize) const
+{
+    auto it = this->plans.find(batchSize);
+    if (it != this->plans.end()) {
+        return it->second;
+    }
+
+    fftHandleType plan;
+    int rank = 3;
+    int n[3] = {this->nx, this->ny, this->nz};
+    int *inembed = nullptr;
+    int *onembed = nullptr;
+    int istride = 1, ostride = 1;
+    int idist = this->nx * this->ny * this->nz;
+    int odist = idist;
+
+    size_t workAreaSize;
+
+#if defined(__CUDA)
+    CHECK_CUFFT(cufftPlanMany(&plan, rank, n, inembed, istride, idist,
+                   onembed, ostride, odist,
+                   fftType, batchSize));
+    CHECK_CUFFT(cufftGetSize(plan, &workAreaSize));
+#elif defined(__ROCM)
+    CHECK_CUFFT(hipfftPlanMany(&plan, rank, n, inembed, istride, idist,
+                   onembed, ostride, odist,
+                   fftType, batchSize));
+    CHECK_CUFFT(hipfftGetSize(plan, &workAreaSize));
+#endif
+
+    if (workAreaSize >= this->sharedWorkAreaSize && workAreaSize > 0){
+        base_device::memory::resize_memory_op<char, base_device::DEVICE_GPU>()(gpu_ctx, this->sharedWorkArea, workAreaSize);
+        this->sharedWorkAreaSize = workAreaSize;
+    }
+
+    if (workAreaSize > 0){
+#if defined(__CUDA)
+        CHECK_CUFFT(cufftSetWorkArea(plan, this->sharedWorkArea));
+#elif defined(__ROCM)
+        CHECK_CUFFT(hipfftSetWorkArea(plan, this->sharedWorkArea));
+#endif
+    }
+
+    this->plans[batchSize] = plan;
+    return plan;
+}
+
+template class BatchedFFT<float>;
+template class BatchedFFT<double>;
+
+#endif
 } // namespace ModulePW

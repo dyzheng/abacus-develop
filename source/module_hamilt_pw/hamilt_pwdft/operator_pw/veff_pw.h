@@ -43,6 +43,14 @@ class Veff<OperatorPW<T, Device>> : public OperatorPW<T, Device>
         T* tmhpsi,
         const int ngk_ik = 0)const override;
 
+    void act_batch(const int nbands,
+        const int nbasis,
+        const int npol,
+        const T* tmpsi_in,
+        T* tmhpsi,
+        const int ngk_ik = 0,
+        const int batchSize = 1)const;
+
     // denghui added for copy constructor at 20221105
     const Real *get_veff() const {return this->veff;}
     int get_veff_col() const {return this->veff_col;}
@@ -65,13 +73,22 @@ class Veff<OperatorPW<T, Device>> : public OperatorPW<T, Device>
     int veff_col = 0;
     int veff_row = 0;
     const Real *veff = nullptr, *h_veff = nullptr, *d_veff = nullptr;
-    T *porter = nullptr;
-    T *porter1 = nullptr;
+    mutable T *porter = nullptr;
+    mutable T *porter1 = nullptr;
+    mutable int porter_length = 0;
     base_device::AbacusDevice_t device = {};
     using veff_op = veff_pw_op<Real, Device>;
+    using veff_batch_op = veff_pw_batch_op<Real, Device>;
 
     using resmem_complex_op = base_device::memory::resize_memory_op<T, Device>;
     using delmem_complex_op = base_device::memory::delete_memory_op<T, Device>;
+
+    void malloc_porter(int size) const{
+        if (size <= this->porter_length) return;
+        resmem_complex_op()(this->ctx, this->porter, size, "Veff<PW>::porter");
+        resmem_complex_op()(this->ctx, this->porter1, size, "Veff<PW>::porter1");
+        this->porter_length = size;
+    }
 };
 
 } // namespace hamilt

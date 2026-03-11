@@ -74,6 +74,7 @@ struct Input_para
                                        ///< and wavefunction. 0: output only when ion steps are finished
     int elpa_num_thread = -1;          ///< Number of threads need to use in elpa
     std::string device = "cpu";
+    int fft_batch_size = 0; // for gpu : 0: auto-detect the batch size. 1: loop calcaulate. >1 batch calcaulate.
     std::string precision = "double";
 
     // ==============   #Parameters (2.PW) ===========================
@@ -576,7 +577,8 @@ struct Input_para
     std::string lr_solver = "dav"; ///< the eigensolver for LR-TDDFT
     double lr_thr = 1e-2;  ///< convergence threshold of the LR-TDDFT eigensolver
     bool out_wfc_lr = false;    ///< whether to output the eigenvectors (excitation amplitudes) in the particle-hole basis
-    std::vector<double> abs_wavelen_range = { 0., 0. };  ///< the range of wavelength(nm) to output the absorption spectrum 
+    std::vector<double> abs_wavelen_range = { 0., 0. };  ///< the range of wavelength(nm) to output the absorption spectrum
     double abs_broadening = 0.01;   ///< the broadening (eta) for LR-TDDFT absorption spectrum
+
 };
 #endif

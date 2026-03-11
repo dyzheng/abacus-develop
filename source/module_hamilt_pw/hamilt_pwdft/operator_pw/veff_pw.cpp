@@ -16,12 +16,13 @@ Veff<OperatorPW<T, Device>>::Veff(const int* isk_in,
     this->cal_type = calculation_type::pw_veff;
     this->isk = isk_in;
     this->veff = veff_in;
-    //note: "veff = nullptr" means that this core does not treat potential but still treats wf. 
+    //note: "veff = nullptr" means that this core does not treat potential but still treats wf.
     this->veff_row = veff_row;
     this->veff_col = veff_col;
     this->wfcpw = wfcpw_in;
-    resmem_complex_op()(this->ctx, this->porter, this->wfcpw->nmaxgr, "Veff<PW>::porter");
-    resmem_complex_op()(this->ctx, this->porter1, this->wfcpw->nmaxgr, "Veff<PW>::porter1");
+    this->malloc_porter(this->wfcpw->nmaxgr);
+    // resmem_complex_op()(this->ctx, this->porter, this->wfcpw->nmaxgr, "Veff<PW>::porter");
+    // resmem_complex_op()(this->ctx, this->porter1, this->wfcpw->nmaxgr, "Veff<PW>::porter1");
     if (this->isk == nullptr || this->wfcpw == nullptr) {
         ModuleBase::WARNING_QUIT("VeffPW", "Constuctor of Operator::VeffPW is failed, please check your code!");
     }
@@ -32,6 +33,7 @@ Veff<OperatorPW<T, Device>>::~Veff()
 {
     delmem_complex_op()(this->ctx, this->porter);
     delmem_complex_op()(this->ctx, this->porter1);
+    this->porter_length = 0;
 }
 
 template<typename T, typename Device>
@@ -44,11 +46,33 @@ void Veff<OperatorPW<T, Device>>::act(
     const int ngk_ik)const
 {
     ModuleBase::timer::tick("Operator", "VeffPW");
+    int loop_batches = (nbands + npol - 1) / npol;
+#if defined(__CUDA) || defined(__ROCM)
+    // addtional memory: porter, porter1, fft data, fft workarea
+    int batchSize = ModulePW::BatchedFFT<double>::estimate_batch_size(4 * this->wfcpw->nmaxgr * sizeof(T));
+#else
+    int batchSize = 1;
+#endif
+
+    if (std::is_same<Device, base_device::DEVICE_GPU>::value && batchSize > 1 && loop_batches > 1) // this->device = AbacusDevice_t::UnKnown ?
+    {
+        int max_npw = nbasis / npol;
+        int ld_tmp = max_npw * npol;
+
+        for (int i = 0; i < loop_batches; i += batchSize)
+        {
+            int remaining = loop_batches - i;
+            int current_batch = std::min(remaining, batchSize);
+            this->act_batch(nbands, nbasis, npol, tmpsi_in + i * ld_tmp, tmhpsi + i * ld_tmp, ngk_ik, current_batch);
+        }
+        ModuleBase::timer::tick("Operator", "VeffPW");
+        return;
+    }
 
     int max_npw = nbasis / npol;
     const int current_spin = this->isk[this->ik];
-    
-    // T *porter = new T[wfcpw->nmaxgr];
+
+
     for (int ib = 0; ib < nbands; ib += npol)
     {
         if (npol == 1)
@@ -109,6 +133,48 @@ void Veff<OperatorPW<T, Device>>::act(
 }
 
 template<typename T, typename Device>
+void Veff<OperatorPW<T, Device>>::act_batch(
+    const int nbands,
+    const int nbasis,
+    const int npol,
+    const T* tmpsi_in,
+    T* tmhpsi,
+    const int ngk_ik,
+    const int batchSize)const
+{
+    int max_npw = nbasis / npol;
+    const int current_spin = this->isk[this->ik];
+
+    this->malloc_porter(this->wfcpw->nmaxgr * batchSize);
+
+    if (npol == 1)
+    {
+        wfcpw->recip_to_real_batch(this->ctx, tmpsi_in, max_npw * npol, this->porter, this->wfcpw->nmaxgr, this->ik, batchSize);
+        if (this->veff_col != 0)
+        {
+            veff_batch_op()(this->ctx, this->veff_col, this->porter, this->wfcpw->nmaxgr, this->veff + current_spin * this->veff_col, batchSize);
+        }
+        wfcpw->real_to_recip_batch(this->ctx, this->porter, this->wfcpw->nmaxgr, tmhpsi, max_npw * npol, this->ik, batchSize, true);
+    }
+    else
+    {
+        const Real* current_veff[4];
+        for(int is = 0; is < 4; is++) {
+            current_veff[is] = this->veff + is * this->veff_col ; // for CPU device
+        }
+        wfcpw->recip_to_real_batch(this->ctx, tmpsi_in, max_npw * npol, this->porter, this->wfcpw->nmaxgr, this->ik, batchSize);
+        wfcpw->recip_to_real_batch(this->ctx, tmpsi_in + max_npw, max_npw * npol, this->porter1, this->wfcpw->nmaxgr, this->ik, batchSize);
+        if(this->veff_col != 0)
+        {
+            veff_batch_op()(this->ctx, this->veff_col, this->porter, this->wfcpw->nmaxgr, this->porter1, this->wfcpw->nmaxgr, current_veff, batchSize);
+        }
+        wfcpw->real_to_recip_batch(this->ctx, this->porter, this->wfcpw->nmaxgr, tmhpsi, max_npw * npol, this->ik, batchSize, true);
+        wfcpw->real_to_recip_batch(this->ctx, this->porter1, this->wfcpw->nmaxgr, tmhpsi + max_npw, max_npw * npol, this->ik, batchSize, true);
+
+    }
+}
+
+template<typename T, typename Device>
 template<typename T_in, typename Device_in>
 hamilt::Veff<OperatorPW<T, Device>>::Veff(const Veff<OperatorPW<T_in, Device_in>> *veff) {
     this->classname = "Veff";
@@ -118,8 +184,9 @@ hamilt::Veff<OperatorPW<T, Device>>::Veff(const Veff<OperatorPW<T_in, Device_in>
     this->veff_col = veff->get_veff_col();
     this->veff_row = veff->get_veff_row();
     this->wfcpw = veff->get_wfcpw();
-    resmem_complex_op()(this->ctx, this->porter, this->wfcpw->nmaxgr);
-    resmem_complex_op()(this->ctx, this->porter1, this->wfcpw->nmaxgr);
+    this->malloc_porter(this->wfcpw->nmaxgr);
+    // resmem_complex_op()(this->ctx, this->porter, this->wfcpw->nmaxgr);
+    // resmem_complex_op()(this->ctx, this->porter1, this->wfcpw->nmaxgr);
     this->veff = veff->get_veff();
     if (this->isk == nullptr || this->veff == nullptr || this->wfcpw == nullptr) {
         ModuleBase::WARNING_QUIT("VeffPW", "Constuctor of Operator::VeffPW is failed, please check your code!");

@@ -81,6 +81,31 @@ struct elecstate_pw_op<FPTYPE, base_device::DEVICE_CPU>
     }
 };
 
+template <typename FPTYPE>
+struct elecstate_pw_batch_op<FPTYPE, base_device::DEVICE_CPU>
+{
+    void operator()(const base_device::DEVICE_CPU* ctx,
+                    const bool& DOMAG,
+                    const bool& DOMAG_Z,
+                    const int& nrxx,
+                    const double* weight,
+                    const double volume,
+                    FPTYPE** rho,
+                    const std::complex<FPTYPE>* wfcr,
+                    const std::complex<FPTYPE>* wfcr_another_spin,
+                    const int ld_wfcr,
+                    const int batchSize)
+    {
+        for(int i = 0; i < batchSize; ++i)
+        {
+            elecstate_pw_op<FPTYPE, base_device::DEVICE_CPU>()(ctx, DOMAG, DOMAG_Z, nrxx, weight[i] / volume, rho, wfcr + ld_wfcr * i,
+                wfcr_another_spin + ld_wfcr * i);
+        }
+    }
+};
+
 template struct elecstate_pw_op<float, base_device::DEVICE_CPU>;
 template struct elecstate_pw_op<double, base_device::DEVICE_CPU>;
+template struct elecstate_pw_batch_op<float, base_device::DEVICE_CPU>;
+template struct elecstate_pw_batch_op<double, base_device::DEVICE_CPU>;
 }  // namespace elecstate

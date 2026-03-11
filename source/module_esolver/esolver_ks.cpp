@@ -535,7 +535,9 @@ void ESolver_KS<T, Device>::runner(const int istep, UnitCell& ucell)
             // EState should be used after it is constructed.
 
             drho = p_chgmix->get_drho(pelec->charge, GlobalV::nelec);
+#ifdef __MPI
             Parallel_Common::bcast_double(drho);
+#endif
             double hsolver_error = 0.0;
             if (firstscf)
             {

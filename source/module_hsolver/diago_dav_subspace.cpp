@@ -502,8 +502,9 @@ bool Diago_DavSubspace<T, Device>::diag_zhegvx(const int& nbase,
             }
         }
     }
-
+#ifdef __MPI
     MPI_Bcast(&fail_info, 1, MPI_INT, 0, this->diag_comm.comm);
+#endif
     if(fail_info != 0)
     {
         return false;

@@ -584,6 +584,12 @@ void ReadInput::item_general()
         this->add_item(item);
     }
     {
+        Input_Item item("fft_batch_size");
+        item.annotation = "the fft batch size for ABACUS GPU";
+        read_sync_int(input.fft_batch_size);
+        this->add_item(item);
+    }
+    {
         Input_Item item("precision");
         item.annotation = "the computing precision for ABACUS";
         read_sync_string(input.precision);

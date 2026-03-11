@@ -3,6 +3,8 @@
 
 #include <complex>
 #include <string>
+#include <type_traits>
+#include <unordered_map>
 
 #include "fftw3.h"
 #if defined(__FFTW3_MPI) && defined(__MPI)
@@ -40,13 +42,13 @@ public:
 	FFT();
 	~FFT();
 	void clear(); //reset fft
-	
+
 	// init parameters of fft
-	void initfft(int nx_in, int ny_in, int nz_in, int lixy_in, int rixy_in, int ns_in, int nplane_in, 
+	void initfft(int nx_in, int ny_in, int nz_in, int lixy_in, int rixy_in, int ns_in, int nplane_in,
 				 int nproc_in, bool gamma_only_in, bool xprime_in = true, bool mpifft_in = false);
 
 	//init fftw_plans
-	void setupFFT(); 
+	void setupFFT();
 
 	//destroy fftw_plans
 	void cleanFFT();
@@ -106,7 +108,7 @@ public :
     template <typename FPTYPE>
     std::complex<FPTYPE>* get_auxr_3d_data() const;
 
-	int fft_mode = 0; ///< fftw mode 0: estimate, 1: measure, 2: patient, 3: exhaustive 
+	int fft_mode = 0; ///< fftw mode 0: estimate, 1: measure, 2: patient, 3: exhaustive
 
   private:
     bool gamma_only = false;
@@ -167,6 +169,77 @@ public:
     void set_precision(std::string precision_);
 
 };
+
+#if defined(__CUDA) || defined(__ROCM)
+template <typename T>
+struct FFTTypeTraits;
+
+template <>
+struct FFTTypeTraits<float> {
+#if defined(__CUDA)
+    using cuComplexType = cufftComplex;
+    static constexpr cufftType Type = CUFFT_C2C;
+#elif defined(__ROCM)
+    using hipComplexType = hipfftComplex;
+    static constexpr hipfftType Type = HIPFFT_C2C;
+#endif
+};
+
+template <>
+struct FFTTypeTraits<double> {
+#if defined(__CUDA)
+    using cuComplexType = cufftDoubleComplex;
+    static constexpr cufftType Type = CUFFT_Z2Z;
+#elif defined(__ROCM)
+    using hipComplexType = hipfftDoubleComplex;
+    static constexpr hipfftType Type = HIPFFT_Z2Z;
+#endif
+};
+
+constexpr float FREE_MEM_COEFF_FFT = 0.8;
+constexpr int MAX_BATCH_SIZE_FFT = 32;
+
+template<typename FPTYPE>  // float or double
+class BatchedFFT
+{
+public:
+#if defined(__CUDA)
+    using cuComplexType = typename FFTTypeTraits<FPTYPE>::cuComplexType;
+    static constexpr cufftType fftType = FFTTypeTraits<FPTYPE>::Type;
+    using fftHandleType = cufftHandle;
+#elif defined(__ROCM)
+    using hipComplexType = typename FFTTypeTraits<FPTYPE>::hipComplexType;
+    static constexpr hipfftType fftType = FFTTypeTraits<FPTYPE>::Type;
+    using fftHandleType = hipfftHandle;
+#endif
+
+	BatchedFFT(int nx_, int ny_, int nz_);
+    BatchedFFT();
+	~BatchedFFT();
+    void initFFT(int nx_, int ny_, int nz_);
+	void cleanFFT();
+    void clear_data() const;
+public:
+    std::complex<FPTYPE>* get_auxr_3d_data(int batchSize)const;
+    void fft3D_forward(const base_device::DEVICE_GPU* /*ctx*/, std::complex<FPTYPE>* in, std::complex<FPTYPE>* out, const int batchSize)const;
+    void fft3D_backward(const base_device::DEVICE_GPU* /*ctx*/, std::complex<FPTYPE>* in, std::complex<FPTYPE>* out, const int batchSize)const;
+    static int estimate_batch_size(size_t addtional_memory);
+
+private:
+    int nx, ny, nz;
+    mutable std::unordered_map<int, fftHandleType> plans;
+
+    mutable std::complex<FPTYPE> *auxr_3d = nullptr; // fft space
+    mutable ::size_t auxr_3d_size = 0;
+    mutable char *sharedWorkArea = nullptr;
+    mutable size_t sharedWorkAreaSize = 0;
+
+    fftHandleType get_plan_from_cache(int batchSize)const;
+
+};
+
+#endif
+
 }
 
 #endif
