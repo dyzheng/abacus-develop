@@ -1,4 +1,5 @@
 #include "pw_basis.h"
+#include "module_base/memory.h"
 #include "module_base/tool_quit.h"
 #include "module_base/global_function.h"
 #include "module_base/timer.h"
@@ -167,6 +168,8 @@ void PW_Basis::get_ig2isz_is2fftixy(
     delete[] this->ig2isz; this->ig2isz = new int[this->npw]; // map ig to the z coordinate of this planewave.
     ModuleBase::GlobalFunc::ZEROS(this->ig2isz, this->npw);
     delete[] this->is2fftixy; this->is2fftixy = new int[this->nst]; // map is (index of sticks) to ixy (iy + ix * fftny).
+    ModuleBase::Memory::record("PW_B::ig2isz", sizeof(int) * this->npw);
+    ModuleBase::Memory::record("PW_B::is2fftixy", sizeof(int) * this->nst);
     for (int is = 0; is < this->nst; ++is)
     {
         this->is2fftixy[is] = -1;

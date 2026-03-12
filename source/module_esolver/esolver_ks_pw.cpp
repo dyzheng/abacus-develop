@@ -137,8 +137,12 @@ void ESolver_KS_PW<T, Device>::deallocate_hamilt()
 template <typename T, typename Device>
 void ESolver_KS_PW<T, Device>::before_all_runners(UnitCell& ucell, const Input_para& inp)
 {
+    ModuleBase::TITLE("ESolver_KS_PW", "before_all_runners");
+
     // 1) call before_all_runners() of ESolver_KS
     ESolver_KS<T, Device>::before_all_runners(ucell, inp);
+
+    ModuleBase::TITLE("ESolver_KS_PW", "after_parent_before_all_runners");
 
     // 3) initialize ElecState,
     if (this->pelec == nullptr)
@@ -170,6 +174,7 @@ void ESolver_KS_PW<T, Device>::before_all_runners(UnitCell& ucell, const Input_p
 
     //! 4) inititlize the charge density.
     this->pelec->charge->allocate(PARAM.inp.nspin);
+    ModuleBase::TITLE("ESolver_KS_PW", "after_charge_allocate");
 
     //! 5) set the cell volume variable in pelec
     this->pelec->omega = ucell.omega;
@@ -186,16 +191,20 @@ void ESolver_KS_PW<T, Device>::before_all_runners(UnitCell& ucell, const Input_p
                                                     &(this->pelec->f_en.etxc),
                                                     &(this->pelec->f_en.vtxc));
     }
+    ModuleBase::TITLE("ESolver_KS_PW", "after_potential_creation");
 
 
     //! initalize local pseudopotential
     this->locpp.init_vloc(ucell, this->pw_rhod);
     ModuleBase::GlobalFunc::DONE(GlobalV::ofs_running, "LOCAL POTENTIAL");
+    ModuleBase::TITLE("ESolver_KS_PW", "after_init_vloc");
 
     //! Initalize non-local pseudopotential
     this->ppcell.init(ucell, &this->sf, this->pw_wfc);
+    ModuleBase::TITLE("ESolver_KS_PW", "after_ppcell_init");
     this->ppcell.init_vnl(ucell, this->pw_rhod);
     ModuleBase::GlobalFunc::DONE(GlobalV::ofs_running, "NON-LOCAL POTENTIAL");
+    ModuleBase::TITLE("ESolver_KS_PW", "after_init_vnl");
 
     //! Allocate and initialize psi
     this->p_psi_init = new psi::PSIInit<T, Device>(PARAM.inp.init_wfc,
@@ -249,6 +258,16 @@ void ESolver_KS_PW<T, Device>::before_all_runners(UnitCell& ucell, const Input_p
     this->kspw_psi = is_gpu_build
                          ? new psi::Psi<T, Device>(this->psi[0])
                          : reinterpret_cast<psi::Psi<T, Device>*>(this->psi);
+
+    // In PAGED_GPU + double precision mode, kspw_psi->psi_cpu_ is a redundant copy of this->psi.
+    // Share the same CPU buffer to save ~nks*nbands*npwx*16 bytes of memory.
+    if (this->kspw_psi->get_storage_mode() == psi::PsiStorageMode::PAGED_GPU
+        && PARAM.inp.precision == "double")
+    {
+        // T == std::complex<double> here, same type as this->psi's data
+        T* cpu_base = reinterpret_cast<T*>(this->psi[0].get_pointer() - this->psi[0].get_psi_bias());
+        this->kspw_psi->set_psi_cpu_external(cpu_base);
+    }
 
     if (PARAM.inp.precision == "single")
     {
@@ -686,20 +705,27 @@ void ESolver_KS_PW<T, Device>::after_scf(UnitCell& ucell, const int istep)
     {
         if (this->kspw_psi->get_storage_mode() == psi::PsiStorageMode::PAGED_GPU)
         {
-            // PAGED_GPU: data is on CPU in kspw_psi->psi_cpu_. Copy CPU-to-CPU.
-            const int nks = this->kv.get_nks();
-            const int nbands_local = this->psi[0].get_nbands();
-            const int nbasis_local = this->psi[0].get_nbasis();
-            const size_t k_size = static_cast<size_t>(nbands_local) * nbasis_local;
-            // Get base pointer (without psi_bias offset)
-            auto* base_dst = this->psi[0].get_pointer() - this->psi[0].get_psi_bias();
-            for (int ik = 0; ik < nks; ik++)
+            if (PARAM.inp.precision == "double")
             {
-                const auto* src = this->kspw_psi->get_cpu_pointer(ik);
-                auto* dst = base_dst + static_cast<size_t>(ik) * k_size;
-                for (size_t i = 0; i < k_size; i++)
+                // Double precision PAGED_GPU: kspw_psi->psi_cpu_ shares memory with this->psi,
+                // so no copy is needed — they are already the same buffer.
+            }
+            else
+            {
+                // Single precision PAGED_GPU: types differ, must cast-copy.
+                const int nks = this->kv.get_nks();
+                const int nbands_local = this->psi[0].get_nbands();
+                const int nbasis_local = this->psi[0].get_nbasis();
+                const size_t k_size = static_cast<size_t>(nbands_local) * nbasis_local;
+                auto* base_dst = this->psi[0].get_pointer() - this->psi[0].get_psi_bias();
+                for (int ik = 0; ik < nks; ik++)
                 {
-                    dst[i] = static_cast<std::complex<double>>(src[i]);
+                    const auto* src = this->kspw_psi->get_cpu_pointer(ik);
+                    auto* dst = base_dst + static_cast<size_t>(ik) * k_size;
+                    for (size_t i = 0; i < k_size; i++)
+                    {
+                        dst[i] = static_cast<std::complex<double>>(src[i]);
+                    }
                 }
             }
         }

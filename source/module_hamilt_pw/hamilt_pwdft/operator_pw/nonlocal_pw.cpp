@@ -46,7 +46,7 @@ Nonlocal<OperatorPW<T, Device>>::Nonlocal(const int* isk_in,
             nproj_per_atom[iat] = ucell_in->atoms[it].ncpp.nh;
         }
 
-        const int npwx = this->ppcell->vkb.nc;
+        const int npwx = this->ppcell->npwx;
 
         // Use 25% of a conservative 4GB estimate for auto-detection
         const size_t gpu_mem_budget = 4ULL * 1024 * 1024 * 1024;
@@ -114,7 +114,7 @@ void Nonlocal<OperatorPW<T, Device>>::init(const int ik_in)
             // Compute full VKB on GPU and keep it for force/stress calculations
             // Also copy to CPU for batched transfer in act()
             const int nkb = this->ppcell->nkb;
-            const int npwx = this->ppcell->vkb.nc;
+            const int npwx = this->ppcell->npwx;
 
             // Compute on GPU (this->vkb already points to ppcell's VKB buffer)
             this->ppcell->getvnl(this->ctx, *this->ucell, this->ik, this->vkb);
@@ -260,7 +260,7 @@ void Nonlocal<OperatorPW<T, Device>>::add_nonlocal_pp(T *hpsi_in, const T *becp,
             this->ppcell->nkb,
             &this->one,
             this->vkb,
-            this->ppcell->vkb.nc,
+            this->ppcell->npwx,
             this->ps,
             inc,
             &this->one,
@@ -281,7 +281,7 @@ void Nonlocal<OperatorPW<T, Device>>::add_nonlocal_pp(T *hpsi_in, const T *becp,
             this->ppcell->nkb,
             &this->one,
             this->vkb,
-            this->ppcell->vkb.nc,
+            this->ppcell->npwx,
             this->ps,
             npm,
             &this->one,
@@ -342,7 +342,7 @@ void Nonlocal<OperatorPW<T, Device>>::act(
                         nkb,
                         &this->one,
                         this->vkb,
-                        this->ppcell->vkb.nc,
+                        this->ppcell->npwx,
                         tmpsi_in,
                         inc,
                         &this->zero,
@@ -361,7 +361,7 @@ void Nonlocal<OperatorPW<T, Device>>::act(
                         this->npw,
                         &this->one,
                         this->vkb,
-                        this->ppcell->vkb.nc,
+                        this->ppcell->npwx,
                         tmpsi_in,
                         max_npw,
                         &this->zero,
@@ -412,7 +412,7 @@ void Nonlocal<OperatorPW<T, Device>>::act_batched(
 {
     ModuleBase::timer::tick("Nonlocal", "act_batched");
 
-    const int npwx = this->ppcell->vkb.nc;
+    const int npwx = this->ppcell->npwx;
     const int max_nkb_batch = vkb_manager_.get_max_nkb_batch();
 
     // Lazy pre-allocation: allocate once at max_nkb_batch * nbands, reuse across batches and calls.
@@ -594,7 +594,7 @@ hamilt::Nonlocal<OperatorPW<T, Device>>::Nonlocal(const Nonlocal<OperatorPW<T_in
             nproj_per_atom[iat] = this->ucell->atoms[it].ncpp.nh;
         }
 
-        const int npwx = this->ppcell->vkb.nc;
+        const int npwx = this->ppcell->npwx;
 
         // Use 25% of a conservative 4GB estimate for auto-detection
         const size_t gpu_mem_budget = 4ULL * 1024 * 1024 * 1024;

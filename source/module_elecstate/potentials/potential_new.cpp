@@ -135,10 +135,12 @@ void Potential::allocate()
         if (PARAM.inp.precision == "single") {
             resmem_sd_op()(gpu_ctx, s_veff_smooth, PARAM.inp.nspin * nrxx_smooth);
             resmem_sd_op()(gpu_ctx, s_vofk_smooth, PARAM.inp.nspin * nrxx_smooth);
+            ModuleBase::Memory::record_gpu("Pot::s_veff_smooth", sizeof(float) * PARAM.inp.nspin * nrxx_smooth);
         }
         else {
             resmem_dd_op()(gpu_ctx, d_veff_smooth, PARAM.inp.nspin * nrxx_smooth);
             resmem_dd_op()(gpu_ctx, d_vofk_smooth, PARAM.inp.nspin * nrxx_smooth);
+            ModuleBase::Memory::record_gpu("Pot::d_veff_smooth", sizeof(double) * PARAM.inp.nspin * nrxx_smooth);
         }
     }
     else {

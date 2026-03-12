@@ -1,6 +1,7 @@
 #include "module_base/timer.h"
 #include "pw_basis.h"
 #include "module_parameter/parameter.h"
+#include <iostream>
 namespace ModulePW
 {
 
@@ -47,6 +48,7 @@ void PW_Basis_Sup::setuptransform(const ModulePW::PW_Basis* pw_rho)
                           this->xprime);
     }
     this->fft_bundle.setupFFT();
+
     ModuleBase::timer::tick(this->classname, "setuptransform");
 }
 

@@ -3,6 +3,12 @@
 #include "gint_force.cuh"
 #include "cuda_tools.cuh"
 #include "module_base/module_device/device.h"
+
+// __ldg is not available in CUDA < 3.5 compute capability
+#if !defined(__CUDA_ARCH__) || __CUDA_ARCH__ >= 350
+#define USE_LDG
+#endif
+
 // CUDA kernel to calculate psi and force
 namespace GintKernel
 {
@@ -55,7 +61,11 @@ __global__ void get_psi_force(double* ylmcoef,
         const double dr_y = dr_part[dr_start + 1] + mcell_pos_y;
         const double dr_z = dr_part[dr_start + 2] + mcell_pos_z;
         double dist = sqrt(dr_x * dr_x + dr_y * dr_y + dr_z * dr_z);
+#ifdef USE_LDG
         const int atype = __ldg(atoms_type + pre_atoms + atom_id);
+#else
+        const int atype = atoms_type[pre_atoms + atom_id];
+#endif
         if(dist < rcut[atype])
         {
             if (dist < 1.0E-9)
@@ -66,7 +76,11 @@ __global__ void get_psi_force(double* ylmcoef,
             double dr[3] = {dr_x, dr_y, dr_z};
             double ylma[49];
             double grly[49][3];
+#ifdef USE_LDG
             const int nwl = __ldg(ucell_atom_nwl + atype);
+#else
+            const int nwl = ucell_atom_nwl[atype];
+#endif
             spherical_harmonics_d(dr, dist*dist, grly, nwl, ylma, ylmcoef);
             int psi_idx = ((pre_atoms + atom_id) * bxyz + mcell_id) * nwmax;
             interp_f(dist,

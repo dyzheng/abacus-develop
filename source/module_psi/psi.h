@@ -153,6 +153,10 @@ class Psi
     void store_k_from_gpu(int ik);
     void ensure_k_on_gpu(int ik);
 
+    /// Set an external (borrowed) CPU buffer for PAGED_GPU mode.
+    /// The caller retains ownership — this Psi will NOT delete the buffer.
+    void set_psi_cpu_external(T* ext_cpu_buf);
+
     int get_current_k_gpu() const { return current_k_gpu_; }
     T* get_cpu_pointer(int ik = 0);
     const T* get_cpu_pointer(int ik = 0) const;
@@ -186,6 +190,7 @@ class Psi
     // Memory optimization members
     PsiStorageMode storage_mode_ = PsiStorageMode::ALL_GPU;
     T* psi_cpu_ = nullptr;           // CPU storage for all k-points (used in PAGED_GPU mode)
+    bool psi_cpu_owned_ = true;      // Whether psi_cpu_ is owned (should be deleted) by this object
     T* psi_gpu_buffer_ = nullptr;    // GPU buffer for current k-point
     T* psi_gpu_transfer_buffer_ = nullptr;  // Second buffer for double buffering
     int current_k_gpu_ = -1;         // Which k-point is on GPU (-1 = none)

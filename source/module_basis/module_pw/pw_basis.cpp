@@ -4,6 +4,7 @@
 #include "module_base/mymath.h"
 #include "module_base/timer.h"
 #include "module_base/global_function.h"
+#include "module_base/memory.h"
 
 
 namespace ModulePW
@@ -56,21 +57,22 @@ void PW_Basis::setuptransform()
     this->distribute_g();
     this->getstartgr();
     this->fft_bundle.clear();
-    if(this->xprime)    
+    if(this->xprime)
     {
         this->fft_bundle.initfft(this->nx,this->ny,this->nz,this->lix,this->rix,this->nst,this->nplane,this->poolnproc,this->gamma_only, this->xprime);
     }
-    else                
+    else
     {
         this->fft_bundle.initfft(this->nx,this->ny,this->nz,this->liy,this->riy,this->nst,this->nplane,this->poolnproc,this->gamma_only, this->xprime);
     }
     this->fft_bundle.setupFFT();
+
     ModuleBase::timer::tick(this->classname, "setuptransform");
 }
 
 void PW_Basis::getstartgr()
 {
-    if(this->gamma_only)    
+    if(this->gamma_only)
     {
         this->nmaxgr = ( this->npw > (this->nrxx+1)/2 ) ? this->npw : (this->nrxx+1)/2;
     }
@@ -78,7 +80,7 @@ void PW_Basis::getstartgr()
     {
         this->nmaxgr = ( this->npw > this->nrxx ) ? this->npw : this->nrxx;
     }
-    
+
     //---------------------------------------------
 	// sum : starting plane of FFT box.
 	//---------------------------------------------
@@ -137,6 +139,9 @@ void PW_Basis::collect_local_pw()
     delete[] this->gg; this->gg = new double[this->npw];
     delete[] this->gdirect; this->gdirect = new ModuleBase::Vector3<double>[this->npw];
     delete[] this->gcar; this->gcar = new ModuleBase::Vector3<double>[this->npw];
+    ModuleBase::Memory::record("PW_B::gg", sizeof(double) * this->npw);
+    ModuleBase::Memory::record("PW_B::gdirect", sizeof(ModuleBase::Vector3<double>) * this->npw);
+    ModuleBase::Memory::record("PW_B::gcar", sizeof(ModuleBase::Vector3<double>) * this->npw);
 
     ModuleBase::Vector3<double> f;
     for(int ig = 0 ; ig < this-> npw ; ++ig)

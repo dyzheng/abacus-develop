@@ -1,4 +1,5 @@
 #include "mixing_data.h"
+#include "module_base/memory.h"
 
 namespace Base_Mixing
 {
@@ -10,6 +11,7 @@ Mixing_Data::Mixing_Data(const int& ndim, const std::size_t& length, const size_
     if (ndim * length > 0)
     {
         this->data = malloc(ndim * length * type_size);
+        ModuleBase::Memory::record("Mixing::data", ndim * length * type_size);
     }
 }
 
@@ -30,6 +32,7 @@ void Mixing_Data::resize(const int& ndim, const std::size_t& length, const size_
     if (ndim * length > 0)
     {
         this->data = malloc(ndim * length * type_size);
+        ModuleBase::Memory::record("Mixing::data", ndim * length * type_size);
     }
     this->start = -1;
     this->ndim_use = 0;

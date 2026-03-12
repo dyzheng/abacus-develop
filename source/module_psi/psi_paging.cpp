@@ -151,6 +151,23 @@ void Psi<T, Device>::ensure_k_on_gpu(int ik)
     }
 }
 
+template <typename T, typename Device>
+void Psi<T, Device>::set_psi_cpu_external(T* ext_cpu_buf)
+{
+    if (storage_mode_ != PsiStorageMode::PAGED_GPU)
+    {
+        ModuleBase::WARNING_QUIT("Psi::set_psi_cpu_external",
+                                 "Only valid in PAGED_GPU mode");
+    }
+    // Free existing owned buffer if any
+    if (psi_cpu_ != nullptr && psi_cpu_owned_)
+    {
+        delete[] psi_cpu_;
+    }
+    psi_cpu_ = ext_cpu_buf;
+    psi_cpu_owned_ = false;
+}
+
 // Explicit instantiations for paging methods only (full class instantiated in psi.cpp)
 #define INSTANTIATE_PAGING_METHODS(T, Device)                                                                          \
     template void Psi<T, Device>::set_storage_mode(PsiStorageMode);                                                    \
@@ -158,7 +175,8 @@ void Psi<T, Device>::ensure_k_on_gpu(int ik)
     template const T* Psi<T, Device>::get_cpu_pointer(int) const;                                                      \
     template void Psi<T, Device>::load_k_to_gpu(int);                                                                  \
     template void Psi<T, Device>::store_k_from_gpu(int);                                                               \
-    template void Psi<T, Device>::ensure_k_on_gpu(int);
+    template void Psi<T, Device>::ensure_k_on_gpu(int);                                                                \
+    template void Psi<T, Device>::set_psi_cpu_external(T*);
 
 INSTANTIATE_PAGING_METHODS(float, base_device::DEVICE_CPU)
 INSTANTIATE_PAGING_METHODS(std::complex<float>, base_device::DEVICE_CPU)

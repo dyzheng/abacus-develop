@@ -1,6 +1,7 @@
 #include "psi.h"
 
 #include "module_base/global_variable.h"
+#include "module_base/memory.h"
 #include "module_base/module_device/device.h"
 #include "module_base/tool_quit.h"
 #include "module_parameter/parameter.h"
@@ -45,11 +46,11 @@ Psi<T, Device>::~Psi()
     }
 
     // Cleanup paging-mode resources
-    if (psi_cpu_ != nullptr)
+    if (psi_cpu_ != nullptr && psi_cpu_owned_)
     {
         delete[] psi_cpu_;
-        psi_cpu_ = nullptr;
     }
+    psi_cpu_ = nullptr;
 
     // psi_gpu_buffer_ aliases this->psi (already freed above), just null it
     psi_gpu_buffer_ = nullptr;
@@ -326,11 +327,15 @@ void Psi<T, Device>::resize(const int nks_in, const int nbands_in, const int nba
             delete[] psi_cpu_;
         }
         psi_cpu_ = new T[total_size](); // value-initialize to zero
+        ModuleBase::Memory::record("Psi::psi_cpu", sizeof(T) * total_size);
 
         // Allocate GPU buffer for ONE k-point using device memory ops
         // Note: resize_memory_op frees existing allocation before re-allocating
         const size_t k_size = static_cast<size_t>(nbands_in) * nbasis_in;
         resize_memory_op()(this->ctx, this->psi, k_size, "no_record");
+#if defined(__CUDA) || defined(__ROCM)
+        ModuleBase::Memory::record_gpu("Psi::psi_gpu_k", sizeof(T) * k_size);
+#endif
 
         // Point gpu_buffer to the main psi pointer for convenience
         psi_gpu_buffer_ = this->psi;

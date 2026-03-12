@@ -1,4 +1,5 @@
 #include "fft_cuda.h"
+#include "module_base/memory.h"
 #include "module_base/module_device/memory_op.h"
 #include "module_hamilt_pw/hamilt_pwdft/global.h"
 
@@ -18,6 +19,7 @@ void FFT_CUDA<float>::setupFFT()
 {
     cufftPlan3d(&c_handle, this->nx, this->ny, this->nz, CUFFT_C2C);
     resmem_cd_op()(gpu_ctx, this->c_auxr_3d, this->nx * this->ny * this->nz);
+    ModuleBase::Memory::record_gpu("FFT3D::c_auxr", sizeof(std::complex<float>) * this->nx * this->ny * this->nz);
         
 }
 template <>  
@@ -25,6 +27,7 @@ void FFT_CUDA<double>::setupFFT()
 {
     cufftPlan3d(&z_handle, this->nx, this->ny, this->nz, CUFFT_Z2Z);
     resmem_zd_op()(gpu_ctx, this->z_auxr_3d, this->nx * this->ny * this->nz);
+    ModuleBase::Memory::record_gpu("FFT3D::z_auxr", sizeof(std::complex<double>) * this->nx * this->ny * this->nz);
 }
 template <>
 void FFT_CUDA<float>::cleanFFT()

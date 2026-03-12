@@ -32,6 +32,8 @@ class pseudopot_cell_vnl
 
     int nkb = 0; // total number of beta functions considering all atoms
 
+    int npwx = 0; // max number of plane waves across k-points (cached from wfc_basis)
+
     int lmaxkb = 0; // max angular momentum for non-local projectors
 
     void init_vnl(UnitCell& cell, const ModulePW::PW_Basis* rho_basis);

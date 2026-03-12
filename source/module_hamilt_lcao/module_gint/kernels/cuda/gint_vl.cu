@@ -2,6 +2,12 @@
 #include "interp.cuh"
 #include "cuda_tools.cuh"
 #include "sph.cuh"
+
+// __ldg is not available in CUDA < 3.5 compute capability
+#if !defined(__CUDA_ARCH__) || __CUDA_ARCH__ >= 350
+#define USE_LDG
+#endif
+
 namespace GintKernel
 {
 
@@ -41,7 +47,11 @@ __global__ void get_psi_and_vldr3(const double* const ylmcoef,
         const double dr_y = dr_part[dr_start + 1] + mcell_pos_y;
         const double dr_z = dr_part[dr_start + 2] + mcell_pos_z;
         double dist = sqrt(dr_x * dr_x + dr_y * dr_y + dr_z * dr_z);
+#ifdef USE_LDG
         const int atype = __ldg(atoms_type + pre_atoms + atom_id);
+#else
+        const int atype = atoms_type[pre_atoms + atom_id];
+#endif
         if(dist < rcut[atype])
         {
             if (dist < 1.0E-9)
@@ -50,7 +60,11 @@ __global__ void get_psi_and_vldr3(const double* const ylmcoef,
             }
             double dr[3] = {dr_x / dist, dr_y / dist, dr_z / dist};
             double ylma[49];
+#ifdef USE_LDG
             const int nwl = __ldg(ucell_atom_nwl + atype);
+#else
+            const int nwl = ucell_atom_nwl[atype];
+#endif
             spherical_harmonics(dr, nwl, ylma, ylmcoef);
             int psi_idx = (bcell_id * max_atom + atom_id) * bxyz * nwmax + mcell_id;
             interp_vl(dist,

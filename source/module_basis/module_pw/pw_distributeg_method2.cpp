@@ -1,4 +1,5 @@
 #include "pw_basis.h"
+#include "module_base/memory.h"
 #include "module_base/mymath.h"
 #include "module_base/global_function.h"
 
@@ -31,6 +32,7 @@ void PW_Basis::distribution_method2()
     delete[] this->nst_per; this->nst_per = new int[this->poolnproc]; // number of sticks on each core.
     delete[] this->npw_per;   this->npw_per = new int[this->poolnproc];  // number of planewaves on each core.
     delete[] this->fftixy2ip; this->fftixy2ip = new int[this->fftnxy];              // ip of core which contains the stick on (x, y).
+    ModuleBase::Memory::record("PW_B::fftixy2ip", sizeof(int) * this->fftnxy);
     for (int ixy = 0; ixy < this->fftnxy; ++ixy)
         this->fftixy2ip[ixy] = -1;                 // meaning this stick has not been distributed or there is no stick on (x, y).
     if (poolrank == 0)
@@ -55,6 +57,7 @@ void PW_Basis::distribution_method2()
     MPI_Bcast(&rix, 1, MPI_INT, 0, this->pool_world);
 #endif
     delete[] this->istot2ixy; this->istot2ixy = new int[this->nstot];
+    ModuleBase::Memory::record("PW_B::istot2ixy", sizeof(int) * this->nstot);
 
     if(poolrank == 0)
     {

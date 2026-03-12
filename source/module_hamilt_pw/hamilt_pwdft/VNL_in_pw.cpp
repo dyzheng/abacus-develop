@@ -176,6 +176,10 @@ void pseudopot_cell_vnl::init(const UnitCell& ucell,
             resmem_dd_op()(gpu_ctx, d_nhtol, ntype * this->nhm);
             resmem_dd_op()(gpu_ctx, d_nhtolm, ntype * this->nhm);
             resmem_dd_op()(gpu_ctx, d_qq_nt, ntype * this->nhm * this->nhm);
+            ModuleBase::Memory::record_gpu("VNL::d_deeq",
+                sizeof(double) * PARAM.inp.nspin * ucell.nat * this->nhm * this->nhm);
+            ModuleBase::Memory::record_gpu("VNL::d_qq_nt",
+                sizeof(double) * ntype * this->nhm * this->nhm);
         }
         else
         {
@@ -221,11 +225,18 @@ void pseudopot_cell_vnl::init(const UnitCell& ucell,
     // nqxq = ((sqrt(gcutm)+sqrt(xqq[1]*xqq[1]+xqq[2]*xqq[2]+xqq[3]*xqq[3])/
     // dq+4)*cell_factor;
     this->lmaxq = 2 * this->lmaxkb + 1;
-    int npwx = this->wfcpw->npwk_max;
+    this->npwx = this->wfcpw->npwk_max;
+    int npwx = this->npwx;
     if (nkb > 0 && allocate_vkb)
     {
-        vkb.create(nkb, npwx);
-        ModuleBase::Memory::record("VNL::vkb", nkb * npwx * sizeof(std::complex<double>));
+        // In GPU mode, skip CPU vkb allocation — GPU buffer z_vkb is allocated below.
+        // CPU code paths (velocity_pw, fs_nonlocal_tools) that use vkb.c are not
+        // reached in GPU mode, and dimension queries use ppcell->npwx instead.
+        if (PARAM.inp.device != "gpu")
+        {
+            vkb.create(nkb, npwx);
+            ModuleBase::Memory::record("VNL::vkb", nkb * npwx * sizeof(std::complex<double>));
+        }
     }
 
     // this->nqx = 10000;		// calculted in allocate_nlpot.f90
@@ -277,9 +288,13 @@ void pseudopot_cell_vnl::init(const UnitCell& ucell,
         {
             resmem_sd_op()(gpu_ctx, s_tab, this->tab.getSize());
             resmem_cd_op()(gpu_ctx, c_vkb, nkb * npwx);
+            ModuleBase::Memory::record_gpu("VNL::s_tab", sizeof(float) * this->tab.getSize());
+            ModuleBase::Memory::record_gpu("VNL::c_vkb", sizeof(std::complex<float>) * nkb * npwx);
         }
         resmem_zd_op()(gpu_ctx, z_vkb, nkb * npwx);
         resmem_dd_op()(gpu_ctx, d_tab, this->tab.getSize());
+        ModuleBase::Memory::record_gpu("VNL::z_vkb", sizeof(std::complex<double>) * nkb * npwx);
+        ModuleBase::Memory::record_gpu("VNL::d_tab", sizeof(double) * this->tab.getSize());
     }
     else
     {

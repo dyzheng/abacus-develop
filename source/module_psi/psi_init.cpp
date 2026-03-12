@@ -39,6 +39,7 @@ void PSIInit<T, Device>::prepare_init(const int& random_seed)
     // under restriction of C++11, std::unique_ptr can not be allocate via std::make_unique
     // use new instead, but will cause asymmetric allocation and deallocation, in literal aspect
     ModuleBase::timer::tick("PSIInit", "prepare_init");
+    ModuleBase::TITLE("PSIInit", "prepare_init_start");
     this->psi_initer.reset();
     if (this->init_wfc == "random")
     {
@@ -75,7 +76,9 @@ void PSIInit<T, Device>::prepare_init(const int& random_seed)
     }
 
     this->psi_initer->initialize(&sf, &pw_wfc, &ucell, &parakpts, random_seed, &nlpp, rank);
+    ModuleBase::TITLE("PSIInit", "after_initialize");
     this->psi_initer->tabulate();
+    ModuleBase::TITLE("PSIInit", "after_tabulate");
 
     ModuleBase::timer::tick("PSIInit", "prepare_init");
 }
@@ -206,7 +209,6 @@ void allocate_psi(Psi<std::complex<double>>*& psi, const int& nks, const int* ng
     }
     psi = new psi::Psi<std::complex<double>>(nks2, nbands, npwx * PARAM.globalv.npol, ngk);
     const size_t memory_cost = sizeof(std::complex<double>) * nks2 * nbands * (PARAM.globalv.npol * npwx);
-    std::cout << " MEMORY FOR PSI (MB)  : " << static_cast<double>(memory_cost) / 1024.0 / 1024.0 << std::endl;
     ModuleBase::Memory::record("Psi_PW", memory_cost);
 }
 

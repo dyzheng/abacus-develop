@@ -148,6 +148,8 @@ void PW_Basis_K::setupIndGk()
 }
     delete[] igl2isz_k; this->igl2isz_k = new int [this->nks * this->npwk_max];
     delete[] igl2ig_k; this->igl2ig_k = new int [this->nks * this->npwk_max];
+    ModuleBase::Memory::record("PW_B_K::igl2isz_k", sizeof(int) * this->nks * this->npwk_max);
+    ModuleBase::Memory::record("PW_B_K::igl2ig_k", sizeof(int) * this->nks * this->npwk_max);
     for (int ik = 0; ik < this->nks; ik++)
     {
         int igl = 0;
@@ -166,6 +168,7 @@ void PW_Basis_K::setupIndGk()
     if (this->device == "gpu") {
         resmem_int_op()(gpu_ctx, this->d_igl2isz_k, this->npwk_max * this->nks);
         syncmem_int_h2d_op()(gpu_ctx, cpu_ctx, this->d_igl2isz_k, this->igl2isz_k, this->npwk_max * this->nks);
+        ModuleBase::Memory::record_gpu("PW_B_K::d_igl2isz_k", sizeof(int) * this->npwk_max * this->nks);
     }
 #endif
     this->get_ig2ixyz_k();
@@ -192,6 +195,7 @@ void PW_Basis_K::setuptransform()
         this->fft_bundle.initfft(this->nx,this->ny,this->nz,this->liy,this->riy,this->nst,this->nplane,this->poolnproc,this->gamma_only, this->xprime);
     }
     this->fft_bundle.setupFFT();
+
     ModuleBase::timer::tick(this->classname, "setuptransform");
 }
 
@@ -251,12 +255,16 @@ void PW_Basis_K::collect_local_pw(const double& erf_ecut_in, const double& erf_h
             resmem_sd_op()(gpu_ctx, this->s_gcar, this->npwk_max * this->nks * 3);
             castmem_d2s_h2d_op()(gpu_ctx, cpu_ctx, this->s_gk2, this->gk2, this->npwk_max * this->nks);
             castmem_d2s_h2d_op()(gpu_ctx, cpu_ctx, this->s_gcar, reinterpret_cast<double *>(&this->gcar[0][0]), this->npwk_max * this->nks * 3);
+            ModuleBase::Memory::record_gpu("PW_B_K::s_gk2", sizeof(float) * this->npwk_max * this->nks);
+            ModuleBase::Memory::record_gpu("PW_B_K::s_gcar", sizeof(float) * this->npwk_max * this->nks * 3);
         }
         else {
             resmem_dd_op()(gpu_ctx, this->d_gk2, this->npwk_max * this->nks);
             resmem_dd_op()(gpu_ctx, this->d_gcar, this->npwk_max * this->nks * 3);
             syncmem_d2d_h2d_op()(gpu_ctx, cpu_ctx, this->d_gk2, this->gk2, this->npwk_max * this->nks);
             syncmem_d2d_h2d_op()(gpu_ctx, cpu_ctx, this->d_gcar, reinterpret_cast<double *>(&this->gcar[0][0]), this->npwk_max * this->nks * 3);
+            ModuleBase::Memory::record_gpu("PW_B_K::d_gk2", sizeof(double) * this->npwk_max * this->nks);
+            ModuleBase::Memory::record_gpu("PW_B_K::d_gcar", sizeof(double) * this->npwk_max * this->nks * 3);
         }
     }
     else {

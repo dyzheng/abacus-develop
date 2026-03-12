@@ -70,6 +70,8 @@ void Broyden_Mixing::tem_push_data(Mixing_Data& mdata,
         if (dF != nullptr)
             free(dF);
         dF = malloc(sizeof(FPTYPE) * length * mixing_ndim);
+        ModuleBase::Memory::record("Broyden::F", sizeof(FPTYPE) * length);
+        ModuleBase::Memory::record("Broyden::dF", sizeof(FPTYPE) * length * mixing_ndim);
         FP_dF = static_cast<FPTYPE*>(dF);
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static, 4096 / sizeof(FPTYPE))

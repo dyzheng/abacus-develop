@@ -1,5 +1,7 @@
 #include "fft_cpu.h"
 #include "fftw3.h"
+#include "module_base/memory.h"
+#include <iostream>
 namespace ModulePW
 {
 
@@ -63,6 +65,8 @@ void FFT_CPU<double>::setupFFT()
     }
     z_auxg = (std::complex<double>*)fftw_malloc(sizeof(fftw_complex) * this->maxgrids);
     z_auxr = (std::complex<double>*)fftw_malloc(sizeof(fftw_complex) * this->maxgrids);
+    ModuleBase::Memory::record("FFT::z_auxg", sizeof(fftw_complex) * this->maxgrids);
+    ModuleBase::Memory::record("FFT::z_auxr", sizeof(fftw_complex) * this->maxgrids);
     d_rspace = (double*)z_auxg;
     this->planzfor = fftw_plan_many_dft(1, 
                                         &this->nz, 

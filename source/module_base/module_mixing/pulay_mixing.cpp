@@ -65,6 +65,7 @@ void Pulay_Mixing::tem_push_data(Mixing_Data& mdata,
         if (F != nullptr)
             free(F);
         F = malloc(sizeof(FPTYPE) * length * mixing_ndim);
+        ModuleBase::Memory::record("Pulay::F", sizeof(FPTYPE) * length * mixing_ndim);
         FP_F = static_cast<FPTYPE*>(F);
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static, 4096 / sizeof(FPTYPE))
