@@ -327,7 +327,9 @@ void Psi<T, Device>::resize(const int nks_in, const int nbands_in, const int nba
             delete[] psi_cpu_;
         }
         psi_cpu_ = new T[total_size](); // value-initialize to zero
-        ModuleBase::Memory::record("Psi::psi_cpu", sizeof(T) * total_size);
+        // Note: Memory::record for psi_cpu_ is deferred.
+        // If set_psi_cpu_external() is called later, this buffer is freed and replaced,
+        // so we only record in the final state (see set_psi_cpu_external and the fallback below).
 
         // Allocate GPU buffer for ONE k-point using device memory ops
         // Note: resize_memory_op frees existing allocation before re-allocating

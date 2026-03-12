@@ -268,6 +268,11 @@ void ESolver_KS_PW<T, Device>::before_all_runners(UnitCell& ucell, const Input_p
         T* cpu_base = reinterpret_cast<T*>(this->psi[0].get_pointer() - this->psi[0].get_psi_bias());
         this->kspw_psi->set_psi_cpu_external(cpu_base);
     }
+    else if (this->kspw_psi->get_storage_mode() == psi::PsiStorageMode::PAGED_GPU)
+    {
+        // Single precision PAGED_GPU: types differ, psi_cpu_ is an independent owned buffer
+        ModuleBase::Memory::record("Psi::psi_cpu", sizeof(T) * this->kspw_psi->size());
+    }
 
     if (PARAM.inp.precision == "single")
     {
