@@ -35,7 +35,7 @@ Nonlocal<OperatorPW<T, Device>>::Nonlocal(const int* isk_in,
 
     // Initialize VKB batching if requested
     const int vkb_batch_atoms = PARAM.inp.vkb_batch_atoms;
-    if ((vkb_batch_atoms > 0 || PARAM.inp.device_memory_mode == "paged")
+    if (vkb_batch_atoms > 0
         && this->ppcell->nkb > 0 && ucell_in->nat > 0)
     {
         // Build nproj per atom array
@@ -583,7 +583,7 @@ hamilt::Nonlocal<OperatorPW<T, Device>>::Nonlocal(const Nonlocal<OperatorPW<T_in
 
     // Initialize VKB batching (same logic as primary constructor)
     const int vkb_batch_atoms = PARAM.inp.vkb_batch_atoms;
-    if ((vkb_batch_atoms > 0 || PARAM.inp.device_memory_mode == "paged")
+    if (vkb_batch_atoms > 0
         && this->ppcell->nkb > 0 && this->ucell->nat > 0)
     {
         // Build nproj per atom array
