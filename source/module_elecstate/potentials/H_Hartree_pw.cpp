@@ -4,6 +4,9 @@
 #include "module_base/constants.h"
 #include "module_base/timer.h"
 #include "module_base/parallel_reduce.h"
+#if defined(__CUDA) || defined(__ROCM)
+#include <cuda_runtime.h>
+#endif
 
 namespace elecstate
 {
@@ -35,7 +38,28 @@ ModuleBase::matrix H_Hartree_pw::v_hartree(const UnitCell &cell,
     //=============================
     //  bring rho (aux) to G space
     //=============================
-    rho_basis->real2recip(Porter.data(), Porter.data());
+#if defined(__CUDA) || defined(__ROCM)
+    if (rho_basis->gpu_fft_bundle != nullptr)
+    {
+        // GPU FFT path: H2D -> cuFFT -> D2H
+        std::complex<double>* d_porter = nullptr;
+        std::complex<double>* d_rhog = nullptr;
+        cudaMalloc(&d_porter, sizeof(std::complex<double>) * rho_basis->nrxx);
+        cudaMalloc(&d_rhog, sizeof(std::complex<double>) * rho_basis->npw);
+        cudaMemcpy(d_porter, Porter.data(), sizeof(std::complex<double>) * rho_basis->nrxx, cudaMemcpyHostToDevice);
+
+        base_device::DEVICE_GPU* gpu_ctx = nullptr;
+        rho_basis->real_to_recip(gpu_ctx, d_porter, d_rhog);
+
+        cudaMemcpy(Porter.data(), d_rhog, sizeof(std::complex<double>) * rho_basis->npw, cudaMemcpyDeviceToHost);
+        cudaFree(d_porter);
+        cudaFree(d_rhog);
+    }
+    else
+#endif
+    {
+        rho_basis->real2recip(Porter.data(), Porter.data());
+    }
 
     //=======================================================
     // calculate hartree potential in G-space (NB: V(G=0)=0 )
@@ -66,7 +90,28 @@ ModuleBase::matrix H_Hartree_pw::v_hartree(const UnitCell &cell,
     //==========================================
     // transform hartree potential to real space
     //==========================================
-    rho_basis->recip2real(vh_g.data(), Porter.data());
+#if defined(__CUDA) || defined(__ROCM)
+    if (rho_basis->gpu_fft_bundle != nullptr)
+    {
+        // GPU IFFT path: H2D -> cuFFT -> D2H
+        std::complex<double>* d_vhg = nullptr;
+        std::complex<double>* d_porter = nullptr;
+        cudaMalloc(&d_vhg, sizeof(std::complex<double>) * rho_basis->npw);
+        cudaMalloc(&d_porter, sizeof(std::complex<double>) * rho_basis->nrxx);
+        cudaMemcpy(d_vhg, vh_g.data(), sizeof(std::complex<double>) * rho_basis->npw, cudaMemcpyHostToDevice);
+
+        base_device::DEVICE_GPU* gpu_ctx = nullptr;
+        rho_basis->recip_to_real(gpu_ctx, d_vhg, d_porter);
+
+        cudaMemcpy(Porter.data(), d_porter, sizeof(std::complex<double>) * rho_basis->nrxx, cudaMemcpyDeviceToHost);
+        cudaFree(d_vhg);
+        cudaFree(d_porter);
+    }
+    else
+#endif
+    {
+        rho_basis->recip2real(vh_g.data(), Porter.data());
+    }
 
     //==========================================
     // Add hartree potential to the xc potential
