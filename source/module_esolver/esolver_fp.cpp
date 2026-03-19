@@ -86,6 +86,13 @@ void ESolver_FP::before_all_runners(UnitCell& ucell, const Input_para& inp)
     this->pw_rho->setuptransform();
     this->pw_rho->collect_local_pw();
     this->pw_rho->collect_uniqgg();
+#if defined(__CUDA) || defined(__ROCM)
+    if (PARAM.inp.basis_type == "lcao" && PARAM.inp.device == "gpu"
+        && GlobalV::NPROC_IN_POOL == 1)
+    {
+        this->pw_rho->setup_gpu_fft();
+    }
+#endif
 
     //! 3) initialize the double grid (for uspp) if necessary
     if ( PARAM.globalv.double_grid)

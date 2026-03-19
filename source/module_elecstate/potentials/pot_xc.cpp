@@ -2,6 +2,7 @@
 
 #include "module_base/timer.h"
 #include "module_hamilt_pw/hamilt_pwdft/global.h"
+#include "module_parameter/parameter.h"
 
 #ifdef USE_LIBXC
 #include "module_hamilt_general/module_xc/xc_functional_libxc.h"
@@ -35,11 +36,23 @@ void PotXC::cal_v_eff(const Charge*const chg, const UnitCell*const ucell, Module
     }
     else
     {
-        const std::tuple<double, double, ModuleBase::matrix> etxc_vtxc_v
-            = XC_Functional::v_xc(nrxx_current, chg, ucell);
-        *(this->etxc_) = std::get<0>(etxc_vtxc_v);
-        *(this->vtxc_) = std::get<1>(etxc_vtxc_v);
-        v_eff += std::get<2>(etxc_vtxc_v);
+#if defined(__CUDA) || defined(__ROCM)
+        if (PARAM.inp.device == "gpu")
+        {
+            const auto [etxc, vtxc, v] = XC_Functional::v_xc_gpu(nrxx_current, chg, ucell);
+            *(this->etxc_) = etxc;
+            *(this->vtxc_) = vtxc;
+            v_eff += v;
+        }
+        else
+#endif
+        {
+            const std::tuple<double, double, ModuleBase::matrix> etxc_vtxc_v
+                = XC_Functional::v_xc(nrxx_current, chg, ucell);
+            *(this->etxc_) = std::get<0>(etxc_vtxc_v);
+            *(this->vtxc_) = std::get<1>(etxc_vtxc_v);
+            v_eff += std::get<2>(etxc_vtxc_v);
+        }
     }
     ModuleBase::timer::tick("PotXC", "cal_v_eff");
 }

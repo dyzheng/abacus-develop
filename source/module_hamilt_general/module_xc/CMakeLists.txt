@@ -19,6 +19,14 @@ add_library(
     xc_functional_libxc_wrapper_tauxc.cpp
 )
 
+if(USE_CUDA)
+    target_sources(xc_ PRIVATE
+        xc_functional_gpu_launcher.cu
+        xc_functional_gradcorr_gpu.cu
+        xc_functional_vxc_gpu.cpp
+    )
+endif()
+
 if(ENABLE_COVERAGE)
   add_coverage(xc_)
 endif()

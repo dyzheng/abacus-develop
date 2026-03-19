@@ -41,7 +41,15 @@ PW_Basis:: ~PW_Basis()
 #if defined(__CUDA) || defined(__ROCM)
     if (this->device == "gpu") {
         delmem_int_op()(gpu_ctx, this->d_is2fftixy);
+        delmem_int_op()(gpu_ctx, this->ig2ixyz);
     }
+    else if (this->gpu_fft_bundle != nullptr) {
+        // ig2ixyz was allocated by setup_gpu_fft for LCAO+GPU path
+        if (this->ig2ixyz != nullptr) {
+            delmem_int_op()(gpu_ctx, this->ig2ixyz);
+        }
+    }
+    delete this->gpu_fft_bundle;
 #endif
 }
 
@@ -66,6 +74,7 @@ void PW_Basis::setuptransform()
         this->fft_bundle.initfft(this->nx,this->ny,this->nz,this->liy,this->riy,this->nst,this->nplane,this->poolnproc,this->gamma_only, this->xprime);
     }
     this->fft_bundle.setupFFT();
+    this->get_ig2ixyz();
 
     ModuleBase::timer::tick(this->classname, "setuptransform");
 }
@@ -293,5 +302,66 @@ void PW_Basis::set_device(std::string device_) {
 void PW_Basis::set_precision(std::string precision_) {
     this->precision = std::move(precision_);
 }
+
+void PW_Basis::get_ig2ixyz()
+{
+#if defined(__CUDA) || defined(__ROCM)
+    if (this->device != "gpu")
+    {
+        return;
+    }
+    int* ig2ixyz_cpu = new int[this->npw];
+    ModuleBase::Memory::record("PW_B::ig2ixyz", sizeof(int) * this->npw);
+    for (int ig = 0; ig < this->npw; ++ig)
+    {
+        int isz = this->ig2isz[ig];
+        int iz = isz % this->nz;
+        int is = isz / this->nz;
+        int ixy = this->is2fftixy[is];
+        int iy = ixy % this->ny;
+        int ix = ixy / this->ny;
+        ig2ixyz_cpu[ig] = iz + iy * nz + ix * ny * nz;
+    }
+    resmem_int_op()(gpu_ctx, this->ig2ixyz, this->npw);
+    syncmem_int_h2d_op()(gpu_ctx, cpu_ctx, this->ig2ixyz, ig2ixyz_cpu, this->npw);
+    delete[] ig2ixyz_cpu;
+#endif
+}
+
+#if defined(__CUDA) || defined(__ROCM)
+void PW_Basis::setup_gpu_fft()
+{
+    if (this->poolnproc != 1) { return;
+}
+    delete this->gpu_fft_bundle;
+    this->gpu_fft_bundle = new FFT_Bundle();
+    this->gpu_fft_bundle->setfft("gpu", this->precision);
+    this->gpu_fft_bundle->initfft(this->nx, this->ny, this->nz,
+                                   0, 0, 0, 0, 1, false, true);
+    this->gpu_fft_bundle->setupFFT();
+    this->get_ig2ixyz_for_gpu();
+}
+
+void PW_Basis::get_ig2ixyz_for_gpu()
+{
+    if (this->ig2ixyz != nullptr) { return;
+}
+    int* ig2ixyz_cpu = new int[this->npw];
+    ModuleBase::Memory::record("PW_B::ig2ixyz", sizeof(int) * this->npw);
+    for (int ig = 0; ig < this->npw; ++ig)
+    {
+        int isz = this->ig2isz[ig];
+        int iz = isz % this->nz;
+        int is = isz / this->nz;
+        int ixy = this->is2fftixy[is];
+        int iy = ixy % this->ny;
+        int ix = ixy / this->ny;
+        ig2ixyz_cpu[ig] = iz + iy * nz + ix * ny * nz;
+    }
+    resmem_int_op()(gpu_ctx, this->ig2ixyz, this->npw);
+    syncmem_int_h2d_op()(gpu_ctx, cpu_ctx, this->ig2ixyz, ig2ixyz_cpu, this->npw);
+    delete[] ig2ixyz_cpu;
+}
+#endif
 
 }

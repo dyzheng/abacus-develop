@@ -5,6 +5,7 @@
 #include "module_base/global_function.h"
 #include "module_base/timer.h"
 #include "pw_gatherscatter.h"
+#include "module_basis/module_pw/kernels/pw_op.h"
 
 namespace ModulePW {
 /**
@@ -311,4 +312,261 @@ template void PW_Basis::recip2real<double>(const std::complex<double>* in,
                                            std::complex<double>* out,
                                            const bool add,
                                            const double factor) const;
+
+// ============================================================
+// Device-aware FFT: CPU specializations (delegate to existing)
+// ============================================================
+
+template <>
+void PW_Basis::real_to_recip(const base_device::DEVICE_CPU* /*ctx*/,
+                              const double* in,
+                              std::complex<double>* out,
+                              const bool add,
+                              const double factor) const
+{
+    this->real2recip(in, out, add, factor);
+}
+template <>
+void PW_Basis::real_to_recip(const base_device::DEVICE_CPU* /*ctx*/,
+                              const float* in,
+                              std::complex<float>* out,
+                              const bool add,
+                              const float factor) const
+{
+    this->real2recip(in, out, add, factor);
+}
+template <>
+void PW_Basis::real_to_recip(const base_device::DEVICE_CPU* /*ctx*/,
+                              const std::complex<double>* in,
+                              std::complex<double>* out,
+                              const bool add,
+                              const double factor) const
+{
+    this->real2recip(in, out, add, factor);
+}
+template <>
+void PW_Basis::real_to_recip(const base_device::DEVICE_CPU* /*ctx*/,
+                              const std::complex<float>* in,
+                              std::complex<float>* out,
+                              const bool add,
+                              const float factor) const
+{
+    this->real2recip(in, out, add, factor);
+}
+
+template <>
+void PW_Basis::recip_to_real(const base_device::DEVICE_CPU* /*ctx*/,
+                              const std::complex<double>* in,
+                              double* out,
+                              const bool add,
+                              const double factor) const
+{
+    this->recip2real(in, out, add, factor);
+}
+template <>
+void PW_Basis::recip_to_real(const base_device::DEVICE_CPU* /*ctx*/,
+                              const std::complex<float>* in,
+                              float* out,
+                              const bool add,
+                              const float factor) const
+{
+    this->recip2real(in, out, add, factor);
+}
+template <>
+void PW_Basis::recip_to_real(const base_device::DEVICE_CPU* /*ctx*/,
+                              const std::complex<double>* in,
+                              std::complex<double>* out,
+                              const bool add,
+                              const double factor) const
+{
+    this->recip2real(in, out, add, factor);
+}
+template <>
+void PW_Basis::recip_to_real(const base_device::DEVICE_CPU* /*ctx*/,
+                              const std::complex<float>* in,
+                              std::complex<float>* out,
+                              const bool add,
+                              const float factor) const
+{
+    this->recip2real(in, out, add, factor);
+}
+
+// ============================================================
+// Device-aware FFT: GPU specializations (3D cuFFT)
+// ============================================================
+#if defined(__CUDA) || defined(__ROCM)
+
+// real_to_recip: complex input -> complex output (GPU)
+template <>
+void PW_Basis::real_to_recip(const base_device::DEVICE_GPU* ctx,
+                              const std::complex<double>* in,
+                              std::complex<double>* out,
+                              const bool add,
+                              const double factor) const
+{
+    ModuleBase::timer::tick(this->classname, "real_to_recip gpu");
+    assert(this->gamma_only == false);
+    assert(this->gpu_fft_bundle != nullptr);
+
+    base_device::memory::synchronize_memory_op<std::complex<double>,
+                                               base_device::DEVICE_GPU,
+                                               base_device::DEVICE_GPU>()(ctx, ctx,
+                                                   this->gpu_fft_bundle->get_auxr_3d_data<double>(),
+                                                   in, this->nrxx);
+
+    this->gpu_fft_bundle->fft3D_forward(ctx,
+        this->gpu_fft_bundle->get_auxr_3d_data<double>(),
+        this->gpu_fft_bundle->get_auxr_3d_data<double>());
+
+    set_real_to_recip_output_op<double, base_device::DEVICE_GPU>()(ctx,
+        this->npw, this->nxyz, add, factor,
+        this->ig2ixyz,
+        this->gpu_fft_bundle->get_auxr_3d_data<double>(),
+        out);
+
+    ModuleBase::timer::tick(this->classname, "real_to_recip gpu");
+}
+
+template <>
+void PW_Basis::real_to_recip(const base_device::DEVICE_GPU* ctx,
+                              const std::complex<float>* in,
+                              std::complex<float>* out,
+                              const bool add,
+                              const float factor) const
+{
+    ModuleBase::timer::tick(this->classname, "real_to_recip gpu");
+    assert(this->gamma_only == false);
+    assert(this->gpu_fft_bundle != nullptr);
+
+    base_device::memory::synchronize_memory_op<std::complex<float>,
+                                               base_device::DEVICE_GPU,
+                                               base_device::DEVICE_GPU>()(ctx, ctx,
+                                                   this->gpu_fft_bundle->get_auxr_3d_data<float>(),
+                                                   in, this->nrxx);
+
+    this->gpu_fft_bundle->fft3D_forward(ctx,
+        this->gpu_fft_bundle->get_auxr_3d_data<float>(),
+        this->gpu_fft_bundle->get_auxr_3d_data<float>());
+
+    set_real_to_recip_output_op<float, base_device::DEVICE_GPU>()(ctx,
+        this->npw, this->nxyz, add, factor,
+        this->ig2ixyz,
+        this->gpu_fft_bundle->get_auxr_3d_data<float>(),
+        out);
+
+    ModuleBase::timer::tick(this->classname, "real_to_recip gpu");
+}
+
+// real_to_recip: real input -> complex output (GPU)
+// Not yet implemented for GPU — real-input FFT on GPU requires a real-to-complex kernel.
+// For GPU XC path, convert real to complex on GPU before calling the complex overload.
+template <>
+void PW_Basis::real_to_recip(const base_device::DEVICE_GPU* /*ctx*/,
+                              const double* /*in*/,
+                              std::complex<double>* /*out*/,
+                              const bool /*add*/,
+                              const double /*factor*/) const
+{
+    ModuleBase::WARNING_QUIT("PW_Basis::real_to_recip",
+        "GPU real(double)->recip not implemented. Use complex input overload.");
+}
+
+template <>
+void PW_Basis::real_to_recip(const base_device::DEVICE_GPU* /*ctx*/,
+                              const float* /*in*/,
+                              std::complex<float>* /*out*/,
+                              const bool /*add*/,
+                              const float /*factor*/) const
+{
+    ModuleBase::WARNING_QUIT("PW_Basis::real_to_recip",
+        "GPU real(float)->recip not implemented. Use complex input overload.");
+}
+
+// recip_to_real: complex input -> complex output (GPU)
+template <>
+void PW_Basis::recip_to_real(const base_device::DEVICE_GPU* ctx,
+                              const std::complex<double>* in,
+                              std::complex<double>* out,
+                              const bool add,
+                              const double factor) const
+{
+    ModuleBase::timer::tick(this->classname, "recip_to_real gpu");
+    assert(this->gamma_only == false);
+    assert(this->gpu_fft_bundle != nullptr);
+
+    base_device::memory::set_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(
+        ctx, this->gpu_fft_bundle->get_auxr_3d_data<double>(), 0, this->nxyz);
+
+    set_3d_fft_box_op<double, base_device::DEVICE_GPU>()(ctx,
+        this->npw, this->ig2ixyz, in,
+        this->gpu_fft_bundle->get_auxr_3d_data<double>());
+
+    this->gpu_fft_bundle->fft3D_backward(ctx,
+        this->gpu_fft_bundle->get_auxr_3d_data<double>(),
+        this->gpu_fft_bundle->get_auxr_3d_data<double>());
+
+    set_recip_to_real_output_op<double, base_device::DEVICE_GPU>()(ctx,
+        this->nrxx, add, factor,
+        this->gpu_fft_bundle->get_auxr_3d_data<double>(),
+        out);
+
+    ModuleBase::timer::tick(this->classname, "recip_to_real gpu");
+}
+
+template <>
+void PW_Basis::recip_to_real(const base_device::DEVICE_GPU* ctx,
+                              const std::complex<float>* in,
+                              std::complex<float>* out,
+                              const bool add,
+                              const float factor) const
+{
+    ModuleBase::timer::tick(this->classname, "recip_to_real gpu");
+    assert(this->gamma_only == false);
+    assert(this->gpu_fft_bundle != nullptr);
+
+    base_device::memory::set_memory_op<std::complex<float>, base_device::DEVICE_GPU>()(
+        ctx, this->gpu_fft_bundle->get_auxr_3d_data<float>(), 0, this->nxyz);
+
+    set_3d_fft_box_op<float, base_device::DEVICE_GPU>()(ctx,
+        this->npw, this->ig2ixyz, in,
+        this->gpu_fft_bundle->get_auxr_3d_data<float>());
+
+    this->gpu_fft_bundle->fft3D_backward(ctx,
+        this->gpu_fft_bundle->get_auxr_3d_data<float>(),
+        this->gpu_fft_bundle->get_auxr_3d_data<float>());
+
+    set_recip_to_real_output_op<float, base_device::DEVICE_GPU>()(ctx,
+        this->nrxx, add, factor,
+        this->gpu_fft_bundle->get_auxr_3d_data<float>(),
+        out);
+
+    ModuleBase::timer::tick(this->classname, "recip_to_real gpu");
+}
+
+// recip_to_real: complex input -> real output (GPU)
+// Not yet implemented — extracting real part on GPU requires a dedicated kernel.
+template <>
+void PW_Basis::recip_to_real(const base_device::DEVICE_GPU* /*ctx*/,
+                              const std::complex<double>* /*in*/,
+                              double* /*out*/,
+                              const bool /*add*/,
+                              const double /*factor*/) const
+{
+    ModuleBase::WARNING_QUIT("PW_Basis::recip_to_real",
+        "GPU recip->real(double) not implemented. Use complex output overload.");
+}
+
+template <>
+void PW_Basis::recip_to_real(const base_device::DEVICE_GPU* /*ctx*/,
+                              const std::complex<float>* /*in*/,
+                              float* /*out*/,
+                              const bool /*add*/,
+                              const float /*factor*/) const
+{
+    ModuleBase::WARNING_QUIT("PW_Basis::recip_to_real",
+        "GPU recip->real(float) not implemented. Use complex output overload.");
+}
+
+#endif // __CUDA || __ROCM
+
 }

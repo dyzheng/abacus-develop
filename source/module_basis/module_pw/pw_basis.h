@@ -244,6 +244,13 @@ public:
                      // Thus complex<double>[nmaxgr] is able to contain either reciprocal or real data
     // FFT ft;
     FFT_Bundle fft_bundle;
+#if defined(__CUDA) || defined(__ROCM)
+    FFT_Bundle* gpu_fft_bundle = nullptr; ///< Optional GPU FFT, coexists with CPU fft_bundle
+    void setup_gpu_fft();                  ///< Initialize gpu_fft_bundle + ig2ixyz for LCAO+GPU
+  private:
+    void get_ig2ixyz_for_gpu();            ///< Allocate ig2ixyz without checking this->device
+  public:
+#endif
     //The position of pointer in and out can be equal(in-place transform) or different(out-of-place transform).
 
     template <typename FPTYPE>
@@ -288,9 +295,44 @@ public:
     void set_device(std::string device_);
     void set_precision(std::string precision_);
 
+    // GPU mapping array: ig -> 3D FFT box index (ix*ny*nz + iy*nz + iz)
+    int* ig2ixyz = nullptr; ///< GPU memory, size = npw, for GPU 3D FFT
+
+    // Device-aware FFT transforms (no k-point, for charge density)
+    template <typename FPTYPE, typename Device>
+    void real_to_recip(const Device* ctx,
+                       const FPTYPE* in,
+                       std::complex<FPTYPE>* out,
+                       const bool add = false,
+                       const FPTYPE factor = 1.0) const;
+
+    template <typename FPTYPE, typename Device>
+    void real_to_recip(const Device* ctx,
+                       const std::complex<FPTYPE>* in,
+                       std::complex<FPTYPE>* out,
+                       const bool add = false,
+                       const FPTYPE factor = 1.0) const;
+
+    template <typename FPTYPE, typename Device>
+    void recip_to_real(const Device* ctx,
+                       const std::complex<FPTYPE>* in,
+                       FPTYPE* out,
+                       const bool add = false,
+                       const FPTYPE factor = 1.0) const;
+
+    template <typename FPTYPE, typename Device>
+    void recip_to_real(const Device* ctx,
+                       const std::complex<FPTYPE>* in,
+                       std::complex<FPTYPE>* out,
+                       const bool add = false,
+                       const FPTYPE factor = 1.0) const;
+
 protected:
     std::string device = "cpu";
     std::string precision = "double";
+
+    /// Compute ig2ixyz mapping for GPU 3D FFT (called from setuptransform)
+    void get_ig2ixyz();
 };
 
 }

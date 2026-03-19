@@ -44,12 +44,20 @@ class XC_Functional
 // NOTE : it is only used for nspin = 1 and 2, the nspin = 4 case is treated in v_xc
 // 3. v_xc_meta : which takes rho and tau as input, and v_xc as output
 
-	// compute the exchange-correlation energy 
+	// compute the exchange-correlation energy
 	// [etxc, vtxc, v] = v_xc(...)
     static std::tuple<double,double,ModuleBase::matrix> v_xc(
 		const int &nrxx, // number of real-space grid
 		const Charge* const chr,
 		const UnitCell *ucell); // charge density
+
+#if defined(__CUDA) || defined(__ROCM)
+    // GPU version: compute LDA XC on device, result returned as CPU matrix
+    static std::tuple<double,double,ModuleBase::matrix> v_xc_gpu(
+		const int &nrxx,
+		const Charge* const chr,
+		const UnitCell *ucell);
+#endif
 
 //-------------------
 //  xc_functional.cpp
