@@ -380,10 +380,11 @@ void Psi<T, Device>::resize(const int nks_in, const int nbands_in, const int nba
     else
     {
         // Original behavior: allocate full storage on device
-        resize_memory_op()(this->ctx,
-                           this->psi,
-                           nks_in * static_cast<std::size_t>(nbands_in) * nbasis_in,
-                           "no_record");
+        const size_t full_size = nks_in * static_cast<std::size_t>(nbands_in) * nbasis_in;
+        resize_memory_op()(this->ctx, this->psi, full_size, "no_record");
+#if defined(__CUDA) || defined(__ROCM)
+        ModuleBase::Memory::record_gpu("Psi_PW", sizeof(T) * full_size);
+#endif
     }
 
     this->nk = nks_in;
