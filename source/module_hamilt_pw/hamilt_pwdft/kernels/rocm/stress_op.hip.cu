@@ -1,5 +1,6 @@
 #include "module_hamilt_pw/hamilt_pwdft/kernels/stress_op.h"
 #include "module_hamilt_pw/hamilt_pwdft/kernels/cuda/vnl_tools_cu.hpp"
+#include "module_base/memory.h"
 
 #include <complex>
 
@@ -876,7 +877,7 @@ FPTYPE cal_multi_dot_op<FPTYPE, base_device::DEVICE_GPU>::operator()(const int& 
                                                                    const std::complex<FPTYPE>* psi)
 {
     FPTYPE* d_sum = nullptr;
-    hipMalloc(&d_sum, sizeof(FPTYPE) * 1);
+    hipMallocCheck(&d_sum, sizeof(FPTYPE) * 1, "stress::d_sum");
     hipMemset(d_sum, 0, sizeof(FPTYPE) * 1);
     int block = (npw + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
     hipLaunchKernelGGL(HIP_KERNEL_NAME(cal_multi_dot<FPTYPE>), dim3(block), dim3(THREADS_PER_BLOCK), 0, 0,
@@ -908,7 +909,7 @@ void pointer_array_malloc<base_device::DEVICE_GPU>::operator()(
         void **ptr,
         const int n
 ){
-    hipErrcheck(hipMalloc(ptr, n * sizeof(void*)));
+    hipMallocCheck(ptr, n * sizeof(void*), "stress::pointer_array");
 }
 
 template struct pointer_array_malloc<base_device::DEVICE_GPU>;

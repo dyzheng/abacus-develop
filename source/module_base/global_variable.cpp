@@ -10,6 +10,19 @@
 #include <sstream>
 #include <string>
 #include <vector>
+
+#if defined(__CUDA) || defined(__ROCM)
+// Define the function pointer declared in cuda.h
+void (*cuda_running_log_flush_fn)() = nullptr;
+
+namespace {
+static void flush_running_log() { GlobalV::ofs_running.flush(); }
+struct RunningLogFlushRegistrar {
+    RunningLogFlushRegistrar() { cuda_running_log_flush_fn = &flush_running_log; }
+} _running_log_flush_registrar;
+}
+#endif
+
 namespace GlobalV
 {
 //----------------------------------------------------------

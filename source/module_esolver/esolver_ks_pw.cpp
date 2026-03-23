@@ -47,6 +47,9 @@
 #ifdef USE_PAW
 #include "module_cell/module_paw/paw_cell.h"
 #endif
+#if defined(__CUDA)
+#include <cuda_runtime.h>
+#endif
 
 #include <ATen/kernels/blas.h>
 #include <ATen/kernels/lapack.h>
@@ -217,7 +220,9 @@ void ESolver_KS_PW<T, Device>::before_all_runners(UnitCell& ucell, const Input_p
                                                    this->ppcell,
                                                    *this->pw_wfc);
     allocate_psi(this->psi, this->kv.get_nks(), this->kv.ngk.data(), PARAM.inp.nbands, this->pw_wfc->npwk_max);
+    ModuleBase::TITLE("ESolver_KS_PW", "after_allocate_psi");
     this->p_psi_init->prepare_init(PARAM.inp.pw_seed);
+    ModuleBase::TITLE("ESolver_KS_PW", "after_prepare_init");
 
     // Determine GPU memory storage mode for psi and set on CPU psi before copy construction.
     // The storage_mode_ flag propagates through the copy constructor to kspw_psi.
@@ -259,20 +264,9 @@ void ESolver_KS_PW<T, Device>::before_all_runners(UnitCell& ucell, const Input_p
                          ? new psi::Psi<T, Device>(this->psi[0])
                          : reinterpret_cast<psi::Psi<T, Device>*>(this->psi);
 
-    // In PAGED_GPU + double precision mode, kspw_psi->psi_cpu_ is a redundant copy of this->psi.
-    // Share the same CPU buffer to save ~nks*nbands*npwx*16 bytes of memory.
-    if (this->kspw_psi->get_storage_mode() == psi::PsiStorageMode::PAGED_GPU
-        && PARAM.inp.precision == "double")
-    {
-        // T == std::complex<double> here, same type as this->psi's data
-        T* cpu_base = reinterpret_cast<T*>(this->psi[0].get_pointer() - this->psi[0].get_psi_bias());
-        this->kspw_psi->set_psi_cpu_external(cpu_base);
-    }
-    else if (this->kspw_psi->get_storage_mode() == psi::PsiStorageMode::PAGED_GPU)
-    {
-        // Single precision PAGED_GPU: types differ, psi_cpu_ is an independent owned buffer
-        ModuleBase::Memory::record("Psi::psi_cpu", sizeof(T) * this->kspw_psi->size());
-    }
+    // Note: In PAGED_GPU + double precision mode, the copy constructor above
+    // automatically shares the CPU buffer from this->psi[0] to avoid allocating
+    // 2x memory temporarily. No need for explicit set_psi_cpu_external() call.
 
     if (PARAM.inp.precision == "single")
     {
@@ -538,6 +532,22 @@ void ESolver_KS_PW<T, Device>::hamilt2density_single(UnitCell& ucell,
                                                      const double ethr)
 {
     ModuleBase::timer::tick("ESolver_KS_PW", "hamilt2density_single");
+
+    // GPU memory waterline logging
+#if defined(__CUDA) || defined(__ROCM)
+    if (base_device::get_device_type<Device>(this->ctx) == base_device::GpuDevice)
+    {
+        size_t gpu_free = 0, gpu_total = 0;
+        cudaMemGetInfo(&gpu_free, &gpu_total);
+        double free_mb = static_cast<double>(gpu_free) / (1024.0 * 1024.0);
+        double total_mb = static_cast<double>(gpu_total) / (1024.0 * 1024.0);
+        double used_mb = total_mb - free_mb;
+        GlobalV::ofs_running << " [GPU Memory] SCF iter " << iter
+                             << ": used " << std::fixed << std::setprecision(1) << used_mb
+                             << " MB / " << total_mb << " MB (free " << free_mb << " MB)"
+                             << std::endl;
+    }
+#endif
 
     // reset energy
     this->pelec->f_en.eband = 0.0;

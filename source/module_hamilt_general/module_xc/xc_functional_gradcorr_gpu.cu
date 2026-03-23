@@ -5,6 +5,8 @@
 #include "module_basis/module_pw/pw_basis.h"
 #include "module_base/parallel_reduce.h"
 #include "module_base/timer.h"
+#include "module_base/memory.h"
+#include <base/macros/macros.h>
 #include <cuda_runtime.h>
 #include <complex>
 #include <cstring>
@@ -370,8 +372,8 @@ static void grad_rho_on_gpu(
     // Temp arrays for FFT
     std::complex<double>* d_gtmp = nullptr;
     std::complex<double>* d_rtmp = nullptr;
-    cudaMalloc(&d_gtmp, sizeof(std::complex<double>) * npw);
-    cudaMalloc(&d_rtmp, sizeof(std::complex<double>) * nrxx);
+    cudaMallocCheck(&d_gtmp, sizeof(std::complex<double>) * npw, "gradcorr::grad_rho::d_gtmp");
+    cudaMallocCheck(&d_rtmp, sizeof(std::complex<double>) * nrxx, "gradcorr::grad_rho::d_rtmp");
 
     for (int idir = 0; idir < 3; ++idir)
     {
@@ -413,9 +415,9 @@ static void grad_dot_on_gpu(
     std::complex<double>* d_aux = nullptr;   // [nrxx] complex, real-space
     std::complex<double>* d_aux_g = nullptr; // [npw] complex, G-space
     std::complex<double>* d_gaux = nullptr;  // [npw] complex, accumulated
-    cudaMalloc(&d_aux, sizeof(std::complex<double>) * nrxx);
-    cudaMalloc(&d_aux_g, sizeof(std::complex<double>) * npw);
-    cudaMalloc(&d_gaux, sizeof(std::complex<double>) * npw);
+    cudaMallocCheck(&d_aux, sizeof(std::complex<double>) * nrxx, "gradcorr::grad_dot::d_aux");
+    cudaMallocCheck(&d_aux_g, sizeof(std::complex<double>) * npw, "gradcorr::grad_dot::d_aux_g");
+    cudaMallocCheck(&d_gaux, sizeof(std::complex<double>) * npw, "gradcorr::grad_dot::d_gaux");
 
     for (int idir = 0; idir < 3; ++idir)
     {
@@ -500,21 +502,21 @@ void gradcorr_gpu(const int nrxx, const int npw,
             h_gcar_flat[ig * 3 + 1] = rhopw->gcar[ig].y;
             h_gcar_flat[ig * 3 + 2] = rhopw->gcar[ig].z;
         }
-        cudaMalloc(&d_gcar_flat, sizeof(double) * npw * 3);
+        cudaMallocCheck(&d_gcar_flat, sizeof(double) * npw * 3, "gradcorr::d_gcar_flat");
         cudaMemcpy(d_gcar_flat, h_gcar_flat, sizeof(double) * npw * 3, cudaMemcpyHostToDevice);
         delete[] h_gcar_flat;
     }
 
     // Upload func_ids to GPU
     int* d_fids = nullptr;
-    cudaMalloc(&d_fids, func_ids.size() * sizeof(int));
+    cudaMallocCheck(&d_fids, func_ids.size() * sizeof(int), "gradcorr::d_fids");
     cudaMemcpy(d_fids, func_ids.data(), func_ids.size() * sizeof(int), cudaMemcpyHostToDevice);
 
     // Allocate etxc/vtxc reduction buffers on GPU
     double* d_etxc = nullptr;
     double* d_vtxc = nullptr;
-    cudaMalloc(&d_etxc, sizeof(double));
-    cudaMalloc(&d_vtxc, sizeof(double));
+    cudaMallocCheck(&d_etxc, sizeof(double), "gradcorr::d_etxc");
+    cudaMallocCheck(&d_vtxc, sizeof(double), "gradcorr::d_vtxc");
     cudaMemset(d_etxc, 0, sizeof(double));
     cudaMemset(d_vtxc, 0, sizeof(double));
 
@@ -525,10 +527,10 @@ void gradcorr_gpu(const int nrxx, const int npw,
     std::complex<double>* d_rho_core_complex = nullptr;
     std::complex<double>* d_rhog_core = nullptr;
 
-    cudaMalloc(&d_rho_complex, sizeof(std::complex<double>) * nrxx);
-    cudaMalloc(&d_rhog[0], sizeof(std::complex<double>) * npw);
-    cudaMalloc(&d_rho_core_complex, sizeof(std::complex<double>) * nrxx);
-    cudaMalloc(&d_rhog_core, sizeof(std::complex<double>) * npw);
+    cudaMallocCheck(&d_rho_complex, sizeof(std::complex<double>) * nrxx, "gradcorr::d_rho_complex");
+    cudaMallocCheck(&d_rhog[0], sizeof(std::complex<double>) * npw, "gradcorr::d_rhog[0]");
+    cudaMallocCheck(&d_rho_core_complex, sizeof(std::complex<double>) * nrxx, "gradcorr::d_rho_core_complex");
+    cudaMallocCheck(&d_rhog_core, sizeof(std::complex<double>) * npw, "gradcorr::d_rhog_core");
 
     // FFT rho[0] -> rhog[0]
     real_to_complex_kernel<<<(nrxx + bs - 1) / bs, bs>>>(nrxx, d_rho[0],
@@ -542,7 +544,7 @@ void gradcorr_gpu(const int nrxx, const int npw,
 
     if (nspin == 2)
     {
-        cudaMalloc(&d_rhog[1], sizeof(std::complex<double>) * npw);
+        cudaMallocCheck(&d_rhog[1], sizeof(std::complex<double>) * npw, "gradcorr::d_rhog[1]");
         real_to_complex_kernel<<<(nrxx + bs - 1) / bs, bs>>>(nrxx, d_rho[1],
             reinterpret_cast<double2*>(d_rho_complex));
         do_real_to_recip(d_rho_complex, d_rhog[1], rhopw);
@@ -556,9 +558,9 @@ void gradcorr_gpu(const int nrxx, const int npw,
     double* d_gdr1 = nullptr;
     double* d_gdr2 = nullptr;
 
-    cudaMalloc(&d_rhotmp1, sizeof(double) * nrxx);
-    cudaMalloc(&d_rhogsum1, sizeof(std::complex<double>) * npw);
-    cudaMalloc(&d_gdr1, sizeof(double) * nrxx * 3);
+    cudaMallocCheck(&d_rhotmp1, sizeof(double) * nrxx, "gradcorr::d_rhotmp1");
+    cudaMallocCheck(&d_rhogsum1, sizeof(std::complex<double>) * npw, "gradcorr::d_rhogsum1");
+    cudaMallocCheck(&d_gdr1, sizeof(double) * nrxx * 3, "gradcorr::d_gdr1");
 
     // rhotmp1 = rho[0] + fac * rho_core
     add_core_kernel<<<(nrxx + bs - 1) / bs, bs>>>(nrxx, d_rho[0], d_rho_core, fac, d_rhotmp1);
@@ -577,9 +579,9 @@ void gradcorr_gpu(const int nrxx, const int npw,
 
     if (nspin0 == 2)
     {
-        cudaMalloc(&d_rhotmp2, sizeof(double) * nrxx);
-        cudaMalloc(&d_rhogsum2, sizeof(std::complex<double>) * npw);
-        cudaMalloc(&d_gdr2, sizeof(double) * nrxx * 3);
+        cudaMallocCheck(&d_rhotmp2, sizeof(double) * nrxx, "gradcorr::d_rhotmp2");
+        cudaMallocCheck(&d_rhogsum2, sizeof(std::complex<double>) * npw, "gradcorr::d_rhogsum2");
+        cudaMallocCheck(&d_gdr2, sizeof(double) * nrxx * 3, "gradcorr::d_gdr2");
 
         add_core_kernel<<<(nrxx + bs - 1) / bs, bs>>>(nrxx, d_rho[1], d_rho_core, fac, d_rhotmp2);
         add_core_kernel<<<(2 * npw + bs - 1) / bs, bs>>>(
@@ -595,7 +597,7 @@ void gradcorr_gpu(const int nrxx, const int npw,
     // Step 3: GGA XC kernel
     double* d_h1 = nullptr;
     double* d_h2 = nullptr;
-    cudaMalloc(&d_h1, sizeof(double) * nrxx * 3);
+    cudaMallocCheck(&d_h1, sizeof(double) * nrxx * 3, "gradcorr::d_h1");
 
     if (nspin0 == 1)
     {
@@ -606,7 +608,7 @@ void gradcorr_gpu(const int nrxx, const int npw,
     }
     else
     {
-        cudaMalloc(&d_h2, sizeof(double) * nrxx * 3);
+        cudaMallocCheck(&d_h2, sizeof(double) * nrxx * 3, "gradcorr::d_h2");
         gga_xc_nspin2_kernel<<<(nrxx + bs - 1) / bs, bs>>>(
             nrxx, d_rhotmp1, d_rhotmp2, d_rho_core,
             d_gdr1, d_gdr2,
@@ -624,7 +626,7 @@ void gradcorr_gpu(const int nrxx, const int npw,
 
     // Step 5: grad_dot(h) -> dh, then v_xc -= dh, vtxc -= sum(dh * rhotmp)
     double* d_dh = nullptr;
-    cudaMalloc(&d_dh, sizeof(double) * nrxx);
+    cudaMallocCheck(&d_dh, sizeof(double) * nrxx, "gradcorr::d_dh");
 
     for (int is = 0; is < nspin0; ++is)
     {

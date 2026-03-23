@@ -48,7 +48,7 @@ void resize_memory_op<FPTYPE, base_device::DEVICE_GPU>::operator()(const base_de
     {
         delete_memory_op<FPTYPE, base_device::DEVICE_GPU>()(dev, arr);
     }
-    hipErrcheck(hipMalloc((void**)&arr, sizeof(FPTYPE) * size));
+    hipMallocCheck((void**)&arr, sizeof(FPTYPE) * size, "resize_memory_op");
 }
 
 template <typename FPTYPE>

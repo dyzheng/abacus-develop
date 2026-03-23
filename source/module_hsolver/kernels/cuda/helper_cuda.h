@@ -588,6 +588,17 @@ void check(T result, char const *const func, const char *const file,
   if (result) {
     fprintf(stderr, "CUDA error at %s:%d code=%d(%s) \"%s\" \n", file, line,
             static_cast<unsigned int>(result), _cudaGetErrorEnum(result), func);
+    // Dump GPU memory state before exit
+    size_t _free_mem = 0, _total_mem = 0;
+    cudaGetLastError(); // clear sticky error
+    cudaError_t _mem_err = cudaMemGetInfo(&_free_mem, &_total_mem);
+    if (_mem_err == cudaSuccess) {
+      double _free_mb = static_cast<double>(_free_mem) / (1024.0 * 1024.0);
+      double _total_mb = static_cast<double>(_total_mem) / (1024.0 * 1024.0);
+      fprintf(stderr, " GPU Memory : %.2f MB used / %.2f MB total (%.2f MB free)\n",
+              _total_mb - _free_mb, _total_mb, _free_mb);
+    }
+    fflush(stderr);
     exit(EXIT_FAILURE);
   }
 }

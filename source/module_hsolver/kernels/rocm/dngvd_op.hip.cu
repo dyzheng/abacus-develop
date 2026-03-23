@@ -1,4 +1,5 @@
 #include "module_hsolver/kernels/dngvd_op.h"
+#include "module_base/memory.h"
 
 #include <hip/hip_runtime.h>
 #include <base/macros/macros.h>
@@ -47,7 +48,7 @@ void dngvd_op<double, base_device::DEVICE_GPU>::operator()(const base_device::DE
         int * devInfo = nullptr;
         int lwork = 0, info_gpu = 0;
         double * work = nullptr;
-        hipErrcheck(hipMalloc((void**)&devInfo, sizeof(int)));
+        hipMallocCheck((void**)&devInfo, sizeof(int), "Dsygvd::devInfo");
         hipsolverFillMode_t uplo = HIPSOLVER_FILL_MODE_UPPER;
 
         hipsolverErrcheck(hipsolverDnDsygvd_bufferSize(
@@ -58,7 +59,8 @@ void dngvd_op<double, base_device::DEVICE_GPU>::operator()(const base_device::DE
             _eigenvalue,
             &lwork));
 
-        hipErrcheck(hipMalloc((void**)&work, sizeof(double) * lwork));
+        hipMallocCheck((void**)&work, sizeof(double) * lwork, "Dsygvd::workspace");
+        ModuleBase::Memory::record_gpu("Dsygvd::workspace", sizeof(double) * lwork);
 
         hipsolverErrcheck(hipsolverDnDsygvd(
             hipsolver_H, HIPSOLVER_EIG_TYPE_1, HIPSOLVER_EIG_MODE_VECTOR, uplo,
@@ -128,7 +130,7 @@ void dngvd_op<std::complex<float>, base_device::DEVICE_GPU>::operator()(const ba
         int * devInfo = nullptr;
         int lwork = 0, info_gpu = 0;
         float2 * work = nullptr;
-        hipErrcheck(hipMalloc((void**)&devInfo, sizeof(int)));
+        hipMallocCheck((void**)&devInfo, sizeof(int), "Chegvd::devInfo");
         hipsolverFillMode_t uplo = HIPSOLVER_FILL_MODE_UPPER;
 
         hipsolverErrcheck(hipsolverDnChegvd_bufferSize(
@@ -139,7 +141,8 @@ void dngvd_op<std::complex<float>, base_device::DEVICE_GPU>::operator()(const ba
             _eigenvalue,
             &lwork));
 
-        hipErrcheck(hipMalloc((void**)&work, sizeof(float2) * lwork));
+        hipMallocCheck((void**)&work, sizeof(float2) * lwork, "Chegvd::workspace");
+        ModuleBase::Memory::record_gpu("Chegvd::workspace", sizeof(float2) * lwork);
 
         hipsolverErrcheck(hipsolverDnChegvd(
             hipsolver_H, HIPSOLVER_EIG_TYPE_1, HIPSOLVER_EIG_MODE_VECTOR, uplo,
@@ -200,7 +203,7 @@ void dngvd_op<std::complex<double>, base_device::DEVICE_GPU>::operator()(const b
         int * devInfo = nullptr;
         int lwork = 0, info_gpu = 0;
         double2 * work = nullptr;
-        hipErrcheck(hipMalloc((void**)&devInfo, sizeof(int)));
+        hipMallocCheck((void**)&devInfo, sizeof(int), "Zhegvd::devInfo");
         hipsolverFillMode_t uplo = HIPSOLVER_FILL_MODE_UPPER;
 
         hipsolverErrcheck(hipsolverDnZhegvd_bufferSize(
@@ -211,7 +214,8 @@ void dngvd_op<std::complex<double>, base_device::DEVICE_GPU>::operator()(const b
             _eigenvalue,
             &lwork));
 
-        hipErrcheck(hipMalloc((void**)&work, sizeof(double2) * lwork));
+        hipMallocCheck((void**)&work, sizeof(double2) * lwork, "Zhegvd::workspace");
+        ModuleBase::Memory::record_gpu("Zhegvd::workspace", sizeof(double2) * lwork);
 
         hipsolverErrcheck(hipsolverDnZhegvd(
             hipsolver_H, HIPSOLVER_EIG_TYPE_1, HIPSOLVER_EIG_MODE_VECTOR, uplo,

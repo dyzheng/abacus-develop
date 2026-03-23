@@ -214,14 +214,64 @@ inline void cublasAssert(cublasStatus_t res, const char* file, int line)
         cublasAssert((res), __FILE__, __LINE__);                                                                       \
     }
 
-// CUDA API errors
+// Function pointer for GPU memory record dump - set by memory.cpp at startup
+// This avoids including memory.h in this header (which is included by .cpp files)
+extern void (*cuda_gpu_record_dump_fn)();
+// Function pointer for flushing the running log - set by global_variable.cpp at startup
+extern void (*cuda_running_log_flush_fn)();
+
+// Helper function for CUDA error diagnostics - prints GPU memory state and tracked records
+inline void cudaDumpDiagnostics(cudaError_t err, const char* file, int line, const char* context = nullptr)
+{
+    // Flush running log before printing diagnostics
+    if (cuda_running_log_flush_fn) { cuda_running_log_flush_fn(); }
+
+    fprintf(stderr, "\n");
+    fprintf(stderr, " !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
+    fprintf(stderr, " !! GPU CUDA ERROR                                        !!\n");
+    fprintf(stderr, " !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
+    fprintf(stderr, " Location   : %s:%d\n", file, line);
+    if (context) { fprintf(stderr, " Context    : %s\n", context); }
+    fprintf(stderr, " CUDA Error : %s, %s\n", cudaGetErrorName(err), cudaGetErrorString(err));
+    // Try to query GPU memory (may fail if device is in error state)
+    cudaGetLastError(); // clear sticky error
+    size_t _free_mem = 0, _total_mem = 0;
+    cudaError_t _mem_err = cudaMemGetInfo(&_free_mem, &_total_mem);
+    if (_mem_err == cudaSuccess)
+    {
+        double _free_mb = static_cast<double>(_free_mem) / (1024.0 * 1024.0);
+        double _total_mb = static_cast<double>(_total_mem) / (1024.0 * 1024.0);
+        fprintf(stderr, " GPU Free   : %.2f MB / %.2f MB total\n", _free_mb, _total_mb);
+        fprintf(stderr, " GPU Used   : %.2f MB\n", _total_mb - _free_mb);
+    }
+    else
+    {
+        fprintf(stderr, " GPU Memory : query failed (device in error state)\n");
+    }
+    if (cuda_gpu_record_dump_fn) { cuda_gpu_record_dump_fn(); }
+    fflush(stderr);
+}
+
+// CUDA API errors - enhanced with GPU memory diagnostics
 #define cudaErrcheck(res)                                                                                              \
     {                                                                                                                  \
         if (res != cudaSuccess)                                                                                        \
         {                                                                                                              \
-            fprintf(stderr, " Unexpected Device Error %s:%d: %s, %s\n", __FILE__, __LINE__, cudaGetErrorName(res),     \
-                    cudaGetErrorString(res));                                                                          \
+            cudaDumpDiagnostics(res, __FILE__, __LINE__);                                                              \
             exit(res);                                                                                                 \
+        }                                                                                                              \
+    }
+
+// Enhanced cudaMalloc with OOM diagnostics: prints allocation context, GPU memory state, and tracked records
+#define cudaMallocCheck(ptr, size_bytes, label)                                                                        \
+    {                                                                                                                  \
+        cudaError_t _alloc_res = cudaMalloc((ptr), (size_bytes));                                                      \
+        if (_alloc_res != cudaSuccess)                                                                                 \
+        {                                                                                                              \
+            double _req_mb = static_cast<double>(size_bytes) / (1024.0 * 1024.0);                                      \
+            fprintf(stderr, " Allocation : %s (%.2f MB requested)\n", (label), _req_mb);                               \
+            cudaDumpDiagnostics(_alloc_res, __FILE__, __LINE__, (label));                                               \
+            exit(_alloc_res);                                                                                          \
         }                                                                                                              \
     }
 

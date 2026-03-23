@@ -80,6 +80,11 @@ class Memory
       const bool accumulate = false
     );
 
+    /**
+     * @brief Dump all GPU memory records to stderr (for OOM diagnostics)
+     */
+    static void dump_gpu_records_to_stderr();
+
 #endif
 
     static double &get_total(void)

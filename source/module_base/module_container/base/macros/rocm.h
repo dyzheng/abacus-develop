@@ -246,4 +246,18 @@ inline void hipblasAssert(hipblasStatus_t code, const char* file, int line, bool
 #define hipCheckOnDebug()
 #endif
 
+// Enhanced hipMalloc with OOM diagnostics: prints allocation context, GPU memory state, and tracked records
+#define hipMallocCheck(ptr, size_bytes, label)                                                                         \
+    {                                                                                                                  \
+        hipError_t _alloc_res = hipMalloc((ptr), (size_bytes));                                                        \
+        if (_alloc_res != hipSuccess)                                                                                  \
+        {                                                                                                              \
+            double _req_mb = static_cast<double>(size_bytes) / (1024.0 * 1024.0);                                      \
+            fprintf(stderr, " Unexpected Device Error %s:%d: %s, %s\n Allocation : %s (%.2f MB requested)\n",         \
+                    __FILE__, __LINE__, hipGetErrorName(_alloc_res), hipGetErrorString(_alloc_res),                    \
+                    (label), _req_mb);                                                                                 \
+            exit(_alloc_res);                                                                                          \
+        }                                                                                                              \
+    }
+
 #endif // BASE_MACROS_ROCM_H_

@@ -86,7 +86,7 @@ class Psi
     ~Psi();
 
     // allocate psi for three dimensions
-    void resize(const int nks_in, const int nbands_in, const int nbasis_in);
+    void resize(const int nks_in, const int nbands_in, const int nbasis_in, const bool skip_psi_cpu_alloc = false);
 
     // get the pointer for the 1st index
     T* get_pointer() const;

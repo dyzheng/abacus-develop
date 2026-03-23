@@ -255,6 +255,37 @@ Psi<T, Device>::Psi(const Psi<T_in, Device_in>& psi_in)
     this->current_k_gpu_ = -1; // New copy starts with no k on GPU
     // this function will copy psi_in.psi to this->psi no matter the device types of each other.
     this->device = base_device::get_device_type<Device>(this->ctx);
+
+    // Optimization: In PAGED_GPU + double precision mode, when copying from CPU to GPU,
+    // we can share the CPU buffer to avoid allocating 2x memory temporarily.
+    const bool is_cpu_to_gpu = std::is_same<Device, base_device::DEVICE_GPU>::value
+                               && std::is_same<Device_in, base_device::DEVICE_CPU>::value;
+    const bool is_same_type = std::is_same<T, T_in>::value;
+    const bool is_double_precision = std::is_same<T, std::complex<double>>::value;
+    const bool can_share_cpu_buffer = is_cpu_to_gpu
+                                      && is_same_type
+                                      && is_double_precision
+                                      && this->storage_mode_ == PsiStorageMode::PAGED_GPU;
+
+    if (can_share_cpu_buffer)
+    {
+        // Skip psi_cpu_ allocation in resize(), we'll use the source buffer directly
+        this->resize(psi_in.get_nk(), psi_in.get_nbands(), psi_in.get_nbasis(), true);
+
+        // Set psi_cpu_ to point to the source buffer (external, not owned)
+        // reinterpret_cast is safe here: can_share_cpu_buffer guarantees T == T_in at runtime
+        this->psi_cpu_ = reinterpret_cast<T*>(psi_in.get_pointer() - psi_in.get_psi_bias());
+        this->psi_cpu_owned_ = false;
+
+        // GPU buffer left empty, load_k_to_gpu() will populate it when needed
+        this->current_k_gpu_ = -1;
+        this->psi_bias = 0;
+        this->psi_current = this->psi;
+        this->current_nbasis = psi_in.get_current_nbas();
+        return;
+    }
+
+    // Original logic for all other cases
     this->resize(psi_in.get_nk(), psi_in.get_nbands(), psi_in.get_nbasis());
 
     // Specifically, if the Device_in type is CPU and the Device type is GPU.
@@ -314,22 +345,24 @@ Psi<T, Device>::Psi(const Psi<T_in, Device_in>& psi_in)
 }
 
 template <typename T, typename Device>
-void Psi<T, Device>::resize(const int nks_in, const int nbands_in, const int nbasis_in)
+void Psi<T, Device>::resize(const int nks_in, const int nbands_in, const int nbasis_in, const bool skip_psi_cpu_alloc)
 {
     assert(nks_in > 0 && nbands_in >= 0 && nbasis_in > 0);
 
     if (storage_mode_ == PsiStorageMode::PAGED_GPU)
     {
-        // Allocate CPU storage for ALL k-points
+        // Allocate CPU storage for ALL k-points (unless skipped for external buffer)
         const size_t total_size = static_cast<size_t>(nks_in) * nbands_in * nbasis_in;
-        if (psi_cpu_ != nullptr)
+        if (!skip_psi_cpu_alloc)
         {
-            delete[] psi_cpu_;
+            if (psi_cpu_ != nullptr)
+            {
+                delete[] psi_cpu_;
+            }
+            psi_cpu_ = new T[total_size](); // value-initialize to zero
+            ModuleBase::Memory::record("Psi::psi_cpu", sizeof(T) * total_size);
+            psi_cpu_owned_ = true;
         }
-        psi_cpu_ = new T[total_size](); // value-initialize to zero
-        // Note: Memory::record for psi_cpu_ is deferred.
-        // If set_psi_cpu_external() is called later, this buffer is freed and replaced,
-        // so we only record in the final state (see set_psi_cpu_external and the fallback below).
 
         // Allocate GPU buffer for ONE k-point using device memory ops
         // Note: resize_memory_op frees existing allocation before re-allocating

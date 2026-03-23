@@ -61,7 +61,6 @@ void resize_memory_op<FPTYPE, base_device::DEVICE_GPU>::operator()(const base_de
     {
         delete_memory_op<FPTYPE, base_device::DEVICE_GPU>()(dev, arr);
     }
-    cudaErrcheck(cudaMalloc((void**)&arr, sizeof(FPTYPE) * size));
     std::string record_string;
     if (record_in != nullptr)
     {
@@ -71,6 +70,8 @@ void resize_memory_op<FPTYPE, base_device::DEVICE_GPU>::operator()(const base_de
     {
         record_string = "no_record";
     }
+
+    cudaMallocCheck((void**)&arr, sizeof(FPTYPE) * size, record_string.c_str());
 
     if (record_string != "no_record")
     {

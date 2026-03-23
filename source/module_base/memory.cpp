@@ -7,6 +7,20 @@
 #include "global_variable.h"
 #include "module_base/parallel_reduce.h"
 
+#if defined(__CUDA) || defined(__ROCM)
+// Define and register the function pointer used by cudaDumpDiagnostics in cuda.h
+// This avoids including memory.h in the cuda.h header
+void (*cuda_gpu_record_dump_fn)() = nullptr;
+
+namespace {
+struct CudaGpuRecordDumpRegistrar {
+    CudaGpuRecordDumpRegistrar() {
+        cuda_gpu_record_dump_fn = &ModuleBase::Memory::dump_gpu_records_to_stderr;
+    }
+} _cuda_gpu_record_dump_registrar;
+}
+#endif
+
 namespace ModuleBase
 {
 //    8 bit  = 1 Byte
@@ -337,6 +351,43 @@ void Memory::record_gpu
 		}
 	}
 	return;
+}
+
+void Memory::dump_gpu_records_to_stderr()
+{
+	if(!init_flag_gpu)
+	{
+		fprintf(stderr, " [GPU Memory Records] No GPU memory records available.\n");
+		return;
+	}
+	fprintf(stderr, "\n ============ GPU Memory Records (OOM Diagnostic) ============\n");
+	fprintf(stderr, " %-40s %15s\n", "NAME", "GPU MEM (MB)");
+	fprintf(stderr, " ------------------------------------------------------------\n");
+	fprintf(stderr, " %-40s %15.2f\n", "TOTAL (tracked)", total_gpu);
+	fprintf(stderr, " ------------------------------------------------------------\n");
+
+	// Print records sorted by size (descending), skip < 0.1 MB
+	bool *printed = new bool[n_memory];
+	for(int i = 0; i < n_memory; i++) { printed[i] = false; }
+
+	for(int i = 0; i < n_now_gpu; i++)
+	{
+		int k = -1;
+		double max_val = -1.0;
+		for(int j = 0; j < n_now_gpu; j++)
+		{
+			if(!printed[j] && consume_gpu[j] > max_val)
+			{
+				k = j;
+				max_val = consume_gpu[j];
+			}
+		}
+		if(k < 0 || consume_gpu[k] < 0.1) { break; }
+		printed[k] = true;
+		fprintf(stderr, " %-40s %15.2f\n", name_gpu[k].c_str(), consume_gpu[k]);
+	}
+	fprintf(stderr, " ============================================================\n\n");
+	delete[] printed;
 }
 
 #endif
