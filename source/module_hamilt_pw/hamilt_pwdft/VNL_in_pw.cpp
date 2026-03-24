@@ -154,6 +154,14 @@ void pseudopot_cell_vnl::init(const UnitCell& ucell,
         this->deeq_nc.create(PARAM.inp.nspin, ucell.nat, this->nhm, this->nhm);
         this->qq_nt.create(ntype, this->nhm, this->nhm);
         this->qq_so.create(ntype, 4, this->nhm, this->nhm);
+        ModuleBase::Memory::record("VNL::deeq",
+            sizeof(double) * PARAM.inp.nspin * ucell.nat * this->nhm * this->nhm);
+        ModuleBase::Memory::record("VNL::deeq_nc",
+            sizeof(std::complex<double>) * PARAM.inp.nspin * ucell.nat * this->nhm * this->nhm);
+        ModuleBase::Memory::record("VNL::qq_nt",
+            sizeof(double) * ntype * this->nhm * this->nhm);
+        ModuleBase::Memory::record("VNL::qq_so",
+            sizeof(double) * ntype * 4 * this->nhm * this->nhm);
         if (PARAM.inp.device == "gpu")
         {
             if (PARAM.inp.precision == "single")
@@ -165,11 +173,17 @@ void pseudopot_cell_vnl::init(const UnitCell& ucell,
                 resmem_sd_op()(gpu_ctx, s_qq_nt, ntype * this->nhm * this->nhm);
                 resmem_cd_op()(gpu_ctx, c_deeq_nc, PARAM.inp.nspin * ucell.nat * this->nhm * this->nhm);
                 resmem_cd_op()(gpu_ctx, c_qq_so, ntype * 4 * this->nhm * this->nhm);
+                ModuleBase::Memory::record_gpu("VNL::s_deeq",
+                    sizeof(float) * PARAM.inp.nspin * ucell.nat * this->nhm * this->nhm);
+                ModuleBase::Memory::record_gpu("VNL::c_deeq_nc",
+                    sizeof(std::complex<float>) * PARAM.inp.nspin * ucell.nat * this->nhm * this->nhm);
             }
             else
             {
                 resmem_zd_op()(gpu_ctx, z_deeq_nc, PARAM.inp.nspin * ucell.nat * this->nhm * this->nhm);
                 resmem_zd_op()(gpu_ctx, z_qq_so, ntype * 4 * this->nhm * this->nhm);
+                ModuleBase::Memory::record_gpu("VNL::z_deeq_nc",
+                    sizeof(std::complex<double>) * PARAM.inp.nspin * ucell.nat * this->nhm * this->nhm);
             }
             resmem_dd_op()(gpu_ctx, d_deeq, PARAM.inp.nspin * ucell.nat * this->nhm * this->nhm);
             resmem_dd_op()(gpu_ctx, d_indv, ntype * this->nhm);
@@ -216,6 +230,10 @@ void pseudopot_cell_vnl::init(const UnitCell& ucell,
 
         this->ijtoh.create(ntype, this->nhm, this->nhm);
         this->qq_at.create(ucell.nat, this->nhm, this->nhm);
+        ModuleBase::Memory::record("VNL::dvan",
+            sizeof(double) * ntype * this->nhm * this->nhm);
+        ModuleBase::Memory::record("VNL::qq_at",
+            sizeof(double) * ucell.nat * this->nhm * this->nhm);
     }
     else
     {
@@ -262,6 +280,8 @@ void pseudopot_cell_vnl::init(const UnitCell& ucell,
         if (lmaxq > 0)
         {
             this->qrad.create(ntype, lmaxq, nbetam * (nbetam + 1) / 2, PARAM.globalv.nqxq);
+            ModuleBase::Memory::record("VNL::qrad",
+                sizeof(double) * ntype * lmaxq * (nbetam * (nbetam + 1) / 2) * PARAM.globalv.nqxq);
         }
     }
 
@@ -592,6 +612,8 @@ void pseudopot_cell_vnl::init_vnl(UnitCell& cell, const ModulePW::PW_Basis* rho_
     // In the spin-orbit case we need the unitary matrix u which rotates the
     // real spherical harmonics and yields the complex ones.
     soc.fcoef.create(cell.ntype, this->nhm, this->nhm);
+    ModuleBase::Memory::record("VNL::fcoef",
+        sizeof(std::complex<double>) * cell.ntype * 4 * this->nhm * this->nhm);
     if (PARAM.inp.lspinorb)
     {
         soc.rot_ylm(this->lmaxkb);
@@ -604,6 +626,7 @@ void pseudopot_cell_vnl::init_vnl(UnitCell& cell, const ModulePW::PW_Basis* rho_
     this->dvan_so.zero_out(); // added by zhengdy-soc
     delete[] indv_ijkb0;
     this->indv_ijkb0 = new int[cell.nat];
+    ModuleBase::Memory::record("VNL::indv_ijkb0", sizeof(int) * cell.nat);
     int ijkb0 = 0;
     for (int it = 0; it < cell.ntype; it++)
     {

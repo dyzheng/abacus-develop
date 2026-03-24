@@ -15,11 +15,12 @@ namespace GintKernel
  *
  * @note The grid integration on the GPU is mainly divided into the following
  * steps:
- * 1. Use the CPU to divide the grid integration into subtasks.
- * 2. Copy the subtask information to the GPU.
- * 3. Calculate the matrix elements on the GPU.
- * 4. Perform matrix multiplication on the GPU.
- * 5. Copy the results back to the host.
+ * 1. Upload vlocal and start_ind to GPU once.
+ * 2. Use the CPU to collect atom info per subtask.
+ * 3. Extract vldr3 on GPU via extract_vldr3_kernel.
+ * 4. Calculate the matrix elements on the GPU.
+ * 5. Perform matrix multiplication on the GPU.
+ * 6. Copy the results back to the host.
  */
 void gint_vl_gpu(hamilt::HContainer<double>* hRGint,
                  const double* vlocal,
@@ -30,7 +31,6 @@ void gint_vl_gpu(hamilt::HContainer<double>* hRGint,
                  const UnitCell& ucell)
 {
     checkCuda(cudaSetDevice(gridt.dev_id));
-    // checkCuda(cudaSetDeviceFlags(cudaDeviceScheduleBlockingSync));
     const int nbzp = gridt.nbzp;
     const int num_streams = gridt.nstreams;
     const int max_atom = gridt.max_atom;
@@ -49,6 +49,17 @@ void gint_vl_gpu(hamilt::HContainer<double>* hRGint,
         checkCuda(cudaEventCreateWithFlags(&events[i], cudaEventDisableTiming));
     }
 
+    // Upload vlocal to GPU once (size = ncx * ncy * nczp)
+    const int vlocal_size = gridt.ncx * gridt.ncy * nczp;
+    double* d_vlocal = nullptr;
+    checkCuda(cudaMalloc(&d_vlocal, vlocal_size * sizeof(double)));
+    checkCuda(cudaMemcpy(d_vlocal, vlocal, vlocal_size * sizeof(double), cudaMemcpyHostToDevice));
+
+    // Upload start_ind to GPU once (size = nbxx)
+    int* d_start_ind = nullptr;
+    checkCuda(cudaMalloc(&d_start_ind, gridt.nbxx * sizeof(int)));
+    checkCuda(cudaMemcpy(d_start_ind, gridt.start_ind.data(), gridt.nbxx * sizeof(int), cudaMemcpyHostToDevice));
+
     const int nnrg = hRGint->get_nnr();
     hRGint->set_zero();
     Cuda_Mem_Wrapper<double> grid_vlocal_g(nnrg, 1, false);
@@ -56,10 +67,9 @@ void gint_vl_gpu(hamilt::HContainer<double>* hRGint,
 
     Cuda_Mem_Wrapper<double> dr_part(max_atom_per_z * 3, num_streams, true);
     Cuda_Mem_Wrapper<uint8_t> atoms_type(max_atom_per_z, num_streams, true);
-    // The first number in every group of two represents the number of atoms on that bigcell.
-    // The second number represents the cumulative number of atoms up to that bigcell.
     Cuda_Mem_Wrapper<int> atoms_num_info(2 * nbzp, num_streams, true);
-    Cuda_Mem_Wrapper<double> vldr3(nbzp * gridt.bxyz, num_streams, true);
+    // vldr3: GPU-only, no host allocation needed
+    Cuda_Mem_Wrapper<double> vldr3(nbzp * gridt.bxyz, num_streams, false);
 
     Cuda_Mem_Wrapper<double> psi(max_phi_per_z, num_streams, false);
     Cuda_Mem_Wrapper<double> psi_vldr3(max_phi_per_z, num_streams, false);
@@ -93,8 +103,6 @@ const int max_thread_num = std::min(omp_get_max_threads(), num_streams);
     {
         for (int j = 0; j < gridt.nby; j++)
         {
-            // 20240620 Note that it must be set again here because 
-            // cuda's device is not safe in a multi-threaded environment.
             checkCuda(cudaSetDevice(gridt.dev_id));
 
             const int sid = (i * gridt.nby + j) % thread_num_streams + sid_start;
@@ -104,19 +112,16 @@ const int max_thread_num = std::min(omp_get_max_threads(), num_streams);
             int atom_pair_num = 0;
             int atoms_per_z = 0;
             const int grid_index_ij = i * gridt.nby * nbzp + j * nbzp;
-            
-            gtask_vlocal(gridt,
-                         ucell,
-                         grid_index_ij,
-                         nczp,
-                         vfactor,
-                         vlocal,
-                         atoms_per_z,
-                         atoms_num_info.get_host_pointer(sid),
-                         atoms_type.get_host_pointer(sid),
-                         dr_part.get_host_pointer(sid),
-                         vldr3.get_host_pointer(sid));
-        
+
+            // CPU: collect atom info only (no vldr3 extraction)
+            gtask_atoms_only(gridt,
+                             ucell,
+                             grid_index_ij,
+                             atoms_per_z,
+                             atoms_num_info.get_host_pointer(sid),
+                             atoms_type.get_host_pointer(sid),
+                             dr_part.get_host_pointer(sid));
+
             alloc_mult_vlocal(hRGint,
                               gridt,
                               ucell,
@@ -140,9 +145,8 @@ const int max_thread_num = std::min(omp_get_max_threads(), num_streams);
 
             dr_part.copy_host_to_device_async(streams[sid], sid, atoms_per_z * 3);
             atoms_type.copy_host_to_device_async(streams[sid], sid, atoms_per_z);
-            vldr3.copy_host_to_device_async(streams[sid], sid);
             atoms_num_info.copy_host_to_device_async(streams[sid], sid, 2 * nbzp);
-            
+
             gemm_m.copy_host_to_device_async(streams[sid], sid, atom_pair_num);
             gemm_n.copy_host_to_device_async(streams[sid], sid, atom_pair_num);
             gemm_k.copy_host_to_device_async(streams[sid], sid, atom_pair_num);
@@ -153,7 +157,26 @@ const int max_thread_num = std::min(omp_get_max_threads(), num_streams);
             gemm_B.copy_host_to_device_async(streams[sid], sid, atom_pair_num);
             gemm_C.copy_host_to_device_async(streams[sid], sid, atom_pair_num);
             checkCuda(cudaEventRecord(events[sid], streams[sid]));
-            
+
+            // GPU: extract vldr3 from d_vlocal
+            const int vldr3_total = nbzp * gridt.bxyz;
+            const int bs_extract = 256;
+            const int gs_extract = (vldr3_total + bs_extract - 1) / bs_extract;
+            extract_vldr3_kernel<<<gs_extract, bs_extract, 0, streams[sid]>>>(
+                d_vlocal,
+                d_start_ind,
+                vldr3.get_device_pointer(sid),
+                grid_index_ij,
+                nbzp,
+                gridt.bx,
+                gridt.by,
+                gridt.bz,
+                gridt.bxyz,
+                gridt.ncy,
+                nczp,
+                vfactor);
+            checkCudaLastError();
+
             psi.memset_device_async(streams[sid], sid, 0);
             psi_vldr3.memset_device_async(streams[sid], sid, 0);
 
@@ -183,7 +206,7 @@ const int max_thread_num = std::min(omp_get_max_threads(), num_streams);
                 psi.get_device_pointer(sid),
                 psi_vldr3.get_device_pointer(sid));
             checkCudaLastError();
-            
+
             gridt.fastest_matrix_mul(max_m,
                                      max_n,
                                      gemm_m.get_device_pointer(sid),
@@ -208,6 +231,10 @@ const int max_thread_num = std::min(omp_get_max_threads(), num_streams);
         grid_vlocal_g.get_device_pointer(),
         nnrg * sizeof(double),
         cudaMemcpyDeviceToHost));
+
+    // Free GPU vlocal and start_ind
+    checkCuda(cudaFree(d_vlocal));
+    checkCuda(cudaFree(d_start_ind));
 
     for (int i = 0; i < num_streams; i++)
     {

@@ -2,6 +2,7 @@
 #include "module_parameter/parameter.h"
 #include "module_base/libm/libm.h"
 #include "module_base/math_integral.h"
+#include "module_base/memory.h"
 #include "module_base/timer.h"
 #include "module_hamilt_pw/hamilt_pwdft/global.h"
 
@@ -86,6 +87,7 @@ void pseudopot_cell_vl::allocate(const UnitCell& ucell,
 	if(PARAM.inp.use_paw) { return;
 }
 	this->vloc.create(ucell.ntype, ngg);
+	ModuleBase::Memory::record("VL::vloc", sizeof(double) * ucell.ntype * ngg);
 
 	delete[] numeric;
 	this->numeric = new bool[ucell.ntype];

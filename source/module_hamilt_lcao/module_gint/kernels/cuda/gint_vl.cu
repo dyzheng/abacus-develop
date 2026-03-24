@@ -86,4 +86,41 @@ __global__ void get_psi_and_vldr3(const double* const ylmcoef,
     }
 }
 
+__global__ void extract_vldr3_kernel(const double* __restrict__ d_vlocal,
+                                     const int* __restrict__ d_start_ind,
+                                     double* vldr3,
+                                     const int grid_index_ij,
+                                     const int nbzp,
+                                     const int bx,
+                                     const int by,
+                                     const int bz,
+                                     const int bxyz,
+                                     const int ncy,
+                                     const int nczp,
+                                     const double vfactor)
+{
+    // Each thread handles one element of vldr3[nbzp * bxyz]
+    const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    const int total = nbzp * bxyz;
+    if (tid >= total)
+        return;
+
+    const int z_index = tid / bxyz;
+    const int id_in_z = tid % bxyz;
+
+    // Decompose id_in_z into bx_index, by_index, bz_index
+    const int bz_index = id_in_z % bz;
+    const int tmp = id_in_z / bz;
+    const int by_index = tmp % by;
+    const int bx_index = tmp / by;
+
+    const int grid_index = grid_index_ij + z_index;
+    const int start_ind_grid = d_start_ind[grid_index];
+    const int vindex_global = bx_index * ncy * nczp
+                              + by_index * nczp + bz_index
+                              + start_ind_grid;
+
+    vldr3[tid] = d_vlocal[vindex_global] * vfactor;
+}
+
 } // namespace GintKernel

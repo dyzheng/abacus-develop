@@ -151,4 +151,39 @@ void alloc_mult_vlocal(const hamilt::HContainer<double>* hRGint,
     }
 }
 
+void gtask_atoms_only(const Grid_Technique& gridt,
+                      const UnitCell& ucell,
+                      const int grid_index_ij,
+                      int& atoms_per_z,
+                      int* atoms_num_info,
+                      uint8_t* atoms_type,
+                      double* dr_part)
+{
+    atoms_per_z = 0;
+    for (int z_index = 0; z_index < gridt.nbzp; z_index++)
+    {
+        const int grid_index = grid_index_ij + z_index;
+        const int bcell_start_index = gridt.bcell_start[grid_index];
+        const int na_grid = gridt.how_many_atoms[grid_index];
+        atoms_num_info[2 * z_index] = na_grid;
+        atoms_num_info[2 * z_index + 1] = atoms_per_z;
+        for (int id = 0; id < na_grid; id++)
+        {
+            const int mcell_index = bcell_start_index + id;
+            const int imcell = gridt.which_bigcell[mcell_index];
+            const int iat = gridt.which_atom[mcell_index];
+            const int it_temp = ucell.iat2it[iat];
+
+            dr_part[atoms_per_z * 3] = gridt.meshball_positions[imcell][0]
+                                       - gridt.tau_in_bigcell[iat][0];
+            dr_part[atoms_per_z * 3 + 1] = gridt.meshball_positions[imcell][1]
+                                           - gridt.tau_in_bigcell[iat][1];
+            dr_part[atoms_per_z * 3 + 2] = gridt.meshball_positions[imcell][2]
+                                           - gridt.tau_in_bigcell[iat][2];
+            atoms_type[atoms_per_z] = it_temp;
+            atoms_per_z++;
+        }
+    }
+}
+
 } // namespace GintKernel

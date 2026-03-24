@@ -4,11 +4,11 @@ suffix			autotest
 calculation     scf
 
 nbands			6
-symmetry		1
+symmetry		0
 pseudo_dir	../../PP_ORB
 
 #Parameters (2.Iteration)
-ecutwfc			20
+ecutwfc			100
 scf_thr				1e-8
 scf_nmax			100
 
@@ -24,4 +24,11 @@ smearing_sigma			0.002
 mixing_type		plain
 mixing_beta		0.5
 
-ks_solver       dav_subspace
+ks_solver dav_subspace
+diago_cond_check first
+
+device gpu
+device_memory_mode paged
+#vkb_batch_atoms       1
+cal_stress   1
+test_stress  1

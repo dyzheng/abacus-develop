@@ -36,5 +36,18 @@ __global__ void get_psi_and_vldr3(const double* const ylmcoef,
                                   double* psi,
                                   double* psi_vldr3);
 
+__global__ void extract_vldr3_kernel(const double* __restrict__ d_vlocal,
+                                     const int* __restrict__ d_start_ind,
+                                     double* vldr3,
+                                     const int grid_index_ij,
+                                     const int nbzp,
+                                     const int bx,
+                                     const int by,
+                                     const int bz,
+                                     const int bxyz,
+                                     const int ncy,
+                                     const int nczp,
+                                     const double vfactor);
+
 } // namespace GintKernel
 #endif // GINT_VL_CUH

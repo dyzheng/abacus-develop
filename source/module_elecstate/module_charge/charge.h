@@ -5,6 +5,7 @@
 #include "module_base/global_function.h"
 #include "module_base/global_variable.h"
 #include "module_base/parallel_global.h"
+#include "module_base/module_device/memory_op.h"
 #include "module_basis/module_pw/pw_basis.h"
 #include "module_cell/module_symmetry/symmetry.h"
 #include "module_elecstate/fp_energy.h"
@@ -165,7 +166,27 @@ class Charge
     int *rec = nullptr; //The number of elements each process should receive into the receive buffer.
     int *dis = nullptr; //The displacement (relative to recvbuf) for each process in the receive buffer.
 #endif
-    
+
+    // ============================================================
+    // GPU memory for XC calculation on device
+    // ============================================================
+  public:
+#if defined(__CUDA) || defined(__ROCM)
+    double** d_rho = nullptr;           ///< d_rho[nspin], each nrxx doubles on GPU
+    double* d_rho_core = nullptr;       ///< nrxx doubles on GPU
+    std::complex<double>** d_rhog = nullptr;  ///< d_rhog[nspin], each npw complex on GPU
+    std::complex<double>* d_rhog_core = nullptr; ///< npw complex on GPU
+
+    /// Allocate GPU memory for charge density arrays
+    void allocate_gpu_memory();
+    /// Free GPU memory
+    void deallocate_gpu_memory();
+    /// Sync rho and rho_core from CPU to GPU
+    void sync_rho_to_device();
+    /// Sync rhog and rhog_core from CPU to GPU
+    void sync_rhog_to_device();
+#endif
+
 };
 
 #endif // charge

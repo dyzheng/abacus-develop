@@ -45,6 +45,9 @@ Charge::Charge()
 Charge::~Charge()
 {
     this->destroy();
+#if defined(__CUDA) || defined(__ROCM)
+    this->deallocate_gpu_memory();
+#endif
 #ifdef __MPI
     delete[] rec;
     delete[] dis;
@@ -809,3 +812,82 @@ void Charge::init_final_scf()
     this->allocate_rho_final_scf = true;
     return;
 }
+
+#if defined(__CUDA) || defined(__ROCM)
+
+void Charge::allocate_gpu_memory()
+{
+    using resmem_double_op = base_device::memory::resize_memory_op<double, base_device::DEVICE_GPU>;
+    using resmem_complex_op = base_device::memory::resize_memory_op<std::complex<double>, base_device::DEVICE_GPU>;
+
+    // Allocate pointer arrays on CPU
+    this->d_rho = new double*[this->nspin];
+    this->d_rhog = new std::complex<double>*[this->nspin];
+
+    for (int is = 0; is < this->nspin; ++is)
+    {
+        resmem_double_op()(gpu_ctx, this->d_rho[is], this->nrxx);
+        resmem_complex_op()(gpu_ctx, this->d_rhog[is], this->ngmc);
+    }
+
+    resmem_double_op()(gpu_ctx, this->d_rho_core, this->nrxx);
+    resmem_complex_op()(gpu_ctx, this->d_rhog_core, this->ngmc);
+
+    ModuleBase::Memory::record("Chg::d_rho", sizeof(double) * this->nrxx * this->nspin);
+    ModuleBase::Memory::record("Chg::d_rhog", sizeof(std::complex<double>) * this->ngmc * this->nspin);
+    ModuleBase::Memory::record("Chg::d_rho_core", sizeof(double) * this->nrxx);
+    ModuleBase::Memory::record("Chg::d_rhog_core", sizeof(std::complex<double>) * this->ngmc);
+}
+
+void Charge::deallocate_gpu_memory()
+{
+    using delmem_double_op = base_device::memory::delete_memory_op<double, base_device::DEVICE_GPU>;
+    using delmem_complex_op = base_device::memory::delete_memory_op<std::complex<double>, base_device::DEVICE_GPU>;
+
+    if (this->d_rho != nullptr)
+    {
+        for (int is = 0; is < this->nspin; ++is)
+        {
+            delmem_double_op()(gpu_ctx, this->d_rho[is]);
+            delmem_complex_op()(gpu_ctx, this->d_rhog[is]);
+        }
+        delete[] this->d_rho;
+        delete[] this->d_rhog;
+        this->d_rho = nullptr;
+        this->d_rhog = nullptr;
+    }
+    if (this->d_rho_core != nullptr)
+    {
+        delmem_double_op()(gpu_ctx, this->d_rho_core);
+        this->d_rho_core = nullptr;
+    }
+    if (this->d_rhog_core != nullptr)
+    {
+        delmem_complex_op()(gpu_ctx, this->d_rhog_core);
+        this->d_rhog_core = nullptr;
+    }
+}
+
+void Charge::sync_rho_to_device()
+{
+    using syncmem_h2d_double = base_device::memory::synchronize_memory_op<double, base_device::DEVICE_GPU, base_device::DEVICE_CPU>;
+
+    for (int is = 0; is < this->nspin; ++is)
+    {
+        syncmem_h2d_double()(gpu_ctx, cpu_ctx, this->d_rho[is], this->rho[is], this->nrxx);
+    }
+    syncmem_h2d_double()(gpu_ctx, cpu_ctx, this->d_rho_core, this->rho_core, this->nrxx);
+}
+
+void Charge::sync_rhog_to_device()
+{
+    using syncmem_h2d_complex = base_device::memory::synchronize_memory_op<std::complex<double>, base_device::DEVICE_GPU, base_device::DEVICE_CPU>;
+
+    for (int is = 0; is < this->nspin; ++is)
+    {
+        syncmem_h2d_complex()(gpu_ctx, cpu_ctx, this->d_rhog[is], this->rhog[is], this->ngmc);
+    }
+    syncmem_h2d_complex()(gpu_ctx, cpu_ctx, this->d_rhog_core, this->rhog_core, this->ngmc);
+}
+
+#endif // __CUDA || __ROCM

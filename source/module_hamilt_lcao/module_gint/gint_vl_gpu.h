@@ -28,6 +28,15 @@ void gtask_vlocal(const Grid_Technique& gridt,
                   double* dr_part,
                   double* vldr3);
 
+// Atom-info-only version of gtask_vlocal (vldr3 extraction done on GPU)
+void gtask_atoms_only(const Grid_Technique& gridt,
+                      const UnitCell& ucell,
+                      const int grid_index_ij,
+                      int& atoms_per_z,
+                      int* atoms_num_info,
+                      uint8_t* atoms_type,
+                      double* dr_part);
+
 void alloc_mult_vlocal(const hamilt::HContainer<double>* hRGint,
                        const Grid_Technique& gridt,
                        const UnitCell& ucell,

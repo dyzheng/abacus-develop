@@ -3,18 +3,19 @@ INPUT_PARAMETERS
 suffix			autotest
 calculation     scf
 
-nbands			20
-symmetry		1
+#nbands			20
+symmetry		0
 pseudo_dir	../../PP_ORB
 orbital_dir	../../PP_ORB
 gamma_only      0
 
 #Parameters (2.Iteration)
-ecutwfc			20
-scf_thr				1e-7
-scf_nmax			100
+ecutwfc			50
+scf_thr				1e-10
+scf_nmax			10
 
-nspin           2
+nspin           4
+noncolin        1
 #Parameters (3.Basis)
 basis_type		lcao
 
@@ -27,3 +28,5 @@ mixing_type		broyden
 mixing_beta		0.4
 mixing_beta_mag 0.4
 
+onsite_radius 3.0
+out_mul       1
