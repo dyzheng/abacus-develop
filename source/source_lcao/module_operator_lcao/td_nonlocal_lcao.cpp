@@ -16,6 +16,7 @@
 #include <omp.h>
 #include <unordered_set>
 #endif
+#include "td_nonlocal_force.hpp"
 
 template <typename TK, typename TR>
 hamilt::TDNonlocal<hamilt::OperatorLCAO<TK, TR>>::TDNonlocal(HS_Matrix_K<TK>* hsk_in,

@@ -51,6 +51,10 @@ class TDNonlocal<OperatorLCAO<TK, TR>> : public OperatorLCAO<TK, TR>
 
     virtual void set_HR_fixed(void*) override;
 
+    void cal_force(const bool cal_force,
+                    const HContainer<TR>* dmR,
+                    ModuleBase::matrix& force);
+
   private:
     const UnitCell* ucell = nullptr;
     const LCAO_Orbitals& orb_;
@@ -98,6 +102,15 @@ class TDNonlocal<OperatorLCAO<TK, TR>> : public OperatorLCAO<TK, TR>
                     std::complex<double>* data_pointer,
                     std::complex<double>** data_pointer_c);
 
+    void cal_force_IJR(const int& iat1,
+                      const int& iat2,
+                      const int& T0,
+                      const Parallel_Orbitals* paraV,
+                      const std::unordered_map<int, std::vector<std::complex<double>>>& nlm1_all,
+                      const std::unordered_map<int, std::vector<std::complex<double>>>& nlm2_all,
+                      const hamilt::BaseMatrix<TR>* dmR_pointer,
+                      double* force1,
+                      double* force2);
     /// @brief exact the nearest neighbor atoms from all adjacent atoms
     std::vector<AdjacentAtomInfo> adjs_all;
     /// @brief Store the vector potential for td_nonlocal term

@@ -22,8 +22,23 @@
 #include "source_lcao/module_operator_lcao/nonlocal.h"
 #include "source_lcao/module_operator_lcao/ekinetic.h"
 #include "source_lcao/module_operator_lcao/overlap.h"
+#include "source_lcao/module_operator_lcao/td_ekinetic_lcao.h"
+#include "source_lcao/module_operator_lcao/td_nonlocal_lcao.h"
+#include "source_lcao/module_rt/td_info.h"
 #include "source_lcao/pulay_fs.h"
-
+void print_force(ModuleBase::matrix& m, std::string name, int nat)
+{
+    for(int i = 0; i<nat; i++)
+    {
+        std::cout<< name <<std::endl;
+        std::cout<<"nat: "<<i<<std::endl;
+        for(int j = 0; j<3; j++)
+        {
+            std::cout<<m(i,j)<<" ";
+        }
+        std::cout<<std::endl;
+    }
+}
 
 // mohan add 2025-11-04
 template <>
@@ -111,6 +126,7 @@ void Force_Stress_LCAO<T>::getForceStress(UnitCell& ucell,
     ModuleBase::matrix fcc;
     ModuleBase::matrix fscc;
     ModuleBase::matrix fvnl_dalpha; // deepks
+    ModuleBase::matrix fekinetic_td;
 
     fvl_dphi.create(nat, 3); // must do it now, update it later, noted by zhengdy
 
@@ -125,6 +141,7 @@ void Force_Stress_LCAO<T>::getForceStress(UnitCell& ucell,
         fcc.create(nat, 3); // force due to core correction
         fscc.create(nat, 3); // force due to self-consistent field
         fvnl_dalpha.create(nat, 3); // deepks
+        fekinetic_td.create(nat, 3);
 
         // calculate basic terms in Force, same method with PW base
         this->calForcePwPart(ucell, fvl_dvl, fewalds, fcc, fscc, pelec->f_en.etxc,
@@ -200,11 +217,31 @@ void Force_Stress_LCAO<T>::getForceStress(UnitCell& ucell,
         tmp_overlap.cal_force_stress(isforce, isstress, edmR, foverlap, soverlap);
 
         // Calculate nonlocal force/stress (uses DM)
-        hamilt::Nonlocal<hamilt::OperatorLCAO<T, double>> tmp_nonlocal(
+        // When A=0, TDNonlocal should give same result as Nonlocal
+        // Use Nonlocal when |A| is very small to ensure consistency
+        const double A_norm = TD_info::cart_At.norm();
+        if(PARAM.inp.td_stype == 1 && A_norm > 1e-10)
+        {
+            hamilt::TDNonlocal<hamilt::OperatorLCAO<std::complex<double>, double>> tmp_nonlocal(
+            nullptr, kv.kvec_d, nullptr, &ucell, orb, &gd);
+            tmp_nonlocal.cal_force(isforce, dmR, fvnl_dbeta);
+        }
+        else
+        {
+            hamilt::Nonlocal<hamilt::OperatorLCAO<T, double>> tmp_nonlocal(
             nullptr, kv.kvec_d, nullptr, &ucell, orb.cutoffs(), &gd,
             two_center_bundle.overlap_orb_beta.get());
-        tmp_nonlocal.cal_force_stress(isforce, isstress, dmR, fvnl_dbeta, svnl_dbeta);
+            tmp_nonlocal.cal_force_stress(isforce, isstress, dmR, fvnl_dbeta, svnl_dbeta);
+        }
         
+        if(PARAM.inp.td_stype == 1)
+        {
+            hamilt::TDEkinetic<hamilt::OperatorLCAO<std::complex<double>, double>> tmp_td_ekinetic(
+                nullptr, nullptr, &kv, &ucell, orb.cutoffs(), &gd, 
+                two_center_bundle.overlap_orb.get());
+            tmp_td_ekinetic.cal_force(isforce, &pv, psi, pelec, fekinetic_td);
+        }
+
         // Switch back to spin channel 0
         if (PARAM.inp.nspin == 2)
         {
@@ -472,6 +509,22 @@ void Force_Stress_LCAO<T>::getForceStress(UnitCell& ucell,
     //--------------------------------
     if (isforce)
     {
+        if(GlobalV::MY_RANK==0)
+        {
+            print_force(foverlap, "foverlap",nat);
+            print_force(ftvnl_dphi, "ftvnl_dphi",nat);
+            print_force(fvnl_dbeta, "fvnl_dbeta",nat);
+            print_force(fvl_dphi, "fvl_dphi",nat);
+            print_force(fvl_dvl, "fvl_dvl",nat);
+            print_force(fewalds, "fewalds",nat);
+            print_force(fcc, "fcc",nat);
+            print_force(fscc, "fscc",nat);
+            // if (PARAM.inp.esolver_type == "tddft")
+            // {
+            //     print_force(fpothybrid, "fpothybrid",nat);
+            //     print_force(fefield_tddft, "fefield_tddft",nat);
+            // }    
+        }
         //---------------------------------
         // sum all parts of force!
         //---------------------------------
@@ -517,6 +570,10 @@ void Force_Stress_LCAO<T>::getForceStress(UnitCell& ucell,
                 if (PARAM.inp.esolver_type == "tddft")
                 {
                     fcs(iat, i) += fefield_tddft(iat, i);
+                    if(PARAM.inp.td_stype == 1)
+                    {
+                        fcs(iat, i) += fekinetic_td(iat, i);
+                    }
                 }
                 // Gate field force
                 if (PARAM.inp.gate_flag)

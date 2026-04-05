@@ -1,0 +1,14 @@
+INPUT_PARAMETERS
+pseudo_dir      ./
+basis_type      lcao
+
+ecutwfc         60
+scf_nmax        100
+scf_thr         1e-6
+
+calculation     md
+esolver_type    tddft
+md_type         nve
+md_nstep        1
+td_dt           0.1
+td_stype        1

@@ -1,0 +1,183 @@
+                                                                                     
+                              ABACUS v3.9.0.24
+
+               Atomic-orbital Based Ab-initio Computation at UStc                    
+
+                     Website: http://abacus.ustc.edu.cn/                             
+               Documentation: https://abacus.deepmodeling.com/                       
+                  Repository: https://github.com/abacusmodeling/abacus-develop       
+                              https://github.com/deepmodeling/abacus-develop         
+                      Commit: e2680576d (Mon Feb 2 16:22:45 2026 +0800)
+
+ Sun Apr  5 22:15:24 2026
+ MAKE THE DIR         : OUT.ABACUS/
+ MAKE THE STRU DIR    : OUT.ABACUS/STRU/
+ RUNNING WITH DEVICE  : CPU / Intel(R) Core(TM) Ultra 5 225H (x1)
+ WARNING: some of potential function is set to zero cause of less than 1e-30.
+ WARNING: some of potential function is set to zero cause of less than 1e-30.
+ UNIFORM GRID DIM     : 192 * 192 * 40
+ UNIFORM GRID DIM(BIG): 48 * 48 * 10
+ DONE(0.090986   SEC) : SETUP UNITCELL
+ DONE(0.0912956  SEC) : INIT K-POINTS
+ ---------------------------------------------------------
+ Molecular Dynamics simulations
+ ---------------------------------------------------------
+ ENSEMBLE                 : NVE
+ Time interval(fs)        : 0.1
+ ---------------------------------------------------------
+ SPIN    KPOINTS         PROCESSORS  THREADS     NBASE       
+ 1       8               2           2           26          
+ ---------------------------------------------------------
+ Use Systematically Improvable Atomic bases
+ ---------------------------------------------------------
+ ELEMENT ORBITALS        NBASE       NATOM       XC          
+ C       2s2p1d-8au      13          1           
+ O       2s2p1d-8au      13          1           
+ ---------------------------------------------------------
+ Initial plane wave basis and FFT box
+ ---------------------------------------------------------
+ DONE(0.155319   SEC) : INIT PLANEWAVE
+ START CHARGE      : atomic
+ DONE(0.476429   SEC) : CHARGE
+ DONE(0.697161   SEC) : POTENTIALS
+ Reading velocities from STRU file
+ Autoset the initial tempearture to 0 K
+
+ ================================================================
+ STEP OF MOLECULAR DYNAMICS: 1
+ ================================================================
+ DONE(1.0364     SEC) : INIT SCF
+ -------------------------------------------
+ STEP OF ELECTRON EVOLVE : 0
+ -------------------------------------------
+ ITER       ETOT/eV          EDIFF/eV         DRHO     TIME/s
+ GE1     -5.87445499e+02   0.00000000e+00   1.3572e-01   0.48
+ GE2     -5.87157335e+02   2.88163986e-01   1.2957e-01   0.39
+ GE3     -5.88086812e+02  -9.29476909e-01   4.6694e-02   0.37
+ GE4     -5.88163597e+02  -7.67857772e-02   1.1440e-02   0.38
+ GE5     -5.88164613e+02  -1.01556938e-03   4.7414e-03   0.36
+ GE6     -5.88164890e+02  -2.77531333e-04   3.0835e-03   0.36
+ GE7     -5.88165260e+02  -3.69089941e-04   2.1976e-03   0.36
+ GE8     -5.88165683e+02  -4.23361786e-04   1.5509e-03   0.40
+ GE9     -5.88165831e+02  -1.47814828e-04   1.0275e-03   0.37
+ GE10    -5.88165888e+02  -5.70211512e-05   7.0307e-04   0.37
+ GE11    -5.88165942e+02  -5.45335054e-05   5.1185e-04   0.36
+ GE12    -5.88165975e+02  -3.26044978e-05   2.9547e-04   0.35
+ GE13    -5.88165985e+02  -9.75977839e-06   1.1977e-04   0.36
+ GE14    -5.88165986e+02  -1.04824793e-06   5.6747e-05   0.37
+ GE15    -5.88165989e+02  -3.13333951e-06   4.4428e-05   0.36
+ GE16    -5.88165991e+02  -1.70902643e-06   3.0808e-05   0.37
+ GE17    -5.88165991e+02  -8.95443082e-07   1.7753e-05   0.36
+ GE18    -5.88165992e+02  -1.75768570e-07   8.4328e-06   0.38
+ GE19    -5.88165992e+02  -6.97739984e-08   3.4921e-06   0.36
+ GE20    -5.88165992e+02  -8.55586879e-09   1.0674e-06   0.39
+ GE21    -5.88165992e+02  -7.56621399e-09   4.4649e-07   0.35
+ Potential (Ry): -43.2293875458532
+ -------------------------------------------
+ STEP OF ELECTRON EVOLVE : 1
+ -------------------------------------------
+ ITER       ETOT/eV          EDIFF/eV         DRHO     TIME/s
+ GE1     -5.88165992e+02   0.00000000e+00   1.5399e-08   0.46
+ Potential (Ry): -43.2293875458542
+foverlap
+nat: 0
+1.23195435179197e-14 -3.95125847413824e-16 -1.16050340935661 
+foverlap
+nat: 1
+-1.23195435179197e-14 3.95125847413825e-16 1.16050340935661 
+ftvnl_dphi
+nat: 0
+1.95949843244439e-14 -1.01773911811931e-14 -3.22925217497886 
+ftvnl_dphi
+nat: 1
+-1.95949843244439e-14 1.01773911811931e-14 3.22925217497886 
+fvnl_dbeta
+nat: 0
+-1.65078113881175e-15 2.38978597404099e-15 0.00902144927727359 
+fvnl_dbeta
+nat: 1
+1.65078113881175e-15 -2.389785974041e-15 -0.00902144927727339 
+fvl_dphi
+nat: 0
+-1.08224518900371e-14 4.97900477979025e-15 5.87238852165979 
+fvl_dphi
+nat: 1
+5.81676496854721e-14 4.76298223227942e-15 -6.92152336756986 
+fvl_dvl
+nat: 0
+-1.8905120773318e-14 5.69079826081153e-15 6.83953221303196 
+fvl_dvl
+nat: 1
+-2.79165536236488e-14 -2.58105597614991e-14 -5.79049999354083 
+fewalds
+nat: 0
+1.0461471637792e-15 1.04603685160615e-15 -8.13799897135603 
+fewalds
+nat: 1
+-1.01179651540207e-15 -1.00729078777245e-15 8.13799897135609 
+fcc
+nat: 0
+0 0 0 
+fcc
+nat: 1
+0 0 0 
+fscc
+nat: 0
+7.35665169625049e-15 3.46431512761085e-14 9.73581950048729e-08 
+fscc
+nat: 1
+1.68110800279449e-14 5.89365686271941e-14 3.23965710410485e-08 
+ ------------------------------------------------------------------------------------------------
+ Energy (Ry)         Potential (Ry)      Kinetic (Ry)        Temperature (K)     
+ -43.229388          -43.229388          0                   0                   
+ ------------------------------------------------------------------------------------------------
+
+TIME STATISTICS
+-------------------------------------------------------------------------
+    CLASS_NAME              NAME           TIME/s  CALLS   AVG/s  PER/%  
+-------------------------------------------------------------------------
+                   total                   10.74  13       0.83   100.00 
+ Driver            atomic_world            10.74  1        10.74  100.00 
+ ESolver_KS_LCAO   before_all_runners      0.69   1        0.69   6.45   
+ Charge            atomic_rho              0.99   4        0.25   9.26   
+ PW_Basis_Sup      recip2real              2.50   146      0.02   23.26  
+ ppcell_vl         init_vloc               0.21   1        0.21   1.93   
+ Run_MD            md_line                 10.04  1        10.04  93.44  
+ Verlet            setup                   10.04  1        10.04  93.44  
+ MD_func           force_virial            10.04  1        10.04  93.44  
+ ESolver_KS        runner                  9.68   1        9.68   90.13  
+ ESolver_KS_LCAO   before_scf              0.34   1        0.34   3.16   
+ Potential         init_pot                0.59   2        0.30   5.50   
+ Potential         cal_veff                6.37   24       0.27   59.28  
+ H_Hartree_pw      v_hartree               0.92   24       0.04   8.53   
+ PW_Basis_Sup      real2recip              2.64   168      0.02   24.62  
+ PotXC             cal_veff                5.42   24       0.23   50.44  
+ XC_Functional     v_xc                    5.40   24       0.23   50.30  
+ HSolverLCAO       solve                   1.02   21       0.05   9.47   
+ HamiltLCAO        updateHk                0.68   200      0.00   6.33   
+ OperatorLCAO      init                    0.45   800      0.00   4.17   
+ Veff              contributeHR            0.45   22       0.02   4.16   
+ Gint              cal_gint_vl             0.45   22       0.02   4.16   
+ TDNonlocal        contributeHR            0.23   22       0.01   2.13   
+ TDNonlocal        calculate_HR            0.23   2        0.11   2.13   
+ module_rt         snap_psibeta_half_tddft 0.23   260      0.00   2.12   
+ LCAO_domain       dm2rho                  0.42   22       0.02   3.87   
+ Gint              cal_gint_rho            0.37   22       0.02   3.44   
+ Charge_Mixing     mix_rho                 1.07   20       0.05   9.98   
+ Charge_Mixing     mix_rho_real            1.04   20       0.05   9.72   
+ Charge_Mixing     Kerker_screen_real      0.73   20       0.04   6.81   
+ Broyden_Mixing    tem_cal_coef            0.16   20       0.01   1.54   
+ ESolver_KS        after_scf               0.50   2        0.25   4.63   
+ ESolver_KS_LCAO   after_scf               0.50   2        0.25   4.63   
+ Charge_Extra      extrapolate_charge      0.26   1        0.26   2.42   
+ Evolve_elec       solve_psi               0.14   1        0.14   1.33   
+ ESolver_KS_LCAO   cal_force               0.36   1        0.36   3.31   
+ Force_Stress_LCAO getForceStress          0.36   1        0.36   3.31   
+ Forces            cal_force_scc           0.28   1        0.28   2.59   
+-------------------------------------------------------------------------
+
+
+ START  Time  : Sun Apr  5 22:15:24 2026
+ FINISH Time  : Sun Apr  5 22:15:35 2026
+ TOTAL  Time  : 11
+ SEE INFORMATION IN : OUT.ABACUS/

@@ -10,6 +10,7 @@
 #include "source_lcao/center2_orb-orb11.h"
 #include "source_lcao/spar_hsr.h"
 #include "source_lcao/module_hcontainer/hcontainer_funcs.h"
+#include "td_ekinetic_force.hpp"
 
 namespace hamilt
 {
@@ -27,6 +28,7 @@ TDEkinetic<OperatorLCAO<TK, TR>>::TDEkinetic(HS_Matrix_K<TK>* hsk_in,
     this->cal_type = calculation_type::lcao_tddft_periodic;
     this->Grid = GridD_in;
     // initialize HR to get adjs info.
+    if(hR_in!=nullptr)
     this->initialize_HR(Grid);
 }
 
