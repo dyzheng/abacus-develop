@@ -195,27 +195,18 @@ else { return "cpu";
 int get_device_kpar(const int& kpar, const int& bndpar)
 {
 #if __MPI && (__CUDA || __ROCM)
-    int temp_nproc = 0;
-    int new_kpar = kpar;
-    MPI_Comm_size(MPI_COMM_WORLD, &temp_nproc);
-    if (temp_nproc != kpar * bndpar)
-    {
-        new_kpar = temp_nproc / bndpar;
-        ModuleBase::WARNING("Input_conv", "kpar is not compatible with the number of processors, auto set kpar value.");
-    }
-    
+    // Bind GPU device based on node rank
     // get the CPU rank of current node
     int node_rank = base_device::information::get_node_rank();
 
     int device_num = -1;
 #if defined(__CUDA)
   cudaGetDeviceCount(&device_num); // get the number of GPU devices of current node
-  cudaSetDevice(node_rank % device_num); // band the CPU processor to the devices
+  cudaSetDevice(node_rank % device_num); // bind the CPU processor to the devices
 #elif defined(__ROCM)
   hipGetDeviceCount(&device_num);
   hipSetDevice(node_rank % device_num);
 #endif
-  return new_kpar;
 #endif
   return kpar;
 }

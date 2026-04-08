@@ -525,12 +525,6 @@ void ESolver_KS_LCAO<TK, TR>::iter_init(UnitCell& ucell, const int istep, const 
 {
     ModuleBase::TITLE("ESolver_KS_LCAO", "iter_init");
 
-    // Reset condition number check state at the start of each ionic/MD step
-    if (istep == 0 && iter == 1) {
-        hsolver::Diago_DavSubspace<double, base_device::DEVICE_GPU>::reset_cond_check();
-        hsolver::Diago_DavSubspace<std::complex<double>, base_device::DEVICE_GPU>::reset_cond_check();
-    }
-
     // call iter_init() of ESolver_KS
     ESolver_KS<TK>::iter_init(ucell, istep, iter);
 

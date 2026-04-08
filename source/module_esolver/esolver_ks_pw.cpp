@@ -287,12 +287,6 @@ void ESolver_KS_PW<T, Device>::before_scf(UnitCell& ucell, const int istep)
     ModuleBase::TITLE("ESolver_KS_PW", "before_scf");
     ModuleBase::timer::tick("ESolver_KS_PW", "before_scf");
 
-    // Reset condition number check state at the start of each ionic/MD step
-    if (istep == 0) {
-        hsolver::Diago_DavSubspace<std::complex<double>, base_device::DEVICE_GPU>::reset_cond_check();
-        hsolver::Diago_DavSubspace<std::complex<float>, base_device::DEVICE_GPU>::reset_cond_check();
-    }
-
     //! 1) call before_scf() of ESolver_KS
     ESolver_KS<T, Device>::before_scf(ucell, istep);
 

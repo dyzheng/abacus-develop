@@ -4,6 +4,7 @@
 #include "module_base/constants.h"
 #include "module_base/libm/libm.h"
 #include "module_base/math_ylmreal.h"
+#include "module_base/parallel_device.h"
 #include "module_base/parallel_reduce.h"
 #include "module_base/timer.h"
 #include "module_base/module_device/device.h"
@@ -334,7 +335,7 @@ void ElecStatePW<T, Device>::cal_becsum(const psi::Psi<T, Device>& psi)
                       becp,
                       this->ppcell->nkb);
         }
-        Parallel_Reduce::reduce_pool(becp, this->ppcell->nkb * nbands);
+        Parallel_Common::reduce_dev(this->ctx, becp, this->ppcell->nkb * nbands, POOL_WORLD);
 
         // sum over bands: \sum_i <psi_i|beta_l><beta_m|psi_i> w_i
         for (int it = 0; it < ucell->ntype; it++)

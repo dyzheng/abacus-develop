@@ -41,6 +41,7 @@ option(ENABLE_PEXSI "Enable support for PEXSI." OFF)
 option(ENABLE_CUSOLVERMP "Enable cusolvermp." OFF)
 option(USE_DSP "Enable DSP usage." OFF)
 option(USE_CUDA_ON_DCU "Enable CUDA on DCU" OFF)
+option(USE_HEFFTE "Enable heFFTe for multi-GPU distributed FFT" OFF)
 
 # enable json support
 if(ENABLE_RAPIDJSON)
@@ -370,6 +371,24 @@ if(USE_CUDA)
           ${CAL_LIBRARY}
           ${CUSOLVERMP_LIBRARY}
       )
+    endif()
+  endif()
+endif()
+
+# heFFTe for multi-GPU distributed FFT
+if(USE_HEFFTE)
+  if(NOT USE_CUDA AND NOT USE_ROCM)
+    message(WARNING "heFFTe requires CUDA or ROCm. Disabling heFFTe.")
+    set(USE_HEFFTE OFF)
+  else()
+    find_package(Heffte REQUIRED)
+    if(Heffte_FOUND)
+      message(STATUS "Found heFFTe: enabling multi-GPU distributed FFT")
+      add_compile_definitions(__HEFFTE)
+      target_link_libraries(${ABACUS_BIN_NAME} Heffte::Heffte)
+    else()
+      message(WARNING "heFFTe not found. Multi-process GPU FFT will fall back to CPU FFT.")
+      set(USE_HEFFTE OFF)
     endif()
   endif()
 endif()
