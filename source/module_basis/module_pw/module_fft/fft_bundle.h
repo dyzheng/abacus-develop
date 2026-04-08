@@ -191,25 +191,54 @@ class FFT_Bundle
                      FPTYPE* out) const;
 
         template <typename FPTYPE, typename Device>
-        void fft3D_forward(const Device* ctx, 
-                          std::complex<FPTYPE>* in, 
+        void fft3D_forward(const Device* ctx,
+                          std::complex<FPTYPE>* in,
                           std::complex<FPTYPE>* out) const;
         template <typename FPTYPE, typename Device>
-        void fft3D_backward(const Device* ctx, 
-                            std::complex<FPTYPE>* in, 
+        void fft3D_backward(const Device* ctx,
+                            std::complex<FPTYPE>* in,
                             std::complex<FPTYPE>* out) const;
 
+#if defined(__CUDA) || defined(__ROCM)
+        /**
+         * @brief Create split XY (2D-batched) and Z (1D-batched) GPU FFT
+         *        plans needed by the multi-process GPU pipeline.
+         *
+         * Must be called after initfft() and before setupFFT() when
+         * poolnproc > 1 on a GPU device.
+         *
+         * @param nx      grid size x
+         * @param ny      grid size y
+         * @param nz      grid size z
+         * @param nplane  XY planes owned by this rank (batch for fftxy)
+         * @param nst     sticks owned by this rank   (batch for fftz)
+         * @param chunk_sz pipeline chunk size (default 16)
+         */
+        void initfft_split(int nx, int ny, int nz, int nplane, int nst, int chunk_sz = 16);
+#endif
+
     private:
-        int  fft_mode = 0; 
+        int  fft_mode = 0;
         bool float_flag=false;
         bool float_define=true;
         bool double_flag=false;
         std::shared_ptr<FFT_BASE<float>> fft_float=nullptr;
         std::shared_ptr<FFT_BASE<double>> fft_double=nullptr;
-        
+
         std::string device = "cpu";
         std::string precision = "double";
-};   
+
+#if defined(__CUDA) || defined(__ROCM)
+    public:
+        /**
+         * @brief Return the raw FFT_BASE<float>* pointer.
+         * Needed by pw_transform_k to downcast to FFT_CUDA<float>
+         * for the async split-FFT interface.
+         */
+        FFT_BASE<float>*  raw_float_ptr()  const { return fft_float.get(); }
+        FFT_BASE<double>* raw_double_ptr() const { return fft_double.get(); }
+#endif
+};
 } // namespace ModulePW
 #endif // FFT_H
 

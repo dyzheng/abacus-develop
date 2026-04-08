@@ -4,6 +4,10 @@
 #include "pw_basis.h"
 #include "module_psi/psi.h"
 #include "module_base/module_device/device.h"
+#if defined(__CUDA) || defined(__ROCM)
+#include "pw_multi_gpu_fft.h"
+#include <memory>
+#endif
 namespace ModulePW
 {
 
@@ -181,6 +185,13 @@ private:
     float * s_gcar = nullptr, * s_kvec_c = nullptr;
     double * d_gcar = nullptr, * d_kvec_c = nullptr;
 
+#if defined(__CUDA) || defined(__ROCM)
+public:
+    /// GPU parallel FFT context (float and double).
+    /// Allocated in setuptransform() when poolnproc > 1 and device == "gpu".
+    mutable std::unique_ptr<MultiGpuFftContext<float>>  mgpu_fft_float;
+    mutable std::unique_ptr<MultiGpuFftContext<double>> mgpu_fft_double;
+#endif
 };
 
 }

@@ -1,6 +1,7 @@
 #include "pw_basis_k.h"
 
 #include <utility>
+#include <vector>
 
 #include "module_base/constants.h"
 #include "module_base/memory.h"
@@ -195,6 +196,37 @@ void PW_Basis_K::setuptransform()
         this->fft_bundle.initfft(this->nx,this->ny,this->nz,this->liy,this->riy,this->nst,this->nplane,this->poolnproc,this->gamma_only, this->xprime);
     }
     this->fft_bundle.setupFFT();
+
+#if defined(__CUDA) || defined(__ROCM)
+    // ----------------------------------------------------------------
+    // Initialise multi-GPU FFT context when running on GPU with > 1
+    // process in the pool.  The split XY/Z plans are created here so
+    // that the full 3D plan (already set up above for poolnproc==1 path)
+    // coexists without conflict.
+    // ----------------------------------------------------------------
+    if (this->device == "gpu" && this->poolnproc > 1)
+    {
+        // Create split FFT plans via FFT_Bundle / FFT_CUDA
+        this->fft_bundle.initfft_split(this->nx, this->ny, this->nz,
+                                       this->nplane, this->nst);
+
+        // Allocate pipeline contexts
+        if (this->precision == "single" || this->precision == "mixing")
+        {
+            mgpu_fft_float = std::make_unique<MultiGpuFftContext<float>>();
+            mgpu_fft_float->init(this->nx, this->ny, this->nz,
+                                 this->nplane, this->nst, this->nstot,
+                                 this->poolnproc);
+        }
+        if (this->precision == "double" || this->precision == "mixing")
+        {
+            mgpu_fft_double = std::make_unique<MultiGpuFftContext<double>>();
+            mgpu_fft_double->init(this->nx, this->ny, this->nz,
+                                  this->nplane, this->nst, this->nstot,
+                                  this->poolnproc);
+        }
+    }
+#endif // __CUDA || __ROCM
 
     ModuleBase::timer::tick(this->classname, "setuptransform");
 }

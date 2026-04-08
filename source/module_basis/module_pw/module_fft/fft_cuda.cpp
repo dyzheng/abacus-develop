@@ -37,6 +37,16 @@ void FFT_CUDA<float>::cleanFFT()
         cufftDestroy(c_handle);
         c_handle = {};
     }
+    if (c_xy_handle)
+    {
+        cufftDestroy(c_xy_handle);
+        c_xy_handle = {};
+    }
+    if (c_z_handle)
+    {
+        cufftDestroy(c_z_handle);
+        c_z_handle = {};
+    }
 }
 template <>
 void FFT_CUDA<double>::cleanFFT()
@@ -45,6 +55,16 @@ void FFT_CUDA<double>::cleanFFT()
     {
         cufftDestroy(z_handle);
         z_handle = {};
+    }
+    if (z_xy_handle)
+    {
+        cufftDestroy(z_xy_handle);
+        z_xy_handle = {};
+    }
+    if (z_z_handle)
+    {
+        cufftDestroy(z_z_handle);
+        z_z_handle = {};
     }
 }
 template <>
@@ -105,10 +125,183 @@ void FFT_CUDA<double>::fft3D_backward(std::complex<double>* in,
                              reinterpret_cast<cufftDoubleComplex*>(out), 
                              CUFFT_INVERSE));
 }
-template <> std::complex<float>* 
+template <> std::complex<float>*
 FFT_CUDA<float>::get_auxr_3d_data()  const {return this->c_auxr_3d;}
-template <> std::complex<double>* 
+template <> std::complex<double>*
 FFT_CUDA<double>::get_auxr_3d_data() const {return this->z_auxr_3d;}
+
+// -----------------------------------------------------------------------
+// initfft_split: create XY (2D, batched) and Z (1D, batched) cufft plans
+// -----------------------------------------------------------------------
+template <>
+void FFT_CUDA<float>::initfft_split(int nx_in, int ny_in, int nz_in,
+                                    int nplane_in, int nst_in, int chunk_sz)
+{
+    nplane_ = nplane_in;
+    nst_    = nst_in;
+
+    int xy_batch = std::min(chunk_sz, nplane_in);
+
+    // XY plan: batch of xy_batch 2D C2C FFTs over (nx_in × ny_in)
+    {
+        int dims[2]      = {ny_in, nx_in};
+        int inembed[2]   = {ny_in, nx_in};
+        int onembed[2]   = {ny_in, nx_in};
+        CHECK_CUFFT(cufftPlanMany(&c_xy_handle,
+                                  2, dims,
+                                  inembed, 1, nx_in * ny_in,
+                                  onembed, 1, nx_in * ny_in,
+                                  CUFFT_C2C, xy_batch));
+    }
+
+    // Z plan: batch of nst_in 1D C2C FFTs (process all sticks at once)
+    {
+        int dims[1]    = {nz_in};
+        int inembed[1] = {nz_in};
+        int onembed[1] = {nz_in};
+        CHECK_CUFFT(cufftPlanMany(&c_z_handle,
+                                  1, dims,
+                                  inembed, 1, nz_in,
+                                  onembed, 1, nz_in,
+                                  CUFFT_C2C, nst_in));
+    }
+}
+
+template <>
+void FFT_CUDA<double>::initfft_split(int nx_in, int ny_in, int nz_in,
+                                     int nplane_in, int nst_in, int chunk_sz)
+{
+    nplane_ = nplane_in;
+    nst_    = nst_in;
+
+    int xy_batch = std::min(chunk_sz, nplane_in);
+
+    // XY plan (double)
+    {
+        int dims[2]    = {ny_in, nx_in};
+        int inembed[2] = {ny_in, nx_in};
+        int onembed[2] = {ny_in, nx_in};
+        CHECK_CUFFT(cufftPlanMany(&z_xy_handle,
+                                  2, dims,
+                                  inembed, 1, nx_in * ny_in,
+                                  onembed, 1, nx_in * ny_in,
+                                  CUFFT_Z2Z, xy_batch));
+    }
+
+    // Z plan (double): batch of nst_in (process all sticks at once)
+    {
+        int dims[1]    = {nz_in};
+        int inembed[1] = {nz_in};
+        int onembed[1] = {nz_in};
+        CHECK_CUFFT(cufftPlanMany(&z_z_handle,
+                                  1, dims,
+                                  inembed, 1, nz_in,
+                                  onembed, 1, nz_in,
+                                  CUFFT_Z2Z, nst_in));
+    }
+}
+
+// -----------------------------------------------------------------------
+// fftxy_forward / fftxy_backward  (async, on caller-supplied stream)
+// -----------------------------------------------------------------------
+template <>
+void FFT_CUDA<float>::fftxy_forward(std::complex<float>* in,
+                                    std::complex<float>* out,
+                                    cudaStream_t stream) const
+{
+    CHECK_CUFFT(cufftSetStream(c_xy_handle, stream));
+    CHECK_CUFFT(cufftExecC2C(c_xy_handle,
+                             reinterpret_cast<cufftComplex*>(in),
+                             reinterpret_cast<cufftComplex*>(out),
+                             CUFFT_FORWARD));
+}
+
+template <>
+void FFT_CUDA<double>::fftxy_forward(std::complex<double>* in,
+                                     std::complex<double>* out,
+                                     cudaStream_t stream) const
+{
+    CHECK_CUFFT(cufftSetStream(z_xy_handle, stream));
+    CHECK_CUFFT(cufftExecZ2Z(z_xy_handle,
+                             reinterpret_cast<cufftDoubleComplex*>(in),
+                             reinterpret_cast<cufftDoubleComplex*>(out),
+                             CUFFT_FORWARD));
+}
+
+template <>
+void FFT_CUDA<float>::fftxy_backward(std::complex<float>* in,
+                                     std::complex<float>* out,
+                                     cudaStream_t stream) const
+{
+    CHECK_CUFFT(cufftSetStream(c_xy_handle, stream));
+    CHECK_CUFFT(cufftExecC2C(c_xy_handle,
+                             reinterpret_cast<cufftComplex*>(in),
+                             reinterpret_cast<cufftComplex*>(out),
+                             CUFFT_INVERSE));
+}
+
+template <>
+void FFT_CUDA<double>::fftxy_backward(std::complex<double>* in,
+                                      std::complex<double>* out,
+                                      cudaStream_t stream) const
+{
+    CHECK_CUFFT(cufftSetStream(z_xy_handle, stream));
+    CHECK_CUFFT(cufftExecZ2Z(z_xy_handle,
+                             reinterpret_cast<cufftDoubleComplex*>(in),
+                             reinterpret_cast<cufftDoubleComplex*>(out),
+                             CUFFT_INVERSE));
+}
+
+// -----------------------------------------------------------------------
+// fftz_forward / fftz_backward  (async, on caller-supplied stream)
+// -----------------------------------------------------------------------
+template <>
+void FFT_CUDA<float>::fftz_forward(std::complex<float>* in,
+                                   std::complex<float>* out,
+                                   cudaStream_t stream) const
+{
+    CHECK_CUFFT(cufftSetStream(c_z_handle, stream));
+    CHECK_CUFFT(cufftExecC2C(c_z_handle,
+                             reinterpret_cast<cufftComplex*>(in),
+                             reinterpret_cast<cufftComplex*>(out),
+                             CUFFT_FORWARD));
+}
+
+template <>
+void FFT_CUDA<double>::fftz_forward(std::complex<double>* in,
+                                    std::complex<double>* out,
+                                    cudaStream_t stream) const
+{
+    CHECK_CUFFT(cufftSetStream(z_z_handle, stream));
+    CHECK_CUFFT(cufftExecZ2Z(z_z_handle,
+                             reinterpret_cast<cufftDoubleComplex*>(in),
+                             reinterpret_cast<cufftDoubleComplex*>(out),
+                             CUFFT_FORWARD));
+}
+
+template <>
+void FFT_CUDA<float>::fftz_backward(std::complex<float>* in,
+                                    std::complex<float>* out,
+                                    cudaStream_t stream) const
+{
+    CHECK_CUFFT(cufftSetStream(c_z_handle, stream));
+    CHECK_CUFFT(cufftExecC2C(c_z_handle,
+                             reinterpret_cast<cufftComplex*>(in),
+                             reinterpret_cast<cufftComplex*>(out),
+                             CUFFT_INVERSE));
+}
+
+template <>
+void FFT_CUDA<double>::fftz_backward(std::complex<double>* in,
+                                     std::complex<double>* out,
+                                     cudaStream_t stream) const
+{
+    CHECK_CUFFT(cufftSetStream(z_z_handle, stream));
+    CHECK_CUFFT(cufftExecZ2Z(z_z_handle,
+                             reinterpret_cast<cufftDoubleComplex*>(in),
+                             reinterpret_cast<cufftDoubleComplex*>(out),
+                             CUFFT_INVERSE));
+}
 
 template FFT_CUDA<float>::FFT_CUDA();
 template FFT_CUDA<float>::~FFT_CUDA();

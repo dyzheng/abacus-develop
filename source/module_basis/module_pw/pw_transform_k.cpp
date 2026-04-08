@@ -2,6 +2,10 @@
 #include "module_basis/module_pw/kernels/pw_op.h"
 #include "pw_basis_k.h"
 #include "pw_gatherscatter.h"
+#if defined(__CUDA) || defined(__ROCM)
+#include "pw_multi_gpu_fft.h"
+#include "module_fft/fft_cuda.h"
+#endif
 
 #include <cassert>
 #include <complex>
@@ -332,6 +336,10 @@ void PW_Basis_K::recip_to_real(const base_device::DEVICE_CPU* /*dev*/,
 }
 
 #if (defined(__CUDA) || defined(__ROCM))
+
+// -----------------------------------------------------------------------
+// real_to_recip  (float)
+// -----------------------------------------------------------------------
 template <>
 void PW_Basis_K::real_to_recip(const base_device::DEVICE_GPU* ctx,
                                const std::complex<float>* in,
@@ -342,29 +350,76 @@ void PW_Basis_K::real_to_recip(const base_device::DEVICE_GPU* ctx,
 {
     ModuleBase::timer::tick(this->classname, "real_to_recip gpu");
     assert(this->gamma_only == false);
-    assert(this->poolnproc == 1);
 
-    base_device::memory::synchronize_memory_op<std::complex<float>, base_device::DEVICE_GPU, base_device::DEVICE_GPU>()(
-        ctx,
-        ctx,
-        this->fft_bundle.get_auxr_3d_data<float>(),
-        in,
-        this->nrxx);
+    if (this->poolnproc == 1 || !mgpu_fft_float)
+    {
+        // ---- single-process path (original) ----
+        base_device::memory::synchronize_memory_op<
+            std::complex<float>,
+            base_device::DEVICE_GPU,
+            base_device::DEVICE_GPU>()(ctx, ctx,
+                this->fft_bundle.get_auxr_3d_data<float>(), in, this->nrxx);
 
-    this->fft_bundle.fft3D_forward(ctx, this->fft_bundle.get_auxr_3d_data<float>(), this->fft_bundle.get_auxr_3d_data<float>());
+        this->fft_bundle.fft3D_forward(ctx,
+            this->fft_bundle.get_auxr_3d_data<float>(),
+            this->fft_bundle.get_auxr_3d_data<float>());
 
-    const int startig = ik * this->npwk_max;
-    const int npw_k = this->npwk[ik];
-    set_real_to_recip_output_op<float, base_device::DEVICE_GPU>()(ctx,
-                                                                  npw_k,
-                                                                  this->nxyz,
-                                                                  add,
-                                                                  factor,
-                                                                  this->ig2ixyz_k + startig,
-                                                                  this->fft_bundle.get_auxr_3d_data<float>(),
-                                                                  out);
+        const int startig = ik * this->npwk_max;
+        const int npw_k   = this->npwk[ik];
+        set_real_to_recip_output_op<float, base_device::DEVICE_GPU>()(ctx,
+            npw_k, this->nxyz, add, factor,
+            this->ig2ixyz_k + startig,
+            this->fft_bundle.get_auxr_3d_data<float>(), out);
+    }
+    else
+    {
+        // ---- multi-process GPU pipeline (float) ----
+        std::complex<float>* d_sticks = mgpu_fft_float->d_sticks;
+        std::complex<float>* d_tbuf  = mgpu_fft_float->d_transpose_buf;
+        const int nxy    = mgpu_fft_float->get_nxy();
+        const int nplane = mgpu_fft_float->get_nplane();
+
+        // Transpose input: (nxy, nplane) → (nplane, nxy) for cuFFT
+        transpose_nxy_nplane_gpu<float>(in, d_tbuf, nxy, nplane, 0);
+
+        auto fxy = [this](std::complex<float>* a,
+                           std::complex<float>* b,
+                           gpuStream_t s) {
+            static_cast<FFT_CUDA<float>*>(
+                this->fft_bundle.raw_float_ptr())->fftxy_forward(a, b, s);
+        };
+        auto fz = [this](std::complex<float>* a,
+                          std::complex<float>* b,
+                          gpuStream_t s) {
+            static_cast<FFT_CUDA<float>*>(
+                this->fft_bundle.raw_float_ptr())->fftz_forward(a, b, s);
+        };
+
+        mgpu_fft_float->fft_forward(d_tbuf,
+                                    fxy, fz,
+                                    this->istot2ixy,
+                                    this->startz, this->numz,
+                                    this->numr,   this->numg,
+                                    this->startr, this->startg,
+                                    this->pool_world,
+                                    d_sticks);
+
+        const int startig = ik * this->npwk_max;
+        const int npw_k   = this->npwk[ik];
+        set_real_to_recip_output_op<float, base_device::DEVICE_GPU>()(ctx,
+            npw_k,
+            this->nxyz,
+            add, factor,
+            this->d_igl2isz_k + startig,
+            d_sticks, out);
+    }
+
     ModuleBase::timer::tick(this->classname, "real_to_recip gpu");
 }
+
+// -----------------------------------------------------------------------
+// real_to_recip  (double)
+// -----------------------------------------------------------------------
 template <>
 void PW_Basis_K::real_to_recip(const base_device::DEVICE_GPU* ctx,
                                const std::complex<double>* in,
@@ -375,31 +430,76 @@ void PW_Basis_K::real_to_recip(const base_device::DEVICE_GPU* ctx,
 {
     ModuleBase::timer::tick(this->classname, "real_to_recip gpu");
     assert(this->gamma_only == false);
-    assert(this->poolnproc == 1);
 
-    base_device::memory::synchronize_memory_op<std::complex<double>,
-                                               base_device::DEVICE_GPU,
-                                               base_device::DEVICE_GPU>()(ctx,
-                                                                          ctx,
-                                                                          this->fft_bundle.get_auxr_3d_data<double>(),
-                                                                          in,
-                                                                          this->nrxx);
+    if (this->poolnproc == 1 || !mgpu_fft_double)
+    {
+        // ---- single-process path (original) ----
+        base_device::memory::synchronize_memory_op<
+            std::complex<double>,
+            base_device::DEVICE_GPU,
+            base_device::DEVICE_GPU>()(ctx, ctx,
+                this->fft_bundle.get_auxr_3d_data<double>(), in, this->nrxx);
 
-    this->fft_bundle.fft3D_forward(ctx, this->fft_bundle.get_auxr_3d_data<double>(), this->fft_bundle.get_auxr_3d_data<double>());
+        this->fft_bundle.fft3D_forward(ctx,
+            this->fft_bundle.get_auxr_3d_data<double>(),
+            this->fft_bundle.get_auxr_3d_data<double>());
 
-    const int startig = ik * this->npwk_max;
-    const int npw_k = this->npwk[ik];
-    set_real_to_recip_output_op<double, base_device::DEVICE_GPU>()(ctx,
-                                                                   npw_k,
-                                                                   this->nxyz,
-                                                                   add,
-                                                                   factor,
-                                                                   this->ig2ixyz_k + startig,
-                                                                   this->fft_bundle.get_auxr_3d_data<double>(),
-                                                                   out);
+        const int startig = ik * this->npwk_max;
+        const int npw_k   = this->npwk[ik];
+        set_real_to_recip_output_op<double, base_device::DEVICE_GPU>()(ctx,
+            npw_k, this->nxyz, add, factor,
+            this->ig2ixyz_k + startig,
+            this->fft_bundle.get_auxr_3d_data<double>(), out);
+    }
+    else
+    {
+        // ---- multi-process GPU pipeline (double) ----
+        std::complex<double>* d_sticks = mgpu_fft_double->d_sticks;
+        std::complex<double>* d_tbuf  = mgpu_fft_double->d_transpose_buf;
+        const int nxy    = mgpu_fft_double->get_nxy();
+        const int nplane = mgpu_fft_double->get_nplane();
+
+        // Transpose input: (nxy, nplane) → (nplane, nxy) for cuFFT
+        transpose_nxy_nplane_gpu<double>(in, d_tbuf, nxy, nplane, 0);
+
+        auto fxy = [this](std::complex<double>* a,
+                           std::complex<double>* b,
+                           gpuStream_t s) {
+            static_cast<FFT_CUDA<double>*>(
+                this->fft_bundle.raw_double_ptr())->fftxy_forward(a, b, s);
+        };
+        auto fz = [this](std::complex<double>* a,
+                          std::complex<double>* b,
+                          gpuStream_t s) {
+            static_cast<FFT_CUDA<double>*>(
+                this->fft_bundle.raw_double_ptr())->fftz_forward(a, b, s);
+        };
+
+        mgpu_fft_double->fft_forward(d_tbuf,
+                                     fxy, fz,
+                                     this->istot2ixy,
+                                     this->startz, this->numz,
+                                     this->numr,   this->numg,
+                                     this->startr, this->startg,
+                                     this->pool_world,
+                                     d_sticks);
+
+        const int startig = ik * this->npwk_max;
+        const int npw_k   = this->npwk[ik];
+        set_real_to_recip_output_op<double, base_device::DEVICE_GPU>()(ctx,
+            npw_k,
+            this->nxyz,
+            add, factor,
+            this->d_igl2isz_k + startig,
+            d_sticks, out);
+    }
+
     ModuleBase::timer::tick(this->classname, "real_to_recip gpu");
 }
 
+// -----------------------------------------------------------------------
+// recip_to_real  (float)
+// -----------------------------------------------------------------------
 template <>
 void PW_Basis_K::recip_to_real(const base_device::DEVICE_GPU* ctx,
                                const std::complex<float>* in,
@@ -410,33 +510,84 @@ void PW_Basis_K::recip_to_real(const base_device::DEVICE_GPU* ctx,
 {
     ModuleBase::timer::tick(this->classname, "recip_to_real gpu");
     assert(this->gamma_only == false);
-    assert(this->poolnproc == 1);
-    // ModuleBase::GlobalFunc::ZEROS(fft_bundle.get_auxr_3d_data<float>(), this->nxyz);
-    base_device::memory::set_memory_op<std::complex<float>, base_device::DEVICE_GPU>()(
-        ctx,
-        this->fft_bundle.get_auxr_3d_data<float>(),
-        0,
-        this->nxyz);
 
-    const int startig = ik * this->npwk_max;
-    const int npw_k = this->npwk[ik];
+    if (this->poolnproc == 1 || !mgpu_fft_float)
+    {
+        // ---- single-process path (original) ----
+        base_device::memory::set_memory_op<std::complex<float>,
+                                           base_device::DEVICE_GPU>()(
+            ctx, this->fft_bundle.get_auxr_3d_data<float>(), 0, this->nxyz);
 
-    set_3d_fft_box_op<float, base_device::DEVICE_GPU>()(ctx,
-                                                        npw_k,
-                                                        this->ig2ixyz_k + startig,
-                                                        in,
-                                                        this->fft_bundle.get_auxr_3d_data<float>());
-    this->fft_bundle.fft3D_backward(ctx, this->fft_bundle.get_auxr_3d_data<float>(), this->fft_bundle.get_auxr_3d_data<float>());
+        const int startig = ik * this->npwk_max;
+        const int npw_k   = this->npwk[ik];
+        set_3d_fft_box_op<float, base_device::DEVICE_GPU>()(ctx,
+            npw_k, this->ig2ixyz_k + startig, in,
+            this->fft_bundle.get_auxr_3d_data<float>());
 
-    set_recip_to_real_output_op<float, base_device::DEVICE_GPU>()(ctx,
-                                                                  this->nrxx,
-                                                                  add,
-                                                                  factor,
-                                                                  this->fft_bundle.get_auxr_3d_data<float>(),
-                                                                  out);
+        this->fft_bundle.fft3D_backward(ctx,
+            this->fft_bundle.get_auxr_3d_data<float>(),
+            this->fft_bundle.get_auxr_3d_data<float>());
+
+        set_recip_to_real_output_op<float, base_device::DEVICE_GPU>()(ctx,
+            this->nrxx, add, factor,
+            this->fft_bundle.get_auxr_3d_data<float>(), out);
+    }
+    else
+    {
+        // ---- multi-process GPU pipeline (float) ----
+        std::complex<float>* d_sticks = mgpu_fft_float->d_sticks;
+        std::complex<float>* d_tbuf  = mgpu_fft_float->d_transpose_buf;
+        const int nxy    = mgpu_fft_float->get_nxy();
+        const int nplane = mgpu_fft_float->get_nplane();
+
+        // Scatter G+k coefficients into (nst, nz) buffer
+        base_device::memory::set_memory_op<std::complex<float>,
+                                           base_device::DEVICE_GPU>()(
+            ctx, d_sticks, 0, this->nst * this->nz);
+
+        const int startig = ik * this->npwk_max;
+        const int npw_k   = this->npwk[ik];
+        set_3d_fft_box_op<float, base_device::DEVICE_GPU>()(ctx,
+            npw_k, this->d_igl2isz_k + startig, in, d_sticks);
+
+        auto fxy_b = [this](std::complex<float>* a,
+                             std::complex<float>* b,
+                             gpuStream_t s) {
+            static_cast<FFT_CUDA<float>*>(
+                this->fft_bundle.raw_float_ptr())->fftxy_backward(a, b, s);
+        };
+        auto fz_b = [this](std::complex<float>* a,
+                            std::complex<float>* b,
+                            gpuStream_t s) {
+            static_cast<FFT_CUDA<float>*>(
+                this->fft_bundle.raw_float_ptr())->fftz_backward(a, b, s);
+        };
+
+        // fft_backward produces (nplane, nxy) layout in d_tbuf
+        mgpu_fft_float->fft_backward(d_sticks, d_tbuf,
+                                     fxy_b, fz_b,
+                                     this->istot2ixy,
+                                     this->startz, this->numz,
+                                     this->numr,   this->numg,
+                                     this->startr, this->startg,
+                                     this->pool_world);
+
+        // Transpose output: (nplane, nxy) → (nxy, nplane)
+        transpose_nxy_nplane_gpu<float>(d_tbuf, out, nxy, nplane, 1);
+
+        if (add || factor != 1.0f)
+        {
+            set_recip_to_real_output_op<float, base_device::DEVICE_GPU>()(
+                ctx, this->nrxx, add, factor, out, out);
+        }
+    }
 
     ModuleBase::timer::tick(this->classname, "recip_to_real gpu");
 }
+
+// -----------------------------------------------------------------------
+// recip_to_real  (double)
+// -----------------------------------------------------------------------
 template <>
 void PW_Basis_K::recip_to_real(const base_device::DEVICE_GPU* ctx,
                                const std::complex<double>* in,
@@ -447,30 +598,76 @@ void PW_Basis_K::recip_to_real(const base_device::DEVICE_GPU* ctx,
 {
     ModuleBase::timer::tick(this->classname, "recip_to_real gpu");
     assert(this->gamma_only == false);
-    assert(this->poolnproc == 1);
-    // ModuleBase::GlobalFunc::ZEROS(fft_bundle.get_auxr_3d_data<double>(), this->nxyz);
-    base_device::memory::set_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(
-        ctx,
-        this->fft_bundle.get_auxr_3d_data<double>(),
-        0,
-        this->nxyz);
 
-    const int startig = ik * this->npwk_max;
-    const int npw_k = this->npwk[ik];
+    if (this->poolnproc == 1 || !mgpu_fft_double)
+    {
+        // ---- single-process path (original) ----
+        base_device::memory::set_memory_op<std::complex<double>,
+                                           base_device::DEVICE_GPU>()(
+            ctx, this->fft_bundle.get_auxr_3d_data<double>(), 0, this->nxyz);
 
-    set_3d_fft_box_op<double, base_device::DEVICE_GPU>()(ctx,
-                                                         npw_k,
-                                                         this->ig2ixyz_k + startig,
-                                                         in,
-                                                         this->fft_bundle.get_auxr_3d_data<double>());
-    this->fft_bundle.fft3D_backward(ctx, this->fft_bundle.get_auxr_3d_data<double>(), this->fft_bundle.get_auxr_3d_data<double>());
+        const int startig = ik * this->npwk_max;
+        const int npw_k   = this->npwk[ik];
+        set_3d_fft_box_op<double, base_device::DEVICE_GPU>()(ctx,
+            npw_k, this->ig2ixyz_k + startig, in,
+            this->fft_bundle.get_auxr_3d_data<double>());
 
-    set_recip_to_real_output_op<double, base_device::DEVICE_GPU>()(ctx,
-                                                                   this->nrxx,
-                                                                   add,
-                                                                   factor,
-                                                                   this->fft_bundle.get_auxr_3d_data<double>(),
-                                                                   out);
+        this->fft_bundle.fft3D_backward(ctx,
+            this->fft_bundle.get_auxr_3d_data<double>(),
+            this->fft_bundle.get_auxr_3d_data<double>());
+
+        set_recip_to_real_output_op<double, base_device::DEVICE_GPU>()(ctx,
+            this->nrxx, add, factor,
+            this->fft_bundle.get_auxr_3d_data<double>(), out);
+    }
+    else
+    {
+        // ---- multi-process GPU pipeline (double) ----
+        std::complex<double>* d_sticks = mgpu_fft_double->d_sticks;
+        std::complex<double>* d_tbuf  = mgpu_fft_double->d_transpose_buf;
+        const int nxy    = mgpu_fft_double->get_nxy();
+        const int nplane = mgpu_fft_double->get_nplane();
+
+        base_device::memory::set_memory_op<std::complex<double>,
+                                           base_device::DEVICE_GPU>()(
+            ctx, d_sticks, 0, this->nst * this->nz);
+
+        const int startig = ik * this->npwk_max;
+        const int npw_k   = this->npwk[ik];
+        set_3d_fft_box_op<double, base_device::DEVICE_GPU>()(ctx,
+            npw_k, this->d_igl2isz_k + startig, in, d_sticks);
+
+        auto fxy_b = [this](std::complex<double>* a,
+                             std::complex<double>* b,
+                             gpuStream_t s) {
+            static_cast<FFT_CUDA<double>*>(
+                this->fft_bundle.raw_double_ptr())->fftxy_backward(a, b, s);
+        };
+        auto fz_b = [this](std::complex<double>* a,
+                            std::complex<double>* b,
+                            gpuStream_t s) {
+            static_cast<FFT_CUDA<double>*>(
+                this->fft_bundle.raw_double_ptr())->fftz_backward(a, b, s);
+        };
+
+        // fft_backward produces (nplane, nxy) layout in d_tbuf
+        mgpu_fft_double->fft_backward(d_sticks, d_tbuf,
+                                      fxy_b, fz_b,
+                                      this->istot2ixy,
+                                      this->startz, this->numz,
+                                      this->numr,   this->numg,
+                                      this->startr, this->startg,
+                                      this->pool_world);
+
+        // Transpose output: (nplane, nxy) → (nxy, nplane)
+        transpose_nxy_nplane_gpu<double>(d_tbuf, out, nxy, nplane, 1);
+
+        if (add || factor != 1.0)
+        {
+            set_recip_to_real_output_op<double, base_device::DEVICE_GPU>()(
+                ctx, this->nrxx, add, factor, out, out);
+        }
+    }
 
     ModuleBase::timer::tick(this->classname, "recip_to_real gpu");
 }

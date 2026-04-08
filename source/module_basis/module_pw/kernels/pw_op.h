@@ -72,6 +72,14 @@ struct set_real_to_recip_output_op {
         std::complex<FPTYPE>* out);
 };
 
+/// @brief Transpose between (nxy, nplane) and (nplane, nxy) layouts on GPU.
+/// dir=0: (nxy, nplane) → (nplane, nxy)  [z-fastest to z-slowest, for cuFFT input]
+/// dir=1: (nplane, nxy) → (nxy, nplane)  [z-slowest to z-fastest, for CPU-compatible output]
+template <typename FPTYPE>
+void transpose_nxy_nplane_gpu(const std::complex<FPTYPE>* in,
+                              std::complex<FPTYPE>* out,
+                              int nxy, int nplane, int dir);
+
 #if __CUDA || __UT_USE_CUDA || __ROCM || __UT_USE_ROCM
 // Partially specialize functor for base_device::GpuDevice.
 template <typename FPTYPE>

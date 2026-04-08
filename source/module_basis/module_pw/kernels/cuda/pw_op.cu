@@ -120,11 +120,50 @@ void set_real_to_recip_output_op<FPTYPE, base_device::DEVICE_GPU>::operator()(co
     cudaCheckOnDebug();
 }
 
+// Transpose kernel: (nxy, nplane) <-> (nplane, nxy)
+// dir=0: in[ixy*nplane+iz] -> out[iz*nxy+ixy]   (z-fastest to z-slowest)
+// dir=1: in[iz*nxy+ixy]   -> out[ixy*nplane+iz]  (z-slowest to z-fastest)
+template<class FPTYPE>
+__global__ void transpose_nxy_nplane_kernel(
+    const thrust::complex<FPTYPE>* in,
+    thrust::complex<FPTYPE>* out,
+    const int nxy, const int nplane, const int dir)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int total = nxy * nplane;
+    if (idx >= total) return;
+    if (dir == 0) {
+        int ixy = idx / nplane;
+        int iz  = idx % nplane;
+        out[iz * nxy + ixy] = in[idx];
+    } else {
+        int iz  = idx / nxy;
+        int ixy = idx % nxy;
+        out[ixy * nplane + iz] = in[idx];
+    }
+}
+
 template struct set_3d_fft_box_op<float, base_device::DEVICE_GPU>;
 template struct set_recip_to_real_output_op<float, base_device::DEVICE_GPU>;
 template struct set_real_to_recip_output_op<float, base_device::DEVICE_GPU>;
 template struct set_3d_fft_box_op<double, base_device::DEVICE_GPU>;
 template struct set_recip_to_real_output_op<double, base_device::DEVICE_GPU>;
 template struct set_real_to_recip_output_op<double, base_device::DEVICE_GPU>;
+
+template <typename FPTYPE>
+void transpose_nxy_nplane_gpu(const std::complex<FPTYPE>* in,
+                              std::complex<FPTYPE>* out,
+                              int nxy, int nplane, int dir)
+{
+    int total = nxy * nplane;
+    int block = (total + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
+    transpose_nxy_nplane_kernel<FPTYPE><<<block, THREADS_PER_BLOCK>>>(
+        reinterpret_cast<const thrust::complex<FPTYPE>*>(in),
+        reinterpret_cast<thrust::complex<FPTYPE>*>(out),
+        nxy, nplane, dir);
+}
+
+template void transpose_nxy_nplane_gpu<float>(const std::complex<float>*, std::complex<float>*, int, int, int);
+template void transpose_nxy_nplane_gpu<double>(const std::complex<double>*, std::complex<double>*, int, int, int);
 
 }  // namespace ModulePW

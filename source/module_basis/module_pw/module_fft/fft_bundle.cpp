@@ -199,8 +199,25 @@ FFT_Bundle::fft3D_backward(const base_device::DEVICE_GPU* ctx,
                                  std::complex<double>* out) 
 const {fft_double->fft3D_backward(in, out);}
 
+#if defined(__CUDA) || defined(__ROCM)
+void FFT_Bundle::initfft_split(int nx, int ny, int nz, int nplane, int nst, int chunk_sz)
+{
+    assert(device == "gpu");
+    if (float_flag)
+    {
+        static_cast<FFT_CUDA<float>*>(fft_float.get())
+            ->initfft_split(nx, ny, nz, nplane, nst, chunk_sz);
+    }
+    if (double_flag)
+    {
+        static_cast<FFT_CUDA<double>*>(fft_double.get())
+            ->initfft_split(nx, ny, nz, nplane, nst, chunk_sz);
+    }
+}
+#endif // __CUDA || __ROCM
+
 // access the real space data
-template <> float* 
+template <> float*
 FFT_Bundle::get_rspace_data()  const {return fft_float->get_rspace_data();}
 template <> double* 
 FFT_Bundle::get_rspace_data()  const {return fft_double->get_rspace_data();}
