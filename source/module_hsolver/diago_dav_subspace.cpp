@@ -62,7 +62,7 @@ Diago_DavSubspace<T, Device>::Diago_DavSubspace(const std::vector<Real>& precond
     if (this->device == base_device::GpuDevice)
     {
         resmem_real_op()(this->ctx, this->d_precondition, nbasis_in);
-        // syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, this->d_precondition, this->precondition.data(), nbasis_in);
+        syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, this->d_precondition, this->precondition.data(), nbasis_in);
     }
 #endif
 }
