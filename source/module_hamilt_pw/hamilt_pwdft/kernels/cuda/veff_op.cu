@@ -46,6 +46,7 @@ void veff_pw_op<FPTYPE, base_device::DEVICE_GPU>::operator()(const base_device::
                                                              std::complex<FPTYPE>* out,
                                                              const FPTYPE* in)
 {
+//     printf("DEBUG: veff_pw kernel launch, size=%d\n", size);
     const int block = (size + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
     veff_pw<FPTYPE><<<block, THREADS_PER_BLOCK>>>(
         size, // control params
@@ -53,6 +54,7 @@ void veff_pw_op<FPTYPE, base_device::DEVICE_GPU>::operator()(const base_device::
         in); // array of data
 
     cudaCheckOnDebug();
+//     printf("DEBUG: veff_pw kernel complete\n");
 }
 
 template <typename FPTYPE>
@@ -62,6 +64,7 @@ void veff_pw_op<FPTYPE, base_device::DEVICE_GPU>::operator()(const base_device::
                                                              std::complex<FPTYPE>* out1,
                                                              const FPTYPE** in)
 {
+//     printf("DEBUG: veff_pw_nc kernel launch, size=%d\n", size);
     const int block = (size + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
     veff_pw<FPTYPE><<<block, THREADS_PER_BLOCK>>>(
         size, // control params
@@ -70,6 +73,7 @@ void veff_pw_op<FPTYPE, base_device::DEVICE_GPU>::operator()(const base_device::
         in[0]); // array of data
 
     cudaCheckOnDebug();
+//     printf("DEBUG: veff_pw_nc kernel complete\n");
 }
 
 template struct veff_pw_op<float, base_device::DEVICE_GPU>;

@@ -305,7 +305,9 @@ void Nonlocal<OperatorPW<T, Device>>::act(
     ModuleBase::timer::tick("Operator", "NonlocalPW");
     if(is_first_node)
     {
+//         printf("DEBUG: before setmem_complex_op\n");
         setmem_complex_op()(this->ctx, tmhpsi, 0, nbasis*nbands/npol);
+//         printf("DEBUG: after setmem_complex_op\n");
     }
     if(!PARAM.inp.use_paw)
     {
@@ -315,6 +317,7 @@ void Nonlocal<OperatorPW<T, Device>>::act(
 
         if (this->ppcell->nkb > 0)
         {
+//             printf("DEBUG: nkb > 0, use_vkb_batching=%d\n", use_vkb_batching_);
             if (use_vkb_batching_)
             {
                 // ===== BATCHED PATH =====
@@ -323,17 +326,21 @@ void Nonlocal<OperatorPW<T, Device>>::act(
             else
             {
                 // ===== ORIGINAL PATH =====
+//                 printf("DEBUG: entering original path\n");
                 //<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
                 // qianrui optimize 2021-3-31
                 int nkb = this->ppcell->nkb;
                 if (this->nkb_m < nbands * nkb) {
+//                     printf("DEBUG: before resmem_complex_op, size=%d\n", nbands * nkb);
                     resmem_complex_op()(this->ctx, this->becp, nbands * nkb, "Nonlocal<PW>::becp");
+//                     printf("DEBUG: after resmem_complex_op\n");
                 }
                 // ModuleBase::ComplexMatrix becp(nbands, nkb, false);
                 char transa = 'C';
                 char transb = 'N';
                 if (nbands == 1)
                 {
+//                     printf("DEBUG: nbands=1, calling gemv_op\n");
                     int inc = 1;
                     gemv_op()(
                         this->ctx,
@@ -351,6 +358,7 @@ void Nonlocal<OperatorPW<T, Device>>::act(
                 }
                 else
                 {
+//                     printf("DEBUG: nbands=%d, calling gemm_op\n", nbands);
                     int npm = nbands;
                     gemm_op()(
                         this->ctx,
@@ -368,11 +376,35 @@ void Nonlocal<OperatorPW<T, Device>>::act(
                         this->becp,
                         nkb
                     );
+#if defined(__CUDA) || defined(__ROCM)
+#ifdef __CUDA
+                    cudaDeviceSynchronize();
+#else
+                    hipDeviceSynchronize();
+#endif
+#endif
+//                     printf("DEBUG: after gemm_op\n");
                 }
 
+//                 printf("DEBUG: before Parallel_Reduce::reduce_pool\n");
+#if defined(__CUDA) || defined(__ROCM)
+                // GPU memory requires manual D2H, MPI reduce, H2D
+                using syncmem_d2h_op = base_device::memory::synchronize_memory_op<T, base_device::DEVICE_CPU, Device>;
+                using syncmem_h2d_op = base_device::memory::synchronize_memory_op<T, Device, base_device::DEVICE_CPU>;
+                std::vector<T> becp_cpu(nkb * nbands);
+                syncmem_d2h_op()(this->cpu_ctx, this->ctx,
+                                becp_cpu.data(), this->becp, nkb * nbands);
+                Parallel_Reduce::reduce_pool(becp_cpu.data(), nkb * nbands);
+                syncmem_h2d_op()(this->ctx, this->cpu_ctx,
+                                this->becp, becp_cpu.data(), nkb * nbands);
+#else
                 Parallel_Reduce::reduce_pool(becp, nkb * nbands);
+#endif
+//                 printf("DEBUG: after Parallel_Reduce::reduce_pool\n");
 
+//                 printf("DEBUG: before add_nonlocal_pp\n");
                 this->add_nonlocal_pp(tmhpsi, becp, nbands);
+//                 printf("DEBUG: after add_nonlocal_pp\n");
             }
         }
     }

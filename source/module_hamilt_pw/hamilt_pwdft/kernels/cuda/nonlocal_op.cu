@@ -92,6 +92,7 @@ void hamilt::nonlocal_pw_op<FPTYPE, base_device::DEVICE_GPU>::operator()(const b
 {
   // denghui implement 20221019
   // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+//   printf("DEBUG: nonlocal_pw kernel launch, l1=%d, l2=%d, l3=%d, blocks=%d\n", l1, l2, l3, l1*l2);
   nonlocal_pw<FPTYPE><<<l1 * l2, THREADS_PER_BLOCK>>>(
     l1, l2, l3, // loop size
     sum, iat, spin, nkb,   // control params
@@ -100,6 +101,7 @@ void hamilt::nonlocal_pw_op<FPTYPE, base_device::DEVICE_GPU>::operator()(const b
     reinterpret_cast<const thrust::complex<FPTYPE>*>(becp)); // array of data
 
   cudaCheckOnDebug();
+//   printf("DEBUG: nonlocal_pw kernel complete\n");
   iat += l1;
   sum += l1 * l3;
 }
@@ -121,6 +123,7 @@ void hamilt::nonlocal_pw_op<FPTYPE, base_device::DEVICE_GPU>::operator()(const b
 {
   // denghui implement 20221109
   // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+//   printf("DEBUG: nonlocal_pw_nc kernel launch, l1=%d, l2=%d, l3=%d, blocks=%d\n", l1, l2, l3, l1*l2/2);
   nonlocal_pw<FPTYPE><<<l1 * l2 / 2, THREADS_PER_BLOCK>>>(
     l1, l2, l3, // loop size
     sum, iat, nkb,   // control params
@@ -130,6 +133,7 @@ void hamilt::nonlocal_pw_op<FPTYPE, base_device::DEVICE_GPU>::operator()(const b
     reinterpret_cast<const thrust::complex<FPTYPE>*>(becp)); // array of data
 
   cudaCheckOnDebug();
+//   printf("DEBUG: nonlocal_pw_nc kernel complete\n");
   iat += l1;
   sum += l1 * l3;
   // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>

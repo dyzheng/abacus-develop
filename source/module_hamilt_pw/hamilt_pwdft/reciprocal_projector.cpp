@@ -1,5 +1,7 @@
 #include "reciprocal_projector.h"
 
+#include "module_base/parallel_comm.h"
+#include "module_base/parallel_device.h"
 #include "module_base/parallel_reduce.h"
 
 #include <algorithm>
@@ -143,7 +145,7 @@ void ReciprocalProjector<T, Device>::compute_becp(const T* psi,
             }
 
             // 3. MPI reduction across pool
-            Parallel_Reduce::reduce_pool(becp_batch_, nkb_batch * nbands);
+            Parallel_Common::reduce_dev(this->ctx_, becp_batch_, nkb_batch * nbands, POOL_WORLD);
 
             // 4. Scatter becp_batch_ (stride nkb_batch) into full becp (stride nkb_)
             //    becp layout: [nbands][nkb_], batch portion at column jkb_offset.
@@ -179,7 +181,7 @@ void ReciprocalProjector<T, Device>::compute_becp(const T* psi,
         }
 
         // MPI reduction across pool
-        Parallel_Reduce::reduce_pool(becp, nkb_ * nbands);
+        Parallel_Common::reduce_dev(this->ctx_, becp, nkb_ * nbands, POOL_WORLD);
     }
 }
 

@@ -111,6 +111,7 @@ void Veff<OperatorPW<T, Device>>::act(
         tmhpsi += max_npw * npol;
         tmpsi_in += max_npw * npol;
     }
+
     ModuleBase::timer::tick("Operator", "VeffPW");
 }
 
