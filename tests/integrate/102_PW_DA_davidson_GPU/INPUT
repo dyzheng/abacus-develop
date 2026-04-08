@@ -12,13 +12,13 @@ smearing_method     gaussian
 smearing_sigma      0.02
 
 #Parameters (3.PW)
-ecutwfc             40
+ecutwfc             100
 scf_thr             1e-7
 scf_nmax            100
 
 #Parameters (LCAO)
 basis_type          pw
-ks_solver           dav
+ks_solver           dav_subspace
 device              gpu
 chg_extrap          second-order
 out_dm              0
@@ -31,4 +31,5 @@ cal_stress          1
 
 mixing_type         broyden
 mixing_beta         0.4
+out_alllog          1
 mixing_gg0          1.5

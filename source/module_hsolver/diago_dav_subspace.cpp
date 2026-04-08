@@ -1,9 +1,9 @@
 #include "diago_dav_subspace.h"
-#include "diago_cond_check.h"
 
 #include "diago_iter_assist.h"
 #include "module_base/memory.h"
 #include "module_base/module_device/device.h"
+#include "module_base/parallel_device.h"
 #include "module_base/timer.h"
 #include "module_hsolver/kernels/dngvd_op.h"
 #include "module_hsolver/kernels/math_kernel_op.h"
@@ -13,13 +13,6 @@
 #include <vector>
 
 using namespace hsolver;
-
-// Initialize static variables
-template <typename T, typename Device>
-bool Diago_DavSubspace<T, Device>::use_cpu_dngvd_ = false;
-
-template <typename T, typename Device>
-bool Diago_DavSubspace<T, Device>::cond_check_done_ = false;
 
 template <typename T, typename Device>
 Diago_DavSubspace<T, Device>::Diago_DavSubspace(const std::vector<Real>& precondition_in,
@@ -167,7 +160,6 @@ int Diago_DavSubspace<T, Device>::diag_once(const HPsiFunc& hpsi_func,
 
         // check convergence and update eigenvalues
         ModuleBase::timer::tick("Diago_DavSubspace", "check_update");
-
         this->notconv = 0;
         for (int m = 0; m < this->n_band; m++)
         {
@@ -181,7 +173,6 @@ int Diago_DavSubspace<T, Device>::diag_once(const HPsiFunc& hpsi_func,
 
             eigenvalue_in_hsolver[m] = eigenvalue_iter[m];
         }
-
         ModuleBase::timer::tick("Diago_DavSubspace", "check_update");
 
         if ((this->notconv == 0) || (nbase + this->notconv + 1 > this->nbase_x) || (dav_iter == this->iter_nmax))
@@ -214,7 +205,6 @@ int Diago_DavSubspace<T, Device>::diag_once(const HPsiFunc& hpsi_func,
             if (!this->notconv || (dav_iter == this->iter_nmax))
             {
                 // overall convergence or last iteration: exit the iteration
-
                 ModuleBase::timer::tick("Diago_DavSubspace", "last");
                 break;
             }
@@ -463,62 +453,9 @@ void Diago_DavSubspace<T, Device>::cal_elem(const int& dim,
         // Only on dsp hardware need an extra space to reduce data
         dsp_dav_subspace_reduce(hcc, scc, nbase, this->nbase_x, this->notconv, this->diag_comm.comm);
 #else
-        auto* swap = new T[notconv * this->nbase_x];
-
-        syncmem_complex_op()(this->ctx, this->ctx, swap, hcc + nbase * this->nbase_x, notconv * this->nbase_x);
-
-        if (std::is_same<T, double>::value)
-        {
-            Parallel_Reduce::reduce_pool(hcc + nbase * this->nbase_x, notconv * this->nbase_x);
-            Parallel_Reduce::reduce_pool(scc + nbase * this->nbase_x, notconv * this->nbase_x);
-        }
-        else
-        {
-            if (base_device::get_current_precision(swap) == "single")
-            {
-                MPI_Reduce(swap,
-                           hcc + nbase * this->nbase_x,
-                           notconv * this->nbase_x,
-                           MPI_COMPLEX,
-                           MPI_SUM,
-                           0,
-                           this->diag_comm.comm);
-            }
-            else
-            {
-                MPI_Reduce(swap,
-                           hcc + nbase * this->nbase_x,
-                           notconv * this->nbase_x,
-                           MPI_DOUBLE_COMPLEX,
-                           MPI_SUM,
-                           0,
-                           this->diag_comm.comm);
-            }
-
-            syncmem_complex_op()(this->ctx, this->ctx, swap, scc + nbase * this->nbase_x, notconv * this->nbase_x);
-
-            if (base_device::get_current_precision(swap) == "single")
-            {
-                MPI_Reduce(swap,
-                           scc + nbase * this->nbase_x,
-                           notconv * this->nbase_x,
-                           MPI_COMPLEX,
-                           MPI_SUM,
-                           0,
-                           this->diag_comm.comm);
-            }
-            else
-            {
-                MPI_Reduce(swap,
-                           scc + nbase * this->nbase_x,
-                           notconv * this->nbase_x,
-                           MPI_DOUBLE_COMPLEX,
-                           MPI_SUM,
-                           0,
-                           this->diag_comm.comm);
-            }
-        }
-        delete[] swap;
+        // Use reduce_dev which handles GPU-CPU-MPI communication correctly
+        Parallel_Common::reduce_dev(this->ctx, hcc + nbase * this->nbase_x, notconv * this->nbase_x, this->diag_comm.comm);
+        Parallel_Common::reduce_dev(this->ctx, scc + nbase * this->nbase_x, notconv * this->nbase_x, this->diag_comm.comm);
 #endif
     }
 #endif
@@ -567,53 +504,10 @@ void Diago_DavSubspace<T, Device>::diag_zhegvx(const int& nbase,
 
             // Ensure all GPU memory operations complete before condition check
             cudaDeviceSynchronize();
-
-            // Determine if condition number check is needed
-            bool should_check = false;
-            if (PARAM.inp.diago_cond_check == "always") {
-                should_check = true;
-            } else if (PARAM.inp.diago_cond_check == "first" && !Diago_DavSubspace<T, Device>::cond_check_done_) {
-                should_check = true;
-            } else if (PARAM.inp.diago_cond_check == "always-false") {
-                // Force CPU path without checking
-                Diago_DavSubspace<T, Device>::use_cpu_dngvd_ = true;
-                Diago_DavSubspace<T, Device>::cond_check_done_ = true;
-            }
-
-            // Perform check if needed
-            if (should_check) {
-                Diago_DavSubspace<T, Device>::use_cpu_dngvd_ =
-                    check_matrix_condition_number(scc_gpu, nbase, 1e12);
-                Diago_DavSubspace<T, Device>::cond_check_done_ = true;
-            }
-
-            // Select execution path based on decision
-            if (Diago_DavSubspace<T, Device>::use_cpu_dngvd_) {
-                // Use CPU path
-                std::vector<T> hcc_cpu(nbase * nbase);
-                std::vector<T> scc_cpu(nbase * nbase);
-                std::vector<T> vcc_cpu(nbase * nbase);
-                std::vector<Real> eigenvalue_cpu(nbase);
-
-                // D2H copy
-                cudaMemcpy(hcc_cpu.data(), hcc_gpu, sizeof(T) * nbase * nbase, cudaMemcpyDeviceToHost);
-                cudaMemcpy(scc_cpu.data(), scc_gpu, sizeof(T) * nbase * nbase, cudaMemcpyDeviceToHost);
-
-                // Call CPU dngvd
-                base_device::DEVICE_CPU* cpu_ctx_local = {};
-                dngvd_op<T, base_device::DEVICE_CPU>()(
-                    cpu_ctx_local, nbase, nbase,
-                    hcc_cpu.data(), scc_cpu.data(),
-                    eigenvalue_cpu.data(), vcc_cpu.data()
-                );
-
-                // H2D copy results
-                cudaMemcpy(vcc_gpu, vcc_cpu.data(), sizeof(T) * nbase * nbase, cudaMemcpyHostToDevice);
-                cudaMemcpy(eigenvalue_gpu, eigenvalue_cpu.data(), sizeof(Real) * nbase, cudaMemcpyHostToDevice);
-            } else {
-                // Original GPU path
-                dngvd_op<T, Device>()(this->ctx, nbase, nbase, hcc_gpu, scc_gpu, eigenvalue_gpu, vcc_gpu);
-            }
+            // Use dngvx (partial eigensolver) for better convergence behavior,
+            // matching the CPU path which uses zhegvx (bisection + inverse iteration).
+            dngvx_op<T, Device>()(this->ctx, nbase, nbase, hcc_gpu, scc_gpu,
+                                  nband, eigenvalue_gpu, vcc_gpu);
             for(int i=0;i<nbase;i++)
             {
                 base_device::memory::synchronize_memory_op<T, Device, Device>()(this->ctx, this->ctx, vcc + i * nbase_x, vcc_gpu + i * nbase, nbase);
@@ -648,6 +542,7 @@ void Diago_DavSubspace<T, Device>::diag_zhegvx(const int& nbase,
                                   nband,
                                   (*eigenvalue_iter).data(),
                                   this->vcc);
+
             // reset:
             for (size_t i = 0; i < nbase; i++)
             {
@@ -671,12 +566,50 @@ void Diago_DavSubspace<T, Device>::diag_zhegvx(const int& nbase,
 #ifdef __MPI
     if (this->diag_comm.nproc > 1)
     {
-        // vcc: nbase * nband
-        for (int i = 0; i < nband; i++)
+#if defined(__CUDA) || defined(__ROCM)
+        if (this->device == base_device::GpuDevice)
         {
-            MPI_Bcast(&vcc[i * this->nbase_x], nbase, MPI_DOUBLE_COMPLEX, 0, this->diag_comm.comm);
+            // GPU memory: copy to CPU, broadcast, copy back
+            std::vector<T> vcc_cpu(nbase * nband);
+            std::vector<Real> eigenvalue_cpu(nband);
+
+            if (this->diag_comm.rank == 0) {
+                using syncmem_d2h_op = base_device::memory::synchronize_memory_op<T, base_device::DEVICE_CPU, Device>;
+                for (int i = 0; i < nband; i++) {
+                    syncmem_d2h_op()(this->cpu_ctx, this->ctx,
+                                    vcc_cpu.data() + i * nbase, vcc + i * this->nbase_x, nbase);
+                }
+                for (int i = 0; i < nband; i++) {
+                    eigenvalue_cpu[i] = (*eigenvalue_iter)[i];
+                }
+            }
+
+            for (int i = 0; i < nband; i++) {
+                MPI_Bcast(vcc_cpu.data() + i * nbase, nbase * sizeof(T), MPI_CHAR, 0, this->diag_comm.comm);
+            }
+            MPI_Bcast(eigenvalue_cpu.data(), nband * sizeof(Real), MPI_CHAR, 0, this->diag_comm.comm);
+
+            if (this->diag_comm.rank != 0) {
+                using syncmem_h2d_op = base_device::memory::synchronize_memory_op<T, Device, base_device::DEVICE_CPU>;
+                for (int i = 0; i < nband; i++) {
+                    syncmem_h2d_op()(this->ctx, this->cpu_ctx,
+                                    vcc + i * this->nbase_x, vcc_cpu.data() + i * nbase, nbase);
+                }
+                for (int i = 0; i < nband; i++) {
+                    (*eigenvalue_iter)[i] = eigenvalue_cpu[i];
+                }
+            }
         }
-        MPI_Bcast((*eigenvalue_iter).data(), nband, MPI_DOUBLE, 0, this->diag_comm.comm);
+        else
+#endif
+        {
+            // CPU memory: direct broadcast
+            for (int i = 0; i < nband; i++)
+            {
+                MPI_Bcast(&vcc[i * this->nbase_x], nbase, MPI_DOUBLE_COMPLEX, 0, this->diag_comm.comm);
+            }
+            MPI_Bcast((*eigenvalue_iter).data(), nband, MPI_DOUBLE, 0, this->diag_comm.comm);
+        }
     }
 #endif
 

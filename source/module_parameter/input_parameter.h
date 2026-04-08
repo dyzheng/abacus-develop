@@ -63,7 +63,6 @@ struct Input_para
     int mem_saver = 0;                              ///< 1: save psi when nscf calculation.
     int diago_proc = 0;                             ///< the number of procs used to diag. mohan add 2012-01-13
     int nbspline = -1;                              ///< the order of B-spline basis(>=0) if it is -1 (default)
-    std::string diago_cond_check = "off";           ///< condition number check for GPU dngvd: "first", "always", "off"
     std::vector<double> kspacing = {0.0, 0.0, 0.0}; ///< kspacing for k-point generation
     double min_dist_coef = 0.2;                     ///< allowed minimum distance between two atoms
 

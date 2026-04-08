@@ -341,7 +341,29 @@ struct dngvx_op<T, base_device::DEVICE_GPU>
                     Real* eigenvalue,
                     T* vcc)
     {
+        // cuSOLVER has no zhegvx equivalent, so we use CPU LAPACK zhegvx.
+        // The subspace matrices (nbase x nbase) are small, so the D2H/H2D
+        // overhead is negligible compared to the convergence benefit of
+        // computing only the first m eigenpairs with bisection+inverse iteration.
+        const int mat_size = nbase * ldh;
+        std::vector<T> h_hcc(mat_size);
+        std::vector<T> h_scc(mat_size);
+        std::vector<T> h_vcc(mat_size, T(0));
+        std::vector<Real> h_eig(nbase, Real(0));
 
+        // D2H: copy hcc and scc from GPU to CPU
+        cudaErrcheck(cudaMemcpy(h_hcc.data(), hcc, sizeof(T) * mat_size, cudaMemcpyDeviceToHost));
+        cudaErrcheck(cudaMemcpy(h_scc.data(), scc, sizeof(T) * mat_size, cudaMemcpyDeviceToHost));
+
+        // Call CPU LAPACK dngvx (zhegvx) for first m eigenpairs
+        base_device::DEVICE_CPU* cpu_ctx = {};
+        dngvx_op<T, base_device::DEVICE_CPU>()(cpu_ctx, nbase, ldh,
+                                                h_hcc.data(), h_scc.data(),
+                                                m, h_eig.data(), h_vcc.data());
+
+        // H2D: copy eigenvectors and eigenvalues back to GPU
+        cudaErrcheck(cudaMemcpy(vcc, h_vcc.data(), sizeof(T) * mat_size, cudaMemcpyHostToDevice));
+        cudaErrcheck(cudaMemcpy(eigenvalue, h_eig.data(), sizeof(Real) * m, cudaMemcpyHostToDevice));
     }
 };
 

@@ -3,6 +3,7 @@
 #include "module_base/timer.h"                  // ModuleBase::timer::tick
 #include "module_base/tool_title.h"             // ModuleBase::TITLE
 #include "module_base/module_device/device.h"
+#include "module_base/parallel_device.h"
 
 #include "module_hsolver/kernels/dngvd_op.h"
 #include "module_hsolver/kernels/math_kernel_op.h"
@@ -634,29 +635,8 @@ void DiagoDavid<T, Device>::cal_elem(const int& dim,
         matrixTranspose_op<T, Device>()(this->ctx, nbase_x, nbase_x, hcc, hcc);
         // matrixTranspose_op<T, Device>()(this->ctx, nbase_x, nbase_x, scc, scc);
 
-        auto* swap = new T[notconv * nbase_x];
-        syncmem_complex_op()(this->ctx, this->ctx, swap, hcc + nbase * nbase_x, notconv * nbase_x);
-        if (std::is_same<T, double>::value)
-        {
-            Parallel_Reduce::reduce_pool(hcc + nbase * nbase_x, notconv * nbase_x);
-        }
-        else
-        {
-            if (base_device::get_current_precision(swap) == "single") {
-                MPI_Reduce(swap, hcc + nbase * nbase_x, notconv * nbase_x, MPI_COMPLEX, MPI_SUM, 0, diag_comm.comm);
-            }
-            else {
-                MPI_Reduce(swap, hcc + nbase * nbase_x, notconv * nbase_x, MPI_DOUBLE_COMPLEX, MPI_SUM, 0, diag_comm.comm);
-            }
-            // syncmem_complex_op()(this->ctx, this->ctx, swap, scc + nbase * nbase_x, notconv * nbase_x);
-            if (base_device::get_current_precision(swap) == "single") {
-                // MPI_Reduce(swap, scc + nbase * nbase_x, notconv * nbase_x, MPI_COMPLEX, MPI_SUM, 0, diag_comm.comm);
-            }
-            else {
-                // MPI_Reduce(swap, scc + nbase * nbase_x, notconv * nbase_x, MPI_DOUBLE_COMPLEX, MPI_SUM, 0, diag_comm.comm);
-            }
-        }
-        delete[] swap;
+        // Use reduce_dev which handles GPU-CPU-MPI communication correctly
+        Parallel_Common::reduce_dev(this->ctx, hcc + nbase * nbase_x, notconv * nbase_x, diag_comm.comm);
 
         // Parallel_Reduce::reduce_complex_double_pool( hcc + nbase * nbase_x, notconv * nbase_x );
         // Parallel_Reduce::reduce_complex_double_pool( scc + nbase * nbase_x, notconv * nbase_x );

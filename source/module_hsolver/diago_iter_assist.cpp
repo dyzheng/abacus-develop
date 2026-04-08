@@ -1,6 +1,4 @@
 #include "diago_iter_assist.h"
-#include "diago_dav_subspace.h"
-#include "diago_cond_check.h"
 #include "module_parameter/parameter.h"
 #include "module_base/blas_connector.h"
 #include "module_base/complexmatrix.h"
@@ -8,6 +6,8 @@
 #include "module_base/global_variable.h"
 #include "module_base/lapack_connector.h"
 #include "module_base/module_device/device.h"
+#include "module_base/parallel_comm.h"
+#include "module_base/parallel_device.h"
 #include "module_base/parallel_reduce.h"
 #include "module_base/timer.h"
 #include "module_hsolver/kernels/dngvd_op.h"
@@ -112,8 +112,8 @@ void DiagoIterAssist<T, Device>::diagH_subspace(const hamilt::Hamilt<T, Device>*
 
     if (GlobalV::NPROC_IN_POOL > 1)
     {
-        Parallel_Reduce::reduce_pool(hcc, nstart * nstart);
-        Parallel_Reduce::reduce_pool(scc, nstart * nstart);
+        Parallel_Common::reduce_dev(ctx, hcc, nstart * nstart, POOL_WORLD);
+        Parallel_Common::reduce_dev(ctx, scc, nstart * nstart, POOL_WORLD);
     }
 
     // after generation of H and S matrix, diag them
@@ -279,8 +279,8 @@ void DiagoIterAssist<T, Device>::diagH_subspace_init(hamilt::Hamilt<T, Device>* 
 
     if (GlobalV::NPROC_IN_POOL > 1)
     {
-        Parallel_Reduce::reduce_pool(hcc, nstart * nstart);
-        Parallel_Reduce::reduce_pool(scc, nstart * nstart);
+        Parallel_Common::reduce_dev(ctx, hcc, nstart * nstart, POOL_WORLD);
+        Parallel_Common::reduce_dev(ctx, scc, nstart * nstart, POOL_WORLD);
     }
 
     // after generation of H and S matrix, diag them
@@ -380,70 +380,7 @@ void DiagoIterAssist<T, Device>::diagH_LAPACK(const int nstart,
     resmem_var_op()(ctx, eigenvalues, nstart);
     setmem_var_op()(ctx, eigenvalues, 0, nstart);
 
-    // Determine if condition number check is needed
-    bool should_check = false;
-    if (PARAM.inp.diago_cond_check == "always") {
-        should_check = true;
-    } else if (PARAM.inp.diago_cond_check == "first" && !Diago_DavSubspace<T, Device>::cond_check_done_) {
-        should_check = true;
-    } else if (PARAM.inp.diago_cond_check == "always-false") {
-        // Force CPU path without checking
-        Diago_DavSubspace<T, Device>::use_cpu_dngvd_ = true;
-        Diago_DavSubspace<T, Device>::cond_check_done_ = true;
-    }
-
-    // Perform check if needed and on GPU device
-    if (should_check && base_device::get_device_type<Device>(ctx) == base_device::GpuDevice) {
-#if defined(__CUDA) || defined(__ROCM)
-        // Copy strided scc matrix to contiguous buffer for condition check
-        T* scc_contig = nullptr;
-        base_device::memory::resize_memory_op<T, Device>()(ctx, scc_contig, nstart * nstart);
-        for (int i = 0; i < nstart; i++) {
-            base_device::memory::synchronize_memory_op<T, Device, Device>()(
-                ctx, ctx, scc_contig + i * nstart, scc + i * ldh, nstart);
-        }
-        cudaDeviceSynchronize();
-
-        Diago_DavSubspace<T, Device>::use_cpu_dngvd_ =
-            check_matrix_condition_number(scc_contig, nstart, 1e12);
-        Diago_DavSubspace<T, Device>::cond_check_done_ = true;
-
-        base_device::memory::delete_memory_op<T, Device>()(ctx, scc_contig);
-#endif
-    }
-
-    // Select execution path based on decision
-    if (Diago_DavSubspace<T, Device>::use_cpu_dngvd_ &&
-        base_device::get_device_type<Device>(ctx) == base_device::GpuDevice) {
-        // Use CPU path
-        std::vector<T> scc_cpu(nstart * ldh);
-        std::vector<T> hcc_cpu(nstart * ldh);
-        std::vector<T> vcc_cpu(nstart * ldh);
-        std::vector<Real> eigenvalue_cpu(nstart);
-
-        // D2H copy
-#if ((defined __CUDA) || (defined __ROCM))
-        cudaMemcpy(scc_cpu.data(), scc, sizeof(T) * nstart * ldh, cudaMemcpyDeviceToHost);
-        cudaMemcpy(hcc_cpu.data(), hcc, sizeof(T) * nstart * ldh, cudaMemcpyDeviceToHost);
-#endif
-
-        // Call CPU dngvd
-        base_device::DEVICE_CPU* cpu_ctx_local = {};
-        dngvd_op<T, base_device::DEVICE_CPU>()(
-            cpu_ctx_local, nstart, ldh,
-            hcc_cpu.data(), scc_cpu.data(),
-            eigenvalue_cpu.data(), vcc_cpu.data()
-        );
-
-        // H2D copy results
-#if ((defined __CUDA) || (defined __ROCM))
-        cudaMemcpy(vcc, vcc_cpu.data(), sizeof(T) * nstart * ldh, cudaMemcpyHostToDevice);
-        cudaMemcpy(eigenvalues, eigenvalue_cpu.data(), sizeof(Real) * nstart, cudaMemcpyHostToDevice);
-#endif
-    } else {
-        // Original GPU path (keep existing code)
-        dngvd_op<T, Device>()(ctx, nstart, ldh, hcc, scc, eigenvalues, vcc);
-    }
+    dngvd_op<T, Device>()(ctx, nstart, ldh, hcc, scc, eigenvalues, vcc);
 
     if (base_device::get_device_type<Device>(ctx) == base_device::GpuDevice)
     {
@@ -542,8 +479,8 @@ void DiagoIterAssist<T, Device>::cal_hs_subspace(const hamilt::Hamilt<T, Device>
 
     if (GlobalV::NPROC_IN_POOL > 1)
     {
-        Parallel_Reduce::reduce_pool(hcc, nstart * nstart);
-        Parallel_Reduce::reduce_pool(scc, nstart * nstart);
+        Parallel_Common::reduce_dev(ctx, hcc, nstart * nstart, POOL_WORLD);
+        Parallel_Common::reduce_dev(ctx, scc, nstart * nstart, POOL_WORLD);
     }
 
     delmem_complex_op()(ctx, temp);

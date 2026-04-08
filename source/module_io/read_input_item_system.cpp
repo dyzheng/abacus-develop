@@ -711,19 +711,6 @@ void ReadInput::item_system()
         this->add_item(item);
     }
     {
-        Input_Item item("diago_cond_check");
-        item.annotation = "condition number check for GPU dngvd: first, always, always-false, off";
-        read_sync_string(input.diago_cond_check);
-        item.check_value = [](const Input_Item& item, const Parameter& para) {
-            const std::string& mode = para.input.diago_cond_check;
-            if (mode != "first" && mode != "always" && mode != "always-false" && mode != "off")
-            {
-                ModuleBase::WARNING_QUIT("ReadInput", "diago_cond_check must be 'first', 'always', 'always-false', or 'off'");
-            }
-        };
-        this->add_item(item);
-    }
-    {
         Input_Item item("kspacing");
         item.annotation = "unit in 1/bohr, should be > 0, default is 0 which "
                           "means read KPT file";

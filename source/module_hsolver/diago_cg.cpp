@@ -6,6 +6,8 @@
 #include <ATen/ops/linalg_op.h>
 #include <module_base/constants.h>
 #include <module_base/memory.h>
+#include <module_base/parallel_comm.h>
+#include <module_base/parallel_device.h>
 #include <module_base/parallel_reduce.h>
 #include <module_base/timer.h>
 #include <module_base/tool_title.h>             // ModuleBase::TITLE
@@ -277,7 +279,7 @@ void DiagoCG<T, Device>::orth_grad(const ct::Tensor& psi,
                          lagrange.data<T>(),
                          1);
 
-    Parallel_Reduce::reduce_pool(lagrange.data<T>(), m);
+    Parallel_Common::reduce_dev(ctx_, lagrange.data<T>(), m, POOL_WORLD);
 
     // (3) orthogonal |g> and |scg> to all states (0~m-1)
     //<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
@@ -510,7 +512,7 @@ void DiagoCG<T, Device>::schmit_orth(const int& m, const ct::Tensor& psi, const 
                          inc);
 
     // be careful , here reduce m+1
-    Parallel_Reduce::reduce_pool(lagrange_so.data<T>(), m + 1);
+    Parallel_Common::reduce_dev(ctx_, lagrange_so.data<T>(), m + 1, POOL_WORLD);
 
     //<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
     // haozhihan replace 2022-10-6

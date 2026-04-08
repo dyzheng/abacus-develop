@@ -379,19 +379,6 @@ void ReadInput::item_elec_stru()
         this->add_item(item);
     }
     {
-        Input_Item item("diago_cond_check");
-        item.annotation = "condition number check for GPU dngvd: first, always, always-false, off";
-        read_sync_string(input.diago_cond_check);
-        item.check_value = [](const Input_Item& item, const Parameter& para) {
-            const std::vector<std::string> valid_values = {"first", "always", "always-false", "off"};
-            if (std::find(valid_values.begin(), valid_values.end(), para.input.diago_cond_check) == valid_values.end())
-            {
-                ModuleBase::WARNING_QUIT("ReadInput", "diago_cond_check must be 'first', 'always', 'always-false', or 'off'");
-            }
-        };
-        this->add_item(item);
-    }
-    {
         Input_Item item("smearing_method");
         item.annotation = "type of smearing_method: gauss; fd; fixed; mp; mp2; mv";
         read_sync_string(input.smearing_method);
