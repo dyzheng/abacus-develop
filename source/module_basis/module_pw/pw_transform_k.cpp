@@ -578,7 +578,7 @@ void PW_Basis_K::recip_to_real(const base_device::DEVICE_GPU* ctx,
         if (add || factor != 1.0f)
         {
             set_recip_to_real_output_op<float, base_device::DEVICE_GPU>()(
-                ctx, this->nrxx, add, factor, out, out);
+                ctx, this->nplane * nxy, add, factor, out, out);
         }
     }
 
@@ -665,7 +665,7 @@ void PW_Basis_K::recip_to_real(const base_device::DEVICE_GPU* ctx,
         if (add || factor != 1.0)
         {
             set_recip_to_real_output_op<double, base_device::DEVICE_GPU>()(
-                ctx, this->nrxx, add, factor, out, out);
+                ctx, this->nplane * nxy, add, factor, out, out);
         }
     }
 
