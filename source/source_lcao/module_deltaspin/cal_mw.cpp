@@ -115,6 +115,13 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_MW(const int& step,
     ModuleBase::timer::tick("SpinConstrain", "cal_MW");
 }
 
+// cal_mi_lcao kept for backward compatibility - wraps cal_MW
+template <>
+void spinconstrain::SpinConstrain<std::complex<double>>::cal_mi_lcao(const int& step, bool print)
+{
+    this->cal_MW(step, print);
+}
+
 #endif
 
 template <>

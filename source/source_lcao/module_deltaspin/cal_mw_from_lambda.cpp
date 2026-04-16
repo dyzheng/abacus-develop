@@ -301,7 +301,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mw_from_lambda(int 
             }
         }
         Parallel_Reduce::reduce_double_allpool(PARAM.inp.kpar,
-                                               PARAM.globalv.nproc_in_pool,
+                                               GlobalV::NPROC_IN_POOL,
                                                &(this->Mi_[0][0]),
                                                3 * this->Mi_.size());
     }
@@ -371,7 +371,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::update_psi_charge(const
                     hsolver::DiagoIterAssist<std::complex<double>, base_device::DEVICE_CPU>::PW_DIAG_THR,
                     hsolver::DiagoIterAssist<std::complex<double>, base_device::DEVICE_CPU>::need_subspace);
                 hsolver_pw_obj.solve(hamilt_t, psi_t[0], this->pelec, this->pelec->ekb.c,
-                    PARAM.globalv.rank_in_pool, PARAM.globalv.nproc_in_pool, false, this->tpiba, this->get_nat());
+                    GlobalV::RANK_IN_POOL, GlobalV::NPROC_IN_POOL, false, this->tpiba, this->get_nat());
             }
             else
             {
@@ -430,7 +430,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::update_psi_charge(const
                     hsolver::DiagoIterAssist<std::complex<double>, base_device::DEVICE_GPU>::PW_DIAG_THR,
                     hsolver::DiagoIterAssist<std::complex<double>, base_device::DEVICE_GPU>::need_subspace);
                 hsolver_pw_obj.solve(hamilt_t, psi_t[0], this->pelec, this->pelec->ekb.c,
-                    PARAM.globalv.rank_in_pool, PARAM.globalv.nproc_in_pool, false, this->tpiba, this->get_nat());
+                    GlobalV::RANK_IN_POOL, GlobalV::NPROC_IN_POOL, false, this->tpiba, this->get_nat());
             }
             else
             {
