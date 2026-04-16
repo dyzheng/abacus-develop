@@ -120,7 +120,6 @@ void OnsiteProj<OperatorPW<T, Device>>::cal_ps_delta_spin(const int npol, const 
     const std::complex<double>* becp = onsite_p->get_becp();
 
     spinconstrain::SpinConstrain<std::complex<double>>& sc = spinconstrain::SpinConstrain<std::complex<double>>::getScInstance();
-    auto& constrain = sc.get_constrain();
     auto& lambda = sc.get_sc_lambda();
 
     // T *ps = new T[tnp * m];
@@ -149,66 +148,50 @@ void OnsiteProj<OperatorPW<T, Device>>::cal_ps_delta_spin(const int npol, const 
         syncmem_int_h2d_op()(this->ip_iat, ip_iat0.data(), onsite_p->get_tot_nproj());
     }
 
-    // prepare array of nh_iat and lambda_array to pass to the onsite_ps_op operator
-    std::vector<std::complex<double>> tmp_lambda_coeff(this->ucell->nat * 4);
-    for(int iat=0;iat<this->ucell->nat;iat++)
+    if(npol == 2)
     {
-        tmp_lambda_coeff[iat * 4] = std::complex<double>(lambda[iat][2], 0.0);
-        tmp_lambda_coeff[iat * 4 + 1] = std::complex<double>(lambda[iat][0], lambda[iat][1]);
-        tmp_lambda_coeff[iat * 4 + 2] = std::complex<double>(lambda[iat][0], -1 * lambda[iat][1]);
-        tmp_lambda_coeff[iat * 4 + 3] = std::complex<double>(-1 * lambda[iat][2], 0.0);
-    }
-    syncmem_complex_h2d_op()(this->lambda_coeff, tmp_lambda_coeff.data(), this->ucell->nat * 4);
-    // TODO: code block above should be moved to the init function
-
-    hamilt::onsite_ps_op<Real, Device>()(
-        this->ctx,   // device context
-        m, 
-        npol,
-        this->ip_iat, 
-        tnp,  
-        this->lambda_coeff,
-        this->ps, becp);
-
-    /*int sum = 0;
-    if (npol == 1)
-    {
-        const int current_spin = this->isk[this->ik];
-    }
-    else
-    {
-        for (int iat = 0; iat < this->ucell->nat; iat++)
+        // npol==2: 4-element lambda per atom (2x2 spin matrix)
+        std::vector<std::complex<double>> tmp_lambda_coeff(this->ucell->nat * 4);
+        for(int iat=0;iat<this->ucell->nat;iat++)
         {
-            const int nproj = onsite_p->get_nh(iat);
-            if(constrain[iat].x == 0 && constrain[iat].y == 0 && constrain[iat].z == 0)
-            {
-                sum += nproj;
-                continue;
-            }
-            const std::complex<double> coefficients0(lambda[iat][2], 0.0);
-            const std::complex<double> coefficients1(lambda[iat][0] , lambda[iat][1]);
-            const std::complex<double> coefficients2(lambda[iat][0] , -1 * lambda[iat][1]);
-            const std::complex<double> coefficients3(-1 * lambda[iat][2], 0.0);
-            // each atom has nproj, means this is with structure factor;
-            // each projector (each atom) must multiply coefficient
-            // with all the other projectors.
-            for (int ib = 0; ib < m; ib+=2)
-            {
-                for (int ip = 0; ip < nproj; ip++)
-                {
-                    const int psind = (sum + ip) * m + ib;
-                    const int becpind = ib * tnp + sum + ip;
-                    const std::complex<double> becp1 = becp[becpind];
-                    const std::complex<double> becp2 = becp[becpind + tnp];
-                    ps[psind] += coefficients0 * becp1
-                                    + coefficients2 * becp2;
-                    ps[psind + 1] += coefficients1 * becp1
-                                        + coefficients3 * becp2;
-                } // end ip
-            } // end ib
-            sum += nproj;
-        } // end iat
-    }*/
+            tmp_lambda_coeff[iat * 4] = std::complex<double>(lambda[iat][2], 0.0);
+            tmp_lambda_coeff[iat * 4 + 1] = std::complex<double>(lambda[iat][0], lambda[iat][1]);
+            tmp_lambda_coeff[iat * 4 + 2] = std::complex<double>(lambda[iat][0], -1 * lambda[iat][1]);
+            tmp_lambda_coeff[iat * 4 + 3] = std::complex<double>(-1 * lambda[iat][2], 0.0);
+        }
+        syncmem_complex_h2d_op()(this->lambda_coeff, tmp_lambda_coeff.data(), this->ucell->nat * 4);
+
+        hamilt::onsite_ps_op<Real, Device>()(
+            this->ctx,
+            m,
+            npol,
+            this->ip_iat,
+            tnp,
+            this->lambda_coeff,
+            this->ps, becp);
+    }
+    else // npol == 1, nspin=1 or nspin=2
+    {
+        // npol==1: 1-element lambda per atom (z-component scaled by spin sign)
+        // For nspin=1: sign=1 for all k-points
+        // For nspin=2: sign=1 for spin-up (isk=0), sign=-1 for spin-down (isk=1)
+        const int sign = this->isk[this->ik] == 0 ? 1 : -1;
+        std::vector<std::complex<double>> tmp_lambda_coeff(this->ucell->nat);
+        for(int iat=0;iat<this->ucell->nat;iat++)
+        {
+            tmp_lambda_coeff[iat] = std::complex<double>(lambda[iat][2] * sign, 0.0);
+        }
+        syncmem_complex_h2d_op()(this->lambda_coeff, tmp_lambda_coeff.data(), this->ucell->nat);
+
+        hamilt::onsite_ps_op<Real, Device>()(
+            this->ctx,
+            m,
+            npol,
+            this->ip_iat,
+            tnp,
+            this->lambda_coeff,
+            this->ps, becp);
+    }
 }
 
 template<typename T, typename Device>

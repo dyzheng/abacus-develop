@@ -16,23 +16,42 @@ struct onsite_ps_op<FPTYPE, base_device::DEVICE_CPU>
                     std::complex<FPTYPE>* ps,
                     const std::complex<FPTYPE>* becp)
     {
+        if(npol == 2)
+        {
 #ifdef _OPENMP
 #pragma omp parallel for collapse(2)
 #endif
-        for (int ib = 0; ib < npm / npol; ib++)
-        {
-            for (int ip = 0; ip < tnp; ip++)
+            for (int ib = 0; ib < npm / npol; ib++)
             {
-                int ib2 = ib * npol;
-                int iat = ip_iat[ip];
-                const int psind = ip * npm + ib2;
-                const int becpind = ib2 * tnp + ip;
-                ps[psind] += lambda_array[iat * 4] * becp[becpind] 
-                            + lambda_array[iat * 4 + 2] * becp[becpind + tnp];
-                ps[psind + 1] += lambda_array[iat * 4 + 1] * becp[becpind] 
-                            + lambda_array[iat * 4 + 3] * becp[becpind + tnp];
-            } // end ip
-        } // end ib
+                for (int ip = 0; ip < tnp; ip++)
+                {
+                    int ib2 = ib * npol;
+                    int iat = ip_iat[ip];
+                    const int psind = ip * npm + ib2;
+                    const int becpind = ib2 * tnp + ip;
+                    ps[psind] += lambda_array[iat * 4] * becp[becpind]
+                                + lambda_array[iat * 4 + 2] * becp[becpind + tnp];
+                    ps[psind + 1] += lambda_array[iat * 4 + 1] * becp[becpind]
+                                + lambda_array[iat * 4 + 3] * becp[becpind + tnp];
+                } // end ip
+            } // end ib
+        }
+        else // npol == 1, nspin=1 or nspin=2
+        {
+#ifdef _OPENMP
+#pragma omp parallel for collapse(2)
+#endif
+            for (int ib = 0; ib < npm; ib++)
+            {
+                for (int ip = 0; ip < tnp; ip++)
+                {
+                    int iat = ip_iat[ip];
+                    const int psind = ip * npm + ib;
+                    const int becpind = ib * tnp + ip;
+                    ps[psind] += lambda_array[iat] * becp[becpind];
+                } // end ip
+            } // end ib
+        }
     };
 
     // kernel for DFT+U calculation

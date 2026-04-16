@@ -20,15 +20,28 @@ __global__ void onsite_op(const int npm,
                           const thrust::complex<FPTYPE>* becp)
 {
     const int ip = blockIdx.x;
-    const int nbands = npm / npol;
-    for (int ib = threadIdx.x; ib < nbands; ib += blockDim.x)
+    if(npol == 2)
     {
-        int ib2 = ib * npol;
-        int iat = ip_iat[ip];
-        const int psind = ip * npm + ib2;
-        const int becpind = ib2 * tnp + ip;
-        ps[psind] += lambda_coeff[iat * 4] * becp[becpind] + lambda_coeff[iat * 4 + 2] * becp[becpind + tnp];
-        ps[psind + 1] += lambda_coeff[iat * 4 + 1] * becp[becpind] + lambda_coeff[iat * 4 + 3] * becp[becpind + tnp];
+        const int nbands = npm / npol;
+        for (int ib = threadIdx.x; ib < nbands; ib += blockDim.x)
+        {
+            int ib2 = ib * npol;
+            int iat = ip_iat[ip];
+            const int psind = ip * npm + ib2;
+            const int becpind = ib2 * tnp + ip;
+            ps[psind] += lambda_coeff[iat * 4] * becp[becpind] + lambda_coeff[iat * 4 + 2] * becp[becpind + tnp];
+            ps[psind + 1] += lambda_coeff[iat * 4 + 1] * becp[becpind] + lambda_coeff[iat * 4 + 3] * becp[becpind + tnp];
+        }
+    }
+    else // npol == 1
+    {
+        for (int ib = threadIdx.x; ib < npm; ib += blockDim.x)
+        {
+            int iat = ip_iat[ip];
+            const int psind = ip * npm + ib;
+            const int becpind = ib * tnp + ip;
+            ps[psind] += lambda_coeff[iat] * becp[becpind];
+        }
     }
 }
 
