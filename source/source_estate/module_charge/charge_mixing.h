@@ -50,6 +50,7 @@ class Charge_Mixing
                     double& tpiba_in);
 
     void close_kerker_gg0() { mixing_gg0 = 0.0; mixing_gg0_mag = 0.0; }
+    void conserve_setting() { mixing_beta = 0.01; mixing_beta_mag = 0.04; }
     /**
      * @brief initialize mixing, including constructing mixing and allocating memory for mixing data
      * @brief this function should be called at eachiterinit()

@@ -349,6 +349,12 @@ void ESolver_KS_PW<T, Device>::iter_finish(UnitCell& ucell, const int istep, int
             if (sc.higher_mag_prec)
             { // if oscillate, increase the precision of magnetization and do mixing_restart in next iteration
                 this->p_chgmix->mixing_restart_step = iter + 1;
+                if (PARAM.inp.dft_plus_u && !this->dftu.mixing_dftu)
+                {
+                    // set mixing_dftu true to mix occupation in next iteration
+                    this->dftu.mixing_dftu = 1;
+                    this->p_chgmix->conserve_setting();
+                }
             }
         }
     }
