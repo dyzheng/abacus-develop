@@ -5,6 +5,7 @@
 #include "source_base/memory.h"
 #include "source_base/timer.h"
 #include "source_base/tool_title.h"
+#include "source_io/module_parameter/parameter.h"
 #include "source_pw/module_pwdft/kernels/force_op.h"
 #include "nonlocal_maths.hpp"
 
@@ -831,7 +832,8 @@ void Onsite_Proj_tools<FPTYPE, Device>::cal_force_dftu(int ik,
         vu_tmp = const_cast<std::complex<FPTYPE>*>(vu);
         d_wg = const_cast<FPTYPE*>(h_wg);
     }
-    const int force_nc = 3;
+    int force_nc = 3;
+    const int npol = PARAM.inp.nspin == 4 ? 2 : 1;
     cal_force_nl_op<FPTYPE, Device>()(this->ctx,
                                       npm,
                                       this->nbands,
@@ -840,6 +842,7 @@ void Onsite_Proj_tools<FPTYPE, Device>::cal_force_dftu(int ik,
                                       this->nbands,
                                       ik,
                                       nkb,
+                                      npol,
                                       atom_nh,
                                       atom_na,
                                       this->ucell_->tpiba,
@@ -886,7 +889,8 @@ void Onsite_Proj_tools<FPTYPE, Device>::cal_force_dspin(int ik,
         lambda_tmp = lambda_array.data();
         d_wg = const_cast<FPTYPE*>(h_wg);
     }
-    const int force_nc = 3;
+    int force_nc = 3;
+    const int npol = PARAM.inp.nspin == 4 ? 2 : 1;
     cal_force_nl_op<FPTYPE, Device>()(this->ctx,
                                       npm,
                                       this->nbands,
@@ -895,6 +899,7 @@ void Onsite_Proj_tools<FPTYPE, Device>::cal_force_dspin(int ik,
                                       this->nbands,
                                       ik,
                                       nkb,
+                                      npol,
                                       atom_nh,
                                       atom_na,
                                       this->ucell_->tpiba,
@@ -939,12 +944,14 @@ void Onsite_Proj_tools<FPTYPE, Device>::cal_stress_dftu(int ik,
         vu_tmp = const_cast<std::complex<FPTYPE>*>(vu);
         d_wg = const_cast<FPTYPE*>(h_wg);
     }
+    const int npol = PARAM.inp.nspin == 4 ? 2 : 1;
     cal_stress_nl_op()(this->ctx,
                        nkb,
                        npm,
                        this->ntype,
                        this->nbands,
                        ik,
+                       npol,
                        atom_nh,
                        atom_na,
                        d_wg,
@@ -990,13 +997,14 @@ void Onsite_Proj_tools<FPTYPE, Device>::cal_stress_dspin(int ik,
         lambda_tmp = lambda_array.data();
         d_wg = const_cast<FPTYPE*>(h_wg);
     }
-    const int force_nc = 3;
+    const int npol = PARAM.inp.nspin == 4 ? 2 : 1;
     cal_stress_nl_op()(this->ctx,
                        nkb,
                        npm,
                        this->ntype,
                        this->nbands,
                        ik,
+                       npol,
                        atom_nh,
                        atom_na,
                        d_wg,
