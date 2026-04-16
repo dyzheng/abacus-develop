@@ -208,7 +208,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_loop(
             if(PARAM.inp.basis_type == "pw")
             {
                 //double check Atomic spin moment
-                this->cal_mi_pw();
+                this->cal_Mi_pw();
                 subtract_2d(this->Mi_, this->target_mag_, delta_spin);
                 where_fill_scalar_2d(this->constrain_, 0, zero, delta_spin);
                 search = delta_spin;

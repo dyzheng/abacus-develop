@@ -73,6 +73,50 @@ int SpinConstrain<TK>::get_nspin()
 }
 
 template <typename TK>
+void SpinConstrain<TK>::set_npol(int npol)
+{
+    this->npol_ = npol;
+}
+
+template <typename TK>
+int SpinConstrain<TK>::get_npol()
+{
+    return this->npol_;
+}
+
+template <typename TK>
+int SpinConstrain<TK>::get_nw()
+{
+    int nw = 0;
+    for (const auto& pair : this->orbitalCounts)
+    {
+        nw += pair.second;
+    }
+    return nw;
+}
+
+template <typename TK>
+int SpinConstrain<TK>::get_iwt(int itype, int iat, int orbital_index)
+{
+    auto it1 = this->orbitalCounts.find(itype);
+    if (it1 == this->orbitalCounts.end())
+    {
+        return 0;
+    }
+    int offset = 0;
+    for (auto it = this->orbitalCounts.begin(); it != it1; ++it)
+    {
+        offset += it->second;
+    }
+    auto it2 = this->atomCounts.find(itype);
+    if (it2 == this->atomCounts.end())
+    {
+        return offset;
+    }
+    return offset + iat * it1->second + orbital_index;
+}
+
+template <typename TK>
 int SpinConstrain<TK>::get_nat()
 {
     int nat = 0;
