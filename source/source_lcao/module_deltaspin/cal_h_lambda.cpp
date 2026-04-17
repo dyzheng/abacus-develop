@@ -57,15 +57,15 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_h_lambda(
                                         h_lambda[icc]
                                             = (iwt2 % 2 == 0)
                                                   ? -Sloc2[icc] * lambda[2]
-                                                  : -Sloc2[icc + 1]
+                                                  : -Sloc2[icc + pv->nrow]
                                                         * (lambda[0] + lambda[1] * std::complex<double>(0, 1));
                                     }
                                     else
                                     {
                                         h_lambda[icc] = (iwt2 % 2 == 0)
-                                                            ? -Sloc2[icc - 1]
+                                                            ? -Sloc2[icc + 1]
                                                                   * (lambda[0] - lambda[1] * std::complex<double>(0, 1))
-                                                            : -Sloc2[icc] * (-lambda[2]);
+                                                            : -Sloc2[icc + 1 + pv->nrow] * (-lambda[2]);
                                     }
                                 }
                             }
@@ -83,15 +83,15 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_h_lambda(
                                         h_lambda[icc]
                                             = (iwt2 % 2 == 0)
                                                   ? -Sloc2[icc] * lambda[2]
-                                                  : -Sloc2[icc - 1]
+                                                  : -Sloc2[icc + 1]
                                                         * (lambda[0] + lambda[1] * std::complex<double>(0, 1));
                                     }
                                     else
                                     {
                                         h_lambda[icc] = (iwt2 % 2 == 0)
-                                                            ? -Sloc2[icc + 1]
+                                                            ? -Sloc2[icc + pv->ncol]
                                                                   * (lambda[0] - lambda[1] * std::complex<double>(0, 1))
-                                                            : -Sloc2[icc] * (-lambda[2]);
+                                                            : -Sloc2[icc + 1 + pv->ncol] * (-lambda[2]);
                                     }
                                 }
                             }

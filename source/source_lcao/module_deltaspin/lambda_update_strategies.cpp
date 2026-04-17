@@ -1,5 +1,4 @@
 #include "lambda_update_strategies.h"
-#include <iostream>
 #include <sstream>
 #include <cstring>
 

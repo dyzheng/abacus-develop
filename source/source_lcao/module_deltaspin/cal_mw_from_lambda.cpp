@@ -1,5 +1,6 @@
 #include "source_base/timer.h"
 #include "source_base/tool_title.h"
+#include "source_base/global_variable.h"
 #include "source_hsolver/diago_iter_assist.h"
 #include "source_io/module_parameter/parameter.h"
 #include "spin_constrain.h"
@@ -27,10 +28,8 @@ void spinconstrain::SpinConstrain<std::complex<double>>::calculate_delta_hcc(std
     if(PARAM.inp.device == "gpu")
     {
 #if ((defined __CUDA) || (defined __ROCM))
-        base_device::DEVICE_GPU* ctx = {};
-        base_device::DEVICE_CPU* cpu_ctx = {};
-        base_device::memory::resize_memory_op<std::complex<double>, base_device::DEVICE_CPU>()(cpu_ctx, becp_cpu, size_ps);
-        base_device::memory::synchronize_memory_op<std::complex<double>, base_device::DEVICE_CPU, base_device::DEVICE_GPU>()(cpu_ctx, ctx, becp_cpu, becp_k, size_ps);
+        base_device::memory::resize_memory_op<std::complex<double>, base_device::DEVICE_CPU>()(becp_cpu, size_ps);
+        base_device::memory::synchronize_memory_op<std::complex<double>, base_device::DEVICE_CPU, base_device::DEVICE_GPU>()(becp_cpu, becp_k, size_ps);
 #endif
     }
     else if (PARAM.inp.device == "cpu")
@@ -82,10 +81,8 @@ void spinconstrain::SpinConstrain<std::complex<double>>::calculate_delta_hcc(std
     if(PARAM.inp.device == "gpu")
     {
 #if ((defined __CUDA) || (defined __ROCM))
-        base_device::DEVICE_GPU* ctx = {};
-        base_device::DEVICE_CPU* cpu_ctx = {};
-        base_device::memory::resize_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(ctx, ps_pointer, size_ps);
-        base_device::memory::synchronize_memory_op<std::complex<double>, base_device::DEVICE_GPU, base_device::DEVICE_CPU>()(ctx, cpu_ctx, ps_pointer, ps.data(), size_ps);
+        base_device::memory::resize_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(ps_pointer, size_ps);
+        base_device::memory::synchronize_memory_op<std::complex<double>, base_device::DEVICE_GPU, base_device::DEVICE_CPU>()(ps_pointer, ps.data(), size_ps);
 #endif
     }
     else if (PARAM.inp.device == "cpu")
@@ -103,7 +100,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::calculate_delta_hcc(std
             ctx, transa, transb, nbands, nbands, npm,
             &ModuleBase::ONE, becp_k, npm, ps_pointer, npm,
             &ModuleBase::ONE, h_tmp, nbands);
-        base_device::memory::delete_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(ctx, ps_pointer);
+        base_device::memory::delete_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(ps_pointer);
         delete[] becp_cpu;
 #endif
     }
@@ -211,18 +208,18 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mw_from_lambda(int 
             becp_tmp.resize(size_becp * nk);
             std::complex<double>* h_tmp = nullptr;
             std::complex<double>* s_tmp = nullptr;
-            base_device::memory::resize_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(ctx, h_tmp, nbands * nbands);
-            base_device::memory::resize_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(ctx, s_tmp, nbands * nbands);
+            base_device::memory::resize_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(h_tmp, nbands * nbands);
+            base_device::memory::resize_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(s_tmp, nbands * nbands);
             int initial_hs = 0;
             if(this->sub_h_save == nullptr)
             {
                 initial_hs = 1;
-                base_device::memory::resize_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(ctx, this->sub_h_save, nbands * nbands * nk);
-                base_device::memory::resize_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(ctx, this->sub_s_save, nbands * nbands * nk);
-                base_device::memory::resize_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(ctx, this->becp_save, size_becp * nk);
+                base_device::memory::resize_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(this->sub_h_save, nbands * nbands * nk);
+                base_device::memory::resize_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(this->sub_s_save, nbands * nbands * nk);
+                base_device::memory::resize_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(this->becp_save, size_becp * nk);
             }
             std::complex<double>* becp_pointer = nullptr;
-            base_device::memory::resize_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(ctx, becp_pointer, size_becp);
+            base_device::memory::resize_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(becp_pointer, size_becp);
             for (int ik = 0; ik < nk; ++ik)
             {
                 psi_t->fix_k(ik);
@@ -234,16 +231,16 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mw_from_lambda(int 
                 {
                     hamilt_t->updateHk(ik);
                     hsolver::DiagoIterAssist<std::complex<double>, base_device::DEVICE_GPU>::cal_hs_subspace(hamilt_t, psi_t[0], h_k, s_k);
-                    base_device::memory::synchronize_memory_op<std::complex<double>, base_device::DEVICE_GPU, base_device::DEVICE_GPU>()(ctx, ctx, becp_k, onsite_p->get_becp(), size_becp);
+                    base_device::memory::synchronize_memory_op<std::complex<double>, base_device::DEVICE_GPU, base_device::DEVICE_GPU>()(becp_k, onsite_p->get_becp(), size_becp);
                 }
-                base_device::memory::synchronize_memory_op<std::complex<double>, base_device::DEVICE_GPU, base_device::DEVICE_GPU>()(ctx, ctx, h_tmp, h_k, nbands * nbands);
-                base_device::memory::synchronize_memory_op<std::complex<double>, base_device::DEVICE_GPU, base_device::DEVICE_GPU>()(ctx, ctx, s_tmp, s_k, nbands * nbands);
+                base_device::memory::synchronize_memory_op<std::complex<double>, base_device::DEVICE_GPU, base_device::DEVICE_GPU>()(h_tmp, h_k, nbands * nbands);
+                base_device::memory::synchronize_memory_op<std::complex<double>, base_device::DEVICE_GPU, base_device::DEVICE_GPU>()(s_tmp, s_k, nbands * nbands);
                 if (i_step != -1) this->calculate_delta_hcc(h_tmp, becp_k, delta_lambda, nbands, nkb, nh_iat, sign);
                 hsolver::DiagoIterAssist<std::complex<double>, base_device::DEVICE_GPU>::diag_responce(h_tmp, s_tmp, nbands,
                     becp_k, becp_pointer, nkb * npol, &this->pelec->ekb(ik, 0));
-                base_device::memory::synchronize_memory_op<std::complex<double>, base_device::DEVICE_CPU, base_device::DEVICE_GPU>()(cpu_ctx, ctx, &becp_tmp[ik * size_becp], becp_pointer, size_becp);
+                base_device::memory::synchronize_memory_op<std::complex<double>, base_device::DEVICE_CPU, base_device::DEVICE_GPU>()(&becp_tmp[ik * size_becp], becp_pointer, size_becp);
             }
-            base_device::memory::delete_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(ctx, becp_pointer);
+            base_device::memory::delete_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(becp_pointer);
         }
 #endif
         elecstate::calculate_weights(this->pelec->ekb, this->pelec->wg, this->pelec->klist,
@@ -301,7 +298,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mw_from_lambda(int 
             }
         }
         Parallel_Reduce::reduce_double_allpool(PARAM.inp.kpar,
-                                               GlobalV::NPROC_IN_POOL,
+                                               PARAM.globalv.nproc_in_pool,
                                                &(this->Mi_[0][0]),
                                                3 * this->Mi_.size());
     }
@@ -371,7 +368,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::update_psi_charge(const
                     hsolver::DiagoIterAssist<std::complex<double>, base_device::DEVICE_CPU>::PW_DIAG_THR,
                     hsolver::DiagoIterAssist<std::complex<double>, base_device::DEVICE_CPU>::need_subspace);
                 hsolver_pw_obj.solve(hamilt_t, psi_t[0], this->pelec, this->pelec->ekb.c,
-                    GlobalV::RANK_IN_POOL, GlobalV::NPROC_IN_POOL, false, this->tpiba, this->get_nat());
+                    GlobalV::RANK_IN_POOL, PARAM.globalv.nproc_in_pool, false, this->tpiba, this->get_nat());
             }
             else
             {
@@ -396,8 +393,8 @@ void spinconstrain::SpinConstrain<std::complex<double>>::update_psi_charge(const
             size_becp = nbands * nkb * npol;
             std::complex<double>* h_tmp = nullptr;
             std::complex<double>* s_tmp = nullptr;
-            base_device::memory::resize_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(ctx, h_tmp, nbands * nbands);
-            base_device::memory::resize_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(ctx, s_tmp, nbands * nbands);
+            base_device::memory::resize_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(h_tmp, nbands * nbands);
+            base_device::memory::resize_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(s_tmp, nbands * nbands);
             assert(this->sub_h_save != nullptr);
             assert(this->sub_s_save != nullptr);
             assert(this->becp_save != nullptr);
@@ -407,16 +404,16 @@ void spinconstrain::SpinConstrain<std::complex<double>>::update_psi_charge(const
                 std::complex<double>* s_k = this->sub_s_save + ik * nbands * nbands;
                 std::complex<double>* becp_k = this->becp_save + ik * size_becp;
                 psi_t->fix_k(ik);
-                base_device::memory::synchronize_memory_op<std::complex<double>, base_device::DEVICE_GPU, base_device::DEVICE_GPU>()(ctx, ctx, h_tmp, h_k, nbands * nbands);
-                base_device::memory::synchronize_memory_op<std::complex<double>, base_device::DEVICE_GPU, base_device::DEVICE_GPU>()(ctx, ctx, s_tmp, s_k, nbands * nbands);
+                base_device::memory::synchronize_memory_op<std::complex<double>, base_device::DEVICE_GPU, base_device::DEVICE_GPU>()(h_tmp, h_k, nbands * nbands);
+                base_device::memory::synchronize_memory_op<std::complex<double>, base_device::DEVICE_GPU, base_device::DEVICE_GPU>()(s_tmp, s_k, nbands * nbands);
                 const int sign = this->pelec->klist->isk[ik] == 0 ? 1 : -1;
                 this->calculate_delta_hcc(h_tmp, becp_k, delta_lambda, nbands, nkb, nh_iat, sign);
                 hsolver::DiagoIterAssist<std::complex<double>, base_device::DEVICE_GPU>::diag_subspace_psi(h_tmp, s_tmp, nbands,
                     psi_t[0], &this->pelec->ekb(ik, 0));
             }
-            base_device::memory::delete_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(ctx, sub_h_save);
-            base_device::memory::delete_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(ctx, sub_s_save);
-            base_device::memory::delete_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(ctx, becp_save);
+            base_device::memory::delete_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(sub_h_save);
+            base_device::memory::delete_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(sub_s_save);
+            base_device::memory::delete_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(becp_save);
             this->sub_h_save = nullptr;
             this->sub_s_save = nullptr;
             this->becp_save = nullptr;
@@ -430,7 +427,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::update_psi_charge(const
                     hsolver::DiagoIterAssist<std::complex<double>, base_device::DEVICE_GPU>::PW_DIAG_THR,
                     hsolver::DiagoIterAssist<std::complex<double>, base_device::DEVICE_GPU>::need_subspace);
                 hsolver_pw_obj.solve(hamilt_t, psi_t[0], this->pelec, this->pelec->ekb.c,
-                    GlobalV::RANK_IN_POOL, GlobalV::NPROC_IN_POOL, false, this->tpiba, this->get_nat());
+                    GlobalV::RANK_IN_POOL, PARAM.globalv.nproc_in_pool, false, this->tpiba, this->get_nat());
             }
             else
             {

@@ -1,5 +1,3 @@
-#include <iostream>
-
 #include "source_base/matrix.h"
 #include "source_base/name_angular.h"
 #include "source_base/module_external/scalapack_connector.h"
@@ -104,13 +102,6 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_MW(const int& step,
             }
         }
     }
-    /*else
-    {
-        const std::vector<std::vector<std::complex<double>>>& dm
-            = dynamic_cast<const elecstate::ElecStateLCAO<std::complex<double>>*>(this->pelec)->get_DM()->get_DMK_vector();
-        this->calculate_MW(this->convert(this->cal_MW_k(dm)));
-    }*/
-    //this->print_Mi(print);
 
     ModuleBase::timer::tick("SpinConstrain", "cal_MW");
 }
