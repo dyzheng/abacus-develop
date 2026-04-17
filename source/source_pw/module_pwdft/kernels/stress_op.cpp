@@ -355,29 +355,29 @@ struct cal_stress_nl_op<FPTYPE, base_device::DEVICE_CPU>
             for (int ia = 0; ia < atom_na[it]; ia++)
             {
                 int iat = iat0 + ia;
-                if(npol == 2)
+                if (npol == 2)
                 {
-                const std::complex<FPTYPE> coefficients0(lambda[iat*3+2], 0.0);
-                const std::complex<FPTYPE> coefficients1(lambda[iat*3] , lambda[iat*3+1]);
-                const std::complex<FPTYPE> coefficients2(lambda[iat*3] , -1 * lambda[iat*3+1]);
-                const std::complex<FPTYPE> coefficients3(-1 * lambda[iat*3+2], 0.0);
-                for (int ib = 0; ib < nbands_occ; ib++)
-                {
-                    const int ib2 = ib*2;
-                    FPTYPE fac = d_wg[ik * wg_nc + ib];
-                    for (int ip = 0; ip < nproj; ip++)
+                    const std::complex<FPTYPE> coefficients0(lambda[iat*3+2], 0.0);
+                    const std::complex<FPTYPE> coefficients1(lambda[iat*3] , lambda[iat*3+1]);
+                    const std::complex<FPTYPE> coefficients2(lambda[iat*3] , -1 * lambda[iat*3+1]);
+                    const std::complex<FPTYPE> coefficients3(-1 * lambda[iat*3+2], 0.0);
+                    for (int ib = 0; ib < nbands_occ; ib++)
                     {
-                        const int inkb1 = ib2 * nkb + sum + ia * nproj + ip;
+                        const int ib2 = ib * 2;
+                        FPTYPE fac = d_wg[ik * wg_nc + ib];
+                        for (int ip = 0; ip < nproj; ip++)
+                        {
+                            const int inkb1 = ib2 * nkb + sum + ia * nproj + ip;
 
-                        const std::complex<FPTYPE> dbb0 = conj(dbecp[inkb1]) * becp[inkb1];
-                        const std::complex<FPTYPE> dbb1 = conj(dbecp[inkb1]) * becp[nkb + inkb1];
-                        const std::complex<FPTYPE> dbb2 = conj(dbecp[nkb + inkb1]) * becp[inkb1];
-                        const std::complex<FPTYPE> dbb3 = conj(dbecp[nkb + inkb1]) * becp[nkb + inkb1];
-                        local_stress -= fac * (coefficients0 * dbb0 + coefficients1 * dbb2 + coefficients2 * dbb1 + coefficients3 * dbb3).real();
-                    } // end ip
-                }// ib
+                            const std::complex<FPTYPE> dbb0 = conj(dbecp[inkb1]) * becp[inkb1];
+                            const std::complex<FPTYPE> dbb1 = conj(dbecp[inkb1]) * becp[nkb + inkb1];
+                            const std::complex<FPTYPE> dbb2 = conj(dbecp[nkb + inkb1]) * becp[inkb1];
+                            const std::complex<FPTYPE> dbb3 = conj(dbecp[nkb + inkb1]) * becp[nkb + inkb1];
+                            local_stress -= fac * (coefficients0 * dbb0 + coefficients1 * dbb2 + coefficients2 * dbb1 + coefficients3 * dbb3).real();
+                        } // end ip
+                    } // ib
                 }
-                else if(npol == 1)
+                else if (npol == 1)
                 {
                     const FPTYPE coefficients0(lambda[iat*3+2]);
                     for (int ib = 0; ib < nbands_occ; ib++)
@@ -390,7 +390,7 @@ struct cal_stress_nl_op<FPTYPE, base_device::DEVICE_CPU>
                             const FPTYPE dbb = (conj(dbecp[inkb]) * becp[inkb]).real();
                             local_stress -= fac * coefficients0 * dbb;
                         } // end ip
-                    }// ib
+                    } // ib
                 }
             }// ia
             sum += atom_na[it] * nproj;

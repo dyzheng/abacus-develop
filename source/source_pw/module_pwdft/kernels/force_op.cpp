@@ -413,27 +413,27 @@ struct cal_force_nl_op<FPTYPE, base_device::DEVICE_CPU>
                 {
                     FPTYPE local_force[3] = {0, 0, 0};
                     FPTYPE fac = d_wg[ik * wg_nc + ib] * 2.0 * tpiba;
-                    if(npol ==2)
+                    if (npol == 2)
                     {
-                    const int ib2 = ib*2;
-                    for (int ip = 0; ip < nproj; ip++)
-                    {
-                        const int inkb = sum + ip;
-
-                        for (int ipol = 0; ipol < 3; ipol++)
+                        const int ib2 = ib * 2;
+                        for (int ip = 0; ip < nproj; ip++)
                         {
-                            const int index0 = ipol * nbands * 2 * nkb + ib2 * nkb + inkb;
-                            const int index1 = ib2 * nkb + inkb;
-                            const std::complex<FPTYPE> dbb0 = conj(dbecp[index0]) * becp[index1];
-                            const std::complex<FPTYPE> dbb1 = conj(dbecp[index0]) * becp[index1 + nkb];
-                            const std::complex<FPTYPE> dbb2 = conj(dbecp[index0 + nkb]) * becp[index1];
-                            const std::complex<FPTYPE> dbb3 = conj(dbecp[index0 + nkb]) * becp[index1 + nkb];
+                            const int inkb = sum + ip;
 
-                            local_force[ipol] -= fac * (coefficients0 * dbb0 + coefficients1 * dbb2 + coefficients2 * dbb1 + coefficients3 * dbb3).real();
-                        }
-                    }//ip
+                            for (int ipol = 0; ipol < 3; ipol++)
+                            {
+                                const int index0 = ipol * nbands * 2 * nkb + ib2 * nkb + inkb;
+                                const int index1 = ib2 * nkb + inkb;
+                                const std::complex<FPTYPE> dbb0 = conj(dbecp[index0]) * becp[index1];
+                                const std::complex<FPTYPE> dbb1 = conj(dbecp[index0]) * becp[index1 + nkb];
+                                const std::complex<FPTYPE> dbb2 = conj(dbecp[index0 + nkb]) * becp[index1];
+                                const std::complex<FPTYPE> dbb3 = conj(dbecp[index0 + nkb]) * becp[index1 + nkb];
+
+                                local_force[ipol] -= fac * (coefficients0 * dbb0 + coefficients1 * dbb2 + coefficients2 * dbb1 + coefficients3 * dbb3).real();
+                            }
+                        } // ip
                     }
-                    else if(npol == 1)
+                    else if (npol == 1)
                     {
                         for (int ip = 0; ip < nproj; ip++)
                         {
@@ -441,12 +441,12 @@ struct cal_force_nl_op<FPTYPE, base_device::DEVICE_CPU>
 
                             for (int ipol = 0; ipol < 3; ipol++)
                             {
-                                const int index0 = ipol * nbands * nproj + ib * nproj + ip;
-                                const int index1 = ib * nproj + ip;
+                                const int index0 = ipol * nbands * nkb + ib * nkb + inkb;
+                                const int index1 = ib * nkb + inkb;
                                 const FPTYPE dbb = (conj(dbecp[index0]) * becp[index1]).real();
                                 local_force[ipol] -= fac * lambda[iat*3+2] * dbb;
                             }
-                        }//ip
+                        } // ip
                     }
                     for (int ipol = 0; ipol < 3; ++ipol)
                     {
