@@ -297,21 +297,36 @@ bash Autotest.sh -a ../../build/abacus -n 4 -r "201_NO_.*"
 | T07 | DFT+U+DS | 2 | z | LCAO | ✗ | ❌ BLOCKED |
 | T08 | DFT+U+DS | 4 | xyz | LCAO | ✓ | ❌ BLOCKED |
 
-#### 6.3 DeltaSpin 状态 ⚠️ BLOCKED
+#### 6.3 PW DFTU 调试状态 🔧 IN PROGRESS
 
-- `sc_mag_switch` 上游保护已解除（`read_input_item_other.cpp` 注释掉 WARNING_QUIT）
-- **运行时崩溃**: DeltaSpin + non-collinear PW 测试出现 signal 6 (abort)
-- 根因: bpcg_kernel_op.cpp:170 断言失败 `psi_m_norm > 0.0`
-  - 这是 **dftu-pw-port 已有的 HSolver bug**，不是本次修改引入
-  - 所有 PW DFTU 测试（815/816/099/160）均因此崩溃
-  - LCAO DFTU 测试不受影响（使用不同的 HSolver 路径）
-- **DeltaSpin 集成测试暂时无法运行**
+**问题**: 所有 PW DFTU 集成测试 (815/816/099/160) 在 SCF 第 2 步崩溃
+
+**发现 1 — nspin=2 vu_device sync 偏移 bug** ✅ FIXED (`9642f93fe`)
+- 根因: `op_pw_proj.cpp:282-292` 中 nspin=2 时 vu_device 只 sync 半量数组，但 vu_begin_iat 偏移基于全量计算
+- 修复: 匹配 zdy-tmp 参考实现 — 只对 spin-down (isk==1) sync 半量，spin-up 用全量
+- 对比 zdy-tmp: `onsite_proj_pw.cpp:266-274`
+
+**发现 2 — 更深层 PW DFTU 崩溃** ❌ 未修复
+- 即使修复 nspin=2 bug 后，**所有 nspin 值仍然崩溃**:
+  - **nspin=2 (815)**: DS1 正常 (-5835 eV)，DS2 能量爆炸 (1e+34) → bpcg_kernel_op assert 失败
+  - **nspin=1 (816)**: DS1 正常，DS2 立即段错误 (NULL pointer, address 0x0)
+  - **nspin=4 (099/160)**: 同样崩溃
+- 崩溃调用栈: `diago_dav_subspace.cpp:443` → `hpsi_func()` → `onsite_op.cpp` → segfault
+- LCAO DFTU 不受影响（使用 ScaLAPACK 直接对角化，非迭代 Davidson）
+
+**可能根因**:
+1. PW Hamiltonian 中 OnsiteProj 算子在 SCF 第 2 步未正确更新
+2. `cal_VU_pot_pw()` 是空函数 — eff_pot_pw 从未从 occupation matrix 更新
+3. mixing 后 locale 数据损坏传递给下一轮迭代
+4. OnsiteProj 内部状态在多次 init() 调用间被破坏
+
+**下一步**: 需要对比 zdy-tmp 的 PW esolver SCF 流程，确认 DFTU 有效势更新链路是否完整
 
 #### 6.4 下一步
 
-- [ ] 定位 DeltaSpin crash 根因并修复
+- [ ] 修复深层 PW DFTU 崩溃（eff_pot_pw 更新链路调查）
+- [ ] 修复后运行全部 PW DFTU 集成测试
 - [ ] 补充 PW DFT+U non-collinear (no SOC) 测试 case
-- [ ] 运行全部 DFTU 集成测试并数值验证
 
 ---
 
@@ -358,7 +373,7 @@ delegation:
 | ~~nscf DFTU 逻辑未迁移~~ | ~~P1~~ | ✅ DONE | 已提交 `3195855d7` — esolver/dftu/dftu_occup 3 个文件 |
 | ~~T4: force_op.cu GPU 修复~~ | ~~P1~~ | ✅ DONE | 已验证：dftu-pw-port 已包含 `34f564ef1` 修正（coefficients1*dbb2 + coefficients2*dbb1）|
 | ~~T5: conserve_setting 验证~~ | ~~P1~~ | ✅ DONE | 已提交 `9ab367642` — 补充 mixing_restart_step 排除条件 |
-| 与 zdy-tmp 的数值比对未进行 | P0 | ⏳ | zdy-tmp 无法运行此 case（参数不兼容），改用 develop 基线 |
+| PW DFTU SCF 崩溃（nspin=1/2/4）| P0 | 🔧 | eff_pot_pw 更新链路调查 — `cal_VU_pot_pw` 是空函数 |
 | ESolver 与 ElecState 大量 diff 待评估 | P2 | ⏳ | 等 top-7 完成后统一评估 |
 | lambda strategies SCF 集成 | P2 | ⏳ | 需要专门的设计决策 |
 
