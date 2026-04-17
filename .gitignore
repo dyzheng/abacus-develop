@@ -26,3 +26,13 @@ abacus.json
 toolchain/install/
 toolchain/abacus_env.sh
 .trae
+
+# Auto-generated files
+CMakeCache.txt
+CMakeFiles/
+Testing/
+CTestTestfile.cmake
+DartConfiguration.tcl
+commit.h
+abacus_*p
+*.sum

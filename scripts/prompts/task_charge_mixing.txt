@@ -1,0 +1,28 @@
+## 任务：验证并补全迁移 conserve_setting 修改
+
+### 输入
+- 参考 commit：a9d881c95 (Feature: add conserve_setting for DFTU with DeltaSpin)
+- 参考仓库：/root/abacus-zdy-tmp
+- 目标工作区：{WORKTREE}
+
+### 需处理的文件
+1. `source/source_estate/module_charge/charge_mixing.h`
+2. `source/source_esolver/esolver_ks_pw.cpp`
+
+### 执行步骤
+1. 检查目标仓库中这两个文件是否已经包含该修改
+   - 在 dftu-pw-port 中 `conserve_setting()` 方法可能已存在
+   - `esolver_ks_pw.cpp` 中可能已有相关调用
+2. 如果已经完全存在，仅验证一致性，不做修改
+3. 如果部分缺失或不一致，补全迁移
+4. 做最小编译验证
+
+### 输出要求
+1. `{WORKTREE}/MIGRATION_REPORT.md` 记录：
+   - 当前状态（已完整存在 / 部分存在 / 完全缺失）
+   - 如果做了修改，说明原因
+   - 编译结果
+2. `{WORKTREE}/PROGRESS.md` 更新
+
+### 禁止事项
+- 不要重复已经存在的代码

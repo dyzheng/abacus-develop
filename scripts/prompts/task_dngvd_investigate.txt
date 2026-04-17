@@ -1,0 +1,28 @@
+## 任务：调查 zdy-tmp 中 dngvd_op.hip.cu 修复在 develop 中的对应关系
+
+### 背景
+zdy-tmp 中有 3 个 commit 修改了 `source/module_hsolver/kernels/rocm/dngvd_op.hip.cu`：
+- bce760541 fix:hip code could not run properly in DCU
+- b9ce68339 fix:dngvd.hip.cu run properly in DCU
+- 19ade1859 Fix: initial error of dngvd on DCU
+
+但在目标仓库 `/root/abacus-dftu-pw-port` 中该文件不存在。
+
+### 输入
+- 参考仓库：/root/abacus-zdy-tmp
+- 目标仓库：/root/abacus-dftu-pw-port
+- 上游 develop：/root/abacus-develop
+
+### 输出要求
+1. 检查 develop 中是否有 `dngvd_op.hip.cu` 或类似功能的文件
+2. 检查 dftu-pw-port 中相关的 ROCm 内核文件（如 `hegvd_op.hip.cu` 等），分析 dngvd 功能是否被合并或移除
+3. 在 `/tmp/dngvd_investigation_report.md` 中写入：
+   - 结论：这 3 个 commit 是否需要迁移
+   - 如果需要，目标文件路径是什么
+   - 如果不需要，说明原因
+
+### 里程碑
+每完成一个检查步骤，在 `/tmp/dngvd_investigation_progress.md` 追加：
+- `[HH:MM] 检查完 zdy-tmp 中 dngvd 修改范围`
+- `[HH:MM] 检查完 develop 中对应文件状态`
+- `[HH:MM] 报告写完`

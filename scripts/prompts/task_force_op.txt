@@ -1,0 +1,28 @@
+## 任务：迁移 deltaspin force error 修复
+
+### 输入
+- 参考 commit：34f564ef1 (Fix: deltaspin force error on GPU)
+- 参考仓库：/root/abacus-zdy-tmp
+- 目标工作区：{WORKTREE}/source/source_pw/module_pwdft/kernels/
+
+### 需处理的文件
+1. `cuda/force_op.cu`
+2. `force_op.cpp`
+
+### 执行步骤
+1. 执行 `git show 34f564ef1` 查看差异
+2. 检查目标工作区中两个文件的对应位置
+3. 判断该修改是否已经部分应用：
+   - 特别注意 `ps0 * dbb0 + ps1 * dbb1 + ps2 * dbb2 + ps3 * dbb3` 这行
+   - 以及 `coefficients0 * dbb0 + coefficients1 * dbb2 + coefficients2 * dbb1 + coefficients3 * dbb3` 这行
+4. 只迁移尚未应用的部分（已经存在的不要重复改）
+5. 对修改做最小编译验证
+
+### 输出要求
+1. 只修改未应用的 hunks
+2. 在 `{WORKTREE}/PROGRESS.md` 更新
+3. 在 `{WORKTREE}/MIGRATION_REPORT.md` 记录哪些 hunks 已存在、哪些是新迁移的
+
+### 禁止事项
+- 只能修改上述两个文件
+- 不要改变其他逻辑

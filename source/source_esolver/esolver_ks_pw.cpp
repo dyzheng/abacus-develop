@@ -181,7 +181,8 @@ void ESolver_KS_PW<T, Device>::iter_init(UnitCell& ucell, const int istep, const
 
     // 4) update local occupations for DFT+U
     // should before lambda loop in DeltaSpin
-    if (PARAM.inp.dft_plus_u && (iter != 1 || istep != 0))
+    // skip on first SCF step and on mixing restart step (avoid recalculating during restart)
+    if (PARAM.inp.dft_plus_u && this->drho > 0 && iter != this->p_chgmix->mixing_restart_step)
     {
         // only old DFT+U method should calculate energy correction in esolver,
         // new DFT+U method will calculate energy when evaluating the Hamiltonian

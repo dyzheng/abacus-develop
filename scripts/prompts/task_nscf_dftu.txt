@@ -1,0 +1,29 @@
+## 任务：迁移 nscf 修改到 DFT+U 文件
+
+### 输入
+- 参考 commits：e9e91d7fe + 1a6871dca
+- 参考仓库：/root/abacus-zdy-tmp
+- 目标工作区：{WORKTREE}/source/source_lcao/module_dftu/
+
+### 需处理的文件
+1. dftu_occup.cpp (from e9e91d7fe)
+2. dftu_pw.cpp (from e9e91d7fe + 1a6871dca)
+3. dftu.cpp (from 1a6871dca)
+
+### 执行步骤
+1. 分别执行 git show 查看两个 commit 对上述文件的修改
+2. 对比目标工作区中的当前版本，判断是否已经包含这些修改
+3. 按顺序应用修改（建议先 e9e91d7fe 后 1a6871dca，因为后者可能要修正前者的问题）
+4. 尝试编译验证（可以用 g++ -std=c++11 -c 或尝试 cmake build）
+
+### 输出要求
+1. 修改应用到工作区
+2. `{WORKTREE}/PROGRESS.md` 实时更新
+3. `{WORKTREE}/MIGRATION_REPORT.md` 记录：
+   - 每个文件的修改摘要
+   - 两个 commit 之间的依赖关系
+   - 编译结果
+
+### 禁止事项
+- 不要修改非 DFTU 文件
+- 20 分钟内未完成则写 BLOCKERS.md

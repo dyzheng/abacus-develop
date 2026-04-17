@@ -1,0 +1,19 @@
+## 任务：修复编译错误
+
+### 输入
+- 工作区：{WORKTREE}
+- 编译日志位置：`/tmp/build.log` (如果存在)
+
+### 任务
+1. 检查工作区中被修改文件的编译错误
+2. 修复所有 error，使其至少能独立编译通过
+3. 如果能做到，尝试在 `{WORKTREE}/build` 中运行 cmake 和 make
+4. 每处修复加 `// FIX:` 注释
+
+### 输出
+- `{WORKTREE}/PROGRESS.md` 实时更新
+- `{WORKTREE}/COMPILE_FIX_REPORT.md` 记录每个错误和修复
+
+### 禁止
+- 不要改变算法意图
+- 不要修改未被迁移的文件

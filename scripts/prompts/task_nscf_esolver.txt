@@ -1,0 +1,24 @@
+## 任务：迁移 nscf 修改到 esolver_ks_pw.cpp
+
+### 输入
+- 参考 commit：e9e91d7fe (Fix: nscf for pw code)
+- 参考仓库：/root/abacus-zdy-tmp
+- 目标工作区：{WORKTREE}/source/source_esolver/esolver_ks_pw.cpp
+
+### 差异分析
+1. 在 zdy-tmp 中执行 `git show e9e91d7fe -- source/module_esolver/esolver_ks_pw.cpp`
+2. 对比当前目标文件是否已经包含该修改
+3. 如果未包含或部分不一致，将其迁移过来
+
+### 输出要求
+1. 应用 patch 或手动修改
+2. 确保 `esolver_ks_pw.cpp` 能够编译通过（至少单文件语法检查通过）
+3. 在 `{WORKTREE}/PROGRESS.md` 实时更新
+4. 在 `{WORKTREE}/MIGRATION_REPORT.md` 中记录：
+   - zdy-tmp 修改的内容摘要
+   - 目标文件的当前状态
+   - 是否完成迁移
+
+### 禁止事项
+- 不要修改其他文件
+- 如果目标文件结构与 zdy-tmp 差异很大，停止并写 `{WORKTREE}/BLOCKERS.md`
