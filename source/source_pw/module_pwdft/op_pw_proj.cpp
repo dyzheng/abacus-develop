@@ -279,12 +279,12 @@ void OnsiteProj<OperatorPW<T, Device>>::cal_ps_dftu(
         resmem_complex_op()(this->vu_device, dftu->get_size_eff_pot_pw());
     }
 
-    // For nspin=2, select the correct spin half of eff_pot_pw
-    if(npol == 1 && PARAM.inp.nspin == 2)
+    // For nspin=2 spin-down, select the second half of eff_pot_pw
+    // For nspin=1 or nspin=2 spin-up, use the full array (vu_begin_iat offsets are relative to full array)
+    if(PARAM.inp.nspin == 2 && this->isk[this->ik] == 1)
     {
-        const int current_spin = this->isk[this->ik];
         const int half_size = dftu->get_size_eff_pot_pw() / 2;
-        syncmem_complex_h2d_op()(this->vu_device, dftu->get_eff_pot_pw(0) + current_spin * half_size, half_size);
+        syncmem_complex_h2d_op()(this->vu_device, dftu->get_eff_pot_pw(0) + half_size, half_size);
     }
     else
     {
