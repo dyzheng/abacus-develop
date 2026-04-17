@@ -219,7 +219,7 @@ void Plus_U::init(UnitCell& cell, // unitcell class
         if (PARAM.inp.init_chg == "file")
         {
             std::stringstream sst;
-            sst << PARAM.globalv.global_out_dir << "onsite.dm";
+            sst << PARAM.globalv.global_readin_dir << "onsite.dm";
             this->read_occup_m(cell,sst.str());
 #ifdef __MPI
             this->local_occup_bcast(cell);

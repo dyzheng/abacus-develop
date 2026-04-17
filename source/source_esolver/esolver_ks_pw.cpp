@@ -258,6 +258,18 @@ void ESolver_KS_PW<T, Device>::hamilt2rho_single(UnitCell& ucell, const int iste
           GlobalV::RANK_IN_POOL, GlobalV::NPROC_IN_POOL, skip_charge, ucell.tpiba, ucell.nat);
     }
 
+    // calculate DFT+U occupation matrix for nscf calculation
+    if (PARAM.inp.calculation == "nscf" && PARAM.inp.dft_plus_u)
+    {
+        // only old DFT+U method should calculate energy correction in esolver,
+        // new DFT+U method will calculate energy when evaluating the Hamiltonian
+        if (this->dftu.omc != 2)
+        {
+            this->dftu.cal_occ_pw(iter, this->stp.psi_t, this->pelec->wg, ucell, this->p_chgmix);
+        }
+        this->dftu.output(ucell);
+    }
+
     // symmetrize the charge density
     Symmetry_rho srho;
     for (int is = 0; is < PARAM.inp.nspin; is++)

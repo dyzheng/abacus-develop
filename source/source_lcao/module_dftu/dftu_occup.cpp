@@ -31,11 +31,33 @@ void Plus_U::copy_locale(const UnitCell& ucell)
                     if (PARAM.inp.nspin == 4)
                     {
                         locale_save[iat][l][n][0] = locale[iat][l][n][0];
+                        // save locale matrix for SOC to uom_save
+                        if(this->uom_save.size() != 0)
+                        {
+                            const int size = locale[iat][l][n][0].nr * locale[iat][l][n][0].nc;
+                            for(int mm=0; mm<size; mm++)
+                            {
+                                this->uom_save[eff_pot_pw_index[iat]+mm] = locale[iat][l][n][0].c[mm];
+                                this->uom_save[eff_pot_pw_index[iat]+mm+size] = locale[iat][l][n][0].c[mm+size];
+                                this->uom_save[eff_pot_pw_index[iat]+mm+2*size] = locale[iat][l][n][0].c[mm+2*size];
+                                this->uom_save[eff_pot_pw_index[iat]+mm+3*size] = locale[iat][l][n][0].c[mm+3*size];
+                            }
+                        }
                     }
                     else if (PARAM.inp.nspin == 1 || PARAM.inp.nspin == 2)
                     {
                         locale_save[iat][l][n][0] = locale[iat][l][n][0];
                         locale_save[iat][l][n][1] = locale[iat][l][n][1];
+                        // save locale matrix for spin=0,1 to uom_save
+                        if(this->uom_save.size() != 0)
+                        {
+                            const int size = locale[iat][l][n][0].nr * locale[iat][l][n][0].nc;
+                            for(int mm=0; mm<size; mm++)
+                            {
+                                this->uom_save[eff_pot_pw_index[iat]+mm] = locale[iat][l][n][0].c[mm];
+                                this->uom_save[eff_pot_pw_index[iat]+mm+size] = locale[iat][l][n][1].c[mm];
+                            }
+                        }
                     }
                 }
             }
