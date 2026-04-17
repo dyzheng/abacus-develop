@@ -226,7 +226,7 @@ void ModuleIO::ctrl_scf_pw(const int istep,
     {
         spinconstrain::SpinConstrain<std::complex<double>>& sc
             = spinconstrain::SpinConstrain<std::complex<double>>::getScInstance();
-        sc.cal_mi_pw();
+        sc.cal_Mi_pw();
         sc.print_Mag_Force(GlobalV::ofs_running);
     }
 
