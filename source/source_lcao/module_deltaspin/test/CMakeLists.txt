@@ -22,4 +22,11 @@ AddTest(
     ../spin_constrain.cpp
     ../template_helpers.cpp
 )
+
+AddTest(
+  TARGET deltaspin_lambda_update_strategies_test
+  LIBS ${math_libs} base device parameter
+  SOURCES lambda_update_strategies_test.cpp
+    ../lambda_update_strategies.cpp
+)
 endif() 

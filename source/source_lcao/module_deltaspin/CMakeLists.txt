@@ -10,6 +10,7 @@ list(APPEND objects
     lambda_loop_helper.cpp
     lambda_loop.cpp
     template_helpers.cpp
+    lambda_update_strategies.cpp
 )
 
 add_library(
