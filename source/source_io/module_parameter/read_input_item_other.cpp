@@ -139,6 +139,36 @@ void ReadInput::item_others()
         };
         this->add_item(item);
     }
+    {
+        Input_Item item("sc_lambda_strategy");
+        item.annotation = "Lambda update strategy for spin-constrained DFT: bfgs, linear_response, augmented_lagrangian, hybrid_delayed";
+        read_sync_string(input.sc_lambda_strategy);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("sc_mu_init");
+        item.annotation = "Initial penalty parameter for augmented Lagrangian strategies";
+        read_sync_double(input.sc_mu_init);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("sc_mu_max");
+        item.annotation = "Maximum penalty parameter for augmented Lagrangian strategies";
+        read_sync_double(input.sc_mu_max);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("sc_mu_growth");
+        item.annotation = "Growth factor for penalty parameter in augmented Lagrangian strategies";
+        read_sync_double(input.sc_mu_growth);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("sc_mix_beta");
+        item.annotation = "Mixing parameter for linear response strategy";
+        read_sync_double(input.sc_mix_beta);
+        this->add_item(item);
+    }
 
     // Quasiatomic Orbital analysis
     {

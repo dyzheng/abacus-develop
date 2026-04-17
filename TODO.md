@@ -86,24 +86,19 @@
 
 | zdy Commit | 标题 | 涉及文件 | 迁移状态 | 备注 |
 |------------|------|---------|---------|------|
-| `19ade1859` | Fix: initial error of dngvd on DCU | `module_hsolver/kernels/rocm/dngvd_op.hip.cu` | ⏸️ **BLOCKED** | 目标仓库无此文件，需调查映射关系 |
-| `bce760541` | fix:hip code could not run properly in DCU | `module_hsolver/kernels/rocm/dngvd_op.hip.cu` | ⏸️ **BLOCKED** | 同上 |
-| `b9ce68339` | fix:dngvd.hip.cu run properly in DCU | `module_hsolver/kernels/rocm/dngvd_op.hip.cu` | ⏸️ **BLOCKED** | 同上 |
-| `a9d881c95` | Feature: add conserve_setting for DFTU with DeltaSpin | `charge_mixing.h`, `esolver_ks_pw.cpp` | 🔄 **PARTIAL** | `charge_mixing.h` 已在 `48134c1b9` 中完成；`esolver_ks_pw.cpp` 的 `conserve_setting()` 调用也已加入，但需验证完整上下文 |
-| `e9e91d7fe` | Fix: nscf for pw code | `esolver_ks_pw.cpp`, `dftu_occup.cpp`, `dftu_pw.cpp` | 🔄 **PARTIAL** | `esolver_ks_pw.cpp` 可能与 `48134c1b9` 重叠；`dftu_occup.cpp` 和 `dftu_pw.cpp` 的 nscf 逻辑**尚未迁移** |
-| `1a6871dca` | fix: nscf error of DFT+U | `dftu.cpp`, `dftu_pw.cpp` | ⏳ **PENDING** | 完全未开始 |
-| `34f564ef1` | Fix: deltaspin force error on GPU | `force_op.cu`, `force_op.cpp` | 🔄 **IN PROGRESS** | `force_op.cpp` 的修正已在工作树中（未提交）；`stress_op.cpp` 也有关联修改（未提交）；`force_op.cu` 需检查 |
+| `19ade1859` | Fix: initial error of dngvd on DCU | `module_hsolver/kernels/rocm/dngvd_op.hip.cu` | ❌ SKIP | ROCm/DCU 专用，目标仓库无此文件 |
+| `bce760541` | fix:hip code could not run properly in DCU | `module_hsolver/kernels/rocm/dngvd_op.hip.cu` | ❌ SKIP | 同上 |
+| `b9ce68339` | fix:dngvd.hip.cu run properly in DCU | `module_hsolver/kernels/rocm/dngvd_op.hip.cu` | ❌ SKIP | 同上 |
+| `a9d881c95` | Feature: add conserve_setting for DFTU with DeltaSpin | `charge_mixing.h`, `esolver_ks_pw.cpp` | ✅ DONE | `conserve_setting()` 已存在；补充 `mixing_restart_step` 排除条件 (`9ab367642`) |
+| `e9e91d7fe` | Fix: nscf for pw code | `esolver_ks_pw.cpp`, `dftu_occup.cpp`, `dftu_pw.cpp` | ✅ DONE | nscf DFT+U 调用 + uom_save 逻辑 (`3195855d7`) |
+| `1a6871dca` | fix: nscf error of DFT+U | `dftu.cpp`, `dftu_pw.cpp` | ✅ DONE | global_readin_dir 路径 + initialed_locale 逻辑 (`3195855d7`) |
+| `34f564ef1` | Fix: deltaspin force error on GPU | `force_op.cu`, `force_op.cpp` | ✅ DONE | y-axis 系数修正已验证 (GPU+CPU) + 0b8383a3f |
 
 ### 2.3 关键发现
 
-1. **dngvd 阻塞**: `dftu-pw-port` 及上游 `develop` 中均无 `dngvd_op.hip.cu`。`source_hsolver/kernels/rocm/` 下只有 `hegvd_op.hip.cu` 和 `bpcg_kernel_op.hip.cu`。这 3 个 commit 可能：
-   - 已被上游重构废弃
-   - 功能合并到了 `hegvd_op.hip.cu`
-   - 需要创建新文件但目标目录结构已变
-
-2. **force/stress 工作树修改**: 当前未提交的 `force_op.cpp` 和 `stress_op.cpp` 看起来不仅包含 `34f564ef1` 的系数修正，还追加了 `npol == 1` 分支。这可能是 Batch 2 遗留的未完工作，需要与 zdy-tmp 仔细对比确认是否完整，**同时对比 develop 分支确认 `npol==1` 分支是否与上游重构冲突**。
-
-3. **DeltaSpin GPU API**: `cal_h_lambda.cpp` 和 `cal_mw_from_lambda.cpp` 中把 `base_device::memory::xxx(ctx, ...)` 改成了无 `ctx` 版本。这是为了适配 develop 分支中 memory op 的 API 变更。这些修改与编译通过一致，应尽快提交。
+1. **dngvd 跳过**: `dftu-pw-port` 及上游 `develop` 中均无 `dngvd_op.hip.cu`。这 3 个 commit 是 ROCm/DCU 专用，已跳过。
+2. **force/stress**: y-axis 修正已在 `0b8383a3f` 提交，develop 的 npol==1 重构适配作为独立任务处理。
+3. **DeltaSpin GPU API**: 已在 `060c53d98` 提交 — `cal_h_lambda.cpp` 和 `cal_mw_from_lambda.cpp` 中 memory op API 适配（移除 `ctx` 参数）。
 
 ---
 
@@ -248,18 +243,22 @@ bash Autotest.sh -a ../../build/abacus -n 4 -r "201_NO_.*"
 
 ### Phase 5: 更广泛的 DFTU PW Port 未完成项
 
+> **zdy-tmp Top-7 已全部迁移完成**（`9ab367642`）
+> 当前优先级：Phase 5.4 lambda strategies SCF 集成（Phase 5.1/5.2/5.3 为 LCAO 大模块，待评估）
+
+- [ ] **5.4 lambda_update_strategies 集成到 SCF** ← **当前任务**
+  - 在 `esolver_ks_lcao.cpp` / `esolver_ks_pw.cpp` 中集成新策略（替换现有 `run_lambda_loop`）
+  - 新增 INPUT 参数: `sc_mu_init`, `sc_mu_max`, `sc_mu_growth`, `sc_mix_beta`
+  - 参考 zdy-tmp: `lambda_update_strategies.h/cpp` 已迁移，需集成到 SCF 循环
+
 - [ ] **5.1 Batch 3 — DFTU LCAO 核心**
-  - 8 个文件，~1900 行 diff，当前状态未知，需评估是否已在其他 commit 中覆盖
+  - 8 个文件，~1900 行 diff，需评估是否已在其他 commit 中覆盖
 
 - [ ] **5.2 Batch 5 Part 2 — ESolver + ElecState**
   - `esolver_ks_lcao.cpp` 等仍有大量 diff 待迁移
 
 - [ ] **5.3 Batch 6 — LCAO 基础**
   - `hamilt_lcao.cpp`, `FORCE_STRESS.cpp` 等
-
-- [ ] **5.4 lambda_update_strategies 集成到 SCF**
-  - 在 `esolver_ks_lcao.cpp` / `esolver_ks_pw.cpp` 中集成新策略（替换现有 `run_lambda_loop`）
-  - 新增 INPUT 参数: `sc_mu_init`, `sc_mu_max`, `sc_mu_growth`, `sc_mix_beta`
 
 ---
 
@@ -305,6 +304,7 @@ delegation:
 | force/stress develop 重构适配 | P1 | ⏳ | develop 已移除 npol==1 分支，memory API 签名变化大，需作为独立任务处理 |
 | ~~nscf DFTU 逻辑未迁移~~ | ~~P1~~ | ✅ DONE | 已提交 `3195855d7` — esolver/dftu/dftu_occup 3 个文件 |
 | ~~T4: force_op.cu GPU 修复~~ | ~~P1~~ | ✅ DONE | 已验证：dftu-pw-port 已包含 `34f564ef1` 修正（coefficients1*dbb2 + coefficients2*dbb1）|
+| ~~T5: conserve_setting 验证~~ | ~~P1~~ | ✅ DONE | 已提交 `9ab367642` — 补充 mixing_restart_step 排除条件 |
 | 与 zdy-tmp 的数值比对未进行 | P0 | ⏳ | zdy-tmp 无法运行此 case（参数不兼容），改用 develop 基线 |
 | ESolver 与 ElecState 大量 diff 待评估 | P2 | ⏳ | 等 top-7 完成后统一评估 |
 | lambda strategies SCF 集成 | P2 | ⏳ | 需要专门的设计决策 |
@@ -319,7 +319,9 @@ delegation:
 4. ~~【20 分钟】运行集成测试获取基线~~ ✅ DONE (`160_PW_DJ_PK_PU_SO` 通过)
 5. ~~【当前】启动 nscf DFTU 迁移 subagent (T2 + T3)~~ ✅ DONE (`3195855d7`)
 6. ~~force/stress develop 重构适配~~ ✅ 已验证：dftu-pw-port 的 force/stress kernel 已包含 zdy-tmp 34f564ef1 修正
-7. **【剩余待办】** T5: conserve_setting 验证 (a9d881c95)
+7. ~~T5: conserve_setting 验证~~ ✅ DONE (`9ab367642`)
+
+**zdy-tmp top-7 全部迁移完成！**
 
 ---
 

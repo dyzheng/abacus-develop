@@ -155,6 +155,22 @@ void ESolver_KS_LCAO<TK, TR>::before_scf(UnitCell& ucell, const int istep)
         sc.init_sc(PARAM.inp.sc_thr, PARAM.inp.nsc, PARAM.inp.nsc_min, PARAM.inp.alpha_trial,
                    PARAM.inp.sccut, PARAM.inp.sc_drop_thr, ucell, &(this->pv),
                    PARAM.inp.nspin, this->kv, this->p_hamilt, this->psi, this->dmat.dm, this->pelec);
+        // Set lambda update strategy
+        if (PARAM.inp.sc_lambda_strategy == "linear_response")
+        {
+            sc.set_strategy_type(spinconstrain::LambdaStrategyType::LinearResponse);
+        }
+        else if (PARAM.inp.sc_lambda_strategy == "augmented_lagrangian")
+        {
+            sc.set_strategy_type(spinconstrain::LambdaStrategyType::AugmentedLagrangian);
+        }
+        else if (PARAM.inp.sc_lambda_strategy == "hybrid_delayed")
+        {
+            sc.set_strategy_type(spinconstrain::LambdaStrategyType::HybridDelayed);
+        }
+        sc.set_strategy_params(PARAM.inp.sc_mu_init, PARAM.inp.sc_mu_max,
+                               PARAM.inp.sc_mu_growth, PARAM.inp.sc_mix_beta,
+                               PARAM.inp.sc_scf_thr);
     }
 
     // 11) set xc type before the first cal of xc in pelec->init_scf, Peize Lin add 2016-12-03

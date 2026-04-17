@@ -2,8 +2,10 @@
 #define SPIN_CONSTRAIN_H
 
 #include <map>
+#include <memory>
 #include <vector>
 
+#include "lambda_update_strategies.h"
 #include "source_base/constants.h"
 #include "source_base/tool_quit.h"
 #include "source_base/tool_title.h"
@@ -20,6 +22,9 @@
 
 namespace spinconstrain
 {
+
+/// @brief Strategy type for lambda update in spin-constrained DFT
+enum class LambdaStrategyType { BFGS, LinearResponse, AugmentedLagrangian, HybridDelayed };
 
 struct ScAtomData;
 
@@ -227,6 +232,11 @@ public:
                               double alpha_trial_in,
                               double sccut_in,
                               double sc_drop_thr_in);
+    /// set lambda update strategy type
+    void set_strategy_type(LambdaStrategyType type);
+    /// set lambda update strategy parameters
+    void set_strategy_params(double mu_init = 0.1, double mu_max = 10.0, double mu_growth = 1.5,
+                             double mix_beta = 0.3, double sc_scf_thr = 1e-3);
     /// get sc_thr
     double get_sc_thr();
     /// get nsc
@@ -295,6 +305,11 @@ public:
     bool read_target_mag = true;
     /// @brief direction only mode
     bool direction_only_ = false;
+
+    /// @brief lambda update strategy type
+    LambdaStrategyType strategy_type_ = LambdaStrategyType::BFGS;
+    /// @brief lambda update strategy instance
+    std::unique_ptr<LambdaUpdateStrategy> strategy_;
 
     TK* sub_h_save = nullptr;
     TK* sub_s_save = nullptr;
