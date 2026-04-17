@@ -118,7 +118,7 @@ class Plus_U
 			const void* psi_in, 
 			const ModuleBase::matrix& wg_in, 
 			const UnitCell& cell, 
-			const double& mixing_beta);
+			Charge_Mixing* p_chgmix);
 
     /// calculate the local DFT+U effective potential matrix for PW base.
     void cal_VU_pot_pw(const int spin);

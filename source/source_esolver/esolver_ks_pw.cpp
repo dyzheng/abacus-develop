@@ -187,7 +187,7 @@ void ESolver_KS_PW<T, Device>::iter_init(UnitCell& ucell, const int istep, const
         // new DFT+U method will calculate energy when evaluating the Hamiltonian
         if (this->dftu.omc != 2)
         {
-            this->dftu.cal_occ_pw(iter, this->stp.psi_t, this->pelec->wg, ucell, PARAM.inp.mixing_beta);
+            this->dftu.cal_occ_pw(iter, this->stp.psi_t, this->pelec->wg, ucell, this->p_chgmix);
         }
         this->dftu.output(ucell);
     }
@@ -352,6 +352,7 @@ void ESolver_KS_PW<T, Device>::iter_finish(UnitCell& ucell, const int istep, int
                 if (PARAM.inp.dft_plus_u && !this->dftu.mixing_dftu)
                 {
                     // set mixing_dftu true to mix occupation in next iteration
+                    this->p_chgmix->allocate_mixing_uom(this->dftu.get_size_eff_pot_pw());
                     this->dftu.mixing_dftu = 1;
                     this->p_chgmix->conserve_setting();
                 }

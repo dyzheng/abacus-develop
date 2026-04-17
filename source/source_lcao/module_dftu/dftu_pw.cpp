@@ -1,4 +1,5 @@
 #include "dftu.h"
+#include "source_estate/module_charge/charge_mixing.h"
 #include "source_pw/module_pwdft/onsite_projector.h"
 #include "source_base/parallel_reduce.h"
 #include "source_io/module_parameter/parameter.h"
@@ -10,7 +11,7 @@ void Plus_U::cal_occ_pw(const int iter,
 		const void* psi_in,
 		const ModuleBase::matrix& wg_in,
 		const UnitCell& cell,
-		const double& mixing_beta)
+		Charge_Mixing* p_chgmix)
 {
     ModuleBase::timer::tick("Plus_U", "cal_occ_pw");
     this->copy_locale(cell);
@@ -251,9 +252,10 @@ void Plus_U::cal_occ_pw(const int iter,
         }
     }
 
-    if(mixing_dftu && initialed_locale)
+    if(mixing_dftu && p_chgmix != nullptr)
     {
-        this->mix_locale(cell, mixing_beta);
+        p_chgmix->mix_uom(this->uom_array, this->uom_save);
+        this->set_locale(cell);
     }
 
     Plus_U::energy_u = 0.0;

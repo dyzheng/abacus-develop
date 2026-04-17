@@ -257,3 +257,29 @@ bool Charge_Mixing::if_scf_oscillate(const int iteration, const double drho, con
 
     return false;
 }
+
+void Charge_Mixing::allocate_mixing_uom(int uom_size)
+{
+    ModuleBase::TITLE("Charge_Mixing", "allocate_mixing_uom");
+    ModuleBase::timer::tick("Charge_Mixing", "allocate_mixing_uom");
+    const int uom_fold = (PARAM.inp.nspin == 2) ? 2 : 1;
+    this->mixing->init_mixing_data(this->uom_mdata, uom_size * uom_fold, sizeof(double));
+    this->uom_mdata.reset();
+    ModuleBase::timer::tick("Charge_Mixing", "allocate_mixing_uom");
+    return;
+}
+
+void Charge_Mixing::mix_uom(std::vector<double>& uom_in, std::vector<double>& uom_save_in)
+{
+    ModuleBase::TITLE("Charge_Mixing", "mix_uom");
+    ModuleBase::timer::tick("Charge_Mixing", "mix_uom");
+    double* uom_value_out = uom_in.data();
+    double* uom_value_in = uom_save_in.data();
+    if (PARAM.inp.nspin == 1 || PARAM.inp.nspin == 4)
+    {
+        this->mixing->push_data(this->uom_mdata, uom_value_in, uom_value_out, nullptr, false);
+        this->mixing->mix_data(this->uom_mdata, uom_value_out);
+    }
+    ModuleBase::timer::tick("Charge_Mixing", "mix_uom");
+    return;
+}
