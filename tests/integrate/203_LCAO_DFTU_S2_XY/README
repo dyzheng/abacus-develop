@@ -1,0 +1,11 @@
+# Test 203_LCAO_DFTU_S2_XY
+
+**Configuration**:
+- Basis: LCAO
+- DFT+U: ON (U=5.0 eV, l=2)
+- DeltaSpin: OFF
+- nspin: 2
+- Mag direction: xy
+- K-points: 2x2x2
+
+**Run**: cd /root/abacus-dftu-pw-port/tests/integrate/203_LCAO_DFTU_S2_XY && mpirun -n 1 --allow-run-as-root <abacus_2p>

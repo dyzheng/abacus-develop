@@ -1,0 +1,17 @@
+# Test 250: PW_DS_S2_Z
+
+**Purpose**: PW DeltaSpin + collinear AFM z-axis
+
+**Configuration**:
+- Basis: PW
+- DFT+U: OFF
+- DeltaSpin: ON
+- nspin: 2 (collinear)
+- Mag direction: z
+- K-points: Gamma-only if no DFT+U/DS, 2x2x2 otherwise
+
+**Expected**: SCF convergence, reasonable magnetic moments
+
+**Priority**: P0
+
+**zdy-tmp reference**: To be established

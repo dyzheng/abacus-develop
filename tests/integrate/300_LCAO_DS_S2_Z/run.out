@@ -1,0 +1,73 @@
+                                                                                     
+                              ABACUS v3.9.0.24
+
+               Atomic-orbital Based Ab-initio Computation at UStc                    
+
+                     Website: http://abacus.ustc.edu.cn/                             
+               Documentation: https://abacus.deepmodeling.com/                       
+                  Repository: https://github.com/abacusmodeling/abacus-develop       
+                              https://github.com/deepmodeling/abacus-develop         
+                      Commit: 92e06a1a1 (Fri Apr 17 23:07:59 2026 +0800)
+
+ Sat Apr 18 10:56:03 2026
+Info: Local MPI proc number: 1,OpenMP thread number: 2,Total thread number: 2,Local thread limit: 20
+ MAKE THE DIR         : OUT.autotest/
+ RUNNING WITH DEVICE  : CPU / 12th Gen Intel(R) Core(TM) i7-12700KF (x1)
+ WARNING: some of potential function is set to zero cause of less than 1e-30.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+ Warning: the number of valence electrons in pseudopotential > 8 for Fe: [Ar] 3d6 4s2
+ Pseudopotentials with additional electrons can yield (more) accurate outcomes, but may be less efficient.
+ If you're confident that your chosen pseudopotential is appropriate, you can safely ignore this warning.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+ UNIFORM GRID DIM     : 64 * 64 * 64
+ UNIFORM GRID DIM(BIG): 16 * 16 * 16
+ DONE(0.0375735  SEC) : SETUP UNITCELL
+ DONE(0.0377219  SEC) : INIT K-POINTS
+ ---------------------------------------------------------
+ Self-consistent calculations for electrons
+ ---------------------------------------------------------
+ SPIN    KPOINTS         PROCESSORS  THREADS     NBASE       
+ 2       8               1           2           54          
+ ---------------------------------------------------------
+ Use Systematically Improvable Atomic bases
+ ---------------------------------------------------------
+ ELEMENT ORBITALS        NBASE       NATOM       XC          
+ Fe      4s2p2d1f-6au    27          2           
+ ---------------------------------------------------------
+ Initial plane wave basis and FFT box
+ ---------------------------------------------------------
+ DONE(0.0445661  SEC) : INIT PLANEWAVE
+ START CHARGE      : atomic
+ DONE(0.116372   SEC) : CHARGE
+ DONE(0.123173   SEC) : POTENTIALS
+
+ ================================================================
+ SELF-CONSISTENT: 
+ ================================================================
+ DONE(0.235109   SEC) : INIT SCF
+[zdy:967386] *** Process received signal ***
+[zdy:967386] Signal: Segmentation fault (11)
+[zdy:967386] Signal code: Address not mapped (1)
+[zdy:967386] Failing at address: 0x18
+[zdy:967386] [ 0] /lib/x86_64-linux-gnu/libpthread.so.0(+0x14420)[0x71856c05c420]
+[zdy:967386] [ 1] /root/abacus-dftu-pw-port/build/abacus_2p(+0x485fb4)[0x574f9cc44fb4]
+[zdy:967386] [ 2] /root/abacus-dftu-pw-port/build/abacus_2p(+0x62fb37)[0x574f9cdeeb37]
+[zdy:967386] [ 3] /root/abacus-dftu-pw-port/build/abacus_2p(+0x599114)[0x574f9cd58114]
+[zdy:967386] [ 4] /root/abacus-dftu-pw-port/build/abacus_2p(+0x570661)[0x574f9cd2f661]
+[zdy:967386] [ 5] /root/abacus-dftu-pw-port/build/abacus_2p(+0x3ad795)[0x574f9cb6c795]
+[zdy:967386] [ 6] /root/abacus-dftu-pw-port/build/abacus_2p(+0x3cb900)[0x574f9cb8a900]
+[zdy:967386] [ 7] /root/abacus-dftu-pw-port/build/abacus_2p(+0x3cae16)[0x574f9cb89e16]
+[zdy:967386] [ 8] /root/abacus-dftu-pw-port/build/abacus_2p(+0x3cafa7)[0x574f9cb89fa7]
+[zdy:967386] [ 9] /root/abacus-dftu-pw-port/build/abacus_2p(+0xad223)[0x574f9c86c223]
+[zdy:967386] [10] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0xf3)[0x718569050083]
+[zdy:967386] [11] /root/abacus-dftu-pw-port/build/abacus_2p(+0xad0be)[0x574f9c86c0be]
+[zdy:967386] *** End of error message ***
+--------------------------------------------------------------------------
+Primary job  terminated normally, but 1 process returned
+a non-zero exit code. Per user-direction, the job has been aborted.
+--------------------------------------------------------------------------
+--------------------------------------------------------------------------
+mpirun noticed that process rank 0 with PID 0 on node zdy exited on signal 11 (Segmentation fault).
+--------------------------------------------------------------------------

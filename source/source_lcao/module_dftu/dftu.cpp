@@ -89,6 +89,10 @@ void Plus_U::init(UnitCell& cell, // unitcell class
     // it:index of type of atom
     for (int it = 0; it < cell.ntype; ++it)
     {
+        if(this->orbital_corr[it] == -1)
+        {
+            continue;
+        }
         for (int ia = 0; ia < cell.atoms[it].na; ia++)
         {
             // ia:index of atoms of this type

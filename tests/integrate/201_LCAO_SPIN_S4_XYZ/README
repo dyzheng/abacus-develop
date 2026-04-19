@@ -1,0 +1,11 @@
+# Test 201: LCAO_SPIN_S4_XYZ
+
+**Configuration**:
+- Basis: LCAO
+- DFT+U: OFF
+- DeltaSpin: OFF
+- nspin: 4 (noncollinear)
+- Mag direction: xyz
+- K-points: Gamma-only
+
+**Run**: cd tests/integrate/201_LCAO_SPIN_S4_XYZ && mpirun -n 1 --allow-run-as-root <abacus_2p>

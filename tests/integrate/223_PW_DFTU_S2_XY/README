@@ -1,0 +1,17 @@
+# Test 223: PW_DFTU_S2_XY
+
+**Purpose**: PW DFT+U + collinear magmom along xy
+
+**Configuration**:
+- Basis: PW
+- DFT+U: ON (U=5.0 eV, l=2)
+- DeltaSpin: OFF
+- nspin: 2 (collinear)
+- Mag direction: xy
+- K-points: Gamma-only if no DFT+U/DS, 2x2x2 otherwise
+
+**Expected**: SCF convergence, reasonable magnetic moments
+
+**Priority**: P0
+
+**zdy-tmp reference**: Available

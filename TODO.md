@@ -284,49 +284,55 @@ bash Autotest.sh -a ../../build/abacus -n 4 -r "201_NO_.*"
 | 53_NO_PK_URAMP | DFT+U | 2 | z+URamp | LCAO | ✗ | ✅ |
 | 146_NO_GO_PU_AF | DFT+U | 2 | AFM(z) | LCAO | ✗ | ✅ |
 
-#### 6.2 缺失测试（P0 — 必须补充）
+#### 6.2 完整测试矩阵（34 个测试）
 
-| ID | 功能 | nspin | 磁矩 | 基组 | SOC | 状态 |
-|----|------|-------|------|------|-----|------|
-| T01 | DFT+U | 4 | xyz | PW | ✗ | ⚠️ 创建中 |
-| T02 | DeltaSpin | 2 | z | PW | ✗ | ❌ BLOCKED |
-| T03 | DeltaSpin | 4 | xyz | PW | ✗ | ❌ BLOCKED |
-| T04 | DFT+U+DS | 2 | z | PW | ✗ | ❌ BLOCKED |
-| T05 | DFT+U+DS | 4 | xyz | PW | ✓ | ❌ BLOCKED |
-| T06 | DeltaSpin | 2 | z | LCAO | ✗ | ❌ BLOCKED |
-| T07 | DFT+U+DS | 2 | z | LCAO | ✗ | ❌ BLOCKED |
-| T08 | DFT+U+DS | 4 | xyz | LCAO | ✓ | ❌ BLOCKED |
+> 完整文档: `TEST_STATUS.md`
 
-#### 6.3 PW DFTU 调试状态 🔧 IN PROGRESS
+| 组别 | ID 范围 | 功能 | Basis | nspin | MagDir | 数量 | 状态 |
+|------|---------|------|-------|-------|--------|------|------|
+| A 自旋基准 | 200, 220 | 无 U 无 DS | LCAO/PW | 2 | z | 2 | ⏳ |
+| B DFT+U | 202-204, 222-224 | DFT+U | LCAO/PW | 2/4 | z/xy/xyz | 6 | ⏳ |
+| C DeltaSpin | 250-255, 300-305 | DeltaSpin | PW/LCAO | 2/4 | z/xy/xyz | 12 | 🔴 BLOCKED |
+| D DFT+U+DS | 260-265, 310-315 | DFT+U+DS | PW/LCAO | 2/4 | z/xy/xyz | 12 | 🔴 BLOCKED |
+| **总计** | | | | | | **34** | **22 P0 + 12 P1** |
 
-**问题**: 所有 PW DFTU 集成测试 (815/816/099/160) 在 SCF 第 2 步崩溃
+**阻塞原因**: GROUP C/D 全部 24 个测试被 P0 堆内存损坏阻塞（`diago_dav_subspace.cpp:92`）。
 
-**发现 1 — nspin=2 vu_device sync 偏移 bug** ✅ FIXED (`9642f93fe`)
-- 根因: `op_pw_proj.cpp:282-292` 中 nspin=2 时 vu_device 只 sync 半量数组，但 vu_begin_iat 偏移基于全量计算
-- 修复: 匹配 zdy-tmp 参考实现 — 只对 spin-down (isk==1) sync 半量，spin-up 用全量
-- 对比 zdy-tmp: `onsite_proj_pw.cpp:266-274`
+#### 6.3 PW DFTU/DeltaSpin 调试状态 🔧 IN PROGRESS
 
-**发现 2 — 更深层 PW DFTU 崩溃** ❌ 未修复
-- 即使修复 nspin=2 bug 后，**所有 nspin 值仍然崩溃**:
-  - **nspin=2 (815)**: DS1 正常 (-5835 eV)，DS2 能量爆炸 (1e+34) → bpcg_kernel_op assert 失败
-  - **nspin=1 (816)**: DS1 正常，DS2 立即段错误 (NULL pointer, address 0x0)
-  - **nspin=4 (099/160)**: 同样崩溃
-- 崩溃调用栈: `diago_dav_subspace.cpp:443` → `hpsi_func()` → `onsite_op.cpp` → segfault
-- LCAO DFTU 不受影响（使用 ScaLAPACK 直接对角化，非迭代 Davidson）
+**问题**: 所有 PW DeltaSpin 集成测试 (250-253) 崩溃
 
-**可能根因**:
-1. PW Hamiltonian 中 OnsiteProj 算子在 SCF 第 2 步未正确更新
-2. `cal_VU_pot_pw()` 是空函数 — eff_pot_pw 从未从 occupation matrix 更新
-3. mixing 后 locale 数据损坏传递给下一轮迭代
-4. OnsiteProj 内部状态在多次 init() 调用间被破坏
+**最新崩溃（2026-04-18 09:00）**:
+- `mpirun -n 1 abacus_2p` 在 test 250 (PW+DeltaSpin nspin=2) 崩溃
+- 错误: `corrupted size vs. prev_size` — glibc 堆内存损坏（不是 assert 失败）
+- `addr2line`: `diago_dav_subspace.cpp:92` — 析构函数 `delmem_complex_op()(this->hpsi)` 释放时崩溃
+- 触发点: ik=7 (最后一个 k 点) 的 `dav_subspace.diag` **之后**
+- 根因假设: PW Hamiltonian 在 DeltaSpin 扰动下写入越界，破坏了堆元数据
 
-**下一步**: 需要对比 zdy-tmp 的 PW esolver SCF 流程，确认 DFTU 有效势更新链路是否完整
+**Davidson 与 bpcg_kernel_op 关系确认**:
+- `diago_dav_subspace.cpp:cal_grad()` 第 434 行调用 `normalize_op<T,Device>()`
+- `normalize_op` 定义在 `bpcg_kernel_op.cpp:153-183`（BPCG 和 Davidson 共享内核）
+- 第 170 行 `assert(psi_m_norm > 0.0)` 会在波函数范数为零时触发
+- **结论**: Davidson 确实调用 bpcg_kernel_op 的 normalize_op，这是共享设计非 bug
+
+**LCAO 测试集**:
+- 240-243 已创建（LCAO + DeltaSpin ± DFT+U, nspin=2/4）
+- 阻塞原因同 250（共享 Davidson 求解器路径）
+
+**不受影响的测试**:
+- 815 (PW DFT+U nspin=2) ✅ PASS（无 DeltaSpin）
+- 54/55/56 (LCAO DFT+U) ✅ PASS（ScaLAPACK 对角化，不走 Davidson）
 
 #### 6.4 下一步
 
-- [ ] 修复深层 PW DFTU 崩溃（eff_pot_pw 更新链路调查）
-- [ ] 修复后运行全部 PW DFTU 集成测试
-- [ ] 补充 PW DFT+U non-collinear (no SOC) 测试 case
+- [ ] **定位堆内存损坏根因** — 这是阻塞 240-253 所有测试的 P0 问题
+  - 在 `dav_subspace.diag` 内部添加内存检查点（malloc hook 或 Valgrind/ASan）
+  - 检查 `hpsi` 写入是否越界（PW Hamiltonian 作用于波函数时）
+  - 重点检查 DeltaSpin 的 `hamilt_pw` 是否正确处理了 PW 基矢大小
+- [ ] 修复后运行 250 (PW DeltaSpin nspin=2) 验证
+- [ ] 运行 251-253 (nspin=4, +DFT+U) 验证
+- [ ] 运行 240-243 (LCAO) 验证
+- [ ] 补充 PW DeltaSpin 不同磁矩方向测试
 
 ---
 
@@ -373,7 +379,9 @@ delegation:
 | ~~nscf DFTU 逻辑未迁移~~ | ~~P1~~ | ✅ DONE | 已提交 `3195855d7` — esolver/dftu/dftu_occup 3 个文件 |
 | ~~T4: force_op.cu GPU 修复~~ | ~~P1~~ | ✅ DONE | 已验证：dftu-pw-port 已包含 `34f564ef1` 修正（coefficients1*dbb2 + coefficients2*dbb1）|
 | ~~T5: conserve_setting 验证~~ | ~~P1~~ | ✅ DONE | 已提交 `9ab367642` — 补充 mixing_restart_step 排除条件 |
-| PW DFTU SCF 崩溃（nspin=1/2/4）| P0 | 🔧 | eff_pot_pw 更新链路调查 — `cal_VU_pot_pw` 是空函数 |
+| PW DeltaSpin 堆内存损坏 (240-253) | P0 | 🔧 | `diago_dav_subspace.cpp:92` 析构崩溃，ik=7 后触发 |
+| 测试 250 INPUT 修正 | P1 | ✅ DONE | 补充 `sc_mag_switch` 等 DeltaSpin 参数 |
+| LCAO DeltaSpin 测试 240-243 | P1 | ✅ DONE | 已创建 INPUT/STRU/KPT，等待修复后运行 |
 | ESolver 与 ElecState 大量 diff 待评估 | P2 | ⏳ | 等 top-7 完成后统一评估 |
 | lambda strategies SCF 集成 | P2 | ⏳ | 需要专门的设计决策 |
 

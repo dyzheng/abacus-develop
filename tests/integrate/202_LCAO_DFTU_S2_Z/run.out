@@ -1,0 +1,102 @@
+Info: Local MPI proc number:                                                                                      
+                              ABACUS v3.9.0.24
+
+               Atomic-orbital Based Ab-initio Computation at UStc                    
+
+                     Website: http://abacus.ustc.edu.cn/                             
+               Documentation: https://abacus.deepmodeling.com/                       
+                  Repository: https://github.com/abacusmodeling/abacus-develop       
+                              https://github.com/deepmodeling/abacus-develop         
+                      Commit: 92e06a1a1 (Fri Apr 17 23:07:59 2026 +0800)
+
+1,OpenMP thread number: 2,Total thread number: 2,Local thread limit: 20
+ Sat Apr 18 10:49:40 2026
+ MAKE THE DIR         : OUT.autotest/
+ RUNNING WITH DEVICE  : CPU / 12th Gen Intel(R) Core(TM) i7-12700KF (x1)
+ WARNING: some of potential function is set to zero cause of less than 1e-30.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+ Warning: the number of valence electrons in pseudopotential > 8 for Fe: [Ar] 3d6 4s2
+ Pseudopotentials with additional electrons can yield (more) accurate outcomes, but may be less efficient.
+ If you're confident that your chosen pseudopotential is appropriate, you can safely ignore this warning.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+ UNIFORM GRID DIM     : 64 * 64 * 64
+ UNIFORM GRID DIM(BIG): 16 * 16 * 16
+ DONE(0.0402218  SEC) : SETUP UNITCELL
+ DONE(0.0403631  SEC) : INIT K-POINTS
+ ---------------------------------------------------------
+ Self-consistent calculations for electrons
+ ---------------------------------------------------------
+ SPIN    KPOINTS         PROCESSORS  THREADS     NBASE       
+ 2       8               1           2           54          
+ ---------------------------------------------------------
+ Use Systematically Improvable Atomic bases
+ ---------------------------------------------------------
+ ELEMENT ORBITALS        NBASE       NATOM       XC          
+ Fe      4s2p2d1f-6au    27          2           
+ ---------------------------------------------------------
+ Initial plane wave basis and FFT box
+ ---------------------------------------------------------
+ DONE(0.0471253  SEC) : INIT PLANEWAVE
+ START CHARGE      : atomic
+ DONE(0.11776    SEC) : CHARGE
+ DONE(0.123502   SEC) : POTENTIALS
+
+ ================================================================
+ SELF-CONSISTENT: 
+ ================================================================
+ DONE(0.229123   SEC) : INIT SCF
+ ITER      TMAG       AMAG        ETOT/eV          EDIFF/eV         DRHO     TIME/s
+ GE1      1.18e-05   4.28e+00  -6.77270216e+03   0.00000000e+00   6.1978e-02   1.64
+ GE2      1.54e-04   5.83e+00  -6.76569503e+03   7.00712862e+00   5.6361e-02   1.59
+ GE3      1.96e-05   6.66e+00  -6.76680648e+03  -1.11145427e+00   5.2186e-02   1.52
+ GE4      1.80e-07   6.72e+00  -6.76723686e+03  -4.30375403e-01   5.4370e-02   1.57
+ GE5      1.98e-07   6.98e+00  -6.76742483e+03  -1.87969395e-01   3.6033e-02   1.49
+ GE6      2.07e-07   7.15e+00  -6.76719468e+03   2.30151095e-01   3.1787e-02   1.60
+ GE7      1.87e-07   6.91e+00  -6.76740718e+03  -2.12502976e-01   4.9969e-02   1.56
+ GE8      1.90e-07   6.97e+00  -6.76745371e+03  -4.65267567e-02   4.0626e-02   1.57
+ GE9      1.90e-07   6.98e+00  -6.76759062e+03  -1.36913783e-01   4.4276e-02   1.53
+ GE10     1.92e-07   7.04e+00  -6.76746385e+03   1.26769946e-01   4.8360e-02   1.59
+ GE11     1.94e-07   7.03e+00  -6.76731034e+03   1.53512233e-01   3.9780e-02   1.49
+ GE12     2.02e-07   7.04e+00  -6.76730348e+03   6.85702970e-03   1.4877e-02   1.50
+ GE13     2.07e-07   7.05e+00  -6.76731861e+03  -1.51263516e-02   7.9224e-04   1.58
+ GE14     2.09e-07   7.05e+00  -6.76732003e+03  -1.42006606e-03   3.8579e-04   1.54
+ GE15     2.09e-07   7.06e+00  -6.76732008e+03  -5.03262726e-05   3.0790e-04   1.49
+ GE16     2.09e-07   7.06e+00  -6.76732009e+03  -9.78805079e-06   1.5954e-04   1.57
+ GE17     2.09e-07   7.06e+00  -6.76732009e+03  -2.14766363e-06   8.0441e-05   1.49
+ GE18     2.09e-07   7.06e+00  -6.76732009e+03  -1.95788657e-07   5.1985e-05   1.52
+ GE19     2.09e-07   7.06e+00  -6.76732009e+03  -5.57710163e-08   1.3484e-05   1.48
+ GE20     2.09e-07   7.06e+00  -6.76732009e+03  -2.66047670e-08   7.8677e-06   1.55
+ GE21     2.09e-07   7.06e+00  -6.76732009e+03  -4.91260117e-09   3.9039e-06   1.56
+ GE22     2.09e-07   7.06e+00  -6.76732009e+03  -2.49806388e-10   1.1493e-06   1.46
+ GE23     2.09e-07   7.06e+00  -6.76732009e+03  -1.91801809e-10   4.1263e-07   1.56
+
+TIME STATISTICS
+----------------------------------------------------------
+  CLASS_NAME       NAME     TIME/s  CALLS   AVG/s  PER/%  
+----------------------------------------------------------
+               total        35.68  13       2.74   100.00 
+ Driver        atomic_world 35.68  1        35.68  100.00 
+ Relax_Driver  relax_driver 35.56  1        35.56  99.64  
+ ESolver_KS    runner       35.56  1        35.56  99.64  
+ Potential     cal_veff     1.74   24       0.07   4.89   
+ PotXC         cal_veff     1.64   24       0.07   4.59   
+ XC_Functional v_xc         1.63   24       0.07   4.55   
+ HSolverLCAO   solve        33.28  23       1.45   93.26  
+ HamiltLCAO    updateHk     20.04  184      0.11   56.15  
+ OperatorLCAO  init         19.41  736      0.03   54.39  
+ Veff          contributeHR 19.36  46       0.42   54.25  
+ Gint          cal_gint_vl  19.36  46       0.42   54.25  
+ LCAO_domain   dm2rho       13.05  23       0.57   36.56  
+ Gint          cal_gint_rho 13.01  23       0.57   36.47  
+ Charge_Mixing mix_rho      0.39   22       0.02   1.09   
+ Charge_Mixing mix_rho_real 0.37   22       0.02   1.03   
+ DFTU          contributeHR 0.59   44       0.01   1.64   
+----------------------------------------------------------
+
+
+ START  Time  : Sat Apr 18 10:49:40 2026
+ FINISH Time  : Sat Apr 18 10:50:15 2026
+ TOTAL  Time  : 35
+ SEE INFORMATION IN : OUT.autotest/

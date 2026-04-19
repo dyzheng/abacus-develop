@@ -1,0 +1,102 @@
+Info: Local MPI proc number: 1,OpenMP thread number:                                                                                      
+                              ABACUS v3.9.0.24
+
+               Atomic-orbital Based Ab-initio Computation at UStc                    
+
+                     Website: http://abacus.ustc.edu.cn/                             
+               Documentation: https://abacus.deepmodeling.com/                       
+                  Repository: https://github.com/abacusmodeling/abacus-develop       
+                              https://github.com/deepmodeling/abacus-develop         
+                      Commit: 92e06a1a1 (Fri Apr 17 23:07:59 2026 +0800)
+
+ Sat Apr 18 10:50:31 2026
+2,Total thread number: 2,Local thread limit: 20
+ MAKE THE DIR         : OUT.autotest/
+ RUNNING WITH DEVICE  : CPU / 12th Gen Intel(R) Core(TM) i7-12700KF (x1)
+ WARNING: some of potential function is set to zero cause of less than 1e-30.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+ Warning: the number of valence electrons in pseudopotential > 8 for Fe: [Ar] 3d6 4s2
+ Pseudopotentials with additional electrons can yield (more) accurate outcomes, but may be less efficient.
+ If you're confident that your chosen pseudopotential is appropriate, you can safely ignore this warning.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+ UNIFORM GRID DIM     : 64 * 64 * 64
+ UNIFORM GRID DIM(BIG): 16 * 16 * 16
+ DONE(0.0520743  SEC) : SETUP UNITCELL
+ DONE(0.0526654  SEC) : INIT K-POINTS
+ ---------------------------------------------------------
+ Self-consistent calculations for electrons
+ ---------------------------------------------------------
+ SPIN    KPOINTS         PROCESSORS  THREADS     NBASE       
+ 4       4               1           2           108         
+ ---------------------------------------------------------
+ Use Systematically Improvable Atomic bases
+ ---------------------------------------------------------
+ ELEMENT ORBITALS        NBASE       NATOM       XC          
+ Fe      4s2p2d1f-6au    27          2           
+ ---------------------------------------------------------
+ Initial plane wave basis and FFT box
+ ---------------------------------------------------------
+ DONE(0.0658408  SEC) : INIT PLANEWAVE
+ START CHARGE      : atomic
+ DONE(0.143741   SEC) : CHARGE
+ DONE(0.15548    SEC) : POTENTIALS
+
+ ================================================================
+ SELF-CONSISTENT: 
+ ================================================================
+ DONE(0.289382   SEC) : INIT SCF
+ ITER     TMAGX      TMAGY      TMAGZ       AMAG        ETOT/eV          EDIFF/eV         DRHO     TIME/s
+ GE1      6.80e-06   6.80e-06   6.80e-06   4.28e+00  -6.77270262e+03   0.00000000e+00   1.1259e-01   2.87
+ GE2      8.86e-05   8.86e-05   8.86e-05   5.83e+00  -6.76569715e+03   7.00547123e+00   1.1166e-01   2.78
+ GE3      1.04e-05   1.04e-05   1.04e-05   6.66e+00  -6.76681098e+03  -1.11382726e+00   9.8140e-02   2.79
+ GE4      1.04e-07   1.04e-07   1.04e-07   6.72e+00  -6.76723617e+03  -4.25192286e-01   1.0196e-01   2.81
+ GE5      1.14e-07   1.14e-07   1.14e-07   6.98e+00  -6.76742342e+03  -1.87252317e-01   7.8692e-02   2.81
+ GE6      1.20e-07   1.20e-07   1.20e-07   7.15e+00  -6.76719409e+03   2.29332490e-01   6.5227e-02   2.85
+ GE7      1.08e-07   1.08e-07   1.08e-07   6.91e+00  -6.76740836e+03  -2.14273269e-01   9.9227e-02   2.86
+ GE8      1.10e-07   1.10e-07   1.10e-07   6.96e+00  -6.76745553e+03  -4.71673895e-02   8.6789e-02   2.81
+ GE9      1.10e-07   1.10e-07   1.10e-07   6.98e+00  -6.76760586e+03  -1.50335311e-01   9.5343e-02   2.85
+ GE10     1.10e-07   1.11e-07   1.11e-07   7.03e+00  -6.76746037e+03   1.45494809e-01   1.0932e-01   2.80
+ GE11     1.12e-07   1.12e-07   1.12e-07   7.02e+00  -6.76729118e+03   1.69188135e-01   8.5811e-02   2.79
+ GE12     1.17e-07   1.14e-07   1.20e-07   7.04e+00  -6.76730750e+03  -1.63176732e-02   2.4983e-02   2.84
+ GE13     1.18e-07   1.21e-07   1.20e-07   7.05e+00  -6.76731895e+03  -1.14549733e-02   1.4766e-03   2.79
+ GE14     1.18e-07   1.26e-07   1.17e-07   7.05e+00  -6.76732003e+03  -1.08067770e-03   5.8756e-04   2.76
+ GE15     1.27e-07   1.33e-07   1.02e-07   7.06e+00  -6.76732008e+03  -4.25022886e-05   5.6066e-04   2.78
+ GE16     1.25e-07   1.30e-07   1.07e-07   7.06e+00  -6.76732009e+03  -1.26655102e-05   2.9539e-04   2.79
+ GE17     1.34e-07   1.12e-07   1.15e-07   7.06e+00  -6.76732009e+03  -1.68261230e-06   5.3736e-05   2.80
+ GE18     1.21e-07   9.54e-08   1.45e-07   7.06e+00  -6.76732009e+03  -5.54307227e-08   2.4247e-05   2.80
+ GE19    -1.46e-07   1.60e-07   3.48e-07   7.06e+00  -6.76732009e+03  -7.46557605e-09   8.4602e-06   2.81
+ GE20     1.37e-06  -3.28e-07  -6.79e-07   7.06e+00  -6.76732009e+03  -6.92187979e-10   2.6773e-06   2.79
+ GE21    -3.08e-06   1.26e-06   2.18e-06   7.06e+00  -6.76732009e+03   1.13534296e-09   2.3278e-06   2.75
+ GE22    -1.72e-06   4.89e-07   1.59e-06   7.06e+00  -6.76732009e+03  -6.36503583e-10   1.3131e-06   2.82
+ GE23    -8.56e-07  -3.61e-07   1.58e-06   7.06e+00  -6.76732009e+03  -1.66279794e-10   9.6727e-07   2.87
+
+TIME STATISTICS
+----------------------------------------------------------
+  CLASS_NAME       NAME     TIME/s  CALLS   AVG/s  PER/%  
+----------------------------------------------------------
+               total        64.92  13       4.99   100.00 
+ Driver        atomic_world 64.92  1        64.92  100.00 
+ Relax_Driver  relax_driver 64.76  1        64.76  99.75  
+ ESolver_KS    runner       64.76  1        64.76  99.75  
+ Potential     cal_veff     2.15   24       0.09   3.31   
+ PotXC         cal_veff     2.00   24       0.08   3.07   
+ XC_Functional v_xc         1.97   24       0.08   3.04   
+ HSolverLCAO   solve        61.58  23       2.68   94.85  
+ HamiltLCAO    updateHk     36.18  92       0.39   55.73  
+ OperatorLCAO  init         35.00  368      0.10   53.92  
+ Veff          contributeHR 34.93  23       1.52   53.81  
+ Gint          cal_gint_vl  34.93  23       1.52   53.81  
+ LCAO_domain   dm2rho       25.04  23       1.09   38.58  
+ Gint          cal_gint_rho 24.99  23       1.09   38.49  
+ Charge_Mixing mix_rho      0.78   22       0.04   1.20   
+ Charge_Mixing mix_rho_real 0.72   22       0.03   1.12   
+ DFTU          contributeHR 1.10   22       0.05   1.69   
+----------------------------------------------------------
+
+
+ START  Time  : Sat Apr 18 10:50:31 2026
+ FINISH Time  : Sat Apr 18 10:51:36 2026
+ TOTAL  Time  : 65
+ SEE INFORMATION IN : OUT.autotest/

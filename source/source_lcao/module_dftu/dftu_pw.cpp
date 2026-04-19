@@ -20,6 +20,16 @@ void Plus_U::cal_occ_pw(const int iter,
     {
     this->zero_locale(cell);
 
+    // DIAGNOSTIC [N4]: state right after zero_locale
+    std::cout << "[DIAG-PW] cal_occ_pw iter=" << iter << " right after zero_locale:" << std::endl;
+    std::cout << "[DIAG-PW]   uom_array.size=" << this->uom_array.size()
+              << " eff_pot_pw.size=" << this->eff_pot_pw.size() << std::endl;
+    if (this->uom_array.size() > 0) {
+        std::cout << "[DIAG-PW]   uom_array[0..9]=";
+        for(int i=0;i<10 && i<(int)this->uom_array.size();i++) std::cout << " " << this->uom_array[i];
+        std::cout << std::endl;
+    }
+
     if(PARAM.inp.device == "cpu")
     {
         auto* onsite_p = projectors::OnsiteProjector<double, base_device::DEVICE_CPU>::get_instance();
@@ -36,11 +46,23 @@ void Plus_U::cal_occ_pw(const int iter,
             psi_p->fix_k(ik);
             onsite_p->tabulate_atomic(ik);
 
+            // DIAGNOSTIC: print psi pointer and psi values BEFORE overlap_proj_psi
+            const std::complex<double>* psi_ptr_before = psi_p->get_pointer();
+            std::cout << "[PSI-BEFORE] pw-port ik=" << ik << " psi_ptr=" << psi_ptr_before << " nbands=" << nbands << " npol=" << psi_p->get_npol() << std::endl;
+            std::cout << "[PSI-BEFORE] pw-port ik=" << ik << " psi[0..9]=";
+            for(int i=0;i<10;i++) std::cout << " (" << psi_ptr_before[i].real() << "," << psi_ptr_before[i].imag() << ")";
+            std::cout << std::endl;
+
             onsite_p->overlap_proj_psi(nbands*psi_p->get_npol(), psi_p->get_pointer());
             const std::complex<double>* becp = onsite_p->get_h_becp();
             // becp(nbands*npol , nkb)
             // mag = wg * \sum_{nh}becp * becp
             int nkb = onsite_p->get_size_becp() / nbands / psi_p->get_npol();
+            std::cout << "[BECP] pw-port ik=" << ik << " becp_ptr=" << becp << " nkb=" << nkb << " size=" << nbands*psi_p->get_npol()*nkb << std::endl;
+            // print first 10 becp values
+            std::cout << "[BECP] pw-port ik=" << ik << " becp[0..9]=";
+            for(int i=0;i<10 && i<nbands*psi_p->get_npol()*nkb; i++) std::cout << " (" << becp[i].real() << "," << becp[i].imag() << ")";
+            std::cout << std::endl;
             int begin_ih = 0;
             for(int iat = 0; iat < cell.nat; iat++)
             {
@@ -86,6 +108,13 @@ void Plus_U::cal_occ_pw(const int iter,
                 {
                 for(int ib = 0;ib<nbands;ib++)
                 {
+                    // DIAGNOSTIC: print wg for first band
+                    if(iter <= 2 && ib == 0 && ik == 0)
+                    {
+                        std::cout << "[WG-PW] iter=" << iter << " ik=" << ik << " wg[0..7]=";
+                        for(int b=0;b<8;b++) std::cout << " " << wg_in(ik, b);
+                        std::cout << std::endl;
+                    }
                     const double weight = wg_in(ik, ib);
                     int ind_m1m2 = 0;
                     for(int m1 = 0; m1 < tlp1; m1++)
@@ -102,6 +131,19 @@ void Plus_U::cal_occ_pw(const int iter,
                 }
                 begin_ih += nh;
             }// iat
+            // DIAG: locale snapshot per ik
+            if(iter <= 3 && (ik == 0 || ik == 1)) {
+                std::cout << "[DFTU-IK] pw-port iter=" << iter << " ik=" << ik << " after locale acc:" << std::endl;
+                for(int iat2=0; iat2<cell.nat; iat2++){
+                    const int it2 = cell.iat2it[iat2];
+                    const int tl2 = this->orbital_corr[it2];
+                    if(tl2 == -1) continue;
+                    const int sz2 = (2*tl2+1)*(2*tl2+1);
+                    std::cout << "[DFTU-IK]   locale[iat=" << iat2 << "][0](spin" << is << ")=";
+                    for(int ii=0;ii<sz2;ii++) std::cout << (ii>0?",":"") << this->locale[iat2][tl2][0][is].c[ii];
+                    std::cout << std::endl;
+                }
+            }
         }// ik
     }
 #if defined(__CUDA) || defined(__ROCM)
@@ -121,11 +163,19 @@ void Plus_U::cal_occ_pw(const int iter,
             psi_p->fix_k(ik);
             onsite_p->tabulate_atomic(ik);
 
+            // DIAGNOSTIC: print psi pointer and becp info per ik
+            std::cout << "[BECP] pw-port ik=" << ik << " psi_ptr=" << psi_p->get_pointer() << " nbands=" << nbands << " npol=" << psi_p->get_npol() << std::endl;
+
             onsite_p->overlap_proj_psi(nbands*psi_p->get_npol(), psi_p->get_pointer());
             const std::complex<double>* becp = onsite_p->get_h_becp();
             // becp(nbands*npol , nkb)
             // mag = wg * \sum_{nh}becp * becp
             int nkb = onsite_p->get_size_becp() / nbands / psi_p->get_npol();
+            std::cout << "[BECP] pw-port ik=" << ik << " becp_ptr=" << becp << " nkb=" << nkb << " size=" << nbands*psi_p->get_npol()*nkb << std::endl;
+            // print first 10 becp values
+            std::cout << "[BECP] pw-port ik=" << ik << " becp[0..9]=";
+            for(int i=0;i<10 && i<nbands*psi_p->get_npol()*nkb; i++) std::cout << " (" << becp[i].real() << "," << becp[i].imag() << ")";
+            std::cout << std::endl;
             int begin_ih = 0;
             for(int iat = 0; iat < cell.nat; iat++)
             {
@@ -259,6 +309,31 @@ void Plus_U::cal_occ_pw(const int iter,
     }
 
     Plus_U::energy_u = 0.0;
+
+    // DIAGNOSTIC [N5]: state before VU calculation
+    if(iter <= 2)
+    std::cout << "[DIAG-PW] cal_occ_pw iter=" << iter << " before VU calculation:" << std::endl;
+    if(iter <= 2)
+    std::cout << "[DIAG-PW]   uom_array.size=" << this->uom_array.size()
+              << " eff_pot_pw.size=" << this->eff_pot_pw.size() << std::endl;
+    if(iter <= 2 && this->uom_array.size() > 0) {
+        std::cout << "[DIAG-PW]   uom_array[0..29]=";
+        for(int i=0;i<30 && i<(int)this->uom_array.size();i++) std::cout << " " << this->uom_array[i];
+        std::cout << std::endl;
+    }
+    if(iter <= 2)
+    for(int iat = 0; iat < cell.nat; iat++) {
+        const int it2 = cell.iat2it[iat];
+        const int tl = this->orbital_corr[it2];
+        if(tl == -1) continue;
+        const int sz = (2*tl+1)*(2*tl+1);
+        std::cout << "[DIAG-PW]   locale[iat=" << iat << "][0][0](";
+        for(int i=0;i<sz;i++) std::cout << (i>0?",":"") << this->locale[iat][tl][0][0].c[i];
+        std::cout << ") locale[0][1](";
+        for(int i=0;i<sz;i++) std::cout << (i>0?",":"") << this->locale[iat][tl][0][1].c[i];
+        std::cout << ")" << std::endl;
+    }
+
     // calculate effective potential and energy
     for(int iat = 0; iat < cell.nat; iat++)
     {
@@ -348,6 +423,22 @@ void Plus_U::cal_occ_pw(const int iter,
         }
         }
     }
+
+    // DIAGNOSTIC [N6]: state after VU calculation
+    if(iter <= 2)
+    std::cout << "[DIAG-PW] cal_occ_pw iter=" << iter << " after VU calculation:" << std::endl;
+    if(iter <= 2)
+    std::cout << "[DIAG-PW]   eff_pot_pw.size=" << this->eff_pot_pw.size() << std::endl;
+    if(iter <= 2 && this->eff_pot_pw.size() > 0) {
+        std::cout << "[DIAG-PW]   eff_pot_pw[0..29]=";
+        for(int i=0;i<30 && i<(int)this->eff_pot_pw.size();i++)
+            std::cout << " (" << this->eff_pot_pw[i].real() << "," << this->eff_pot_pw[i].imag() << ")";
+        std::cout << std::endl;
+    }
+    if(iter <= 2)
+    std::cout << "[DIAG-PW]   energy_u=" << Plus_U::energy_u << std::endl;
+    if(iter <= 2)
+    std::cout << "[DIAG-PW]   initialed_locale=false" << std::endl;
 
     initialed_locale = false;
 

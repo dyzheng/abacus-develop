@@ -1,0 +1,777 @@
+                                                                                     
+                              ABACUS v3.9.0.24
+
+               Atomic-orbital Based Ab-initio Computation at UStc                    
+
+                     Website: http://abacus.ustc.edu.cn/                             
+               Documentation: https://abacus.deepmodeling.com/                       
+                  Repository: https://github.com/abacusmodeling/abacus-develop       
+                              https://github.com/deepmodeling/abacus-develop         
+                      Commit: 92e06a1a1 (Fri Apr 17 23:07:59 2026 +0800)
+
+ Sat Apr 18 10:56:56 2026
+Info: Local MPI proc number: 1,OpenMP thread number: 2,Total thread number: 2,Local thread limit: 20
+ MAKE THE DIR         : OUT.autotest/
+ RUNNING WITH DEVICE  : CPU / 12th Gen Intel(R) Core(TM) i7-12700KF (x1)
+ WARNING: some of potential function is set to zero cause of less than 1e-30.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+ Warning: the number of valence electrons in pseudopotential > 8 for Fe: [Ar] 3d6 4s2
+ Pseudopotentials with additional electrons can yield (more) accurate outcomes, but may be less efficient.
+ If you're confident that your chosen pseudopotential is appropriate, you can safely ignore this warning.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+ UNIFORM GRID DIM     : 45 * 45 * 45
+ UNIFORM GRID DIM(BIG): 45 * 45 * 45
+ DONE(0.0356936  SEC) : SETUP UNITCELL
+ DONE(0.046539   SEC) : INIT K-POINTS
+ ---------------------------------------------------------
+ Self-consistent calculations for electrons
+ ---------------------------------------------------------
+ SPIN    KPOINTS         PROCESSORS  THREADS     
+ 4       4               1           2           
+ ---------------------------------------------------------
+ Use plane wave basis
+ ---------------------------------------------------------
+ ELEMENT NATOM       XC          
+ Fe      2           
+ ---------------------------------------------------------
+ Initial plane wave basis and FFT box
+ ---------------------------------------------------------
+ DONE(0.0510526  SEC) : INIT PLANEWAVE
+ START CHARGE      : atomic
+ DONE(0.058923   SEC) : LOCAL POTENTIAL
+ DONE(0.0660712  SEC) : NON-LOCAL POTENTIAL
+ MEMORY FOR PSI (MB)  : 8.07129
+ DONE(0.103599   SEC) : INIT BASIS
+
+ ================================================================
+ SELF-CONSISTENT: 
+ ================================================================
+ DONE(0.170547   SEC) : INIT SCF
+DEBUG hamilt2rho_single ENTER iter=1 p_hamilt=0x5f9568707bc0
+DEBUG hamilt2rho_single energy reset done
+DEBUG hamilt2rho_single DiagoIterAssist setup done
+DEBUG HSolverPW updateHk(0) done
+DEBUG HSolverPW psi.fix_k(0) done
+DEBUG HSolverPW before update_precondition ik=0
+DEBUG HSolverPW after update_precondition ik=0
+DEBUG HSolverPW before hamiltSolvePsiK ik=0 nbands=40
+DEBUG hamiltSolvePsiK count=1
+DEBUG hamiltSolvePsiK count=1 method=dav_subspace need_subspace=0
+DEBUG hamiltSolvePsiK count=1 cur_nbasis=1653
+DEBUG hamiltSolvePsiK count=1 entering dav_subspace
+DEBUG hamiltSolvePsiK count=1 before dav_subspace.diag, nbands=40
+DEBUG hamiltSolvePsiK count=1 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=0
+DEBUG HSolverPW updateHk(1) done
+DEBUG HSolverPW psi.fix_k(1) done
+DEBUG HSolverPW before update_precondition ik=1
+DEBUG HSolverPW after update_precondition ik=1
+DEBUG HSolverPW before hamiltSolvePsiK ik=1 nbands=40
+DEBUG hamiltSolvePsiK count=2
+DEBUG hamiltSolvePsiK count=2 method=dav_subspace need_subspace=0
+DEBUG hamiltSolvePsiK count=2 cur_nbasis=1633
+DEBUG hamiltSolvePsiK count=2 entering dav_subspace
+DEBUG hamiltSolvePsiK count=2 before dav_subspace.diag, nbands=40
+DEBUG hamiltSolvePsiK count=2 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=1
+DEBUG HSolverPW updateHk(2) done
+DEBUG HSolverPW psi.fix_k(2) done
+DEBUG HSolverPW before update_precondition ik=2
+DEBUG HSolverPW after update_precondition ik=2
+DEBUG HSolverPW before hamiltSolvePsiK ik=2 nbands=40
+DEBUG hamiltSolvePsiK count=3
+DEBUG hamiltSolvePsiK count=3 method=dav_subspace need_subspace=0
+DEBUG hamiltSolvePsiK count=3 cur_nbasis=1633
+DEBUG hamiltSolvePsiK count=3 entering dav_subspace
+DEBUG hamiltSolvePsiK count=3 before dav_subspace.diag, nbands=40
+DEBUG hamiltSolvePsiK count=3 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=2
+DEBUG HSolverPW updateHk(3) done
+DEBUG HSolverPW psi.fix_k(3) done
+DEBUG HSolverPW before update_precondition ik=3
+DEBUG HSolverPW after update_precondition ik=3
+DEBUG HSolverPW before hamiltSolvePsiK ik=3 nbands=40
+DEBUG hamiltSolvePsiK count=4
+DEBUG hamiltSolvePsiK count=4 method=dav_subspace need_subspace=0
+DEBUG hamiltSolvePsiK count=4 cur_nbasis=1633
+DEBUG hamiltSolvePsiK count=4 entering dav_subspace
+DEBUG hamiltSolvePsiK count=4 before dav_subspace.diag, nbands=40
+DEBUG hamiltSolvePsiK count=4 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=3
+DEBUG hamilt2rho_single ENTER iter=1 p_hamilt=0x5f9568707bc0
+DEBUG hamilt2rho_single energy reset done
+DEBUG hamilt2rho_single DiagoIterAssist setup done
+DEBUG HSolverPW updateHk(0) done
+DEBUG HSolverPW psi.fix_k(0) done
+DEBUG HSolverPW before update_precondition ik=0
+DEBUG HSolverPW after update_precondition ik=0
+DEBUG HSolverPW before hamiltSolvePsiK ik=0 nbands=40
+DEBUG hamiltSolvePsiK count=5
+DEBUG hamiltSolvePsiK count=5 method=dav_subspace need_subspace=0
+DEBUG hamiltSolvePsiK count=5 cur_nbasis=1653
+DEBUG hamiltSolvePsiK count=5 entering dav_subspace
+DEBUG hamiltSolvePsiK count=5 before dav_subspace.diag, nbands=40
+DEBUG hamiltSolvePsiK count=5 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=0
+DEBUG HSolverPW updateHk(1) done
+DEBUG HSolverPW psi.fix_k(1) done
+DEBUG HSolverPW before update_precondition ik=1
+DEBUG HSolverPW after update_precondition ik=1
+DEBUG HSolverPW before hamiltSolvePsiK ik=1 nbands=40
+DEBUG hamiltSolvePsiK count=6
+DEBUG hamiltSolvePsiK count=6 method=dav_subspace need_subspace=0
+DEBUG hamiltSolvePsiK count=6 cur_nbasis=1633
+DEBUG hamiltSolvePsiK count=6 entering dav_subspace
+DEBUG hamiltSolvePsiK count=6 before dav_subspace.diag, nbands=40
+DEBUG hamiltSolvePsiK count=6 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=1
+DEBUG HSolverPW updateHk(2) done
+DEBUG HSolverPW psi.fix_k(2) done
+DEBUG HSolverPW before update_precondition ik=2
+DEBUG HSolverPW after update_precondition ik=2
+DEBUG HSolverPW before hamiltSolvePsiK ik=2 nbands=40
+DEBUG hamiltSolvePsiK count=7
+DEBUG hamiltSolvePsiK count=7 method=dav_subspace need_subspace=0
+DEBUG hamiltSolvePsiK count=7 cur_nbasis=1633
+DEBUG hamiltSolvePsiK count=7 entering dav_subspace
+DEBUG hamiltSolvePsiK count=7 before dav_subspace.diag, nbands=40
+DEBUG hamiltSolvePsiK count=7 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=2
+DEBUG HSolverPW updateHk(3) done
+DEBUG HSolverPW psi.fix_k(3) done
+DEBUG HSolverPW before update_precondition ik=3
+DEBUG HSolverPW after update_precondition ik=3
+DEBUG HSolverPW before hamiltSolvePsiK ik=3 nbands=40
+DEBUG hamiltSolvePsiK count=8
+DEBUG hamiltSolvePsiK count=8 method=dav_subspace need_subspace=0
+DEBUG hamiltSolvePsiK count=8 cur_nbasis=1633
+DEBUG hamiltSolvePsiK count=8 entering dav_subspace
+DEBUG hamiltSolvePsiK count=8 before dav_subspace.diag, nbands=40
+DEBUG hamiltSolvePsiK count=8 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=3
+ ITER     TMAGX      TMAGY      TMAGZ       AMAG        ETOT/eV          EDIFF/eV         DRHO     TIME/s
+ DS1     -2.79e-06  -2.79e-06  -2.79e-06   5.59e+00  -6.79574850e+03   0.00000000e+00   3.1927e-01   1.39
+DEBUG hamilt2rho_single ENTER iter=2 p_hamilt=0x5f9568707bc0
+DEBUG hamilt2rho_single energy reset done
+DEBUG hamilt2rho_single DiagoIterAssist setup done
+DEBUG HSolverPW updateHk(0) done
+DEBUG HSolverPW psi.fix_k(0) done
+DEBUG HSolverPW before update_precondition ik=0
+DEBUG HSolverPW after update_precondition ik=0
+DEBUG HSolverPW before hamiltSolvePsiK ik=0 nbands=40
+DEBUG hamiltSolvePsiK count=9
+DEBUG hamiltSolvePsiK count=9 method=dav_subspace need_subspace=1
+DEBUG hamiltSolvePsiK count=9 cur_nbasis=1653
+DEBUG hamiltSolvePsiK count=9 entering dav_subspace
+DEBUG hamiltSolvePsiK count=9 before dav_subspace.diag, nbands=40
+DEBUG hamiltSolvePsiK count=9 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=0
+DEBUG HSolverPW updateHk(1) done
+DEBUG HSolverPW psi.fix_k(1) done
+DEBUG HSolverPW before update_precondition ik=1
+DEBUG HSolverPW after update_precondition ik=1
+DEBUG HSolverPW before hamiltSolvePsiK ik=1 nbands=40
+DEBUG hamiltSolvePsiK count=10
+DEBUG hamiltSolvePsiK count=10 method=dav_subspace need_subspace=1
+DEBUG hamiltSolvePsiK count=10 cur_nbasis=1633
+DEBUG hamiltSolvePsiK count=10 entering dav_subspace
+DEBUG hamiltSolvePsiK count=10 before dav_subspace.diag, nbands=40
+DEBUG hamiltSolvePsiK count=10 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=1
+DEBUG HSolverPW updateHk(2) done
+DEBUG HSolverPW psi.fix_k(2) done
+DEBUG HSolverPW before update_precondition ik=2
+DEBUG HSolverPW after update_precondition ik=2
+DEBUG HSolverPW before hamiltSolvePsiK ik=2 nbands=40
+DEBUG hamiltSolvePsiK count=11
+DEBUG hamiltSolvePsiK count=11 method=dav_subspace need_subspace=1
+DEBUG hamiltSolvePsiK count=11 cur_nbasis=1633
+DEBUG hamiltSolvePsiK count=11 entering dav_subspace
+DEBUG hamiltSolvePsiK count=11 before dav_subspace.diag, nbands=40
+DEBUG hamiltSolvePsiK count=11 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=2
+DEBUG HSolverPW updateHk(3) done
+DEBUG HSolverPW psi.fix_k(3) done
+DEBUG HSolverPW before update_precondition ik=3
+DEBUG HSolverPW after update_precondition ik=3
+DEBUG HSolverPW before hamiltSolvePsiK ik=3 nbands=40
+DEBUG hamiltSolvePsiK count=12
+DEBUG hamiltSolvePsiK count=12 method=dav_subspace need_subspace=1
+DEBUG hamiltSolvePsiK count=12 cur_nbasis=1633
+DEBUG hamiltSolvePsiK count=12 entering dav_subspace
+DEBUG hamiltSolvePsiK count=12 before dav_subspace.diag, nbands=40
+DEBUG hamiltSolvePsiK count=12 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=3
+ DS2      2.60e-06   2.60e-06   2.60e-06   6.49e+00  -6.79715104e+03  -1.40254373e+00   1.0314e-01   0.82
+DEBUG hamilt2rho_single ENTER iter=3 p_hamilt=0x5f9568707bc0
+DEBUG hamilt2rho_single energy reset done
+DEBUG hamilt2rho_single DiagoIterAssist setup done
+DEBUG HSolverPW updateHk(0) done
+DEBUG HSolverPW psi.fix_k(0) done
+DEBUG HSolverPW before update_precondition ik=0
+DEBUG HSolverPW after update_precondition ik=0
+DEBUG HSolverPW before hamiltSolvePsiK ik=0 nbands=40
+DEBUG hamiltSolvePsiK count=13
+DEBUG hamiltSolvePsiK count=13 method=dav_subspace need_subspace=1
+DEBUG hamiltSolvePsiK count=13 cur_nbasis=1653
+DEBUG hamiltSolvePsiK count=13 entering dav_subspace
+DEBUG hamiltSolvePsiK count=13 before dav_subspace.diag, nbands=40
+DEBUG hamiltSolvePsiK count=13 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=0
+DEBUG HSolverPW updateHk(1) done
+DEBUG HSolverPW psi.fix_k(1) done
+DEBUG HSolverPW before update_precondition ik=1
+DEBUG HSolverPW after update_precondition ik=1
+DEBUG HSolverPW before hamiltSolvePsiK ik=1 nbands=40
+DEBUG hamiltSolvePsiK count=14
+DEBUG hamiltSolvePsiK count=14 method=dav_subspace need_subspace=1
+DEBUG hamiltSolvePsiK count=14 cur_nbasis=1633
+DEBUG hamiltSolvePsiK count=14 entering dav_subspace
+DEBUG hamiltSolvePsiK count=14 before dav_subspace.diag, nbands=40
+DEBUG hamiltSolvePsiK count=14 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=1
+DEBUG HSolverPW updateHk(2) done
+DEBUG HSolverPW psi.fix_k(2) done
+DEBUG HSolverPW before update_precondition ik=2
+DEBUG HSolverPW after update_precondition ik=2
+DEBUG HSolverPW before hamiltSolvePsiK ik=2 nbands=40
+DEBUG hamiltSolvePsiK count=15
+DEBUG hamiltSolvePsiK count=15 method=dav_subspace need_subspace=1
+DEBUG hamiltSolvePsiK count=15 cur_nbasis=1633
+DEBUG hamiltSolvePsiK count=15 entering dav_subspace
+DEBUG hamiltSolvePsiK count=15 before dav_subspace.diag, nbands=40
+DEBUG hamiltSolvePsiK count=15 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=2
+DEBUG HSolverPW updateHk(3) done
+DEBUG HSolverPW psi.fix_k(3) done
+DEBUG HSolverPW before update_precondition ik=3
+DEBUG HSolverPW after update_precondition ik=3
+DEBUG HSolverPW before hamiltSolvePsiK ik=3 nbands=40
+DEBUG hamiltSolvePsiK count=16
+DEBUG hamiltSolvePsiK count=16 method=dav_subspace need_subspace=1
+DEBUG hamiltSolvePsiK count=16 cur_nbasis=1633
+DEBUG hamiltSolvePsiK count=16 entering dav_subspace
+DEBUG hamiltSolvePsiK count=16 before dav_subspace.diag, nbands=40
+DEBUG hamiltSolvePsiK count=16 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=3
+ DS3     -3.11e-06  -3.11e-06  -3.11e-06   6.62e+00  -6.79724443e+03  -9.33870271e-02   1.0304e-02   0.66
+DEBUG hamilt2rho_single ENTER iter=4 p_hamilt=0x5f9568707bc0
+DEBUG hamilt2rho_single energy reset done
+DEBUG hamilt2rho_single DiagoIterAssist setup done
+DEBUG HSolverPW updateHk(0) done
+DEBUG HSolverPW psi.fix_k(0) done
+DEBUG HSolverPW before update_precondition ik=0
+DEBUG HSolverPW after update_precondition ik=0
+DEBUG HSolverPW before hamiltSolvePsiK ik=0 nbands=40
+DEBUG hamiltSolvePsiK count=17
+DEBUG hamiltSolvePsiK count=17 method=dav_subspace need_subspace=1
+DEBUG hamiltSolvePsiK count=17 cur_nbasis=1653
+DEBUG hamiltSolvePsiK count=17 entering dav_subspace
+DEBUG hamiltSolvePsiK count=17 before dav_subspace.diag, nbands=40
+DEBUG hamiltSolvePsiK count=17 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=0
+DEBUG HSolverPW updateHk(1) done
+DEBUG HSolverPW psi.fix_k(1) done
+DEBUG HSolverPW before update_precondition ik=1
+DEBUG HSolverPW after update_precondition ik=1
+DEBUG HSolverPW before hamiltSolvePsiK ik=1 nbands=40
+DEBUG hamiltSolvePsiK count=18
+DEBUG hamiltSolvePsiK count=18 method=dav_subspace need_subspace=1
+DEBUG hamiltSolvePsiK count=18 cur_nbasis=1633
+DEBUG hamiltSolvePsiK count=18 entering dav_subspace
+DEBUG hamiltSolvePsiK count=18 before dav_subspace.diag, nbands=40
+DEBUG hamiltSolvePsiK count=18 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=1
+DEBUG HSolverPW updateHk(2) done
+DEBUG HSolverPW psi.fix_k(2) done
+DEBUG HSolverPW before update_precondition ik=2
+DEBUG HSolverPW after update_precondition ik=2
+DEBUG HSolverPW before hamiltSolvePsiK ik=2 nbands=40
+DEBUG hamiltSolvePsiK count=19
+DEBUG hamiltSolvePsiK count=19 method=dav_subspace need_subspace=1
+DEBUG hamiltSolvePsiK count=19 cur_nbasis=1633
+DEBUG hamiltSolvePsiK count=19 entering dav_subspace
+DEBUG hamiltSolvePsiK count=19 before dav_subspace.diag, nbands=40
+DEBUG hamiltSolvePsiK count=19 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=2
+DEBUG HSolverPW updateHk(3) done
+DEBUG HSolverPW psi.fix_k(3) done
+DEBUG HSolverPW before update_precondition ik=3
+DEBUG HSolverPW after update_precondition ik=3
+DEBUG HSolverPW before hamiltSolvePsiK ik=3 nbands=40
+DEBUG hamiltSolvePsiK count=20
+DEBUG hamiltSolvePsiK count=20 method=dav_subspace need_subspace=1
+DEBUG hamiltSolvePsiK count=20 cur_nbasis=1633
+DEBUG hamiltSolvePsiK count=20 entering dav_subspace
+DEBUG hamiltSolvePsiK count=20 before dav_subspace.diag, nbands=40
+DEBUG hamiltSolvePsiK count=20 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=3
+ DS4      3.86e-05   3.86e-05   3.86e-05   6.84e+00  -6.79728418e+03  -3.97545973e-02   2.2505e-03   0.70
+DEBUG hamilt2rho_single ENTER iter=5 p_hamilt=0x5f9568707bc0
+DEBUG hamilt2rho_single energy reset done
+DEBUG hamilt2rho_single DiagoIterAssist setup done
+DEBUG HSolverPW updateHk(0) done
+DEBUG HSolverPW psi.fix_k(0) done
+DEBUG HSolverPW before update_precondition ik=0
+DEBUG HSolverPW after update_precondition ik=0
+DEBUG HSolverPW before hamiltSolvePsiK ik=0 nbands=40
+DEBUG hamiltSolvePsiK count=21
+DEBUG hamiltSolvePsiK count=21 method=dav_subspace need_subspace=1
+DEBUG hamiltSolvePsiK count=21 cur_nbasis=1653
+DEBUG hamiltSolvePsiK count=21 entering dav_subspace
+DEBUG hamiltSolvePsiK count=21 before dav_subspace.diag, nbands=40
+DEBUG hamiltSolvePsiK count=21 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=0
+DEBUG HSolverPW updateHk(1) done
+DEBUG HSolverPW psi.fix_k(1) done
+DEBUG HSolverPW before update_precondition ik=1
+DEBUG HSolverPW after update_precondition ik=1
+DEBUG HSolverPW before hamiltSolvePsiK ik=1 nbands=40
+DEBUG hamiltSolvePsiK count=22
+DEBUG hamiltSolvePsiK count=22 method=dav_subspace need_subspace=1
+DEBUG hamiltSolvePsiK count=22 cur_nbasis=1633
+DEBUG hamiltSolvePsiK count=22 entering dav_subspace
+DEBUG hamiltSolvePsiK count=22 before dav_subspace.diag, nbands=40
+DEBUG hamiltSolvePsiK count=22 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=1
+DEBUG HSolverPW updateHk(2) done
+DEBUG HSolverPW psi.fix_k(2) done
+DEBUG HSolverPW before update_precondition ik=2
+DEBUG HSolverPW after update_precondition ik=2
+DEBUG HSolverPW before hamiltSolvePsiK ik=2 nbands=40
+DEBUG hamiltSolvePsiK count=23
+DEBUG hamiltSolvePsiK count=23 method=dav_subspace need_subspace=1
+DEBUG hamiltSolvePsiK count=23 cur_nbasis=1633
+DEBUG hamiltSolvePsiK count=23 entering dav_subspace
+DEBUG hamiltSolvePsiK count=23 before dav_subspace.diag, nbands=40
+DEBUG hamiltSolvePsiK count=23 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=2
+DEBUG HSolverPW updateHk(3) done
+DEBUG HSolverPW psi.fix_k(3) done
+DEBUG HSolverPW before update_precondition ik=3
+DEBUG HSolverPW after update_precondition ik=3
+DEBUG HSolverPW before hamiltSolvePsiK ik=3 nbands=40
+DEBUG hamiltSolvePsiK count=24
+DEBUG hamiltSolvePsiK count=24 method=dav_subspace need_subspace=1
+DEBUG hamiltSolvePsiK count=24 cur_nbasis=1633
+DEBUG hamiltSolvePsiK count=24 entering dav_subspace
+DEBUG hamiltSolvePsiK count=24 before dav_subspace.diag, nbands=40
+DEBUG hamiltSolvePsiK count=24 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=3
+ SCF restart after this step!
+ DS5     -1.10e-04  -1.10e-04  -1.10e-04   6.80e+00  -6.79672990e+03   5.54278196e-01   3.5516e-04   0.64
+DEBUG hamilt2rho_single ENTER iter=6 p_hamilt=0x5f9568707bc0
+DEBUG hamilt2rho_single energy reset done
+DEBUG hamilt2rho_single DiagoIterAssist setup done
+===============================================================================
+Inner optimization for lambda begins ...
+Covergence criterion for the iteration: 0.0001
+initial lambda (eV/uB): 
+ATOM      1         0.0000000000         0.0000000000         0.0000000000
+ATOM      2         0.0000000000         0.0000000000         0.0000000000
+initial spin (uB): 
+ATOM      1         0.0000000000         0.0000000000         7.4198383420
+ATOM      2         0.0000000000         0.0000000000         7.4355734953
+target spin (uB): 
+ATOM      1         1.1550000000         1.1550000000         1.1550000000
+ATOM      2        -1.1550000000        -1.1550000000        -1.1550000000
+Step (Outer -- Inner) =  5 -- 1           RMS = 0     TIME(s) = 0.195033   
+Meet convergence criterion ( < 0.0001 ), exit.       Total TIME(s) = 0.195033
+after-optimization spin (uB): (print in the inner loop): 
+ATOM      1         0.0000000000         0.0000000000         7.4198383420
+ATOM      2         0.0000000000         0.0000000000         7.4355734953
+after-optimization lambda (eV/uB): (print in the inner loop): 
+ATOM      1         0.0000000000         0.0000000000         0.0000000000
+ATOM      2         0.0000000000         0.0000000000         0.0000000000
+Inner optimization for lambda ends.
+===============================================================================
+DEBUG HSolverPW updateHk(0) done
+DEBUG HSolverPW psi.fix_k(0) done
+DEBUG HSolverPW before update_precondition ik=0
+DEBUG HSolverPW after update_precondition ik=0
+DEBUG HSolverPW before hamiltSolvePsiK ik=0 nbands=40
+DEBUG hamiltSolvePsiK count=25
+DEBUG hamiltSolvePsiK count=25 method=dav_subspace need_subspace=1
+DEBUG hamiltSolvePsiK count=25 cur_nbasis=1653
+DEBUG hamiltSolvePsiK count=25 entering dav_subspace
+DEBUG hamiltSolvePsiK count=25 before dav_subspace.diag, nbands=40
+DEBUG hamiltSolvePsiK count=25 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=0
+DEBUG HSolverPW updateHk(1) done
+DEBUG HSolverPW psi.fix_k(1) done
+DEBUG HSolverPW before update_precondition ik=1
+DEBUG HSolverPW after update_precondition ik=1
+DEBUG HSolverPW before hamiltSolvePsiK ik=1 nbands=40
+DEBUG hamiltSolvePsiK count=26
+DEBUG hamiltSolvePsiK count=26 method=dav_subspace need_subspace=1
+DEBUG hamiltSolvePsiK count=26 cur_nbasis=1633
+DEBUG hamiltSolvePsiK count=26 entering dav_subspace
+DEBUG hamiltSolvePsiK count=26 before dav_subspace.diag, nbands=40
+DEBUG hamiltSolvePsiK count=26 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=1
+DEBUG HSolverPW updateHk(2) done
+DEBUG HSolverPW psi.fix_k(2) done
+DEBUG HSolverPW before update_precondition ik=2
+DEBUG HSolverPW after update_precondition ik=2
+DEBUG HSolverPW before hamiltSolvePsiK ik=2 nbands=40
+DEBUG hamiltSolvePsiK count=27
+DEBUG hamiltSolvePsiK count=27 method=dav_subspace need_subspace=1
+DEBUG hamiltSolvePsiK count=27 cur_nbasis=1633
+DEBUG hamiltSolvePsiK count=27 entering dav_subspace
+DEBUG hamiltSolvePsiK count=27 before dav_subspace.diag, nbands=40
+DEBUG hamiltSolvePsiK count=27 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=2
+DEBUG HSolverPW updateHk(3) done
+DEBUG HSolverPW psi.fix_k(3) done
+DEBUG HSolverPW before update_precondition ik=3
+DEBUG HSolverPW after update_precondition ik=3
+DEBUG HSolverPW before hamiltSolvePsiK ik=3 nbands=40
+DEBUG hamiltSolvePsiK count=28
+DEBUG hamiltSolvePsiK count=28 method=dav_subspace need_subspace=1
+DEBUG hamiltSolvePsiK count=28 cur_nbasis=1633
+DEBUG hamiltSolvePsiK count=28 entering dav_subspace
+DEBUG hamiltSolvePsiK count=28 before dav_subspace.diag, nbands=40
+DEBUG hamiltSolvePsiK count=28 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=3
+Current RMS: 0
+ DS6      1.49e-03   1.49e-03   1.49e-03   6.78e+00  -6.79728847e+03  -5.58565546e-01   2.8809e-04   1.06
+DEBUG hamilt2rho_single ENTER iter=7 p_hamilt=0x5f9568707bc0
+DEBUG hamilt2rho_single energy reset done
+DEBUG hamilt2rho_single DiagoIterAssist setup done
+===============================================================================
+Inner optimization for lambda begins ...
+Covergence criterion for the iteration: 0.0001
+initial lambda (eV/uB): 
+ATOM      1         0.0000000000         0.0000000000         0.0000000000
+ATOM      2         0.0000000000         0.0000000000         0.0000000000
+initial spin (uB): 
+ATOM      1         0.0000000000         0.0000000000         7.4353848765
+ATOM      2         0.0000000000         0.0000000000         7.4208775620
+target spin (uB): 
+ATOM      1         1.1550000000         1.1550000000         1.1550000000
+ATOM      2        -1.1550000000        -1.1550000000        -1.1550000000
+Step (Outer -- Inner) =  6 -- 1           RMS = 0     TIME(s) = 0.195871   
+Meet convergence criterion ( < 0.0001 ), exit.       Total TIME(s) = 0.195871
+after-optimization spin (uB): (print in the inner loop): 
+ATOM      1         0.0000000000         0.0000000000         7.4353848765
+ATOM      2         0.0000000000         0.0000000000         7.4208775620
+after-optimization lambda (eV/uB): (print in the inner loop): 
+ATOM      1         0.0000000000         0.0000000000         0.0000000000
+ATOM      2         0.0000000000         0.0000000000         0.0000000000
+Inner optimization for lambda ends.
+===============================================================================
+DEBUG HSolverPW updateHk(0) done
+DEBUG HSolverPW psi.fix_k(0) done
+DEBUG HSolverPW before update_precondition ik=0
+DEBUG HSolverPW after update_precondition ik=0
+DEBUG HSolverPW before hamiltSolvePsiK ik=0 nbands=40
+DEBUG hamiltSolvePsiK count=29
+DEBUG hamiltSolvePsiK count=29 method=dav_subspace need_subspace=1
+DEBUG hamiltSolvePsiK count=29 cur_nbasis=1653
+DEBUG hamiltSolvePsiK count=29 entering dav_subspace
+DEBUG hamiltSolvePsiK count=29 before dav_subspace.diag, nbands=40
+DEBUG hamiltSolvePsiK count=29 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=0
+DEBUG HSolverPW updateHk(1) done
+DEBUG HSolverPW psi.fix_k(1) done
+DEBUG HSolverPW before update_precondition ik=1
+DEBUG HSolverPW after update_precondition ik=1
+DEBUG HSolverPW before hamiltSolvePsiK ik=1 nbands=40
+DEBUG hamiltSolvePsiK count=30
+DEBUG hamiltSolvePsiK count=30 method=dav_subspace need_subspace=1
+DEBUG hamiltSolvePsiK count=30 cur_nbasis=1633
+DEBUG hamiltSolvePsiK count=30 entering dav_subspace
+DEBUG hamiltSolvePsiK count=30 before dav_subspace.diag, nbands=40
+DEBUG hamiltSolvePsiK count=30 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=1
+DEBUG HSolverPW updateHk(2) done
+DEBUG HSolverPW psi.fix_k(2) done
+DEBUG HSolverPW before update_precondition ik=2
+DEBUG HSolverPW after update_precondition ik=2
+DEBUG HSolverPW before hamiltSolvePsiK ik=2 nbands=40
+DEBUG hamiltSolvePsiK count=31
+DEBUG hamiltSolvePsiK count=31 method=dav_subspace need_subspace=1
+DEBUG hamiltSolvePsiK count=31 cur_nbasis=1633
+DEBUG hamiltSolvePsiK count=31 entering dav_subspace
+DEBUG hamiltSolvePsiK count=31 before dav_subspace.diag, nbands=40
+DEBUG hamiltSolvePsiK count=31 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=2
+DEBUG HSolverPW updateHk(3) done
+DEBUG HSolverPW psi.fix_k(3) done
+DEBUG HSolverPW before update_precondition ik=3
+DEBUG HSolverPW after update_precondition ik=3
+DEBUG HSolverPW before hamiltSolvePsiK ik=3 nbands=40
+DEBUG hamiltSolvePsiK count=32
+DEBUG hamiltSolvePsiK count=32 method=dav_subspace need_subspace=1
+DEBUG hamiltSolvePsiK count=32 cur_nbasis=1633
+DEBUG hamiltSolvePsiK count=32 entering dav_subspace
+DEBUG hamiltSolvePsiK count=32 before dav_subspace.diag, nbands=40
+DEBUG hamiltSolvePsiK count=32 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=3
+Current RMS: 0
+ DS7     -4.46e-03  -4.46e-03  -4.46e-03   6.78e+00  -6.79728860e+03  -1.29172930e-04   1.4985e-04   0.93
+DEBUG hamilt2rho_single ENTER iter=8 p_hamilt=0x5f9568707bc0
+DEBUG hamilt2rho_single energy reset done
+DEBUG hamilt2rho_single DiagoIterAssist setup done
+===============================================================================
+Inner optimization for lambda begins ...
+Covergence criterion for the iteration: 0.0001
+initial lambda (eV/uB): 
+ATOM      1         0.0000000000         0.0000000000         0.0000000000
+ATOM      2         0.0000000000         0.0000000000         0.0000000000
+initial spin (uB): 
+ATOM      1         0.0000000000         0.0000000000         7.4170614341
+ATOM      2         0.0000000000         0.0000000000         7.4358199630
+target spin (uB): 
+ATOM      1         1.1550000000         1.1550000000         1.1550000000
+ATOM      2        -1.1550000000        -1.1550000000        -1.1550000000
+Step (Outer -- Inner) =  7 -- 1           RMS = 0     TIME(s) = 0.208854   
+Meet convergence criterion ( < 0.0001 ), exit.       Total TIME(s) = 0.208854
+after-optimization spin (uB): (print in the inner loop): 
+ATOM      1         0.0000000000         0.0000000000         7.4170614341
+ATOM      2         0.0000000000         0.0000000000         7.4358199630
+after-optimization lambda (eV/uB): (print in the inner loop): 
+ATOM      1         0.0000000000         0.0000000000         0.0000000000
+ATOM      2         0.0000000000         0.0000000000         0.0000000000
+Inner optimization for lambda ends.
+===============================================================================
+DEBUG HSolverPW updateHk(0) done
+DEBUG HSolverPW psi.fix_k(0) done
+DEBUG HSolverPW before update_precondition ik=0
+DEBUG HSolverPW after update_precondition ik=0
+DEBUG HSolverPW before hamiltSolvePsiK ik=0 nbands=40
+DEBUG hamiltSolvePsiK count=33
+DEBUG hamiltSolvePsiK count=33 method=dav_subspace need_subspace=1
+DEBUG hamiltSolvePsiK count=33 cur_nbasis=1653
+DEBUG hamiltSolvePsiK count=33 entering dav_subspace
+DEBUG hamiltSolvePsiK count=33 before dav_subspace.diag, nbands=40
+DEBUG hamiltSolvePsiK count=33 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=0
+DEBUG HSolverPW updateHk(1) done
+DEBUG HSolverPW psi.fix_k(1) done
+DEBUG HSolverPW before update_precondition ik=1
+DEBUG HSolverPW after update_precondition ik=1
+DEBUG HSolverPW before hamiltSolvePsiK ik=1 nbands=40
+DEBUG hamiltSolvePsiK count=34
+DEBUG hamiltSolvePsiK count=34 method=dav_subspace need_subspace=1
+DEBUG hamiltSolvePsiK count=34 cur_nbasis=1633
+DEBUG hamiltSolvePsiK count=34 entering dav_subspace
+DEBUG hamiltSolvePsiK count=34 before dav_subspace.diag, nbands=40
+DEBUG hamiltSolvePsiK count=34 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=1
+DEBUG HSolverPW updateHk(2) done
+DEBUG HSolverPW psi.fix_k(2) done
+DEBUG HSolverPW before update_precondition ik=2
+DEBUG HSolverPW after update_precondition ik=2
+DEBUG HSolverPW before hamiltSolvePsiK ik=2 nbands=40
+DEBUG hamiltSolvePsiK count=35
+DEBUG hamiltSolvePsiK count=35 method=dav_subspace need_subspace=1
+DEBUG hamiltSolvePsiK count=35 cur_nbasis=1633
+DEBUG hamiltSolvePsiK count=35 entering dav_subspace
+DEBUG hamiltSolvePsiK count=35 before dav_subspace.diag, nbands=40
+DEBUG hamiltSolvePsiK count=35 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=2
+DEBUG HSolverPW updateHk(3) done
+DEBUG HSolverPW psi.fix_k(3) done
+DEBUG HSolverPW before update_precondition ik=3
+DEBUG HSolverPW after update_precondition ik=3
+DEBUG HSolverPW before hamiltSolvePsiK ik=3 nbands=40
+DEBUG hamiltSolvePsiK count=36
+DEBUG hamiltSolvePsiK count=36 method=dav_subspace need_subspace=1
+DEBUG hamiltSolvePsiK count=36 cur_nbasis=1633
+DEBUG hamiltSolvePsiK count=36 entering dav_subspace
+DEBUG hamiltSolvePsiK count=36 before dav_subspace.diag, nbands=40
+DEBUG hamiltSolvePsiK count=36 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=3
+Current RMS: 0
+ DS8      9.78e-03   9.78e-03   9.78e-03   6.78e+00  -6.79728858e+03   2.34130310e-05   4.6120e-04   0.97
+DEBUG hamilt2rho_single ENTER iter=9 p_hamilt=0x5f9568707bc0
+DEBUG hamilt2rho_single energy reset done
+DEBUG hamilt2rho_single DiagoIterAssist setup done
+===============================================================================
+Inner optimization for lambda begins ...
+Covergence criterion for the iteration: 0.0001
+initial lambda (eV/uB): 
+ATOM      1         0.0000000000         0.0000000000         0.0000000000
+ATOM      2         0.0000000000         0.0000000000         0.0000000000
+initial spin (uB): 
+ATOM      1         0.0000000000         0.0000000000         7.4357572671
+ATOM      2         0.0000000000         0.0000000000         7.4182605458
+target spin (uB): 
+ATOM      1         1.1550000000         1.1550000000         1.1550000000
+ATOM      2        -1.1550000000        -1.1550000000        -1.1550000000
+Step (Outer -- Inner) =  8 -- 1           RMS = 0     TIME(s) = 0.193701   
+Meet convergence criterion ( < 0.0001 ), exit.       Total TIME(s) = 0.193701
+after-optimization spin (uB): (print in the inner loop): 
+ATOM      1         0.0000000000         0.0000000000         7.4357572671
+ATOM      2         0.0000000000         0.0000000000         7.4182605458
+after-optimization lambda (eV/uB): (print in the inner loop): 
+ATOM      1         0.0000000000         0.0000000000         0.0000000000
+ATOM      2         0.0000000000         0.0000000000         0.0000000000
+Inner optimization for lambda ends.
+===============================================================================
+DEBUG HSolverPW updateHk(0) done
+DEBUG HSolverPW psi.fix_k(0) done
+DEBUG HSolverPW before update_precondition ik=0
+DEBUG HSolverPW after update_precondition ik=0
+DEBUG HSolverPW before hamiltSolvePsiK ik=0 nbands=40
+DEBUG hamiltSolvePsiK count=37
+DEBUG hamiltSolvePsiK count=37 method=dav_subspace need_subspace=1
+DEBUG hamiltSolvePsiK count=37 cur_nbasis=1653
+DEBUG hamiltSolvePsiK count=37 entering dav_subspace
+DEBUG hamiltSolvePsiK count=37 before dav_subspace.diag, nbands=40
+DEBUG hamiltSolvePsiK count=37 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=0
+DEBUG HSolverPW updateHk(1) done
+DEBUG HSolverPW psi.fix_k(1) done
+DEBUG HSolverPW before update_precondition ik=1
+DEBUG HSolverPW after update_precondition ik=1
+DEBUG HSolverPW before hamiltSolvePsiK ik=1 nbands=40
+DEBUG hamiltSolvePsiK count=38
+DEBUG hamiltSolvePsiK count=38 method=dav_subspace need_subspace=1
+DEBUG hamiltSolvePsiK count=38 cur_nbasis=1633
+DEBUG hamiltSolvePsiK count=38 entering dav_subspace
+DEBUG hamiltSolvePsiK count=38 before dav_subspace.diag, nbands=40
+DEBUG hamiltSolvePsiK count=38 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=1
+DEBUG HSolverPW updateHk(2) done
+DEBUG HSolverPW psi.fix_k(2) done
+DEBUG HSolverPW before update_precondition ik=2
+DEBUG HSolverPW after update_precondition ik=2
+DEBUG HSolverPW before hamiltSolvePsiK ik=2 nbands=40
+DEBUG hamiltSolvePsiK count=39
+DEBUG hamiltSolvePsiK count=39 method=dav_subspace need_subspace=1
+DEBUG hamiltSolvePsiK count=39 cur_nbasis=1633
+DEBUG hamiltSolvePsiK count=39 entering dav_subspace
+DEBUG hamiltSolvePsiK count=39 before dav_subspace.diag, nbands=40
+DEBUG hamiltSolvePsiK count=39 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=2
+DEBUG HSolverPW updateHk(3) done
+DEBUG HSolverPW psi.fix_k(3) done
+DEBUG HSolverPW before update_precondition ik=3
+DEBUG HSolverPW after update_precondition ik=3
+DEBUG HSolverPW before hamiltSolvePsiK ik=3 nbands=40
+DEBUG hamiltSolvePsiK count=40
+DEBUG hamiltSolvePsiK count=40 method=dav_subspace need_subspace=1
+DEBUG hamiltSolvePsiK count=40 cur_nbasis=1633
+DEBUG hamiltSolvePsiK count=40 entering dav_subspace
+DEBUG hamiltSolvePsiK count=40 before dav_subspace.diag, nbands=40
+DEBUG hamiltSolvePsiK count=40 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=3
+Current RMS: 0
+ DS9     -1.52e-03  -1.52e-03  -1.52e-03   6.78e+00  -6.79728900e+03  -4.20662706e-04   1.2630e-05   0.91
+DEBUG hamilt2rho_single ENTER iter=10 p_hamilt=0x5f9568707bc0
+DEBUG hamilt2rho_single energy reset done
+DEBUG hamilt2rho_single DiagoIterAssist setup done
+===============================================================================
+Inner optimization for lambda begins ...
+Covergence criterion for the iteration: 0.0001
+initial lambda (eV/uB): 
+ATOM      1         0.0000000000         0.0000000000         0.0000000000
+ATOM      2         0.0000000000         0.0000000000         0.0000000000
+initial spin (uB): 
+ATOM      1         0.0000000000         0.0000000000         7.4356233036
+ATOM      2         0.0000000000         0.0000000000         7.4178164151
+target spin (uB): 
+ATOM      1         1.1550000000         1.1550000000         1.1550000000
+ATOM      2        -1.1550000000        -1.1550000000        -1.1550000000
+Step (Outer -- Inner) =  9 -- 1           RMS = 0     TIME(s) = 0.222928   
+Meet convergence criterion ( < 0.0001 ), exit.       Total TIME(s) = 0.222928
+after-optimization spin (uB): (print in the inner loop): 
+ATOM      1         0.0000000000         0.0000000000         7.4356233036
+ATOM      2         0.0000000000         0.0000000000         7.4178164151
+after-optimization lambda (eV/uB): (print in the inner loop): 
+ATOM      1         0.0000000000         0.0000000000         0.0000000000
+ATOM      2         0.0000000000         0.0000000000         0.0000000000
+Inner optimization for lambda ends.
+===============================================================================
+DEBUG HSolverPW updateHk(0) done
+DEBUG HSolverPW psi.fix_k(0) done
+DEBUG HSolverPW before update_precondition ik=0
+DEBUG HSolverPW after update_precondition ik=0
+DEBUG HSolverPW before hamiltSolvePsiK ik=0 nbands=40
+DEBUG hamiltSolvePsiK count=41
+DEBUG hamiltSolvePsiK count=41 method=dav_subspace need_subspace=1
+DEBUG hamiltSolvePsiK count=41 cur_nbasis=1653
+DEBUG hamiltSolvePsiK count=41 entering dav_subspace
+DEBUG hamiltSolvePsiK count=41 before dav_subspace.diag, nbands=40
+DEBUG hamiltSolvePsiK count=41 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=0
+DEBUG HSolverPW updateHk(1) done
+DEBUG HSolverPW psi.fix_k(1) done
+DEBUG HSolverPW before update_precondition ik=1
+DEBUG HSolverPW after update_precondition ik=1
+DEBUG HSolverPW before hamiltSolvePsiK ik=1 nbands=40
+DEBUG hamiltSolvePsiK count=42
+DEBUG hamiltSolvePsiK count=42 method=dav_subspace need_subspace=1
+DEBUG hamiltSolvePsiK count=42 cur_nbasis=1633
+DEBUG hamiltSolvePsiK count=42 entering dav_subspace
+DEBUG hamiltSolvePsiK count=42 before dav_subspace.diag, nbands=40
+DEBUG hamiltSolvePsiK count=42 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=1
+DEBUG HSolverPW updateHk(2) done
+DEBUG HSolverPW psi.fix_k(2) done
+DEBUG HSolverPW before update_precondition ik=2
+DEBUG HSolverPW after update_precondition ik=2
+DEBUG HSolverPW before hamiltSolvePsiK ik=2 nbands=40
+DEBUG hamiltSolvePsiK count=43
+DEBUG hamiltSolvePsiK count=43 method=dav_subspace need_subspace=1
+DEBUG hamiltSolvePsiK count=43 cur_nbasis=1633
+DEBUG hamiltSolvePsiK count=43 entering dav_subspace
+DEBUG hamiltSolvePsiK count=43 before dav_subspace.diag, nbands=40
+DEBUG hamiltSolvePsiK count=43 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=2
+DEBUG HSolverPW updateHk(3) done
+DEBUG HSolverPW psi.fix_k(3) done
+DEBUG HSolverPW before update_precondition ik=3
+DEBUG HSolverPW after update_precondition ik=3
+DEBUG HSolverPW before hamiltSolvePsiK ik=3 nbands=40
+DEBUG hamiltSolvePsiK count=44
+DEBUG hamiltSolvePsiK count=44 method=dav_subspace need_subspace=1
+DEBUG hamiltSolvePsiK count=44 cur_nbasis=1633
+DEBUG hamiltSolvePsiK count=44 entering dav_subspace
+DEBUG hamiltSolvePsiK count=44 before dav_subspace.diag, nbands=40
+DEBUG hamiltSolvePsiK count=44 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=3
+Current RMS: 0
+ DS10    -2.36e-04  -2.36e-04  -2.36e-04   6.78e+00  -6.79728901e+03  -1.12626780e-05   3.1918e-07   0.83
+
+TIME STATISTICS
+--------------------------------------------------------------------
+    CLASS_NAME            NAME        TIME/s  CALLS   AVG/s  PER/%  
+--------------------------------------------------------------------
+                   total              9.10   15       0.61   100.00 
+ Driver            atomic_world       9.10   1        9.10   100.00 
+ Relax_Driver      relax_driver       9.00   1        9.00   98.84  
+ ESolver_KS        runner             9.00   1        9.00   98.84  
+ Potential         cal_veff           0.35   11       0.03   3.81   
+ PotXC             cal_veff           0.33   11       0.03   3.59   
+ XC_Functional     v_xc               0.32   11       0.03   3.55   
+ ESolver_KS_PW     hamilt2rho_single  8.52   11       0.77   93.56  
+ HSolverPW         solve              7.46   11       0.68   81.95  
+ HSolverPW         solve_psik         6.34   44       0.14   69.63  
+ Diago_DavSubspace diag_once          6.13   44       0.14   67.27  
+ Diago_DavSubspace first              2.33   44       0.05   25.54  
+ Operator          hPsi               6.20   174      0.04   68.08  
+ Operator          veff_pw            5.82   174      0.03   63.91  
+ PW_Basis_K        recip2real         3.64   13516    0.00   39.95  
+ PW_Basis_K        real2recip         2.50   9996     0.00   27.47  
+ Operator          nonlocal_pw        0.23   174      0.00   2.56   
+ Nonlocal          add_nonlocal_pp    0.12   174      0.00   1.32   
+ Operator          OnsiteProjPW       0.13   174      0.00   1.43   
+ Diago_DavSubspace cal_elem           0.35   154      0.00   3.85   
+ Diago_DavSubspace diag_zhegvx        0.21   154      0.00   2.30   
+ Diago_DavSubspace cal_grad           3.25   110      0.03   35.72  
+ Diago_DavSubspace last               0.10   44       0.00   1.09   
+ ElecStatePW       psiToRho           1.11   11       0.10   12.16  
+ SpinConstrain     cal_mw_from_lambda 1.02   5        0.20   11.16  
+ SpinConstrain     update_psi_charge  3.48   5        0.70   38.18  
+--------------------------------------------------------------------
+
+
+ START  Time  : Sat Apr 18 10:56:56 2026
+ FINISH Time  : Sat Apr 18 10:57:05 2026
+ TOTAL  Time  : 9
+ SEE INFORMATION IN : OUT.autotest/

@@ -1,0 +1,17 @@
+# Test 224: PW_DFTU_S4_XYZ
+
+**Purpose**: PW DFT+U + noncollinear magmom along xyz
+
+**Configuration**:
+- Basis: PW
+- DFT+U: ON (U=5.0 eV, l=2)
+- DeltaSpin: OFF
+- nspin: 4 (noncollinear)
+- Mag direction: xyz
+- K-points: Gamma-only if no DFT+U/DS, 2x2x2 otherwise
+
+**Expected**: SCF convergence, reasonable magnetic moments
+
+**Priority**: P0
+
+**zdy-tmp reference**: Available

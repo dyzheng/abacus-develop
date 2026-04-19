@@ -1,0 +1,398 @@
+                                                                                     
+                              ABACUS v3.9.0.24
+
+               Atomic-orbital Based Ab-initio Computation at UStc                    
+
+                     Website: http://abacus.ustc.edu.cn/                             
+               Documentation: https://abacus.deepmodeling.com/                       
+                  Repository: https://github.com/abacusmodeling/abacus-develop       
+                              https://github.com/deepmodeling/abacus-develop         
+                      Commit: 92e06a1a1 (Fri Apr 17 23:07:59 2026 +0800)
+
+ Sat Apr 18 10:50:21 2026
+Info: Local MPI proc number: 1,OpenMP thread number: 2,Total thread number: 2,Local thread limit: 20
+ MAKE THE DIR         : OUT.autotest/
+ RUNNING WITH DEVICE  : CPU / 12th Gen Intel(R) Core(TM) i7-12700KF (x1)
+ WARNING: some of potential function is set to zero cause of less than 1e-30.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+ Warning: the number of valence electrons in pseudopotential > 8 for Fe: [Ar] 3d6 4s2
+ Pseudopotentials with additional electrons can yield (more) accurate outcomes, but may be less efficient.
+ If you're confident that your chosen pseudopotential is appropriate, you can safely ignore this warning.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+ UNIFORM GRID DIM     : 45 * 45 * 45
+ UNIFORM GRID DIM(BIG): 45 * 45 * 45
+ DONE(0.0356273  SEC) : SETUP UNITCELL
+ DONE(0.0459225  SEC) : INIT K-POINTS
+ ---------------------------------------------------------
+ Self-consistent calculations for electrons
+ ---------------------------------------------------------
+ SPIN    KPOINTS         PROCESSORS  THREADS     
+ 4       4               1           2           
+ ---------------------------------------------------------
+ Use plane wave basis
+ ---------------------------------------------------------
+ ELEMENT NATOM       XC          
+ Fe      2           
+ ---------------------------------------------------------
+ Initial plane wave basis and FFT box
+ ---------------------------------------------------------
+ DONE(0.0503018  SEC) : INIT PLANEWAVE
+ START CHARGE      : atomic
+ DONE(0.0589186  SEC) : LOCAL POTENTIAL
+ DONE(0.0662959  SEC) : NON-LOCAL POTENTIAL
+ MEMORY FOR PSI (MB)  : 8.07129
+ DONE(0.103157   SEC) : INIT BASIS
+
+ ================================================================
+ SELF-CONSISTENT: 
+ ================================================================
+ DONE(0.166535   SEC) : INIT SCF
+DEBUG hamilt2rho_single ENTER iter=1 p_hamilt=0x56af69dabbc0
+DEBUG hamilt2rho_single energy reset done
+DEBUG hamilt2rho_single DiagoIterAssist setup done
+DEBUG HSolverPW updateHk(0) done
+DEBUG HSolverPW psi.fix_k(0) done
+DEBUG HSolverPW before update_precondition ik=0
+DEBUG HSolverPW after update_precondition ik=0
+DEBUG HSolverPW before hamiltSolvePsiK ik=0 nbands=40
+DEBUG hamiltSolvePsiK count=1
+DEBUG hamiltSolvePsiK count=1 method=dav_subspace need_subspace=0
+DEBUG hamiltSolvePsiK count=1 cur_nbasis=1653
+DEBUG hamiltSolvePsiK count=1 entering dav_subspace
+DEBUG hamiltSolvePsiK count=1 before dav_subspace.diag, nbands=40
+DEBUG cal_ps_dftu entry=1 ik=0 npol=2 m=80
+DEBUG cal_ps_dftu entry=1 onsite_p=0x56af640364c0
+DEBUG cal_ps_dftu entry=1 becp=0x56af6b2fc8a0
+
+=== DEBUG VU_DUMP count=1 ik=0 npol=2 vu_size=200 nat=2 ===
+  eff_pot_pw[0..9]= (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0)
+  iat=0 type=0 l=2 begin=0 vu=[(0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0)]
+  iat=1 type=0 l=2 begin=100 vu=[(0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0)]
+=== END VU_DUMP ===
+DEBUG cal_ps_dftu entry=2 ik=0 npol=2 m=80
+DEBUG cal_ps_dftu entry=2 onsite_p=0x56af640364c0
+DEBUG cal_ps_dftu entry=2 becp=0x56af6b2fc8a0
+
+=== DEBUG VU_DUMP count=2 ik=0 npol=2 vu_size=200 nat=2 ===
+  eff_pot_pw[0..9]= (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0)
+  iat=0 type=0 l=2 begin=0 vu=[(0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0)]
+  iat=1 type=0 l=2 begin=100 vu=[(0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0)]
+=== END VU_DUMP ===
+DEBUG cal_ps_dftu entry=3 ik=0 npol=2 m=44
+DEBUG cal_ps_dftu entry=3 onsite_p=0x56af640364c0
+DEBUG cal_ps_dftu entry=3 becp=0x56af6b2fc8a0
+
+=== DEBUG VU_DUMP count=3 ik=0 npol=2 vu_size=200 nat=2 ===
+  eff_pot_pw[0..9]= (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0)
+  iat=0 type=0 l=2 begin=0 vu=[(0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0)]
+  iat=1 type=0 l=2 begin=100 vu=[(0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0)]
+=== END VU_DUMP ===
+DEBUG hamiltSolvePsiK count=1 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=0
+DEBUG HSolverPW updateHk(1) done
+DEBUG HSolverPW psi.fix_k(1) done
+DEBUG HSolverPW before update_precondition ik=1
+DEBUG HSolverPW after update_precondition ik=1
+DEBUG HSolverPW before hamiltSolvePsiK ik=1 nbands=40
+DEBUG hamiltSolvePsiK count=2
+DEBUG hamiltSolvePsiK count=2 method=dav_subspace need_subspace=0
+DEBUG hamiltSolvePsiK count=2 cur_nbasis=1633
+DEBUG hamiltSolvePsiK count=2 entering dav_subspace
+DEBUG hamiltSolvePsiK count=2 before dav_subspace.diag, nbands=40
+DEBUG cal_ps_dftu entry=4 ik=1 npol=2 m=80
+DEBUG cal_ps_dftu entry=4 onsite_p=0x56af640364c0
+DEBUG cal_ps_dftu entry=4 becp=0x56af6b2fc8a0
+
+=== DEBUG VU_DUMP count=4 ik=1 npol=2 vu_size=200 nat=2 ===
+  eff_pot_pw[0..9]= (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0)
+  iat=0 type=0 l=2 begin=0 vu=[(0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0)]
+  iat=1 type=0 l=2 begin=100 vu=[(0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0)]
+=== END VU_DUMP ===
+DEBUG cal_ps_dftu entry=5 ik=1 npol=2 m=80
+DEBUG cal_ps_dftu entry=5 onsite_p=0x56af640364c0
+DEBUG cal_ps_dftu entry=5 becp=0x56af6b2fc8a0
+
+=== DEBUG VU_DUMP count=5 ik=1 npol=2 vu_size=200 nat=2 ===
+  eff_pot_pw[0..9]= (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0)
+  iat=0 type=0 l=2 begin=0 vu=[(0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0)]
+  iat=1 type=0 l=2 begin=100 vu=[(0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0)]
+=== END VU_DUMP ===
+DEBUG cal_ps_dftu entry=6 ik=1 npol=2 m=48
+DEBUG cal_ps_dftu entry=6 onsite_p=0x56af640364c0
+DEBUG cal_ps_dftu entry=6 becp=0x56af6b2fc8a0
+
+=== DEBUG VU_DUMP count=6 ik=1 npol=2 vu_size=200 nat=2 ===
+  eff_pot_pw[0..9]= (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0)
+  iat=0 type=0 l=2 begin=0 vu=[(0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0)]
+  iat=1 type=0 l=2 begin=100 vu=[(0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0)]
+=== END VU_DUMP ===
+DEBUG cal_ps_dftu entry=7 ik=1 npol=2 m=24
+DEBUG cal_ps_dftu entry=7 onsite_p=0x56af640364c0
+DEBUG cal_ps_dftu entry=7 becp=0x56af6b2fc8a0
+
+=== DEBUG VU_DUMP count=7 ik=1 npol=2 vu_size=200 nat=2 ===
+  eff_pot_pw[0..9]= (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0)
+  iat=0 type=0 l=2 begin=0 vu=[(0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0)]
+  iat=1 type=0 l=2 begin=100 vu=[(0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0)]
+=== END VU_DUMP ===
+DEBUG hamiltSolvePsiK count=2 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=1
+DEBUG HSolverPW updateHk(2) done
+DEBUG HSolverPW psi.fix_k(2) done
+DEBUG HSolverPW before update_precondition ik=2
+DEBUG HSolverPW after update_precondition ik=2
+DEBUG HSolverPW before hamiltSolvePsiK ik=2 nbands=40
+DEBUG hamiltSolvePsiK count=3
+DEBUG hamiltSolvePsiK count=3 method=dav_subspace need_subspace=0
+DEBUG hamiltSolvePsiK count=3 cur_nbasis=1633
+DEBUG hamiltSolvePsiK count=3 entering dav_subspace
+DEBUG hamiltSolvePsiK count=3 before dav_subspace.diag, nbands=40
+DEBUG cal_ps_dftu entry=8 ik=2 npol=2 m=80
+DEBUG cal_ps_dftu entry=8 onsite_p=0x56af640364c0
+DEBUG cal_ps_dftu entry=8 becp=0x56af6b2fc8a0
+
+=== DEBUG VU_DUMP count=8 ik=2 npol=2 vu_size=200 nat=2 ===
+  eff_pot_pw[0..9]= (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0)
+  iat=0 type=0 l=2 begin=0 vu=[(0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0)]
+  iat=1 type=0 l=2 begin=100 vu=[(0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0)]
+=== END VU_DUMP ===
+DEBUG cal_ps_dftu entry=9 ik=2 npol=2 m=80
+DEBUG cal_ps_dftu entry=9 onsite_p=0x56af640364c0
+DEBUG cal_ps_dftu entry=9 becp=0x56af6b2fc8a0
+
+=== DEBUG VU_DUMP count=9 ik=2 npol=2 vu_size=200 nat=2 ===
+  eff_pot_pw[0..9]= (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0)
+  iat=0 type=0 l=2 begin=0 vu=[(0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0)]
+  iat=1 type=0 l=2 begin=100 vu=[(0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0)]
+=== END VU_DUMP ===
+DEBUG cal_ps_dftu entry=10 ik=2 npol=2 m=48
+DEBUG cal_ps_dftu entry=10 onsite_p=0x56af640364c0
+DEBUG cal_ps_dftu entry=10 becp=0x56af6b2fc8a0
+
+=== DEBUG VU_DUMP count=10 ik=2 npol=2 vu_size=200 nat=2 ===
+  eff_pot_pw[0..9]= (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0)
+  iat=0 type=0 l=2 begin=0 vu=[(0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0)]
+  iat=1 type=0 l=2 begin=100 vu=[(0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0)]
+=== END VU_DUMP ===
+DEBUG cal_ps_dftu entry=11 ik=2 npol=2 m=24
+DEBUG cal_ps_dftu entry=11 onsite_p=0x56af640364c0
+DEBUG cal_ps_dftu entry=11 becp=0x56af6b2fc8a0
+
+=== DEBUG VU_DUMP count=11 ik=2 npol=2 vu_size=200 nat=2 ===
+  eff_pot_pw[0..9]= (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0)
+  iat=0 type=0 l=2 begin=0 vu=[(0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0)]
+  iat=1 type=0 l=2 begin=100 vu=[(0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0)]
+=== END VU_DUMP ===
+DEBUG hamiltSolvePsiK count=3 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=2
+DEBUG HSolverPW updateHk(3) done
+DEBUG HSolverPW psi.fix_k(3) done
+DEBUG HSolverPW before update_precondition ik=3
+DEBUG HSolverPW after update_precondition ik=3
+DEBUG HSolverPW before hamiltSolvePsiK ik=3 nbands=40
+DEBUG hamiltSolvePsiK count=4
+DEBUG hamiltSolvePsiK count=4 method=dav_subspace need_subspace=0
+DEBUG hamiltSolvePsiK count=4 cur_nbasis=1633
+DEBUG hamiltSolvePsiK count=4 entering dav_subspace
+DEBUG hamiltSolvePsiK count=4 before dav_subspace.diag, nbands=40
+DEBUG cal_ps_dftu entry=12 ik=3 npol=2 m=80
+DEBUG cal_ps_dftu entry=12 onsite_p=0x56af640364c0
+DEBUG cal_ps_dftu entry=12 becp=0x56af6b2fc8a0
+
+=== DEBUG VU_DUMP count=12 ik=3 npol=2 vu_size=200 nat=2 ===
+  eff_pot_pw[0..9]= (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0)
+  iat=0 type=0 l=2 begin=0 vu=[(0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0)]
+  iat=1 type=0 l=2 begin=100 vu=[(0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0)]
+=== END VU_DUMP ===
+DEBUG cal_ps_dftu entry=13 ik=3 npol=2 m=80
+DEBUG cal_ps_dftu entry=13 onsite_p=0x56af640364c0
+DEBUG cal_ps_dftu entry=13 becp=0x56af6b2fc8a0
+
+=== DEBUG VU_DUMP count=13 ik=3 npol=2 vu_size=200 nat=2 ===
+  eff_pot_pw[0..9]= (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0)
+  iat=0 type=0 l=2 begin=0 vu=[(0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0)]
+  iat=1 type=0 l=2 begin=100 vu=[(0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0)]
+=== END VU_DUMP ===
+DEBUG cal_ps_dftu entry=14 ik=3 npol=2 m=48
+DEBUG cal_ps_dftu entry=14 onsite_p=0x56af640364c0
+DEBUG cal_ps_dftu entry=14 becp=0x56af6b2fc8a0
+
+=== DEBUG VU_DUMP count=14 ik=3 npol=2 vu_size=200 nat=2 ===
+  eff_pot_pw[0..9]= (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0)
+  iat=0 type=0 l=2 begin=0 vu=[(0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0)]
+  iat=1 type=0 l=2 begin=100 vu=[(0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0)]
+=== END VU_DUMP ===
+DEBUG cal_ps_dftu entry=15 ik=3 npol=2 m=24
+DEBUG cal_ps_dftu entry=15 onsite_p=0x56af640364c0
+DEBUG cal_ps_dftu entry=15 becp=0x56af6b2fc8a0
+
+=== DEBUG VU_DUMP count=15 ik=3 npol=2 vu_size=200 nat=2 ===
+  eff_pot_pw[0..9]= (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0)
+  iat=0 type=0 l=2 begin=0 vu=[(0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0)]
+  iat=1 type=0 l=2 begin=100 vu=[(0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0)]
+=== END VU_DUMP ===
+DEBUG hamiltSolvePsiK count=4 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=3
+DEBUG hamilt2rho_single ENTER iter=1 p_hamilt=0x56af69dabbc0
+DEBUG hamilt2rho_single energy reset done
+DEBUG hamilt2rho_single DiagoIterAssist setup done
+DEBUG HSolverPW updateHk(0) done
+DEBUG HSolverPW psi.fix_k(0) done
+DEBUG HSolverPW before update_precondition ik=0
+DEBUG HSolverPW after update_precondition ik=0
+DEBUG HSolverPW before hamiltSolvePsiK ik=0 nbands=40
+DEBUG hamiltSolvePsiK count=5
+DEBUG hamiltSolvePsiK count=5 method=dav_subspace need_subspace=0
+DEBUG hamiltSolvePsiK count=5 cur_nbasis=1653
+DEBUG hamiltSolvePsiK count=5 entering dav_subspace
+DEBUG hamiltSolvePsiK count=5 before dav_subspace.diag, nbands=40
+DEBUG cal_ps_dftu entry=16 ik=0 npol=2 m=80
+DEBUG cal_ps_dftu entry=16 onsite_p=0x56af640364c0
+DEBUG cal_ps_dftu entry=16 becp=0x56af6b2fc8a0
+
+=== DEBUG VU_DUMP count=16 ik=0 npol=2 vu_size=200 nat=2 ===
+  eff_pot_pw[0..9]= (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0)
+  iat=0 type=0 l=2 begin=0 vu=[(0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0)]
+  iat=1 type=0 l=2 begin=100 vu=[(0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0)]
+=== END VU_DUMP ===
+DEBUG cal_ps_dftu entry=17 ik=0 npol=2 m=80
+DEBUG cal_ps_dftu entry=17 onsite_p=0x56af640364c0
+DEBUG cal_ps_dftu entry=17 becp=0x56af6b2fc8a0
+
+=== DEBUG VU_DUMP count=17 ik=0 npol=2 vu_size=200 nat=2 ===
+  eff_pot_pw[0..9]= (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0)
+  iat=0 type=0 l=2 begin=0 vu=[(0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0)]
+  iat=1 type=0 l=2 begin=100 vu=[(0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0)]
+=== END VU_DUMP ===
+DEBUG hamiltSolvePsiK count=5 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=0
+DEBUG HSolverPW updateHk(1) done
+DEBUG HSolverPW psi.fix_k(1) done
+DEBUG HSolverPW before update_precondition ik=1
+DEBUG HSolverPW after update_precondition ik=1
+DEBUG HSolverPW before hamiltSolvePsiK ik=1 nbands=40
+DEBUG hamiltSolvePsiK count=6
+DEBUG hamiltSolvePsiK count=6 method=dav_subspace need_subspace=0
+DEBUG hamiltSolvePsiK count=6 cur_nbasis=1633
+DEBUG hamiltSolvePsiK count=6 entering dav_subspace
+DEBUG hamiltSolvePsiK count=6 before dav_subspace.diag, nbands=40
+DEBUG cal_ps_dftu entry=18 ik=1 npol=2 m=80
+DEBUG cal_ps_dftu entry=18 onsite_p=0x56af640364c0
+DEBUG cal_ps_dftu entry=18 becp=0x56af6b2fc8a0
+
+=== DEBUG VU_DUMP count=18 ik=1 npol=2 vu_size=200 nat=2 ===
+  eff_pot_pw[0..9]= (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0)
+  iat=0 type=0 l=2 begin=0 vu=[(0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0)]
+  iat=1 type=0 l=2 begin=100 vu=[(0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0)]
+=== END VU_DUMP ===
+DEBUG cal_ps_dftu entry=19 ik=1 npol=2 m=80
+DEBUG cal_ps_dftu entry=19 onsite_p=0x56af640364c0
+DEBUG cal_ps_dftu entry=19 becp=0x56af6b2fc8a0
+
+=== DEBUG VU_DUMP count=19 ik=1 npol=2 vu_size=200 nat=2 ===
+  eff_pot_pw[0..9]= (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0)
+  iat=0 type=0 l=2 begin=0 vu=[(0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0)]
+  iat=1 type=0 l=2 begin=100 vu=[(0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0)]
+=== END VU_DUMP ===
+DEBUG hamiltSolvePsiK count=6 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=1
+DEBUG HSolverPW updateHk(2) done
+DEBUG HSolverPW psi.fix_k(2) done
+DEBUG HSolverPW before update_precondition ik=2
+DEBUG HSolverPW after update_precondition ik=2
+DEBUG HSolverPW before hamiltSolvePsiK ik=2 nbands=40
+DEBUG hamiltSolvePsiK count=7
+DEBUG hamiltSolvePsiK count=7 method=dav_subspace need_subspace=0
+DEBUG hamiltSolvePsiK count=7 cur_nbasis=1633
+DEBUG hamiltSolvePsiK count=7 entering dav_subspace
+DEBUG hamiltSolvePsiK count=7 before dav_subspace.diag, nbands=40
+DEBUG cal_ps_dftu entry=20 ik=2 npol=2 m=80
+DEBUG cal_ps_dftu entry=20 onsite_p=0x56af640364c0
+DEBUG cal_ps_dftu entry=20 becp=0x56af6b2fc8a0
+
+=== DEBUG VU_DUMP count=20 ik=2 npol=2 vu_size=200 nat=2 ===
+  eff_pot_pw[0..9]= (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0)
+  iat=0 type=0 l=2 begin=0 vu=[(0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0)]
+  iat=1 type=0 l=2 begin=100 vu=[(0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0)]
+=== END VU_DUMP ===
+DEBUG cal_ps_dftu entry=21 ik=2 npol=2 m=80
+DEBUG cal_ps_dftu entry=21 onsite_p=0x56af640364c0
+DEBUG cal_ps_dftu entry=21 becp=0x56af6b2fc8a0
+
+=== DEBUG VU_DUMP count=21 ik=2 npol=2 vu_size=200 nat=2 ===
+  eff_pot_pw[0..9]= (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0)
+  iat=0 type=0 l=2 begin=0 vu=[(0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0)]
+  iat=1 type=0 l=2 begin=100 vu=[(0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0)]
+=== END VU_DUMP ===
+DEBUG hamiltSolvePsiK count=7 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=2
+DEBUG HSolverPW updateHk(3) done
+DEBUG HSolverPW psi.fix_k(3) done
+DEBUG HSolverPW before update_precondition ik=3
+DEBUG HSolverPW after update_precondition ik=3
+DEBUG HSolverPW before hamiltSolvePsiK ik=3 nbands=40
+DEBUG hamiltSolvePsiK count=8
+DEBUG hamiltSolvePsiK count=8 method=dav_subspace need_subspace=0
+DEBUG hamiltSolvePsiK count=8 cur_nbasis=1633
+DEBUG hamiltSolvePsiK count=8 entering dav_subspace
+DEBUG hamiltSolvePsiK count=8 before dav_subspace.diag, nbands=40
+DEBUG cal_ps_dftu entry=22 ik=3 npol=2 m=80
+DEBUG cal_ps_dftu entry=22 onsite_p=0x56af640364c0
+DEBUG cal_ps_dftu entry=22 becp=0x56af6b2fc8a0
+
+=== DEBUG VU_DUMP count=22 ik=3 npol=2 vu_size=200 nat=2 ===
+  eff_pot_pw[0..9]= (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0)
+  iat=0 type=0 l=2 begin=0 vu=[(0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0)]
+  iat=1 type=0 l=2 begin=100 vu=[(0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0)]
+=== END VU_DUMP ===
+DEBUG cal_ps_dftu entry=23 ik=3 npol=2 m=80
+DEBUG cal_ps_dftu entry=23 onsite_p=0x56af640364c0
+DEBUG cal_ps_dftu entry=23 becp=0x56af6b2fc8a0
+
+=== DEBUG VU_DUMP count=23 ik=3 npol=2 vu_size=200 nat=2 ===
+  eff_pot_pw[0..9]= (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0) (0,0)
+  iat=0 type=0 l=2 begin=0 vu=[(0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0)]
+  iat=1 type=0 l=2 begin=100 vu=[(0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0), (0,0)]
+=== END VU_DUMP ===
+DEBUG hamiltSolvePsiK count=8 after dav_subspace.diag
+DEBUG HSolverPW after hamiltSolvePsiK ik=3
+ ITER     TMAGX      TMAGY      TMAGZ       AMAG        ETOT/eV          EDIFF/eV         DRHO     TIME/s
+ DS1     -4.83e-06  -1.84e-15  -1.25e-14   5.59e+00  -6.79574823e+03   0.00000000e+00   3.1927e-01   1.38
+corrupted double-linked list
+DEBUG iter_init iter=2 calling cal_occ_pw, drho=0.319266
+[zdy:965073] *** Process received signal ***
+[zdy:965073] Signal: Aborted (6)
+[zdy:965073] Signal code:  (-6)
+[zdy:965073] [ 0] /lib/x86_64-linux-gnu/libpthread.so.0(+0x14420)[0x7e3538317420]
+[zdy:965073] [ 1] /lib/x86_64-linux-gnu/libc.so.6(gsignal+0xcb)[0x7e3534e6f00b]
+[zdy:965073] [ 2] /lib/x86_64-linux-gnu/libc.so.6(abort+0x12b)[0x7e3534e4e859]
+[zdy:965073] [ 3] /lib/x86_64-linux-gnu/libc.so.6(+0x8d266)[0x7e3534eb9266]
+[zdy:965073] [ 4] /lib/x86_64-linux-gnu/libc.so.6(+0x952fc)[0x7e3534ec12fc]
+[zdy:965073] [ 5] /lib/x86_64-linux-gnu/libc.so.6(+0x9594c)[0x7e3534ec194c]
+[zdy:965073] [ 6] /lib/x86_64-linux-gnu/libc.so.6(+0x95aaf)[0x7e3534ec1aaf]
+[zdy:965073] [ 7] /lib/x86_64-linux-gnu/libc.so.6(+0x97c83)[0x7e3534ec3c83]
+[zdy:965073] [ 8] /lib/x86_64-linux-gnu/libc.so.6(__libc_malloc+0x1b9)[0x7e3534ec6299]
+[zdy:965073] [ 9] /lib/x86_64-linux-gnu/libstdc++.so.6(_Znwm+0x19)[0x7e35350c8b29]
+[zdy:965073] [10] /root/abacus-dftu-pw-port/build/abacus_2p(+0x4f408d)[0x56af63a5608d]
+[zdy:965073] [11] /root/abacus-dftu-pw-port/build/abacus_2p(+0x502ff0)[0x56af63a64ff0]
+[zdy:965073] [12] /root/abacus-dftu-pw-port/build/abacus_2p(+0x4fba67)[0x56af63a5da67]
+[zdy:965073] [13] /root/abacus-dftu-pw-port/build/abacus_2p(+0x62174e)[0x56af63b8374e]
+[zdy:965073] [14] /root/abacus-dftu-pw-port/build/abacus_2p(+0x5798ff)[0x56af63adb8ff]
+[zdy:965073] [15] /root/abacus-dftu-pw-port/build/abacus_2p(+0x570631)[0x56af63ad2631]
+[zdy:965073] [16] /root/abacus-dftu-pw-port/build/abacus_2p(+0x3ad795)[0x56af6390f795]
+[zdy:965073] [17] /root/abacus-dftu-pw-port/build/abacus_2p(+0x3cb900)[0x56af6392d900]
+[zdy:965073] [18] /root/abacus-dftu-pw-port/build/abacus_2p(+0x3cae16)[0x56af6392ce16]
+[zdy:965073] [19] /root/abacus-dftu-pw-port/build/abacus_2p(+0x3cafa7)[0x56af6392cfa7]
+[zdy:965073] [20] /root/abacus-dftu-pw-port/build/abacus_2p(+0xad223)[0x56af6360f223]
+[zdy:965073] [21] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0xf3)[0x7e3534e50083]
+[zdy:965073] [22] /root/abacus-dftu-pw-port/build/abacus_2p(+0xad0be)[0x56af6360f0be]
+[zdy:965073] *** End of error message ***
+--------------------------------------------------------------------------
+Primary job  terminated normally, but 1 process returned
+a non-zero exit code. Per user-direction, the job has been aborted.
+--------------------------------------------------------------------------
+--------------------------------------------------------------------------
+mpirun noticed that process rank 0 with PID 0 on node zdy exited on signal 6 (Aborted).
+--------------------------------------------------------------------------
