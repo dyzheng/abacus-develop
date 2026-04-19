@@ -74,14 +74,14 @@ void OnsiteProj<OperatorPW<T, Device>>::init(const int ik_in)
 // this function sum up each non-local pseudopotential located on each atom,
 //--------------------------------------------------------------------------
 template<typename T, typename Device>
-void OnsiteProj<OperatorPW<T, Device>>::add_onsite_proj(T *hpsi_in, const int npol, const int m) const
+void OnsiteProj<OperatorPW<T, Device>>::add_onsite_proj(T *hpsi_in, const int npol, const int m, const int npwx) const
 {
     ModuleBase::timer::tick("OnsiteProj", "add_onsite_proj");
 
     // DIAGNOSTIC: output first 3 hpsi values before and after
     if(m == 28 && (this->ik == 0 || this->ik == 1))
     {
-        std::cout << "[HPSI-PW] add_onsite_proj BEFORE ik=" << this->ik << " m=" << m << " hpsi[0..2]=";
+        std::cout << "[HPSI-PW] add_onsite_proj BEFORE ik=" << this->ik << " m=" << m << " npwx=" << npwx << " hpsi[0..2]=";
         for(int i=0;i<3;i++) std::cout << " (" << hpsi_in[i].real() << "," << hpsi_in[i].imag() << ")";
         std::cout << std::endl;
     }
@@ -91,7 +91,6 @@ void OnsiteProj<OperatorPW<T, Device>>::add_onsite_proj(T *hpsi_in, const int np
     //std::cout << "use of tab_atomic at " << __FILE__ << ": " << __LINE__ << std::endl;
     const std::complex<double>* tab_atomic = onsite_p->get_tab_atomic();
     const int npw = onsite_p->get_npw();
-    const int npwx = onsite_p->get_npwx();
 
     // DIAG: print hpsi norms for first 5 bands
     if(m == 28 && (this->ik == 0 || this->ik == 1))
@@ -140,17 +139,17 @@ void OnsiteProj<OperatorPW<T, Device>>::add_onsite_proj(T *hpsi_in, const int np
 }
 
 template<typename T, typename Device>
-void OnsiteProj<OperatorPW<T, Device>>::update_becp(const T *psi_in, const int npol, const int m) const
+void OnsiteProj<OperatorPW<T, Device>>::update_becp(const T *psi_in, const int npol, const int m, const int npwx) const
 {
     auto* onsite_p = projectors::OnsiteProjector<double, Device>::get_instance();
     // calculate <alpha|psi> 
     // DIAGNOSTIC: print psi_in pointer address and first 3 values
     std::cout << "[DIAG-UB] update_becp ik=" << this->ik << " psi_in=" << (const void*)psi_in 
-              << " nbands=" << m << " psi[0..2]=";
+              << " nbands=" << m << " npwx=" << npwx << " psi[0..2]=";
     for(int i=0;i<3;i++) std::cout << " (" << psi_in[i].real() << "," << psi_in[i].imag() << ")";
     std::cout << std::endl;
     // std::cout << __FILE__ << ":" << __LINE__ << " nbands = " << m << std::endl;
-    onsite_p->overlap_proj_psi(m, psi_in);
+    onsite_p->overlap_proj_psi(m, psi_in, npwx);
 }
 
 template<typename T, typename Device>
@@ -399,14 +398,16 @@ template<>
 void OnsiteProj<OperatorPW<std::complex<float>, base_device::DEVICE_CPU>>::add_onsite_proj(
 		std::complex<float> *hpsi_in, 
 		const int npol, 
-		const int m) const
+		const int m,
+		const int npwx) const
 {}
 
 template<>
 void OnsiteProj<OperatorPW<std::complex<float>, base_device::DEVICE_CPU>>::update_becp(
 		const std::complex<float> *psi_in, 
 		const int npol, 
-		const int m) const
+		const int m,
+		const int npwx) const
 {}
 
 template<>
@@ -426,14 +427,16 @@ template<>
 void OnsiteProj<OperatorPW<std::complex<float>, base_device::DEVICE_GPU>>::add_onsite_proj(
 		std::complex<float> *hpsi_in, 
 		const int npol, 
-		const int m) const
+		const int m,
+		const int npwx) const
 {}
 
 template<>
 void OnsiteProj<OperatorPW<std::complex<float>, base_device::DEVICE_GPU>>::update_becp(
 		const std::complex<float> *psi_in, 
 		const int npol, 
-		const int m) const
+		const int m,
+		const int npwx) const
 {}
 
 template<>
@@ -460,7 +463,7 @@ void OnsiteProj<OperatorPW<T, Device>>::act(
     const bool is_first_node)const
 {
     ModuleBase::timer::tick("Operator", "OnsiteProjPW");
-    this->update_becp(tmpsi_in, npol, nbands);
+    this->update_becp(tmpsi_in, npol, nbands, nbasis/npol);
     this->cal_ps_delta_spin(npol, nbands);
 
     // DIAGNOSTIC: dump becp and ps before cal_ps_dftu
@@ -489,7 +492,7 @@ void OnsiteProj<OperatorPW<T, Device>>::act(
         std::cout << std::endl;
     }
 
-    this->add_onsite_proj(tmhpsi, npol, nbands);
+    this->add_onsite_proj(tmhpsi, npol, nbands, nbasis/npol);
     ModuleBase::timer::tick("Operator", "OnsiteProjPW");
 }
 
