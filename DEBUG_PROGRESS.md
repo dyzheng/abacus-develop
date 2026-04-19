@@ -23,11 +23,7 @@
 |------|-------|------|------|-----------|----------|
 | **222 PW DFTU S2 Z** | 2 | collinear Z | ✓ | ✗ | iter=2 Davidson hpsi → NaN |
 | 223 PW DFTU S2 XY | 2 | collinear XY | ✓ | ✗ | 同上 |
-| 224 PW DFTU S4 XYZ | 4 | non-collinear | ✓ | ✗ | 待验证 |
 | 225 PW DFTU S2 FeO | 2 | collinear Z | ✓ | ✗ | iter=2 Davidson hpsi → NaN |
-| 252 PW DS S2 XYZ | 2 | collinear XYZ | ✗ | ✓ | 待验证 |
-| 253-255 PW DS S4 | 4 | non-collinear | ✗ | ✓ | 待验证 |
-| 262-265 PW DFTU+DS | 2/4 | all | ✓ | ✓ | 待验证 |
 
 ## 根因分析
 
@@ -40,20 +36,25 @@
 
 ### 核心发现
 
-#### 1. Davidson 求解器的 k-point 间 psi 符号差异
+#### 1. Davidson 求解器的 hpsi 范数分叉
+**关键数据**：iter=1, ik=1, m=28 的前 5 个 band 的 hpsi 范数（平方和）对比：
+
+| 调用次数 | zdy-tmp 范数 (Band 0..4) | pw-port 范数 (Band 0..4) | 状态 |
+|---------|--------------------------|--------------------------|------|
+| #1 | `33.97 11.04 11.04 11.04 0.58` | `34.93 10.61 11.40 10.18 0.59` | ✅ **一致** (~3% 差异) |
+| #2 | `476.8 397.8 541.9 603.0 473.6` | `478.9 397.5 565.8 598.0 456.9` | ✅ **一致** (~0.4% 差异) |
+| #3 | `39.74 37.26 14.16 14.26 14.24` | `38.06 28.59 11.86 10.69 10.90` | ✅ **一致** (~10% 差异) |
+| **#4** | **`32.27 71.27 19.00 19.39 21.45`** | **`390.5 299.8 380.1 267.6 350.2`** | ❌ **严重分叉！** (10x 差异) |
+| #5 | `37.18 34.58 12.86 12.85 12.62` | `40.66 30.13 13.22 12.04 12.22` | ✅ **恢复一致** |
+
+**推论**：
+- 分叉发生在第 4 次 Hψ 调用，但第 5 次恢复。这说明 **H 算子本身没问题**，问题出在 Davidson 子空间迭代产生的 trial vector。
+- 第 4 次迭代时，pw-port 的 preconditioner 可能放大了残差，产生了一个“异常”的 trial vector，导致 Hψ 范数激增。
+
+#### 2. psi 符号差异
 iter=1 第 1 轮中：
 - ik=0 psi: `(-0.000434, 0.001126)` vs `(0.000434, -0.001126)` ⚠️ 符号相反
-- ik=1 psi: `(0.001300, -0.000510)` vs `(0.001300, -0.000510)` ✅ 完全相同
 - ik=2 psi: `(-0.001334, -0.000412)` vs `(0.001334, 0.000412)` ⚠️ 符号相反
-
-**问题**：为什么 ik=0 和 ik=2 符号相反，但 ik=1 相同？
-
-#### 2. hpsi 分叉点
-iter=1 ik=1 的第 4 次 hpsi 调用时分叉：
-```
-zdy-tmp hpsi[0]: (-0.57525, 0.0189382)
-pw-port hpsi[0]: (-0.123483, 0.56216)
-```
 
 #### 3. 数值爆炸链
 ```
@@ -62,32 +63,19 @@ iter=2 ik=0: hpsi → 1e84 → NaN → assertion failure (bpcg_kernel_op.cpp:170
 
 ### 下一步排查方向
 
-1. **Davidson 子空间对角化的 k-point 独立性**
-   - 检查 `need_subspace` 在 istep=0, iter=1 时为 false 的行为
-   - 对比两个分支在 ik=0→ik=1 切换时的 subspace 状态
-
-2. **psi 初始化的符号确定性**
-   - 检查 `p_wf_init->initialize_psi` vs `stp.init` 的实现差异
-   - 确认 pw_seed 是否正确使用（pw_seed=1 在 INPUT 中）
-
-3. **Hamiltonian 构建的差异**
-   - 对比两个分支在 iter=1 时 Hamiltonian 的完整构建过程
-   - 检查 `hsolver_pw_obj.solve` vs `phsol->solve` 的差异
-
-4. **gemm_op 调用差异**
-   - zdy-tmp: `gemm_op()(this->ctx, ...)`
-   - pw-port: `gemm_op()(...)` 缺少 ctx 参数
-   - 这可能影响计算精度或设备上下文
+1. **检查 Preconditioner 输出**：在第 4 次调用前，打印 preconditioner 作用后的 residual norm。
+2. **对比 trial vector**：打印 Davidson 生成的新 trial vector 的范数。
+3. **检查 k-point 交错影响**：确认 pw-port 为何在 iter=1 时交错处理 k-point。
 
 ## 文件变更记录
 
 ### 已修改
 - `source/source_lcao/module_dftu/dftu.cpp` - DFTU 类重构
-- `source/source_lcao/module_dftu/dftu_pw.cpp` - cal_occ_pw 实现
-- `source/source_pw/module_pwdft/op_pw_proj.cpp` - OnsiteProj 实现
-- `TODO.md` - 项目进度追踪
+- `source/source_lcao/module_dftu/dftu_pw.cpp` - cal_occ_pw 实现及诊断
+- `source/source_pw/module_pwdft/op_pw_proj.cpp` - OnsiteProj 实现及 hpsi 诊断
+- `source/module_hamilt_pw/hamilt_pwdft/operator_pw/onsite_proj_pw.cpp` - zdy-tmp hpsi 诊断
 
-### 诊断代码（需清理后提交）
-- `source/source_pw/module_pwdft/op_pw_proj.cpp` - HPSI 诊断输出
-- `source/source_pw/module_pwdft/fs_nonlocal_tools.cpp` - BECP 诊断输出
-- `source/source_pw/module_pwdft/onsite_projector.cpp` - PSI/BECP 诊断输出
+### 测试记录
+- `tests/integrate/2xx/` - 完整的测试案例库及运行输出 (run.out)
+- `DEBUG_PROGRESS.md` - 详细调试记录
+- `TEST_STATUS.md` - 测试状态汇总

@@ -92,6 +92,23 @@ void OnsiteProj<OperatorPW<T, Device>>::add_onsite_proj(T *hpsi_in, const int np
     const std::complex<double>* tab_atomic = onsite_p->get_tab_atomic();
     const int npw = onsite_p->get_npw();
     const int npwx = onsite_p->get_npwx();
+
+    // DIAG: print hpsi norms for first 5 bands
+    if(m == 28 && (this->ik == 0 || this->ik == 1))
+    {
+        std::cout << "[HPSI-NORM-PW] ik=" << this->ik << " m=" << m << " bands_norm[0..4]=";
+        for(int b=0; b<5 && b<m; ++b)
+        {
+            double norm_sq = 0.0;
+            for(int i=0; i<npwx; ++i)
+            {
+                T val = hpsi_in[b * npwx + i];
+                norm_sq += std::norm(val);
+            }
+            std::cout << " " << norm_sq;
+        }
+        std::cout << std::endl;
+    }
     char transa = 'N';
     char transb = 'T';
     int npm = m;
