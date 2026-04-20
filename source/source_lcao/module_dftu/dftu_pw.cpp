@@ -20,6 +20,7 @@ void Plus_U::cal_occ_pw(const int iter,
     {
     this->zero_locale(cell);
 
+#if 0  // DIAG disabled
     // DIAGNOSTIC [N4]: state right after zero_locale
     std::cout << "[DIAG-PW] cal_occ_pw iter=" << iter << " right after zero_locale:" << std::endl;
     std::cout << "[DIAG-PW]   uom_array.size=" << this->uom_array.size()
@@ -29,6 +30,7 @@ void Plus_U::cal_occ_pw(const int iter,
         for(int i=0;i<10 && i<(int)this->uom_array.size();i++) std::cout << " " << this->uom_array[i];
         std::cout << std::endl;
     }
+#endif
 
     if(PARAM.inp.device == "cpu")
     {
@@ -311,6 +313,7 @@ void Plus_U::cal_occ_pw(const int iter,
     Plus_U::energy_u = 0.0;
 
     // DIAGNOSTIC [N5]: state before VU calculation
+#if 0  // disabled: locale[0][1] access crashes for nspin=4
     if(iter <= 2)
     std::cout << "[DIAG-PW] cal_occ_pw iter=" << iter << " before VU calculation:" << std::endl;
     if(iter <= 2)
@@ -333,6 +336,7 @@ void Plus_U::cal_occ_pw(const int iter,
         for(int i=0;i<sz;i++) std::cout << (i>0?",":"") << this->locale[iat][tl][0][1].c[i];
         std::cout << ")" << std::endl;
     }
+#endif
 
     // calculate effective potential and energy
     for(int iat = 0; iat < cell.nat; iat++)

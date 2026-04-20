@@ -29,4 +29,10 @@ AddTest(
   SOURCES lambda_update_strategies_test.cpp
     ../lambda_update_strategies.cpp
 )
-endif() 
+
+AddTest(
+  TARGET deltaspin_pw_test
+  LIBS ${math_libs} base device parameter
+  SOURCES deltaspin_pw_test.cpp
+)
+endif()

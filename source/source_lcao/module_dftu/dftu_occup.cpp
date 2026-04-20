@@ -24,16 +24,13 @@ void Plus_U::copy_locale(const UnitCell& ucell)
             if (PARAM.inp.nspin == 4)
             {
                 locale_save[iat][target_l][0][0] = locale[iat][target_l][0][0];
-                // save locale matrix for SOC to uom_save
+                // nspin=4 locale matrix already contains all spin components interleaved
                 if(this->uom_save.size() != 0)
                 {
                     const int size = locale[iat][target_l][0][0].nr * locale[iat][target_l][0][0].nc;
                     for(int mm=0; mm<size; mm++)
                     {
                         this->uom_save[eff_pot_pw_index[iat]+mm] = locale[iat][target_l][0][0].c[mm];
-                        this->uom_save[eff_pot_pw_index[iat]+mm+size] = locale[iat][target_l][0][0].c[mm+size];
-                        this->uom_save[eff_pot_pw_index[iat]+mm+2*size] = locale[iat][target_l][0][0].c[mm+2*size];
-                        this->uom_save[eff_pot_pw_index[iat]+mm+3*size] = locale[iat][target_l][0][0].c[mm+3*size];
                     }
                 }
             }
