@@ -4,6 +4,7 @@ calculation    scf
 basis_type    pw
 ecutwfc    50
 gamma_only    0
+
 nspin    2
 nbands    28
 scf_thr    1.0e-6
@@ -16,5 +17,12 @@ mixing_beta    0.4
 ks_solver    dav_subspace
 symmetry    0
 
-pseudo_dir    ../../PP_ORB
+# DFT+U parameters
+dft_plus_u    1
+orbital_corr    2
+hubbard_u    5.0
+onsite_radius   3.0
+
+pseudo_dir    ./PP_ORB
+orbital_dir    ./PP_ORB
 pw_seed 1
