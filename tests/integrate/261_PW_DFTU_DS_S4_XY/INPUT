@@ -33,8 +33,8 @@ alpha_trial    0.01
 sccut    3.0
 sc_scf_thr    1e-3
 
+kpar    2
 pseudo_dir    ../../PP_ORB
 orbital_dir    ../../PP_ORB
 
 pw_seed 1
-out_alllog 1
