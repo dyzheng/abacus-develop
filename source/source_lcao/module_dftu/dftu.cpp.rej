@@ -1,0 +1,12 @@
+--- source/source_lcao/module_dftu/dftu.cpp
++++ source/source_lcao/module_dftu/dftu.cpp
+@@ -170,7 +170,8 @@ void Plus_U::init(const UnitCell& cell)
+     }
+ 
+     // allocate memory for eff_pot_pw
+-    if(PARAM.inp.nspin == 2) pot_index *= 2; // for spin polarized case, we need to double the size
++    if (PARAM.inp.nspin == 2) pot_index *= 2; // for spin polarized case
++    else if (PARAM.inp.nspin == 4) pot_index *= 4; // for noncollinear case, need 4x size
+ 
+     this->eff_pot_pw.resize(pot_index, 0.0);
+     this->uom_array.resize(pot_index, 0.0);
