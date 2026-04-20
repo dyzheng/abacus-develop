@@ -181,14 +181,25 @@ void ESolver_KS_PW<T, Device>::iter_init(UnitCell& ucell, const int istep, const
 
     // 4) update local occupations for DFT+U
     // should before lambda loop in DeltaSpin
-    // skip on first SCF step and on mixing restart step (avoid recalculating during restart)
-    if (PARAM.inp.dft_plus_u && this->drho > 0 && iter != this->p_chgmix->mixing_restart_step)
+    // Match zdy-tmp behavior: 
+    //   - iter 1: cal_occ_pw with nullptr (compute VU but skip Broyden mixing)
+    //   - iter 2+: cal_occ_pw with p_chgmix (full mixing with history)
+    // skip on mixing restart step (avoid recalculating during restart)
+    if (PARAM.inp.dft_plus_u && iter != this->p_chgmix->mixing_restart_step)
     {
         // only old DFT+U method should calculate energy correction in esolver,
         // new DFT+U method will calculate energy when evaluating the Hamiltonian
         if (this->dftu.omc != 2)
         {
-            this->dftu.cal_occ_pw(iter, this->stp.psi_t, this->pelec->wg, ucell, this->p_chgmix);
+            // In iter 1, drho==0 so skip mixing; from iter 2, use full mixing
+            if (iter == 1)
+            {
+                this->dftu.cal_occ_pw(iter, this->stp.psi_t, this->pelec->wg, ucell, nullptr);
+            }
+            else if (this->drho > 0)
+            {
+                this->dftu.cal_occ_pw(iter, this->stp.psi_t, this->pelec->wg, ucell, this->p_chgmix);
+            }
         }
         this->dftu.output(ucell);
     }
