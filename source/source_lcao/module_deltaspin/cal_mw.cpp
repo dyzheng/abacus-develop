@@ -76,14 +76,14 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_MW(const int& step,
     // calculate MW from lambda in real space projection method
     {
         this->zero_Mi();
-        const hamilt::HContainer<double>* dmr
-            = static_cast<const elecstate::ElecStateLCAO<std::complex<double>>*>(this->pelec)->get_DM()->get_DMR_pointer(1);
+        // Use dm_ saved in init_sc instead of pelec->get_DM() which is uninitialized in LCAO
+        const hamilt::HContainer<double>* dmr = this->dm_->get_DMR_pointer(1);
         std::vector<double> moments;
         if(PARAM.inp.nspin==2)
         {
-            static_cast<const elecstate::ElecStateLCAO<std::complex<double>>*>(this->pelec)->get_DM()->switch_dmr(2);
+            this->dm_->switch_dmr(2);
             moments = static_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double>>*>(this->p_operator)->cal_moment(dmr, this->get_constrain());
-            static_cast<const elecstate::ElecStateLCAO<std::complex<double>>*>(this->pelec)->get_DM()->switch_dmr(0);
+            this->dm_->switch_dmr(0);
             for(int iat=0;iat<this->Mi_.size();iat++)
             {
                 this->Mi_[iat].x = 0.0;
