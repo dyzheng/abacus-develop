@@ -387,6 +387,8 @@ void projectors::OnsiteProjector<T, Device>::overlap_proj_psi(
     // std::cout << "at " << __FILE__ << ": " << __LINE__ << " ik_: " << ik_ << std::endl;
     int npol = this->ucell->get_npol();
     if(npwx == 0) npwx = this->npwx_;
+    std::cout << "[DIAG-OP2] overlap_proj_psi npm=" << npm << " npol=" << npol << " tot_nproj=" << this->tot_nproj << " becp=" << (void*)this->becp << " fs_tools=" << (void*)this->fs_tools << " ppsi=" << (void*)ppsi << " device=" << ((this->device == base_device::GpuDevice) ? "GPU" : "CPU") << std::endl;
+    std::cout.flush();
     if(this->becp == nullptr || this->size_becp < npm*this->tot_nproj)
     {
         this->size_becp = npm*this->tot_nproj;

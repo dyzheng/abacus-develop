@@ -55,12 +55,13 @@ void OnsiteProj<OperatorPW<T, Device>>::init(const int ik_in)
     ModuleBase::timer::tick("OnsiteProj", "getvnl");
     this->ik = ik_in;
 
-    std::cout << "[DIAG-INIT] OnsiteProj::init ik=" << ik_in << std::endl;
+    // std::cout << "[DIAG-INIT] OnsiteProj::init ik=" << ik_in << std::endl;
 
     // DEBUG: dump first 5 elements of psi for this ik
     auto* onsite_p = projectors::OnsiteProjector<double, Device>::get_instance();
     onsite_p->tabulate_atomic(ik_in);
     this->tnp = onsite_p->get_tot_nproj();
+    // std::cout << "[DIAG-INIT] tnp=" << this->tnp << " fs_tools=" << (void*)onsite_p->get_fs_tools() << std::endl;
 
     if(this->next_op != nullptr)
     {
@@ -78,7 +79,8 @@ void OnsiteProj<OperatorPW<T, Device>>::add_onsite_proj(T *hpsi_in, const int np
 {
     ModuleBase::timer::tick("OnsiteProj", "add_onsite_proj");
 
-    // DIAGNOSTIC: output first 3 hpsi values before and after
+    // DIAGNOSTIC: disabled (reads GPU memory from CPU -> segfault)
+    /*
     if(m == 28 && (this->ik == 0 || this->ik == 1))
     {
         std::cout << "[HPSI-PW] add_onsite_proj BEFORE ik=" << this->ik << " m=" << m << " npwx=" << npwx << " hpsi[0..2]=";
@@ -108,6 +110,11 @@ void OnsiteProj<OperatorPW<T, Device>>::add_onsite_proj(T *hpsi_in, const int np
         }
         std::cout << std::endl;
     }
+    */
+    auto* onsite_p = projectors::OnsiteProjector<double, Device>::get_instance();
+    const std::complex<double>* tab_atomic = onsite_p->get_tab_atomic();
+    const int npw = onsite_p->get_npw();
+
     char transa = 'N';
     char transb = 'T';
     int npm = m;
@@ -127,13 +134,15 @@ void OnsiteProj<OperatorPW<T, Device>>::add_onsite_proj(T *hpsi_in, const int np
         npwx
     );
 
-    // DIAGNOSTIC: output first 3 hpsi values after
+    // DIAGNOSTIC: disabled
+    /*
     if(m == 28 && (this->ik == 0 || this->ik == 1))
     {
         std::cout << "[HPSI-PW] add_onsite_proj AFTER ik=" << this->ik << " m=" << m << " hpsi[0..2]=";
         for(int i=0;i<3;i++) std::cout << " (" << hpsi_in[i].real() << "," << hpsi_in[i].imag() << ")";
         std::cout << std::endl;
     }
+    */
 
     ModuleBase::timer::tick("OnsiteProj", "add_onsite_proj");
 }
@@ -143,11 +152,6 @@ void OnsiteProj<OperatorPW<T, Device>>::update_becp(const T *psi_in, const int n
 {
     auto* onsite_p = projectors::OnsiteProjector<double, Device>::get_instance();
     // calculate <alpha|psi> 
-    // DIAGNOSTIC: print psi_in pointer address and first 3 values
-    std::cout << "[DIAG-UB] update_becp ik=" << this->ik << " psi_in=" << (const void*)psi_in 
-              << " nbands=" << m << " npwx=" << npwx << " psi[0..2]=";
-    for(int i=0;i<3;i++) std::cout << " (" << psi_in[i].real() << "," << psi_in[i].imag() << ")";
-    std::cout << std::endl;
     // std::cout << __FILE__ << ":" << __LINE__ << " nbands = " << m << std::endl;
     onsite_p->overlap_proj_psi(m, psi_in, npwx);
 }
@@ -466,7 +470,8 @@ void OnsiteProj<OperatorPW<T, Device>>::act(
     this->update_becp(tmpsi_in, npol, nbands, nbasis/npol);
     this->cal_ps_delta_spin(npol, nbands);
 
-    // DIAGNOSTIC: dump becp and ps before cal_ps_dftu
+    // DIAGNOSTIC: disabled to avoid CPU reading invalid pointers during debug
+    /*
     if(this->has_dftu)
     {
         auto* onsite_p = projectors::OnsiteProjector<double, Device>::get_instance();
@@ -481,16 +486,18 @@ void OnsiteProj<OperatorPW<T, Device>>::act(
         for(int i=0;i<nkb;i++) sum2 += std::norm(becp[i]);
         std::cout << sum2 << std::endl;
     }
+    */
 
     this->cal_ps_dftu(npol, nbands);
 
-    // DIAGNOSTIC: dump ps after cal_ps_dftu
+    /*
     if(this->has_dftu)
     {
         std::cout << "[DIAG-OP]   ps[0..9]=";
         for(int i=0;i<10;i++) std::cout << " (" << this->ps[i].real() << "," << this->ps[i].imag() << ")";
         std::cout << std::endl;
     }
+    */
 
     this->add_onsite_proj(tmhpsi, npol, nbands, nbasis/npol);
     ModuleBase::timer::tick("Operator", "OnsiteProjPW");

@@ -95,9 +95,8 @@ void spinconstrain::SpinConstrain<std::complex<double>>::calculate_delta_hcc(std
     if (PARAM.inp.device == "gpu")
     {
 #if ((defined __CUDA) || (defined __ROCM))
-        base_device::DEVICE_GPU* ctx = {};
-        hsolver::gemm_op<std::complex<double>, base_device::DEVICE_GPU>()(
-            ctx, transa, transb, nbands, nbands, npm,
+        ModuleBase::gemm_op<std::complex<double>, base_device::DEVICE_GPU>()(
+            transa, transb, nbands, nbands, npm,
             &ModuleBase::ONE, becp_k, npm, ps_pointer, npm,
             &ModuleBase::ONE, h_tmp, nbands);
         base_device::memory::delete_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(ps_pointer);
