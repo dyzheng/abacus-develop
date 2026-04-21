@@ -35,7 +35,7 @@ void Force_LCAO<std::complex<double>>::allocate(const UnitCell& ucell,
                                                 const std::vector<ModuleBase::Vector3<double>>& kvec_d)
 {
     ModuleBase::TITLE("Forces", "allocate");
-    ModuleBase::timer::start("Forces", "allocate");
+    ModuleBase::timer::tick("Forces", "allocate");
 
     const int nnr = pv.nnr;
 
@@ -132,7 +132,7 @@ void Force_LCAO<std::complex<double>>::allocate(const UnitCell& ucell,
                               &gd,
                               nullptr); // delete lm.Hloc_fixedR
 
-    ModuleBase::timer::end("Forces", "allocate");
+    ModuleBase::timer::tick("Forces", "allocate");
     return;
 }
 
@@ -187,7 +187,7 @@ void Force_LCAO<std::complex<double>>::ftable(const bool isforce,
 		Record_adj* ra)
 {
     ModuleBase::TITLE("Forces", "ftable");
-    ModuleBase::timer::start("Forces", "ftable");
+    ModuleBase::timer::tick("Forces", "ftable");
 
     this->allocate(ucell,
                    gd,
@@ -277,6 +277,6 @@ void Force_LCAO<std::complex<double>>::ftable(const bool isforce,
     }
 #endif
 
-    ModuleBase::timer::end("Forces", "ftable");
+    ModuleBase::timer::tick("Forces", "ftable");
     return;
 }

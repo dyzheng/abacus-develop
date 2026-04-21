@@ -265,7 +265,7 @@ void KEDF_ExtWT::tau_extwt(const double* const* prho, ModulePW::PW_Basis* pw_rho
  */
 void KEDF_ExtWT::extwt_potential(const double* const* prho, ModulePW::PW_Basis* pw_rho, ModuleBase::matrix& rpotential)
 {
-    ModuleBase::timer::start("KEDF_ExtWT", "extwt_potential");
+    ModuleBase::timer::tick("KEDF_ExtWT", "extwt_potential");
 
     // 1. WT potential
     double** kernelRhoBeta = new double*[PARAM.inp.nspin];
@@ -381,7 +381,7 @@ void KEDF_ExtWT::extwt_potential(const double* const* prho, ModulePW::PW_Basis* 
     }
     delete[] kernelRhoBeta;
     delete[] kernelRhoAlpha;
-    ModuleBase::timer::end("KEDF_ExtWT", "extwt_potential");
+    ModuleBase::timer::tick("KEDF_ExtWT", "extwt_potential");
 }
 
 /**

@@ -79,7 +79,7 @@ template<typename T>
 void compose_hr_gint(HContainer<T>& hr_gint)
 {
     ModuleBase::TITLE("Gint", "compose_hr_gint");
-    ModuleBase::timer::start("Gint", "compose_hr_gint");
+    ModuleBase::timer::tick("Gint", "compose_hr_gint");
     for (int iap = 0; iap < hr_gint.size_atom_pairs(); iap++)
     {
         auto& ap = hr_gint.get_atom_pair(iap);
@@ -109,14 +109,14 @@ void compose_hr_gint(HContainer<T>& hr_gint)
             }
         }
     }
-    ModuleBase::timer::end("Gint", "compose_hr_gint");
+    ModuleBase::timer::tick("Gint", "compose_hr_gint");
 }
 
 template <typename T>
 void transfer_hr_gint_to_hR(const HContainer<T>& hr_gint, HContainer<T>& hR)
 {
     ModuleBase::TITLE("Gint", "transfer_hr_gint_to_hR");
-    ModuleBase::timer::start("Gint", "transfer_hr_gint_to_hR");
+    ModuleBase::timer::tick("Gint", "transfer_hr_gint_to_hR");
 #ifdef __MPI
     int size = 0;
     MPI_Comm_size(MPI_COMM_WORLD, &size);
@@ -131,7 +131,7 @@ void transfer_hr_gint_to_hR(const HContainer<T>& hr_gint, HContainer<T>& hR)
 #else
     hR.add(hr_gint);
 #endif
-    ModuleBase::timer::end("Gint", "transfer_hr_gint_to_hR");
+    ModuleBase::timer::tick("Gint", "transfer_hr_gint_to_hR");
 }
 
 
@@ -139,7 +139,7 @@ void merge_hr_part_to_hR(const std::vector<hamilt::HContainer<double>>& hr_gint_
                          hamilt::HContainer<std::complex<double>>* hR,
                          const GintInfo& gint_info){
     ModuleBase::TITLE("Gint_k", "transfer_pvpR");
-    ModuleBase::timer::start("Gint_k", "transfer_pvpR");
+    ModuleBase::timer::tick("Gint_k", "transfer_pvpR");
 
     const UnitCell* ucell_in = gint_info.get_ucell();
     int mg = hR->get_paraV()->get_global_row_size()/2;
@@ -252,7 +252,7 @@ void merge_hr_part_to_hR(const std::vector<hamilt::HContainer<double>>& hr_gint_
         }
         delete hRGint_tmpCd;
     }
-    ModuleBase::timer::end("Gint_k", "transfer_pvpR");
+    ModuleBase::timer::tick("Gint_k", "transfer_pvpR");
     return;
 }
 
@@ -300,7 +300,7 @@ void transfer_dm_2d_to_gint(
     std::vector<HContainer<TGint>>& dm_gint)
 {
     ModuleBase::TITLE("Gint", "transfer_dm_2d_to_gint");
-    ModuleBase::timer::start("Gint", "transfer_dm_2d_to_gint");
+    ModuleBase::timer::tick("Gint", "transfer_dm_2d_to_gint");
 
     if (PARAM.inp.nspin != 4)
     {
@@ -368,7 +368,7 @@ void transfer_dm_2d_to_gint(
         delete dm2d_tmp;
 #endif
     }
-    ModuleBase::timer::end("Gint", "transfer_dm_2d_to_gint");
+    ModuleBase::timer::tick("Gint", "transfer_dm_2d_to_gint");
 }
 
 int globalIndex(int localindex, int nblk, int nprocs, int myproc)
@@ -393,7 +393,7 @@ void wfc_2d_to_gint(const T* wfc_2d,
                     const GintInfo& gint_info)
 {
     ModuleBase::TITLE("Gint", "wfc_2d_to_gint");
-    ModuleBase::timer::start("Gint", "wfc_2d_to_gint");
+    ModuleBase::timer::tick("Gint", "wfc_2d_to_gint");
 
 #ifdef __MPI
     // dimension related
@@ -475,7 +475,7 @@ void wfc_2d_to_gint(const T* wfc_2d,
         }
     }
 #endif
-    ModuleBase::timer::end("Gint", "wfc_2d_to_gint");
+    ModuleBase::timer::tick("Gint", "wfc_2d_to_gint");
 }
 
 template void compose_hr_gint(HContainer<double>& hr_gint);

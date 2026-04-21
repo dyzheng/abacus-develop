@@ -28,7 +28,6 @@ void Driver::init()
 
     // 2) Print the current time, since it may run a long time.
     time_t time_start = std::time(nullptr);
-    ModuleBase::timer::start();
 
     // 3) Welcome to the atomic world! Let's do some fancy stuff here.
     this->atomic_world();
@@ -110,7 +109,7 @@ void Driver::print_start_info()
 void Driver::reading()
 {
     ModuleBase::TITLE("Driver", "reading");
-    ModuleBase::timer::start("Driver", "reading");
+    ModuleBase::timer::tick("Driver", "reading");
     // temperarily
     GlobalV::MY_RANK = PARAM.globalv.myrank;
     GlobalV::NPROC = PARAM.globalv.nproc;
@@ -163,13 +162,13 @@ void Driver::reading()
                                 GlobalV::RANK_IN_POOL,
                                 GlobalV::MY_POOL);
 #endif
-    ModuleBase::timer::end("Driver", "reading");
+    ModuleBase::timer::tick("Driver", "reading");
 }
 
 void Driver::atomic_world()
 {
     ModuleBase::TITLE("Driver", "atomic_world");
-    ModuleBase::timer::start("Driver", "atomic_world");
+    ModuleBase::timer::tick("Driver", "atomic_world");
 
     // reading information 
     this->reading();
@@ -177,5 +176,5 @@ void Driver::atomic_world()
     // where the actual stuff is done
     this->driver_run();
 
-    ModuleBase::timer::end("Driver", "atomic_world");
+    ModuleBase::timer::tick("Driver", "atomic_world");
 }

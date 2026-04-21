@@ -50,30 +50,30 @@ protected:
 
 TEST_F(TimerTest, Tick)
 {
-	ModuleBase::timer::start("wavefunc","evc");
+	ModuleBase::timer::tick("wavefunc","evc");
 	// after 1st call of tick, start_flag becomes false
 	EXPECT_FALSE(ModuleBase::timer::timer_pool["wavefunc"]["evc"].start_flag);
 	std::this_thread::sleep_for(std::chrono::microseconds(T_Elapse)); // 0.1 ms
 	// then we can have time elapsed in cpu_second
-	ModuleBase::timer::end("wavefunc","evc");
+	ModuleBase::timer::tick("wavefunc","evc");
 	EXPECT_GT(ModuleBase::timer::timer_pool["wavefunc"]["evc"].cpu_second,0.0001);
 }
 
 
 TEST_F(TimerTest, Start)
 {
-	ModuleBase::timer::start();
+	ModuleBase::timer::tick();
 	// start() called tick() once
 	EXPECT_FALSE(ModuleBase::timer::timer_pool[""]["total"].start_flag);
-	ModuleBase::timer::end("","total");
+	ModuleBase::timer::tick("","total");
 }
 
 
 TEST_F(TimerTest, write_to_json)
 {
-	ModuleBase::timer::start("wavefunc","evc");
+	ModuleBase::timer::tick("wavefunc","evc");
 	std::this_thread::sleep_for(std::chrono::microseconds(T_Elapse)); // 0.1 ms
-	ModuleBase::timer::end("wavefunc","evc");
+	ModuleBase::timer::tick("wavefunc","evc");
 	ModuleBase::timer::write_to_json("tmp.json");
 
 	// check if tmp.json exists
@@ -104,9 +104,9 @@ TEST_F(TimerTest, write_to_json)
 
 TEST_F(TimerTest, PrintAll)
 {
-	ModuleBase::timer::start("wavefunc","evc");
+	ModuleBase::timer::tick("wavefunc","evc");
 	std::this_thread::sleep_for(std::chrono::microseconds(T_Elapse)); // 0.1 ms
-	ModuleBase::timer::end("wavefunc","evc");
+	ModuleBase::timer::tick("wavefunc","evc");
 
 	// call print_all
 	ofs.open("tmp");
@@ -154,9 +154,9 @@ TEST_F(TimerTest, PrintUntilNow)
 
 TEST_F(TimerTest, Finish)
 {
-	ModuleBase::timer::start("wavefunc","evc");
+	ModuleBase::timer::tick("wavefunc","evc");
 	std::this_thread::sleep_for(std::chrono::microseconds(T_Elapse)); // 0.1 ms
-	ModuleBase::timer::end("wavefunc","evc");
+	ModuleBase::timer::tick("wavefunc","evc");
 
 	// call print_all
 	ofs.open("tmp");

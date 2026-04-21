@@ -12,7 +12,7 @@ void GintAtom::set_ddphi(
     T* ddphi_xx, T* ddphi_xy, T* ddphi_xz,
     T* ddphi_yy, T* ddphi_yz, T* ddphi_zz) const
 {
-    ModuleBase::timer::start("GintAtom", "set_ddphi");
+    ModuleBase::timer::tick("GintAtom", "set_ddphi");
     
     const int num_mgrids = coords.size();
 
@@ -227,7 +227,7 @@ void GintAtom::set_ddphi(
         //     }     // end if
     }
 
-    ModuleBase::timer::end("GintAtom", "set_ddphi");
+    ModuleBase::timer::tick("GintAtom", "set_ddphi");
 }
 
 // explicit instantiation

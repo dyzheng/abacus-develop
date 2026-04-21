@@ -4,7 +4,6 @@ calculation    scf
 basis_type    pw
 ecutwfc    50
 gamma_only    0
-device    cpu
 
 nspin    2
 nbands    28
@@ -27,3 +26,4 @@ onsite_radius   3.0
 pseudo_dir    ../../PP_ORB
 orbital_dir    ../../PP_ORB
 pw_seed 1
+

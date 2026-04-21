@@ -19,7 +19,7 @@ namespace hamilt {
 
 template <>
 void OperatorLCAO<double, double>::get_hs_pointers() {
-    ModuleBase::timer::start("OperatorLCAO", "get_hs_pointers");
+    ModuleBase::timer::tick("OperatorLCAO", "get_hs_pointers");
     this->hmatrix_k = this->hsk->get_hk();
     if ((this->new_e_iteration && ik == 0) || PARAM.inp.out_mat_hs[0])
     {
@@ -38,7 +38,7 @@ void OperatorLCAO<double, double>::get_hs_pointers() {
 #endif
         this->new_e_iteration = false;
     }
-    ModuleBase::timer::end("OperatorLCAO", "get_hs_pointers");
+    ModuleBase::timer::tick("OperatorLCAO", "get_hs_pointers");
 }
 
 template<>
@@ -84,7 +84,7 @@ void OperatorLCAO<TK, TR>::set_current_spin(const int current_spin_in)
 template <typename TK, typename TR>
 void OperatorLCAO<TK, TR>::init(const int ik_in) {
     ModuleBase::TITLE("OperatorLCAO", "init");
-    ModuleBase::timer::start("OperatorLCAO", "init");
+    ModuleBase::timer::tick("OperatorLCAO", "init");
     if (this->is_first_node) {
         // refresh HK
         this->refresh_h();
@@ -236,9 +236,9 @@ void OperatorLCAO<TK, TR>::init(const int ik_in) {
                 = this->hr_done;
         }
         // call init() function of next node
-        ModuleBase::timer::end("OperatorLCAO", "init");
+        ModuleBase::timer::tick("OperatorLCAO", "init");
         this->next_op->init(ik_in);
-        ModuleBase::timer::start("OperatorLCAO", "init");
+        ModuleBase::timer::tick("OperatorLCAO", "init");
     } else { // it is the last node, update HK with the current total HR
         OperatorLCAO<TK, TR>::contributeHk(ik_in);
     }
@@ -246,14 +246,14 @@ void OperatorLCAO<TK, TR>::init(const int ik_in) {
     // set HR status of this node to done
     this->hr_done = true;
 
-    ModuleBase::timer::end("OperatorLCAO", "init");
+    ModuleBase::timer::tick("OperatorLCAO", "init");
 }
 
 // contributeHk()
 template <>
 void OperatorLCAO<double, double>::contributeHk(int ik) {
     ModuleBase::TITLE("OperatorLCAO", "contributeHk");
-    ModuleBase::timer::start("OperatorLCAO", "contributeHk");
+    ModuleBase::timer::tick("OperatorLCAO", "contributeHk");
     if(ModuleBase::GlobalFunc::IS_COLUMN_MAJOR_KS_SOLVER(PARAM.inp.ks_solver))
     {
         const int nrow = this->hsk->get_pv()->get_row_size();
@@ -264,13 +264,13 @@ void OperatorLCAO<double, double>::contributeHk(int ik) {
         const int ncol = this->hsk->get_pv()->get_col_size();
         hamilt::folding_HR(*this->hR, this->hsk->get_hk(), this->kvec_d[ik], ncol, 0);
     }
-    ModuleBase::timer::end("OperatorLCAO", "contributeHk");
+    ModuleBase::timer::tick("OperatorLCAO", "contributeHk");
 }
 // contributeHk()
 template <typename TK, typename TR>
 void OperatorLCAO<TK, TR>::contributeHk(int ik) {
     ModuleBase::TITLE("OperatorLCAO", "contributeHk");
-    ModuleBase::timer::start("OperatorLCAO", "contributeHk");
+    ModuleBase::timer::tick("OperatorLCAO", "contributeHk");
     if(ModuleBase::GlobalFunc::IS_COLUMN_MAJOR_KS_SOLVER(PARAM.inp.ks_solver))
     {
         const int nrow = this->hsk->get_pv()->get_row_size();
@@ -295,7 +295,7 @@ void OperatorLCAO<TK, TR>::contributeHk(int ik) {
             hamilt::folding_HR(*this->hR, this->hsk->get_hk(), this->kvec_d[ik], ncol, 0);
         }
     }
-    ModuleBase::timer::end("OperatorLCAO", "contributeHk");
+    ModuleBase::timer::tick("OperatorLCAO", "contributeHk");
 }
 
 template class OperatorLCAO<double, double>;
