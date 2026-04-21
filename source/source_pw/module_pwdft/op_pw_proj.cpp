@@ -83,9 +83,9 @@ void OnsiteProj<OperatorPW<T, Device>>::add_onsite_proj(T *hpsi_in, const int np
     /*
     if(m == 28 && (this->ik == 0 || this->ik == 1))
     {
-        std::cout << "[HPSI-PW] add_onsite_proj BEFORE ik=" << this->ik << " m=" << m << " npwx=" << npwx << " hpsi[0..2]=";
-        for(int i=0;i<3;i++) std::cout << " (" << hpsi_in[i].real() << "," << hpsi_in[i].imag() << ")";
-        std::cout << std::endl;
+        // std::cout << "[HPSI-PW] add_onsite_proj BEFORE ik=" << this->ik << " m=" << m << " npwx=" << npwx << " hpsi[0..2]=";
+        // for(int i=0;i<3;i++) std::cout << " (" << hpsi_in[i].real() << "," << hpsi_in[i].imag() << ")";
+        // std::cout << std::endl;
     }
 
     auto* onsite_p = projectors::OnsiteProjector<double, Device>::get_instance();
@@ -97,7 +97,7 @@ void OnsiteProj<OperatorPW<T, Device>>::add_onsite_proj(T *hpsi_in, const int np
     // DIAG: print hpsi norms for first 5 bands
     if(m == 28 && (this->ik == 0 || this->ik == 1))
     {
-        std::cout << "[HPSI-NORM-PW] ik=" << this->ik << " m=" << m << " bands_norm[0..4]=";
+        // std::cout << "[HPSI-NORM-PW] ik=" << this->ik << " m=" << m << " bands_norm[0..4]=";
         for(int b=0; b<5 && b<m; ++b)
         {
             double norm_sq = 0.0;
@@ -106,9 +106,9 @@ void OnsiteProj<OperatorPW<T, Device>>::add_onsite_proj(T *hpsi_in, const int np
                 T val = hpsi_in[b * npwx + i];
                 norm_sq += std::norm(val);
             }
-            std::cout << " " << norm_sq;
+            // std::cout << " " << norm_sq;
         }
-        std::cout << std::endl;
+        // std::cout << std::endl;
     }
     */
     auto* onsite_p = projectors::OnsiteProjector<double, Device>::get_instance();
@@ -138,9 +138,9 @@ void OnsiteProj<OperatorPW<T, Device>>::add_onsite_proj(T *hpsi_in, const int np
     /*
     if(m == 28 && (this->ik == 0 || this->ik == 1))
     {
-        std::cout << "[HPSI-PW] add_onsite_proj AFTER ik=" << this->ik << " m=" << m << " hpsi[0..2]=";
-        for(int i=0;i<3;i++) std::cout << " (" << hpsi_in[i].real() << "," << hpsi_in[i].imag() << ")";
-        std::cout << std::endl;
+        // std::cout << "[HPSI-PW] add_onsite_proj AFTER ik=" << this->ik << " m=" << m << " hpsi[0..2]=";
+        // for(int i=0;i<3;i++) std::cout << " (" << hpsi_in[i].real() << "," << hpsi_in[i].imag() << ")";
+        // std::cout << std::endl;
     }
     */
 
@@ -477,14 +477,14 @@ void OnsiteProj<OperatorPW<T, Device>>::act(
         auto* onsite_p = projectors::OnsiteProjector<double, Device>::get_instance();
         const std::complex<double>* becp = onsite_p->get_h_becp();
         int nkb = onsite_p->get_tot_nproj();
-        std::cout << "[DIAG-OP] OnsiteProj::act ik=" << this->ik << " npol=" << npol 
+        // std::cout << "[DIAG-OP] OnsiteProj::act ik=" << this->ik << " npol=" << npol 
                   << " nbands=" << nbands << " tnp=" << this->tnp << std::endl;
-        std::cout << "[DIAG-OP]   becp[0..4]=";
-        for(int i=0;i<5;i++) std::cout << " (" << becp[i].real() << "," << becp[i].imag() << ")";
-        std::cout << " | sum|becp|^2=";
+        // std::cout << "[DIAG-OP]   becp[0..4]=";
+        // for(int i=0;i<5;i++) std::cout << " (" << becp[i].real() << "," << becp[i].imag() << ")";
+        // std::cout << " | sum|becp|^2=";
         double sum2 = 0;
         for(int i=0;i<nkb;i++) sum2 += std::norm(becp[i]);
-        std::cout << sum2 << std::endl;
+        // std::cout << sum2 << std::endl;
     }
     */
 
@@ -493,9 +493,9 @@ void OnsiteProj<OperatorPW<T, Device>>::act(
     /*
     if(this->has_dftu)
     {
-        std::cout << "[DIAG-OP]   ps[0..9]=";
-        for(int i=0;i<10;i++) std::cout << " (" << this->ps[i].real() << "," << this->ps[i].imag() << ")";
-        std::cout << std::endl;
+        // std::cout << "[DIAG-OP]   ps[0..9]=";
+        // for(int i=0;i<10;i++) std::cout << " (" << this->ps[i].real() << "," << this->ps[i].imag() << ")";
+        // std::cout << std::endl;
     }
     */
 
