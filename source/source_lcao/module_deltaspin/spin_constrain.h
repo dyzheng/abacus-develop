@@ -77,7 +77,7 @@ public:
    */
   double cal_escon();
 
-  double get_escon();
+  double get_escon() const;
 
   void run_lambda_loop(int outer_step, 
 		  bool rerun = true);
@@ -202,7 +202,7 @@ public:
     /// set nspin
     void set_nspin(int nspin);
     /// get nspin
-    int get_nspin();
+    int get_nspin() const;
     /// zdy-tmp: set npol
     void set_npol(int npol);
     /// zdy-tmp: get npol
@@ -238,17 +238,17 @@ public:
     void set_strategy_params(double mu_init = 0.1, double mu_max = 10.0, double mu_growth = 1.5,
                              double mix_beta = 0.3, double sc_scf_thr = 1e-3);
     /// get sc_thr
-    double get_sc_thr();
+    double get_sc_thr() const;
     /// get nsc
-    int get_nsc();
+    int get_nsc() const;
     /// get nsc_min
-    int get_nsc_min();
+    int get_nsc_min() const;
     /// get alpha_trial
-    double get_alpha_trial();
+    double get_alpha_trial() const;
     /// get sccut
-    double get_sccut();
+    double get_sccut() const;
     /// get sc_drop_thr
-    double get_sc_drop_thr();
+    double get_sc_drop_thr() const;
     /// @brief set orbital parallel info
     void set_ParaV(Parallel_Orbitals* ParaV_in);
     /// @brief set parameters for solver

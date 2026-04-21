@@ -590,6 +590,7 @@ OBJS_IO=module_parameter/input_conv.o\
     orb_io.o\
     cal_pLpR.o\
     filename.o\
+    ucell_io.o\
 
 OBJS_IO_LCAO=cal_r_overlap_R.o\
       write_orb_info.o\
@@ -675,6 +676,8 @@ OBJS_MODULE_RI=conv_coulomb_pot_k.o\
       symmetry_rotation.o\
       symmetry_rotation_output.o\
       symmetry_irreducible_sector.o\
+      gaussian_abfs.o\
+      singular_value.o\
 
 OBJS_PARALLEL=parallel_common.o\
     parallel_global.o\
@@ -704,6 +707,9 @@ OBJS_SRCPW=H_Ewald_pw.o\
     setup_pot.o\
     setup_pwrho.o\
     setup_pwwfc.o\
+    update_cell_pw.o\
+    dftu_pw.o\
+    deltaspin_pw.o\
     forces.o\
     forces_us.o\
     forces_nl.o\
@@ -752,8 +758,9 @@ OBJS_SRCPW=H_Ewald_pw.o\
     sto_tool.o\
     sto_elecond.o\
     sto_dos.o\
-    onsite_projector.o\
+    onsite_proj.o\
     onsite_proj_tools.o\
+    onsite_proj_print.o\
     vsep_pw.o
 
 OBJS_VDW=vdw.o\

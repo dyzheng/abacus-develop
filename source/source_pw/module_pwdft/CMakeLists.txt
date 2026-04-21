@@ -15,6 +15,9 @@ list(APPEND objects
     setup_pot.cpp
     setup_pwrho.cpp
     setup_pwwfc.cpp
+    update_cell_pw.cpp
+    dftu_pw.cpp
+    deltaspin_pw.cpp
     forces_nl.cpp
     forces_cc.cpp
     forces_scc.cpp
@@ -44,8 +47,9 @@ list(APPEND objects
     fs_nonlocal_tools.cpp
     fs_kin_tools.cpp
     radial_proj.cpp
-    onsite_projector.cpp
+    onsite_proj.cpp
     onsite_proj_tools.cpp
+    onsite_proj_print.cpp
     vsep_pw.cpp
 )
 

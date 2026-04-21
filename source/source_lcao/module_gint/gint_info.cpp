@@ -69,22 +69,9 @@ GintInfo::~GintInfo()
     ModuleBase::Memory::record("GintInfo::ijr_info_", -(long long)(sizeof(int) * ijr_info_.size()), true);
 }
 
-template <typename T>
-HContainer<T> GintInfo::get_hr(int npol) const
-{
-    auto hr = HContainer<T>(ucell_->nat);
-    if(PARAM.inp.gamma_only)
-    {
-        hr.fix_gamma();
-    }
-    hr.insert_ijrs(&ijr_info_, *ucell_, npol);
-    hr.allocate(nullptr, true);
-    return hr;
-}
-
 void GintInfo::init_atoms_(int ntype, const Atom* atoms, const Numerical_Orbital* Phi)
 {
-    ModuleBase::timer::tick("GintInfo", "init_atoms");
+    ModuleBase::timer::start("GintInfo", "init_atoms");
     int iat = 0;
     is_atom_in_proc_.resize(ucell_->nat, false);
     atoms_.resize(ucell_->nat);
@@ -159,7 +146,7 @@ void GintInfo::init_atoms_(int ntype, const Atom* atoms, const Numerical_Orbital
             iat++;
         }
     }
-    ModuleBase::timer::tick("GintInfo", "init_atoms");
+    ModuleBase::timer::end("GintInfo", "init_atoms");
 }
 
 void GintInfo::init_trace_lo_(const UnitCell& ucell, const int nspin)
@@ -288,6 +275,4 @@ void GintInfo::init_bgrid_batches_(int batch_size)
 }
 #endif
 
-template HContainer<double> GintInfo::get_hr<double>(int npol) const;
-template HContainer<std::complex<double>> GintInfo::get_hr<std::complex<double>>(int npol) const;
 }

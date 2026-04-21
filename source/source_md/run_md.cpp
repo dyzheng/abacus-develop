@@ -18,7 +18,7 @@ namespace Run_MD
 void md_line(UnitCell& unit_in, ModuleESolver::ESolver* p_esolver, const Parameter& param_in)
 {
     ModuleBase::TITLE("Run_MD", "md_line");
-    ModuleBase::timer::tick("Run_MD", "md_line");
+    ModuleBase::timer::start("Run_MD", "md_line");
 
     /// determine the md_type
     MD_base* mdrun = nullptr;
@@ -56,8 +56,8 @@ void md_line(UnitCell& unit_in, ModuleESolver::ESolver* p_esolver, const Paramet
         }
         else
         {
-			// mohan add 2026-01-04
-			const int stress_step = 0;
+            // mohan add 2026-01-04
+            const int stress_step = 0;
             const int force_step = 0;
             const int istep_print = mdrun->step_ + mdrun->step_rst_ + 1;
             ModuleIO::print_screen(stress_step, force_step, istep_print);
@@ -130,7 +130,7 @@ void md_line(UnitCell& unit_in, ModuleESolver::ESolver* p_esolver, const Paramet
     }
 
     delete mdrun;
-    ModuleBase::timer::tick("Run_MD", "md_line");
+    ModuleBase::timer::end("Run_MD", "md_line");
     return;
 }
 

@@ -12,6 +12,7 @@ list(APPEND objects
     template_helpers.cpp
     lambda_update_strategies.cpp
     lambda_strategy_integration.cpp
+    deltaspin_lcao.cpp
 )
 
 add_library(

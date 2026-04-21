@@ -4,7 +4,7 @@
 #include "source_hsolver/diago_iter_assist.h"
 #include "source_io/module_parameter/parameter.h"
 #include "spin_constrain.h"
-#include "source_pw/module_pwdft/onsite_projector.h"
+#include "source_pw/module_pwdft/onsite_proj.h"
 #include "source_base/parallel_reduce.h"
 #include "source_base/kernels/math_kernel_op.h"
 #include "source_hsolver/hsolver_lcao.h"
@@ -301,7 +301,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mw_from_lambda(int 
                                                &(this->Mi_[0][0]),
                                                3 * this->Mi_.size());
     }
-    ModuleBase::timer::tick("SpinConstrain", "cal_mw_from_lambda");
+    ModuleBase::timer::end("spinconstrain::SpinConstrain", "cal_mw_from_lambda");
 }
 
 template <>

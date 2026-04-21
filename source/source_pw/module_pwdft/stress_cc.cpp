@@ -21,7 +21,7 @@ void Stress_Func<FPTYPE, Device>::stress_cc(ModuleBase::matrix& sigma,
                                             const Charge* const chr)
 {
     ModuleBase::TITLE("Stress","stress_cc");
-	ModuleBase::timer::tick("Stress","stress_cc");
+	ModuleBase::timer::start("Stress","stress_cc");
         
 	FPTYPE fact=1.0;
 
@@ -31,7 +31,7 @@ void Stress_Func<FPTYPE, Device>::stress_cc(ModuleBase::matrix& sigma,
 	}
 
 	FPTYPE sigmadiag;
-	FPTYPE* rhocg;
+	FPTYPE* rhocg = nullptr;
 
 	int judge=0;
 	for(int nt=0;nt<ucell.ntype;nt++)
@@ -44,7 +44,7 @@ void Stress_Func<FPTYPE, Device>::stress_cc(ModuleBase::matrix& sigma,
 
 	if(judge==0) 
 	{
-		ModuleBase::timer::tick("Stress","stress_cc");
+		ModuleBase::timer::end("Stress","stress_cc");
 		return;
 	}
 
@@ -206,7 +206,7 @@ void Stress_Func<FPTYPE, Device>::stress_cc(ModuleBase::matrix& sigma,
 	delete[] rhocg;
 	delete[] psic;
 
-	ModuleBase::timer::tick("Stress","stress_cc");
+	ModuleBase::timer::end("Stress","stress_cc");
 	return;
 }
 
@@ -230,7 +230,7 @@ void Stress_Func<FPTYPE, Device>::deriv_drhoc
 	double gx = 0.0;
     double rhocg1 = 0.0;
 	std::vector<double> aux(mesh);
-	this->device = base_device::get_device_type<Device>(this->ctx);
+	this->device = base_device::get_device_type(this->ctx);
 
 	// the modulus of g for a given shell
 	// the fourier transform

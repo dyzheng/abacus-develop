@@ -36,3 +36,4 @@ DartConfiguration.tcl
 commit.h
 abacus_*p
 *.sum
+compile_commands.json

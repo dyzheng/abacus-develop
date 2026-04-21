@@ -23,7 +23,7 @@ void ctrl_output_fp(UnitCell& ucell,
                     const int istep)
 {
     ModuleBase::TITLE("ModuleIO", "ctrl_output_fp");
-    ModuleBase::timer::tick("ModuleIO", "ctrl_output_fp");
+    ModuleBase::timer::start("ModuleIO", "ctrl_output_fp");
 
     const bool out_app_flag = PARAM.inp.out_app_flag;
     const bool gamma_only = PARAM.globalv.gamma_only_local;
@@ -62,8 +62,6 @@ void ctrl_output_fp(UnitCell& ucell,
     {
         for (int is = 0; is < nspin; ++is)
         {
-            pw_rhod->real2recip(chr.rho_save[is], chr.rhog_save[is]);
-
             std::string fn = PARAM.globalv.global_out_dir + "chg";
 
             std::string spin_block;
@@ -82,7 +80,7 @@ void ctrl_output_fp(UnitCell& ucell,
                                           chr.rho_save[is],
                                           is,
                                           nspin,
-                                          istep_in,
+                                          istep, // change istep_in to istep, mohan 20260222
                                           fn,
                                           pelec->eferm.get_efval(is),
                                           &(ucell),
@@ -108,7 +106,7 @@ void ctrl_output_fp(UnitCell& ucell,
     }
 
     // 5) write potential
-    if (PARAM.inp.out_pot == 1 || PARAM.inp.out_pot == 3)
+    if (PARAM.inp.out_pot[0] == 1 || PARAM.inp.out_pot[0] == 3)
     {
         for (int is = 0; is < nspin; is++)
         {
@@ -134,11 +132,11 @@ void ctrl_output_fp(UnitCell& ucell,
                                           fn,
                                           0.0, // efermi
                                           &(ucell),
-                                          3,  // precision
+                                          PARAM.inp.out_pot[1],  // precision
                                           0); // out_fermi
         }
     }
-    else if (PARAM.inp.out_pot == 2)
+    else if (PARAM.inp.out_pot[0] == 2)
     {
         std::string fn = PARAM.globalv.global_out_dir + "potes";
         fn += geom_block + ".cube";
@@ -154,7 +152,8 @@ void ctrl_output_fp(UnitCell& ucell,
             &chr,
             &(ucell),
             pelec->pot->get_fixed_v(),
-            solvent);
+            solvent,
+	    PARAM.inp.out_pot[1]);
     }
 
     // 6) write ELF
@@ -199,7 +198,7 @@ void ctrl_output_fp(UnitCell& ucell,
     }
 #endif
 
-    ModuleBase::timer::tick("ModuleIO", "ctrl_output_fp");
+    ModuleBase::timer::end("ModuleIO", "ctrl_output_fp");
 }
 
 } // namespace ModuleIO

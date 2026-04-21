@@ -1,3 +1,6 @@
+# Note: Help data is now embedded in Input_Item objects in read_input_item_*.cpp
+# The old input_help_data.h generation has been removed.
+
 list(APPEND objects
     module_parameter/input_conv.cpp
     module_ctrl/ctrl_output_fp.cpp
@@ -39,8 +42,10 @@ list(APPEND objects
     module_output/output_log.cpp
     module_json/para_json.cpp
     parse_args.cpp
+    input_help.cpp
     module_output/orb_io.cpp
     module_output/filename.cpp
+    module_output/ucell_io.cpp
 )
 
 list(APPEND objects_advanced
@@ -117,6 +122,7 @@ add_library(
     ${objects}
 )
 
+# Include directory for build_info.h (generated at build time)
 target_include_directories(
     io_basic
     PUBLIC

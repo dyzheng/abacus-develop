@@ -6,7 +6,7 @@
 #include "source_io/module_parameter/parameter.h"
 #include "source_lcao/module_deltaspin/spin_constrain.h"
 #include "source_lcao/module_dftu/dftu.h"
-#include "source_pw/module_pwdft/onsite_projector.h"
+#include "source_pw/module_pwdft/onsite_proj.h"
 #include "source_pw/module_pwdft/kernels/onsite_op.h"
 
 
@@ -52,7 +52,7 @@ OnsiteProj<OperatorPW<T, Device>>::~OnsiteProj() {
 template<typename T, typename Device>
 void OnsiteProj<OperatorPW<T, Device>>::init(const int ik_in)
 {
-    ModuleBase::timer::tick("OnsiteProj", "getvnl");
+    ModuleBase::timer::start("OnsiteProj", "getvnl");
     this->ik = ik_in;
 
     // std::cout << "[DIAG-INIT] OnsiteProj::init ik=" << ik_in << std::endl;
@@ -68,7 +68,7 @@ void OnsiteProj<OperatorPW<T, Device>>::init(const int ik_in)
         this->next_op->init(ik_in);
     }
 
-    ModuleBase::timer::tick("OnsiteProj", "getvnl");
+    ModuleBase::timer::end("OnsiteProj", "getvnl");
 }
 
 //--------------------------------------------------------------------------
@@ -77,7 +77,7 @@ void OnsiteProj<OperatorPW<T, Device>>::init(const int ik_in)
 template<typename T, typename Device>
 void OnsiteProj<OperatorPW<T, Device>>::add_onsite_proj(T *hpsi_in, const int npol, const int m, const int npwx) const
 {
-    ModuleBase::timer::tick("OnsiteProj", "add_onsite_proj");
+    ModuleBase::timer::start("OnsiteProj", "add_onsite_proj");
 
     // DIAGNOSTIC: disabled (reads GPU memory from CPU -> segfault)
     /*
@@ -144,7 +144,7 @@ void OnsiteProj<OperatorPW<T, Device>>::add_onsite_proj(T *hpsi_in, const int np
     }
     */
 
-    ModuleBase::timer::tick("OnsiteProj", "add_onsite_proj");
+    ModuleBase::timer::end("OnsiteProj", "add_onsite_proj");
 }
 
 template<typename T, typename Device>
@@ -466,7 +466,7 @@ void OnsiteProj<OperatorPW<T, Device>>::act(
     const int ngk_ik,
     const bool is_first_node)const
 {
-    ModuleBase::timer::tick("Operator", "OnsiteProjPW");
+    ModuleBase::timer::start("Operator", "OnsiteProjPW");
     this->update_becp(tmpsi_in, npol, nbands, nbasis/npol);
     this->cal_ps_delta_spin(npol, nbands);
 
@@ -500,7 +500,7 @@ void OnsiteProj<OperatorPW<T, Device>>::act(
     */
 
     this->add_onsite_proj(tmhpsi, npol, nbands, nbasis/npol);
-    ModuleBase::timer::tick("Operator", "OnsiteProjPW");
+    ModuleBase::timer::end("Operator", "OnsiteProjPW");
 }
 
 template<typename T, typename Device>
