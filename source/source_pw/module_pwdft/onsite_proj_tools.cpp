@@ -970,7 +970,6 @@ double Onsite_Proj_tools<FPTYPE, Device>::cal_stress_dftu(int ik,
         delmem_var_op()(stress_device);
         delmem_complex_op()(vu_tmp);
         delmem_int_op()(orb_corr_tmp);
-	std::cout << "BUG: DFT+U (GPU) stress_out = " << stress_out << std::endl;
     }
     else
 #endif
