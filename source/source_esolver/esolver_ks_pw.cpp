@@ -134,7 +134,7 @@ template <typename T, typename Device>
 void ESolver_KS_PW<T, Device>::before_scf(UnitCell& ucell, const int istep)
 {
     ModuleBase::TITLE("ESolver_KS_PW", "before_scf");
-    ModuleBase::timer::tick("ESolver_KS_PW", "before_scf");
+    ModuleBase::timer::start("ESolver_KS_PW", "before_scf");
 
     ESolver_KS::before_scf(ucell, istep);
 
@@ -173,7 +173,7 @@ void ESolver_KS_PW<T, Device>::before_scf(UnitCell& ucell, const int istep)
     //! Setup EXX helper for Hamiltonian and psi
     exx_helper->before_scf(this->p_hamilt, this->stp.template get_psi_t<T, Device>(), PARAM.inp);
 
-    ModuleBase::timer::tick("ESolver_KS_PW", "before_scf");
+    ModuleBase::timer::end("ESolver_KS_PW", "before_scf");
 }
 
 template <typename T, typename Device>
@@ -189,35 +189,14 @@ void ESolver_KS_PW<T, Device>::iter_init(UnitCell& ucell, const int istep, const
 
     // update local occupations for DFT+U
     // should before lambda loop in DeltaSpin
-    // Match zdy-tmp behavior: 
-    //   - iter 1: cal_occ_pw with nullptr (compute VU but skip Broyden mixing)
-    //   - iter 2+: cal_occ_pw with p_chgmix (full mixing with history)
-    // skip on mixing restart step (avoid recalculating during restart)
-    if (PARAM.inp.dft_plus_u && iter != this->p_chgmix->mixing_restart_step)
-    {
-        // only old DFT+U method should calculate energy correction in esolver,
-        // new DFT+U method will calculate energy when evaluating the Hamiltonian
-        if (this->dftu.omc != 2)
-        {
-            // In iter 1, drho==0 so skip mixing; from iter 2, use full mixing
-            if (iter == 1)
-            {
-                this->dftu.cal_occ_pw(iter, this->stp.template get_psi_t<T, Device>(), this->pelec->wg, ucell, nullptr);
-            }
-            else if (this->drho > 0)
-            {
-                this->dftu.cal_occ_pw(iter, this->stp.template get_psi_t<T, Device>(), this->pelec->wg, ucell, this->p_chgmix);
-            }
-        }
-        this->dftu.output(ucell);
-    }
+    pw::iter_init_dftu_pw(iter, istep, this->dftu, this->stp.template get_psi_t<T, Device>(), this->pelec->wg, ucell, this->p_chgmix);
 }
 
 // Temporary, it should be replaced by hsolver later.
 template <typename T, typename Device>
 void ESolver_KS_PW<T, Device>::hamilt2rho_single(UnitCell& ucell, const int istep, const int iter, const double ethr)
 {
-    ModuleBase::timer::tick("ESolver_KS_PW", "hamilt2rho_single");
+    ModuleBase::timer::start("ESolver_KS_PW", "hamilt2rho_single");
 
     // reset energy
     this->pelec->f_en.eband = 0.0;
@@ -250,22 +229,10 @@ void ESolver_KS_PW<T, Device>::hamilt2rho_single(UnitCell& ucell, const int iste
           GlobalV::RANK_IN_POOL, GlobalV::NPROC_IN_POOL, skip_charge, ucell.tpiba, ucell.nat);
     }
 
-    // calculate DFT+U occupation matrix for nscf calculation
-    if (PARAM.inp.calculation == "nscf" && PARAM.inp.dft_plus_u)
-    {
-        // only old DFT+U method should calculate energy correction in esolver,
-        // new DFT+U method will calculate energy when evaluating the Hamiltonian
-        if (this->dftu.omc != 2)
-        {
-            this->dftu.cal_occ_pw(iter, this->stp.template get_psi_t<T, Device>(), this->pelec->wg, ucell, this->p_chgmix);
-        }
-        this->dftu.output(ucell);
-    }
-
     // symmetrize the charge density
     Symmetry_rho::symmetrize_rho(PARAM.inp.nspin, this->chr, this->pw_rhod, ucell.symm);
 
-    ModuleBase::timer::tick("ESolver_KS_PW", "hamilt2rho_single");
+    ModuleBase::timer::end("ESolver_KS_PW", "hamilt2rho_single");
 }
 
 
@@ -297,27 +264,7 @@ void ESolver_KS_PW<T, Device>::iter_finish(UnitCell& ucell, const int istep, int
     exx_helper->iter_finish(this->pelec, &this->chr, this->stp.template get_psi_t<T, Device>(), ucell, PARAM.inp, conv_esolver, iter);
 
     // check if oscillate for delta_spin method
-    if (PARAM.inp.sc_mag_switch)
-    {
-        spinconstrain::SpinConstrain<std::complex<double>>& sc
-            = spinconstrain::SpinConstrain<std::complex<double>>::getScInstance();
-        if (!sc.higher_mag_prec)
-        {
-            sc.higher_mag_prec = this->p_chgmix->if_scf_oscillate(iter, 
-              this->drho, PARAM.inp.sc_os_ndim, PARAM.inp.scf_os_thr);
-            if (sc.higher_mag_prec)
-            { // if oscillate, increase the precision of magnetization and do mixing_restart in next iteration
-                this->p_chgmix->mixing_restart_step = iter + 1;
-                if (PARAM.inp.dft_plus_u && !this->dftu.mixing_dftu)
-                {
-                    // set mixing_dftu true to mix occupation in next iteration
-                    this->p_chgmix->allocate_mixing_uom(this->dftu.get_size_eff_pot_pw());
-                    this->dftu.mixing_dftu = 1;
-                    this->p_chgmix->conserve_setting();
-                }
-            }
-        }
-    }
+    pw::check_deltaspin_oscillation(iter, this->drho, this->p_chgmix, PARAM.inp);
 
     // the output quantities
     ModuleIO::ctrl_iter_pw(istep, iter, conv_esolver, this->stp.psi_cpu, 
@@ -328,7 +275,7 @@ template <typename T, typename Device>
 void ESolver_KS_PW<T, Device>::after_scf(UnitCell& ucell, const int istep, const bool conv_esolver)
 {
     ModuleBase::TITLE("ESolver_KS_PW", "after_scf");
-    ModuleBase::timer::tick("ESolver_KS_PW", "after_scf");
+    ModuleBase::timer::start("ESolver_KS_PW", "after_scf");
 
     // Calculate kinetic energy density tau for ELF if needed
     if (PARAM.inp.out_elf[0] > 0)
@@ -343,7 +290,7 @@ void ESolver_KS_PW<T, Device>::after_scf(UnitCell& ucell, const int istep, const
               this->pw_rho, this->pw_rhod, this->pw_big, this->stp,
               this->Pgrid, PARAM.inp);
 
-    ModuleBase::timer::tick("ESolver_KS_PW", "after_scf");
+    ModuleBase::timer::end("ESolver_KS_PW", "after_scf");
 }
 
 template <typename T, typename Device>

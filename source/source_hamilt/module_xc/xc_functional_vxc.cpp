@@ -34,7 +34,7 @@ std::tuple<double, double, ModuleBase::matrix> XC_Functional::v_xc(const int& nr
 #endif
     }
 
-    ModuleBase::timer::tick("XC_Functional", "v_xc");
+    ModuleBase::timer::start("XC_Functional", "v_xc");
 
     //Exchange-Correlation potential Vxc(r) from n(r)
     double etxc = 0.0;
@@ -185,6 +185,6 @@ std::tuple<double, double, ModuleBase::matrix> XC_Functional::v_xc(const int& nr
     etxc *= ucell->omega / chr->rhopw->nxyz;
     vtxc *= ucell->omega / chr->rhopw->nxyz;
 
-    ModuleBase::timer::tick("XC_Functional", "v_xc");
+    ModuleBase::timer::end("XC_Functional", "v_xc");
     return std::make_tuple(etxc, vtxc, std::move(v));
 }

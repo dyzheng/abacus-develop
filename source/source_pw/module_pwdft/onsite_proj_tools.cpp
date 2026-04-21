@@ -5,7 +5,6 @@
 #include "source_base/memory.h"
 #include "source_base/timer.h"
 #include "source_base/tool_title.h"
-#include "source_io/module_parameter/parameter.h"
 #include "source_pw/module_pwdft/kernels/force_op.h"
 #include "nonlocal_maths.hpp"
 
@@ -283,10 +282,9 @@ void Onsite_Proj_tools<FPTYPE, Device>::cal_becp(int ik,
                                                  int npwx)
 {
     ModuleBase::TITLE("Onsite_Proj_tools", "cal_becp");
-    ModuleBase::timer::tick("Onsite_Proj_tools", "cal_becp");
+    ModuleBase::timer::start("Onsite_Proj_tools", "cal_becp");
 
     const int npol = this->ucell_->get_npol();
-    if(npwx == 0) npwx = this->wfc_basis_->npwk_max;
     const std::complex<FPTYPE>* ppsi = ppsi_in == nullptr ? &(this->psi_[0](ik, 0, 0)) : ppsi_in;
     const int npw = this->wfc_basis_->npwk[ik];
     if (becp_in == nullptr && this->becp == nullptr)
@@ -437,7 +435,7 @@ void Onsite_Proj_tools<FPTYPE, Device>::cal_becp(int ik,
               this->ppcell_vkb,
               npw,
               ppsi,
-              npwx,
+              this->max_npw,
               &ModuleBase::ZERO,
               becp_tmp,
               this->nkb);
@@ -461,7 +459,7 @@ void Onsite_Proj_tools<FPTYPE, Device>::cal_becp(int ik,
     // {
     //     std::cout << "becp[" << i << "]: " << becp[i] << std::endl;
     // }
-    ModuleBase::timer::tick("Onsite_Proj_tools", "cal_becp");
+    ModuleBase::timer::end("Onsite_Proj_tools", "cal_becp");
 }
 
 // cal_dbecp
@@ -469,7 +467,7 @@ template <typename FPTYPE, typename Device>
 void Onsite_Proj_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, int jpol)
 {
     ModuleBase::TITLE("Onsite_Proj_tools", "cal_dbecp_s");
-    ModuleBase::timer::tick("Onsite_Proj_tools", "cal_dbecp_s");
+    ModuleBase::timer::start("Onsite_Proj_tools", "cal_dbecp_s");
     this->current_ik = -1; // reset the current ik, vkb has been reused to save dvkb
     const int npol = this->ucell_->get_npol();
     const int size_becp = this->nbands * npol * this->nkb;
@@ -591,7 +589,7 @@ void Onsite_Proj_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, i
               &ModuleBase::ZERO,
               dbecp,
               nkb);
-    ModuleBase::timer::tick("Onsite_Proj_tools", "cal_dbecp_s");
+    ModuleBase::timer::end("Onsite_Proj_tools", "cal_dbecp_s");
 }
 
 // cal_dbecp_f
@@ -604,7 +602,7 @@ template <typename FPTYPE, typename Device>
 void Onsite_Proj_tools<FPTYPE, Device>::cal_dbecp_f(int ik, int npm, int ipol)
 {
     ModuleBase::TITLE("Onsite_Proj_tools", "cal_dbecp_f");
-    ModuleBase::timer::tick("Onsite_Proj_tools", "cal_dbecp_f");
+    ModuleBase::timer::start("Onsite_Proj_tools", "cal_dbecp_f");
 
     this->current_ik = -1; // reset the current ik, vkb has been reused to save dvkb
 
@@ -671,7 +669,7 @@ void Onsite_Proj_tools<FPTYPE, Device>::cal_dbecp_f(int ik, int npm, int ipol)
               nkb);
     this->revert_vkb(npw, ipol);
     this->pre_ik_f = ik;
-    ModuleBase::timer::tick("Onsite_Proj_tools", "cal_dbecp_f");
+    ModuleBase::timer::end("Onsite_Proj_tools", "cal_dbecp_f");
 }
 
 // save_vkb
@@ -832,7 +830,7 @@ void Onsite_Proj_tools<FPTYPE, Device>::cal_force_dftu(int ik,
         vu_tmp = const_cast<std::complex<FPTYPE>*>(vu);
         d_wg = const_cast<FPTYPE*>(h_wg);
     }
-    int force_nc = 3;
+    const int force_nc = 3;
     const int npol = PARAM.inp.nspin == 4 ? 2 : 1;
     cal_force_nl_op<FPTYPE, Device>()(this->ctx,
                                       npm,
@@ -889,7 +887,7 @@ void Onsite_Proj_tools<FPTYPE, Device>::cal_force_dspin(int ik,
         lambda_tmp = lambda_array.data();
         d_wg = const_cast<FPTYPE*>(h_wg);
     }
-    int force_nc = 3;
+    const int force_nc = 3;
     const int npol = PARAM.inp.nspin == 4 ? 2 : 1;
     cal_force_nl_op<FPTYPE, Device>()(this->ctx,
                                       npm,
@@ -993,15 +991,10 @@ double Onsite_Proj_tools<FPTYPE, Device>::cal_stress_dftu(int ik,
                            becp,
                            dbecp,
                            &stress_out);
-//\tstd::cout << "DFT+U (CPU) stress_out = " << stress_out << std::endl;
+//	std::cout << "DFT+U (CPU) stress_out = " << stress_out << std::endl;
     }
-#if defined(__CUDA) || defined(__ROCM)
-    if (this->device == base_device::GpuDevice)
-    {
-        delmem_complex_op()(vu_tmp);
-        delmem_int_op()(orb_corr_tmp);
-    }
-#endif
+    
+    return stress_out;
 }
 
 template <typename FPTYPE, typename Device>
@@ -1076,6 +1069,8 @@ double Onsite_Proj_tools<FPTYPE, Device>::cal_stress_dspin(int ik,
                            dbecp,
                            &stress_out);
     }
+    
+    return stress_out;
 }
 
 // template instantiation

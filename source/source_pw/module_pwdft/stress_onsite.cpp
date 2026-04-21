@@ -45,7 +45,7 @@ void Stress_Func<FPTYPE, Device>::stress_onsite(
         ModuleBase::WARNING_QUIT("stress_onsite.cpp", "Cell volume is zero or negative, cannot calculate stress");
     }
     
-    ModuleBase::timer::tick("Stress", "stress_onsite");
+    ModuleBase::timer::start("Stress", "stress_onsite");
 
     // Host memory for stress storage (CPU only)
     std::vector<double> sigma_onsite(9, 0.0);
@@ -192,7 +192,7 @@ void Stress_Func<FPTYPE, Device>::stress_onsite(
         p_symm->symmetrize_mat3(sigma, ucell_in.lat);
     }
 
-    ModuleBase::timer::tick("Stress", "stress_onsite");
+    ModuleBase::timer::end("Stress", "stress_onsite");
 }
 
 template class Stress_Func<double, base_device::DEVICE_CPU>;

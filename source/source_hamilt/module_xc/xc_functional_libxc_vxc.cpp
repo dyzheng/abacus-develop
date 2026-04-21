@@ -22,7 +22,7 @@ std::tuple<double,double,ModuleBase::matrix> XC_Functional_Libxc::v_xc_libxc(		/
         const std::map<int, double>* scaling_factor)
 {
     ModuleBase::TITLE("XC_Functional_Libxc","v_xc_libxc");
-    ModuleBase::timer::tick("XC_Functional_Libxc","v_xc_libxc");
+    ModuleBase::timer::start("XC_Functional_Libxc","v_xc_libxc");
 
     const int nspin =
         (PARAM.inp.nspin == 1 || ( PARAM.inp.nspin ==4 && !PARAM.globalv.domag && !PARAM.globalv.domag_z))
@@ -94,7 +94,7 @@ std::tuple<double,double,ModuleBase::matrix> XC_Functional_Libxc::v_xc_libxc(		/
         std::vector<double> vrho  ( nrxx * nspin            );
         std::vector<double> vsigma( nrxx * ((1==nspin)?1:3) );
 
-        ModuleBase::timer::tick("Libxc","xc_lda/gga_exc_vxc");
+        ModuleBase::timer::start("Libxc","xc_lda/gga_exc_vxc");
         switch( func.info->family )
         {
             case XC_FAMILY_LDA:
@@ -145,7 +145,7 @@ std::tuple<double,double,ModuleBase::matrix> XC_Functional_Libxc::v_xc_libxc(		/
         
             }
         }
-        ModuleBase::timer::tick("Libxc","xc_lda/gga_exc_vxc");
+        ModuleBase::timer::end("Libxc","xc_lda/gga_exc_vxc");
 
         // added by jghan, 2024-10-10
         double factor = 1.0;
@@ -185,7 +185,7 @@ std::tuple<double,double,ModuleBase::matrix> XC_Functional_Libxc::v_xc_libxc(		/
 
     XC_Functional_Libxc::finish_func(funcs);
 
-    ModuleBase::timer::tick("XC_Functional_Libxc","v_xc_libxc");
+    ModuleBase::timer::end("XC_Functional_Libxc","v_xc_libxc");
     return std::make_tuple( etxc, vtxc, std::move(v) );
 }
 
@@ -210,7 +210,7 @@ std::tuple<double,double,ModuleBase::matrix,ModuleBase::matrix> XC_Functional_Li
     const Charge* const chr)
 {
     ModuleBase::TITLE("XC_Functional_Libxc","v_xc_meta");
-    ModuleBase::timer::tick("XC_Functional_Libxc","v_xc_meta");
+    ModuleBase::timer::start("XC_Functional_Libxc","v_xc_meta");
 
     double e2 = 2.0;
 
@@ -301,7 +301,7 @@ std::tuple<double,double,ModuleBase::matrix,ModuleBase::matrix> XC_Functional_Li
     {
         assert(func.info->family == XC_FAMILY_MGGA);
 
-        ModuleBase::timer::tick("Libxc","xc_mgga_exc_vxc");
+        ModuleBase::timer::start("Libxc","xc_mgga_exc_vxc");
         constexpr int nr_batch_size = 1024;
         #ifdef _OPENMP
         #pragma omp parallel for schedule(static, nr_batch_size)
@@ -323,7 +323,7 @@ std::tuple<double,double,ModuleBase::matrix,ModuleBase::matrix> XC_Functional_Li
                 vlapl.data() + ir_start * nspin,
                 vtau.data() + ir_start * nspin);
         }
-        ModuleBase::timer::tick("Libxc","xc_mgga_exc_vxc");
+        ModuleBase::timer::end("Libxc","xc_mgga_exc_vxc");
 
         //process etxc
         for( int is=0; is!=nspin; ++is )
@@ -460,7 +460,7 @@ std::tuple<double,double,ModuleBase::matrix,ModuleBase::matrix> XC_Functional_Li
 
     XC_Functional_Libxc::finish_func(funcs);
 
-    ModuleBase::timer::tick("XC_Functional_Libxc","v_xc_meta");
+    ModuleBase::timer::end("XC_Functional_Libxc","v_xc_meta");
     return std::make_tuple( etxc, vtxc, std::move(v), std::move(vofk) );
 }
 

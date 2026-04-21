@@ -108,22 +108,6 @@ void pw::setup_pot(const int istep,
 #endif
                    pelec,
                    pw_wfc);
-        // Set lambda update strategy
-        if (PARAM.inp.sc_lambda_strategy == "linear_response")
-        {
-            sc.set_strategy_type(spinconstrain::LambdaStrategyType::LinearResponse);
-        }
-        else if (PARAM.inp.sc_lambda_strategy == "augmented_lagrangian")
-        {
-            sc.set_strategy_type(spinconstrain::LambdaStrategyType::AugmentedLagrangian);
-        }
-        else if (PARAM.inp.sc_lambda_strategy == "hybrid_delayed")
-        {
-            sc.set_strategy_type(spinconstrain::LambdaStrategyType::HybridDelayed);
-        }
-        sc.set_strategy_params(PARAM.inp.sc_mu_init, PARAM.inp.sc_mu_max,
-                               PARAM.inp.sc_mu_growth, PARAM.inp.sc_mix_beta,
-                               PARAM.inp.sc_scf_thr);
     }
 
     //----------------------------------------------------------

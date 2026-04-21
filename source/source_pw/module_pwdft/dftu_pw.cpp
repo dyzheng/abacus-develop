@@ -1,6 +1,5 @@
 #include "source_pw/module_pwdft/dftu_pw.h"
 #include "source_lcao/module_dftu/dftu.h"
-#include "source_estate/module_charge/charge_mixing.h"
 
 namespace pw
 {
@@ -11,10 +10,9 @@ void iter_init_dftu_pw(const int iter,
                        const void* psi,
                        const ModuleBase::matrix& wg,
                        const UnitCell& ucell,
-                       const Input_para& inp,
                        Charge_Mixing* p_chgmix)
 {
-    if (!inp.dft_plus_u)
+    if (!p_chgmix)
     {
         return;
     }

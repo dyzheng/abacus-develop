@@ -79,13 +79,13 @@ void SpinConstrain<TK>::set_npol(int npol)
 }
 
 template <typename TK>
-int SpinConstrain<TK>::get_npol()
+int SpinConstrain<TK>::get_npol() const
 {
     return this->npol_;
 }
 
 template <typename TK>
-int SpinConstrain<TK>::get_nw()
+int SpinConstrain<TK>::get_nw() const
 {
     int nw = 0;
     for (const auto& pair : this->orbitalCounts)
@@ -96,7 +96,7 @@ int SpinConstrain<TK>::get_nw()
 }
 
 template <typename TK>
-int SpinConstrain<TK>::get_iwt(int itype, int iat, int orbital_index)
+int SpinConstrain<TK>::get_iwt(int itype, int iat, int orbital_index) const
 {
     auto it1 = this->orbitalCounts.find(itype);
     if (it1 == this->orbitalCounts.end())

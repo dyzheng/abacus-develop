@@ -28,11 +28,10 @@ void ReadInput::item_others()
         item.check_value = [](const Input_Item& item, const Parameter& para) {
             if (para.input.sc_mag_switch)
             {
-                // WARNING_QUIT disabled for pw-port testing:
-                // ModuleBase::WARNING_QUIT("ReadInput",
-                //                          "This feature is not stable yet and might lead to "
-                //                          "erroneous results.\n"
-                //                          " Please wait for the official release version.");
+//                ModuleBase::WARNING_QUIT("ReadInput",
+//                                         "This feature is not stable yet and might lead to "
+//                                         "erroneous results.\n"
+//                                         " Please wait for the official release version.");
                 // if (para.input.nspin != 4 && para.input.nspin != 2)
                 // {
                 //     ModuleBase::WARNING_QUIT("ReadInput", "nspin must be 2 or
@@ -201,36 +200,6 @@ void ReadInput::item_others()
                 ModuleBase::WARNING_QUIT("ReadInput", "sc_scf_thr must > 0.0");
             }
         };
-        this->add_item(item);
-    }
-    {
-        Input_Item item("sc_lambda_strategy");
-        item.annotation = "Lambda update strategy for spin-constrained DFT: bfgs, linear_response, augmented_lagrangian, hybrid_delayed";
-        read_sync_string(input.sc_lambda_strategy);
-        this->add_item(item);
-    }
-    {
-        Input_Item item("sc_mu_init");
-        item.annotation = "Initial penalty parameter for augmented Lagrangian strategies";
-        read_sync_double(input.sc_mu_init);
-        this->add_item(item);
-    }
-    {
-        Input_Item item("sc_mu_max");
-        item.annotation = "Maximum penalty parameter for augmented Lagrangian strategies";
-        read_sync_double(input.sc_mu_max);
-        this->add_item(item);
-    }
-    {
-        Input_Item item("sc_mu_growth");
-        item.annotation = "Growth factor for penalty parameter in augmented Lagrangian strategies";
-        read_sync_double(input.sc_mu_growth);
-        this->add_item(item);
-    }
-    {
-        Input_Item item("sc_mix_beta");
-        item.annotation = "Mixing parameter for linear response strategy";
-        read_sync_double(input.sc_mix_beta);
         this->add_item(item);
     }
 

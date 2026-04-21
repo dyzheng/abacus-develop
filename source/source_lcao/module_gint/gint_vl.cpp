@@ -12,7 +12,7 @@ namespace ModuleGint
 void Gint_vl::cal_gint()
 {
     ModuleBase::TITLE("Gint", "cal_gint_vl");
-    ModuleBase::timer::tick("Gint", "cal_gint_vl");
+    ModuleBase::timer::start("Gint", "cal_gint_vl");
     switch (gint_info_->get_exec_precision())
     {
     case GintPrecision::fp32:
@@ -23,7 +23,7 @@ void Gint_vl::cal_gint()
         cal_gint_impl_<double>();
         break;
     }
-    ModuleBase::timer::tick("Gint", "cal_gint_vl");
+    ModuleBase::timer::end("Gint", "cal_gint_vl");
 }
 
 //========================

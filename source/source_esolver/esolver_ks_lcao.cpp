@@ -48,7 +48,7 @@ template <typename TK, typename TR>
 void ESolver_KS_LCAO<TK, TR>::before_all_runners(UnitCell& ucell, const Input_para& inp)
 {
     ModuleBase::TITLE("ESolver_KS_LCAO", "before_all_runners");
-    ModuleBase::timer::tick("ESolver_KS_LCAO", "before_all_runners");
+    ModuleBase::timer::start("ESolver_KS_LCAO", "before_all_runners");
 
     // 1) before_all_runners in ESolver_KS
     ESolver_KS::before_all_runners(ucell, inp);
@@ -95,7 +95,7 @@ void ESolver_KS_LCAO<TK, TR>::before_all_runners(UnitCell& ucell, const Input_pa
           two_center_bundle_, inp.dft_functional, inp.rdmft_power_alpha);
     }
 
-    ModuleBase::timer::tick("ESolver_KS_LCAO", "before_all_runners");
+    ModuleBase::timer::end("ESolver_KS_LCAO", "before_all_runners");
     return;
 }
 
@@ -104,7 +104,7 @@ template <typename TK, typename TR>
 void ESolver_KS_LCAO<TK, TR>::before_scf(UnitCell& ucell, const int istep)
 {
     ModuleBase::TITLE("ESolver_KS_LCAO", "before_scf");
-    ModuleBase::timer::tick("ESolver_KS_LCAO", "before_scf");
+    ModuleBase::timer::start("ESolver_KS_LCAO", "before_scf");
 
     //! 1) call before_scf() of ESolver_KS.
     ESolver_KS::before_scf(ucell, istep);
@@ -153,29 +153,7 @@ void ESolver_KS_LCAO<TK, TR>::before_scf(UnitCell& ucell, const int istep)
     this->deepks.build_overlap(ucell, orb_, pv, gd, *(two_center_bundle_.overlap_orb_alpha), PARAM.inp);
 
     // 10) prepare sc calculation
-    if (PARAM.inp.sc_mag_switch)
-    {
-        spinconstrain::SpinConstrain<TK>& sc = spinconstrain::SpinConstrain<TK>::getScInstance();
-        sc.init_sc(PARAM.inp.sc_thr, PARAM.inp.nsc, PARAM.inp.nsc_min, PARAM.inp.alpha_trial,
-                   PARAM.inp.sccut, PARAM.inp.sc_drop_thr, ucell, &(this->pv),
-                   PARAM.inp.nspin, this->kv, this->p_hamilt, this->psi, this->dmat.dm, this->pelec);
-        // Set lambda update strategy
-        if (PARAM.inp.sc_lambda_strategy == "linear_response")
-        {
-            sc.set_strategy_type(spinconstrain::LambdaStrategyType::LinearResponse);
-        }
-        else if (PARAM.inp.sc_lambda_strategy == "augmented_lagrangian")
-        {
-            sc.set_strategy_type(spinconstrain::LambdaStrategyType::AugmentedLagrangian);
-        }
-        else if (PARAM.inp.sc_lambda_strategy == "hybrid_delayed")
-        {
-            sc.set_strategy_type(spinconstrain::LambdaStrategyType::HybridDelayed);
-        }
-        sc.set_strategy_params(PARAM.inp.sc_mu_init, PARAM.inp.sc_mu_max,
-                               PARAM.inp.sc_mu_growth, PARAM.inp.sc_mix_beta,
-                               PARAM.inp.sc_scf_thr);
-    }
+    init_deltaspin_lcao<TK>(ucell, PARAM.inp, &(this->pv), this->kv, this->p_hamilt, this->psi, this->dmat.dm, this->pelec);
 
     // 11) set xc type before the first cal of xc in pelec->init_scf, Peize Lin add 2016-12-03
     this->exx_nao.before_scf(ucell, this->kv, orb_, this->p_chgmix, istep, PARAM.inp);
@@ -231,7 +209,7 @@ void ESolver_KS_LCAO<TK, TR>::before_scf(UnitCell& ucell, const int istep)
         rdmft_solver.update_ion(ucell, *(this->pw_rho), this->locpp.vloc, this->sf.strucFac);
     }
 
-    ModuleBase::timer::tick("ESolver_KS_LCAO", "before_scf");
+    ModuleBase::timer::end("ESolver_KS_LCAO", "before_scf");
     return;
 }
 
@@ -246,7 +224,7 @@ template <typename TK, typename TR>
 void ESolver_KS_LCAO<TK, TR>::cal_force(UnitCell& ucell, ModuleBase::matrix& force)
 {
     ModuleBase::TITLE("ESolver_KS_LCAO", "cal_force");
-    ModuleBase::timer::tick("ESolver_KS_LCAO", "cal_force");
+    ModuleBase::timer::start("ESolver_KS_LCAO", "cal_force");
 
     Force_Stress_LCAO<TK> fsl(this->RA, ucell.nat);
 
@@ -265,14 +243,14 @@ void ESolver_KS_LCAO<TK, TR>::cal_force(UnitCell& ucell, ModuleBase::matrix& for
 
     this->have_force = true;
 
-    ModuleBase::timer::tick("ESolver_KS_LCAO", "cal_force");
+    ModuleBase::timer::end("ESolver_KS_LCAO", "cal_force");
 }
 
 template <typename TK, typename TR>
 void ESolver_KS_LCAO<TK, TR>::cal_stress(UnitCell& ucell, ModuleBase::matrix& stress)
 {
     ModuleBase::TITLE("ESolver_KS_LCAO", "cal_stress");
-    ModuleBase::timer::tick("ESolver_KS_LCAO", "cal_stress");
+    ModuleBase::timer::start("ESolver_KS_LCAO", "cal_stress");
 
     if (!this->have_force)
     {
@@ -284,14 +262,14 @@ void ESolver_KS_LCAO<TK, TR>::cal_stress(UnitCell& ucell, ModuleBase::matrix& st
     stress = this->scs;
     this->have_force = false;
 
-    ModuleBase::timer::tick("ESolver_KS_LCAO", "cal_stress");
+    ModuleBase::timer::end("ESolver_KS_LCAO", "cal_stress");
 }
 
 template <typename TK, typename TR>
 void ESolver_KS_LCAO<TK, TR>::after_all_runners(UnitCell& ucell)
 {
     ModuleBase::TITLE("ESolver_KS_LCAO", "after_all_runners");
-    ModuleBase::timer::tick("ESolver_KS_LCAO", "after_all_runners");
+    ModuleBase::timer::start("ESolver_KS_LCAO", "after_all_runners");
 
     ESolver_KS::after_all_runners(ucell);
 
@@ -316,7 +294,7 @@ void ESolver_KS_LCAO<TK, TR>::after_all_runners(UnitCell& ucell)
 #endif
 #endif
 
-    ModuleBase::timer::tick("ESolver_KS_LCAO", "after_all_runners");
+    ModuleBase::timer::end("ESolver_KS_LCAO", "after_all_runners");
 }
 
 template <typename TK, typename TR>
@@ -509,7 +487,7 @@ template <typename TK, typename TR>
 void ESolver_KS_LCAO<TK, TR>::after_scf(UnitCell& ucell, const int istep, const bool conv_esolver)
 {
     ModuleBase::TITLE("ESolver_KS_LCAO", "after_scf");
-    ModuleBase::timer::tick("ESolver_KS_LCAO", "after_scf");
+    ModuleBase::timer::start("ESolver_KS_LCAO", "after_scf");
 
     auto* hamilt_lcao = dynamic_cast<hamilt::HamiltLCAO<TK, TR>*>(this->p_hamilt);
 
@@ -540,7 +518,7 @@ void ESolver_KS_LCAO<TK, TR>::after_scf(UnitCell& ucell, const int istep, const 
         this->RA.delete_grid();
     }
 
-    ModuleBase::timer::tick("ESolver_KS_LCAO", "after_scf");
+    ModuleBase::timer::end("ESolver_KS_LCAO", "after_scf");
 }
 
 template class ESolver_KS_LCAO<double, double>;

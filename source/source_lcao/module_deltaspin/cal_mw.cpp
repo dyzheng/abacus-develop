@@ -1,6 +1,7 @@
+#include <iostream>
+
 #include "source_base/matrix.h"
 #include "source_base/name_angular.h"
-#include "source_base/module_external/scalapack_connector.h"
 #include "source_base/tool_title.h"
 #include "source_base/timer.h"
 #include "source_pw/module_pwdft/onsite_proj.h"
@@ -11,113 +12,52 @@
 #include "source_lcao/hamilt_lcao.h"
 #include "source_lcao/module_operator_lcao/dspin_lcao.h"
 
-
-template <>
-ModuleBase::matrix spinconstrain::SpinConstrain<std::complex<double>>::cal_MW_k(
-    const std::vector<std::vector<std::complex<double>>>& dm)
-{
-    ModuleBase::TITLE("module_deltaspin", "cal_MW_k");
-    int nw = this->get_nw();
-    const int nlocal = (this->nspin_ == 4) ? nw / 2 : nw;
-    ModuleBase::matrix MecMulP(this->nspin_, nlocal, true), orbMulP(this->nspin_, nlocal, true);
-    for(size_t ik = 0; ik != this->kv_.get_nks(); ++ik)
-    {
-        std::complex<double> *sk = nullptr;
-        if (this->nspin_ == 4)
-        {
-            static_cast<hamilt::HamiltLCAO<std::complex<double>, std::complex<double>>*>(this->p_hamilt)->updateSk(ik, 1);
-            sk = static_cast<hamilt::HamiltLCAO<std::complex<double>, std::complex<double>>*>(this->p_hamilt)->getSk();
-        }
-        else
-        {
-            static_cast<hamilt::HamiltLCAO<std::complex<double>, double>*>(this->p_hamilt)->updateSk(ik, 1);
-            sk = static_cast<hamilt::HamiltLCAO<std::complex<double>, double>*>(this->p_hamilt)->getSk();
-        }
-        ModuleBase::ComplexMatrix mud(this->ParaV->ncol, this->ParaV->nrow, true);
-#ifdef __MPI
-        const char T_char = 'T';
-        const char N_char = 'N';
-        const int one_int = 1;
-        const std::complex<double> one_float = {1.0, 0.0}, zero_float = {0.0, 0.0};
-        pzgemm_(&N_char,
-                &T_char,
-                &nw,
-                &nw,
-                &nw,
-                &one_float,
-                dm[ik].data(),
-                &one_int,
-                &one_int,
-                this->ParaV->desc,
-                sk,
-                &one_int,
-                &one_int,
-                this->ParaV->desc,
-                &zero_float,
-                mud.c,
-                &one_int,
-                &one_int,
-                this->ParaV->desc);
-        this->collect_MW(MecMulP, mud, nw, this->kv_.isk[ik]);
-#endif
-    }
-#ifdef __MPI
-    MPI_Allreduce(MecMulP.c, orbMulP.c, this->nspin_*nlocal, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-#endif
-
-    return orbMulP;
-}
-
-template <>
-void spinconstrain::SpinConstrain<std::complex<double>>::cal_MW(const int& step, bool print)
-{
-    ModuleBase::TITLE("module_deltaspin", "cal_MW");
-    ModuleBase::timer::tick("SpinConstrain", "cal_MW");
-    // calculate MW from lambda in real space projection method
-    {
-        this->zero_Mi();
-        // Use dm_ saved in init_sc instead of pelec->get_DM() which is uninitialized in LCAO
-        const hamilt::HContainer<double>* dmr = this->dm_->get_DMR_pointer(1);
-        std::vector<double> moments;
-        if(PARAM.inp.nspin==2)
-        {
-            this->dm_->switch_dmr(2);
-            moments = static_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double>>*>(this->p_operator)->cal_moment(dmr, this->get_constrain());
-            this->dm_->switch_dmr(0);
-            for(int iat=0;iat<this->Mi_.size();iat++)
-            {
-                this->Mi_[iat].x = 0.0;
-                this->Mi_[iat].y = 0.0;
-                this->Mi_[iat].z = moments[iat];
-            }
-        }
-        else if(PARAM.inp.nspin==4)
-        {
-            moments = static_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, std::complex<double>>>*>(this->p_operator)->cal_moment(dmr, this->get_constrain());
-            for(int iat=0;iat<this->Mi_.size();iat++)
-            {
-                this->Mi_[iat].x = moments[iat*3];
-                this->Mi_[iat].y = moments[iat*3+1];
-                this->Mi_[iat].z = moments[iat*3+2];
-            }
-        }
-    }
-
-    ModuleBase::timer::tick("SpinConstrain", "cal_MW");
-}
-
-// cal_mi_lcao kept for backward compatibility - wraps cal_MW
 template <>
 void spinconstrain::SpinConstrain<std::complex<double>>::cal_mi_lcao(const int& step, bool print)
 {
-    this->cal_MW(step, print);
+    ModuleBase::TITLE("module_deltaspin", "cal_mi_lcao");
+    ModuleBase::timer::start("spinconstrain::SpinConstrain", "cal_mi_lcao");
+    // calculate MW from lambda in real space projection method
+    this->zero_Mi();
+    const hamilt::HContainer<double>* dmr = this->dm_->get_DMR_pointer(1);
+    std::vector<double> moments;
+    if(PARAM.inp.nspin==2)
+    {
+        this->dm_->switch_dmr(2);
+
+        moments = static_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double>>*>(this->p_operator)->cal_moment(dmr, this->get_constrain());
+
+        this->dm_->switch_dmr(0);
+
+        for(int iat=0;iat<this->Mi_.size();iat++)
+        {
+            this->Mi_[iat].x = 0.0;
+            this->Mi_[iat].y = 0.0;
+            this->Mi_[iat].z = moments[iat];
+        }
+    }
+    else if(PARAM.inp.nspin==4)
+    {
+        moments = static_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, std::complex<double>>>*>(this->p_operator)->cal_moment(dmr, this->get_constrain());
+        for(int iat=0;iat<this->Mi_.size();iat++)
+        {
+            this->Mi_[iat].x = moments[iat*3];
+            this->Mi_[iat].y = moments[iat*3+1];
+            this->Mi_[iat].z = moments[iat*3+2];
+        }
+    }
+
+    ModuleBase::timer::end("spinconstrain::SpinConstrain", "cal_mi_lcao");
 }
 
 #endif
 
 template <>
-void spinconstrain::SpinConstrain<std::complex<double>>::cal_Mi_pw()
+void spinconstrain::SpinConstrain<std::complex<double>>::cal_mi_pw()
 {
+    ModuleBase::TITLE("module_deltaspin", "cal_mi_pw");
+    ModuleBase::timer::start("spinconstrain::SpinConstrain", "cal_mi_pw");
+
     this->zero_Mi();
     if(PARAM.inp.device == "cpu")
     {
@@ -128,40 +68,6 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_Mi_pw()
         const int nbands = psi_t->get_nbands();
         const int nks = psi_t->get_nk();
         const int npol = psi_t->get_npol();
-        if(npol == 1)// nspin=2
-        for(int ik = 0; ik < nks; ik++)
-        {
-            psi_t->fix_k(ik);
-            const int is = this->pelec->klist->isk[ik];
-            const int sign = (is == 0) ? 1 : -1;
-            psi_pointer = psi_t->get_pointer();
-            onsite_p->tabulate_atomic(ik); // tabulate for each atom at each k-point
-            // std::cout << __FILE__ << ":" << __LINE__ << " nbands = " << nbands << std::endl;
-            onsite_p->overlap_proj_psi(nbands, psi_pointer);
-            const std::complex<double>* becp = onsite_p->get_h_becp();
-            // becp(nbands*npol , nkb)
-            // mag = wg * \sum_{nh}becp * becp
-            int nkb = onsite_p->get_tot_nproj();
-            for(int ib = 0;ib<nbands;ib++)
-            {
-                const double weight = this->pelec->wg(ik, ib);
-                int begin_ih = 0;
-                for(int iat = 0; iat < this->Mi_.size(); iat++)
-                {
-                    double occ = 0.0;
-                    const int nh = onsite_p->get_nh(iat);
-                    for(int ih = 0; ih < nh; ih++)
-                    {
-                        const int index = ib*nkb + begin_ih + ih;
-                        occ += (conj(becp[index]) * becp[index]).real();
-                    }
-                    // occ has been reduced and calculate mag
-                    this->Mi_[iat].z += sign * weight * occ ;
-                    begin_ih += nh;
-                }
-            }
-        }
-        else if(npol == 2)
         for(int ik = 0; ik < nks; ik++)
         {
             psi_t->fix_k(ik);
@@ -246,8 +152,9 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_Mi_pw()
     }
 #endif
     // reduce mag from all k-pools
-    Parallel_Reduce::reduce_double_allpool(PARAM.inp.kpar, PARAM.globalv.nproc_in_pool, &(this->Mi_[0][0]), 3 * this->Mi_.size());
-
+    Parallel_Reduce::reduce_double_allpool(PARAM.inp.kpar, GlobalV::NPROC_IN_POOL, &(this->Mi_[0][0]), 3 * this->Mi_.size());
+    
+    ModuleBase::timer::end("spinconstrain::SpinConstrain", "cal_mi_pw");
 }
 
 template <>

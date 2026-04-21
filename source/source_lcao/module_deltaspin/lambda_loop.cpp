@@ -208,7 +208,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_loop(
             if(PARAM.inp.basis_type == "pw")
             {
                 //double check Atomic spin moment
-                this->cal_Mi_pw();
+                this->cal_mi_pw();
                 subtract_2d(this->Mi_, this->target_mag_, delta_spin);
                 where_fill_scalar_2d(this->constrain_, 0, zero, delta_spin);
                 search = delta_spin;
@@ -229,40 +229,6 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_loop(
                 }
             }
             break;
-        }
-        // If a non-BFGS strategy is active, use it instead of the traditional BFGS update
-        if (this->strategy_)
-        {
-            auto result = this->strategy_->update_lambda(
-                this->lambda_, this->Mi_, this->target_mag_, this->constrain_,
-                this->sc_thr_, i_step, nat);
-            if (result.status == "converged")
-            {
-                this->update_psi_charge(nullptr, rerun);
-                if(PARAM.inp.basis_type == "pw")
-                {
-                    this->cal_Mi_pw();
-                    subtract_2d(this->Mi_, this->target_mag_, delta_spin);
-                    where_fill_scalar_2d(this->constrain_, 0, zero, delta_spin);
-                    for (int ia = 0; ia < nat; ia++)
-                    {
-                        for (int ic = 0; ic < 3; ic++)
-                        {
-                            temp_1[ia][ic] = std::pow(delta_spin[ia][ic],2);
-                        }
-                    }
-                    rms_error = std::sqrt(sum_2d(temp_1) / nat);
-                }
-                break;
-            }
-            if (result.status.find("fallback") != std::string::npos)
-            {
-                // fallback: let the outer SCF continue and retry lambda loop
-                this->update_psi_charge(nullptr, rerun);
-                break;
-            }
-            // Strategy updated lambda, continue to next iteration for a fresh SCF solve
-            continue;
         }
 #ifdef __MPI
 		iterstart = MPI_Wtime();

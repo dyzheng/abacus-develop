@@ -35,7 +35,7 @@ template <typename TK, typename TR>
 void ESolver_KS_LCAO<TK, TR>::others(UnitCell& ucell, const int istep)
 {
     ModuleBase::TITLE("ESolver_KS_LCAO", "others");
-    ModuleBase::timer::tick("ESolver_KS_LCAO", "others");
+    ModuleBase::timer::start("ESolver_KS_LCAO", "others");
 
     const std::string cal_type = PARAM.inp.calculation;
 
@@ -163,22 +163,6 @@ void ESolver_KS_LCAO<TK, TR>::others(UnitCell& ucell, const int istep)
                    this->psi,
                    this->dmat.dm,
                    this->pelec);
-        // Set lambda update strategy
-        if (PARAM.inp.sc_lambda_strategy == "linear_response")
-        {
-            sc.set_strategy_type(spinconstrain::LambdaStrategyType::LinearResponse);
-        }
-        else if (PARAM.inp.sc_lambda_strategy == "augmented_lagrangian")
-        {
-            sc.set_strategy_type(spinconstrain::LambdaStrategyType::AugmentedLagrangian);
-        }
-        else if (PARAM.inp.sc_lambda_strategy == "hybrid_delayed")
-        {
-            sc.set_strategy_type(spinconstrain::LambdaStrategyType::HybridDelayed);
-        }
-        sc.set_strategy_params(PARAM.inp.sc_mu_init, PARAM.inp.sc_mu_max,
-                               PARAM.inp.sc_mu_growth, PARAM.inp.sc_mix_beta,
-                               PARAM.inp.sc_scf_thr);
     }
 
     //=========================================================
@@ -282,7 +266,7 @@ void ESolver_KS_LCAO<TK, TR>::others(UnitCell& ucell, const int istep)
         ModuleBase::WARNING_QUIT("ESolver_KS_LCAO::others", "CALCULATION type not supported");
     }
 
-    ModuleBase::timer::tick("ESolver_KS_LCAO", "others");
+    ModuleBase::timer::end("ESolver_KS_LCAO", "others");
     return;
 }
 
