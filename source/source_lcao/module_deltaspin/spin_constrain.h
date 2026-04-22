@@ -79,8 +79,11 @@ public:
 
   double get_escon() const;
 
-  void run_lambda_loop(int outer_step, 
+  void run_lambda_loop(int outer_step,
 		  bool rerun = true);
+
+  /// @brief optimized lambda loop for LCAO nspin=2: subspace diag + analytical Jacobian
+  void run_lambda_loop_lcao(int outer_step);
 
   /// @brief update the charge density for LCAO base with new lambda
   /// update the charge density and psi for PW base with new lambda
