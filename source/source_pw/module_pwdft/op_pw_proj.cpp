@@ -269,7 +269,7 @@ void OnsiteProj<OperatorPW<T, Device>>::cal_ps_dftu(
             {
                 const int tlp1 = 2 * target_l + 1;
                 vu_begin_iat0[iat] = vu_begin;
-                vu_begin += tlp1 * tlp1 * 4;
+                vu_begin += tlp1 * tlp1 * npol * npol;
                 const int m_begin = target_l * target_l;
                 const int m_end  = (target_l + 1) * (target_l + 1);
                 for(int ip=0;ip<nproj;ip++)
@@ -294,19 +294,40 @@ void OnsiteProj<OperatorPW<T, Device>>::cal_ps_dftu(
         resmem_complex_op()(this->vu_device, dftu->get_size_eff_pot_pw());
     }
 
-    syncmem_complex_h2d_op()(this->vu_device, dftu->get_eff_pot_pw(0), dftu->get_size_eff_pot_pw());
-
-    hamilt::onsite_ps_op<Real, Device>()(
-        this->ctx,   // device context
-        m, 
-        npol,
-        this->orb_l_iat,
-        this->ip_iat,
-        this->ip_m,
-        this->vu_begin_iat, 
-        tnp,  
-        this->vu_device,
-        this->ps, becp);
+    // For nspin=2, need to select spin-up or spin-down potential
+    if(PARAM.inp.nspin == 2 && this->isk[this->ik] == 1)
+    {
+        const int size_eff_pot_pw = dftu->get_size_eff_pot_pw() / 2;
+        syncmem_complex_h2d_op()(this->vu_device, 
+            dftu->get_eff_pot_pw(0) + size_eff_pot_pw, 
+            size_eff_pot_pw);
+        hamilt::onsite_ps_op<Real, Device>()(
+            this->ctx,   // device context
+            m, 
+            npol,
+            this->orb_l_iat,
+            this->ip_iat,
+            this->ip_m,
+            this->vu_begin_iat, 
+            tnp,  
+            this->vu_device,
+            this->ps, becp);
+    }
+    else
+    {
+        syncmem_complex_h2d_op()(this->vu_device, dftu->get_eff_pot_pw(0), dftu->get_size_eff_pot_pw());
+        hamilt::onsite_ps_op<Real, Device>()(
+            this->ctx,   // device context
+            m, 
+            npol,
+            this->orb_l_iat,
+            this->ip_iat,
+            this->ip_m,
+            this->vu_begin_iat, 
+            tnp,  
+            this->vu_device,
+            this->ps, becp);
+    }
 
     /*
     int sum = 0;
