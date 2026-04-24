@@ -153,13 +153,19 @@ void ESolver_KS_LCAO<TK, TR>::before_scf(UnitCell& ucell, const int istep)
     // since it depends on ionic positions
     this->deepks.build_overlap(ucell, orb_, pv, gd, *(two_center_bundle_.overlap_orb_alpha), PARAM.inp);
 
-    // 10) prepare sc calculation
+    // 10) initialize HSolver once (reuse across SCF iterations and lambda loop)
+    if (this->phsol == nullptr)
+    {
+        this->phsol = new hsolver::HSolverLCAO<TK>(&(this->pv), PARAM.inp.ks_solver);
+    }
+
+    // 11) prepare sc calculation
     if (PARAM.inp.sc_mag_switch)
     {
         spinconstrain::SpinConstrain<TK>& sc = spinconstrain::SpinConstrain<TK>::getScInstance();
         sc.init_sc(PARAM.inp.sc_thr, PARAM.inp.nsc, PARAM.inp.nsc_min, PARAM.inp.alpha_trial,
                    PARAM.inp.sccut, PARAM.inp.sc_drop_thr, ucell, &(this->pv),
-                   PARAM.inp.nspin, this->kv, this->p_hamilt, this->psi, this->dmat.dm, this->pelec);
+                   PARAM.inp.nspin, this->kv, this->p_hamilt, this->psi, this->dmat.dm, this->pelec, nullptr, this->phsol);
         // Set lambda update strategy
         if (PARAM.inp.sc_lambda_strategy == "linear_response")
         {
@@ -460,8 +466,9 @@ void ESolver_KS_LCAO<TK, TR>::hamilt2rho_single(UnitCell& ucell, int istep, int 
     // 3) run Hsolver
     if (!skip_solve)
     {
-        hsolver::HSolverLCAO<TK> hsolver_lcao_obj(&(this->pv), PARAM.inp.ks_solver);
-        hsolver_lcao_obj.solve(static_cast<hamilt::Hamilt<TK>*>(this->p_hamilt), this->psi[0], this->pelec, *this->dmat.dm, 
+        hsolver::HSolverLCAO<TK>* hsolver_lcao_obj
+            = static_cast<hsolver::HSolverLCAO<TK>*>(this->phsol);
+        hsolver_lcao_obj->solve(static_cast<hamilt::Hamilt<TK>*>(this->p_hamilt), this->psi[0], this->pelec, *this->dmat.dm, 
           this->chr, PARAM.inp.nspin, skip_charge);
     }
 

@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "lambda_update_strategies.h"
+#include "lambda_solvers.h"
 #include "source_base/constants.h"
 #include "source_base/tool_quit.h"
 #include "source_base/tool_title.h"
@@ -52,7 +53,8 @@ public:
 			   elecstate::DensityMatrix<TK, double> *dm_in, // mohan add 2025-11-02
 #endif
 			   elecstate::ElecState* pelec_in,
-               ModulePW::PW_Basis_K* pw_wfc_in = nullptr);
+               ModulePW::PW_Basis_K* pw_wfc_in = nullptr,
+               void* phsol_in = nullptr);
 
   /// @brief calculate the magnetization of each atom with real space projection method for LCAO base
   /// @param step : the step number of the SCF calculation
@@ -190,6 +192,10 @@ public:
     void set_constrain(const ModuleBase::Vector3<int>* constrain_in, int nat_in);
     /// get sc_lambda
     const std::vector<ModuleBase::Vector3<double>>& get_sc_lambda() const;
+    /// get Mi (current magnetic moments)
+    const std::vector<ModuleBase::Vector3<double>>& get_Mi() const { return Mi_; }
+    /// set sc_lambda from vector
+    void set_lambda(const std::vector<ModuleBase::Vector3<double>>& lambda_in) { lambda_ = lambda_in; }
     /// get target_mag
     const std::vector<ModuleBase::Vector3<double>>& get_target_mag() const;
     /// get constrain
@@ -240,6 +246,11 @@ public:
     /// set lambda update strategy parameters
     void set_strategy_params(double mu_init = 0.1, double mu_max = 10.0, double mu_growth = 1.5,
                              double mix_beta = 0.3, double sc_scf_thr = 1e-3);
+
+    /// @brief set lambda solver type (replaces entire inner loop when set)
+    void set_lambda_solver_type(LambdaSolverType type);
+    /// @brief get lambda solver
+    LambdaSolver* get_lambda_solver() const { return lambda_solver_.get(); }
     /// get sc_thr
     double get_sc_thr() const;
     /// get nsc
@@ -252,13 +263,22 @@ public:
     double get_sccut() const;
     /// get sc_drop_thr
     double get_sc_drop_thr() const;
+    /// get restrict_current
+    double get_restrict_current() const { return restrict_current_; }
+    /// set current_sc_thr
+    void set_current_sc_thr(double thr) { current_sc_thr_ = thr; }
+    /// get current_sc_thr
+    double get_current_sc_thr() const { return current_sc_thr_; }
+    /// @brief get operator pointer for spin-constrained DFT
+    hamilt::Operator<TK>* get_operator() const { return p_operator; }
     /// @brief set orbital parallel info
     void set_ParaV(Parallel_Orbitals* ParaV_in);
     /// @brief set parameters for solver
     void set_solver_parameters(const K_Vectors& kv_in,
                                void* p_hamilt_in,
                                void* psi_in,
-                               elecstate::ElecState* pelec_in);
+                               elecstate::ElecState* pelec_in,
+                               void* phsol_in = nullptr);
 
   private:
     SpinConstrain(){};                               // Private constructor
@@ -313,6 +333,9 @@ public:
     LambdaStrategyType strategy_type_ = LambdaStrategyType::BFGS;
     /// @brief lambda update strategy instance
     std::unique_ptr<LambdaUpdateStrategy> strategy_;
+
+    /// @brief lambda solver instance (replaces entire inner loop when set)
+    std::unique_ptr<LambdaSolver> lambda_solver_;
 
     TK* sub_h_save = nullptr;
     TK* sub_s_save = nullptr;

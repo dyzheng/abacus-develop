@@ -18,7 +18,8 @@ void spinconstrain::SpinConstrain<TK>::init_sc(double sc_thr_in,
 		elecstate::DensityMatrix<TK, double>* dm_in, // mohan add 2025-11-03
 #endif
 		elecstate::ElecState* pelec_in,
-		ModulePW::PW_Basis_K* pw_wfc_in)
+		ModulePW::PW_Basis_K* pw_wfc_in,
+		void* phsol_in)
 {
     this->set_input_parameters(sc_thr_in, nsc_in, nsc_min_in, alpha_trial_in, sccut_in, sc_drop_thr_in);
     this->set_atomCounts(ucell.get_atom_Counts());
@@ -33,7 +34,7 @@ void spinconstrain::SpinConstrain<TK>::init_sc(double sc_thr_in,
     this->pw_wfc_ = pw_wfc_in;
     this->set_decay_grad();
     if(ParaV_in != nullptr) this->set_ParaV(ParaV_in);
-    this->set_solver_parameters(kv_in, p_hamilt_in, psi_in, pelec_in);
+    this->set_solver_parameters(kv_in, p_hamilt_in, psi_in, pelec_in, phsol_in);
 #ifdef __LCAO
     this->dm_ = dm_in; // mohan add 2025-11-03
 #endif

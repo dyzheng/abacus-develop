@@ -12,6 +12,7 @@ list(APPEND objects
     template_helpers.cpp
     lambda_update_strategies.cpp
     lambda_strategy_integration.cpp
+    lambda_solvers.cpp
     deltaspin_lcao.cpp
 )
 

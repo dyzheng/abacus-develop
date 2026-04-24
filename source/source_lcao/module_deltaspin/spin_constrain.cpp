@@ -534,9 +534,11 @@ template <typename TK>
 void SpinConstrain<TK>::set_solver_parameters(const K_Vectors& kv_in,
                                                   void* p_hamilt_in,
                                                   void* psi_in,
-                                                  elecstate::ElecState* pelec_in)
+                                                  elecstate::ElecState* pelec_in,
+                                                  void* phsol_in)
 {
     this->kv_ = kv_in;
+    this->phsol = phsol_in;
     this->p_hamilt = p_hamilt_in;
     this->psi = psi_in;
     this->pelec = pelec_in;

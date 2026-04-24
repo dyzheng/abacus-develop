@@ -96,6 +96,9 @@ class ESolver_KS_LCAO : public ESolver_KS
     friend class LR::ESolver_LR<double, double>;
     friend class LR::ESolver_LR<std::complex<double>, double>;
 
+    //! Persistent solver pointer (for SpinConstrain reuse)
+    void* phsol = nullptr;
+
     // Temporarily store the stress to unify the interface with PW,
     // because it's hard to seperate force and stress calculation in LCAO.
     ModuleBase::matrix scs;

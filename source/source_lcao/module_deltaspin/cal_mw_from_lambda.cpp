@@ -122,7 +122,6 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mw_from_lambda(int 
     {
         psi::Psi<std::complex<double>>* psi_t = static_cast<psi::Psi<std::complex<double>>*>(this->psi);
         hamilt::Hamilt<std::complex<double>>* hamilt_t = static_cast<hamilt::Hamilt<std::complex<double>>*>(this->p_hamilt);
-        hsolver::HSolverLCAO<std::complex<double>> hsolver_t(this->ParaV, PARAM.inp.ks_solver);
         if (PARAM.inp.nspin == 2)
         {
             dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double>>*>(this->p_operator)->update_lambda();
@@ -131,7 +130,19 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mw_from_lambda(int 
         {
             dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, std::complex<double>>>*>(this->p_operator)->update_lambda();
         }
-        hsolver_t.solve(hamilt_t, psi_t[0], this->pelec, *this->dm_, *this->pelec->charge, PARAM.inp.nspin, true);
+        // Use the pre-initialized solver from ESolver (same as zdy-tmp)
+        if (this->phsol != nullptr)
+        {
+            hsolver::HSolverLCAO<std::complex<double>>* hsolver_t
+                = static_cast<hsolver::HSolverLCAO<std::complex<double>>*>(this->phsol);
+            hsolver_t->solve(hamilt_t, psi_t[0], this->pelec, *this->dm_, *this->pelec->charge, PARAM.inp.nspin, true);
+        }
+        else
+        {
+            // Fallback: create solver on stack (less efficient but functional)
+            hsolver::HSolverLCAO<std::complex<double>> hsolver_t(this->ParaV, PARAM.inp.ks_solver);
+            hsolver_t.solve(hamilt_t, psi_t[0], this->pelec, *this->dm_, *this->pelec->charge, PARAM.inp.nspin, true);
+        }
         elecstate::calculate_weights(this->pelec->ekb, this->pelec->wg, this->pelec->klist,
                                      this->pelec->eferm, this->pelec->f_en, this->pelec->nelec_spin, this->pelec->skip_weights);
         elecstate::calEBand(this->pelec->ekb, this->pelec->wg, this->pelec->f_en);
