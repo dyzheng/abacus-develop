@@ -12,7 +12,7 @@ void iter_init_dftu_pw(const int iter,
                        const UnitCell& ucell,
                        Charge_Mixing* p_chgmix)
 {
-    if (!p_chgmix)
+    if (!p_chgmix || !PARAM.inp.dft_plus_u)
     {
         return;
     }

@@ -79,6 +79,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mi_pw()
             // becp(nbands*npol , nkb)
             // mag = wg * \sum_{nh}becp * becp
             int nkb = onsite_p->get_tot_nproj();
+            if (npol == 2)
             for(int ib = 0;ib<nbands;ib++)
             {
                 const double weight = this->pelec->wg(ik, ib);
@@ -100,6 +101,28 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mi_pw()
                     this->Mi_[iat].x += weight * (occ[1] + occ[2]).real();
                     this->Mi_[iat].y += weight * (occ[1] - occ[2]).imag();
                     begin_ih += nh;
+                }
+            }
+            else if (npol == 1)
+            {
+                const int sign = this->pelec->klist->isk[ik] == 0 ? 1 : -1;
+                for(int ib = 0;ib<nbands;ib++)
+                {
+                    const double weight = this->pelec->wg(ik, ib);
+                    int begin_ih = 0;
+                    for(int iat = 0; iat < this->Mi_.size(); iat++)
+                    {
+                        double occ = 0.0;
+                        const int nh = onsite_p->get_nh(iat);
+                        for(int ih = 0; ih < nh; ih++)
+                        {
+                            const int index = ib*nkb + begin_ih + ih;
+                            occ += (conj(becp[index]) * becp[index]).real();
+                        }
+                        // occ has been reduced and calculate mag
+                        this->Mi_[iat].z += weight * occ * sign;
+                        begin_ih += nh;
+                    }
                 }
             }
         }
@@ -125,6 +148,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mi_pw()
             // becp(nbands*npol , nkb)
             // mag = wg * \sum_{nh}becp * becp
             int nkb = onsite_p->get_size_becp() / nbands / npol;
+            if (npol == 2)
             for(int ib = 0;ib<nbands;ib++)
             {
                 const double weight = this->pelec->wg(ik, ib);
@@ -146,6 +170,28 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mi_pw()
                     this->Mi_[iat].x += weight * (occ[1] + occ[2]).real();
                     this->Mi_[iat].y += weight * (occ[1] - occ[2]).imag();
                     begin_ih += nh;
+                }
+            }
+            else if (npol == 1)
+            {
+                const int sign = this->pelec->klist->isk[ik] == 0 ? 1 : -1;
+                for(int ib = 0;ib<nbands;ib++)
+                {
+                    const double weight = this->pelec->wg(ik, ib);
+                    int begin_ih = 0;
+                    for(int iat = 0; iat < this->Mi_.size(); iat++)
+                    {
+                        double occ = 0.0;
+                        const int nh = onsite_p->get_nh(iat);
+                        for(int ih = 0; ih < nh; ih++)
+                        {
+                            const int index = ib*nkb + begin_ih + ih;
+                            occ += (conj(becp[index]) * becp[index]).real();
+                        }
+                        // occ has been reduced and calculate mag
+                        this->Mi_[iat].z += weight * occ * sign;
+                        begin_ih += nh;
+                    }
                 }
             }
         }

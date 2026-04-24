@@ -78,10 +78,26 @@ public:
   /// update the charge density and psi for PW base with new lambda
   void update_psi_charge(const ModuleBase::Vector3<double>* delta_lambda, bool pw_solve = true);
 
+  /**
+   * @brief PW基组的波函数和电荷更新实现
+   * @details 包含两个阶段：
+   *          1. 子空间对角化：对每个k点应用DeltaSpin修正并求解
+   *          2. 电荷更新：根据pw_solve参数选择全空间对角化或直接更新电荷
+   */
+  void update_psi_charge_pw(const ModuleBase::Vector3<double>* delta_lambda, bool pw_solve);
+  
+  /// CPU版本的PW基组更新实现
+  void update_psi_charge_pw_cpu(const ModuleBase::Vector3<double>* delta_lambda, bool pw_solve);
+  
+#if ((defined __CUDA) || (defined __ROCM))
+  /// GPU版本的PW基组更新实现
+  void update_psi_charge_pw_gpu(const ModuleBase::Vector3<double>* delta_lambda, bool pw_solve);
+#endif
+
   void calculate_delta_hcc(std::complex<double>* h_tmp, 
 		  const std::complex<double>* becp_k, 
 		  const ModuleBase::Vector3<double>* delta_lambda, 
-		  const int nbands, const int nkb, const int* nh_iat);
+		  const int nbands, const int nkb, const int* nh_iat, const int sign);
 
   /// lambda loop helper functions
   bool check_rms_stop(int outer_step, int i_step, double rms_error, double duration, double total_duration);

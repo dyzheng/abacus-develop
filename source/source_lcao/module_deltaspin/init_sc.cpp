@@ -25,6 +25,7 @@ void spinconstrain::SpinConstrain<TK>::init_sc(double sc_thr_in,
     this->set_orbitalCounts(ucell.get_orbital_Counts());
     this->set_lnchiCounts(ucell.get_lnchi_Counts());
     this->set_nspin(nspin_in);
+    this->set_npol((nspin_in == 4) ? 2 : 1);
     this->set_target_mag(ucell.get_target_mag());
     this->lambda_ = ucell.get_lambda();
     this->constrain_ = ucell.get_constrain();

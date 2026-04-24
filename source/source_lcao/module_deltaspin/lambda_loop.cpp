@@ -132,6 +132,8 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_loop(
 
     double inner_loop_duration = 0.0;
 
+    printf("[DIAG] basis_type=%s nsc=%d\n", PARAM.inp.basis_type.c_str(), this->nsc_);
+    fflush(stdout);
     this->print_header();
     // lambda loop
     for (int i_step = -1; i_step < this->nsc_; i_step++)
@@ -152,8 +154,10 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_loop(
         {
             where_fill_scalar_else_2d(this->constrain_, 0, zero, delta_lambda, delta_lambda);
             add_scalar_multiply_2d(initial_lambda, delta_lambda, one, this->lambda_);
-
-            this->cal_mw_from_lambda(i_step);
+ 
+            printf("[DIAG-LOOP] i_step=%d nat=%d dl_size=%zu dl_ptr=%p\n", i_step, nat, delta_lambda.size(), (void*)delta_lambda.data());
+            fflush(stdout);
+            this->cal_mw_from_lambda(i_step, delta_lambda.data());
 
             new_spin = this->Mi_;
             bool GradLessThanBound = this->check_gradient_decay(new_spin, spin, delta_lambda, dnu_last_step);
@@ -203,12 +207,22 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_loop(
         inner_loop_duration += duration;
         if (this->check_rms_stop(outer_step, i_step, rms_error, duration, inner_loop_duration))
         {
+            fprintf(stderr, "[LAMBDA-LOOP] check_rms_stop returned true at i_step=%d\n", i_step);
+            fflush(stderr);
             //add_scalar_multiply_2d(initial_lambda, dnu_last_step, 1.0, this->lambda_);
+            fprintf(stderr, "[LAMBDA-LOOP] calling update_psi_charge\n");
+            fflush(stderr);
             this->update_psi_charge(dnu_last_step.data(), rerun);
+            fprintf(stderr, "[LAMBDA-LOOP] update_psi_charge done\n");
+            fflush(stderr);
             if(PARAM.inp.basis_type == "pw")
             {
+                fprintf(stderr, "[LAMBDA-LOOP] calling cal_mi_pw\n");
+                fflush(stderr);
                 //double check Atomic spin moment
                 this->cal_mi_pw();
+                fprintf(stderr, "[LAMBDA-LOOP] cal_mi_pw done\n");
+                fflush(stderr);
                 subtract_2d(this->Mi_, this->target_mag_, delta_spin);
                 where_fill_scalar_2d(this->constrain_, 0, zero, delta_spin);
                 search = delta_spin;
@@ -247,10 +261,22 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_loop(
         add_scalar_multiply_2d(dnu, search, alpha_trial, dnu);
         delta_lambda = dnu;
 
+        // Cap delta_lambda to prevent explosion
+        for(int ia=0; ia<nat; ++ia) {
+            for(int ic=0; ic<3; ++ic) {
+                if(std::abs(delta_lambda[ia][ic]) > 10.0) {
+                    delta_lambda[ia][ic] = 10.0 * (delta_lambda[ia][ic] > 0 ? 1.0 : -1.0);
+                }
+            }
+        }
+
         where_fill_scalar_else_2d(this->constrain_, 0, zero, delta_lambda, delta_lambda);
         add_scalar_multiply_2d(initial_lambda, delta_lambda, one, this->lambda_);
 
+        printf("[DIAG-BEFORE-255] i_step=%d nat=%d dl_size=%zu dl_ptr=%p\n", i_step, nat, delta_lambda.size(), (void*)delta_lambda.data());
+        fflush(stdout);
         this->cal_mw_from_lambda(i_step, delta_lambda.data());
+        std::cerr << "[DIAG-LAMBDA] after cal_mw_from_lambda i_step=" << i_step << std::endl;
 
         spin_plus = this->Mi_;
 

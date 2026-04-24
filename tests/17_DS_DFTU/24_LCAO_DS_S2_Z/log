@@ -1,0 +1,73 @@
+                                                                                     
+                              ABACUS v3.11.0-beta.1
+
+               Atomic-orbital Based Ab-initio Computation at UStc                    
+
+                     Website: http://abacus.ustc.edu.cn/                             
+               Documentation: https://abacus.deepmodeling.com/                       
+                  Repository: https://github.com/abacusmodeling/abacus-develop       
+                              https://github.com/deepmodeling/abacus-develop         
+                      Commit: d73e6bc9e (Wed Apr 22 17:49:04 2026 +0800)
+
+ Thu Apr 23 11:17:00 2026
+ MAKE THE DIR         : OUT.autotest/
+ RUNNING WITH DEVICE  : CPU / 12th Gen Intel(R) Core(TM) i7-12700KF (x1)
+ WARNING: some of potential function is set to zero cause of less than 1e-30.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+ Warning: the number of valence electrons in pseudopotential > 8 for Fe: [Ar] 3d6 4s2
+ Pseudopotentials with additional electrons can yield (more) accurate outcomes, but may be less efficient.
+ If you're confident that your chosen pseudopotential is appropriate, you can safely ignore this warning.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+ UNIFORM GRID DIM     : 30 * 30 * 30
+ UNIFORM GRID DIM(BIG): 10 * 10 * 10
+ DONE(2.3705e-05 SEC) : SETUP UNITCELL
+ DONE(0.000315964 SEC) : INIT K-POINTS
+ ----------------------------------------------------------------
+ Self-consistent calculations for electrons
+ ----------------------------------------------------------------
+ SPIN    KPOINTS         PROCESSES   THREADS/PROC  THREADS/TOTAL NBASE       
+ 2       8               2           1             2             54          
+ ----------------------------------------------------------------
+ Use Systematically Improvable Atomic bases
+ ----------------------------------------------------------------
+ ELEMENT ORBITALS        NBASE       NATOM       XC          
+ Fe      4s2p2d1f-6au    27          2           
+ ----------------------------------------------------------------
+ Initial plane wave basis and FFT box
+ ----------------------------------------------------------------
+ DONE(0.00206333 SEC) : INIT PLANEWAVE
+ START CHARGE         : atomic
+ DONE(0.0511876  SEC) : CHARGE
+ DONE(0.0524161  SEC) : POTENTIALS
+
+ ================================================================
+ SELF-CONSISTENT: 
+ ================================================================
+ DONE(0.069259   SEC) : INIT SCF
+ ITER      TMAG       AMAG        ETOT/eV          EDIFF/eV         DRHO     TIME/s
+ GE1     -5.07e-02   4.40e+00  -6.77688990e+03   0.00000000e+00   8.4227e-02   0.30
+ GE2      2.45e-02   4.88e+00  -6.77772378e+03  -8.33883047e-01   5.0309e-02   0.21
+ GE3     -4.76e-02   4.76e+00  -6.77779694e+03  -7.31630812e-02   3.2890e-02   0.20
+ GE4     -9.68e-03   4.70e+00  -6.77780456e+03  -7.61297451e-03   1.5658e-02   0.22
+ GE5     -1.20e-01   4.75e+00  -6.77781083e+03  -6.27841869e-03   9.1100e-03   0.20
+ GE6     -6.32e-02   4.76e+00  -6.77782601e+03  -1.51713926e-02   3.2817e-03   0.20
+ GE7     -1.26e-01   4.77e+00  -6.77782830e+03  -2.29947298e-03   1.6515e-03   0.20
+ GE8     -1.62e-01   4.77e+00  -6.77782826e+03   4.59751248e-05   1.6354e-03   0.20
+ GE9     -1.35e-01   4.77e+00  -6.77782577e+03   2.48425514e-03   1.4094e-03   0.20
+ SCF restart after this step!
+ GE10     4.42e-03   4.77e+00  -6.77788005e+03  -5.42751089e-02   5.0241e-04   0.21
+===============================================================================
+Inner optimization for lambda begins ...
+Covergence criterion for the iteration: 0.0001
+initial lambda (eV/uB): 
+ATOM      1         0.0000000000
+ATOM      2         0.0000000000
+initial spin (uB): 
+ATOM      1         2.2970164202
+ATOM      2        -2.3493542192
+target spin (uB): 
+ATOM      1         0.0000000000
+ATOM      2         0.0000000000
+[DEBUG] rank=0 iat=0 r=16 nbands=14 D_I.size=224 comm=0x57366d1a6360
