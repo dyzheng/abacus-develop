@@ -1,0 +1,10 @@
+# 53_PW_DS_S2_bfgs_solver
+
+验证 DeltaSpin 使用 BFGS solver (sc_lambda_solver=bfgs) 的收敛行为。
+
+测试 BFGS Solver 替代传统内层循环的正确性。
+
+## 关键参数
+- `sc_lambda_solver=bfgs`: 启用模块化 BFGS Solver
+- `nspin=2`: 共线自旋极化
+- `sc_thr=1e-4`: 自旋收敛阈值

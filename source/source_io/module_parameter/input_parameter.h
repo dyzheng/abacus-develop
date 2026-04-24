@@ -603,6 +603,7 @@ struct Input_para
     double sc_scf_thr = 1e-3;       ///< minimum number of outer scf loop before initial lambda loop
     double sc_drop_thr = 1e-3;      ///< threshold for lambda-loop threshold cutoff in spin-constrained DFT
     std::string sc_lambda_strategy = "bfgs";  ///< lambda update strategy: bfgs, linear_response, augmented_lagrangian, hybrid_delayed
+    std::string sc_lambda_solver = "none";    ///< lambda solver type: none (use strategy loop), bfgs, chi_guided, subspace
     double sc_mu_init = 0.1;        ///< initial penalty parameter for augmented Lagrangian strategies
     double sc_mu_max = 10.0;        ///< maximum penalty parameter for augmented Lagrangian strategies
     double sc_mu_growth = 1.5;      ///< growth factor for penalty parameter

@@ -50,3 +50,6 @@
 50_FeO_O_first_Fe_second
 51_FeO_Fe_first_O_second
 52_PW_DFTU_SO
+53_PW_DS_S2_bfgs_solver
+54_LCAO_DS_S2_chiguided_solver
+55_PW_DS_S2_subspace_solver

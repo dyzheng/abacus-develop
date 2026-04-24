@@ -122,6 +122,14 @@
 |---|------|------|
 | 52 | PW_DFTU_SO | 验证 DFT+U 与自旋轨道耦合 (SOC) 同时开启时的兼容性，确保 DFT+U 的 onsite 投影与 SOC 的自旋混合正确耦合 |
 
+### 十四、Lambda Solver 切换 (53-55)
+
+| # | 算例 | 说明 |
+|---|------|------|
+| 53 | PW_DS_S2_bfgs_solver | 验证 DeltaSpin 使用模块化 BFGS Solver (sc_lambda_solver=bfgs) 替代传统内层循环的正确性 |
+| 54 | LCAO_DS_S2_chiguided_solver | 验证 LCAO 基组下 Chi-Guided Solver (sc_lambda_solver=chi_guided) 的收敛行为 |
+| 55 | PW_DS_S2_subspace_solver | 验证 Subspace Solver (sc_lambda_solver=subspace) 的实验性行为，PW 基组下单次调用 |
+
 ## 运行方式
 
 ```bash

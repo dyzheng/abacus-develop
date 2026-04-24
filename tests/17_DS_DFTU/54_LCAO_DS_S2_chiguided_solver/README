@@ -1,0 +1,11 @@
+# 54_LCAO_DS_S2_chiguided_solver
+
+验证 DeltaSpin 使用 Chi-Guided solver (sc_lambda_solver=chi_guided) 的收敛行为。
+
+测试 Chi-Guided Newton Solver 在 LCAO 基组下的正确性。
+
+## 关键参数
+- `sc_lambda_solver=chi_guided`: 启用模块化 Chi-Guided Solver
+- `basis_type=lcao`: LCAO 基组
+- `nspin=2`: 共线自旋极化
+- `sc_thr=1e-4`: 自旋收敛阈值

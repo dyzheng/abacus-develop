@@ -1,0 +1,10 @@
+# 55_PW_DS_S2_subspace_solver
+
+验证 DeltaSpin 使用 Subspace solver (sc_lambda_solver=subspace) 的行为。
+
+Subspace Solver 为实验性功能，PW 基组下调用一次 cal_mw_from_lambda。
+
+## 关键参数
+- `sc_lambda_solver=subspace`: 启用模块化 Subspace Solver
+- `nspin=2`: 共线自旋极化
+- `sc_thr=1e-4`: 自旋收敛阈值

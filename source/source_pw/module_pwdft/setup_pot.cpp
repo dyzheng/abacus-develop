@@ -2,6 +2,7 @@
 
 #include "source_estate/module_charge/symmetry_rho.h"
 #include "source_lcao/module_deltaspin/spin_constrain.h"
+#include "source_lcao/module_deltaspin/lambda_solvers.h"
 #include "source_pw/module_pwdft/onsite_proj.h"
 #include "source_lcao/module_dftu/dftu.h"
 #include "source_pw/module_pwdft/vsep_pw.h"
@@ -120,6 +121,11 @@ void pw::setup_pot(const int istep,
         else if (PARAM.inp.sc_lambda_strategy == "hybrid_delayed")
         {
             sc.set_strategy_type(spinconstrain::LambdaStrategyType::HybridDelayed);
+        }
+        // Set lambda solver type (replaces inner loop when not "none")
+        if (PARAM.inp.sc_lambda_solver != "none")
+        {
+            sc.set_lambda_solver_type(spinconstrain::lambda_solver_type_from_string(PARAM.inp.sc_lambda_solver));
         }
         sc.set_strategy_params(PARAM.inp.sc_mu_init, PARAM.inp.sc_mu_max,
                                PARAM.inp.sc_mu_growth, PARAM.inp.sc_mix_beta,

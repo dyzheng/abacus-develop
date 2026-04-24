@@ -210,6 +210,18 @@ void ReadInput::item_others()
         this->add_item(item);
     }
     {
+        Input_Item item("sc_lambda_solver");
+        item.annotation = "Lambda solver type for spin-constrained DFT: none (use strategy inner loop), bfgs, chi_guided, subspace";
+        item.category = "Spin-Constrained DFT";
+        item.type = "String";
+        item.description = "Lambda solver type that replaces the entire inner lambda loop. When 'none', the traditional strategy-based inner loop is used.";
+        item.default_value = "none";
+        item.unit = "";
+        item.availability = "sc_mag_switch is true";
+        read_sync_string(input.sc_lambda_solver);
+        this->add_item(item);
+    }
+    {
         Input_Item item("sc_mu_init");
         item.annotation = "Initial penalty parameter for augmented Lagrangian strategies";
         read_sync_double(input.sc_mu_init);

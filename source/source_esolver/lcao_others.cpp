@@ -18,6 +18,7 @@
 #include "source_io/module_chgpot/write_elecstat_pot.h"
 #include "source_lcao/LCAO_domain.h"
 #include "source_lcao/module_deltaspin/spin_constrain.h"
+#include "source_lcao/module_deltaspin/lambda_solvers.h"
 #include "source_lcao/module_operator_lcao/op_exx_lcao.h"
 #include "source_lcao/module_operator_lcao/operator_lcao.h"
 
@@ -175,6 +176,11 @@ void ESolver_KS_LCAO<TK, TR>::others(UnitCell& ucell, const int istep)
         else if (PARAM.inp.sc_lambda_strategy == "hybrid_delayed")
         {
             sc.set_strategy_type(spinconstrain::LambdaStrategyType::HybridDelayed);
+        }
+        // Set lambda solver type (replaces inner loop when not "none")
+        if (PARAM.inp.sc_lambda_solver != "none")
+        {
+            sc.set_lambda_solver_type(spinconstrain::lambda_solver_type_from_string(PARAM.inp.sc_lambda_solver));
         }
         sc.set_strategy_params(PARAM.inp.sc_mu_init, PARAM.inp.sc_mu_max,
                                PARAM.inp.sc_mu_growth, PARAM.inp.sc_mix_beta,
