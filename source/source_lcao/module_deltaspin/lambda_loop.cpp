@@ -1,11 +1,15 @@
 #include "spin_constrain.h"
 
-#include <iostream>
-#include <cmath>
+#include <algorithm>
 #include <chrono>
+#include <cmath>
+#include <complex>
+#include <iomanip>
+#include <iostream>
 
 #include "basic_funcs.h"
 #include "source_io/module_parameter/parameter.h"
+#include "source_lcao/module_gint/gint_interface.h"
 
 // lambda = initial_lambda + delta_lambda/(spin2 - spin1) * (target_spin - spin1)
 /*inline void next_lambda(std::vector<ModuleBase::Vector3<double>>& initial_lambda,
@@ -327,12 +331,12 @@ template <>
 void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_loop_lcao(int outer_step)
 {
     const int nat = this->get_nat();
-    const int nks = this->kv_.get_nks();   // total k-points (spin-up + spin-down for nspin=2)
-    const int nk = nks / 2;                // k-points per spin channel
+    const int nks = this->kv_.get_nks();
+    const int nk = nks / 2;
     psi::Psi<std::complex<double>>* psi_t = static_cast<psi::Psi<std::complex<double>>*>(this->psi);
-    const int nbands = psi_t->get_nbands();
+    const int nbands = this->ParaV->get_nbands();
     const double alpha_damp = 0.8;
-    const int max_inner_iter = 2;
+    const int max_inner_iter = this->nsc_;
 
     this->print_header();
 
@@ -369,15 +373,13 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_loop_lcao(in
                   << "       RMS = " << rms_error << std::endl;
         std::cout << "Meet convergence criterion ( < " << this->current_sc_thr_ << " ), exit." << std::endl;
         this->print_termination();
-        // Update charge from current psi
         this->pelec->psiToRho(*psi_t);
         return;
     }
 
-    // ── Phase 2: Compute P_I_sub for all k-points ──
+    // ── Phase 2: Compute analytical chi (for first step only) ──
+    // P_I_sub needed for analytical chi calculation
     auto* dspin_op = dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double>>*>(this->p_operator);
-
-    // PI_sub[ik][iat] = nbands × nbands Hermitian matrix
     std::vector<std::vector<std::vector<std::complex<double>>>> PI_sub(nks);
     for (int ik = 0; ik < nks; ik++)
     {
@@ -385,153 +387,86 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_loop_lcao(in
         dspin_op->cal_PI_sub(this->kv_.kvec_d[ik], psi_t->get_pointer(), nbands, PI_sub[ik]);
     }
 
-    // ── Phase 3: Analytical Jacobian ──
-    // chi_I = dM_I^z / dlambda_I
-    // For nspin=2: M_I = sum_k [sum_n f_n_up * P_I_nn_up - sum_n f_n_down * P_I_nn_down]
-    // dM/dlambda uses perturbation theory with both spin channels
+    // Analytical Jacobian: chi_I = dM_I^z / dlambda_I
     std::vector<double> chi(nat, 0.0);
     for (int iat = 0; iat < nat; iat++)
     {
-        if (this->constrain_[iat].z == 0) { continue;
-        }
+        if (this->constrain_[iat].z == 0) { continue; }
         double chi_val = 0.0;
         for (int ik = 0; ik < nks; ik++)
         {
-            if (PI_sub[ik][iat].empty()) { continue;
-            }
-            // sign: +1 for spin-up (ik < nk), -1 for spin-down (ik >= nk)
-            // dH_up/dlambda = +P_I, dH_down/dlambda = -P_I
-            // dM/dlambda = d(M_up - M_down)/dlambda
-            // For spin-up channel: dM_up/dlambda = sum_{n,m} 2*(f_n-f_m)*|P_nm|^2/(e_n-e_m) * (+1)
-            // For spin-down channel: dM_down/dlambda = sum_{n,m} 2*(f_n-f_m)*|P_nm|^2/(e_n-e_m) * (-1)
-            // dM/dlambda = dM_up/dlambda - dM_down/dlambda
-            // Both channels contribute with same sign to chi
-            const double sign = (ik < nk) ? 1.0 : -1.0;
+            if (PI_sub[ik][iat].empty()) { continue; }
             const auto& P = PI_sub[ik][iat];
+            const double wk = this->pelec->klist->wk[ik];
             for (int n = 0; n < nbands; n++)
             {
-                const double fn = this->pelec->wg(ik, n);
+                const double fn = this->pelec->wg(ik, n) / wk;
                 for (int m = n + 1; m < nbands; m++)
                 {
-                    const double fm = this->pelec->wg(ik, m);
+                    const double fm = this->pelec->wg(ik, m) / wk;
                     const double de = this->pelec->ekb(ik, n) - this->pelec->ekb(ik, m);
-                    if (std::abs(de) < 1e-10) { continue;
-                    }
+                    if (std::abs(de) < 1e-10) { continue; }
                     const double P_nm_sq = std::norm(P[n * nbands + m]);
-                    // sign * sign = 1 always, so both channels add
-                    chi_val += 2.0 * (fn - fm) * P_nm_sq / de;
+                    chi_val += 2.0 * wk * (fn - fm) * P_nm_sq / de;
                 }
             }
         }
         chi[iat] = chi_val;
     }
 
-    // ── Phase 4: Newton update + subspace verification ──
-    // Storage for subspace diag results
-    ModuleBase::matrix ekb_new(nks, nbands);
-    ModuleBase::matrix wg_new(nks, nbands);
-    std::vector<std::vector<std::complex<double>>> V_save(nks);
+    // ── Phase 3-6: Newton iteration with full diagonalization + secant chi update ──
+    std::vector<ModuleBase::Vector3<double>> lambda_old(nat);
+    std::vector<ModuleBase::Vector3<double>> Mi_old(nat);
 
     for (int inner = 0; inner < max_inner_iter; inner++)
     {
-        // Newton step: delta_lambda_I = alpha_damp * (target - current) / chi_I
+        // Save old state for secant update
+        lambda_old = this->lambda_;
+        Mi_old = spin;
+
+        // Newton step: delta_lambda = alpha_damp * (target - current) / chi
+        const double lambda_max = this->restrict_current_;
         for (int iat = 0; iat < nat; iat++)
         {
-            if (this->constrain_[iat].z == 0) { continue;
+            if (this->constrain_[iat].z == 0) { continue; }
+            double chi_clamped = chi[iat];
+            if (std::abs(chi_clamped) < 0.1)
+            {
+                chi_clamped = (chi_clamped >= 0) ? 0.1 : -0.1;
             }
-            if (std::abs(chi[iat]) < 1e-15) { continue;
+            double delta_lambda_z = alpha_damp * (this->target_mag_[iat].z - spin[iat].z) / chi_clamped;
+            // Clamp delta_lambda to sccut
+            if (std::abs(delta_lambda_z) > lambda_max)
+            {
+                delta_lambda_z = (delta_lambda_z > 0) ? lambda_max : -lambda_max;
             }
-            const double delta_lambda_z = alpha_damp * (this->target_mag_[iat].z - spin[iat].z) / chi[iat];
             this->lambda_[iat].z = initial_lambda[iat].z + delta_lambda_z;
         }
 
-        // Subspace diag for each k-point
-        for (int ik = 0; ik < nks; ik++)
-        {
-            const double sign = (ik < nk) ? 1.0 : -1.0;
+        // Full diagonalization to get real Mi (SCF self-consistent)
+        this->cal_mw_from_lambda(inner);
+        spin = this->Mi_;
 
-            // Build H_sub = diag(e_k) + sign * sum_I delta_lambda_I * P_I_sub(k)
-            std::vector<std::complex<double>> H_sub(nbands * nbands, {0.0, 0.0});
-            for (int n = 0; n < nbands; n++)
-            {
-                H_sub[n * nbands + n] = {this->pelec->ekb(ik, n), 0.0};
-            }
-            for (int iat = 0; iat < nat; iat++)
-            {
-                if (PI_sub[ik][iat].empty()) { continue;
-                }
-                const double dlambda = sign * (this->lambda_[iat].z - initial_lambda[iat].z);
-                for (int i = 0; i < nbands * nbands; i++)
-                {
-                    H_sub[i] += dlambda * PI_sub[ik][iat][i];
-                }
-            }
-
-            // Diag with LAPACK zheev
-            std::vector<double> e_new(nbands);
-            V_save[ik] = H_sub; // zheev overwrites with eigenvectors
-            int lwork = 2 * nbands;
-            std::vector<std::complex<double>> work(lwork);
-            std::vector<double> rwork(3 * nbands);
-            int info = 0;
-            zheev_("V", "U", &nbands, V_save[ik].data(), &nbands,
-                   e_new.data(), work.data(), &lwork, rwork.data(), &info);
-            if (info != 0)
-            {
-                std::cout << "WARNING: zheev failed with info=" << info << " at ik=" << ik << std::endl;
-            }
-            for (int n = 0; n < nbands; n++)
-            {
-                ekb_new(ik, n) = e_new[n];
-            }
-        }
-
-        // Recompute weights from new eigenvalues
-        elecstate::calculate_weights(ekb_new,
-                                     wg_new,
-                                     this->pelec->klist,
-                                     this->pelec->eferm,
-                                     this->pelec->f_en,
-                                     this->pelec->nelec_spin,
-                                     this->pelec->skip_weights);
-
-        // Compute Mi_new from subspace rotation
-        std::vector<ModuleBase::Vector3<double>> Mi_new(nat, 0.0);
+        // Secant chi update: chi = (Mi_new - Mi_old) / (lambda_new - lambda_old)
         for (int iat = 0; iat < nat; iat++)
         {
-            if (this->constrain_[iat].z == 0) { continue;
-            }
-            double mi_z = 0.0;
-            for (int ik = 0; ik < nks; ik++)
+            if (this->constrain_[iat].z == 0) { continue; }
+            double dlambda = this->lambda_[iat].z - lambda_old[iat].z;
+            double dMi = spin[iat].z - Mi_old[iat].z;
+            if (std::abs(dlambda) > 1e-10)
             {
-                if (PI_sub[ik][iat].empty()) { continue;
-                }
-                const double sign = (ik < nk) ? 1.0 : -1.0;
-                const auto& V = V_save[ik];
-                const auto& P = PI_sub[ik][iat];
-
-                // P_rotated = V^dag P V, we only need diagonal elements
-                // P_rotated[n,n] = sum_{a,b} conj(V[a,n]) * P[a,b] * V[b,n]
-                for (int n = 0; n < nbands; n++)
+                // Blend: use secant if stable, otherwise keep analytical
+                double chi_secant = dMi / dlambda;
+                // If secant chi has same sign and reasonable magnitude, use it
+                if (chi_secant * chi[iat] > 0 && std::abs(chi_secant) > 0.01 && std::abs(chi_secant) < 100.0)
                 {
-                    std::complex<double> pnn = {0.0, 0.0};
-                    for (int a = 0; a < nbands; a++)
-                    {
-                        std::complex<double> tmp = {0.0, 0.0};
-                        for (int b = 0; b < nbands; b++)
-                        {
-                            tmp += P[a * nbands + b] * V[b * nbands + n];
-                        }
-                        pnn += std::conj(V[a * nbands + n]) * tmp;
-                    }
-                    mi_z += sign * wg_new(ik, n) * pnn.real();
+                    chi[iat] = chi_secant;
                 }
             }
-            Mi_new[iat].z = mi_z;
         }
 
         // Check convergence
-        subtract_2d(Mi_new, this->target_mag_, delta_spin);
+        subtract_2d(spin, this->target_mag_, delta_spin);
         where_fill_scalar_2d(this->constrain_, 0, zero, delta_spin);
         {
             double sum = 0.0;
@@ -542,75 +477,28 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_loop_lcao(in
         }
 
         std::cout << "Step (Outer -- Inner) =  " << outer_step << " -- " << std::left << std::setw(5) << inner + 1
-                  << "       RMS = " << rms_error << " (subspace)" << std::endl;
+                  << "       RMS = " << rms_error << std::endl;
 
         if (rms_error < this->current_sc_thr_)
         {
             std::cout << "Meet convergence criterion ( < " << this->current_sc_thr_ << " ), exit." << std::endl;
             break;
         }
-
-        // Update spin for next iteration
-        spin = Mi_new;
     }
 
     this->print_termination();
 
-    // ── Phase 5: Finalize — rotate wavefunctions and update DM/charge ──
-    // C_new_k = C_k * V_k via pzgemm (2D-block distributed)
-    // V_k is nbands × nbands (small, replicated on all procs)
-    // C_k is nlocal × nbands (2D-block distributed)
-    for (int ik = 0; ik < nks; ik++)
-    {
-        psi_t->fix_k(ik);
-        const int nlocal = this->ParaV->get_row_size();
-        const int ncol_local = this->ParaV->ncol_bands;
-
-        // Temporary storage for rotated wavefunction
-        std::vector<std::complex<double>> psi_new(nlocal * ncol_local, {0.0, 0.0});
-
-        // C_new[irow, jcol_local] = sum_m C[irow, m_local] * V[m_global, jcol_global]
-        // Since V is replicated, we can do this locally per process
-        const std::complex<double>* psi_old = psi_t->get_pointer();
-        for (int jcol_local = 0; jcol_local < ncol_local; jcol_local++)
-        {
-            const int jcol_global = this->ParaV->local2global_col(jcol_local);
-            for (int mcol_local = 0; mcol_local < ncol_local; mcol_local++)
-            {
-                const int mcol_global = this->ParaV->local2global_col(mcol_local);
-                // V[mcol_global, jcol_global] — V is column-major from zheev
-                const std::complex<double> v_mj = V_save[ik][mcol_global * nbands + jcol_global];
-                // psi_new[:, jcol_local] += psi_old[:, mcol_local] * v_mj
-                for (int irow = 0; irow < nlocal; irow++)
-                {
-                    psi_new[irow + jcol_local * nlocal] += psi_old[irow + mcol_local * nlocal] * v_mj;
-                }
-            }
-        }
-
-        // Copy back
-        std::complex<double>* psi_ptr = const_cast<std::complex<double>*>(psi_t->get_pointer());
-        std::copy(psi_new.begin(), psi_new.end(), psi_ptr);
-
-        // Update eigenvalues
-        for (int n = 0; n < nbands; n++)
-        {
-            this->pelec->ekb(ik, n) = ekb_new(ik, n);
-        }
-    }
-
-    // Update weights, DM, and charge
-    elecstate::calculate_weights(this->pelec->ekb,
-                                 this->pelec->wg,
-                                 this->pelec->klist,
-                                 this->pelec->eferm,
-                                 this->pelec->f_en,
-                                 this->pelec->nelec_spin,
-                                 this->pelec->skip_weights);
-    elecstate::calEBand(this->pelec->ekb, this->pelec->wg, this->pelec->f_en);
-
+    // ── Phase 7: Update DM/charge from current psi ──
     elecstate::cal_dm_psi(this->ParaV, this->pelec->wg, *psi_t, *this->dm_);
     this->dm_->cal_DMR();
-    this->pelec->psiToRho(*psi_t);
+
+    int nspin = PARAM.inp.nspin;
+    if (PARAM.inp.nspin == 4) { nspin = 1; }
+    for (int is = 0; is < PARAM.inp.nspin; is++)
+    {
+        ModuleBase::GlobalFunc::ZEROS(this->pelec->charge->rho[is], this->pelec->charge->nrxx);
+    }
+    ModuleGint::cal_gint_rho(this->dm_->get_DMR_vector(), nspin, this->pelec->charge->rho);
+    this->pelec->charge->renormalize_rho();
 }
 #endif // __LCAO

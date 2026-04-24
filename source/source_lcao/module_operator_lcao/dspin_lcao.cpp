@@ -549,6 +549,18 @@ void hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::cal_PI_sub(
     const int nbands_global,
     std::vector<std::vector<std::complex<double>>>& PI_sub) const
 {
+    // Ensure initialization is done before using B_I_data
+    if (!this->initialized)
+    {
+        spinconstrain::SpinConstrain<TK>& sc = spinconstrain::SpinConstrain<TK>::getScInstance();
+        auto& constrain = sc.get_constrain();
+        // cast away const to initialize
+        auto* nonconst_this = const_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>*>(this);
+        nonconst_this->cal_constraint_atom_list(constrain);
+        nonconst_this->cal_pre_HR();
+        nonconst_this->initialized = true;
+    }
+
     const int nat = this->ucell->nat;
     PI_sub.resize(nat);
 
@@ -605,20 +617,21 @@ void hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::cal_PI_sub(
 #endif
 
         // Compute P_I_sub = D_I^dag D_I (nbands × nbands Hermitian matrix)
-        // Using zgemm: C = alpha * A^H * B + beta * C
-        // A = D_I (r × nbands), B = D_I (r × nbands)
-        // C = P_I_sub (nbands × nbands)
+        // D_I is stored in C row-major: D_I[lm * nbands_global + jb] = D[lm][jb]
+        // P[n][m] = sum_{lm} conj(D[lm][n]) * D[lm][m]
         PI_sub[iat].resize(nbands_global * nbands_global, {0.0, 0.0});
-        const std::complex<double> one = {1.0, 0.0};
-        const std::complex<double> zero_c = {0.0, 0.0};
-        // zgemm: P = D^H * D, where D is r × nbands (row-major: D[lm][jb])
-        // In column-major (Fortran) convention for BLAS:
-        // D stored as nbands_global × r (transposed view)
-        // We want P = D^H * D = (r×nb)^H * (r×nb) = nb×nb
-        zgemm_("C", "N", &nbands_global, &nbands_global, &r,
-               &one, D_I.data(), &r,
-               D_I.data(), &r,
-               &zero_c, PI_sub[iat].data(), &nbands_global);
+        for (int n = 0; n < nbands_global; ++n)
+        {
+            for (int m = 0; m < nbands_global; ++m)
+            {
+                std::complex<double> sum = {0.0, 0.0};
+                for (int lm = 0; lm < r; ++lm)
+                {
+                    sum += std::conj(D_I[lm * nbands_global + n]) * D_I[lm * nbands_global + m];
+                }
+                PI_sub[iat][n * nbands_global + m] = sum;
+            }
+        }
     }
 }
 
