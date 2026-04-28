@@ -18,21 +18,21 @@
 
 ### P1 — 重要修复
 
-| # | 问题描述 | 文件位置 | 影响范围 |
-|---|---------|---------|---------|
-| P1-1 | `[DS-LAMBDA]` debug fprintf 未清理 | `deltaspin_pw.cpp:12,24,30,35,45` | 所有 DS 测试输出污染 |
-| P1-2 | cal_mw_from_lambda npol=2 Mi 计算缺少 nspin=2 k 点自旋分裂处理 | `cal_mw_from_lambda.cpp:452-481` | DS nspin=2 磁矩 |
-| P1-3 | 测试未验证 DeltaSpin 内循环收敛 + SCF 收敛双重条件 | 测试框架 | 所有 DS 测试 |
-| P1-4 | 测试未验证 lambda 值与 zdy-tmp 一致性 | 测试框架 | 所有 DS 测试 |
-| P1-5 | 测试未覆盖 STRU sc/lambda 特殊用法 (sc_scf_thr < scf_thr) | 测试用例 | DS 外场模拟 |
+| # | 问题描述 | 文件位置 | 状态 |
+|---|---------|---------|------|
+| P1-1 | `[DS-LAMBDA]` debug fprintf 未清理 | `deltaspin_pw.cpp:12,24,30,35,45` | ✅ 已清理 |
+| P1-2 | cal_mw_from_lambda npol=2 Mi 计算缺少 nspin=2 k 点自旋分裂处理 | `cal_mw_from_lambda.cpp:452-481` | ✅ 已验证逻辑与 zdy-tmp 一致，无 bug |
+| P1-3 | 测试未验证 DeltaSpin 内循环收敛 + SCF 收敛双重条件 | 测试框架 | ⏳ 待实现 |
+| P1-4 | 测试未验证 lambda 值与 zdy-tmp 一致性 | 测试框架 | ⏳ 待实现 |
+| P1-5 | 测试未覆盖 STRU sc/lambda 特殊用法 (sc_scf_thr < scf_thr) | 测试用例 | ⏳ 待实现 |
 
 ### P2 — 清理与优化
 
-| # | 问题描述 | 文件位置 |
-|---|---------|---------|
-| P2-1 | dftu_pw.cpp 中冗余注释和缩进不一致 | `dftu_pw.cpp` |
-| P2-2 | op_pw_proj.cpp 中注释掉的旧代码块未清理 | `op_pw_proj.cpp:172-210, 313-358` |
-| P2-3 | 集成测试日志文件 (log, log-tmp) 不应 tracked | `tests/17_DS_DFTU/*/log*` |
+| # | 问题描述 | 文件位置 | 状态 |
+|---|---------|---------|------|
+| P2-1 | op_pw_proj.cpp 中注释掉的旧代码块 | `op_pw_proj.cpp:172-210, 292-339` | ✅ 已清理 (89 行) |
+| P2-2 | lambda_loop.cpp 中 [DIAG-*]/[LAMBDA-LOOP] 调试输出 | `lambda_loop.cpp` | ✅ 已清理 (10+ 处) |
+| P2-3 | 集成测试日志文件 (log, log-tmp) 不应 tracked | `tests/17_DS_DFTU/*/log*` | ⏳ 待处理 |
 
 ---
 
@@ -49,46 +49,47 @@
 - [ ] 对比 zdy-tmp 和当前代码的 `cal_VU_pot_mat` 调用路径（LCAO vs PW 差异）
 
 #### P0-2: GPU delete[] 内存错误
-**修复**: 将 line 126 的 `delete[] becp_cpu;` 改为条件删除（仅当 device=gpu 时 becp_cpu 是 new[] 分配的）
-```cpp
-// 在 calculate_delta_hcc 末尾:
-if(PARAM.inp.device == "gpu") {
-    delete[] becp_cpu;  // becp_cpu was allocated by resize_memory_op
-}
-// cpu 分支 becp_cpu = const_cast<...>(becp_k)，不能 delete
-```
+**状态**: ✅ 已修复 (commit c9e6d747f)
+**修复**: 将 line 126 的 `delete[] becp_cpu;` 改为 `delete_memory_op<std::complex<double>, base_device::DEVICE_CPU>()(becp_cpu);`
 
 #### P0-3: sc_direction_only 参数移植
-**需要移植的文件**:
-- [ ] `spin_constrain.h` — 添加 `sc_direction_only_` 成员
-- [ ] `spin_constrain.cpp` — 添加 getter/setter
-- [ ] `cal_mw.cpp` 或 `cal_mi_lcao` — 修改约束逻辑：当 sc_direction_only=true 时只约束方向不约束大小
-- [ ] `read_input_item_other.cpp` — 添加参数解析
-- [ ] 测试用例: 添加 noncolin + deltaspin + sc_direction_only 组合测试
+**状态**: ✅ 已修复 (commit c9e6d747f)
+**已修改文件**:
+- `input_parameter.h` — 添加 `sc_direction_only` 成员
+- `read_input_item_other.cpp` — 添加参数解析和文档
+- `spin_constrain.h` — 添加 `direction_only_` 成员 + 更新 `init_sc` 签名
+- `init_sc.cpp` — 更新签名并赋值 `direction_only_`
+- `deltaspin_lcao.cpp` — 传递 `inp.sc_direction_only`
+- `setup_pot.cpp` — 传递 `PARAM.inp.sc_direction_only`
+- `lcao_others.cpp` — 传递 `PARAM.inp.sc_direction_only`
+- `lambda_loop.cpp` — 添加 4 处 lambda 投影逻辑
 
 ### Phase 2: P1 功能验证修复
 
 #### P1-1: 清理 debug 输出
-- [ ] 删除 `deltaspin_pw.cpp` 中所有 `[DS-LAMBDA]` fprintf
-- [ ] 检查其他文件残留的 `std::cout` / `printf` / `fprintf(stderr`
+**状态**: ✅ 已清理 (commit 37d7df178)
+- 删除 `deltaspin_pw.cpp` 中所有 `[DS-LAMBDA]` fprintf (5 处)
+- 删除 `lambda_loop.cpp` 中 `[DIAG-LOOP]`, `[LAMBDA-LOOP]`, `[DIAG-BEFORE-255]`, `[DIAG-LAMBDA]` 输出 (10+ 处)
+- 保留有用输出: RMS error, convergence messages, timing
 
 #### P1-2: cal_mw_from_lambda npol=2 Mi 计算
-**当前代码** (line 452-481) 对所有 k 点使用统一公式计算 Mi.x/y/z
-**问题**: nspin=2 时前一半 k 点是 spin-up，后一半是 spin-down，应有符号区分
-**修复**: 添加 `is` 变量，类似 DFT+U 的处理方式
+**状态**: ✅ 已验证逻辑正确
+- 对比 zdy-tmp 代码，Mi 计算逻辑完全一致
+- npol=2 (nspin=4): 使用 `ib * npol * nkb + begin_ih + ih` 索引 + 4 Pauli 分量
+- npol=1 (nspin=2): 使用 `sign = isk[ik] == 0 ? 1 : -1` 区分自旋
 
 #### P1-3~5: 测试框架增强 (详见第三部分)
 
 ### Phase 3: P2 代码清理
-- [ ] clang-format 格式化修改的文件
-- [ ] 删除注释掉的代码块
-- [ ] 清理 git tracked 的测试日志
+
+**已完成**:
+- ✅ P2-1: 删除 op_pw_proj.cpp 注释代码块 (89 行)
+- ✅ P2-2: 删除 lambda_loop.cpp 调试输出 (10+ 处)
+- ⏳ P2-3: 集成测试日志文件 .gitignore (待处理)
 
 ---
 
 ## 三、测试方案
-
-### 3.1 收敛性验证 (对应需求 1)
 
 **规则**: 一个测试用例通过必须同时满足:
 1. DeltaSpin 内循环达到设定阈值 (`sc_thr`)
@@ -194,8 +195,19 @@ Phase 5: sc_direction_only → 新增测试用例
 - SCF 迭代: 45 次
 - DeltaSpin: 未开启 (纯 DFT+U 测试)
 
-### 当前分支状态
+### 当前分支状态 (更新: 2026-04-28)
 - nspin=4 PW+DFTU: ✅ PASS
 - nspin=2 LCAO+DFTU: ✅ PASS  
 - nspin=2 PW (无 DFT+U): ✅ PASS
-- nspin=2 PW+DFTU: ❌ FAIL (DS3 发散)
+- nspin=2 PW+DFTU: ❌ FAIL (DS3 发散) — **当前阻塞项**
+- sc_direction_only 参数: ✅ 已移植
+- GPU 内存管理: ✅ 已修复
+- 调试输出清理: ✅ 已完成
+- cal_mw_from_lambda Mi 计算: ✅ 已验证逻辑正确
+
+### 本轮已完成修复
+| Commit | 修复内容 |
+|--------|---------|
+| 6f28a3b | nspin=2 DFT+U: npol 硬编码、vu_begin 计算、spin-down vu sync、locale 自旋索引 |
+| c9e6d74 | DeltaSpin: GPU 内存修复、sc_direction_only 移植、调试输出清理 |
+| 37d7df1 | 代码清理: 删除注释代码块 (89 行)、删除调试输出 (10+ 处) |
