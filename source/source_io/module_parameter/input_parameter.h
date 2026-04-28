@@ -607,6 +607,7 @@ struct Input_para
     double sc_mu_max = 10.0;        ///< maximum penalty parameter for augmented Lagrangian strategies
     double sc_mu_growth = 1.5;      ///< growth factor for penalty parameter
     double sc_mix_beta = 0.3;       ///< mixing parameter for linear response strategy
+    bool sc_direction_only = false; ///< only optimize the direction of magnetization
 
     // ==============   #Parameters (18.Quasiatomic Orbital analysis) =========
     ///<==========================================================

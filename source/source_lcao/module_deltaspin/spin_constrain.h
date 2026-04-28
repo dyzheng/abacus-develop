@@ -38,6 +38,7 @@ public:
                double sccut_in,
                double sc_drop_thr_in,
                const UnitCell& ucell,
+               bool direction_only_in,
                Parallel_Orbitals* ParaV_in,
                int nspin_in,
                const K_Vectors& kv_in,
@@ -270,6 +271,7 @@ public:
     bool debug = false;
     double alpha_trial_; // in unit of Ry/uB^2 = 0.01 eV/uB^2
     double restrict_current_; // in unit of Ry/uB = 3 eV/uB
+    bool direction_only_ = false; ///< only optimize the direction of magnetization
 
   public:
     /// @brief save operator for spin-constrained DFT

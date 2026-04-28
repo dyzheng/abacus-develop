@@ -123,7 +123,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::calculate_delta_hcc(std
             nbands
         );
         base_device::memory::delete_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(ps_pointer);
-        delete[] becp_cpu;
+        base_device::memory::delete_memory_op<std::complex<double>, base_device::DEVICE_CPU>()(becp_cpu);
 #endif
 
     }

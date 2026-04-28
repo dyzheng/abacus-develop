@@ -154,6 +154,24 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_loop(
         {
             where_fill_scalar_else_2d(this->constrain_, 0, zero, delta_lambda, delta_lambda);
             add_scalar_multiply_2d(initial_lambda, delta_lambda, one, this->lambda_);
+        
+            // set the lambda component along the target magnetic moment direction to zero
+            if(this->direction_only_)
+            for (int ia = 0; ia < nat; ia++)
+            {
+                const auto& target = this->target_mag_[ia];
+                const double norm = std::sqrt(target.x*target.x + target.y*target.y + target.z*target.z);
+                
+                if (norm > 1e-8) {
+                    const ModuleBase::Vector3<double> dir = target / norm;
+                    double parallel = this->lambda_[ia].x*dir.x + 
+                                    this->lambda_[ia].y*dir.y + 
+                                    this->lambda_[ia].z*dir.z;
+                    this->lambda_[ia].x -= parallel * dir.x;
+                    this->lambda_[ia].y -= parallel * dir.y;
+                    this->lambda_[ia].z -= parallel * dir.z;
+                }
+            }
  
             printf("[DIAG-LOOP] i_step=%d nat=%d dl_size=%zu dl_ptr=%p\n", i_step, nat, delta_lambda.size(), (void*)delta_lambda.data());
             fflush(stdout);
@@ -183,6 +201,31 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_loop(
         subtract_2d(spin, this->target_mag_, delta_spin);
         where_fill_scalar_2d(this->constrain_, 0, zero, delta_spin);
         search = delta_spin;
+        // calculate the residual perpendicular to the target magnetic moment direction
+        if(this->direction_only_)
+        for (int ia = 0; ia < nat; ia++)
+        {
+            const auto& target = this->target_mag_[ia];
+            const double norm = std::sqrt(target.x*target.x + target.y*target.y + target.z*target.z);
+            
+            if (norm > 1e-8) {
+                const ModuleBase::Vector3<double> dir = target / norm;
+                const double parallel = delta_spin[ia].x*dir.x + delta_spin[ia].y*dir.y + delta_spin[ia].z*dir.z;
+                temp_1[ia][0] = std::pow(delta_spin[ia].x,2) + std::pow(delta_spin[ia].y,2) + 
+                                std::pow(delta_spin[ia].z,2) - std::pow(parallel,2);
+                temp_1[ia][1] = 0;
+                temp_1[ia][2] = 0;
+                this->target_mag_[ia] += parallel * dir;
+            }
+            else {
+                temp_1[ia][0] = std::pow(delta_spin[ia].x,2) + 
+                              std::pow(delta_spin[ia].y,2) + 
+                              std::pow(delta_spin[ia].z,2);
+                temp_1[ia][1] = 0;
+                temp_1[ia][2] = 0;
+            }
+        }
+        else 
         for (int ia = 0; ia < nat; ia++)
         {
             for (int ic = 0; ic < 3; ic++)
@@ -259,6 +302,21 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_loop(
 
         dnu_last_step = dnu;
         add_scalar_multiply_2d(dnu, search, alpha_trial, dnu);
+        
+        // project delta_lambda to the target direction to ensure the increment update also meets the constraints
+        if(this->direction_only_)
+        for (int ia = 0; ia < nat; ia++) {
+            const auto& target = this->target_mag_[ia];
+            const double norm = std::sqrt(target.x*target.x + target.y*target.y + target.z*target.z);
+            
+            if (norm > 1e-8) {
+                const ModuleBase::Vector3<double> dir = target / norm;
+                double parallel = dnu[ia].x*dir.x + dnu[ia].y*dir.y + dnu[ia].z*dir.z;
+                dnu[ia].x -= parallel * dir.x;
+                dnu[ia].y -= parallel * dir.y;
+                dnu[ia].z -= parallel * dir.z;
+            }
+        }
         delta_lambda = dnu;
 
         // Cap delta_lambda to prevent explosion
@@ -287,6 +345,21 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_loop(
         alpha_plus = alpha_opt - alpha_trial;
         scalar_multiply_2d(search, alpha_plus, temp_1);
         add_scalar_multiply_2d(dnu, temp_1, one, dnu);
+        
+        // project delta_lambda to ensure the increment update also meets the constraints
+        if(this->direction_only_)
+        for (int ia = 0; ia < nat; ia++) {
+            const auto& target = this->target_mag_[ia];
+            const double norm = std::sqrt(target.x*target.x + target.y*target.y + target.z*target.z);
+            
+            if (norm > 1e-8) {
+                const ModuleBase::Vector3<double> dir = target / norm;
+                double parallel = dnu[ia].x*dir.x + dnu[ia].y*dir.y + dnu[ia].z*dir.z;
+                dnu[ia].x -= parallel * dir.x;
+                dnu[ia].y -= parallel * dir.y;
+                dnu[ia].z -= parallel * dir.z;
+            }
+        }
         delta_lambda = dnu;
 
         search_old = search;

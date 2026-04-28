@@ -202,6 +202,20 @@ void ReadInput::item_others()
         };
         this->add_item(item);
     }
+    {
+        Input_Item item("sc_direction_only");
+        item.annotation = "only optimize the direction of magnetization";
+        item.category = "Spin-Constrained DFT";
+        item.type = "Boolean";
+        item.description = R"(When true, only the direction of the magnetic moment is constrained to the target direction, while the magnitude is allowed to vary freely. This is useful for studying magnetic anisotropy or when the magnitude of the moment is determined by the electronic structure rather than an external constraint.
+
+When false (default), both the direction and magnitude of the magnetic moment are constrained to the target values.)";
+        item.default_value = "False";
+        item.unit = "";
+        item.availability = "sc_mag_switch is true";
+        read_sync_bool(input.sc_direction_only);
+        this->add_item(item);
+    }
 
     // Quasiatomic Orbital analysis
     {

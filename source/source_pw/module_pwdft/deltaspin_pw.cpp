@@ -9,8 +9,6 @@ bool run_deltaspin_lambda_loop(const int iter,
                                const double drho,
                                const Input_para& inp)
 {
-    fprintf(stderr, "[DS-LAMBDA] iter=%d drho=%.6e sc_mag=%d\n", iter, drho, inp.sc_mag_switch);
-    fflush(stderr);
     /// Return false if DeltaSpin is not enabled
     if (!inp.sc_mag_switch)
     {
@@ -21,19 +19,13 @@ bool run_deltaspin_lambda_loop(const int iter,
     spinconstrain::SpinConstrain<std::complex<double>>& sc
         = spinconstrain::SpinConstrain<std::complex<double>>::getScInstance();
 
-    fprintf(stderr, "[DS-LAMBDA] mag_converged=%d\n", sc.mag_converged());
-    fflush(stderr);
     /// Case 1: Magnetic moments not yet converged and SCF is close to convergence.
     /// This is the first time we enter the lambda loop after SCF is nearly converged.
     if (!sc.mag_converged() && drho > 0 && drho < inp.sc_scf_thr)
     {
-        fprintf(stderr, "[DS-LAMBDA] Case 1: entering lambda loop\n");
-        fflush(stderr);
         /// Optimize lambda to get target magnetic moments
         sc.run_lambda_loop(iter);
         sc.set_mag_converged(true);
-        fprintf(stderr, "[DS-LAMBDA] Case 1: lambda loop done\n");
-        fflush(stderr);
         return true;
     }
     /// Case 2: Magnetic moments already converged in previous iteration.
@@ -42,8 +34,6 @@ bool run_deltaspin_lambda_loop(const int iter,
     /// Re-running the lambda loop would re-update the charge density and disrupt SCF mixing.
     else if (sc.mag_converged())
     {
-        fprintf(stderr, "[DS-LAMBDA] Case 2: mag already converged, skip solver\n");
-        fflush(stderr);
         return true;
     }
 

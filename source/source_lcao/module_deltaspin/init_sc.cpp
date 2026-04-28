@@ -9,6 +9,7 @@ void spinconstrain::SpinConstrain<TK>::init_sc(double sc_thr_in,
 		double sccut_in,
 		double sc_drop_thr_in,
 		const UnitCell& ucell,
+		bool direction_only_in,
 		Parallel_Orbitals* ParaV_in,
 		int nspin_in,
 		const K_Vectors& kv_in,
@@ -30,6 +31,7 @@ void spinconstrain::SpinConstrain<TK>::init_sc(double sc_thr_in,
     this->lambda_ = ucell.get_lambda();
     this->constrain_ = ucell.get_constrain();
     this->atomLabels_ = ucell.get_atomLabels();
+    this->direction_only_ = direction_only_in;
     this->tpiba = ucell.tpiba;
     this->pw_wfc_ = pw_wfc_in;
     this->set_decay_grad();
