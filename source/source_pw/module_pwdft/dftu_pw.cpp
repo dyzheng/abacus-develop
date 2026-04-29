@@ -17,11 +17,6 @@ void iter_init_dftu_pw(const int iter,
         return;
     }
 
-    if (iter == 1 && istep == 0)
-    {
-        return;
-    }
-
     if (dftu.omc != 2)
     {
         dftu.cal_occ_pw(iter, psi, wg, ucell, p_chgmix);

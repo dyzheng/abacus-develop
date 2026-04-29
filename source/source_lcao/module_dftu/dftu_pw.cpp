@@ -181,6 +181,63 @@ void Plus_U::cal_occ_pw(const int iter,
     }
 #endif
 
+    // reduce locale from all k-pools
+    for(int iat = 0; iat < cell.nat; iat++)
+    {
+        const int it = cell.iat2it[iat];
+        const int target_l = this->orbital_corr[it];
+        if(target_l == -1)
+        {
+            continue;
+        }
+        const int size = (2 * target_l + 1) * (2 * target_l + 1);
+
+        if(PARAM.inp.nspin != 4)
+        {
+            Parallel_Reduce::reduce_double_allpool(PARAM.inp.kpar, 
+                    PARAM.globalv.nproc_in_pool, 
+                    this->locale[iat][target_l][0][0].c, 
+                    size);
+            if(PARAM.inp.nspin == 2)
+            {
+                Parallel_Reduce::reduce_double_allpool(PARAM.inp.kpar, 
+                        PARAM.globalv.nproc_in_pool, 
+                        this->locale[iat][target_l][0][1].c, 
+                        size);
+            }
+        }
+        else
+        {
+            Parallel_Reduce::reduce_double_allpool(PARAM.inp.kpar, 
+                    PARAM.globalv.nproc_in_pool, 
+                    this->locale[iat][target_l][0][0].c, 
+                    size * 4);
+        }
+
+        // save locale matrix for this iat to uom_array
+        if(this->uom_array.size() != 0)
+        {
+            for(int mm=0;mm<size;mm++)
+            {
+                this->uom_array[eff_pot_pw_index[iat]+mm] = this->locale[iat][target_l][0][0].c[mm];
+            }
+            if(PARAM.inp.nspin == 2)
+            {
+                for(int mm=0;mm<size;mm++)
+                {
+                    this->uom_array[eff_pot_pw_index[iat]+mm+size] = this->locale[iat][target_l][0][1].c[mm];
+                }
+            }
+        }
+    }
+
+    // mixing
+    if(mixing_dftu && p_chgmix != nullptr)
+    {
+        p_chgmix->mix_uom(this->uom_array, this->uom_save);
+        this->set_locale(cell);
+    }
+
     Plus_U::energy_u = 0.0;
     const double weight_eu = (PARAM.inp.nspin == 1) ? 1.0 : (PARAM.inp.nspin == 2) ? 0.5 : 0.25;
     const double diag_coeff = (PARAM.inp.nspin == 4) ? 1.0 : 0.5;
@@ -302,11 +359,6 @@ void Plus_U::cal_occ_pw(const int iter,
         }
     }
 
-    if(mixing_dftu && initialed_locale)
-    {
-        this->mix_locale(cell, p_chgmix->get_mixing_beta());
-    }
-    // update effective potential
     ModuleBase::timer::end("Plus_U", "cal_occ_pw");
 }
 /// calculate the local DFT+U effective potential matrix for PW base.

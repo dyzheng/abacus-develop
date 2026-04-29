@@ -1,6 +1,6 @@
 # DFT+U + DeltaSpin PW Port — 问题清单、修复计划与测试方案
 
-> 更新日期: 2026-04-28
+> 更新日期: 2026-04-29
 > 分支: feat/dftu-pw-port
 > 参考分支: zdy-tmp (`/root/abacus-zdy-tmp`)
 
@@ -12,7 +12,7 @@
 
 | # | 问题描述 | 文件位置 | 影响范围 |
 |---|---------|---------|---------|
-| P0-1 | nspin=2 PW+DFT+U SCF 在 DS3 发散 | `dftu_pw.cpp` / `op_pw_proj.cpp` | 测试 222 |
+| P0-1 | nspin=2 PW+DFT+U SCF 在 DS3 发散 | `dftu_pw.cpp` / `op_pw_proj.cpp` / `charge_mixing.cpp` | 测试 222 |
 | P0-2 | DeltaSpin GPU 代码 `delete[] becp_cpu` 但 becp_cpu 非 new[] 分配 | `cal_mw_from_lambda.cpp:126` | GPU nspin=2 DS |
 | P0-3 | `sc_direction_only` 参数未从 zdy-tmp 同步 | `spin_constrain.h/cpp` + 多处 | noncolin+DS 方向约束 |
 
@@ -41,7 +41,21 @@
 ### Phase 1: P0 核心修复
 
 #### P0-1: nspin=2 PW+DFT+U SCF 发散
-**状态**: 已修复 4 个 bug，但仍发散
+**状态**: 🔴 阻塞 - 根因已定位但未修复
+**调试进展**:
+- ✅ 验证 vu 矩阵计算正确（cal_occ_pw 输出与 cal_ps_dftu 读取值匹配）
+- ✅ 验证 Plus_U 对象地址一致（非副本问题）
+- ✅ 修复 mix_uom 支持 nspin=2（添加 `PARAM.inp.nspin == 2` 条件）
+- ✅ 修复 allocate_mixing_uom 的 uom_fold 计算（nspin=2 时不应重复乘 2）
+- ✅ 验证 dft_plus_u=0 时 SCF 收敛到 -6797 eV（10 次迭代）
+- ❌ dft_plus_u=1 时 SCF 在迭代 2 发散（能量从 -6795 eV 爆炸到 10^14 eV）
+
+**根因分析**:
+- vu 矩阵值正确（spin-up: ~-0.13 Ry, spin-down: ~0.09 Ry）
+- vu 被正确传递到 OnsiteProj 算子
+- 但应用 vu 后波函数变为垃圾值，导致 SCF 发散
+- 可能原因：`onsite_ps_op` kernel 对 nspin=2 的 vu 应用有索引错误
+
 **下一步**:
 - [ ] 逐 k 点比对 vu_device 应用前后的 hpsi 值（对比 zdy-tmp）
 - [ ] 检查 `cal_ps_dftu` 中 spin-down 通道的 vu_device sync 是否覆盖完整数据范围
@@ -195,15 +209,21 @@ Phase 5: sc_direction_only → 新增测试用例
 - SCF 迭代: 45 次
 - DeltaSpin: 未开启 (纯 DFT+U 测试)
 
-### 当前分支状态 (更新: 2026-04-28)
+### 当前分支状态 (更新: 2026-04-29)
 - nspin=4 PW+DFTU: ✅ PASS
-- nspin=2 LCAO+DFTU: ✅ PASS  
-- nspin=2 PW (无 DFT+U): ✅ PASS
-- nspin=2 PW+DFTU: ❌ FAIL (DS3 发散) — **当前阻塞项**
+- nspin=4 PW+DS: ✅ PASS (250-265 系列，共 11 个)
+- nspin=4 LCAO+DS: ✅ PASS (301-315 系列，共 10 个)
+- nspin=2 PW (无 DFT+U): ✅ PASS (-6797 eV, 10 次迭代)
+- nspin=2 LCAO+DFTU: ✅ PASS
+- nspin=2 PW+DFTU: ❌ FAIL (迭代 2 发散，能量爆炸到 10^14 eV) — **当前阻塞项**
 - sc_direction_only 参数: ✅ 已移植
+- sc_direction_only 测试: ✅ 已添加 (361, 363, 364, 365)
+- InitLambda 测试: ✅ 已添加 (366)
 - GPU 内存管理: ✅ 已修复
 - 调试输出清理: ✅ 已完成
 - cal_mw_from_lambda Mi 计算: ✅ 已验证逻辑正确
+- mix_uom nspin=2 支持: ✅ 已修复
+- allocate_mixing_uom uom_fold: ✅ 已修复
 
 ### 本轮已完成修复
 | Commit | 修复内容 |
@@ -211,3 +231,26 @@ Phase 5: sc_direction_only → 新增测试用例
 | 6f28a3b | nspin=2 DFT+U: npol 硬编码、vu_begin 计算、spin-down vu sync、locale 自旋索引 |
 | c9e6d74 | DeltaSpin: GPU 内存修复、sc_direction_only 移植、调试输出清理 |
 | 37d7df1 | 代码清理: 删除注释代码块 (89 行)、删除调试输出 (10+ 处) |
+
+### 测试套件状态
+- **有效测试数**: 23 个
+- **运行结果**: 全部 PASS (nspin=4 PW+DS/DFTU+DS)
+- **新增测试**: 361-366 (sc_direction_only + InitLambda)
+- **阻塞测试**: 222 (nspin=2 PW+DFTU)
+
+### P0-1 调试详细日志
+```
+迭代 1: E_KohnSham = -6795 eV (合理，无 DFT+U)
+迭代 2: E_KohnSham = -10^14 eV (发散!)
+迭代 3: E_KohnSham = 10^22 eV (完全发散)
+
+vu 值验证:
+- cal_occ_pw 计算: spin-up vu[0..4] = (-0.133, -0.0009, -0.0009, -7e-8, -0.0018)
+- cal_ps_dftu 读取: spin-up vu[0..4] = (-0.133, -0.0009, -0.0009, -7e-8, -0.0018) ✅ 匹配
+- spin-down vu[0..4] = (0.088, -0.002, -0.002, -4e-8, -0.004) ✅ 匹配
+
+Plus_U 对象地址:
+- cal_occ_pw: this = 0x61b81083af30
+- cal_ps_dftu: dftu_ptr = 0x61b81083af30 ✅ 匹配
+- iter_init_dftu_pw: dftu_addr = 0x61b81083af30 ✅ 匹配
+```
