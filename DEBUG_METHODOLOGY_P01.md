@@ -2,7 +2,34 @@
 
 > 日期: 2026-04-29
 > 问题: nspin=2 PW+DFTU SCF 在迭代 4 发散（能量爆炸到 10^33 eV）
-> 状态: 未解决，已定位到 vu 应用阶段
+> 状态: **阻塞中** - 代码与 zdy-tmp 逻辑一致但仍发散
+
+---
+
+## 最新进展 (2026-04-29 21:30)
+
+### 已确认的事实
+1. **zdy-tmp 收敛**: -6792.33 eV, 45 次迭代 ✅
+2. **我们的代码发散**: iter=4 能量爆炸到 10^33 eV ❌
+3. **vu 矩阵计算**: 与 zdy-tmp 逻辑完全一致
+4. **vu 传递**: 与 zdy-tmp 逻辑完全一致
+5. **onsite_ps_op kernel**: 与 zdy-tmp 逻辑基本一致（缩进差异不影响功能）
+6. **locale 计算**: 与 zdy-tmp 逻辑一致（始终从零开始计算）
+
+### 关键发现
+- zdy-tmp 的 `initialed_locale` 在 dftu_pw.cpp 中**从未被设置为 true**
+- 这意味着 zdy-tmp **每次迭代都重新计算 locale**，与我们的代码相同
+- iter==1 skip 修复已提交，但**不解决发散问题**
+
+### 待验证假设
+1. **Hypothesis A**: onsite_op.cpp kernel 有微妙 bug（索引错误）
+2. **Hypothesis B**: 波函数在 iter 3→4 之间被破坏
+3. **Hypothesis C**: 电荷混合导致 locale/vu 不稳定
+
+### 下一步计划
+1. 创建单元测试独立验证 onsite_ps_op kernel
+2. 对比 zdy-tmp 和我们的 becp/locale 值
+3. 检查是否有内存越界或初始化问题
 
 ---
 
