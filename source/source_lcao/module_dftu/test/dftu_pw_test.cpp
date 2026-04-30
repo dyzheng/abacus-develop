@@ -481,7 +481,7 @@ TEST_F(DftuPwTest, LocaleAccumNspin4_PauliComponents)
 
 TEST_F(DftuPwTest, CopyLocaleToUomSave_Nspin2)
 {
-    // Verify copy_locale logic: uom_save[index+mm] = locale[spin0], uom_save[index+mm+size] = locale[spin1]
+    // Verify copy_locale logic for split layout: [all_up | all_dn]
     const int m_size = 3;
     const int size = m_size * m_size;
 
@@ -494,16 +494,17 @@ TEST_F(DftuPwTest, CopyLocaleToUomSave_Nspin2)
 
     std::vector<double> uom_save(size * 2, 0.0);
     const int eff_pot_index = 0;
+    const int half_size = uom_save.size() / 2;
     for(int mm = 0; mm < size; mm++)
     {
         uom_save[eff_pot_index + mm] = locale_spin0[mm];
-        uom_save[eff_pot_index + mm + size] = locale_spin1[mm];
+        uom_save[half_size + eff_pot_index + mm] = locale_spin1[mm];
     }
 
     for(int i = 0; i < size; i++)
     {
         EXPECT_DOUBLE_EQ(uom_save[i], static_cast<double>(i + 1));
-        EXPECT_DOUBLE_EQ(uom_save[i + size], static_cast<double>(i + 100));
+        EXPECT_DOUBLE_EQ(uom_save[half_size + i], static_cast<double>(i + 100));
     }
 }
 
@@ -805,4 +806,197 @@ TEST_F(DftuPwTest, SpinDownOnly_Path_Nspin2)
         for(int m2 = 0; m2 < m_size; m2++)
             if(m1 != m2)
                 EXPECT_DOUBLE_EQ(vu_dn[m1 * m_size + m2].real(), 0.0);
+}
+
+// =====================================================================
+// Multi-atom split layout test for nspin=2
+// Verifies that the split layout [all_up | all_dn] works correctly
+// with multiple correlated atoms (the P0-1 bug fix)
+// =====================================================================
+
+TEST_F(DftuPwTest, MultiAtomSplitLayout_Nspin2)
+{
+    // 2 correlated atoms with d-orbital (l=2)
+    const int nat = 2;
+    const int m_size = 5;
+    const int size = m_size * m_size; // 25 per atom per spin
+    const int P = nat * size; // 50 = total spin-up block size
+    const int total = P * 2; // 100 = total array size (split: up|dn)
+
+    // eff_pot_pw_index: split layout, each atom gets `size` entries
+    std::vector<int> eff_pot_pw_index(nat);
+    eff_pot_pw_index[0] = 0;
+    eff_pot_pw_index[1] = size; // 25
+
+    // --- Test uom_array writing (dftu_pw.cpp logic) ---
+    std::vector<double> uom_array(total, 0.0);
+    // Simulate locale values for both atoms
+    std::vector<double> locale_up_0(size, 0.0), locale_dn_0(size, 0.0);
+    std::vector<double> locale_up_1(size, 0.0), locale_dn_1(size, 0.0);
+    for(int m = 0; m < m_size; m++)
+    {
+        locale_up_0[m * m_size + m] = 0.8;
+        locale_dn_0[m * m_size + m] = 0.2;
+        locale_up_1[m * m_size + m] = 0.7;
+        locale_dn_1[m * m_size + m] = 0.3;
+    }
+
+    // Write to uom_array using split layout
+    const int half_size = total / 2; // P = 50
+    // atom 0
+    for(int mm = 0; mm < size; mm++)
+    {
+        uom_array[eff_pot_pw_index[0] + mm] = locale_up_0[mm];
+        uom_array[half_size + eff_pot_pw_index[0] + mm] = locale_dn_0[mm];
+    }
+    // atom 1
+    for(int mm = 0; mm < size; mm++)
+    {
+        uom_array[eff_pot_pw_index[1] + mm] = locale_up_1[mm];
+        uom_array[half_size + eff_pot_pw_index[1] + mm] = locale_dn_1[mm];
+    }
+
+    // Verify split layout: first half = all spin-up, second half = all spin-down
+    // atom 0 up: [0..24]
+    EXPECT_DOUBLE_EQ(uom_array[0], 0.8); // locale_up_0 diagonal
+    // atom 1 up: [25..49]
+    EXPECT_DOUBLE_EQ(uom_array[size + 0], 0.7); // locale_up_1 diagonal
+    // atom 0 dn: [50..74]
+    EXPECT_DOUBLE_EQ(uom_array[half_size + 0], 0.2); // locale_dn_0 diagonal
+    // atom 1 dn: [75..99]
+    EXPECT_DOUBLE_EQ(uom_array[half_size + size + 0], 0.3); // locale_dn_1 diagonal
+
+    // --- Test set_locale reading (dftu_occup.cpp logic) ---
+    std::vector<double> read_up_0(size, 0.0), read_dn_0(size, 0.0);
+    std::vector<double> read_up_1(size, 0.0), read_dn_1(size, 0.0);
+
+    for(int mm = 0; mm < size; mm++)
+    {
+        // atom 0
+        read_up_0[mm] = uom_array[eff_pot_pw_index[0] + mm];
+        read_dn_0[mm] = uom_array[half_size + eff_pot_pw_index[0] + mm];
+        // atom 1
+        read_up_1[mm] = uom_array[eff_pot_pw_index[1] + mm];
+        read_dn_1[mm] = uom_array[half_size + eff_pot_pw_index[1] + mm];
+    }
+
+    for(int mm = 0; mm < size; mm++)
+    {
+        EXPECT_DOUBLE_EQ(read_up_0[mm], locale_up_0[mm]);
+        EXPECT_DOUBLE_EQ(read_dn_0[mm], locale_dn_0[mm]);
+        EXPECT_DOUBLE_EQ(read_up_1[mm], locale_up_1[mm]);
+        EXPECT_DOUBLE_EQ(read_dn_1[mm], locale_dn_1[mm]);
+    }
+
+    // --- Test VU writing (dftu_pw.cpp logic) ---
+    std::vector<std::complex<double>> eff_pot_pw(total, {0.0, 0.0});
+    const double U_val = 5.0;
+    const double diag_coeff = 0.5;
+
+    // atom 0 spin-up VU
+    std::complex<double>* vu_up_0 = &eff_pot_pw[eff_pot_pw_index[0]];
+    for(int m1 = 0; m1 < m_size; m1++)
+        for(int m2 = 0; m2 < m_size; m2++)
+            vu_up_0[m1 * m_size + m2] = U_val * (diag_coeff * (m1 == m2) - locale_up_0[m2 * m_size + m1]);
+
+    // atom 0 spin-down VU (split layout: offset by half_size)
+    std::complex<double>* vu_dn_0 = &eff_pot_pw[eff_pot_pw.size() / 2 + eff_pot_pw_index[0]];
+    for(int m1 = 0; m1 < m_size; m1++)
+        for(int m2 = 0; m2 < m_size; m2++)
+            vu_dn_0[m1 * m_size + m2] = U_val * (diag_coeff * (m1 == m2) - locale_dn_0[m2 * m_size + m1]);
+
+    // atom 1 spin-up VU
+    std::complex<double>* vu_up_1 = &eff_pot_pw[eff_pot_pw_index[1]];
+    for(int m1 = 0; m1 < m_size; m1++)
+        for(int m2 = 0; m2 < m_size; m2++)
+            vu_up_1[m1 * m_size + m2] = U_val * (diag_coeff * (m1 == m2) - locale_up_1[m2 * m_size + m1]);
+
+    // atom 1 spin-down VU
+    std::complex<double>* vu_dn_1 = &eff_pot_pw[eff_pot_pw.size() / 2 + eff_pot_pw_index[1]];
+    for(int m1 = 0; m1 < m_size; m1++)
+        for(int m2 = 0; m2 < m_size; m2++)
+            vu_dn_1[m1 * m_size + m2] = U_val * (diag_coeff * (m1 == m2) - locale_dn_1[m2 * m_size + m1]);
+
+    // Verify VU values
+    // atom 0 up diagonal: 5*(0.5-0.8) = -1.5
+    EXPECT_DOUBLE_EQ(vu_up_0[0].real(), -1.5);
+    // atom 0 dn diagonal: 5*(0.5-0.2) = 1.5
+    EXPECT_DOUBLE_EQ(vu_dn_0[0].real(), 1.5);
+    // atom 1 up diagonal: 5*(0.5-0.7) = -1.0
+    EXPECT_DOUBLE_EQ(vu_up_1[0].real(), -1.0);
+    // atom 1 dn diagonal: 5*(0.5-0.3) = 1.0
+    EXPECT_DOUBLE_EQ(vu_dn_1[0].real(), 1.0);
+
+    // Verify no overlap between atoms in VU arrays
+    // atom 0 up ends at index 24, atom 1 up starts at 25 — no overlap
+    EXPECT_NE(vu_up_0[0], vu_up_1[0]);
+    // atom 0 dn starts at half_size=50, atom 1 dn starts at half_size+25=75 — no overlap
+    EXPECT_NE(vu_dn_0[0], vu_dn_1[0]);
+}
+
+// =====================================================================
+// Test that split layout copy_locale/uom_save is consistent
+// with set_locale/uom_array round-trip for multi-atom nspin=2
+// =====================================================================
+
+TEST_F(DftuPwTest, RoundTripCopyAndSetLocale_Nspin2_MultiAtom)
+{
+    const int nat = 2;
+    const int m_size = 5;
+    const int size = m_size * m_size;
+    const int P = nat * size;
+    const int total = P * 2;
+
+    std::vector<int> eff_pot_pw_index = {0, size};
+    std::vector<double> uom_save(total, 0.0);
+    std::vector<double> uom_array(total, 0.0);
+
+    // Simulate locale values
+    std::vector<std::vector<double>> locale_up(nat, std::vector<double>(size, 0.0));
+    std::vector<std::vector<double>> locale_dn(nat, std::vector<double>(size, 0.0));
+    for(int iat = 0; iat < nat; iat++)
+        for(int m = 0; m < m_size; m++)
+        {
+            locale_up[iat][m * m_size + m] = 0.9 - iat * 0.1;
+            locale_dn[iat][m * m_size + m] = 0.1 + iat * 0.1;
+        }
+
+    // copy_locale -> uom_save (split layout)
+    const int half_size = total / 2;
+    for(int iat = 0; iat < nat; iat++)
+        for(int mm = 0; mm < size; mm++)
+        {
+            uom_save[eff_pot_pw_index[iat] + mm] = locale_up[iat][mm];
+            uom_save[half_size + eff_pot_pw_index[iat] + mm] = locale_dn[iat][mm];
+        }
+
+    // cal_occ_pw -> uom_array (split layout)
+    for(int iat = 0; iat < nat; iat++)
+        for(int mm = 0; mm < size; mm++)
+        {
+            uom_array[eff_pot_pw_index[iat] + mm] = locale_up[iat][mm];
+            uom_array[half_size + eff_pot_pw_index[iat] + mm] = locale_dn[iat][mm];
+        }
+
+    // Mixing would compare uom_array with uom_save — verify they match
+    for(int i = 0; i < total; i++)
+        EXPECT_DOUBLE_EQ(uom_array[i], uom_save[i]);
+
+    // set_locale reads back from uom_array
+    std::vector<std::vector<double>> read_up(nat, std::vector<double>(size, 0.0));
+    std::vector<std::vector<double>> read_dn(nat, std::vector<double>(size, 0.0));
+    for(int iat = 0; iat < nat; iat++)
+        for(int mm = 0; mm < size; mm++)
+        {
+            read_up[iat][mm] = uom_array[eff_pot_pw_index[iat] + mm];
+            read_dn[iat][mm] = uom_array[half_size + eff_pot_pw_index[iat] + mm];
+        }
+
+    // Verify round-trip consistency
+    for(int iat = 0; iat < nat; iat++)
+        for(int mm = 0; mm < size; mm++)
+        {
+            EXPECT_DOUBLE_EQ(read_up[iat][mm], locale_up[iat][mm]);
+            EXPECT_DOUBLE_EQ(read_dn[iat][mm], locale_dn[iat][mm]);
+        }
 }

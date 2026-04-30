@@ -75,8 +75,6 @@ void OnsiteProj<OperatorPW<T, Device>>::add_onsite_proj(T *hpsi_in, const int np
     ModuleBase::timer::start("OnsiteProj", "add_onsite_proj");
 
     auto* onsite_p = projectors::OnsiteProjector<double, Device>::get_instance();
-    // apply the operator to the wavefunction
-    //std::cout << "use of tab_atomic at " << __FILE__ << ": " << __LINE__ << std::endl;
     const std::complex<double>* tab_atomic = onsite_p->get_tab_atomic();
     const int npw = onsite_p->get_npw();
     // npwx passed as parameter
@@ -105,9 +103,7 @@ template<typename T, typename Device>
 void OnsiteProj<OperatorPW<T, Device>>::update_becp(const T *psi_in, const int npol, const int m, const int npwx) const
 {
     auto* onsite_p = projectors::OnsiteProjector<double, Device>::get_instance();
-    // calculate <alpha|psi> 
-    // std::cout << __FILE__ << ":" << __LINE__ << " nbands = " << m << std::endl;
-    onsite_p->overlap_proj_psi(m, psi_in);
+    onsite_p->overlap_proj_psi(m, psi_in, npwx);
 }
 
 template<typename T, typename Device>
@@ -170,6 +166,25 @@ void OnsiteProj<OperatorPW<T, Device>>::cal_ps_delta_spin(const int npol, const 
         this->ps, becp);
 }
 
+// cal_ps_dftu — compute ps = VU * becp for DFT+U Hamiltonian contribution
+//
+// eff_pot_pw layout by nspin:
+//   nspin=1: [iat0_tlp1^2 | iat1_tlp1^2 | ...]
+//            single spin channel, full array uploaded
+//   nspin=2: [iat0_up | iat1_up | ... | iat0_dn | iat1_dn | ...]
+//            split layout — first half is spin-up, second half spin-down.
+//            For isk==1 (spin-down k-point), only the second half is
+//            uploaded to vu_device so that vu_begin_iat[iat] indexes
+//            correctly into the spin-down block.
+//   nspin=4: [iat0_Pauli_4blocks | iat1_Pauli_4blocks | ...]
+//            4*(2l+1)^2 entries per atom; kernel uses npol=2 spinor
+//            structure with 2x2 Pauli matrix coefficients.
+//
+// vu_begin_iat is computed as tlp1^2 * npol^2 per atom at init time,
+// which gives the correct offset for each nspin case:
+//   nspin=1: tlp1^2 * 1 = tlp1^2
+//   nspin=2: tlp1^2 * 1 = tlp1^2 (per spin channel, selected by isk)
+//   nspin=4: tlp1^2 * 4 = (2*tlp1)^2
 template<typename T, typename Device>
 void OnsiteProj<OperatorPW<T, Device>>::cal_ps_dftu(
 		const int npol, 
@@ -348,6 +363,21 @@ void OnsiteProj<OperatorPW<std::complex<float>, base_device::DEVICE_GPU>>::cal_p
 {}
 #endif
 
+// OnsiteProj::act — apply DFT+U and/or DeltaSpin Hamiltonian correction
+//
+// Leading dimension note:
+//   The Davidson/CG solver allocates psi and hpsi with stride ld_psi = ngk[ik]
+//   (the number of G-vectors for the current k-point), NOT npwx (the maximum
+//   across all k-points).  We must pass ld_psi = nbasis/npol through the
+//   GEMM chain to avoid buffer overflow when ngk[ik] < npwx.
+//
+// nspin handling in cal_ps_dftu:
+//   nspin=1 (npol=1): single spin channel, no spin selection needed
+//   nspin=2 (npol=1): eff_pot_pw uses split layout [all_up | all_dn];
+//     spin-up  k-points (isk=0) read from the first  half;
+//     spin-down k-points (isk=1) read from the second half.
+//   nspin=4 (npol=2): all 4 Pauli blocks stored per-atom; kernel uses
+//     2x2 spinor structure with tlp1_npol^2 entries per atom.
 template<typename T, typename Device>
 void OnsiteProj<OperatorPW<T, Device>>::act(
     const int nbands,
@@ -359,11 +389,11 @@ void OnsiteProj<OperatorPW<T, Device>>::act(
     const bool is_first_node)const
 {
     ModuleBase::timer::start("Operator", "OnsiteProjPW");
-    auto* onsite_p = projectors::OnsiteProjector<double, Device>::get_instance();
-    this->update_becp(tmpsi_in, npol, nbands, onsite_p->get_npwx());
+    const int ld_psi = nbasis / npol;
+    this->update_becp(tmpsi_in, npol, nbands, ld_psi);
     this->cal_ps_delta_spin(npol, nbands);
     this->cal_ps_dftu(npol, nbands);
-    this->add_onsite_proj(tmhpsi, npol, nbands, onsite_p->get_npwx());
+    this->add_onsite_proj(tmhpsi, npol, nbands, ld_psi);
     ModuleBase::timer::end("Operator", "OnsiteProjPW");
 }
 

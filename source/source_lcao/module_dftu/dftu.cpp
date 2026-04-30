@@ -105,23 +105,25 @@ void Plus_U::init(UnitCell& cell, // unitcell class
             const int tlp1_npol = (this->orbital_corr[it]*2+1)*npol;
             const int tlp1 = 2 * this->orbital_corr[it] + 1;
             const int elem_size = tlp1 * tlp1;
-            if(nspin == 2)
-            {
-                this->eff_pot_pw_index[iat] = pot_index;
-                pot_index += elem_size * 2;
-            }
-            else if(nspin == 4)
-            {
-                // nspin=4: layout is [iat0_pauli(4 blocks)][iat1_pauli(4 blocks)]...
-                // pot_index already accumulates tlp1_npol^2 = (tlp1*2)^2 = 4*tlp1^2
-                this->eff_pot_pw_index[iat] = pot_index;
-                pot_index += tlp1_npol * tlp1_npol;
-            }
-            else
-            {
-                this->eff_pot_pw_index[iat] = pot_index;
-                pot_index += tlp1_npol * tlp1_npol;
-            }
+    // eff_pot_pw_index: per-atom offset into eff_pot_pw (and uom_array)
+    //
+    // nspin=1: offset = sum(tlp1^2 for preceding atoms), total = sum(all tlp1^2)
+    // nspin=2: same per-spin-channel offset; after the loop, pot_index *= 2
+    //          to create split layout: [all_spin_up | all_spin_down]
+    //          spin-up  at eff_pot_pw[eff_pot_pw_index[iat] + mm]
+    //          spin-down at eff_pot_pw[size/2 + eff_pot_pw_index[iat] + mm]
+    // nspin=4: offset = sum(tlp1_npol^2) where tlp1_npol = (2l+1)*npol = 2*(2l+1)
+    //          each atom occupies (2*tlp1)^2 = 4*tlp1^2 entries for 4 Pauli blocks
+    if(nspin == 4)
+    {
+        this->eff_pot_pw_index[iat] = pot_index;
+        pot_index += tlp1_npol * tlp1_npol;
+    }
+    else // nspin=1 or nspin=2: one tlp1^2 block per atom per spin channel
+    {
+        this->eff_pot_pw_index[iat] = pot_index;
+        pot_index += elem_size;
+    }
 
             for (int l = 0; l <= cell.atoms[it].nwl; l++)
             {
@@ -187,8 +189,9 @@ void Plus_U::init(UnitCell& cell, // unitcell class
         }
     }
     // allocate memory for eff_pot_pw
-    // Note: nspin=2 sizing is already handled in the loop above
-    if (PARAM.inp.nspin == 4) pot_index *= 4; // for noncollinear case, need 4x size for interleaved spinors
+    // nspin=2: split layout [all_spin_up | all_spin_down], double the size
+    // nspin=4: each atom already has 4*tlp1^2 (tlp1_npol^2) entries for Pauli blocks
+    if (nspin == 2) pot_index *= 2;
 
     this->eff_pot_pw.resize(pot_index, 0.0);
     this->uom_array.resize(pot_index, 0.0);

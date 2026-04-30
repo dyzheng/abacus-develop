@@ -5,20 +5,18 @@ namespace pw
 {
 
 void iter_init_dftu_pw(const int iter,
-                       const int istep,
-                       Plus_U& dftu,
-                       const void* psi,
-                       const ModuleBase::matrix& wg,
-                       const UnitCell& ucell,
-                       Charge_Mixing* p_chgmix)
+                        const int istep,
+                        Plus_U& dftu,
+                        const void* psi,
+                        const ModuleBase::matrix& wg,
+                        const UnitCell& ucell,
+                        Charge_Mixing* p_chgmix)
 {
     if (!p_chgmix || !PARAM.inp.dft_plus_u)
     {
         return;
     }
 
-    // Skip first iteration (no charge mixing yet, drho==0)
-    // This matches zdy-tmp behavior
     if (iter == 1 && istep == 0)
     {
         return;

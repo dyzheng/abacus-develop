@@ -6,6 +6,12 @@
 #endif
 #include "source_base/module_external/scalapack_connector.h"
 
+// copy_locale — save current locale to locale_save and uom_save
+//
+// nspin=1: single spin channel, uom_save[eff_pot_pw_index[iat]+mm]
+// nspin=2: split layout — spin-up at uom_save[index+mm],
+//          spin-down at uom_save[half_size+index+mm]
+// nspin=4: all 4 Pauli blocks packed contiguously from index
 void Plus_U::copy_locale(const UnitCell& ucell)
 {
     ModuleBase::TITLE("Plus_U", "copy_locale");
@@ -42,10 +48,11 @@ void Plus_U::copy_locale(const UnitCell& ucell)
                 if(this->uom_save.size() != 0)
                 {
                     const int size = locale[iat][target_l][0][0].nr * locale[iat][target_l][0][0].nc;
+                    const int half_size = this->uom_save.size() / 2;
                     for(int mm=0; mm<size; mm++)
                     {
                         this->uom_save[eff_pot_pw_index[iat]+mm] = locale[iat][target_l][0][0].c[mm];
-                        this->uom_save[this->uom_save.size()/2 + eff_pot_pw_index[iat]+mm] = locale[iat][target_l][0][1].c[mm];
+                        this->uom_save[half_size + eff_pot_pw_index[iat]+mm] = locale[iat][target_l][0][1].c[mm];
                     }
                 }
             }
@@ -133,11 +140,16 @@ void Plus_U::mix_locale(const UnitCell& ucell,
     ModuleBase::timer::end("Plus_U", "mix_locale");
 }
 
+// set_locale — restore locale from uom_array (after mixing)
+//
+// nspin=1: locale[iat][l][n][0] from uom_array[eff_pot_pw_index[iat]+mm]
+// nspin=2: spin-up from uom_array[index+mm],
+//          spin-down from uom_array[half_size+index+mm]
+// nspin=4: all 4 Pauli blocks from uom_array[index+mm], mm in [0, 4*tlp1^2)
 void Plus_U::set_locale(const UnitCell& ucell)
 {
     ModuleBase::TITLE("Plus_U", "set_locale");
     ModuleBase::timer::start("Plus_U", "set_locale");
-    ModuleBase::timer::end("Plus_U", "set_locale");
 
     for (int T = 0; T < ucell.ntype; T++)
     {
@@ -153,16 +165,19 @@ void Plus_U::set_locale(const UnitCell& ucell)
             }
             else if (PARAM.inp.nspin == 1 || PARAM.inp.nspin == 2)
             {
+                const int half_size = this->uom_array.size() / 2;
                 for(int mm = 0; mm < locale[iat][l][0][0].nr * locale[iat][l][0][0].nc; mm++)
                 {
                     locale[iat][l][0][0].c[mm] = this->uom_array[eff_pot_pw_index[iat] + mm];
-                    locale[iat][l][0][1].c[mm] = this->uom_array[eff_pot_pw_index[iat] + mm + locale[iat][l][0][0].nr * locale[iat][l][0][0].nc];
+                    if (PARAM.inp.nspin == 2)
+                    {
+                        locale[iat][l][0][1].c[mm] = this->uom_array[half_size + eff_pot_pw_index[iat] + mm];
+                    }
                 }
             }
         }
     }
 
-    ModuleBase::timer::start("Plus_U", "set_locale");
     ModuleBase::timer::end("Plus_U", "set_locale");
 }
 

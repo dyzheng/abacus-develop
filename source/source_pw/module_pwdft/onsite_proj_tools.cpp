@@ -435,7 +435,7 @@ void Onsite_Proj_tools<FPTYPE, Device>::cal_becp(int ik,
               this->ppcell_vkb,
               npw,
               ppsi,
-              this->max_npw,
+              npwx > 0 ? npwx : this->max_npw,
               &ModuleBase::ZERO,
               becp_tmp,
               this->nkb);

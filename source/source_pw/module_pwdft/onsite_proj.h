@@ -43,9 +43,13 @@ namespace projectors
          */
         void tabulate_atomic(const int ik, const char grad = 'n');
         
+        /// compute becp = <alpha|psi>; ld_psi is the leading dimension of psi
+        /// (defaults to npwx if 0, but should be ngk[ik] when called from
+        /// the Davidson/CG solver where psi stride varies per k-point)
         void overlap_proj_psi(
                     const int npm,
-                    const std::complex<double>* ppsi
+                    const std::complex<double>* ppsi,
+                    const int ld_psi = 0
                     );
         void read_abacus_orb(std::ifstream& ifs,
                             std::string& elem,
@@ -81,6 +85,9 @@ namespace projectors
         int get_npwx() const { return npwx_; }
         const int& get_nh(int iat) const { return iat_nh[iat]; }
 
+        bool is_becp_ready(int ik) const { return becp_ready_ && ik_becp_ == ik; }
+        void invalidate_becp() { becp_ready_ = false; }
+
         hamilt::Onsite_Proj_tools<T, Device>* get_fs_tools() const { return fs_tools; }
 
         private:
@@ -105,6 +112,8 @@ namespace projectors
         int npw_ = 0;
         int npwx_ = 0;
         int ik_ = 0;
+        bool becp_ready_ = false;
+        int ik_becp_ = -1;
         std::vector<std::vector<int>> it2ia;
         std::vector<double> rgrid;
         std::vector<std::vector<double>> projs;

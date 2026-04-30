@@ -3,13 +3,26 @@
 #include "source_base/parallel_reduce.h"
 #include "source_io/module_parameter/parameter.h"
 #include "source_base/timer.h"
-#include <cstdio>
 
-// DFTU_DEBUG: Define to enable locale/vu dump for nspin=2 debugging
-#define DFTU_DEBUG 0
-
-
-/// calculate occupation matrix for DFT+U
+/// calculate occupation matrix for DFT+U (PW basis)
+///
+/// nspin=1 (npol=1): single spin channel; locale[iat][l][n][0] only;
+///   eff_pot_pw has one block of tlp1^2 per atom.
+///
+/// nspin=2 (npol=1): two spin channels stored separately:
+///   locale[iat][l][n][0] = spin-up, locale[iat][l][n][1] = spin-down;
+///   becp indices: ib*nkb + begin_ih + m (same formula for both spins);
+///   spin channel selected by `is` derived from ik >= nk/2;
+///   eff_pot_pw split layout: [all_spin_up | all_spin_down];
+///   uom_array split layout:  [all_spin_up | all_spin_down];
+///   VU spin-down stored at eff_pot_pw.size()/2 + eff_pot_pw_index[iat].
+///
+/// nspin=4 (npol=2): spinor calculation;
+///   locale has a single matrix of size (2*tlp1) x (2*tlp1) per atom
+///   storing all 4 Pauli blocks contiguously;
+///   becp indices: ib*npol*nkb + begin_ih + m_begin + m (with spinor offset);
+///   eff_pot_pw has tlp1_npol^2 = 4*tlp1^2 entries per atom;
+///   after VU calculation, Pauli→spin transformation is applied.
 void Plus_U::cal_occ_pw(const int iter, 
 		const void* psi_in, 
 		const ModuleBase::matrix& wg_in, 
@@ -39,20 +52,6 @@ void Plus_U::cal_occ_pw(const int iter,
             onsite_p->overlap_proj_psi(nbands*npol, psi_p->get_pointer());
             const std::complex<double>* becp = onsite_p->get_h_becp();
             int nkb = onsite_p->get_size_becp() / nbands / npol;
-
-#if DFTU_DEBUG
-            if(iter <= 3 && is == 1)
-            {
-                printf("[DFTU-BECP] iter=%d ik=%d is=1 nkb=%d nbands=%d\n", iter, ik, nkb, nbands);
-                printf("[DFTU-BECP]   wg(ik,0..4)=");
-                for(int ib=0;ib<5 && ib<nbands;ib++) printf(" %.8f", wg_in(ik,ib));
-                printf("\n");
-                printf("[DFTU-BECP]   becp(band0,0..9)=");
-                for(int i=0;i<10 && i<nkb;i++) printf(" (%.4f,%.4f)", becp[i].real(), becp[i].imag());
-                printf("\n");
-                fflush(stdout);
-            }
-#endif
 
             int begin_ih = 0;
             for(int iat = 0; iat < cell.nat; iat++)
@@ -114,26 +113,6 @@ void Plus_U::cal_occ_pw(const int iter,
                 }
                 begin_ih += nh;
             }// iat
-
-#if DFTU_DEBUG
-            if(PARAM.inp.nspin == 2 && iter <= 3)
-            {
-                const int tl = this->orbital_corr[0];
-                if(tl == 2)
-                {
-                    const int m_size = 2 * tl + 1;
-                    printf("[DFTU-PERIK] iter=%d ik=%d is=%d after ik loop\n", iter, ik, is);
-                    printf("[DFTU-PERIK]   locale_up diag: ");
-                    for(int m = 0; m < m_size; m++)
-                        printf("%.8f ", this->locale[0][tl][0][0].c[m * m_size + m]);
-                    printf("\n[DFTU-PERIK]   locale_dn diag: ");
-                    for(int m = 0; m < m_size; m++)
-                        printf("%.8f ", this->locale[0][tl][0][1].c[m * m_size + m]);
-                    printf("\n");
-                    fflush(stdout);
-                }
-            }
-#endif
 
         }// ik
     }
@@ -232,21 +211,6 @@ void Plus_U::cal_occ_pw(const int iter,
         }
         const int size = (2 * target_l + 1) * (2 * target_l + 1);
 
-#if DFTU_DEBUG
-        if(iter <= 3 && target_l == 2)
-        {
-            printf("[DFTU-PREDUCE] iter=%d iat=%d BEFORE reduce\n", iter, iat);
-            printf("[DFTU-PREDUCE]   locale_up diag: ");
-            for(int m = 0; m < 2*target_l+1; m++)
-                printf("%.8f ", this->locale[iat][target_l][0][0].c[m * (2*target_l+1) + m]);
-            printf("\n[DFTU-PREDUCE]   locale_dn diag: ");
-            for(int m = 0; m < 2*target_l+1; m++)
-                printf("%.8f ", this->locale[iat][target_l][0][1].c[m * (2*target_l+1) + m]);
-            printf("\n");
-            fflush(stdout);
-        }
-#endif
-
         if(PARAM.inp.nspin != 4)
         {
             Parallel_Reduce::reduce_double_allpool(PARAM.inp.kpar, 
@@ -278,30 +242,13 @@ void Plus_U::cal_occ_pw(const int iter,
             }
             if(PARAM.inp.nspin == 2)
             {
-                // nspin=2: zdy-tmp layout is [up_iat0 | dn_iat0 | up_iat1 | dn_iat1 | ...]
-                // dn block for each iat follows immediately after its up block
+                const int half_size = this->uom_array.size() / 2;
                 for(int mm=0;mm<size;mm++)
                 {
-                    this->uom_array[eff_pot_pw_index[iat]+mm+size] = this->locale[iat][target_l][0][1].c[mm];
+                    this->uom_array[half_size + eff_pot_pw_index[iat]+mm] = this->locale[iat][target_l][0][1].c[mm];
                 }
             }
         }
-
-#if DFTU_DEBUG
-        if(PARAM.inp.nspin == 2 && target_l >= 0)
-        {
-            const int m_size = 2 * target_l + 1;
-            printf("[DFTU-DEBUG-REDUCE1] iter=%d iat=%d l=%d\n", iter, iat, target_l);
-            printf("[DFTU-DEBUG-REDUCE1]   locale_up diag: ");
-            for(int m = 0; m < m_size; m++)
-                printf("%.8f ", this->locale[iat][target_l][0][0].c[m * m_size + m]);
-            printf("\n[DFTU-DEBUG-REDUCE1]   locale_dn diag: ");
-            for(int m = 0; m < m_size; m++)
-                printf("%.8f ", this->locale[iat][target_l][0][1].c[m * m_size + m]);
-            printf("\n");
-            fflush(stdout);
-        }
-#endif
     }
 
     // mixing
@@ -406,40 +353,6 @@ void Plus_U::cal_occ_pw(const int iter,
                                  * this->locale[iat][target_l][0][1].c[m1 * m_size + m2];
                     }
                 }
-
-#if DFTU_DEBUG
-                printf("[DFTU-DEBUG] iter=%d iat=%d l=%d energy_u=%.8f\n", 
-                      iter, iat, target_l, Plus_U::energy_u);
-                printf("[DFTU-DEBUG]   locale_up diag: ");
-                for(int m = 0; m < m_size; m++)
-                    printf("%.8f ", this->locale[iat][target_l][0][0].c[m * m_size + m]);
-                printf("\n[DFTU-DEBUG]   locale_dn diag: ");
-                for(int m = 0; m < m_size; m++)
-                    printf("%.8f ", this->locale[iat][target_l][0][1].c[m * m_size + m]);
-                printf("\n[DFTU-DEBUG]   vu_up diag: ");
-                for(int m = 0; m < m_size; m++)
-                    printf("(%.8f,%.8f) ", vu_iat[m * m_size + m].real(), vu_iat[m * m_size + m].imag());
-                printf("\n[DFTU-DEBUG]   vu_dn diag: ");
-                for(int m = 0; m < m_size; m++)
-                    printf("(%.8f,%.8f) ", vu_iat1[m * m_size + m].real(), vu_iat1[m * m_size + m].imag());
-                printf("\n");
-                fflush(stdout);
-#endif
-            }
-            else
-            {
-#if DFTU_DEBUG
-                printf("[DFTU-DEBUG] iter=%d iat=%d l=%d energy_u=%.8f\n", 
-                      iter, iat, target_l, Plus_U::energy_u);
-                printf("[DFTU-DEBUG]   locale_up diag: ");
-                for(int m = 0; m < m_size; m++)
-                    printf("%.8f ", this->locale[iat][target_l][0][0].c[m * m_size + m]);
-                printf("\n[DFTU-DEBUG]   vu_up diag: ");
-                for(int m = 0; m < m_size; m++)
-                    printf("(%.8f,%.8f) ", vu_iat[m * m_size + m].real(), vu_iat[m * m_size + m].imag());
-                printf("\n");
-                fflush(stdout);
-#endif
             }
         }
     }
