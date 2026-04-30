@@ -85,6 +85,14 @@ int SpinConstrain<TK>::get_npol() const
 }
 
 template <typename TK>
+int SpinConstrain<TK>::get_spin_sign(int ik) const
+{
+    if (this->npol_ == 2) return 1;
+    // npol == 1 (nspin == 2): isk[ik]==0 => spin-up (+1), isk[ik]==1 => spin-down (-1)
+    return (this->pelec->klist->isk[ik] == 0) ? 1 : -1;
+}
+
+template <typename TK>
 int SpinConstrain<TK>::get_nw() const
 {
     int nw = 0;

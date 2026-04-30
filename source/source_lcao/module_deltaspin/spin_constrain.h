@@ -243,7 +243,15 @@ public:
 
   private:
     SpinConstrain(){};                               // Private constructor
-    ~SpinConstrain(){};                              // Destructor
+    ~SpinConstrain()
+    {
+        delete[] sub_h_save;
+        delete[] sub_s_save;
+        delete[] becp_save;
+        sub_h_save = nullptr;
+        sub_s_save = nullptr;
+        becp_save = nullptr;
+    };
     SpinConstrain& operator=(SpinConstrain const&) = delete;  // Copy assign
     SpinConstrain& operator=(SpinConstrain &&) = delete;      // Move assign
     std::map<int, std::vector<ScAtomData>> ScData;
@@ -285,6 +293,8 @@ public:
     int get_npol() const;
     int get_nw() const;
     int get_iwt(int itype, int iat, int orbital_index) const;
+    /// get spin sign for k-point ik: +1 for spin-up, -1 for spin-down
+    int get_spin_sign(int ik) const;
   private:
     /// operator for spin-constrained DFT, used for calculating current atomic magnetic moment
     hamilt::Operator<TK>* p_operator = nullptr;

@@ -132,8 +132,6 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_loop(
 
     double inner_loop_duration = 0.0;
 
-    printf("[DIAG] basis_type=%s nsc=%d\n", PARAM.inp.basis_type.c_str(), this->nsc_);
-    fflush(stdout);
     this->print_header();
     // lambda loop
     for (int i_step = -1; i_step < this->nsc_; i_step++)
@@ -456,7 +454,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_loop_lcao(in
             // For spin-down channel: dM_down/dlambda = sum_{n,m} 2*(f_n-f_m)*|P_nm|^2/(e_n-e_m) * (-1)
             // dM/dlambda = dM_up/dlambda - dM_down/dlambda
             // Both channels contribute with same sign to chi
-            const double sign = (ik < nk) ? 1.0 : -1.0;
+            const double sign = static_cast<double>(this->get_spin_sign(ik));
             const auto& P = PI_sub[ik][iat];
             for (int n = 0; n < nbands; n++)
             {
@@ -498,7 +496,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_loop_lcao(in
         // Subspace diag for each k-point
         for (int ik = 0; ik < nks; ik++)
         {
-            const double sign = (ik < nk) ? 1.0 : -1.0;
+            const double sign = static_cast<double>(this->get_spin_sign(ik));
 
             // Build H_sub = diag(e_k) + sign * sum_I delta_lambda_I * P_I_sub(k)
             std::vector<std::complex<double>> H_sub(nbands * nbands, {0.0, 0.0});
@@ -556,7 +554,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_loop_lcao(in
             {
                 if (PI_sub[ik][iat].empty()) { continue;
                 }
-                const double sign = (ik < nk) ? 1.0 : -1.0;
+                const double sign = static_cast<double>(this->get_spin_sign(ik));
                 const auto& V = V_save[ik];
                 const auto& P = PI_sub[ik][iat];
 

@@ -105,7 +105,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mi_pw()
             }
             else if (npol == 1)
             {
-                const int sign = this->pelec->klist->isk[ik] == 0 ? 1 : -1;
+                const int sign = this->get_spin_sign(ik);
                 for(int ib = 0;ib<nbands;ib++)
                 {
                     const double weight = this->pelec->wg(ik, ib);
@@ -174,7 +174,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mi_pw()
             }
             else if (npol == 1)
             {
-                const int sign = this->pelec->klist->isk[ik] == 0 ? 1 : -1;
+                const int sign = this->get_spin_sign(ik);
                 for(int ib = 0;ib<nbands;ib++)
                 {
                     const double weight = this->pelec->wg(ik, ib);
@@ -198,7 +198,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mi_pw()
     }
 #endif
     // reduce mag from all k-pools
-    Parallel_Reduce::reduce_double_allpool(PARAM.inp.kpar, GlobalV::NPROC_IN_POOL, &(this->Mi_[0][0]), 3 * this->Mi_.size());
+    Parallel_Reduce::reduce_double_allpool(PARAM.inp.kpar, PARAM.globalv.nproc_in_pool, &(this->Mi_[0][0]), 3 * this->Mi_.size());
     
     ModuleBase::timer::end("spinconstrain::SpinConstrain", "cal_mi_pw");
 }
