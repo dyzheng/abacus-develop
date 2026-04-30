@@ -3,6 +3,10 @@
 #include "source_base/parallel_reduce.h"
 #include "source_io/module_parameter/parameter.h"
 #include "source_base/timer.h"
+#include <cstdio>
+
+// DFTU_DEBUG: Define to enable locale/vu dump for nspin=2 debugging
+#define DFTU_DEBUG 0
 
 
 /// calculate occupation matrix for DFT+U
@@ -192,6 +196,21 @@ void Plus_U::cal_occ_pw(const int iter,
         }
         const int size = (2 * target_l + 1) * (2 * target_l + 1);
 
+#if DFTU_DEBUG
+        if(iter <= 3 && target_l == 2)
+        {
+            printf("[DFTU-PREDUCE] iter=%d iat=%d BEFORE reduce\n", iter, iat);
+            printf("[DFTU-PREDUCE]   locale_up diag: ");
+            for(int m = 0; m < 2*target_l+1; m++)
+                printf("%.8f ", this->locale[iat][target_l][0][0].c[m * (2*target_l+1) + m]);
+            printf("\n[DFTU-PREDUCE]   locale_dn diag: ");
+            for(int m = 0; m < 2*target_l+1; m++)
+                printf("%.8f ", this->locale[iat][target_l][0][1].c[m * (2*target_l+1) + m]);
+            printf("\n");
+            fflush(stdout);
+        }
+#endif
+
         if(PARAM.inp.nspin != 4)
         {
             Parallel_Reduce::reduce_double_allpool(PARAM.inp.kpar, 
@@ -223,12 +242,30 @@ void Plus_U::cal_occ_pw(const int iter,
             }
             if(PARAM.inp.nspin == 2)
             {
+                // nspin=2: zdy-tmp layout is [up_iat0 | dn_iat0 | up_iat1 | dn_iat1 | ...]
+                // dn block for each iat follows immediately after its up block
                 for(int mm=0;mm<size;mm++)
                 {
                     this->uom_array[eff_pot_pw_index[iat]+mm+size] = this->locale[iat][target_l][0][1].c[mm];
                 }
             }
         }
+
+#if DFTU_DEBUG
+        if(PARAM.inp.nspin == 2 && target_l >= 0)
+        {
+            const int m_size = 2 * target_l + 1;
+            printf("[DFTU-DEBUG-REDUCE1] iter=%d iat=%d l=%d\n", iter, iat, target_l);
+            printf("[DFTU-DEBUG-REDUCE1]   locale_up diag: ");
+            for(int m = 0; m < m_size; m++)
+                printf("%.8f ", this->locale[iat][target_l][0][0].c[m * m_size + m]);
+            printf("\n[DFTU-DEBUG-REDUCE1]   locale_dn diag: ");
+            for(int m = 0; m < m_size; m++)
+                printf("%.8f ", this->locale[iat][target_l][0][1].c[m * m_size + m]);
+            printf("\n");
+            fflush(stdout);
+        }
+#endif
     }
 
     // mixing
@@ -355,6 +392,40 @@ void Plus_U::cal_occ_pw(const int iter,
                                  * this->locale[iat][target_l][0][1].c[m1 * m_size + m2];
                     }
                 }
+
+#if DFTU_DEBUG
+                printf("[DFTU-DEBUG] iter=%d iat=%d l=%d energy_u=%.8f\n", 
+                      iter, iat, target_l, Plus_U::energy_u);
+                printf("[DFTU-DEBUG]   locale_up diag: ");
+                for(int m = 0; m < m_size; m++)
+                    printf("%.8f ", this->locale[iat][target_l][0][0].c[m * m_size + m]);
+                printf("\n[DFTU-DEBUG]   locale_dn diag: ");
+                for(int m = 0; m < m_size; m++)
+                    printf("%.8f ", this->locale[iat][target_l][0][1].c[m * m_size + m]);
+                printf("\n[DFTU-DEBUG]   vu_up diag: ");
+                for(int m = 0; m < m_size; m++)
+                    printf("(%.8f,%.8f) ", vu_iat[m * m_size + m].real(), vu_iat[m * m_size + m].imag());
+                printf("\n[DFTU-DEBUG]   vu_dn diag: ");
+                for(int m = 0; m < m_size; m++)
+                    printf("(%.8f,%.8f) ", vu_iat1[m * m_size + m].real(), vu_iat1[m * m_size + m].imag());
+                printf("\n");
+                fflush(stdout);
+#endif
+            }
+            else
+            {
+#if DFTU_DEBUG
+                printf("[DFTU-DEBUG] iter=%d iat=%d l=%d energy_u=%.8f\n", 
+                      iter, iat, target_l, Plus_U::energy_u);
+                printf("[DFTU-DEBUG]   locale_up diag: ");
+                for(int m = 0; m < m_size; m++)
+                    printf("%.8f ", this->locale[iat][target_l][0][0].c[m * m_size + m]);
+                printf("\n[DFTU-DEBUG]   vu_up diag: ");
+                for(int m = 0; m < m_size; m++)
+                    printf("(%.8f,%.8f) ", vu_iat[m * m_size + m].real(), vu_iat[m * m_size + m].imag());
+                printf("\n");
+                fflush(stdout);
+#endif
             }
         }
     }
