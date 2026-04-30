@@ -114,6 +114,7 @@ void projectors::OnsiteProjector<T, Device>::init(const std::string& orbital_dir
     {
         this->ucell = ucell_in;
         this->ntype = ucell_in->ntype;
+        this->isk_ = kv.isk.data();
 
         this->pw_basis_ = &pw_basis;
         this->sf_ = &sf;
@@ -594,7 +595,7 @@ void projectors::OnsiteProjector<T, Device>::cal_force_onsite_dftu(int ik, int n
                                                         const Plus_U& dftu, int nks,
                                                         const double* wg_ik) const
 {
-    const int isk_val = (PARAM.inp.nspin == 2 && ik >= nks / 2) ? 1 : 0;
+    const int isk_val = this->isk_ ? this->isk_[ik] : 0;
     const std::complex<double>* vu_ptr = dftu.get_eff_pot_pw_spin(isk_val);
     const int vu_size = dftu.get_size_eff_pot_pw_spin();
     this->fs_tools->cal_force_dftu(ik, npm, force,
@@ -606,7 +607,7 @@ double projectors::OnsiteProjector<T, Device>::cal_stress_onsite_dftu(int ik, in
                                                            const Plus_U& dftu, int nks,
                                                            const double* wg_ik) const
 {
-    const int isk_val = (PARAM.inp.nspin == 2 && ik >= nks / 2) ? 1 : 0;
+    const int isk_val = this->isk_ ? this->isk_[ik] : 0;
     const std::complex<double>* vu_ptr = dftu.get_eff_pot_pw_spin(isk_val);
     const int vu_size = dftu.get_size_eff_pot_pw_spin();
     return this->fs_tools->cal_stress_dftu(ik, npm,

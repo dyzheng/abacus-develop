@@ -144,6 +144,8 @@ namespace projectors
 
         const UnitCell* ucell = nullptr;
 
+        const int* isk_ = nullptr;  ///< spin index per k-point (from K_Vectors)
+
         const ModulePW::PW_Basis_K* pw_basis_ = nullptr;             // level1: the plane wave basis, need ik
         Structure_Factor* sf_ = nullptr;                             // level2: the structure factor calculator
         int ntype = 0;
