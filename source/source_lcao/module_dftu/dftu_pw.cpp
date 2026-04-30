@@ -314,7 +314,7 @@ void Plus_U::cal_occ_pw(const int iter,
     Plus_U::energy_u = 0.0;
     const double weight_eu = (PARAM.inp.nspin == 1) ? 1.0 : (PARAM.inp.nspin == 2) ? 0.5 : 0.25;
     const double diag_coeff = (PARAM.inp.nspin == 4) ? 1.0 : 0.5;
-    // reduce mag from all k-pools
+    // calculate VU and energy (locale already reduced above)
     for(int iat = 0; iat < cell.nat; iat++)
     {
         const int it = cell.iat2it[iat];
@@ -324,28 +324,6 @@ void Plus_U::cal_occ_pw(const int iter,
             continue;
         }
         const int size = (2 * target_l + 1) * (2 * target_l + 1);
-
-        if(PARAM.inp.nspin != 4)
-        {
-            Parallel_Reduce::reduce_double_allpool(PARAM.inp.kpar, 
-                    PARAM.globalv.nproc_in_pool, 
-                    this->locale[iat][target_l][0][0].c, 
-                    size);
-            if(PARAM.inp.nspin == 2)
-            {
-                Parallel_Reduce::reduce_double_allpool(PARAM.inp.kpar, 
-                        PARAM.globalv.nproc_in_pool, 
-                        this->locale[iat][target_l][0][1].c, 
-                        size);
-            }
-        }
-        else
-        {
-            Parallel_Reduce::reduce_double_allpool(PARAM.inp.kpar, 
-                    PARAM.globalv.nproc_in_pool, 
-                    this->locale[iat][target_l][0][0].c, 
-                    size * 4);
-        }
 
         //update effective potential
         const double u_value = this->U[it];
