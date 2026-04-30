@@ -62,6 +62,7 @@ class Plus_U
     static double uramping; // increase U by uramping, default is -1.0
     static int omc; // occupation matrix control
     static int mixing_dftu; //whether to mix locale
+    static int nspin;       // spin channel count (1, 2, or 4), set during init
 
   private:
 
@@ -123,16 +124,43 @@ class Plus_U
     /// calculate the local DFT+U effective potential matrix for PW base.
     void cal_VU_pot_pw(const int spin);
 
-    /// get effective potential matrix for PW base
-	const std::complex<double>* get_eff_pot_pw(const int iat) const 
-	{ 
-		return &(eff_pot_pw[this->eff_pot_pw_index[iat]]); 
-	}
+    /// get effective potential pointer for the given spin channel (PW basis)
+    ///
+    /// nspin=1: isk is ignored, returns &eff_pot_pw[0]
+    /// nspin=2: isk selects spin-up (0) or spin-down (1) half of the
+    ///          split layout [all_up | all_dn]
+    /// nspin=4: isk is ignored, returns &eff_pot_pw[0] (all Pauli blocks)
+    const std::complex<double>* get_eff_pot_pw_spin(const int isk) const
+    {
+        if (nspin == 2 && isk == 1)
+        {
+            return eff_pot_pw.data() + eff_pot_pw.size() / 2;
+        }
+        return eff_pot_pw.data();
+    }
 
-	int get_size_eff_pot_pw() const 
-	{ 
-		return eff_pot_pw.size(); 
-	}
+    /// get size of effective potential for a single spin channel (PW basis)
+    ///
+    /// nspin=1: full array size
+    /// nspin=2: half of the total (one spin channel in split layout)
+    /// nspin=4: full array size (all Pauli blocks are packed together)
+    int get_size_eff_pot_pw_spin() const
+    {
+        return (nspin == 2) ? static_cast<int>(eff_pot_pw.size() / 2)
+                            : static_cast<int>(eff_pot_pw.size());
+    }
+
+    /// get effective potential matrix for PW base (per-atom, raw index)
+    /// Prefer get_eff_pot_pw_spin() for nspin-aware access.
+    const std::complex<double>* get_eff_pot_pw(const int iat) const
+    {
+        return &(eff_pot_pw[this->eff_pot_pw_index[iat]]);
+    }
+
+    int get_size_eff_pot_pw() const
+    {
+        return eff_pot_pw.size();
+    }
 
 #ifdef __LCAO
     // calculate the local occupation number matrix

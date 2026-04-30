@@ -33,6 +33,7 @@ double Plus_U::uramping = 0.0; // increase U by uramping, default is -1.0
 int Plus_U::omc=0; // occupation matrix control
 
 int Plus_U::mixing_dftu=0; //whether to mix locale
+int Plus_U::nspin=0;
 
 bool Plus_U::Yukawa=false; // whether to use Yukawa potential
 
@@ -73,6 +74,7 @@ void Plus_U::init(UnitCell& cell, // unitcell class
     const int npol = PARAM.globalv.npol;     // number of polarization directions
     const int nlocal = PARAM.globalv.nlocal; // number of total local orbitals
     const int nspin = PARAM.inp.nspin;   // number of spins
+    Plus_U::nspin = nspin;
 
     // mohan update 2025-11-06
     Plus_U::energy_u = 0.0;

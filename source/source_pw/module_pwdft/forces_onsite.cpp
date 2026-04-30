@@ -50,20 +50,11 @@ void Forces<FPTYPE, Device>::cal_force_onsite(ModuleBase::matrix& force_onsite,
             // calculate dbecp = <psi|\nabla beta> for all beta functions
             onsite_p->get_fs_tools()->cal_dbecp_f(ik, npm, ipol);
         }
-        // calculate the force_i = \sum_{n,k}f_{nk}\sum_I \sum_{lm,l'm'}D_{l,l'}^{I} becp * dbecp_i
-        // force for DFT+U
-        // nspin=2 VU pointer: split layout [all_up | all_dn]
-        // For spin-down k-points (ik >= nks/2), select the second half
         if(PARAM.inp.dft_plus_u)
         {
-            const std::complex<double>* vu_ptr = dftu.get_eff_pot_pw(0);
-            int vu_size = dftu.get_size_eff_pot_pw();
-            if(PARAM.inp.nspin == 2 && ik >= nks / 2)
-            {
-                const int half_size = vu_size / 2;
-                vu_ptr = vu_ptr + half_size;
-                vu_size = half_size;
-            }
+            const int isk_val = (PARAM.inp.nspin == 2 && ik >= nks / 2) ? 1 : 0;
+            const std::complex<double>* vu_ptr = dftu.get_eff_pot_pw_spin(isk_val);
+            const int vu_size = dftu.get_size_eff_pot_pw_spin();
             onsite_p->get_fs_tools()->cal_force_dftu(ik, npm, force, 
               dftu.orbital_corr.data(), vu_ptr, vu_size, wg.c);
         }

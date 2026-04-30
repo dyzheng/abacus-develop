@@ -269,40 +269,21 @@ void OnsiteProj<OperatorPW<T, Device>>::cal_ps_dftu(
         resmem_complex_op()(this->vu_device, dftu->get_size_eff_pot_pw());
     }
 
-    // For nspin=2, need to select spin-up or spin-down potential
-    if(PARAM.inp.nspin == 2 && this->isk[this->ik] == 1)
-    {
-        const int size_eff_pot_pw = dftu->get_size_eff_pot_pw() / 2;
-        syncmem_complex_h2d_op()(this->vu_device, 
-            dftu->get_eff_pot_pw(0) + size_eff_pot_pw, 
-            size_eff_pot_pw);
-        hamilt::onsite_ps_op<Real, Device>()(
-            this->ctx,   // device context
-            m, 
-            npol,
-            this->orb_l_iat,
-            this->ip_iat,
-            this->ip_m,
-            this->vu_begin_iat, 
-            tnp,  
-            this->vu_device,
-            this->ps, becp);
-    }
-    else
-    {
-        syncmem_complex_h2d_op()(this->vu_device, dftu->get_eff_pot_pw(0), dftu->get_size_eff_pot_pw());
-        hamilt::onsite_ps_op<Real, Device>()(
-            this->ctx,   // device context
-            m, 
-            npol,
-            this->orb_l_iat,
-            this->ip_iat,
-            this->ip_m,
-            this->vu_begin_iat, 
-            tnp,  
-            this->vu_device,
-            this->ps, becp);
-    }
+    const int isk_val = (PARAM.inp.nspin == 2) ? this->isk[this->ik] : 0;
+    const std::complex<double>* vu_host = dftu->get_eff_pot_pw_spin(isk_val);
+    const int vu_size = dftu->get_size_eff_pot_pw_spin();
+    syncmem_complex_h2d_op()(this->vu_device, vu_host, vu_size);
+    hamilt::onsite_ps_op<Real, Device>()(
+        this->ctx,
+        m,
+        npol,
+        this->orb_l_iat,
+        this->ip_iat,
+        this->ip_m,
+        this->vu_begin_iat,
+        tnp,
+        this->vu_device,
+        this->ps, becp);
 }
 
 template<>
