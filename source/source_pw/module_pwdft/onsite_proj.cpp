@@ -6,6 +6,9 @@
 #include <tuple>
 #include "source_pw/module_pwdft/onsite_proj.h"
 #include "source_pw/module_pwdft/onsite_proj_print.h"
+#include "source_lcao/module_dftu/dftu.h"
+#include "source_lcao/module_deltaspin/spin_constrain.h"
+#include "source_io/module_parameter/parameter.h"
 
 #include "source_base/projgen.h"
 #include "source_base/kernels/math_kernel_op.h"
@@ -584,6 +587,46 @@ void projectors::OnsiteProjector<T, Device>::cal_occupations(
     
     // print charge
     ModuleBase::timer::end("OnsiteProj", "cal_occupation");
+}
+
+template <typename T, typename Device>
+void projectors::OnsiteProjector<T, Device>::cal_force_onsite_dftu(int ik, int npm, T* force,
+                                                        const Plus_U& dftu, int nks,
+                                                        const double* wg_ik) const
+{
+    const int isk_val = (PARAM.inp.nspin == 2 && ik >= nks / 2) ? 1 : 0;
+    const std::complex<double>* vu_ptr = dftu.get_eff_pot_pw_spin(isk_val);
+    const int vu_size = dftu.get_size_eff_pot_pw_spin();
+    this->fs_tools->cal_force_dftu(ik, npm, force,
+        dftu.get_orbital_corr_data(), vu_ptr, vu_size, wg_ik);
+}
+
+template <typename T, typename Device>
+double projectors::OnsiteProjector<T, Device>::cal_stress_onsite_dftu(int ik, int npm,
+                                                           const Plus_U& dftu, int nks,
+                                                           const double* wg_ik) const
+{
+    const int isk_val = (PARAM.inp.nspin == 2 && ik >= nks / 2) ? 1 : 0;
+    const std::complex<double>* vu_ptr = dftu.get_eff_pot_pw_spin(isk_val);
+    const int vu_size = dftu.get_size_eff_pot_pw_spin();
+    return this->fs_tools->cal_stress_dftu(ik, npm,
+        dftu.get_orbital_corr_data(), vu_ptr, vu_size, wg_ik);
+}
+
+template <typename T, typename Device>
+void projectors::OnsiteProjector<T, Device>::cal_force_onsite_dspin(int ik, int npm, T* force,
+                                                         const ModuleBase::Vector3<double>* lambda,
+                                                         const double* wg_ik) const
+{
+    this->fs_tools->cal_force_dspin(ik, npm, force, lambda, wg_ik);
+}
+
+template <typename T, typename Device>
+double projectors::OnsiteProjector<T, Device>::cal_stress_onsite_dspin(int ik, int npm,
+                                                            const ModuleBase::Vector3<double>* lambda,
+                                                            const double* wg_ik) const
+{
+    return this->fs_tools->cal_stress_dspin(ik, npm, lambda, wg_ik);
 }
 
 template class projectors::OnsiteProjector<double, base_device::DEVICE_CPU>;

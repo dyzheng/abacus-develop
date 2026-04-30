@@ -7,6 +7,7 @@
 #include "source_pw/module_pwdft/radial_proj.h"
 #include "source_psi/psi.h"
 #include "source_pw/module_pwdft/onsite_proj_tools.h"
+#include "source_lcao/module_dftu/dftu.h"
 
 #include <string>
 #include <vector>
@@ -89,6 +90,26 @@ namespace projectors
         void invalidate_becp() { becp_ready_ = false; }
 
         hamilt::Onsite_Proj_tools<T, Device>* get_fs_tools() const { return fs_tools; }
+
+        /// high-level: compute DFT+U force contribution for one k-point
+        void cal_force_onsite_dftu(int ik, int npm, T* force,
+                                   const Plus_U& dftu, int nks,
+                                   const double* wg_ik) const;
+
+        /// high-level: compute DFT+U stress contribution for one k-point
+        double cal_stress_onsite_dftu(int ik, int npm,
+                                      const Plus_U& dftu, int nks,
+                                      const double* wg_ik) const;
+
+        /// high-level: compute DeltaSpin force contribution for one k-point
+        void cal_force_onsite_dspin(int ik, int npm, T* force,
+                                    const ModuleBase::Vector3<double>* lambda,
+                                    const double* wg_ik) const;
+
+        /// high-level: compute DeltaSpin stress contribution for one k-point
+        double cal_stress_onsite_dspin(int ik, int npm,
+                                       const ModuleBase::Vector3<double>* lambda,
+                                       const double* wg_ik) const;
 
         private:
         OnsiteProjector(){};
