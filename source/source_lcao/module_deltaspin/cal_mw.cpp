@@ -21,7 +21,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mi_lcao(const int& 
     this->zero_Mi();
     const hamilt::HContainer<double>* dmr = this->dm_->get_DMR_pointer(1);
     std::vector<double> moments;
-    if(PARAM.inp.nspin==2)
+    if(this->nspin_==2)
     {
         this->dm_->switch_dmr(2);
 
@@ -36,7 +36,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mi_lcao(const int& 
             this->Mi_[iat].z = moments[iat];
         }
     }
-    else if(PARAM.inp.nspin==4)
+    else if(this->nspin_==4)
     {
         moments = static_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, std::complex<double>>>*>(this->p_operator)->cal_moment(dmr, this->get_constrain());
         for(int iat=0;iat<this->Mi_.size();iat++)

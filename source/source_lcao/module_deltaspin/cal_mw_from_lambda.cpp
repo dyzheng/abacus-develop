@@ -290,19 +290,19 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mw_from_lambda(
         psi::Psi<std::complex<double>>* psi_t = static_cast<psi::Psi<std::complex<double>>*>(this->psi);
         hamilt::Hamilt<std::complex<double>>* hamilt_t = static_cast<hamilt::Hamilt<std::complex<double>>*>(this->p_hamilt);
         hsolver::HSolverLCAO<std::complex<double>> hsolver_t(this->ParaV, PARAM.inp.ks_solver);
-        if (PARAM.inp.nspin == 2)
+        if (this->nspin_ == 2)
         {
             dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double>>*>(this->p_operator)
                 ->update_lambda();
         }
-        else if (PARAM.inp.nspin == 4)
+        else if (this->nspin_ == 4)
         {
             dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, std::complex<double>>>*>(
                 this->p_operator)
                 ->update_lambda();
         }
         // diagonalization without update charge
-        hsolver_t.solve(hamilt_t, psi_t[0], this->pelec, *this->dm_, *this->pelec->charge, PARAM.inp.nspin, true);
+        hsolver_t.solve(hamilt_t, psi_t[0], this->pelec, *this->dm_, *this->pelec->charge, this->nspin_, true);
         elecstate::calculate_weights(this->pelec->ekb,
                                      this->pelec->wg,
                                      this->pelec->klist,
