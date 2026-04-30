@@ -181,6 +181,38 @@ void Plus_U::set_locale(const UnitCell& ucell)
     ModuleBase::timer::end("Plus_U", "set_locale");
 }
 
+void Plus_U::get_locale_flat(const int iat, const int l, std::vector<double>& occ) const
+{
+    const int tlp1 = 2 * l + 1;
+    const int size = tlp1 * tlp1;
+    if (nspin == 2)
+    {
+        for (int is = 0; is < 2; is++)
+        {
+            for (int i = 0; i < size; i++)
+            {
+                occ[is * size + i] = locale[iat][l][0][is].c[i];
+            }
+        }
+    }
+    else
+    {
+        for (int i = 0; i < static_cast<int>(occ.size()); i++)
+        {
+            occ[i] = locale[iat][l][0][0].c[i];
+        }
+    }
+}
+
+void Plus_U::set_locale_flat(const int iat, const int l, const int spin,
+                             const std::vector<double>& occ)
+{
+    for (int i = 0; i < static_cast<int>(occ.size()); i++)
+    {
+        locale[iat][l][0][spin].c[i] = occ[i];
+    }
+}
+
 #ifdef __LCAO
 
 void Plus_U::cal_occup_m_k(const int iter, 

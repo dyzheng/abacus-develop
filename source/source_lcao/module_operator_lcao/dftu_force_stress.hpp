@@ -139,22 +139,7 @@ void DFTU<OperatorLCAO<TK, TR>>::cal_force_stress(const bool cal_force,
         }
         // first iteration to calculate occupation matrix
         std::vector<double> occ(tlp1 * tlp1 * this->nspin, 0);
-        if(this->nspin ==2)
-        {
-            for (int i = 0; i < occ.size(); i++)
-            {
-                const int is = i / (tlp1 * tlp1);
-                const int ii = i % (tlp1 * tlp1);
-                occ[i] = this->dftu->locale[iat0][target_L][0][is].c[ii];
-            }
-        }
-        else
-        {
-            for (int i = 0; i < occ.size(); i++)
-            {
-                occ[i] = this->dftu->locale[iat0][target_L][0][0].c[i];
-            }
-        }
+        this->dftu->get_locale_flat(iat0, target_L, occ);
 
         // calculate VU
         const double u_value = this->dftu->U[T0];

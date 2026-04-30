@@ -249,20 +249,18 @@ void hamilt::DFTU<hamilt::OperatorLCAO<TK, TR>>::contributeHR()
             Parallel_Reduce::reduce_all(occ.data(), occ.size());
 #endif
             // save occ to dftu
-            for (int i = 0; i < occ.size(); i++)
+            if (this->nspin == 1)
             {
-				if (this->nspin == 1) 
-				{
-					occ[i] *= 0.5;
-				}
-                this->dftu->locale[iat0][target_L][0][this->current_spin].c[i] = occ[i];
+                for (auto& v : occ) { v *= 0.5; }
             }
+            this->dftu->set_locale_flat(iat0, target_L, this->current_spin, occ);
         }
         else // use readin locale to calculate occupation matrix
         {
-            for (int i = 0; i < occ.size(); i++)
+            for (int i = 0; i < static_cast<int>(occ.size()); i++)
             {
-                occ[i] = this->dftu->locale[iat0][target_L][0][this->current_spin].c[i];
+                occ[i] = this->dftu->get_locale(iat0, target_L, 0, this->current_spin,
+                                                  i / (2 * target_L + 1), i % (2 * target_L + 1));
             }
             // set initialed_locale to false to avoid using readin locale in next iteration
         }

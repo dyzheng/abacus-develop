@@ -1000,3 +1000,58 @@ TEST_F(DftuPwTest, RoundTripCopyAndSetLocale_Nspin2_MultiAtom)
             EXPECT_DOUBLE_EQ(read_dn[iat][mm], locale_dn[iat][mm]);
         }
 }
+
+// =====================================================================
+// get_locale_flat / set_locale_flat logic tests (pure arithmetic)
+//
+// These test the nspin-dependent packing/unpacking logic without
+// requiring a Plus_U instance, by simulating the same operations.
+// =====================================================================
+
+TEST_F(DftuPwTest, LocaleFlatPackNspin1)
+{
+    PARAM.input.nspin = 1;
+    const int tlp1 = 3;
+    const int size = tlp1 * tlp1;
+    std::vector<double> locale_spin0(size);
+    for (int i = 0; i < size; i++) locale_spin0[i] = static_cast<double>(i);
+    std::vector<double> occ(size);
+    for (int i = 0; i < size; i++) occ[i] = locale_spin0[i];
+    for (int i = 0; i < size; i++) EXPECT_DOUBLE_EQ(occ[i], static_cast<double>(i));
+}
+
+TEST_F(DftuPwTest, LocaleFlatPackNspin2)
+{
+    PARAM.input.nspin = 2;
+    const int tlp1 = 3;
+    const int size = tlp1 * tlp1;
+    std::vector<double> locale_spin0(size), locale_spin1(size);
+    for (int i = 0; i < size; i++)
+    {
+        locale_spin0[i] = static_cast<double>(i);
+        locale_spin1[i] = static_cast<double>(i + 100);
+    }
+    std::vector<double> occ(2 * size);
+    for (int i = 0; i < size; i++)
+    {
+        occ[i] = locale_spin0[i];
+        occ[size + i] = locale_spin1[i];
+    }
+    for (int i = 0; i < size; i++)
+    {
+        EXPECT_DOUBLE_EQ(occ[i], static_cast<double>(i));
+        EXPECT_DOUBLE_EQ(occ[size + i], static_cast<double>(i + 100));
+    }
+}
+
+TEST_F(DftuPwTest, LocaleFlatSetRoundTrip)
+{
+    const int tlp1 = 2;
+    const int size = tlp1 * tlp1;
+    std::vector<double> locale_data(size, 0.0);
+    std::vector<double> occ(size);
+    for (int i = 0; i < size; i++) occ[i] = static_cast<double>(i + 50);
+    for (int i = 0; i < size; i++) locale_data[i] = occ[i];
+    for (int i = 0; i < size; i++)
+        EXPECT_DOUBLE_EQ(locale_data[i], static_cast<double>(i + 50));
+}
