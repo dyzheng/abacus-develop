@@ -131,7 +131,7 @@ void module_charge::chgmixing_ks_pw(const int iter, // scf iteration number
         if (inp.dft_plus_u && inp.mixing_dftu)
         {
             // enable mixing_dftu for DFT+U occupation mixing
-            dftu.mixing_dftu = 1;
+            dftu.enable_mixing();
             // allocate memory for uom_mdata
             p_chgmix->allocate_mixing_uom(dftu.get_size_eff_pot_pw());
         }
@@ -194,7 +194,7 @@ void module_charge::chgmixing_ks_lcao(const int iter, // scf iteration number
         // enable mixing_dftu for DFT+U occupation mixing
         if (inp.dft_plus_u && inp.mixing_dftu)
         {
-            dftu.mixing_dftu = 1;
+            dftu.enable_mixing();
         }
         // this output will be removed once the feeature is stable
         if (dftu.uramping > 0.01)

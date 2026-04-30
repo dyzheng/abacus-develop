@@ -239,7 +239,7 @@ void Plus_U::init(UnitCell& cell, // unitcell class
         this->local_occup_bcast(cell);
 #endif
 
-        initialed_locale = true;
+        mark_locale_initialized();
         this->copy_locale(cell);
     }
     else
@@ -252,7 +252,7 @@ void Plus_U::init(UnitCell& cell, // unitcell class
 #ifdef __MPI
             this->local_occup_bcast(cell);
 #endif
-            initialed_locale = true;
+            mark_locale_initialized();
         }
         else
         {
@@ -271,7 +271,7 @@ void Plus_U::cal_energy_correction(const UnitCell& ucell,
 {
     ModuleBase::TITLE("Plus_U", "cal_energy_correction");
     ModuleBase::timer::start("Plus_U", "cal_energy_correction");
-    if (!initialed_locale)
+    if (!is_locale_initialized())
     {
         ModuleBase::timer::end("Plus_U", "cal_energy_correction");
         return;

@@ -201,6 +201,15 @@ class Plus_U
     // dftu can be calculated only after locale has been initialed
     bool initialed_locale = false;
 
+    // --- Accessors for initialed_locale ---
+    bool is_locale_initialized() const { return initialed_locale; }
+    void mark_locale_initialized() { initialed_locale = true; }
+    void mark_locale_dirty() { initialed_locale = false; }
+
+    // --- Accessors for mixing_dftu ---
+    static bool is_mixing_enabled() { return mixing_dftu != 0; }
+    static void enable_mixing() { mixing_dftu = 1; }
+
   private:
 
     void copy_locale(const UnitCell& ucell);

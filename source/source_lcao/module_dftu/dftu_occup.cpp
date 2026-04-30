@@ -461,12 +461,12 @@ void Plus_U::cal_occup_m_k(const int iter,
         } // end ia
     } // end it
 
-    if(mixing_dftu && initialed_locale)
+    if(is_mixing_enabled() && is_locale_initialized())
     {
         this->mix_locale(ucell,mixing_beta);
     }
 
-    this->initialed_locale = true;
+    mark_locale_initialized();
     ModuleBase::timer::end("Plus_U", "cal_occup_m_k");
     return;
 }
@@ -619,12 +619,12 @@ void Plus_U::cal_occup_m_gamma(const int iter,
         } // it
     } // is
 
-    if(mixing_dftu && initialed_locale)
+    if(is_mixing_enabled() && is_locale_initialized())
     {
         this->mix_locale(ucell,mixing_beta);
     }
 
-    this->initialed_locale = true;
+    mark_locale_initialized();
     ModuleBase::timer::end("Plus_U", "cal_occup_m_gamma");
     return;
 }

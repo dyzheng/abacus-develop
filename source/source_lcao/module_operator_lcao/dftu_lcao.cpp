@@ -177,7 +177,7 @@ template <typename TK, typename TR>
 void hamilt::DFTU<hamilt::OperatorLCAO<TK, TR>>::contributeHR()
 {
     ModuleBase::TITLE("DFTU", "contributeHR");
-    if (this->dftu->get_dmr(0) == nullptr && this->dftu->initialed_locale == false)
+    if (this->dftu->get_dmr(0) == nullptr && !this->dftu->is_locale_initialized())
     { // skip the calculation if dm_in_dftu is nullptr
         return;
     }
@@ -215,7 +215,7 @@ void hamilt::DFTU<hamilt::OperatorLCAO<TK, TR>>::contributeHR()
         // first iteration to calculate occupation matrix
         const int spin_fold = (this->nspin == 4) ? 4 : 1;
         std::vector<double> occ(tlp1 * tlp1 * spin_fold, 0.0);
-        if (this->dftu->initialed_locale == false)
+        if (!this->dftu->is_locale_initialized())
         {
             const hamilt::HContainer<double>* dmR_current = this->dftu->get_dmr(this->current_spin);
             for (int ad1 = 0; ad1 < adjs.adj_num + 1; ++ad1)
@@ -319,7 +319,7 @@ void hamilt::DFTU<hamilt::OperatorLCAO<TK, TR>>::contributeHR()
 	// for readin onsite_dm, set initialed_locale to false to avoid using readin locale in next iteration
 	if (this->current_spin == this->nspin - 1 || this->nspin == 4) 
 	{
-		this->dftu->initialed_locale = false;
+		this->dftu->mark_locale_dirty();
 	}
 
     // update this->current_spin: only nspin=2 iterate change it between 0 and 1

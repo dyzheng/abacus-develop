@@ -252,7 +252,7 @@ void Plus_U::cal_occ_pw(const int iter,
     }
 
     // mixing
-    if(mixing_dftu && p_chgmix != nullptr)
+    if(is_mixing_enabled() && p_chgmix != nullptr)
     {
         p_chgmix->mix_uom(this->uom_array, this->uom_save);
         this->set_locale(cell);
