@@ -39,6 +39,21 @@ void Plus_U::cal_occ_pw(const int iter,
             onsite_p->overlap_proj_psi(nbands*npol, psi_p->get_pointer());
             const std::complex<double>* becp = onsite_p->get_h_becp();
             int nkb = onsite_p->get_size_becp() / nbands / npol;
+
+#if DFTU_DEBUG
+            if(iter <= 3 && is == 1)
+            {
+                printf("[DFTU-BECP] iter=%d ik=%d is=1 nkb=%d nbands=%d\n", iter, ik, nkb, nbands);
+                printf("[DFTU-BECP]   wg(ik,0..4)=");
+                for(int ib=0;ib<5 && ib<nbands;ib++) printf(" %.8f", wg_in(ik,ib));
+                printf("\n");
+                printf("[DFTU-BECP]   becp(band0,0..9)=");
+                for(int i=0;i<10 && i<nkb;i++) printf(" (%.4f,%.4f)", becp[i].real(), becp[i].imag());
+                printf("\n");
+                fflush(stdout);
+            }
+#endif
+
             int begin_ih = 0;
             for(int iat = 0; iat < cell.nat; iat++)
             {
@@ -99,6 +114,27 @@ void Plus_U::cal_occ_pw(const int iter,
                 }
                 begin_ih += nh;
             }// iat
+
+#if DFTU_DEBUG
+            if(PARAM.inp.nspin == 2 && iter <= 3)
+            {
+                const int tl = this->orbital_corr[0];
+                if(tl == 2)
+                {
+                    const int m_size = 2 * tl + 1;
+                    printf("[DFTU-PERIK] iter=%d ik=%d is=%d after ik loop\n", iter, ik, is);
+                    printf("[DFTU-PERIK]   locale_up diag: ");
+                    for(int m = 0; m < m_size; m++)
+                        printf("%.8f ", this->locale[0][tl][0][0].c[m * m_size + m]);
+                    printf("\n[DFTU-PERIK]   locale_dn diag: ");
+                    for(int m = 0; m < m_size; m++)
+                        printf("%.8f ", this->locale[0][tl][0][1].c[m * m_size + m]);
+                    printf("\n");
+                    fflush(stdout);
+                }
+            }
+#endif
+
         }// ik
     }
 #if defined(__CUDA) || defined(__ROCM)

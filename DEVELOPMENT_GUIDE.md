@@ -628,17 +628,22 @@ class SubspaceDataManager {
 3. **问题在 locale 累加**: 爆炸发生在 k 点循环累加过程中，不在 MPI reduce
 4. **mix_uom nspin=2 分支缺失**: `charge_mixing.cpp:281-285` 中只处理 nspin=1/4，遗漏 nspin=2
 
+### becp 数值追踪 (2026-04-30 更新)
+
+**iter=2 ik=4 (spin-down)**: `becp[0] = (0.0026, 0.0009)` — 正常
+**iter=3 ik=4 (spin-down)**: `becp[0] = (495850104, 311362186)` — 垃圾值!
+**iter=3 ik=5 (spin-down)**: `becp[0] = (0.0000, -0.0025)` — 正常
+
+**结论**: spin-down k-point ik=4 的波函数在 iter=2→3 之间被破坏，而 ik=5 正常。
+这表明 HSolverPW::solve 在处理 nspin=2 时，部分 spin-down k 点的波函数被写入了错误数据。
+
+**内存崩溃**: 测试以 signal 6 (Aborted) 终止，"free(): invalid next size" — 进一步证实内存损坏。
+
 ### 待验证假设
 
-1. **Hypothesis A**: iter=2 的 HSolver 错误更新了 spin-down k 点的波函数
-2. **Hypothesis B**: becp 索引在 spin-down k 点有边界错误
-3. **Hypothesis C**: wg (权重) 在 iter=3 时对 spin-down k 点有异常值
-
-### 下一步调试
-
-1. 添加 becp 值 dump，对比 iter=2 和 iter=3 的 spin-down becp
-2. 检查 iter=2 的 HSolver 是否正确处理 nspin=2
-3. 修复 mix_uom nspin=2 分支
+1. **Hypothesis A**: HSolverPW::solve 对 nspin=2 的 spin-down k 点写入越界
+2. **Hypothesis B**: Psi 对象的 spin-down 部分内存布局与 solver 期望不一致
+3. **Hypothesis C**: 电荷混合 (chgmixing) 在 iter=2→3 时破坏了波函数
 
 ---
 
