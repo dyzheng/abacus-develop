@@ -831,7 +831,7 @@ void Onsite_Proj_tools<FPTYPE, Device>::cal_force_dftu(int ik,
         d_wg = const_cast<FPTYPE*>(h_wg);
     }
     const int force_nc = 3;
-    const int npol = PARAM.inp.nspin == 4 ? 2 : 1;
+    const int npol = this->ucell_->get_npol();
     cal_force_nl_op<FPTYPE, Device>()(this->ctx,
                                       npm,
                                       this->nbands,
@@ -888,7 +888,7 @@ void Onsite_Proj_tools<FPTYPE, Device>::cal_force_dspin(int ik,
         d_wg = const_cast<FPTYPE*>(h_wg);
     }
     const int force_nc = 3;
-    const int npol = PARAM.inp.nspin == 4 ? 2 : 1;
+    const int npol = this->ucell_->get_npol();
     cal_force_nl_op<FPTYPE, Device>()(this->ctx,
                                       npm,
                                       this->nbands,
@@ -924,7 +924,7 @@ double Onsite_Proj_tools<FPTYPE, Device>::cal_stress_dftu(int ik,
                                                           const FPTYPE* h_wg)
 {
     double stress_out = 0.0;
-    const int npol = PARAM.inp.nspin == 4 ? 2 : 1;
+    const int npol = this->ucell_->get_npol();
     
     int* orb_corr_tmp = nullptr;
     std::complex<FPTYPE>* vu_tmp = nullptr;
@@ -1004,7 +1004,7 @@ double Onsite_Proj_tools<FPTYPE, Device>::cal_stress_dspin(int ik,
                                                            const FPTYPE* h_wg)
 {
     double stress_out = 0.0;
-    const int npol = PARAM.inp.nspin == 4 ? 2 : 1;
+    const int npol = this->ucell_->get_npol();
     
     std::vector<FPTYPE> lambda_array(this->ucell_->nat * 3);
     for (int iat = 0; iat < this->ucell_->nat; iat++)
