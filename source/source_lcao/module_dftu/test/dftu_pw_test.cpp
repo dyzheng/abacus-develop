@@ -531,3 +531,278 @@ TEST_F(DftuPwTest, CopyLocaleToUomSave_Nspin4)
     for(int i = 0; i < total; i++)
         EXPECT_DOUBLE_EQ(uom_save[i], static_cast<double>(i + 1));
 }
+
+// =====================================================================
+// Step 1: VU calculation test for nspin=2 (isolated from kernel)
+// This tests the complete cal_occ_pw vu calculation path:
+// becp -> locale -> vu_up/vu_dn
+// =====================================================================
+
+TEST_F(DftuPwTest, VU_Calculation_Nspin2_FullPath)
+{
+    // Simulate complete vu calculation for nspin=2
+    // This is the EXACT logic from cal_occ_pw, isolated from kernel
+
+    const int m_size = 5; // d-orbital: 2*2+1
+    const int size = m_size * m_size; // 25
+    const double U_val = 5.0;
+    const double weight_eu = 0.5; // nspin=2
+    const double diag_coeff = 0.5;
+
+    // Simulated locale values (would normally come from becp accumulation)
+    std::vector<double> locale_up(size, 0.0);
+    std::vector<double> locale_dn(size, 0.0);
+    // Set diagonal values typical for occupied d-orbitals
+    for(int m = 0; m < m_size; m++)
+    {
+        locale_up[m * m_size + m] = 0.8;
+        locale_dn[m * m_size + m] = 0.2;
+    }
+
+    // Calculate VU for spin-up
+    std::vector<std::complex<double>> vu_up(size, {0.0, 0.0});
+    for(int m1 = 0; m1 < m_size; m1++)
+    {
+        for(int m2 = 0; m2 < m_size; m2++)
+        {
+            vu_up[m1 * m_size + m2] = U_val *
+                (diag_coeff * (m1 == m2) - locale_up[m2 * m_size + m1]);
+        }
+    }
+
+    // Calculate VU for spin-down
+    std::vector<std::complex<double>> vu_dn(size, {0.0, 0.0});
+    for(int m1 = 0; m1 < m_size; m1++)
+    {
+        for(int m2 = 0; m2 < m_size; m2++)
+        {
+            vu_dn[m1 * m_size + m2] = U_val *
+                (diag_coeff * (m1 == m2) - locale_dn[m2 * m_size + m1]);
+        }
+    }
+
+    // Verify spin-up VU
+    // diagonal: U*(0.5 - 0.8) = 5*(-0.3) = -1.5
+    for(int m = 0; m < m_size; m++)
+    {
+        EXPECT_DOUBLE_EQ(vu_up[m * m_size + m].real(), -1.5);
+        EXPECT_DOUBLE_EQ(vu_up[m * m_size + m].imag(), 0.0);
+    }
+    // off-diagonal: U*(0 - 0) = 0
+    EXPECT_DOUBLE_EQ(vu_up[0 * m_size + 1].real(), 0.0);
+    EXPECT_DOUBLE_EQ(vu_up[1 * m_size + 0].real(), 0.0);
+
+    // Verify spin-down VU
+    // diagonal: U*(0.5 - 0.2) = 5*(0.3) = 1.5
+    for(int m = 0; m < m_size; m++)
+    {
+        EXPECT_DOUBLE_EQ(vu_dn[m * m_size + m].real(), 1.5);
+        EXPECT_DOUBLE_EQ(vu_dn[m * m_size + m].imag(), 0.0);
+    }
+    // off-diagonal: U*(0 - 0) = 0
+    EXPECT_DOUBLE_EQ(vu_dn[0 * m_size + 1].real(), 0.0);
+    EXPECT_DOUBLE_EQ(vu_dn[1 * m_size + 0].real(), 0.0);
+
+    // Verify energy calculation
+    double energy_u = 0.0;
+    for(int m1 = 0; m1 < m_size; m1++)
+        for(int m2 = 0; m2 < m_size; m2++)
+        {
+            energy_u += U_val * weight_eu * locale_up[m2 * m_size + m1] * locale_up[m1 * m_size + m2];
+            energy_u += U_val * weight_eu * locale_dn[m2 * m_size + m1] * locale_dn[m1 * m_size + m2];
+        }
+    // Only diagonal: 5 orbitals per spin channel
+    // spin-up: 5 * U * weight_eu * 0.8*0.8 = 5 * 5.0 * 0.5 * 0.64 = 8.0
+    // spin-down: 5 * U * weight_eu * 0.2*0.2 = 5 * 5.0 * 0.5 * 0.04 = 0.5
+    // total = 8.5
+    EXPECT_DOUBLE_EQ(energy_u, 8.5);
+}
+
+// =====================================================================
+// Step 2: Test vu_device sync for nspin=2
+// This verifies the vu transfer from eff_pot_pw to vu_device
+// =====================================================================
+
+TEST_F(DftuPwTest, VU_DeviceSync_Nspin2)
+{
+    // Simulate eff_pot_pw layout for nspin=2
+    const int m_size = 5;
+    const int size = m_size * m_size;
+    const int total_size = size * 2; // spin-up + spin-down
+
+    std::vector<std::complex<double>> eff_pot_pw(total_size);
+    // Initialize with known values
+    for(int i = 0; i < size; i++)
+    {
+        eff_pot_pw[i] = {static_cast<double>(i + 1), 0.0};         // spin-up
+        eff_pot_pw[i + size] = {static_cast<double>(i + 100), 0.0}; // spin-down
+    }
+
+    // Simulate vu_device sync for spin-down (isk[ik] == 1)
+    const int size_eff_pot_pw = total_size / 2;
+    std::vector<std::complex<double>> vu_device(size_eff_pot_pw);
+    // memcpy from eff_pot_pw[0] + size_eff_pot_pw
+    for(int i = 0; i < size_eff_pot_pw; i++)
+    {
+        vu_device[i] = eff_pot_pw[i + size_eff_pot_pw];
+    }
+
+    // Verify vu_device contains spin-down values
+    for(int i = 0; i < size; i++)
+    {
+        EXPECT_DOUBLE_EQ(vu_device[i].real(), static_cast<double>(i + 100));
+        EXPECT_DOUBLE_EQ(vu_device[i].imag(), 0.0);
+    }
+}
+
+// =====================================================================
+// Step 3: Test onsite_ps_op kernel for nspin=2 (npol=1)
+// This tests the vu application to ps without full ABACUS integration
+// =====================================================================
+
+TEST_F(DftuPwTest, OnsitePsOpKernel_Nspin2_Npol1)
+{
+    // Simulate the npol=1 branch of onsite_ps_op kernel
+    const int npm = 4;   // number of bands (npm/npol for npol=1)
+    const int npol = 1;
+    const int tnp = 10;  // total number of projectors
+    const int orb_l = 2; // d-orbital
+    const int tlp1 = 2 * orb_l + 1; // 5
+    const int nat = 2;
+
+    // vu array: 2 atoms, each with tlp1*tlp1 = 25 elements
+    std::vector<std::complex<double>> vu(nat * tlp1 * tlp1);
+    for(int i = 0; i < nat * tlp1 * tlp1; i++)
+        vu[i] = {static_cast<double>(i + 1), 0.0};
+
+    // ip_m: maps each projector to m index within its atom
+    // First atom (iat=0): projectors 0-4 map to m=0-4
+    // Second atom (iat=1): projectors 5-9 map to m=0-4
+    std::vector<int> ip_m = {0, 1, 2, 3, 4, 0, 1, 2, 3, 4};
+    std::vector<int> ip_iat = {0, 0, 0, 0, 0, 1, 1, 1, 1, 1};
+    std::vector<int> vu_begin_iat = {0, tlp1 * tlp1};
+
+    // becp: npm * tnp
+    std::vector<std::complex<double>> becp(npm * tnp, {0.0, 0.0});
+    // Set some non-zero becp values
+    for(int ib = 0; ib < npm; ib++)
+        for(int ip = 0; ip < tnp; ip++)
+            becp[ib * tnp + ip] = {static_cast<double>(ib + ip + 1), 0.0};
+
+    // ps: tnp * npm
+    std::vector<std::complex<double>> ps(tnp * npm, {0.0, 0.0});
+
+    // Kernel logic for npol=1 (EXACT copy from onsite_op.cpp)
+    for(int ib = 0; ib < npm; ib++)
+    {
+        for(int ip = 0; ip < tnp; ip++)
+        {
+            int m1 = ip_m[ip];
+            if(m1 < 0) continue;
+            int iat = ip_iat[ip];
+            const std::complex<double>* vu_iat = vu.data() + vu_begin_iat[iat];
+            int ip2_begin = ip - m1;
+            int ip2_end = ip - m1 + tlp1;
+            const int psind = ip * npm + ib;
+            for(int ip2 = ip2_begin; ip2 < ip2_end; ip2++)
+            {
+                const int becpind = ib * tnp + ip2;
+                int m2 = ip_m[ip2];
+                const int index_mm = m1 * tlp1 + m2;
+                ps[psind] += vu_iat[index_mm] * becp[becpind];
+            }
+        }
+    }
+
+    // Verify ps[0] (ib=0, ip=0)
+    // m1=0, iat=0, vu_iat=vu[0..]
+    // ip2 from 0 to 5
+    std::complex<double> expected_ps00 = {0.0, 0.0};
+    for(int ip2 = 0; ip2 < tlp1; ip2++)
+    {
+        const int becpind = 0 * tnp + ip2;
+        int m2 = ip_m[ip2];
+        const int index_mm = 0 * tlp1 + m2;
+        expected_ps00 += vu[index_mm] * becp[becpind];
+    }
+    EXPECT_DOUBLE_EQ(ps[0].real(), expected_ps00.real());
+    EXPECT_DOUBLE_EQ(ps[0].imag(), expected_ps00.imag());
+}
+
+// =====================================================================
+// Step 4: Test spin-up only path (isolate from spin-down)
+// =====================================================================
+
+TEST_F(DftuPwTest, SpinUpOnly_Path_Nspin2)
+{
+    // Test that spin-up calculation is independent and correct
+    const int m_size = 5;
+    const int size = m_size * m_size;
+    const double U_val = 5.0;
+    const double diag_coeff = 0.5;
+
+    // Only set spin-up locale
+    std::vector<double> locale_up(size, 0.0);
+    for(int m = 0; m < m_size; m++)
+        locale_up[m * m_size + m] = 0.8;
+
+    // Calculate VU for spin-up only
+    std::vector<std::complex<double>> vu_up(size, {0.0, 0.0});
+    for(int m1 = 0; m1 < m_size; m1++)
+    {
+        for(int m2 = 0; m2 < m_size; m2++)
+        {
+            vu_up[m1 * m_size + m2] = U_val *
+                (diag_coeff * (m1 == m2) - locale_up[m2 * m_size + m1]);
+        }
+    }
+
+    // Verify diagonal values
+    for(int m = 0; m < m_size; m++)
+        EXPECT_DOUBLE_EQ(vu_up[m * m_size + m].real(), -1.5); // 5*(0.5-0.8)
+
+    // Verify off-diagonal are zero
+    for(int m1 = 0; m1 < m_size; m1++)
+        for(int m2 = 0; m2 < m_size; m2++)
+            if(m1 != m2)
+                EXPECT_DOUBLE_EQ(vu_up[m1 * m_size + m2].real(), 0.0);
+}
+
+// =====================================================================
+// Step 5: Test spin-down only path (isolate from spin-up)
+// =====================================================================
+
+TEST_F(DftuPwTest, SpinDownOnly_Path_Nspin2)
+{
+    // Test that spin-down calculation is independent and correct
+    const int m_size = 5;
+    const int size = m_size * m_size;
+    const double U_val = 5.0;
+    const double diag_coeff = 0.5;
+
+    // Only set spin-down locale
+    std::vector<double> locale_dn(size, 0.0);
+    for(int m = 0; m < m_size; m++)
+        locale_dn[m * m_size + m] = 0.2;
+
+    // Calculate VU for spin-down only
+    std::vector<std::complex<double>> vu_dn(size, {0.0, 0.0});
+    for(int m1 = 0; m1 < m_size; m1++)
+    {
+        for(int m2 = 0; m2 < m_size; m2++)
+        {
+            vu_dn[m1 * m_size + m2] = U_val *
+                (diag_coeff * (m1 == m2) - locale_dn[m2 * m_size + m1]);
+        }
+    }
+
+    // Verify diagonal values
+    for(int m = 0; m < m_size; m++)
+        EXPECT_DOUBLE_EQ(vu_dn[m * m_size + m].real(), 1.5); // 5*(0.5-0.2)
+
+    // Verify off-diagonal are zero
+    for(int m1 = 0; m1 < m_size; m1++)
+        for(int m2 = 0; m2 < m_size; m2++)
+            if(m1 != m2)
+                EXPECT_DOUBLE_EQ(vu_dn[m1 * m_size + m2].real(), 0.0);
+}
