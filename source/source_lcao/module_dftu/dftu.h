@@ -171,7 +171,8 @@ class Plus_U
     }
 
     /// get effective potential matrix for PW base (per-atom, raw index)
-    /// Prefer get_eff_pot_pw_spin() for nspin-aware access.
+    /// @deprecated Use get_eff_pot_pw_spin() for nspin-aware access.
+    [[deprecated("Use get_eff_pot_pw_spin() for nspin-aware access")]]
     const std::complex<double>* get_eff_pot_pw(const int iat) const
     {
         return &(eff_pot_pw[this->eff_pot_pw_index[iat]]);
