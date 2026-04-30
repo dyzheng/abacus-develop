@@ -314,6 +314,14 @@ public:
     int get_iwt(int itype, int iat, int orbital_index) const;
     /// get spin sign for k-point ik: +1 for spin-up, -1 for spin-down
     int get_spin_sign(int ik) const;
+    /// accumulate Mi from becp for a single k-point
+    void accumulate_Mi_from_becp(const std::complex<double>* becp,
+                                 int nkb,
+                                 int nbands,
+                                 int npol,
+                                 int ik,
+                                 const double* wg_ik,
+                                 const int* nh_iat);
   private:
     /// operator for spin-constrained DFT, used for calculating current atomic magnetic moment
     hamilt::Operator<TK>* p_operator = nullptr;

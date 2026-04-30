@@ -93,6 +93,61 @@ int SpinConstrain<TK>::get_spin_sign(int ik) const
 }
 
 template <typename TK>
+void SpinConstrain<TK>::accumulate_Mi_from_becp(const std::complex<double>* becp,
+                                                  int nkb,
+                                                  int nbands,
+                                                  int npol,
+                                                  int ik,
+                                                  const double* wg_ik,
+                                                  const int* nh_iat)
+{
+    if (npol == 2)
+    {
+        for (int ib = 0; ib < nbands; ib++)
+        {
+            const double weight = wg_ik[ib];
+            int begin_ih = 0;
+            for (int iat = 0; iat < static_cast<int>(this->Mi_.size()); iat++)
+            {
+                std::complex<double> occ[4] = {ModuleBase::ZERO, ModuleBase::ZERO, ModuleBase::ZERO, ModuleBase::ZERO};
+                const int nh = nh_iat[iat];
+                for (int ih = 0; ih < nh; ih++)
+                {
+                    const int index = ib * 2 * nkb + begin_ih + ih;
+                    occ[0] += conj(becp[index]) * becp[index];
+                    occ[1] += conj(becp[index]) * becp[index + nkb];
+                    occ[2] += conj(becp[index + nkb]) * becp[index];
+                    occ[3] += conj(becp[index + nkb]) * becp[index + nkb];
+                }
+                this->Mi_[iat] += pauli_to_moment(occ, weight);
+                begin_ih += nh;
+            }
+        }
+    }
+    else // npol == 1
+    {
+        const int sign = this->get_spin_sign(ik);
+        for (int ib = 0; ib < nbands; ib++)
+        {
+            const double weight = wg_ik[ib];
+            int begin_ih = 0;
+            for (int iat = 0; iat < static_cast<int>(this->Mi_.size()); iat++)
+            {
+                double occ = 0.0;
+                const int nh = nh_iat[iat];
+                for (int ih = 0; ih < nh; ih++)
+                {
+                    const int index = ib * nkb + begin_ih + ih;
+                    occ += (conj(becp[index]) * becp[index]).real();
+                }
+                this->Mi_[iat].z += weight * occ * sign;
+                begin_ih += nh;
+            }
+        }
+    }
+}
+
+template <typename TK>
 int SpinConstrain<TK>::get_nw() const
 {
     int nw = 0;

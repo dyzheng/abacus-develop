@@ -449,58 +449,11 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mw_from_lambda(
                                          this->pelec->nelec_spin,
                                          this->pelec->skip_weights);
             // calculate Mi from existed becp
-            if (this->npol_ == 2)
             for (int ik = 0; ik < nk; ik++)
             {
                 const std::complex<double>* becp = &becp_tmp[ik * size_becp];
-                // becp(nbands*npol , nkb)
-                // mag = wg * \sum_{nh}becp * becp
-                for (int ib = 0; ib < nbands; ib++)
-                {
-                    const double weight = this->pelec->wg(ik, ib);
-                    int begin_ih = 0;
-                    for (int iat = 0; iat < this->Mi_.size(); iat++)
-                    {
-                        const int nh = nh_iat[iat];
-                        std::complex<double> occ[4]
-                            = {ModuleBase::ZERO, ModuleBase::ZERO, ModuleBase::ZERO, ModuleBase::ZERO};
-                        for (int ih = 0; ih < nh; ih++)
-                        {
-                            const int index = ib * npol * nkb + begin_ih + ih;
-                            occ[0] += conj(becp[index]) * becp[index];
-                            occ[1] += conj(becp[index]) * becp[index + nkb];
-                            occ[2] += conj(becp[index + nkb]) * becp[index];
-                            occ[3] += conj(becp[index + nkb]) * becp[index + nkb];
-                        }
-                        this->Mi_[iat] += pauli_to_moment(occ, weight);
-                        begin_ih += nh;
-                    }
-                }
-            }
-            else if (this->npol_ == 1)
-            {
-                for (int ik = 0; ik < nk; ik++)
-                {
-                    const int sign = this->get_spin_sign(ik);
-                    const std::complex<double>* becp = &becp_tmp[ik * size_becp];
-                    for (int ib = 0; ib < nbands; ib++)
-                    {
-                        const double weight = this->pelec->wg(ik, ib);
-                        int begin_ih = 0;
-                        for (int iat = 0; iat < this->Mi_.size(); iat++)
-                        {
-                            const int nh = nh_iat[iat];
-                            double occ = 0.0;
-                            for (int ih = 0; ih < nh; ih++)
-                            {
-                                const int index = ib * nkb + begin_ih + ih;
-                                occ += (conj(becp[index]) * becp[index]).real();
-                            }
-                            this->Mi_[iat].z += weight * occ * sign;
-                            begin_ih += nh;
-                        }
-                    }
-                }
+                this->accumulate_Mi_from_becp(becp, nkb, nbands, this->npol_, ik,
+                    &this->pelec->wg(ik, 0), nh_iat);
             }
             Parallel_Reduce::reduce_double_allpool(PARAM.inp.kpar,
                                                    PARAM.globalv.nproc_in_pool,
