@@ -227,7 +227,7 @@ void OnsiteProj<OperatorPW<T, Device>>::cal_ps_dftu(
         for(int iat=0;iat<this->ucell->nat;iat++)
         {
             const int it = this->ucell->iat2it[iat];
-            const int target_l = this->dftu->orbital_corr[it];
+            const int target_l = this->dftu->get_orbital_corr(it);
             orb_l_iat0[iat] = target_l;
             const int nproj = onsite_p->get_nh(iat);
             if(target_l == -1)

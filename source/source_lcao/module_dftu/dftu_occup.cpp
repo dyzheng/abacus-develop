@@ -19,7 +19,7 @@ void Plus_U::copy_locale(const UnitCell& ucell)
 
     for (int T = 0; T < ucell.ntype; T++)
     {
-        int target_l = orbital_corr[T];
+        int target_l = get_orbital_corr(T);
         if (target_l == -1)
             continue;
 
@@ -68,7 +68,7 @@ void Plus_U::zero_locale(const UnitCell& ucell)
 
     for (int T = 0; T < ucell.ntype; T++)
     {
-		if (orbital_corr[T] == -1) 
+		if (!has_correlated_orbital(T)) 
 		{ 
 			continue;
 		}
@@ -109,7 +109,7 @@ void Plus_U::mix_locale(const UnitCell& ucell,
 
     for (int T = 0; T < ucell.ntype; T++)
     {
-		if (orbital_corr[T] == -1) 
+		if (!has_correlated_orbital(T))
 		{
 			continue;
 		}
@@ -153,8 +153,8 @@ void Plus_U::set_locale(const UnitCell& ucell)
 
     for (int T = 0; T < ucell.ntype; T++)
     {
-        if (orbital_corr[T] == -1) continue;
-        const int l = orbital_corr[T];
+        if (!has_correlated_orbital(T)) continue;
+        const int l = get_orbital_corr(T);
         for (int I = 0; I < ucell.atoms[T].na; I++)
         {
             const int iat = ucell.itia2iat(T, I);
@@ -300,7 +300,7 @@ void Plus_U::cal_occup_m_k(const int iter,
         for (int it = 0; it < ucell.ntype; it++)
         {
             const int NL = ucell.atoms[it].nwl + 1;
-            const int LC = orbital_corr[it];
+            const int LC = get_orbital_corr(it);
 
 			if (LC == -1) 
 			{
@@ -313,7 +313,7 @@ void Plus_U::cal_occup_m_k(const int iter,
 
                 for (int l = 0; l < NL; l++)
                 {
-					if (l != orbital_corr[it]) 
+					if (l != get_orbital_corr(it)) 
 					{
 						continue;
 					}
@@ -374,7 +374,7 @@ void Plus_U::cal_occup_m_k(const int iter,
     for (int it = 0; it < ucell.ntype; it++)
     {
         const int NL = ucell.atoms[it].nwl + 1;
-        const int LC = orbital_corr[it];
+        const int LC = get_orbital_corr(it);
 
 		if (LC == -1) 
 		{
@@ -387,7 +387,7 @@ void Plus_U::cal_occup_m_k(const int iter,
 
             for (int l = 0; l < NL; l++)
             {
-				if (l != orbital_corr[it]) 
+				if (l != get_orbital_corr(it)) 
 				{
 					continue;
 				}
@@ -520,7 +520,7 @@ void Plus_U::cal_occup_m_gamma(const int iter,
         for (int it = 0; it < ucell.ntype; it++)
         {
             const int NL = ucell.atoms[it].nwl + 1;
-			if (orbital_corr[it] == -1) 
+			if (!has_correlated_orbital(it)) 
 			{
 				continue;
 			}
@@ -530,7 +530,7 @@ void Plus_U::cal_occup_m_gamma(const int iter,
 
                 for (int l = 0; l < NL; l++)
                 {
-					if (l != orbital_corr[it]) 
+					if (l != get_orbital_corr(it)) 
 					{
 						continue;
 					}

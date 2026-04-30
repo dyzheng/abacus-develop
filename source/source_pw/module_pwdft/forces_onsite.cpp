@@ -56,7 +56,7 @@ void Forces<FPTYPE, Device>::cal_force_onsite(ModuleBase::matrix& force_onsite,
             const std::complex<double>* vu_ptr = dftu.get_eff_pot_pw_spin(isk_val);
             const int vu_size = dftu.get_size_eff_pot_pw_spin();
             onsite_p->get_fs_tools()->cal_force_dftu(ik, npm, force, 
-              dftu.orbital_corr.data(), vu_ptr, vu_size, wg.c);
+              dftu.get_orbital_corr_data(), vu_ptr, vu_size, wg.c);
         }
         if(PARAM.inp.sc_mag_switch)
         {

@@ -106,7 +106,7 @@ void Stress_Func<FPTYPE, Device>::stress_onsite(
                     double dftu_stress = fs_tools->cal_stress_dftu(
                         ik,
                         num_occupied_bands,
-                        dftu.orbital_corr.data(),
+                        dftu.get_orbital_corr_data(),
                         vu_ptr,
                         vu_size,
                         wg.c

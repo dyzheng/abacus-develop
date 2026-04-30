@@ -91,7 +91,7 @@ void Plus_U::init(UnitCell& cell, // unitcell class
     // it:index of type of atom
     for (int it = 0; it < cell.ntype; ++it)
     {
-        if(this->orbital_corr[it] == -1)
+        if(!has_correlated_orbital(it))
         {
             continue;
         }
@@ -104,8 +104,8 @@ void Plus_U::init(UnitCell& cell, // unitcell class
             locale[iat].resize(cell.atoms[it].nwl + 1);
             locale_save[iat].resize(cell.atoms[it].nwl + 1);
 
-            const int tlp1_npol = (this->orbital_corr[it]*2+1)*npol;
-            const int tlp1 = 2 * this->orbital_corr[it] + 1;
+            const int tlp1_npol = (get_orbital_corr(it)*2+1)*npol;
+            const int tlp1 = 2 * get_orbital_corr(it) + 1;
             const int elem_size = tlp1 * tlp1;
     // eff_pot_pw_index: per-atom offset into eff_pot_pw (and uom_array)
     //
@@ -285,7 +285,7 @@ void Plus_U::cal_energy_correction(const UnitCell& ucell,
     for (int T = 0; T < ucell.ntype; T++)
     {
         const int NL = ucell.atoms[T].nwl + 1;
-        const int LC = orbital_corr[T];
+        const int LC = get_orbital_corr(T);
         for (int I = 0; I < ucell.atoms[T].na; I++)
         {
             if (LC == -1)
@@ -294,11 +294,11 @@ void Plus_U::cal_energy_correction(const UnitCell& ucell,
             }
 
             const int iat = ucell.itia2iat(T, I);
-            const int L = orbital_corr[T];
+            const int L = get_orbital_corr(T);
 
             for (int l = 0; l < NL; l++)
             {
-                if (l != orbital_corr[T])
+                if (l != get_orbital_corr(T))
                 {
                     continue;
                 }

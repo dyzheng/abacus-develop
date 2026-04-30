@@ -49,7 +49,7 @@ void DFTU<OperatorLCAO<TK, TR>>::cal_force_stress(const bool cal_force,
         int T0=0;
         int I0=0;
         ucell->iat2iait(iat0, &I0, &T0);
-        if(this->dftu->orbital_corr[T0] == -1)
+        if(!this->dftu->has_correlated_orbital(T0))
         {
             continue;
         }
@@ -71,11 +71,11 @@ void DFTU<OperatorLCAO<TK, TR>>::cal_force_stress(const bool cal_force,
         int T0=0;
         int I0=0;
         ucell->iat2iait(iat0, &I0, &T0);
-        const int target_L = this->dftu->orbital_corr[T0];
-		if (target_L == -1) 
-		{
-			continue;
-		}
+        if (!this->dftu->has_correlated_orbital(T0))
+        {
+            continue;
+        }
+        const int target_L = this->dftu->get_orbital_corr(T0);
         const int tlp1 = 2 * target_L + 1;
         AdjacentAtomInfo& adjs = this->adjs_all[atom_index_all[iat0]];
 

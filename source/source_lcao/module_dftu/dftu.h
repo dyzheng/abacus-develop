@@ -64,6 +64,26 @@ class Plus_U
     static int mixing_dftu; //whether to mix locale
     static int nspin;       // spin channel count (1, 2, or 4), set during init
 
+    // --- Accessors for static data (prefer these over direct member access) ---
+
+    /// get Hubbard U for atom type it
+    static double get_hubbard_u(int it) { return U[it]; }
+
+    /// get target Hubbard U0 for atom type it
+    static double get_hubbard_u0(int it) { return U0[it]; }
+
+    /// number of atom types with Hubbard U parameters
+    static int get_num_u_types() { return static_cast<int>(U.size()); }
+
+    /// get correlated orbital angular momentum for atom type it (-1 = none)
+    static int get_orbital_corr(int it) { return orbital_corr[it]; }
+
+    /// whether atom type it has a correlated orbital
+    static bool has_correlated_orbital(int it) { return orbital_corr[it] != -1; }
+
+    /// raw data pointer to orbital_corr (for kernel interfaces)
+    static const int* get_orbital_corr_data() { return orbital_corr.data(); }
+
   private:
 
     // mohan change the variable to static, 20251106

@@ -58,8 +58,8 @@ void Plus_U::cal_occ_pw(const int iter,
             {
                 const int it = cell.iat2it[iat];
                 const int nh = onsite_p->get_nh(iat);
-                const int target_l = this->orbital_corr[it];
-                if(target_l == -1)
+                const int target_l = get_orbital_corr(it);
+                if(!has_correlated_orbital(it))
                 {
                     begin_ih += nh;
                     continue;
@@ -141,8 +141,8 @@ void Plus_U::cal_occ_pw(const int iter,
             {
                 const int it = cell.iat2it[iat];
                 const int nh = onsite_p->get_nh(iat);
-                const int target_l = this->orbital_corr[it];
-                if(target_l == -1)
+                const int target_l = get_orbital_corr(it);
+                if(!has_correlated_orbital(it))
                 {
                     begin_ih += nh;
                     continue;
@@ -204,8 +204,8 @@ void Plus_U::cal_occ_pw(const int iter,
     for(int iat = 0; iat < cell.nat; iat++)
     {
         const int it = cell.iat2it[iat];
-        const int target_l = this->orbital_corr[it];
-        if(target_l == -1)
+        const int target_l = get_orbital_corr(it);
+        if(!has_correlated_orbital(it))
         {
             continue;
         }
@@ -265,8 +265,8 @@ void Plus_U::cal_occ_pw(const int iter,
     for(int iat = 0; iat < cell.nat; iat++)
     {
         const int it = cell.iat2it[iat];
-        const int target_l = this->orbital_corr[it];
-        if(target_l == -1)
+        const int target_l = get_orbital_corr(it);
+        if(!has_correlated_orbital(it))
         {
             continue;
         }

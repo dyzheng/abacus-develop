@@ -165,9 +165,9 @@ void module_charge::chgmixing_ks_pw(const int iter, // scf iteration number
 				{
 					dftu.uramping_update(); // update U by uramping if uramping > 0.01
 					std::cout << " U-Ramping! Current U = ";
-					for (int i = 0; i < dftu.U0.size(); i++)
+					for (int i = 0; i < dftu.get_num_u_types(); i++)
 					{
-						std::cout << dftu.U[i] * ModuleBase::Ry_to_eV << " ";
+						std::cout << dftu.get_hubbard_u(i) * ModuleBase::Ry_to_eV << " ";
 					}
 					std::cout << " eV " << std::endl;
 				}
@@ -200,9 +200,9 @@ void module_charge::chgmixing_ks_lcao(const int iter, // scf iteration number
         if (dftu.uramping > 0.01)
         {
             std::cout << " U-Ramping! Current U = ";
-            for (int i = 0; i < dftu.U0.size(); i++)
+            for (int i = 0; i < dftu.get_num_u_types(); i++)
             {
-                std::cout << dftu.U[i] * ModuleBase::Ry_to_eV << " ";
+                std::cout << dftu.get_hubbard_u(i) * ModuleBase::Ry_to_eV << " ";
             }
             std::cout << " eV " << std::endl;
         }
@@ -219,9 +219,9 @@ void module_charge::chgmixing_ks_lcao(const int iter, // scf iteration number
             if (dftu.uramping > 0.01)
             {
                 std::cout << " U-Ramping! Current U = ";
-                for (int i = 0; i < dftu.U0.size(); i++)
+                for (int i = 0; i < dftu.get_num_u_types(); i++)
                 {
-                    std::cout << dftu.U[i] * ModuleBase::Ry_to_eV << " ";
+                    std::cout << dftu.get_hubbard_u(i) * ModuleBase::Ry_to_eV << " ";
                 }
                 std::cout << " eV " << std::endl;
             }
