@@ -103,8 +103,25 @@ void Plus_U::init(UnitCell& cell, // unitcell class
             locale_save[iat].resize(cell.atoms[it].nwl + 1);
 
             const int tlp1_npol = (this->orbital_corr[it]*2+1)*npol;
-            this->eff_pot_pw_index[iat] = pot_index;
-            pot_index += tlp1_npol * tlp1_npol;
+            const int tlp1 = 2 * this->orbital_corr[it] + 1;
+            const int elem_size = tlp1 * tlp1;
+            if(nspin == 2)
+            {
+                this->eff_pot_pw_index[iat] = pot_index;
+                pot_index += elem_size * 2;
+            }
+            else if(nspin == 4)
+            {
+                // nspin=4: layout is [iat0_pauli(4 blocks)][iat1_pauli(4 blocks)]...
+                // pot_index already accumulates tlp1_npol^2 = (tlp1*2)^2 = 4*tlp1^2
+                this->eff_pot_pw_index[iat] = pot_index;
+                pot_index += tlp1_npol * tlp1_npol;
+            }
+            else
+            {
+                this->eff_pot_pw_index[iat] = pot_index;
+                pot_index += tlp1_npol * tlp1_npol;
+            }
 
             for (int l = 0; l <= cell.atoms[it].nwl; l++)
             {
@@ -170,8 +187,8 @@ void Plus_U::init(UnitCell& cell, // unitcell class
         }
     }
     // allocate memory for eff_pot_pw
-    if (PARAM.inp.nspin == 2) pot_index *= 2; // for spin polarized case, we need to double the size
-    else if (PARAM.inp.nspin == 4) pot_index *= 4; // for noncollinear case, need 4x size for interleaved spinors
+    // Note: nspin=2 sizing is already handled in the loop above
+    if (PARAM.inp.nspin == 4) pot_index *= 4; // for noncollinear case, need 4x size for interleaved spinors
 
     this->eff_pot_pw.resize(pot_index, 0.0);
     this->uom_array.resize(pot_index, 0.0);

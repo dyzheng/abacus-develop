@@ -156,7 +156,7 @@ void Plus_U::set_locale(const UnitCell& ucell)
                 for(int mm = 0; mm < locale[iat][l][0][0].nr * locale[iat][l][0][0].nc; mm++)
                 {
                     locale[iat][l][0][0].c[mm] = this->uom_array[eff_pot_pw_index[iat] + mm];
-                    locale[iat][l][0][1].c[mm] = this->uom_array[this->uom_array.size()/2 + eff_pot_pw_index[iat] + mm];
+                    locale[iat][l][0][1].c[mm] = this->uom_array[eff_pot_pw_index[iat] + mm + locale[iat][l][0][0].nr * locale[iat][l][0][0].nc];
                 }
             }
         }
