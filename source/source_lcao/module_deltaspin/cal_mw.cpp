@@ -97,9 +97,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mi_pw()
                         occ[3] += conj(becp[index + nkb]) * becp[index + nkb];
                     }
                     // occ has been reduced and calculate mag
-                    this->Mi_[iat].z += weight * (occ[0] - occ[3]).real();
-                    this->Mi_[iat].x += weight * (occ[1] + occ[2]).real();
-                    this->Mi_[iat].y += weight * (occ[1] - occ[2]).imag();
+                    this->Mi_[iat] += pauli_to_moment(occ, weight);
                     begin_ih += nh;
                 }
             }
@@ -166,9 +164,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mi_pw()
                         occ[3] += conj(becp[index + nkb]) * becp[index + nkb];
                     }
                     // occ has been reduced and calculate mag
-                    this->Mi_[iat].z += weight * (occ[0] - occ[3]).real();
-                    this->Mi_[iat].x += weight * (occ[1] + occ[2]).real();
-                    this->Mi_[iat].y += weight * (occ[1] - occ[2]).imag();
+                    this->Mi_[iat] += pauli_to_moment(occ, weight);
                     begin_ih += nh;
                 }
             }

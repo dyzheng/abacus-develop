@@ -1,6 +1,7 @@
 #ifndef SPIN_CONSTRAIN_H
 #define SPIN_CONSTRAIN_H
 
+#include <complex>
 #include <map>
 #include <vector>
 
@@ -20,6 +21,24 @@
 
 namespace spinconstrain
 {
+
+/**
+ * @brief Extract magnetic moment from nspin=4 occupation matrix elements.
+ *
+ * Given occ[4] = {|a|^2, a* b, b* a, |b|^2} (spinor density matrix),
+ * the magnetic moment components are:
+ *   Mz = occ[0] - occ[3]  (sigma_z)
+ *   Mx = occ[1] + occ[2]  (sigma_x)
+ *   My = Im(occ[1] - occ[2])  (sigma_y)
+ */
+inline ModuleBase::Vector3<double> pauli_to_moment(const std::complex<double> occ[4], double weight)
+{
+    return ModuleBase::Vector3<double>(
+        weight * (occ[1] + occ[2]).real(),
+        weight * (occ[1] - occ[2]).imag(),
+        weight * (occ[0] - occ[3]).real()
+    );
+}
 
 struct ScAtomData;
 
