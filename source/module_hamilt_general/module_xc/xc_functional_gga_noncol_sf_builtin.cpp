@@ -231,6 +231,105 @@ void gradcorr_ncgga_sf_builtin(const Charge* const chr, ModulePW::PW_Basis* rhop
                                 const UnitCell* ucell, std::vector<double>& stress_gga)
 {
     stress_gga.assign(9, 0.0);
+
+    const int nrxx = rhopw->nrxx;
+    const int npw = rhopw->npw;
+    const double e2 = ModuleBase::e2;
+    constexpr double epsr = 1.0e-6;
+    constexpr double small = 1.0e-10;
+    const double fac = 0.5;
+
+    std::vector<double> rhotmp1(nrxx), rhotmp2(nrxx), amag_arr(nrxx);
+    std::vector<double> mag_part(3 * nrxx, 0.0);
+
+    for (int ir = 0; ir < nrxx; ++ir)
+    {
+        const double mx = chr->rho[1][ir], my = chr->rho[2][ir], mz = chr->rho[3][ir];
+        double amag = std::sqrt(mx*mx + my*my + mz*mz);
+        amag_arr[ir] = amag;
+        rhotmp1[ir] = 0.5 * (chr->rho[0][ir] + amag);
+        rhotmp2[ir] = 0.5 * (chr->rho[0][ir] - amag);
+        if (amag > 1e-12)
+        {
+            mag_part[ir] = mx / amag;
+            mag_part[ir + nrxx] = my / amag;
+            mag_part[ir + 2*nrxx] = mz / amag;
+        }
+    }
+    for (int ir = 0; ir < nrxx; ++ir)
+    {
+        rhotmp1[ir] += fac * chr->rho_core[ir];
+        rhotmp2[ir] += fac * chr->rho_core[ir];
+    }
+
+    std::vector<std::complex<double>> rhogsum1(npw), tmp_recip(npw);
+    rhopw->real2recip(chr->rho[0], rhogsum1.data());
+    for (int ig = 0; ig < npw; ++ig)
+        rhogsum1[ig] += chr->rhog_core[ig];
+
+    std::vector<ModuleBase::Vector3<double>> gdr1(nrxx), gdr2(nrxx);
+    std::vector<ModuleBase::Vector3<double>> gdr_mag(nrxx);
+    XC_Functional::grad_rho(rhogsum1.data(), gdr1.data(), rhopw, ucell->tpiba);
+
+    for (int ir = 0; ir < nrxx; ++ir)
+    {
+        gdr_mag[ir] = gdr1[ir];
+        gdr1[ir] = 0.5 * gdr_mag[ir];
+        gdr2[ir] = 0.5 * gdr_mag[ir];
+    }
+    for (int is = 1; is <= 3; ++is)
+    {
+        rhopw->real2recip(chr->rho[is], tmp_recip.data());
+        XC_Functional::grad_rho(tmp_recip.data(), gdr_mag.data(), rhopw, ucell->tpiba);
+        const double* mp = mag_part.data() + (is-1)*nrxx;
+        for (int ir = 0; ir < nrxx; ++ir)
+        {
+            const ModuleBase::Vector3<double> g = 0.5 * gdr_mag[ir] * mp[ir];
+            gdr1[ir] += g;
+            gdr2[ir] -= g;
+        }
+    }
+
+    for (int ir = 0; ir < nrxx; ++ir)
+    {
+        double sx = 0, v1xup = 0, v1xdw = 0, v2xup = 0, v2xdw = 0;
+        double sc = 0, v1cup = 0, v1cdw = 0, v2c = 0;
+        double v2cup = 0, v2cdw = 0, v2cud = 0;
+        const double grho2a = gdr1[ir] * gdr1[ir];
+        const double grho2b = gdr2[ir] * gdr2[ir];
+        const double rh = rhotmp1[ir] + rhotmp2[ir];
+
+        XC_Functional::gcx_spin(rhotmp1[ir], rhotmp2[ir], grho2a, grho2b,
+                                sx, v1xup, v1xdw, v2xup, v2xdw);
+
+        if (rh > epsr)
+        {
+            double zeta = (rhotmp1[ir] - rhotmp2[ir]) / rh;
+            zeta = std::fabs(zeta);
+            if (zeta > 1.0 - epsr) zeta = 1.0 - epsr;
+            const double grh2 = (gdr1[ir] + gdr2[ir]) * (gdr1[ir] + gdr2[ir]);
+            if (std::sqrt(std::abs(grh2)) > small)
+            {
+                XC_Functional::gcc_spin(rh, zeta, grh2, sc, v1cup, v1cdw, v2c);
+            }
+            v2cup = v2c;
+            v2cdw = v2c;
+            v2cud = v2c;
+        }
+
+        double tt1[3] = {gdr1[ir].x, gdr1[ir].y, gdr1[ir].z};
+        double tt2[3] = {gdr2[ir].x, gdr2[ir].y, gdr2[ir].z};
+        for (int l = 0; l < 3; l++)
+        {
+            for (int m = 0; m < l + 1; m++)
+            {
+                int ind = l * 3 + m;
+                stress_gga[ind] += e2 * (tt1[l]*tt1[m]*v2xup + tt2[l]*tt2[m]*v2xdw);
+                stress_gga[ind] += e2 * (tt1[l]*tt1[m]*v2cup + tt2[l]*tt2[m]*v2cdw
+                                         + (tt1[l]*tt2[m] + tt2[l]*tt1[m])*v2cud);
+            }
+        }
+    }
 }
 
 } // namespace NCGGA_SF_Builtin
