@@ -8,6 +8,7 @@
 #include "module_base/parallel_reduce.h"
 #include "module_base/timer.h"
 #include "module_parameter/parameter.h"
+#include "xc_functional_gga_noncol_sf_builtin.h"
 #include <unistd.h>
 
 // [etxc, vtxc, v] = XC_Functional::v_xc(...)
@@ -26,6 +27,12 @@ std::tuple<double,double,ModuleBase::matrix> XC_Functional::v_xc(
 #else
         ModuleBase::WARNING_QUIT("v_xc","compile with LIBXC");
 #endif
+    }
+
+    // gga_grad=3: Scalmani-Frisch noncollinear GGA via built-in PBE
+    if (GlobalV::NSPIN == 4 && (GlobalV::DOMAG || GlobalV::DOMAG_Z) && PARAM.inp.gga_grad == 3)
+    {
+        return ModuleXC::NCGGA_SF_Builtin::v_xc_ncgga_sf_builtin(nrxx, ucell->omega, ucell->tpiba, chr);
     }
 
     //Exchange-Correlation potential Vxc(r) from n(r)

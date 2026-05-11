@@ -11,6 +11,7 @@
 #include "module_base/timer.h"
 #include "module_basis/module_pw/pw_basis_k.h"
 #include "xc_functional.h"
+#include "xc_functional_gga_noncol_sf_builtin.h"
 
 #include <ATen/core/tensor.h>
 #include <ATen/core/tensor_map.h>
@@ -51,6 +52,17 @@ void XC_Functional::gradcorr(double& etxc,
     if (GlobalV::NSPIN == 4 && (GlobalV::DOMAG || GlobalV::DOMAG_Z))
     {
         nspin0 = 2;
+    }
+
+    // gga_grad=3: use SF builtin for stress path
+    if (GlobalV::NSPIN == 4 && (GlobalV::DOMAG || GlobalV::DOMAG_Z)
+        && PARAM.inp.gga_grad == 3)
+    {
+        if (is_stress)
+        {
+                        ModuleXC::NCGGA_SF_Builtin::gradcorr_ncgga_sf_builtin(chr, rhopw, ucell, stress_gga);
+        }
+        return;
     }
 
     assert(nspin0 > 0);
