@@ -24,6 +24,9 @@ class Gint_vl : public Gint
     template<typename Real>
     void cal_gint_impl_();
 
+    template<typename Real>
+    HContainer<Real> init_hr_gint_() const;
+
     // input
     const double* vr_eff_ = nullptr;
 

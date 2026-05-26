@@ -1,6 +1,5 @@
 add_subdirectory(module_symmetry)
 add_subdirectory(module_neighbor)
-add_subdirectory(module_neighlist)
 
 add_library(
     cell

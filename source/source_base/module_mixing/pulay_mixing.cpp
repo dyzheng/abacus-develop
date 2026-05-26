@@ -1,6 +1,7 @@
 #include "pulay_mixing.h"
 
 #include "source_base/module_external/lapack_connector.h"
+#include "source_base/memory_recorder.h"
 #include "source_base/timer.h"
 #include "source_base/tool_title.h"
 namespace Base_Mixing

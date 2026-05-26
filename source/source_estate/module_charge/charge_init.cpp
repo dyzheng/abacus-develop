@@ -1,5 +1,4 @@
 #include <vector>
-#include <algorithm>
 
 #include "charge.h"
 #include "source_base/global_function.h"
@@ -8,6 +7,7 @@
 #include "source_base/libm/libm.h"
 #include "source_base/math_integral.h"
 #include "source_base/math_sphbes.h"
+#include "source_base/memory_recorder.h"
 #include "source_base/parallel_reduce.h"
 #include "source_base/timer.h"
 #include "source_base/tool_threading.h"
@@ -32,9 +32,7 @@ void Charge::init_rho(const UnitCell& ucell,
     const int nspin = PARAM.inp.nspin;
     assert(nspin>0);
 
-    std::string init_chg_upper = PARAM.inp.init_chg;
-    std::transform(init_chg_upper.begin(), init_chg_upper.end(), init_chg_upper.begin(), ::toupper);
-    std::cout << " START CHARGE         : " << init_chg_upper << std::endl;
+    std::cout << " START CHARGE         : " << PARAM.inp.init_chg << std::endl;
 
     // we need to set the omega for the charge density
     set_omega(&ucell.omega);

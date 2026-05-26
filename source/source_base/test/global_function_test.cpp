@@ -1,5 +1,8 @@
 #include "../global_function.h"
 #include "../global_variable.h"
+#define private public
+#include "source_io/module_parameter/parameter.h"
+#undef private
 #include "../vector3.h"
 #include "../tool_quit.h"
 #include <string>
@@ -57,7 +60,7 @@
  *   - print out warning info in running.log file
  * - COPYARRAY
  *   - copy complex or double arrays
- * - IS_COLUMN_MAJOR_KS_SOLVER(ks_solver)
+ * - IS_COLUMN_MAJOR_KS_SOLVER(PARAM.input.ks_solver)
  *   - judge whether the KS_SOLVER is column major
  * - VECTOR_TO_PTR
  *   - get a copy of the ptr of a vector
@@ -659,7 +662,8 @@ TEST_F(GlobalFunctionTest, COPYARRAY)
 
 TEST_F(GlobalFunctionTest,IsColumnMajor)
 {
-	EXPECT_TRUE(ModuleBase::GlobalFunc::IS_COLUMN_MAJOR_KS_SOLVER("genelpa"));
+	PARAM.input.ks_solver = "genelpa";
+	EXPECT_TRUE(ModuleBase::GlobalFunc::IS_COLUMN_MAJOR_KS_SOLVER(PARAM.input.ks_solver));
 }
 
 TEST_F(GlobalFunctionTest,Vector2Ptr)

@@ -4,8 +4,6 @@
 #include "pot_base.h"
 #include "source_io/module_parameter/parameter.h"
 
-#include <vector>
-
 namespace elecstate
 {
 
@@ -122,7 +120,7 @@ class H_TDDFT_pw : public PotBase
     static bool is_initialized; // static flag variable, used to ensure initialization only once
 
     static double amp;
-    static std::vector<double> global_vext_time;
+    static vector<double> global_vext_time;
 
     const UnitCell* ucell_ = nullptr;
 

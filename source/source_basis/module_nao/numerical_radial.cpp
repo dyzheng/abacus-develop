@@ -11,6 +11,7 @@
 #include "source_base/global_variable.h"
 #include "source_base/math_integral.h"
 #include "source_base/spherical_bessel_transformer.h"
+#include "source_io/module_parameter/parameter.h"
 
 using ModuleBase::PI;
 
@@ -153,11 +154,7 @@ void NumericalRadial::build(const int l,
     set_icut(for_r_space, !for_r_space);
 }
 
-void NumericalRadial::to_numerical_orbital_lm(Numerical_Orbital_Lm& orbital_lm,
-                                              const int nk_legacy,
-                                              const double lcao_dk,
-                                              const bool out_element_info,
-                                              const bool cal_force) const
+void NumericalRadial::to_numerical_orbital_lm(Numerical_Orbital_Lm& orbital_lm, const int nk_legacy, const double lcao_dk) const
 {
 #ifdef __DEBUG
     assert(rgrid_);
@@ -174,7 +171,7 @@ void NumericalRadial::to_numerical_orbital_lm(Numerical_Orbital_Lm& orbital_lm,
 
     orbital_lm.set_orbital_info(symbol_, itype_, l_, izeta_, std::min(nr_, ircut_+1), rab, rgrid_,
             Numerical_Orbital_Lm::Psi_Type::Psi, rvalue_, nk_legacy, lcao_dk,
-            0.001 /* dr_uniform */, out_element_info, true, cal_force);
+            0.001 /* dr_uniform */, PARAM.inp.out_element_info, true, PARAM.inp.cal_force);
     delete[] rab;
 }
 

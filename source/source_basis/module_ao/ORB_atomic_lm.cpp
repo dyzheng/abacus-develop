@@ -1,7 +1,6 @@
 #include "ORB_atomic_lm.h"
 #include "source_base/sph_bessel_recursive.h"
-#include "source_base/global_variable.h"
-#include "source_base/tool_quit.h"
+#include "source_io/module_parameter/parameter.h"
 #include "source_base/module_external/blas_connector.h"
 #include "source_base/timer.h"
 #include "source_base/math_integral.h"
@@ -384,7 +383,7 @@ void Numerical_Orbital_Lm::use_uniform(const double &dr_uniform_in)
 	if(GlobalV::MY_RANK==0)
 	{
 		std::stringstream ss;
-		ss << ModuleBase::get_global_out_dir() << this->label << "/"
+		ss << PARAM.globalv.global_out_dir << this->label << "/"
 			<< this->label << "-" << orbital_type << ".ORBITAL_NOR_uniform.txt";
 
 		std::ofstream ofs(ss.str().c_str());
@@ -723,16 +722,16 @@ void Numerical_Orbital_Lm::plot(void)const
 	if(GlobalV::MY_RANK==0)
 	{
 		std::stringstream ssr, ssk, ssru ,ssdru; // 2013-08-10 pengfei
-		ssr << ModuleBase::get_global_out_dir() << this->label << "/"
+		ssr << PARAM.globalv.global_out_dir << this->label << "/"
 			<< this->label << "-"<< orbital_type << index_chi+1 << "-orbital-r.dat";
 
-		ssk << ModuleBase::get_global_out_dir() << this->label << "/"
+		ssk << PARAM.globalv.global_out_dir << this->label << "/"
 			<< this->label << "-" << orbital_type << index_chi+1 << "-orbital-k.dat";
 
-		ssru << ModuleBase::get_global_out_dir() << this->label << "/"
+		ssru << PARAM.globalv.global_out_dir << this->label << "/"
 			<< this->label << "-" << orbital_type << index_chi+1 << "-orbital-ru.dat";
 
-		ssdru << ModuleBase::get_global_out_dir() << this->label << "/"  // 2013-08-10 pengfei
+		ssdru << PARAM.globalv.global_out_dir << this->label << "/"  // 2013-08-10 pengfei
 			<< this->label << "-" << orbital_type << index_chi+1 << "-orbital-dru.dat";
 
 		std::ofstream ofsr(ssr.str().c_str());
