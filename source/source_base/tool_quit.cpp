@@ -10,7 +10,7 @@
 #include "source_io/module_parameter/parameter.h"
 #include "global_file.h"
 #include "timer.h"
-#include "memory.h"
+#include "memory_recorder.h"
 #endif
 
 namespace ModuleBase

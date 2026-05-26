@@ -10,7 +10,7 @@
 // USE FILE timer.h
 // ONLY :  output time after quit.
 //==========================================================
-#include "memory.h"
+#include "memory_recorder.h"
 #include "timer.h"
 
 #include <fstream>
