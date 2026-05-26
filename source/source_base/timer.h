@@ -64,15 +64,6 @@ class timer
     }
 
     /**
-     * @brief Toggle NVTX range emission for CUDA profiling.
-     * Caller-injected; only consulted when built with __CUDA && __USE_NVTX.
-     */
-    static void set_nvtx_enabled(bool b)
-    {
-        enable_nvtx_ = b;
-    }
-
-    /**
      * @brief Disable time computation
      *
      */
@@ -109,11 +100,6 @@ class timer
      *
      */
     static bool disabled;
-
-    /**
-     * @brief Member variable: NVTX range emission toggle (CUDA profiling only).
-     */
-    static bool enable_nvtx_;
 
     /**
      * @brief Member variable: the index of clocks

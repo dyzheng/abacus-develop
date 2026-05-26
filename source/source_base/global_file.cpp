@@ -14,6 +14,7 @@
 #include <cerrno>
 #include <sstream>
 #include "global_function.h"
+#include "source_io/module_parameter/parameter.h"
 #include "global_variable.h"
 #include "source_base/parallel_common.h"
 #include "source_base/parallel_reduce.h"
@@ -30,16 +31,7 @@ void ModuleBase::Global_File::make_dir_out(
     const bool &out_wfc_dir,
     const int rank,
     const bool &restart,
-    const bool out_alllog,
-    const std::string &global_out_dir,
-    const std::string &global_stru_dir,
-    const std::string &global_matrix_dir,
-    const std::string &global_wfc_dir,
-    const std::string &global_mlkedf_descriptor_dir,
-    const std::string &global_deepks_label_elec_dir,
-    const std::string &log_file,
-    const bool of_ml_gene_data,
-    const bool deepks_out_freq_elec)
+    const bool out_alllog)
 {
 //----------------------------------------------------------
 // USE STL FUNCTION
@@ -51,16 +43,17 @@ void ModuleBase::Global_File::make_dir_out(
 #endif
     int make_dir = 0;
 	// mohan update 2011-05-03
+    //std::string command0 =  "test -d " + PARAM.globalv.global_out_dir + " || mkdir " + PARAM.globalv.global_out_dir;
 
 	int times = 0;
 	while(times<GlobalV::NPROC)
 	{
 		if(rank==times)
 		{
-            int ret = mkdir(global_out_dir.c_str(), 0755);
+            int ret = mkdir(PARAM.globalv.global_out_dir.c_str(), 0755);
 			if ( ret == 0 || errno == EEXIST )
 			{
-				std::cout << " MAKE THE DIR         : " << global_out_dir << std::endl;
+				std::cout << " MAKE THE DIR         : " << PARAM.globalv.global_out_dir << std::endl;
 				make_dir = 1;
 			}
 			else
@@ -89,16 +82,17 @@ void ModuleBase::Global_File::make_dir_out(
     if(calculation == "md")
     {
         int make_dir_stru = 0;
+        //std::string command1 =  "test -d " + PARAM.globalv.global_stru_dir + " || mkdir " + PARAM.globalv.global_stru_dir;
 
         times = 0;
         while(times<GlobalV::NPROC)
         {
             if(rank==times)
             {
-                int ret = mkdir(global_stru_dir.c_str(), 0755);
+                int ret = mkdir(PARAM.globalv.global_stru_dir.c_str(), 0755);
                 if ( ret == 0 || errno == EEXIST )
                 {
-                    std::cout << " MAKE THE STRU DIR    : " << global_stru_dir << std::endl;
+                    std::cout << " MAKE THE STRU DIR    : " << PARAM.globalv.global_stru_dir << std::endl;
                     make_dir_stru = 1;
                 }
                 else
@@ -129,16 +123,17 @@ void ModuleBase::Global_File::make_dir_out(
     if((out_dir) && calculation == "md")
     {
         int make_dir_matrix = 0;
+        //std::string command1 =  "test -d " + PARAM.globalv.global_matrix_dir + " || mkdir " + PARAM.globalv.global_matrix_dir;
 
         times = 0;
         while(times<GlobalV::NPROC)
         {
             if(rank==times)
             {
-                int ret = mkdir(global_matrix_dir.c_str(), 0755);
+                int ret = mkdir(PARAM.globalv.global_matrix_dir.c_str(), 0755);
                 if ( ret == 0 || errno == EEXIST )
                 {
-                    std::cout << " MAKE THE MATRIX DIR    : " << global_matrix_dir << std::endl;
+                    std::cout << " MAKE THE MATRIX DIR    : " << PARAM.globalv.global_matrix_dir << std::endl;
                     make_dir_matrix = 1;
                 }
                 else
@@ -168,16 +163,17 @@ void ModuleBase::Global_File::make_dir_out(
     if(out_wfc_dir)
     {
         int make_dir_wfc = 0;
+        //std::string command1 =  "test -d " + PARAM.globalv.global_wfc_dir + " || mkdir " + PARAM.globalv.global_wfc_dir;
 
         times = 0;
         while(times<GlobalV::NPROC)
         {
             if(rank==times)
             {
-                int ret = mkdir(global_wfc_dir.c_str(), 0755);
+                int ret = mkdir(PARAM.globalv.global_wfc_dir.c_str(), 0755);
                 if ( ret == 0 || errno == EEXIST )
                 {
-                    std::cout << " MAKE THE WFC DIR    : " << global_wfc_dir << std::endl;
+                    std::cout << " MAKE THE WFC DIR    : " << PARAM.globalv.global_wfc_dir << std::endl;
                     make_dir_wfc = 1;
                 }
                 else
@@ -204,19 +200,20 @@ void ModuleBase::Global_File::make_dir_out(
 #endif
     }
 
-    if(of_ml_gene_data)
+    if(PARAM.inp.of_ml_gene_data == 1)
     {
         int make_dir_descrip = 0;
+        //std::string command1 =  "test -d " + PARAM.globalv.global_mlkedf_descriptor_dir + " || mkdir " + PARAM.globalv.global_mlkedf_descriptor_dir;
 
         times = 0;
         while(times<GlobalV::NPROC)
         {
             if(rank==times)
             {
-                int ret = mkdir(global_mlkedf_descriptor_dir.c_str(), 0755);
+                int ret = mkdir(PARAM.globalv.global_mlkedf_descriptor_dir.c_str(), 0755);
                 if ( ret == 0 || errno == EEXIST )
                 {
-                    std::cout << " MAKE THE MLKEDF DESCRIPTOR DIR    : " << global_mlkedf_descriptor_dir << std::endl;
+                    std::cout << " MAKE THE MLKEDF DESCRIPTOR DIR    : " << PARAM.globalv.global_mlkedf_descriptor_dir << std::endl;
                     make_dir_descrip = 1;
                 }
                 else
@@ -229,7 +226,7 @@ void ModuleBase::Global_File::make_dir_out(
             Parallel_Reduce::reduce_all(make_dir_descrip);
 #endif
             if(make_dir_descrip > 0)
-            {
+            { 
                 break;
             }
             ++times;
@@ -245,19 +242,20 @@ void ModuleBase::Global_File::make_dir_out(
 #endif
     }
 
-    if(deepks_out_freq_elec)
+    if(PARAM.inp.deepks_out_freq_elec > 0)
     {
         int make_dir_deepks_elec = 0;
+        //std::string command1 =  "test -d " + PARAM.globalv.global_deepks_label_elec_dir + " || mkdir " + PARAM.globalv.global_deepks_label_elec_dir;
 
         times = 0;
         while(times<GlobalV::NPROC)
         {
             if(rank==times)
             {
-                int ret = mkdir(global_deepks_label_elec_dir.c_str(), 0755);
+                int ret = mkdir(PARAM.globalv.global_deepks_label_elec_dir.c_str(), 0755);
                 if ( ret == 0 || errno == EEXIST )
                 {
-                    std::cout << " MAKE THE DEEPKS LABELS (ELEC) DIR    : " << global_deepks_label_elec_dir << std::endl;
+                    std::cout << " MAKE THE DEEPKS LABELS (ELEC) DIR    : " << PARAM.globalv.global_deepks_label_elec_dir << std::endl;
                     make_dir_deepks_elec = 1;
                 }
                 else
@@ -270,7 +268,7 @@ void ModuleBase::Global_File::make_dir_out(
             Parallel_Reduce::reduce_all(make_dir_deepks_elec);
 #endif
             if(make_dir_deepks_elec > 0)
-            {
+            { 
                 break;
             }
             ++times;
@@ -289,53 +287,53 @@ void ModuleBase::Global_File::make_dir_out(
     // mohan add 2010-09-12
     if(out_alllog)
     {
-	    open_log(GlobalV::ofs_running, log_file, calculation, restart, global_out_dir);
+	    open_log(GlobalV::ofs_running, PARAM.globalv.log_file, calculation, restart);
         #if defined(__CUDA) || defined(__ROCM)
-        open_log(GlobalV::ofs_device, "device" + std::to_string(rank) + ".log", calculation, restart, global_out_dir);
+        open_log(GlobalV::ofs_device, "device" + std::to_string(rank) + ".log", calculation, restart);
         #endif
     }
     else
     {
 	    if(rank==0)
 	    {
-		    open_log(GlobalV::ofs_running, log_file, calculation, restart, global_out_dir);
+		    open_log(GlobalV::ofs_running, PARAM.globalv.log_file, calculation, restart);
             #if defined(__CUDA) || defined(__ROCM)
-            open_log(GlobalV::ofs_device, "device.log", calculation, restart, global_out_dir);
+            open_log(GlobalV::ofs_device, "device.log", calculation, restart);
             #endif
 	    }
     }
 
     if(rank==0)
     {
-        open_log(GlobalV::ofs_warning, "warning.log", calculation, restart, global_out_dir);
+        open_log(GlobalV::ofs_warning, "warning.log", calculation, restart);
     }
 
 #ifdef GATHER_INFO
-    open_log(GlobalV::ofs_info, "math_info_" + std::to_string(rank) + ".log", calculation, restart, global_out_dir);
+    open_log(GlobalV::ofs_info, "math_info_" + std::to_string(rank) + ".log", calculation, restart);
 #endif
 
     return;
 }
 
-void ModuleBase::Global_File::make_dir_atom(const std::string &label, const std::string &global_out_dir)
+void ModuleBase::Global_File::make_dir_atom(const std::string &label)
 {
 //----------------------------------------------------------
 // EXPLAIN : generate atom dir for each type of atom
 //----------------------------------------------------------
     std::stringstream ss;
-    ss << global_out_dir << label << "/";
+    ss << PARAM.globalv.global_out_dir << label << "/";
     ModuleBase::GlobalFunc::MAKE_DIR(ss.str());
     return;
 }
 
-void ModuleBase::Global_File::open_log(std::ofstream &ofs, const std::string &fn, const std::string &calculation, const bool &restart, const std::string &global_out_dir)
+void ModuleBase::Global_File::open_log(std::ofstream &ofs, const std::string &fn, const std::string &calculation, const bool &restart)
 {
 //----------------------------------------------------------
 // USE GLOBAL VARIABLE :
-// global_out_dir : (default dir to store "*.log" file)
+// PARAM.globalv.global_out_dir : (default dir to store "*.log" file)
 //----------------------------------------------------------
     std::stringstream ss;
-    ss << global_out_dir << fn;
+    ss << PARAM.globalv.global_out_dir << fn;
 
     if(calculation == "md" && restart)
     {

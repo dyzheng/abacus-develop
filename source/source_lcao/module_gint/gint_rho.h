@@ -28,12 +28,16 @@ class Gint_rho : public Gint
     template<typename Real>
     std::vector<HContainer<Real>> init_dm_gint_() const;
 
-    // rho is always accumulated in double (see phi_dot_phi). When Real=float,
-    // only phi and phi_dm are fp32; the per-meshgrid reduction is fp64.
+    template<typename Real>
+    Real* get_rho_data_(int is, std::vector<std::vector<Real>>& rho_cache) const;
+
     template<typename Real>
     void cal_rho_(
         const std::vector<HContainer<Real>>& dm_gint_vec,
-        const std::vector<double*>& rho_data) const;
+        const std::vector<Real*>& rho_data) const;
+
+    template<typename Real>
+    void transfer_rho_cache_(const std::vector<std::vector<Real>>& rho_cache) const;
 
     // input
     const std::vector<HContainer<double>*> dm_vec_;

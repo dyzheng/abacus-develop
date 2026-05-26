@@ -1,7 +1,7 @@
 #include "esolver_sdft_pw.h"
 
 #include "source_base/global_variable.h"
-#include "source_base/memory_recorder.h"
+#include "source_base/memory.h"
 #include "source_estate/module_charge/symmetry_rho.h"
 #include "source_pw/module_stodft/sto_dos.h"
 #include "source_pw/module_stodft/sto_elecond.h"
@@ -157,8 +157,8 @@ void ESolver_SDFT_PW<T, Device>::hamilt2rho_single(UnitCell& ucell, int istep, i
                                                            this->p_hamilt_sto,
                                                            PARAM.inp.calculation,
                                                            PARAM.inp.basis_type,
-                                                           PARAM.inp.ks_solver,
-                                                           PARAM.globalv.use_uspp,
+                                                            PARAM.inp.ks_solver,
+                                                            PARAM.globalv.use_uspp,
                                                            PARAM.inp.nspin,
                                                            hsolver::DiagoIterAssist<T, Device>::SCF_ITER,
                                                            hsolver::DiagoIterAssist<T, Device>::PW_DIAG_NMAX,

@@ -1,5 +1,6 @@
 #include "ORB_atomic.h"
 
+#include "source_io/module_parameter/parameter.h"
 Numerical_Orbital_AtomRelation Numerical_Orbital::NOAR;
 
 Numerical_Orbital::Numerical_Orbital()

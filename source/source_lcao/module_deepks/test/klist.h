@@ -3,6 +3,7 @@
 
 #include "source_base/global_function.h"
 #include "source_base/matrix3.h"
+#include "source_base/memory.h"
 #include "source_base/vector3.h"
 
 #include <fstream>
