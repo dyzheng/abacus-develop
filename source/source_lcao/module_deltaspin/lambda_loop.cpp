@@ -518,7 +518,32 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_loop(int out
             // STEP -1: INITIALIZATION
             // Compute initial magnetic moments and save starting state
             // =============================================================
-            this->cal_mw_from_lambda(i_step);
+            //
+            // Optimized fast mode: if subspace acceleration is configured with
+            // a very large RMS threshold (>= 1e8), it will activate on the
+            // very first BFGS step. In that case, we can merge the initialization
+            // and cache-build steps into a single full diagonalization by
+            // pre-activating acceleration here and calling cal_mw_from_lambda(-2)
+            // directly. This saves 2 full diagonalizations per SCF iteration
+            // (the normal init + the early-step cache-build would both do full
+            // diags at the same lambda).
+            //
+            // Non-fast modes (normal/accuracy): use the original path.
+            // =============================================================
+            const bool fast_mode = (this->sc_acceleration_mode_ != "off")
+                                   && (this->sc_acceleration_rms_thr_ >= 1e8);
+            if (fast_mode)
+            {
+                this->acceleration_active_ = true;
+                this->acceleration_subspace_built_ = false;
+                this->free_lcao_subspace_cache();
+                this->cal_mw_from_lambda(-2);
+                this->acceleration_subspace_built_ = true;
+            }
+            else
+            {
+                this->cal_mw_from_lambda(i_step);
+            }
             spin = this->Mi_;
 
             // Save initial lambda: for unconstrained components (constrain==0), set to 0

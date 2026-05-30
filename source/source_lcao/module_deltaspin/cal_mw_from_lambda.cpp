@@ -1069,12 +1069,77 @@ void spinconstrain::SpinConstrain<std::complex<double>>::update_psi_charge(const
     {
         psi::Psi<std::complex<double>>* psi_t = static_cast<psi::Psi<std::complex<double>>*>(this->psi);
 
-        // If subspace acceleration was active, psi is still at the reference lambda,
-        // not at the converged lambda. Must do a final full diag to get correct psi
-        // for charge density construction.
         if (this->acceleration_active_ && this->acceleration_subspace_built_
+            && this->nspin_ == 2 && this->lcao_subspace_initialized_)
+        {
+            // =============================================================
+            // OPTIMIZED: Subspace rotation instead of full diagonalization
+            // =============================================================
+            // When subspace acceleration was active during the lambda loop,
+            // psi is still at the reference lambda. Instead of doing a full
+            // O(N³) diagonalization, we:
+            //   1. Build H_sub(k) at the converged lambda from cached data
+            //      H_sub(k) = H₀_sub(k) + Σ_I (λ_conv - λ_ref)_I · P_I_sub(k)
+            //   2. Diagonalize H_sub(k) → eigenvalues, V(k)    [O(nbands³)]
+            //   3. Rotate psi: ψ_new(k) = ψ_ref(k) · V(k)     [O(N × nbands²)]
+            //   4. Compute Fermi weights from new eigenvalues
+            //   5. Build charge density from rotated psi
+            // =============================================================
+            const int nk = psi_t->get_nk();
+            const int nbands = PARAM.inp.nbands;
+            const int nlocal = this->ParaV->get_global_row_size();
+            const int nn = nbands * nbands;
+            const int nloc_eij = this->ParaV->nrow * this->ParaV->ncol_bands;
+
+            if (this->h_sub_local_buf_.size() != static_cast<std::size_t>(nloc_eij))
+            {
+                this->h_sub_local_buf_.resize(nloc_eij, {0.0, 0.0});
+                this->h_tmp_buf_.resize(nn);
+                this->s_tmp_buf_.resize(nn);
+                this->vcc_buf_.resize(nn);
+                this->s_copy_buf_.resize(nn);
+                this->eigenvalues_buf_.resize(nbands, 0.0);
+            }
+
+            std::vector<std::vector<std::complex<double>>> vcc_conv(nk);
+
+            for (int ik = 0; ik < nk; ik++)
+            {
+                std::fill(this->h_sub_local_buf_.begin(), this->h_sub_local_buf_.end(), std::complex<double>(0.0, 0.0));
+                scatter_sub_matrix_to_local(this->lcao_sub_h_save + ik * nn, this->ParaV,
+                                            this->h_sub_local_buf_.data(), nbands);
+
+                this->calculate_delta_hcc_lcao(this->h_sub_local_buf_.data(), this->lcao_PI_sub_save_[ik],
+                                               this->lambda_.data(), nbands, ik, true, this->ParaV);
+
+                gather_sub_matrix_to_all(this->h_sub_local_buf_.data(), this->ParaV, this->h_tmp_buf_.data(), nbands);
+
+                std::memcpy(this->s_tmp_buf_.data(), this->lcao_sub_s_save + ik * nn, sizeof(std::complex<double>) * nn);
+                std::memcpy(this->s_copy_buf_.data(), this->s_tmp_buf_.data(), sizeof(std::complex<double>) * nn);
+
+                hsolver::DiagoIterAssist<std::complex<double>>::diag_hegvd(
+                    nbands, nbands, this->h_tmp_buf_.data(), this->s_copy_buf_.data(), nbands,
+                    this->eigenvalues_buf_.data(), this->vcc_buf_.data());
+
+                vcc_conv[ik].assign(this->vcc_buf_.data(), this->vcc_buf_.data() + nn);
+                for (int ib = 0; ib < nbands; ib++)
+                    this->pelec->ekb(ik, ib) = this->eigenvalues_buf_[ib];
+            }
+
+            elecstate::calculate_weights(this->pelec->ekb, this->pelec->wg,
+                                         this->pelec->klist, this->pelec->eferm,
+                                         this->pelec->f_en, this->pelec->nelec_spin,
+                                         this->pelec->skip_weights);
+            elecstate::calEBand(this->pelec->ekb, this->pelec->wg, this->pelec->f_en);
+
+            this->rotate_psi_subspace_lcao(*psi_t, this->ParaV, vcc_conv, nbands, nlocal, nk);
+
+            this->pelec->psiToRho(*psi_t);
+        }
+        else if (this->acceleration_active_ && this->acceleration_subspace_built_
             && this->nspin_ == 2)
         {
+            // Fallback: subspace cache not initialized properly, full diag
             hamilt::Hamilt<std::complex<double>>* hamilt_t
                 = static_cast<hamilt::Hamilt<std::complex<double>>*>(this->p_hamilt);
             dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double>>*>(
@@ -1087,9 +1152,13 @@ void spinconstrain::SpinConstrain<std::complex<double>>::update_psi_charge(const
                                          this->pelec->f_en, this->pelec->nelec_spin,
                                          this->pelec->skip_weights);
             elecstate::calEBand(this->pelec->ekb, this->pelec->wg, this->pelec->f_en);
-        }
 
-        this->pelec->psiToRho(*psi_t);
+            this->pelec->psiToRho(*psi_t);
+        }
+        else
+        {
+            this->pelec->psiToRho(*psi_t);
+        }
     }
     else
 #endif
