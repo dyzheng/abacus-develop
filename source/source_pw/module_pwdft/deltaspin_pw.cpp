@@ -19,23 +19,6 @@ bool run_deltaspin_lambda_loop(const int iter,
     spinconstrain::SpinConstrain<std::complex<double>>& sc
         = spinconstrain::SpinConstrain<std::complex<double>>::getScInstance();
 
-    if (inp.sc_mixing_lambda_beta != 0.0
-        && inp.sc_lambda_strategy != "linear_scan"
-        && inp.mixing_restart > 0.0
-        && !sc.is_lambda_mixing_enabled()
-        && sc.get_nat() > 0)
-    {
-        double beta = inp.sc_mixing_lambda_beta;
-        if (beta < 0.0)
-        {
-            beta = p_chgmix->get_mixing_beta();
-        }
-        if (beta > 0.0)
-        {
-            sc.init_lambda_mixing(beta);
-        }
-    }
-
     if (inp.sc_lambda_strategy == "linear_scan")
     {
         sc.set_drho(drho);
@@ -43,12 +26,35 @@ bool run_deltaspin_lambda_loop(const int iter,
         return true;
     }
 
+    // Helper lambda for init_lambda_mixing
+    auto try_init_lambda_mixing = [&]() {
+        if (inp.sc_mixing_lambda_beta != 0.0
+            && !sc.is_lambda_mixing_enabled()
+            && sc.get_nat() > 0)
+        {
+            double beta = inp.sc_mixing_lambda_beta;
+            if (beta < 0.0)
+            {
+                beta = p_chgmix->get_mixing_beta();
+            }
+            if (beta > 0.0)
+            {
+                sc.init_lambda_mixing(beta);
+            }
+        }
+    };
+
     bool ran_loop = false;
 
     if (inp.sc_scf_thr_mode == "immediate")
     {
         if (iter >= 1)
         {
+            // immediate mode: init mixing only when drho < mixing_restart
+            if (drho > 0 && drho < inp.mixing_restart)
+            {
+                try_init_lambda_mixing();
+            }
             sc.set_drho(drho);
             sc.run_lambda_loop(iter - 1);
             if (!sc.mag_converged()) { sc.set_mag_converged(true); }
@@ -59,9 +65,10 @@ bool run_deltaspin_lambda_loop(const int iter,
     {
         return false;
     }
-    else
+    else // "threshold"
     {
-        if (!sc.mag_converged() && drho > 0 && drho < inp.mixing_restart)
+        // threshold mode: never init/mix lambda mixing
+        if (!sc.mag_converged() && drho > 0 && drho < inp.sc_scf_thr)
         {
             sc.set_drho(drho);
             sc.run_lambda_loop(iter - 1);
@@ -78,7 +85,7 @@ bool run_deltaspin_lambda_loop(const int iter,
 
     if (ran_loop && sc.is_lambda_mixing_enabled()
         && inp.sc_lambda_strategy != "linear_scan"
-        && inp.mixing_restart > 0.0)
+        && inp.sc_scf_thr_mode == "immediate")
     {
         sc.mix_lambda();
     }
