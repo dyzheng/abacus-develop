@@ -8,7 +8,8 @@ namespace pw
 
 bool run_deltaspin_lambda_loop(const int iter,
                                const double drho,
-                               const Input_para& inp)
+                               const Input_para& inp,
+                               Charge_Mixing* p_chgmix)
 {
     if (!inp.sc_mag_switch)
     {
@@ -18,6 +19,23 @@ bool run_deltaspin_lambda_loop(const int iter,
     spinconstrain::SpinConstrain<std::complex<double>>& sc
         = spinconstrain::SpinConstrain<std::complex<double>>::getScInstance();
 
+    if (inp.sc_mixing_lambda_beta != 0.0
+        && inp.sc_lambda_strategy != "linear_scan"
+        && inp.mixing_restart > 0.0
+        && !sc.is_lambda_mixing_enabled()
+        && sc.get_nat() > 0)
+    {
+        double beta = inp.sc_mixing_lambda_beta;
+        if (beta < 0.0)
+        {
+            beta = p_chgmix->get_mixing_beta();
+        }
+        if (beta > 0.0)
+        {
+            sc.init_lambda_mixing(beta);
+        }
+    }
+
     if (inp.sc_lambda_strategy == "linear_scan")
     {
         sc.set_drho(drho);
@@ -25,46 +43,47 @@ bool run_deltaspin_lambda_loop(const int iter,
         return true;
     }
 
+    bool ran_loop = false;
+
     if (inp.sc_scf_thr_mode == "immediate")
     {
-        // "immediate" mode: activate lambda loop from second SCF iteration.
-        // First iteration (iter=0) is skipped because initial wavefunctions
-        // are not available to compute initial magnetic moments.
         if (iter >= 1)
         {
             sc.set_drho(drho);
             sc.run_lambda_loop(iter - 1);
             if (!sc.mag_converged()) { sc.set_mag_converged(true); }
-            return true;
+            ran_loop = true;
         }
+    }
+    else if (inp.sc_scf_thr_mode == "off")
+    {
         return false;
     }
-
-    if (inp.sc_scf_thr_mode == "off")
+    else
     {
-        // "off" mode: never activate the lambda loop.
-        // Lambda values are loaded from STRU and used as constant constraints.
-        // Replaces the old convention of setting sc_scf_thr=1e-10.
-        return false;
+        if (!sc.mag_converged() && drho > 0 && drho < inp.mixing_restart)
+        {
+            sc.set_drho(drho);
+            sc.run_lambda_loop(iter - 1);
+            sc.set_mag_converged(true);
+            ran_loop = true;
+        }
+        else if (sc.mag_converged())
+        {
+            sc.set_drho(drho);
+            sc.run_lambda_loop(iter - 1);
+            ran_loop = true;
+        }
     }
 
-    // "threshold" mode: activate when drho < sc_scf_thr
-    // drho > 0 excludes iterations where drho has not been computed.
-    if (!sc.mag_converged() && drho > 0 && drho < inp.sc_scf_thr)
+    if (ran_loop && sc.is_lambda_mixing_enabled()
+        && inp.sc_lambda_strategy != "linear_scan"
+        && inp.mixing_restart > 0.0)
     {
-        sc.set_drho(drho);
-        sc.run_lambda_loop(iter - 1);
-        sc.set_mag_converged(true);
-        return true;
-    }
-    else if (sc.mag_converged())
-    {
-        sc.set_drho(drho);
-        sc.run_lambda_loop(iter - 1);
-        return true;
+        sc.mix_lambda();
     }
 
-    return false;
+    return ran_loop;
 }
 
 void check_deltaspin_oscillation(const int iter,

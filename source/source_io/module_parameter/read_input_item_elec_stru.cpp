@@ -659,18 +659,29 @@ For systems that are difficult to converge, one could try increasing the value o
         item.availability = "";
         read_sync_double(input.mixing_restart);
         item.reset_value = [](const Input_Item& item, Parameter& para) {
-            if (para.input.sc_mag_switch)
+            // Only apply auto-setting if user did not explicitly set mixing_restart
+            if (item.is_read())
             {
-                if (para.input.sc_direction_only)
+                return;
+            }
+
+            // DFT+U or DeltaSpin: default mixing_restart to 1e-2
+            if (para.input.dft_plus_u || para.input.sc_mag_switch)
+            {
+                para.input.mixing_restart = 1e-2;
+            }
+
+            // DeltaSpin-specific auto-setting (only if not direction_only and not off)
+            if (para.input.sc_mag_switch && !para.input.sc_direction_only)
+            {
+                if (para.input.sc_scf_thr_mode == "threshold")
                 {
-                    para.input.mixing_restart = 0.0;
-                }
-                else if (para.input.sc_scf_thr_mode == "threshold")
-                {
+                    // Use sc_scf_thr as mixing_restart for threshold mode
                     para.input.mixing_restart = para.input.sc_scf_thr;
                 }
                 else if (para.input.sc_scf_thr_mode == "immediate")
                 {
+                    // Use scf_thr/10 for immediate mode (PW oscillation detection)
                     para.input.mixing_restart = para.input.scf_thr / 10.0;
                 }
                 else // "off"
@@ -773,6 +784,13 @@ For systems that are difficult to converge, particularly metallic systems, enabl
         item.unit = "";
         item.availability = "Only relevant for DFT+U calculations.";
         read_sync_bool(input.mixing_dftu);
+        item.reset_value = [](const Input_Item& item, Parameter& para) {
+            // Auto-enable mixing_dftu when DFT+U is enabled (if user didn't set it)
+            if (!item.is_read() && para.input.dft_plus_u)
+            {
+                para.input.mixing_dftu = true;
+            }
+        };
         this->add_item(item);
     }
     {

@@ -922,8 +922,16 @@ public:
      ModuleGint::GintPrecision get_subspace_exec_precision() const { return subspace_exec_precision_; }
     /// @brief Flag: has trace vs DMR diagnostic been run this calculation?
     bool local_diag_run_ = false;
-    void set_npol(int npol);
-    int get_npol() const;
+     void set_npol(int npol);
+     int get_npol() const;
+     /// @brief Initialize lambda mixing with given beta value
+     void init_lambda_mixing(double beta);
+     /// @brief Perform lambda mixing: λ_new = (1-β)·λ_prev + β·λ_BFGS
+     void mix_lambda();
+     /// @brief Check if lambda mixing is enabled
+     bool is_lambda_mixing_enabled() const { return lambda_mixing_enabled_; }
+     /// @brief Get lambda mixing beta
+     double get_lambda_mixing_beta() const { return lambda_mixing_beta_; }
     int get_nw() const; ///< Total number of orbitals across all constrained atoms
     int get_iwt(int itype, int iat, int orbital_index) const; ///< Convert (itype, iat, iw) to global orbital index
     /// @brief Get spin sign for k-point ik: +1 for spin-up, -1 for spin-down (nspin=2 only)
@@ -1048,6 +1056,14 @@ public:
       DiagonalizationStrategy current_strategy_ = DiagonalizationStrategy::FullSpace;
       std::vector<ModuleBase::Vector3<double>> engine_lambda_ref_;
        double accel_fallback_rms_thr_ = -1.0;
+
+       // =================================================================
+       // Lambda mixing (SCF-level)
+       // =================================================================
+       std::vector<ModuleBase::Vector3<double>> lambda_prev_; ///< Lambda before mixing (previous SCF step result)
+       bool lambda_mixing_enabled_ = false;                   ///< Is lambda mixing active?
+       double lambda_mixing_beta_ = 0.0;                      ///< Actual beta used for lambda mixing
+       bool lambda_mixing_initialized_ = false;               ///< Has lambda_prev_ been set?
     };
 
 

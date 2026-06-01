@@ -919,6 +919,65 @@ void SpinConstrain<TK>::reset_dspin_operator()
 #endif
 }
 
+template <typename TK>
+void SpinConstrain<TK>::init_lambda_mixing(double beta)
+{
+    if (beta <= 0.0)
+    {
+        lambda_mixing_enabled_ = false;
+        lambda_mixing_beta_ = 0.0;
+        return;
+    }
+    lambda_mixing_beta_ = beta;
+    lambda_mixing_enabled_ = true;
+    lambda_mixing_initialized_ = false;
+    int nat = this->get_nat();
+    if (nat > 0 && lambda_.size() == static_cast<size_t>(nat))
+    {
+        lambda_prev_ = lambda_;
+        lambda_mixing_initialized_ = true;
+    }
+}
+
+template <typename TK>
+void SpinConstrain<TK>::mix_lambda()
+{
+    if (!lambda_mixing_enabled_ || lambda_mixing_beta_ <= 0.0)
+    {
+        return;
+    }
+    int nat = this->get_nat();
+    if (nat == 0 || lambda_.size() != static_cast<size_t>(nat))
+    {
+        return;
+    }
+    if (!lambda_mixing_initialized_)
+    {
+        lambda_prev_ = lambda_;
+        lambda_mixing_initialized_ = true;
+        return;
+    }
+    const auto& constrain = this->get_constrain();
+    for (int iat = 0; iat < nat; ++iat)
+    {
+        for (int ic = 0; ic < 3; ++ic)
+        {
+            if (constrain[iat][ic] != 0)
+            {
+                double lambda_bfgs = lambda_[iat][ic];
+                double lambda_old = lambda_prev_[iat][ic];
+                lambda_[iat][ic] = (1.0 - lambda_mixing_beta_) * lambda_old
+                                 + lambda_mixing_beta_ * lambda_bfgs;
+            }
+            else
+            {
+                lambda_[iat][ic] = 0.0;
+            }
+        }
+    }
+    lambda_prev_ = lambda_;
+}
+
 template class SpinConstrain<std::complex<double>>;
 template class SpinConstrain<double>;
 

@@ -612,6 +612,7 @@ struct Input_para
     std::string sc_strategy = "normal"; ///< DeltaSpin execution strategy: "fast" (subspace), "accuracy" (full), "normal" (threshold-triggered)
     std::string sc_acceleration_mode = "off"; ///< acceleration mode: "off", "first_order", "subspace"
     double sc_acceleration_rms_thr = -1.0;    ///< RMS threshold (uB) to activate acceleration, <0 disables
+    double sc_mixing_lambda_beta = -1.0;     ///<Lambda mixing beta. -1.0=auto(mixing_beta), 0.0=off, >0=specified 🔴
 
     // ==============   #Parameters (18.Quasiatomic Orbital analysis) =========
     ///<==========================================================

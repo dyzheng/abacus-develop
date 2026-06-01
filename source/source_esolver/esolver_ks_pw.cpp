@@ -208,7 +208,7 @@ void ESolver_KS_PW<T, Device>::hamilt2rho_single(UnitCell& ucell, const int iste
     bool skip_charge = PARAM.inp.calculation == "nscf" ? true : false;
 
     // run the inner lambda loop to contrain atomic moments with the DeltaSpin method
-    bool skip_solve = pw::run_deltaspin_lambda_loop(iter - 1, this->drho, PARAM.inp);
+    bool skip_solve = pw::run_deltaspin_lambda_loop(iter - 1, this->drho, PARAM.inp, this->p_chgmix);
 
     if (!skip_solve)
     {

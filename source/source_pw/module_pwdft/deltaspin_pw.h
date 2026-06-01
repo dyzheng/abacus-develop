@@ -22,7 +22,8 @@ namespace pw
  */
 bool run_deltaspin_lambda_loop(const int iter,
                                const double drho,
-                               const Input_para& inp);
+                               const Input_para& inp,
+                               Charge_Mixing* p_chgmix);
 
 /**
  * @brief Check if SCF oscillation occurs for DeltaSpin method.

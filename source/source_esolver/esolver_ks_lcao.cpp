@@ -450,6 +450,23 @@ void ESolver_KS_LCAO<TK, TR>::hamilt2rho_single(UnitCell& ucell, int istep, int 
     {
         spinconstrain::SpinConstrain<TK>& sc = spinconstrain::SpinConstrain<TK>::getScInstance();
 
+        if (PARAM.inp.sc_mixing_lambda_beta != 0.0
+            && PARAM.inp.sc_lambda_strategy != "linear_scan"
+            && PARAM.inp.mixing_restart > 0.0
+            && !sc.is_lambda_mixing_enabled()
+            && sc.get_nat() > 0)
+        {
+            double beta = PARAM.inp.sc_mixing_lambda_beta;
+            if (beta < 0.0)
+            {
+                beta = this->p_chgmix->get_mixing_beta();
+            }
+            if (beta > 0.0)
+            {
+                sc.init_lambda_mixing(beta);
+            }
+        }
+
         if (PARAM.inp.sc_lambda_strategy == "linear_scan")
         {
             sc.set_drho(this->drho);
@@ -529,7 +546,7 @@ void ESolver_KS_LCAO<TK, TR>::hamilt2rho_single(UnitCell& ucell, int istep, int 
             }
             else // "threshold"
             {
-                if (!sc.mag_converged() && this->drho > 0 && this->drho < PARAM.inp.sc_scf_thr)
+                if (!sc.mag_converged() && this->drho > 0 && this->drho < PARAM.inp.mixing_restart)
                 {
                     sc.set_drho(this->drho);
                     sc.run_lambda_loop(iter - 1);
@@ -562,9 +579,9 @@ void ESolver_KS_LCAO<TK, TR>::hamilt2rho_single(UnitCell& ucell, int istep, int 
             }
             else // "threshold"
             {
-                // "threshold" mode: activate when drho < sc_scf_thr.
+                // "threshold" mode: activate when drho < mixing_restart.
                 // drho > 0 excludes iter=1 where drho has not been computed yet.
-                if (!sc.mag_converged() && this->drho > 0 && this->drho < PARAM.inp.sc_scf_thr)
+                if (!sc.mag_converged() && this->drho > 0 && this->drho < PARAM.inp.mixing_restart)
                 {
                     sc.set_drho(this->drho);
                     sc.run_lambda_loop(iter - 1);
@@ -595,6 +612,12 @@ void ESolver_KS_LCAO<TK, TR>::hamilt2rho_single(UnitCell& ucell, int istep, int 
             }
             sc.run_trace_vs_dmr_diagnostic(iter - 1, lambda_ref_ry);
             sc.local_diag_run_ = true;
+        }
+
+        if (sc.is_lambda_mixing_enabled() && PARAM.inp.sc_lambda_strategy != "linear_scan"
+            && PARAM.inp.sc_scf_thr_mode != "off")
+        {
+            sc.mix_lambda();
         }
     }
 

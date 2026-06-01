@@ -351,6 +351,18 @@ Manual override is allowed: if sc_acceleration_mode is explicitly set, it takes 
         read_sync_double(input.sc_acceleration_rms_thr);
         this->add_item(item);
     }
+    {
+        Input_Item item("sc_mixing_lambda_beta");
+        item.annotation = "mixing beta for Lagrange multiplier lambda";
+        item.category = "Spin-Constrained DFT";
+        item.type = "Real";
+        item.description = "Mixing beta for lambda during SCF iteration. -1.0 means auto (use mixing_beta), 0.0 disables lambda mixing (original behavior), >0 uses the specified value. Lambda mixing can reduce oscillation caused by subspace approximation bias. 🔴";
+        item.default_value = "-1.0";
+        item.unit = "";
+        item.availability = "sc_mag_switch is true and sc_scf_thr_mode is not off and sc_lambda_strategy is not linear_scan";
+        read_sync_double(input.sc_mixing_lambda_beta);
+        this->add_item(item);
+    }
 
     // Quasiatomic Orbital analysis
     {
