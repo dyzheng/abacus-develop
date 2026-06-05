@@ -20,6 +20,7 @@ if(ENABLE_LCAO)
   if (ENABLE_MPI)
     list(APPEND objects
         hsolver_lcao.cpp
+        hsolver_lcao_subspace.cpp
         diago_scalapack.cpp
         parallel_k2d.cpp
         diago_lapack.cpp
@@ -27,6 +28,7 @@ if(ENABLE_LCAO)
   else ()
     list(APPEND objects
         hsolver_lcao.cpp
+        hsolver_lcao_subspace.cpp
         diago_lapack.cpp
     )
   endif ()

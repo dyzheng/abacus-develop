@@ -212,6 +212,40 @@ void ESolver_KS_LCAO<TK, TR>::before_scf(UnitCell& ucell, const int istep)
         rdmft_solver.update_ion(ucell, *(this->pw_rho), this->locpp.vloc, this->sf.strucFac);
     }
 
+    // 18) Manage subspace solver cache for MD/relax acceleration
+    if (PARAM.inp.lcao_subspace_persistent && istep > 0)
+    {
+        // Check atomic displacement
+        double max_disp = 0.0;
+        for (int iat = 0; iat < ucell.nat; iat++)
+        {
+            const auto& tau = ucell.get_tau(iat);
+            double dx = tau.x - this->last_atom_positions_[iat].x;
+            double dy = tau.y - this->last_atom_positions_[iat].y;
+            double dz = tau.z - this->last_atom_positions_[iat].z;
+            double disp = std::sqrt(dx*dx + dy*dy + dz*dz) * ucell.lat0;
+            if (disp > max_disp) max_disp = disp;
+        }
+
+        // Clear cache if displacement exceeds threshold or cache is invalid
+        if (this->subspace_solver_ && 
+            (PARAM.inp.lcao_subspace_clear_thr > 0.0 && 
+             max_disp > PARAM.inp.lcao_subspace_clear_thr))
+        {
+            this->subspace_solver_->clear_subspace();
+            GlobalV::ofs_running << " >> Subspace cache cleared: max atomic displacement = " 
+                                 << max_disp << " Bohr (threshold: " 
+                                 << PARAM.inp.lcao_subspace_clear_thr << " Bohr)" << std::endl;
+        }
+    }
+
+    // Save current atom positions for next step comparison
+    this->last_atom_positions_.resize(ucell.nat);
+    for (int iat = 0; iat < ucell.nat; iat++)
+    {
+        this->last_atom_positions_[iat] = ucell.get_tau(iat);
+    }
+
     ModuleBase::timer::end("ESolver_KS_LCAO", "before_scf");
     return;
 }
@@ -404,9 +438,31 @@ void ESolver_KS_LCAO<TK, TR>::hamilt2rho_single(UnitCell& ucell, int istep, int 
     // 3) run Hsolver
     if (!skip_solve)
     {
-        hsolver::HSolverLCAO<TK> hsolver_lcao_obj(&(this->pv), PARAM.inp.ks_solver);
-        hsolver_lcao_obj.solve(static_cast<hamilt::Hamilt<TK>*>(this->p_hamilt), this->psi[0], this->pelec, *this->dmat.dm, 
-          this->chr, PARAM.inp.nspin, skip_charge);
+        // Try subspace solver first (for SCF acceleration after first step)
+        bool subspace_used = false;
+        if constexpr (std::is_same_v<TK, std::complex<double>>)
+        {
+            if (this->subspace_solver_ && this->subspace_solver_->has_subspace())
+            {
+                this->subspace_solver_->solve(
+                    static_cast<hamilt::Hamilt<TK>*>(this->p_hamilt), 
+                    this->psi[0], 
+                    this->pelec, 
+                    *this->dmat.dm,
+                    this->chr, 
+                    PARAM.inp.nspin, 
+                    skip_charge);
+                subspace_used = true;
+            }
+        }
+
+        // Fall back to standard HSolverLCAO if subspace not available
+        if (!subspace_used)
+        {
+            hsolver::HSolverLCAO<TK> hsolver_lcao_obj(&(this->pv), PARAM.inp.ks_solver);
+            hsolver_lcao_obj.solve(static_cast<hamilt::Hamilt<TK>*>(this->p_hamilt), this->psi[0], this->pelec, *this->dmat.dm, 
+              this->chr, PARAM.inp.nspin, skip_charge);
+        }
     }
 
     // 4) EXX
@@ -484,6 +540,32 @@ void ESolver_KS_LCAO<TK, TR>::iter_finish(UnitCell& ucell, const int istep, int&
       this->pv, this->gd, this->psi, this->chr, this->p_chgmix, 
       hamilt_lcao, this->orb_, this->deepks, 
       this->exx_nao, iter, istep, conv_esolver, this->scf_ene_thr);
+
+    // Update subspace cache after each SCF iteration (for next iteration acceleration)
+    // First SCF step (istep=0, iter=1): full diagonalization already done by HSolverLCAO
+    //   -> update_subspace_cache() uses the converged wavefunctions to build initial cache
+    // Subsequent SCF steps: subspace solver used, then cache updated with new wavefunctions
+    if constexpr (std::is_same_v<TK, std::complex<double>>)
+    {
+        if (PARAM.inp.lcao_subspace_persistent)
+        {
+            if (!this->subspace_solver_)
+            {
+                this->subspace_solver_.reset(
+                    new hsolver::HSolverLCAOSubspace(&(this->pv), PARAM.inp.ks_solver));
+                this->subspace_solver_->set_persistent(true);
+            }
+
+            // Update subspace cache using current wavefunctions
+            // lambda_ref is zero because we don't use DeltaSpin perturbation here
+            std::vector<ModuleBase::Vector3<double>> lambda_ref(ucell.nat, {0.0, 0.0, 0.0});
+            this->subspace_solver_->update_subspace_cache(
+                static_cast<hamilt::Hamilt<TK>*>(this->p_hamilt),
+                this->psi[0],
+                this->pelec,
+                lambda_ref);
+        }
+    }
 }
 
 template <typename TK, typename TR>

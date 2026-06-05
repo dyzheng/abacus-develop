@@ -147,6 +147,8 @@ struct Input_para
     std::vector<double> bessel_nao_rcuts = {}; ///< No specific values provided for bessel_nao_rcuts
     bool bessel_nao_smooth = true;             ///< spherical bessel smooth or not
     double bessel_nao_sigma = 0.1;             ///< spherical bessel smearing_sigma
+    bool lcao_subspace_persistent = false;     ///< enable subspace cache persistence across MD/relax ionic steps
+    double lcao_subspace_clear_thr = 0.0;      ///< atomic displacement threshold (Bohr) to clear subspace cache, 0=never auto-clear
     // ==========================================================
     //  spherical bessel  Peize Lin added on 2022-12-15
     // ==========================================================
@@ -601,7 +603,7 @@ struct Input_para
     double alpha_trial = 0.01;      ///< initial trial step size for lambda in eV/uB^2
     double sccut = 3.0;             ///< restriction of step size in eV/uB
     double sc_scf_thr = 1e-3;       ///< minimum number of outer scf loop before initial lambda loop
-    double sc_drop_thr = 1e-3;      ///< threshold for lambda-loop threshold cutoff in spin-constrained DFT
+     double sc_drop_thr = 1e-3;      ///< threshold for lambda-loop threshold cutoff in spin-constrained DFT
 
     // ==============   #Parameters (18.Quasiatomic Orbital analysis) =========
     ///<==========================================================

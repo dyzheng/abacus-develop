@@ -1404,5 +1404,33 @@ Use case: When experimental or high-level theoretical results suggest that the S
         read_sync_double(input.bessel_nao_sigma);
         this->add_item(item);
     }
+    {
+        Input_Item item("lcao_subspace_persistent");
+        item.annotation = "Enable subspace cache persistence across MD/relax ionic steps";
+        item.category = "NAOs";
+        item.type = "Boolean";
+        item.description = R"(When true, the LCAO subspace cache (H0_sub, S_sub) is preserved across
+MD/relax ionic steps instead of being rebuilt each step. This accelerates
+SCF convergence when atomic positions change minimally between steps.)";
+        item.default_value = "False";
+        item.unit = "";
+        item.availability = "basis_type = lcao";
+        read_sync_bool(input.lcao_subspace_persistent);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("lcao_subspace_clear_thr");
+        item.annotation = "Atomic displacement threshold to clear subspace cache";
+        item.category = "NAOs";
+        item.type = "Real";
+        item.description = R"(Maximum atomic displacement (Bohr) between ionic steps before
+the subspace cache is automatically cleared. Set to 0 to never
+auto-clear. Only relevant when lcao_subspace_persistent=true.)";
+        item.default_value = "0.0";
+        item.unit = "Bohr";
+        item.availability = "basis_type = lcao AND lcao_subspace_persistent = true";
+        read_sync_double(input.lcao_subspace_clear_thr);
+        this->add_item(item);
+    }
 }
 } // namespace ModuleIO

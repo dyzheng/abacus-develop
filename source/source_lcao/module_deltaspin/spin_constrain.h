@@ -166,6 +166,10 @@ public:
     void set_constrain(const ModuleBase::Vector3<int>* constrain_in, int nat_in);
     /// get sc_lambda
     const std::vector<ModuleBase::Vector3<double>>& get_sc_lambda() const;
+    /// get Mi (current magnetic moments)
+    const std::vector<ModuleBase::Vector3<double>>& get_Mi() const { return Mi_; }
+    /// set lambda directly
+    void set_lambda(const std::vector<ModuleBase::Vector3<double>>& v) { lambda_ = v; }
     /// get target_mag
     const std::vector<ModuleBase::Vector3<double>>& get_target_mag() const;
     /// get constrain
@@ -213,6 +217,10 @@ public:
     double get_sccut() const;
     /// get sc_drop_thr
     double get_sc_drop_thr() const;
+    /// set current adaptive threshold
+    void set_current_sc_thr(double thr) { current_sc_thr_ = thr; }
+    /// get current adaptive threshold
+    double get_current_sc_thr() const { return current_sc_thr_; }
     /// @brief set orbital parallel info
     void set_ParaV(Parallel_Orbitals* ParaV_in);
     /// @brief set parameters for solver
@@ -253,20 +261,22 @@ public:
     double restrict_current_; // in unit of Ry/uB = 3 eV/uB
 
   public:
-    /// @brief save operator for spin-constrained DFT
-    /// @param op_in the base pointer of operator, actual type should be DeltaSpin<OperatorLCAO<TK, TR>>*
-    void set_operator(hamilt::Operator<TK>* op_in);
-    /// @brief set is_Mi_converged
-    void set_mag_converged(bool is_Mi_converged_in){this->is_Mi_converged = is_Mi_converged_in;}
-    /// @brief get is_Mi_converged
-    bool mag_converged() const {return this->is_Mi_converged;}
-  private:
-    /// operator for spin-constrained DFT, used for calculating current atomic magnetic moment
-    hamilt::Operator<TK>* p_operator = nullptr;
-    /// @brief if atomic magnetic moment is converged
-    bool is_Mi_converged = false;
+     /// @brief Set DeltaSpin operator pointer for magnetic moment calculation (LCAO)
+     /// @param op_in Base pointer, actual type is DeltaSpin<OperatorLCAO<TK, TR>>*
+     void set_operator(hamilt::Operator<TK>* op_in);
+     /// @brief Get DeltaSpin operator pointer
+     hamilt::Operator<TK>* get_operator() const { return p_operator; }
+     /// @brief Set magnetic moment convergence flag
+     void set_mag_converged(bool is_Mi_converged_in){this->is_Mi_converged = is_Mi_converged_in;}
+     /// @brief Get magnetic moment convergence flag
+     bool mag_converged() const {return this->is_Mi_converged;}
+   private:
+     /// operator for spin-constrained DFT, used for calculating current atomic magnetic moment
+     hamilt::Operator<TK>* p_operator = nullptr;
+     /// @brief if atomic magnetic moment is converged
+     bool is_Mi_converged = false;
 
-    TK* sub_h_save = nullptr;
+     TK* sub_h_save = nullptr;
     TK* sub_s_save = nullptr;
     TK* becp_save = nullptr;
 };

@@ -8,6 +8,7 @@
 #include "source_lcao/module_operator_lcao/operator_lcao.h"
 #include "source_lcao/module_hcontainer/hcontainer.h"
 #include <unordered_map>
+#include <complex>
 
 namespace hamilt
 {
@@ -48,6 +49,12 @@ class DeltaSpin<OperatorLCAO<TK, TR>> : public OperatorLCAO<TK, TR>
     */
     std::vector<double> cal_moment(const HContainer<double>* dmR, const std::vector<ModuleBase::Vector3<int>>& constrain);
 
+    /// @brief Reset initialization state to allow re-constraint with new constrain array
+    void reset_initialized()
+    {
+        this->initialized = false;
+    }
+
     /**
      * @brief set the update_lambda_ to true, which means the lambda will be updated in the next contributeHR()
     */
@@ -58,6 +65,25 @@ class DeltaSpin<OperatorLCAO<TK, TR>> : public OperatorLCAO<TK, TR>
             this->update_lambda_[is] = true;
         }
     }
+
+    /// @brief Compute P_I_sub(k) = D_I(k)^dag D_I(k) for all constrained atoms
+    /// Uses saved B_I overlaps and 2D-block distributed wavefunctions
+    /// @param kvec_d  k-point in direct coordinates (for phase factor)
+    /// @param psi_k   wavefunction coefficients C_k (2D-block distributed)
+    /// @param nbands_global  global number of bands
+    /// @param PI_sub  output: PI_sub[iat] is nbands×nbands Hermitian matrix (gathered to all procs)
+    ///                Only filled for constrained atoms; empty for unconstrained.
+    void cal_PI_sub(const ModuleBase::Vector3<double>& kvec_d,
+                    const std::complex<double>* psi_k,
+                    const int nbands_global,
+                    std::vector<std::vector<std::complex<double>>>& PI_sub) const;
+
+    /// @brief Get the pre-computed real-space projector HContainer for atom iat
+    /// pre_hr[iat](μ,ν;R) = Σ_lm <φ_μ(0)|α_lm(I)><α_lm(I)|φ_ν(R)>
+    const hamilt::HContainer<TR>* get_pre_hr(int iat) const { return pre_hr[iat]; }
+
+    /// @brief Get the constraint atom list
+    const std::vector<bool>& get_constraint_atom_list() const { return constraint_atom_list; }
 
     /// calculate force and stress for DFT+U
     void cal_force_stress(const bool cal_force,
@@ -154,6 +180,19 @@ class DeltaSpin<OperatorLCAO<TK, TR>> : public OperatorLCAO<TK, TR>
     bool initialized = false;
     int spin_num = 1;
     std::vector<bool> update_lambda_;
+    /// Independent HR completion flag for DeltaSpin, decoupled from
+    /// the shared OperatorLCAO::hr_done to avoid cross-k-point accumulation.
+    bool sc_hr_done = false;
+
+    /// @brief Saved B_I overlap data for subspace projection optimization
+    /// For each constrained atom I, stores the overlaps <phi_mu|alpha_I_lm> organized by adjacent atoms
+    struct BI_AdjacentData {
+        int iat_adj;                                          ///< global atom index of adjacent atom
+        ModuleBase::Vector3<int> R_index;                     ///< cell index of adjacent atom
+        std::unordered_map<int, std::vector<double>> nlm;     ///< iw_global -> <phi_iw|alpha_I_lm>
+    };
+    std::vector<std::vector<BI_AdjacentData>> B_I_data;       ///< [iat][adj_index]
+    std::vector<int> B_I_nproj;                               ///< r = max_l_plus_1^2 per constrained atom
 };
 
 }

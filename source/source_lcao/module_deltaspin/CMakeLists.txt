@@ -5,6 +5,7 @@ list(APPEND objects
     basic_funcs.cpp
     lambda_loop_helper.cpp
     lambda_loop.cpp
+    lambda_solvers.cpp
     cal_mw_from_lambda.cpp
     template_helpers.cpp
     deltaspin_lcao.cpp

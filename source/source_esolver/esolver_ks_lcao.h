@@ -11,6 +11,7 @@
 #include "source_lcao/setup_exx.h" // for exx, mohan add 20251008
 #include "source_lcao/module_rdmft/rdmft.h" // rdmft
 #include "source_lcao/setup_dm.h" // mohan add 2025-10-30
+#include "source_hsolver/hsolver_lcao_subspace.h" // subspace solver for SCF acceleration
 
 #include <memory>
 
@@ -91,6 +92,10 @@ class ESolver_KS_LCAO : public ESolver_KS
 
     //! For RDMFT calculations, added by jghan, 2024-03-16 
     rdmft::RDMFT<TK, TR> rdmft_solver;
+
+    //! Subspace solver for accelerating SCF in MD/relax ionic steps
+    std::unique_ptr<hsolver::HSolverLCAOSubspace> subspace_solver_;
+    std::vector<ModuleBase::Vector3<double>> last_atom_positions_;
 
     //! For linear-response TDDFT
     friend class LR::ESolver_LR<double, double>;

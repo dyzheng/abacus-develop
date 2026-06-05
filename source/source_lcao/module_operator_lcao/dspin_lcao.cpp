@@ -6,6 +6,10 @@
 #include "source_base/parallel_reduce.h"
 #include "source_io/module_parameter/parameter.h"
 
+#ifdef __MPI
+#include <mpi.h>
+#endif
+
 template <typename TK, typename TR>
 hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::DeltaSpin(HS_Matrix_K<TK>* hsk_in,
                                                            const std::vector<ModuleBase::Vector3<double>>& kvec_d_in,
@@ -223,6 +227,11 @@ void hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::cal_pre_HR()
     this->pre_hr.clear();
     this->pre_hr.resize(this->ucell->nat, nullptr);
 
+    // Initialize B_I data structures for subspace projection optimization
+    this->B_I_data.clear();
+    this->B_I_data.resize(this->ucell->nat);
+    this->B_I_nproj.assign(this->ucell->nat, 0);
+
     const int npol = this->ucell->get_npol();
     size_t memory_cost = 0;
     for(int iat=0;iat<this->ucell->nat;iat++)
@@ -344,6 +353,18 @@ void hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::cal_pre_HR()
                 }
                 nlm_iat0[ad].insert({all_indexes[iw1l], nlm_target});
             }
+        }
+
+        // Save B_I overlap data for subspace projection optimization
+        this->B_I_data[iat].clear();
+        this->B_I_nproj[iat] = max_l_plus_1 * max_l_plus_1;
+        for (int ad = 0; ad < adjs.adj_num + 1; ++ad)
+        {
+            BI_AdjacentData bi_ad;
+            bi_ad.iat_adj = this->ucell->itia2iat(adjs.ntype[ad], adjs.natom[ad]);
+            bi_ad.R_index = adjs.box[ad];
+            bi_ad.nlm = nlm_iat0[ad];
+            this->B_I_data[iat].push_back(std::move(bi_ad));
         }
 
         // fourth step: calculate the <phi|alpha><alpha|phi>
@@ -524,6 +545,92 @@ void hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, std::complex<d
     moment[1] += tmp_moment[1].real();
     moment[2] += tmp_moment[2].real();
 }
+
+// cal_PI_sub: compute P_I_sub(k) = D_I(k)^dag D_I(k) for all constrained atoms
+// D_I(k) = B_I(k) * C_k, where B_I(k)[lm, mu] = sum_R <alpha_I_lm|phi_{mu,R}> exp(ik·R)
+// C_k is the 2D-block distributed wavefunction matrix
+template <typename TK, typename TR>
+void hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::cal_PI_sub(
+    const ModuleBase::Vector3<double>& kvec_d,
+    const std::complex<double>* psi_k,
+    const int nbands_global,
+    std::vector<std::vector<std::complex<double>>>& PI_sub) const
+{
+    ModuleBase::TITLE("DeltaSpin", "cal_PI_sub");
+    ModuleBase::timer::start("DeltaSpin", "cal_PI_sub");
+
+    const int nat = this->ucell->nat;
+    PI_sub.resize(nat);
+
+    const int nrow_local = this->paraV->get_row_size();   // local rows of C_k
+    const int ncol_local = this->paraV->ncol_bands;        // local band columns of C_k
+    const int lda = nrow_local;  // leading dimension (column-major for ScaLAPACK)
+
+    for (int iat = 0; iat < nat; iat++)
+    {
+        if (!this->constraint_atom_list[iat])
+        {
+            PI_sub[iat].clear();
+            continue;
+        }
+
+        const int r = this->B_I_nproj[iat];
+        if (r == 0) { continue; }
+
+        // D_I_local: r × nbands_global, initialized to zero
+        std::vector<std::complex<double>> D_I(r * nbands_global, {0.0, 0.0});
+
+        for (const auto& bi_ad : this->B_I_data[iat])
+        {
+            // Phase factor: exp(i * 2pi * k · R)
+            const double arg = 2.0 * M_PI * (kvec_d.x * bi_ad.R_index.x
+                                            + kvec_d.y * bi_ad.R_index.y
+                                            + kvec_d.z * bi_ad.R_index.z);
+            const std::complex<double> phase(std::cos(arg), std::sin(arg));
+
+            for (const auto& [iw_global, nlm_vec] : bi_ad.nlm)
+            {
+                // Check if this global orbital index is in our local rows
+                const int iw_local = this->paraV->global2local_row(iw_global);
+                if (iw_local < 0) { continue; }
+
+                // D_I[lm, jb_global] += nlm_vec[lm] * phase * C_k[iw_local, jb_local]
+                for (int jb_local = 0; jb_local < ncol_local; jb_local++)
+                {
+                    const int jb_global = this->paraV->local2global_col(jb_local);
+                    const std::complex<double> c_val = phase * psi_k[iw_local + jb_local * lda];
+                    for (int lm = 0; lm < r; lm++)
+                    {
+                        D_I[lm * nbands_global + jb_global] += nlm_vec[lm] * c_val;
+                    }
+                }
+            }
+        }
+
+        // MPI_Allreduce to sum D_I across all processes
+#ifdef __MPI
+        MPI_Allreduce(MPI_IN_PLACE, D_I.data(), 2 * r * nbands_global,
+                      MPI_DOUBLE, MPI_SUM, this->paraV->comm());
+#endif
+
+        // Compute P_I_sub = D_I^dag D_I (nbands × nbands Hermitian matrix)
+        // D_I is stored in row-major layout: D_I[lm * nbands_global + jb]
+        // In column-major BLAS convention, this looks like a (nbands × r) matrix.
+        // To compute P = D^H * D (nbands × nbands), we use zgemm:
+        // P = (D^T) * (D^T)^H = D_memory * D_memory^H
+        PI_sub[iat].resize(nbands_global * nbands_global, {0.0, 0.0});
+        const std::complex<double> one = {1.0, 0.0};
+        const std::complex<double> zero_c = {0.0, 0.0};
+        zgemm_("N", "C", &nbands_global, &nbands_global, &r,
+               &one, D_I.data(), &nbands_global,
+               D_I.data(), &nbands_global,
+               &zero_c, PI_sub[iat].data(), &nbands_global);
+    }
+
+    ModuleBase::timer::end("DeltaSpin", "cal_PI_sub");
+}
+
+#include <cmath>
 
 #include "dspin_force_stress.hpp"
 
