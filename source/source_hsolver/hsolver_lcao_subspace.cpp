@@ -473,6 +473,111 @@ void HSolverLCAOSubspace::clear_subspace()
     }
 }
 
+bool HSolverLCAOSubspace::build_subspace_lcao(
+    hamilt::Hamilt<std::complex<double>>* pHamilt,
+    psi::Psi<std::complex<double>>& psi,
+    elecstate::ElecState* pes,
+    elecstate::DensityMatrix<std::complex<double>, double>& dm,
+    Charge& chr,
+    const int nspin,
+    const bool skip_charge,
+    const std::vector<ModuleBase::Vector3<double>>& lambda_ref)
+{
+    ModuleBase::TITLE("HSolverLCAOSubspace", "build_subspace_lcao");
+    ModuleBase::timer::start("HSolverLCAOSubspace", "build_subspace_lcao");
+
+    const int nk = psi.get_nk();
+    const int nbands = ParaV_->get_nbands();
+    const int nat = lambda_ref.size();
+    const int nlocal = ParaV_->get_global_row_size();
+    const int nn = nbands * nbands;
+
+    // Full diagonalization to get correct psi at lambda_ref
+    solve_fullspace(pHamilt, psi, pes, dm, chr, nspin, skip_charge);
+
+    // Clear existing cache
+    cache_.clear();
+
+    // Allocate arrays
+    std::vector<std::complex<double>> H0_sub_raw(nk * nn);
+    std::vector<std::complex<double>> S_sub_raw(nk * nn);
+    std::vector<std::vector<std::vector<std::complex<double>>>> P_I_sub_all(nk);
+
+    // For LCAO: compute H_sub = C^† H C and S_sub = C^† S C using correct dimensions
+    // C is stored as psi[nk][nbands][nlocal] with leading dimension = nlocal
+    const int lda = nlocal;  // leading dimension of psi matrix
+
+    for (int ik = 0; ik < nk; ik++)
+    {
+        psi.fix_k(ik);
+        std::complex<double>* psi_ptr = psi.get_pointer();
+
+        // Get H(k) and S(k) matrices from Hamiltonian
+        pHamilt->updateHk(ik);
+        hamilt::MatrixBlock<std::complex<double>> h_mat, s_mat;
+        pHamilt->matrix(h_mat, s_mat);
+
+        // H_sub = C^† H C: (nbands x nlocal) * (nlocal x nlocal) * (nlocal x nbands)
+        // First compute temp = H * C: (nlocal x nlocal) * (nlocal x nbands) -> (nlocal x nbands)
+        std::vector<std::complex<double>> h_temp(lda * nbands, {0.0, 0.0});
+        const std::complex<double> one = {1.0, 0.0};
+        const std::complex<double> zero = {0.0, 0.0};
+
+        zgemm_("N", "N", &lda, &nbands, &lda,
+               &one, h_mat.p, &lda,
+               psi_ptr, &lda,
+               &zero, h_temp.data(), &lda);
+
+        // Then H_sub = C^† * temp: (nbands x nlocal) * (nlocal x nbands) -> (nbands x nbands)
+        zgemm_("C", "N", &nbands, &nbands, &lda,
+               &one, psi_ptr, &lda,
+               h_temp.data(), &lda,
+               &zero, H0_sub_raw.data() + ik * nn, &nbands);
+
+        // S_sub = C^† S C
+        std::vector<std::complex<double>> s_temp(lda * nbands, {0.0, 0.0});
+        zgemm_("N", "N", &lda, &nbands, &lda,
+               &one, s_mat.p, &lda,
+               psi_ptr, &lda,
+               &zero, s_temp.data(), &lda);
+
+        zgemm_("C", "N", &nbands, &nbands, &lda,
+               &one, psi_ptr, &lda,
+               s_temp.data(), &lda,
+               &zero, S_sub_raw.data() + ik * nn, &nbands);
+
+        // P_I_sub = C^† D_I C for each constrained atom (if DeltaSpin is active)
+        auto* dspin_op = dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double>>*>(pHamilt);
+        if (dspin_op != nullptr)
+        {
+            dspin_op->cal_PI_sub(
+                pes->klist->kvec_d[ik],
+                psi.get_pointer(),
+                nbands,
+                P_I_sub_all[ik]);
+        }
+    }
+
+    // Collect eigenvalues
+    std::vector<double> ekb_ref_all(nk * nbands);
+    for (int ik = 0; ik < nk; ik++)
+    {
+        for (int ib = 0; ib < nbands; ib++)
+        {
+            ekb_ref_all[ik * nbands + ib] = pes->ekb(ik, ib);
+        }
+    }
+
+    // Build the cache
+    cache_.build(nk, nbands, nat,
+                 H0_sub_raw.data(), S_sub_raw.data(),
+                 std::move(P_I_sub_all),
+                 ekb_ref_all, lambda_ref);
+
+    ModuleBase::timer::end("HSolverLCAOSubspace", "build_subspace_lcao");
+    return true;
+}
+
 void HSolverLCAOSubspace::update_subspace_cache(
     hamilt::Hamilt<std::complex<double>>* pHamilt,
     psi::Psi<std::complex<double>>& psi,

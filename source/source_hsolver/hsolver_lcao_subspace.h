@@ -164,6 +164,19 @@ public:
                         const int nspin,
                         const std::vector<ModuleBase::Vector3<double>>& lambda_ref);
 
+    /// @brief Build the subspace cache using LCAO-specific subspace projection
+    ///
+    /// This version correctly handles LCAO wavefunction layout (nbasis x nbands)
+    /// instead of using the PW-specific cal_hs_subspace.
+    bool build_subspace_lcao(hamilt::Hamilt<std::complex<double>>* pHamilt,
+                             psi::Psi<std::complex<double>>& psi,
+                             elecstate::ElecState* pes,
+                             elecstate::DensityMatrix<std::complex<double>, double>& dm,
+                             Charge& chr,
+                             const int nspin,
+                             const bool skip_charge,
+                             const std::vector<ModuleBase::Vector3<double>>& lambda_ref);
+
     /// @brief Update subspace cache using current wavefunctions (without full diagonalization)
     ///
     /// Uses the current psi to rebuild H_sub and S_sub. Assumes psi contains

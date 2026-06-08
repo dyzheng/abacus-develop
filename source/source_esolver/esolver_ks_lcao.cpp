@@ -541,10 +541,7 @@ void ESolver_KS_LCAO<TK, TR>::iter_finish(UnitCell& ucell, const int istep, int&
       hamilt_lcao, this->orb_, this->deepks, 
       this->exx_nao, iter, istep, conv_esolver, this->scf_ene_thr);
 
-    // Update subspace cache after each SCF iteration (for next iteration acceleration)
-    // First SCF step (istep=0, iter=1): full diagonalization already done by HSolverLCAO
-    //   -> update_subspace_cache() uses the converged wavefunctions to build initial cache
-    // Subsequent SCF steps: subspace solver used, then cache updated with new wavefunctions
+    // Build subspace cache when SCF converges (for next iteration acceleration)
     if constexpr (std::is_same_v<TK, std::complex<double>>)
     {
         if (PARAM.inp.lcao_subspace_persistent)
@@ -556,14 +553,24 @@ void ESolver_KS_LCAO<TK, TR>::iter_finish(UnitCell& ucell, const int istep, int&
                 this->subspace_solver_->set_persistent(true);
             }
 
-            // Update subspace cache using current wavefunctions
-            // lambda_ref is zero because we don't use DeltaSpin perturbation here
-            std::vector<ModuleBase::Vector3<double>> lambda_ref(ucell.nat, {0.0, 0.0, 0.0});
-            this->subspace_solver_->update_subspace_cache(
-                static_cast<hamilt::Hamilt<TK>*>(this->p_hamilt),
-                this->psi[0],
-                this->pelec,
-                lambda_ref);
+            // Build subspace cache on first SCF convergence
+            if (conv_esolver && !this->subspace_solver_->has_subspace())
+            {
+                // Build subspace cache using LCAO-specific method
+                std::vector<ModuleBase::Vector3<double>> lambda_ref(ucell.nat, {0.0, 0.0, 0.0});
+                bool skip_charge = PARAM.inp.calculation == "nscf" ? true : false;
+                this->subspace_solver_->build_subspace_lcao(
+                    static_cast<hamilt::Hamilt<TK>*>(this->p_hamilt),
+                    this->psi[0],
+                    this->pelec,
+                    *this->dmat.dm,
+                    this->chr,
+                    PARAM.inp.nspin,
+                    skip_charge,
+                    lambda_ref);
+                
+                GlobalV::ofs_running << " >> Subspace cache built for SCF acceleration" << std::endl;
+            }
         }
     }
 }
