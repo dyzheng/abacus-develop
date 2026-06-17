@@ -662,8 +662,8 @@ void DiagoPPCG<T, Device>::diag(const HPsiFunc& hpsi_func,
     // When 3*n_band fits in the ambient space the P block is safe and
     // 2-3 iterations accelerate convergence.  Otherwise stick to 1 to
     // avoid near-singular overlap matrices.
-    const bool p_safe = (3 * this->n_band <= this->n_dim - 2);
-    const int max_iter = p_safe ? 3 : 1;
+    const bool p_safe = (3 * this->n_band <= this->n_dim - this->p_safe_margin_);
+    const int max_iter = p_safe ? this->max_inner_iter_ : 1;
     for (int iter = 0; iter < max_iter && not_conv; ++iter)
     {
         const bool has_p = (iter > 0) && p_safe;
