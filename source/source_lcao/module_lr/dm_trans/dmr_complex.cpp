@@ -44,7 +44,7 @@ namespace elecstate
                         {
                             if (ik_in >= 0 && ik_in != ik) continue;
                             // Inverse Fourier transform: D(R) = (1/Nk) * sum_k D(k) * exp(-i*k*R)
-                            // See Sec. 3 of nao_lcao_force_stress_derivation.md
+                            // Phase factor: exp(-i*k*R) = cos(k·R) - i*sin(k·R)
                             const ModuleBase::Vector3<double> dR(r_index[0], r_index[1], r_index[2]);
                             const double arg = (this->_kvec_d[ik] * dR) * ModuleBase::TWO_PI;
                             double sinp = 0.0, cosp = 0.0;
