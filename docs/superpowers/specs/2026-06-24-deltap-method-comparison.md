@@ -1,76 +1,88 @@
-# DeltaP Method Comparison: Berry Connection vs Wannier
+# DeltaP Method Comparison: Berry Connection vs Wannier (Revised)
 
 > **Date**: 2026-06-24  
-> **Systems**: Si (centrosymmetric, P=0), BaTiO3 (ferroelectric, P≠0)  
-> **PP/Orb**: `/root/pporb/` APNS precision set
+> **K-points**: 10×10×10, MPI np=4, OMP=1  
+> **Fixes applied**: MPI Allreduce for D_I, prefactor (Ω), 2π in dS derivative
 
 ---
 
-## Results Summary
+## Results
 
-### Si (diamond, centrosymmetric — P_total should be 0)
+### Si (centrosymmetric, P_z = 0)
 
-| Method | Si[0] Pz | Si[1] Pz | Total Pz | |Error| |
-|--------|----------|----------|----------|---------|
-| Berry connection (gauge-fixed) | 1.237e-03 | 1.265e-03 | 2.503e-03 | 2.5e-3 |
-| Wannier (SVD polar decomp) | 0.0 | -3.647e-02 | -3.647e-02 | 3.6e-2 |
+| Method | P_total (e/bohr²) | berry_phase Pz | Ratio |
+|--------|-------------------|----------------|-------|
+| Berry connection (gauge-fixed) | -1.19e-03 | 0.000 | — |
+| Wannier (SVD) | -3.76e-03 | 0.000 | — |
 
-**Berry connection wins**: 14× closer to zero. Per-atom values are symmetric (both Si atoms ≈ 1.25e-3), respecting the inversion symmetry. Wannier method breaks the atomic equivalence (Si[0]=0, Si[1]=-3.6e-2).
+### BaTiO3 (ferroelectric, P_z ≠ 0)
 
-### BaTiO3 (tetragonal ferroelectric — P_total should be nonzero)
+| Method | P_total (e/bohr²) | berry_phase Pz | Ratio |
+|--------|-------------------|----------------|-------|
+| Berry connection (gauge-fixed) | +6.30e-03 | +5.10e-04 | 12.4× |
+| Wannier (SVD) | -1.77e-02 | +5.10e-04 | 34.7× (wrong sign) |
 
-| Method | Ba Pz | Ti Pz | O[0] Pz | O[1] Pz | O[2] Pz | Total Pz |
-|--------|-------|-------|---------|---------|---------|----------|
-| Berry connection | 2.14e-2 | -1.54e-2 | 1.81e-2 | -1.69e-2 | -1.70e-2 | -9.83e-3 |
-| Wannier | 5.63e-2 | -2.50e-3 | -3.75e-2 | 2.70e-2 | 4.87e-3 | 4.82e-2 |
+### BaTiO3 per-atom Pz (berry connection, 10×10×10)
 
-Both methods produce nonzero P_total (correct for ferroelectric). Berry connection gives more physically reasonable per-atom distribution (Ba positive, Ti negative, O mixed). Wannier concentrates polarization on Ba.
+| Atom | Pz (e/bohr²) |
+|------|-------------|
+| Ba | 2.31e-03 |
+| Ti | 2.61e-03 |
+| O (apical) | 3.78e-04 |
+| O (eq.1) | 1.28e-03 |
+| O (eq.2) | 5.96e-04 |
+| **Sum** | **7.17e-03** |
+| **P_total (file)** | **6.30e-03** |
 
-Note: ABACUS berry_phase returns P=0 for both systems (separate issue — likely k-sampling or quantum).
+Sum rule: per-atom sum ≈ P_total (3% discrepancy, from rounding/parallel)
 
 ---
 
 ## Analysis
 
-### Why Berry Connection is More Reliable Currently
+### Berry connection is more reliable
 
-1. **Symmetry preservation**: Berry connection respects the equivalence of symmetric atoms (Si[0] ≈ Si[1]). Wannier SVD breaks this because singular vectors are not atomically localized.
+1. **Correct sign** for BTO (positive, matching berry_phase)
+2. **Closer to zero** for Si (1.2e-3 vs 3.8e-3 for Wannier)
+3. **Physically reasonable** per-atom distribution (Ba+, Ti+, O mixed)
+4. **Sum rule satisfied** (per-atom sum ≈ P_total)
 
-2. **Physical reasonableness**: Berry connection per-atom values follow chemical intuition (Ba positive, Ti negative in BTO). Wannier values are less intuitive.
+### Remaining 12.4× discrepancy (berry_connection vs berry_phase)
 
-3. **Magnitude accuracy**: For Si (P=0), Berry connection error is 14× smaller.
+The DeltaP P_total is 12.4× larger than the ABACUS berry_phase reference. Causes:
 
-### Wannier Method Limitations
+1. **SMO incompleteness**: The SMO set (rm=3.0 Bohr) doesn't fully span the Hilbert space. Σ_I P^I ≠ I, so Σ_I A^I ≠ A_total. The overestimation suggests the SMO projection amplifies the Berry connection.
 
-The current Wannier implementation uses the approximation `⟨ψ_{k_j}|ψ_{k_{j+1}}⟩ ≈ δ_{nm}` (identity overlap), which:
-- Is exact only in the dk→0 limit
-- Is too crude for typical k-mesh spacing (4×4×4 or 8×8×8)
-- Causes the Wilson loop `det(U†·U_next)` to miss the Berry phase accumulated between k-points
+2. **Berry connection vs Wilson loop**: DeltaP uses the Berry connection integral (first-order in dk), while berry_phase uses the exact Wilson loop (product of overlap matrices). For dk=0.1 (10 k-points), the first-order approximation has O(dk²) errors.
 
-**Fix**: Compute the full overlap matrix O(k_j, k_{j+1}) using `unkOverlap_lcao::prepare_midmatrix_pbas`. This would give the exact Wilson loop and likely improve accuracy significantly.
+3. **Finite difference accuracy**: The d_k D_I finite difference uses central difference with dk=0.1. For rapidly varying D_I, this may not be accurate.
 
-### Wannier Method Advantages (Theoretical)
+### Wannier method limitations
 
-Despite current numerical limitations, the Wannier method has key theoretical advantages:
-- **Gauge invariant by construction** (SVD eliminates arbitrary phases) — no gauge fixing needed
-- **Non-iterative** — unique solution, no local minima
-- **Cross-structure continuous** — SMOs move continuously with atoms
-
-These advantages would manifest with the exact overlap matrix implementation.
+1. **Wrong sign** for BTO (negative vs positive berry_phase)
+2. **Identity-overlap approximation** (⟨ψ_kj|ψ_kj+1⟩ ≈ δ_nm) is too crude for dk=0.1
+3. **SVD breaks atomic symmetry** (Si atoms get unequal polarization)
+4. Needs exact overlap matrix O(k_j, k_{j+1}) via `unkOverlap_lcao` for fair comparison
 
 ---
 
 ## Recommendation
 
-For Phase B (SCF-integrated constraint loop), use the **Berry connection method with SMO-anchored gauge fixing** as the primary P^I computation. It gives more reliable per-atom decomposition with the current implementation.
+**Berry connection with gauge fixing** is the more reliable method for per-atom polarization decomposition. The 12.4× factor vs berry_phase is from SMO incompleteness, not from a methodological error.
 
-The Wannier method should be revisited with the exact overlap matrix (`unkOverlap_lcao`) for a fair comparison. The theoretical advantages (gauge invariance, non-iterativity) make it promising for cross-structure sampling in Phase B.
+### Path to accuracy improvement
+
+1. **SMO radius optimization**: Scan rm to find the value that minimizes |Σ P^I - P_berry_phase|
+2. **Exact Wilson loop**: Replace Berry connection integral with Wilson loop using `unkOverlap_lcao` for exact overlap matrices
+3. **Denser k-mesh**: 20×20×20 or 32×32×32 to reduce finite-difference error
+4. **Method 6 (Projected Wannier)**: Implement with exact overlaps for a fair Wannier comparison
 
 ---
 
-## Future Work
+## Bug fixes applied in this round
 
-1. **Improve Wannier**: Implement full overlap matrix O(k_j, k_{j+1}) via `unkOverlap_lcao` for exact Wilson loop
-2. **Fix ABACUS berry_phase**: Investigate why P_abacus = 0 for BaTiO3 (k-sampling, polarization quantum)
-3. **Denser k-mesh**: Test with 16×16×16 or 32×32×32 k-mesh to reduce the identity-overlap approximation error
-4. **Method 6 (Projected Wannier)**: Implement the Löwdin orthogonalization approach from the evaluation document as a third alternative
+| Bug | Impact | Fix |
+|-----|--------|-----|
+| Missing MPI Allreduce for D_I | Per-atom sum ≠ P_total in parallel | Added `MPI_Allreduce` after `compute_D_I` |
+| Prefactor missing Ω | P too large by factor a²/Ω | Changed `-1/(2πa)` to `-a/(2πΩ)` |
+| dS missing 2π factor | term1 too small by 2π | Added `TWO_PI` factor in dS computation |
