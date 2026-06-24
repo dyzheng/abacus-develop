@@ -12,4 +12,10 @@ AddTest(
   SOURCES deltap_gauge_test.cpp
 )
 
+AddTest(
+  TARGET MODULE_LCAO_deltap_smoothness_test
+  LIBS ${math_libs} base device parameter
+  SOURCES deltap_smoothness_test.cpp
+)
+
 endif()
