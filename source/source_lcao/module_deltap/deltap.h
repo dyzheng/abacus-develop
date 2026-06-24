@@ -50,7 +50,8 @@ public:
               const TwoCenterIntegrator* intor,
               const std::vector<double>& orb_cutoff,
               double rm,
-              int gdir);
+              int gdir,
+              const Parallel_Orbitals* paraV);
 
     void compute_atomic_polarization(
         const UnitCell& ucell,

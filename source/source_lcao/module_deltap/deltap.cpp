@@ -6,7 +6,7 @@ namespace deltap {
 
 void DeltaP::init(const UnitCell& ucell, const Grid_Driver& gd, const K_Vectors& kv,
                   const TwoCenterIntegrator* intor, const std::vector<double>& orb_cutoff,
-                  double rm, int gdir)
+                  double rm, int gdir, const Parallel_Orbitals* paraV)
 {
     intor_ = intor;
     orb_cutoff_ = orb_cutoff;
@@ -15,11 +15,69 @@ void DeltaP::init(const UnitCell& ucell, const Grid_Driver& gd, const K_Vectors&
     nat_ = ucell.nat;
     gd_ = &gd;
     kv_ = &kv;
+    paraV_ = paraV;
     ModuleBase::TITLE("DeltaP", "init");
 }
 
 void DeltaP::compute_atomic_polarization(const UnitCell& ucell,
-    const psi::Psi<std::complex<double>>* psi, const elecstate::ElecState* pelec) {}
+    const psi::Psi<std::complex<double>>* psi, const elecstate::ElecState* pelec)
+{
+    ModuleBase::TITLE("DeltaP", "compute_atomic_polarization");
+    ModuleBase::timer::start("DeltaP", "compute_atomic_polarization");
+
+    std::cout << "\n * * * * * *\n << Start DeltaP atomic polarization decomposition\n";
+
+    // Step 1: compute real-space overlaps
+    compute_real_overlaps(ucell, *gd_);
+
+    // Step 2: setup k-string
+    setup_kstring(*kv_);
+
+    // Step 3: Allocate kstring_data_ and populate kvec_d + S/dS + D_I for all k on string
+    const int nks = psi->get_nk();
+    const int nbands = psi->get_nbands();
+    const int nrow_local = paraV_->get_row_size();
+
+    kstring_data_.resize(nppstr_);
+
+    // First pass: compute S, dS, and D_I for all k-points on the first string
+    for (int j = 0; j < nppstr_; j++)
+    {
+        int ik_psi = k_index_[0][j];  // first string only for now
+        if (ik_psi >= nks) continue;
+
+        // Set kvec_d from K_Vectors
+        kstring_data_[j].kvec_d = kv_->kvec_d[ik_psi];
+
+        psi->fix_k(ik_psi);
+        const std::complex<double>* psi_k = psi->get_pointer();
+
+        compute_S_k(j);
+        compute_D_I(j, psi_k, nbands, nrow_local);
+    }
+
+    // Second pass: compute Berry connection (needs all D_I for finite difference)
+    for (int j = 0; j < nppstr_; j++)
+    {
+        int ik_psi = k_index_[0][j];
+        if (ik_psi >= nks) continue;
+        psi->fix_k(ik_psi);
+        const std::complex<double>* psi_k = psi->get_pointer();
+        const double* wg = &(pelec->wg(ik_psi, 0));
+        compute_berry_connection(j, psi_k, nbands, nrow_local, wg);
+    }
+
+    // Step 4: Integrate to polarization
+    integrate_polarization(ucell, nbands);
+
+    // Step 5: Verify and output
+    verify_sum_rule();
+    write_results(ucell);
+
+    std::cout << " >> Finish DeltaP atomic polarization decomposition.\n * * * * * *\n";
+
+    ModuleBase::timer::end("DeltaP", "compute_atomic_polarization");
+}
 
 void DeltaP::setup_kstring(const K_Vectors& kv)
 {
@@ -98,7 +156,5 @@ void DeltaP::setup_kstring(const K_Vectors& kv)
 
     ModuleBase::timer::end("DeltaP", "setup_kstring");
 }
-void DeltaP::verify_sum_rule() {}
-void DeltaP::write_results(const UnitCell& ucell) const {}
 
 } // namespace deltap
