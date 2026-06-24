@@ -1101,5 +1101,72 @@ Manual override is allowed: if sc_acceleration_mode is explicitly set, it takes 
         };
         this->add_item(item);
     }
+    // DeltaP atomic polarization
+    {
+        Input_Item item("deltap_switch");
+        item.annotation = "switch to enable DeltaP atomic polarization decomposition";
+        item.category = "DeltaP";
+        item.type = "Boolean";
+        item.description = "Switch to enable DeltaP atomic polarization decomposition";
+        item.default_value = "False";
+        item.unit = "";
+        item.availability = "";
+        read_sync_bool(input.deltap_switch);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("deltap_rm");
+        item.annotation = "SMO modulation radius (Bohr)";
+        item.category = "DeltaP";
+        item.type = "Real";
+        item.description = "SMO modulation radius (Bohr); if 0, reuse onsite_radius";
+        item.default_value = "3.0";
+        item.unit = "Bohr";
+        item.availability = "deltap_switch is true";
+        read_sync_double(input.deltap_rm);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("deltap_gdir");
+        item.annotation = "polarization direction: 1=x, 2=y, 3=z";
+        item.category = "DeltaP";
+        item.type = "Integer";
+        item.description = "Polarization direction: 1=x, 2=y, 3=z";
+        item.default_value = "3";
+        item.unit = "";
+        item.availability = "deltap_switch is true";
+        read_sync_int(input.deltap_gdir);
+        item.check_value = [](const Input_Item& item, const Parameter& para) {
+            if (para.input.deltap_gdir < 1 || para.input.deltap_gdir > 3)
+            {
+                ModuleBase::WARNING_QUIT("ReadInput", "deltap_gdir must be 1, 2, or 3");
+            }
+        };
+        this->add_item(item);
+    }
+    {
+        Input_Item item("deltap_dk_fd");
+        item.annotation = "finite-difference delta-k for T0 validation";
+        item.category = "DeltaP";
+        item.type = "Real";
+        item.description = "Finite-difference delta-k for Berry connection validation";
+        item.default_value = "1.0e-6";
+        item.unit = "";
+        item.availability = "deltap_switch is true";
+        read_sync_double(input.deltap_dk_fd);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("deltap_npk_string");
+        item.annotation = "override k-string density (0 = use KPT mesh)";
+        item.category = "DeltaP";
+        item.type = "Integer";
+        item.description = "Override k-string density; 0 means use KPT mesh density";
+        item.default_value = "0";
+        item.unit = "";
+        item.availability = "deltap_switch is true";
+        read_sync_int(input.deltap_npk_string);
+        this->add_item(item);
+    }
 }
 } // namespace ModuleIO

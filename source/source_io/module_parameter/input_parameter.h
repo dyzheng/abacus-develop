@@ -613,6 +613,13 @@ struct Input_para
     std::string sc_acceleration_mode = "off"; ///< acceleration mode: "off", "first_order", "subspace"
     double sc_acceleration_rms_thr = -1.0;    ///< RMS threshold (uB) to activate acceleration, <0 disables
 
+    // ==============   #Parameters (20.DeltaP atomic polarization) =============
+    bool deltap_switch = false;       ///< switch to enable DeltaP atomic polarization decomposition
+    double deltap_rm = 3.0;          ///< SMO modulation radius (Bohr); if 0, reuse onsite_radius
+    int deltap_gdir = 3;             ///< polarization direction: 1=x, 2=y, 3=z
+    double deltap_dk_fd = 1e-6;      ///< finite-difference delta-k for T0 validation
+    int deltap_npk_string = 0;       ///< override k-string density (0 = use KPT mesh)
+
     // ==============   #Parameters (18.Quasiatomic Orbital analysis) =========
     ///<==========================================================
     ///< variables for Quasiatomic Orbital analysis
