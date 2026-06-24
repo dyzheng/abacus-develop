@@ -78,6 +78,9 @@ private:
                                   int nbands, int nrow_local, const double* wg);
     void integrate_polarization(const UnitCell& ucell, int nbands);
     void gauge_fix_smo_anchored(int nbands);
+    void compute_wannier_polarization(const UnitCell& ucell,
+                                      const psi::Psi<std::complex<double>>* psi,
+                                      const elecstate::ElecState* pelec);
     void verify_sum_rule();
     void write_results(const UnitCell& ucell) const;
 

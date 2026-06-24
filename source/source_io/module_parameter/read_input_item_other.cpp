@@ -1198,5 +1198,23 @@ Manual override is allowed: if sc_acceleration_mode is explicitly set, it takes 
         read_sync_double(input.deltap_anchor_thr);
         this->add_item(item);
     }
+    {
+        Input_Item item("deltap_method");
+        item.annotation = "P^I computation method";
+        item.category = "DeltaP";
+        item.type = "String";
+        item.description = "Method for atomic polarization: 'berry_connection' (Berry phase integral) or 'wannier' (SMO-projected Wannier via SVD)";
+        item.default_value = "berry_connection";
+        item.unit = "";
+        item.availability = "deltap_switch is true";
+        read_sync_string(input.deltap_method);
+        item.check_value = [](const Input_Item& item, const Parameter& para) {
+            if (para.input.deltap_method != "berry_connection" && para.input.deltap_method != "wannier")
+            {
+                ModuleBase::WARNING_QUIT("ReadInput", "deltap_method must be 'berry_connection' or 'wannier'");
+            }
+        };
+        this->add_item(item);
+    }
 }
 } // namespace ModuleIO

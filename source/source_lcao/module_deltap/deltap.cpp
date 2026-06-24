@@ -26,6 +26,13 @@ void DeltaP::compute_atomic_polarization(const UnitCell& ucell,
     ModuleBase::TITLE("DeltaP", "compute_atomic_polarization");
     ModuleBase::timer::start("DeltaP", "compute_atomic_polarization");
 
+    if (PARAM.inp.deltap_method == "wannier")
+    {
+        compute_wannier_polarization(ucell, psi, pelec);
+        ModuleBase::timer::end("DeltaP", "compute_atomic_polarization");
+        return;
+    }
+
     std::cout << "\n * * * * * *\n << Start DeltaP atomic polarization decomposition\n";
 
     // Step 1: compute real-space overlaps

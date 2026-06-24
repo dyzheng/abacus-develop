@@ -621,6 +621,7 @@ struct Input_para
     int deltap_npk_string = 0;       ///< override k-string density (0 = use KPT mesh)
     std::string deltap_gauge_mode = "none";   ///< gauge fixing mode: "none" or "smo_anchored"
     double deltap_anchor_thr = 1e-8;          ///< threshold for anchor SMO re-selection
+    std::string deltap_method = "berry_connection";  ///< P^I computation method: "berry_connection" or "wannier"
 
     // ==============   #Parameters (18.Quasiatomic Orbital analysis) =========
     ///<==========================================================
