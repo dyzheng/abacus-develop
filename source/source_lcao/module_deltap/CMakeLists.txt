@@ -2,6 +2,7 @@ list(APPEND objects
     deltap.cpp
     deltap_overlap.cpp
     deltap_berry.cpp
+    deltap_gauge.cpp
     deltap_io.cpp
 )
 

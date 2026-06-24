@@ -1168,5 +1168,35 @@ Manual override is allowed: if sc_acceleration_mode is explicitly set, it takes 
         read_sync_int(input.deltap_npk_string);
         this->add_item(item);
     }
+    {
+        Input_Item item("deltap_gauge_mode");
+        item.annotation = "gauge fixing mode for Berry connection continuity";
+        item.category = "DeltaP";
+        item.type = "String";
+        item.description = "Gauge fixing mode: 'none' (default) or 'smo_anchored'";
+        item.default_value = "none";
+        item.unit = "";
+        item.availability = "deltap_switch is true";
+        read_sync_string(input.deltap_gauge_mode);
+        item.check_value = [](const Input_Item& item, const Parameter& para) {
+            if (para.input.deltap_gauge_mode != "none" && para.input.deltap_gauge_mode != "smo_anchored")
+            {
+                ModuleBase::WARNING_QUIT("ReadInput", "deltap_gauge_mode must be 'none' or 'smo_anchored'");
+            }
+        };
+        this->add_item(item);
+    }
+    {
+        Input_Item item("deltap_anchor_thr");
+        item.annotation = "threshold for anchor SMO re-selection";
+        item.category = "DeltaP";
+        item.type = "Real";
+        item.description = "Threshold for anchor SMO re-selection";
+        item.default_value = "1.0e-8";
+        item.unit = "";
+        item.availability = "deltap_switch is true and deltap_gauge_mode is smo_anchored";
+        read_sync_double(input.deltap_anchor_thr);
+        this->add_item(item);
+    }
 }
 } // namespace ModuleIO

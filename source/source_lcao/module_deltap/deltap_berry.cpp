@@ -145,25 +145,49 @@ void DeltaP::compute_berry_connection(int ik, const std::complex<double>* psi_k,
 
                 for (int lm = 0; lm < r; lm++)
                 {
-                    // term1: <psi_nk | d_k_alpha alpha> * <alpha | psi_nk>
+                    // Determine gauge phase for this (ik, n)
+                    std::complex<double> g_nk(1.0, 0.0);
+                    if (gauge_enabled_ && static_cast<int>(gauge_phase_.size()) > ik
+                        && static_cast<int>(gauge_phase_[ik].size()) > n)
+                    {
+                        g_nk = gauge_phase_[ik][n];
+                    }
+
+                    // term1: <psi|d_k alpha> * <alpha|psi>
+                    // Bug fix: conj(C)*dS (not conj(dS)*C) for correct <psi|d_k alpha>
+                    // Gauge: C -> C * g_nk
                     std::complex<double> bra_grad = {0.0, 0.0};
                     const int s_size = kstring_data_[ik].dS_k[iat][alpha][lm].size();
                     for (int mu = 0; mu < s_size; mu++)
                     {
                         const std::complex<double> ds_val = kstring_data_[ik].dS_k[iat][alpha][lm][mu];
                         const std::complex<double> c_val = psi_k[mu + n * nrow_local];
-                        bra_grad += std::conj(ds_val) * c_val;
+                        bra_grad += std::conj(c_val * g_nk) * ds_val;
                     }
-                    term1 += bra_grad * kstring_data_[ik].D_I[iat][lm][n];
+                    std::complex<double> D_I_gauge = kstring_data_[ik].D_I[iat][lm][n] * g_nk;
+                    term1 += bra_grad * D_I_gauge;
 
-                    // term2: <psi_nk | alpha> * d_k <alpha | psi_nk>
+                    // term2: conj(D_I) * d_k D_I
+                    // Gauge: apply gauge phases to D_I at ik, ik_next, ik_prev
                     std::complex<double> d_D = {0.0, 0.0};
                     if (ik_next != ik && ik_prev != ik)
                     {
-                        d_D = (kstring_data_[ik_next].D_I[iat][lm][n]
-                               - kstring_data_[ik_prev].D_I[iat][lm][n]) * inv_2dk;
+                        std::complex<double> g_next(1.0, 0.0);
+                        std::complex<double> g_prev(1.0, 0.0);
+                        if (gauge_enabled_)
+                        {
+                            if (static_cast<int>(gauge_phase_.size()) > ik_next
+                                && static_cast<int>(gauge_phase_[ik_next].size()) > n)
+                                g_next = gauge_phase_[ik_next][n];
+                            if (static_cast<int>(gauge_phase_.size()) > ik_prev
+                                && static_cast<int>(gauge_phase_[ik_prev].size()) > n)
+                                g_prev = gauge_phase_[ik_prev][n];
+                        }
+                        std::complex<double> D_next = kstring_data_[ik_next].D_I[iat][lm][n] * g_next;
+                        std::complex<double> D_prev = kstring_data_[ik_prev].D_I[iat][lm][n] * g_prev;
+                        d_D = (D_next - D_prev) * inv_2dk;
                     }
-                    term2 += std::conj(kstring_data_[ik].D_I[iat][lm][n]) * d_D;
+                    term2 += std::conj(D_I_gauge) * d_D;
                 }
 
                 A_nk_[iat][ik][n][alpha] = term1 + term2;

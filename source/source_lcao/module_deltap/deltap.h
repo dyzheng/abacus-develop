@@ -77,6 +77,7 @@ private:
     void compute_berry_connection(int ik, const std::complex<double>* psi_k,
                                   int nbands, int nrow_local, const double* wg);
     void integrate_polarization(const UnitCell& ucell, int nbands);
+    void gauge_fix_smo_anchored(int nbands);
     void verify_sum_rule();
     void write_results(const UnitCell& ucell) const;
 
@@ -105,6 +106,14 @@ private:
 
     // Berry connection: A_nk_[iat][ik][nband][3] (alpha=x,y,z)
     std::vector<std::vector<std::vector<ModuleBase::Vector3<std::complex<double>>>>> A_nk_;
+
+    // Gauge fixing data (SMO-anchored gauge, Method 5)
+    std::vector<std::vector<std::complex<double>>> gauge_phase_;  // [ik][n]
+    std::vector<int> anchor_iat_;                                 // [n]
+    std::vector<int> anchor_lm_;                                  // [n]
+    std::vector<std::complex<double>> phase_corrections_;         // [n]
+    bool gauge_enabled_ = false;
+    double anchor_thr_ = 1e-8;
 
     // Results
     AtomicPolarization results_;

@@ -1,6 +1,7 @@
 #include "deltap.h"
 #include "source_base/timer.h"
 #include "source_base/tool_title.h"
+#include "source_io/module_parameter/parameter.h"
 
 namespace deltap {
 
@@ -54,6 +55,14 @@ void DeltaP::compute_atomic_polarization(const UnitCell& ucell,
 
         compute_S_k(j);
         compute_D_I(j, psi_k, nbands, nrow_local);
+    }
+
+    // Step 3.5: Gauge fixing (SMO-anchored, Method 5)
+    gauge_enabled_ = (PARAM.inp.deltap_gauge_mode == "smo_anchored");
+    anchor_thr_ = PARAM.inp.deltap_anchor_thr;
+    if (gauge_enabled_)
+    {
+        gauge_fix_smo_anchored(nbands);
     }
 
     // Second pass: compute Berry connection (needs all D_I for finite difference)
