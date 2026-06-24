@@ -3,6 +3,7 @@ add_subdirectory(module_deepks)
 add_subdirectory(module_dftu)
 add_subdirectory(module_hcontainer)
 add_subdirectory(module_deltaspin)
+add_subdirectory(module_deltap)
 
 if(ENABLE_LCAO)
     add_subdirectory(module_operator_lcao)
