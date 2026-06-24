@@ -58,7 +58,7 @@ void DeltaP::compute_S_k(int ik)
                     {
                         double R_alpha = (a == 0) ? od.R_index.x : (a == 1) ? od.R_index.y : od.R_index.z;
                         kstring_data_[ik].dS_k[iat][a][lm][iw_local]
-                            += i_phase * R_alpha * phase * nlm_vec[lm];
+                            += ModuleBase::TWO_PI * i_phase * R_alpha * phase * nlm_vec[lm];
                     }
                 }
             }
@@ -206,14 +206,16 @@ void DeltaP::integrate_polarization(const UnitCell& ucell, int nbands)
     const int nat = nat_;
     const int alpha_idx = gdir_ - 1;
 
-    // Lattice vector length along gdir (in Bohr), matching berryphase convention
+    // Lattice vector length along gdir (in Bohr) and cell volume
     double a_alpha = 0.0;
     if (gdir_ == 1) { a_alpha = ucell.lat0 * ucell.a1.norm(); }
     else if (gdir_ == 2) { a_alpha = ucell.lat0 * ucell.a2.norm(); }
     else { a_alpha = ucell.lat0 * ucell.a3.norm(); }
+    const double omega = ucell.omega;
 
     const double dk_dir = 1.0 / (nppstr_ - 1);
-    const double prefactor = -1.0 / (2.0 * ModuleBase::PI * a_alpha) * dk_dir;
+    // P = -(a_alpha / 2*pi*Omega) * dk * gamma  [result in e/Bohr^2]
+    const double prefactor = -a_alpha / (2.0 * ModuleBase::PI * omega) * dk_dir;
 
     results_.P_I.resize(nat, ModuleBase::Vector3<double>(0.0, 0.0, 0.0));
     results_.gamma_I.resize(nat, ModuleBase::Vector3<double>(0.0, 0.0, 0.0));

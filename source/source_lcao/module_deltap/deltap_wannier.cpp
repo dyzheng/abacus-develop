@@ -3,6 +3,9 @@
 #include "source_base/timer.h"
 #include "source_base/tool_title.h"
 #include "source_io/module_parameter/parameter.h"
+#ifdef __MPI
+#include "source_base/parallel_comm.h"
+#endif
 #include <cmath>
 #include <algorithm>
 #include <vector>
@@ -63,6 +66,28 @@ void DeltaP::compute_wannier_polarization(
         compute_S_k(j);
         compute_D_I(j, psi->get_pointer(), nbands, nrow_local);
     }
+
+    // MPI reduction: D_I is only partially computed on each rank
+#ifdef __MPI
+    for (int j = 0; j < nppstr_; j++)
+    {
+        for (int iat = 0; iat < nat_; iat++)
+        {
+            int r = nproj_per_atom_[iat];
+            for (int lm = 0; lm < r; lm++)
+            {
+                if (kstring_data_[j].D_I.size() <= static_cast<size_t>(iat)) continue;
+                if (kstring_data_[j].D_I[iat].size() <= static_cast<size_t>(lm)) continue;
+                int sz = kstring_data_[j].D_I[iat][lm].size();
+                if (sz > 0)
+                {
+                    MPI_Allreduce(MPI_IN_PLACE, kstring_data_[j].D_I[iat][lm].data(),
+                                  2 * sz, MPI_DOUBLE, MPI_SUM, paraV_->comm());
+                }
+            }
+        }
+    }
+#endif
 
     // Step 2: SVD of D_I at each k -> U(k) = W * V^dagger (polar decomposition)
     // D_I is (nproj_total x nocc_use) matrix
@@ -165,8 +190,10 @@ void DeltaP::compute_wannier_polarization(
     if (gdir_ == 1) a_alpha = ucell.lat0 * ucell.a1.norm();
     else if (gdir_ == 2) a_alpha = ucell.lat0 * ucell.a2.norm();
     else a_alpha = ucell.lat0 * ucell.a3.norm();
+    const double omega = ucell.omega;
 
-    const double prefactor = -1.0 / (2.0 * ModuleBase::PI * a_alpha);
+    // P = -(a_alpha / 2*pi*Omega) * gamma  [result in e/Bohr^2]
+    const double prefactor = -a_alpha / (2.0 * ModuleBase::PI * omega);
 
     results_.P_I.resize(nat_, ModuleBase::Vector3<double>(0.0, 0.0, 0.0));
     results_.gamma_I.resize(nat_, ModuleBase::Vector3<double>(0.0, 0.0, 0.0));

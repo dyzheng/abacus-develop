@@ -2,6 +2,9 @@
 #include "source_base/timer.h"
 #include "source_base/tool_title.h"
 #include "source_io/module_parameter/parameter.h"
+#ifdef __MPI
+#include "source_base/parallel_comm.h"
+#endif
 
 namespace deltap {
 
@@ -63,6 +66,29 @@ void DeltaP::compute_atomic_polarization(const UnitCell& ucell,
         compute_S_k(j);
         compute_D_I(j, psi_k, nbands, nrow_local);
     }
+
+    // MPI reduction: D_I is only partially computed on each rank (local rows only)
+    // Must Allreduce to get the full sum across all processes
+#ifdef __MPI
+    for (int j = 0; j < nppstr_; j++)
+    {
+        for (int iat = 0; iat < nat_; iat++)
+        {
+            int r = nproj_per_atom_[iat];
+            for (int lm = 0; lm < r; lm++)
+            {
+                if (kstring_data_[j].D_I.size() <= static_cast<size_t>(iat)) continue;
+                if (kstring_data_[j].D_I[iat].size() <= static_cast<size_t>(lm)) continue;
+                int sz = kstring_data_[j].D_I[iat][lm].size();
+                if (sz > 0)
+                {
+                    MPI_Allreduce(MPI_IN_PLACE, kstring_data_[j].D_I[iat][lm].data(),
+                                  2 * sz, MPI_DOUBLE, MPI_SUM, paraV_->comm());
+                }
+            }
+        }
+    }
+#endif
 
     // Step 3.5: Gauge fixing (SMO-anchored, Method 5)
     gauge_enabled_ = (PARAM.inp.deltap_gauge_mode == "smo_anchored");
