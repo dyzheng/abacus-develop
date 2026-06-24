@@ -792,7 +792,8 @@ target_link_libraries(
   device
   container
   dftu
-  deltaspin)
+  deltaspin
+  deltap)
 if(ENABLE_LCAO)
   target_link_libraries(
     ${ABACUS_BIN_NAME}

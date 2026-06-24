@@ -11,6 +11,7 @@
 #include "source_psi/psi.h"
 
 #include <complex>
+#include <stdexcept>
 #include <unordered_map>
 #include <vector>
 
@@ -57,6 +58,14 @@ public:
         const UnitCell& ucell,
         const psi::Psi<std::complex<double>>* psi,
         const elecstate::ElecState* pelec);
+
+    void compute_atomic_polarization(
+        const UnitCell& ucell,
+        const psi::Psi<double>* psi,
+        const elecstate::ElecState* pelec)
+    {
+        throw std::logic_error("DeltaP decomposition supports only multi-k");
+    }
 
     const AtomicPolarization& get_results() const { return results_; }
 

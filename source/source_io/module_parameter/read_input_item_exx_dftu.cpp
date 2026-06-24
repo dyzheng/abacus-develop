@@ -846,10 +846,17 @@ void ReadInput::item_dftu()
         item.availability = "dft_plus_u is set to 1";
         read_sync_double(input.onsite_radius);
         item.reset_value = [](const Input_Item& item, Parameter& para) {
-            if ((para.input.dft_plus_u == 1 || para.input.sc_mag_switch) && para.input.onsite_radius == 0.0)
+            if ((para.input.dft_plus_u == 1 || para.input.sc_mag_switch || para.input.deltap_switch) && para.input.onsite_radius == 0.0)
             {
-                // autoset onsite_radius to 3.0 as default, this default value comes from the systematic atomic magnetism test
-                para.input.onsite_radius = 3.0;
+                if (para.input.deltap_switch)
+                {
+                    para.input.onsite_radius = para.input.deltap_rm;
+                }
+                else
+                {
+                    // autoset onsite_radius to 3.0 as default, this default value comes from the systematic atomic magnetism test
+                    para.input.onsite_radius = 3.0;
+                }
             }
         };
         this->add_item(item);
