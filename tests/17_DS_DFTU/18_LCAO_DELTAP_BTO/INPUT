@@ -25,6 +25,7 @@ gdir    3
 deltap_switch    1
 deltap_rm    3.0
 deltap_gdir    3
+deltap_gauge_mode    smo_anchored
 
 pseudo_dir    /root/pporb/apns-pseudopotentials-v1
 orbital_dir    /root/pporb/apns-orbitals-precision-v1
