@@ -59,3 +59,7 @@
 # 58_LCAO_DS_S4_DirectionOnly_XY
 # 59_LCAO_DFTU_DS_S4_DirectionOnly_XY
 # 65_LCAO_DS_S2_DirectionOnly_Z
+# DeltaP atomic polarization decomposition tests (NSCF + berry_phase)
+# Note: these use absolute paths to /root/pporb/ for pseudopotentials/orbitals
+# 18_LCAO_DELTAP_BTO
+# 19_LCAO_DELTAP_SI
