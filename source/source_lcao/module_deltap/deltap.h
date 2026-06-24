@@ -2,6 +2,14 @@
 #define DELTAP_H
 
 #include "source_base/vector3.h"
+#include "source_basis/module_ao/parallel_orbitals.h"
+#include "source_basis/module_nao/two_center_integrator.h"
+#include "source_cell/module_neighbor/sltk_grid_driver.h"
+#include "source_cell/klist.h"
+#include "source_cell/unitcell.h"
+#include "source_estate/elecstate.h"
+#include "source_psi/psi.h"
+
 #include <complex>
 #include <unordered_map>
 #include <vector>
@@ -16,8 +24,11 @@ struct OverlapData {
 
 struct KSpaceData {
     ModuleBase::Vector3<double> kvec_d;
+    // S_k[iat][lm][mu_local]
     std::vector<std::vector<std::vector<std::complex<double>>>> S_k;
+    // dS_k[iat][alpha][lm][mu_local]  (alpha: 0=x, 1=y, 2=z)
     std::vector<std::vector<std::vector<std::vector<std::complex<double>>>>> dS_k;
+    // D_I[iat][lm][nband]
     std::vector<std::vector<std::vector<std::complex<double>>>> D_I;
 };
 
@@ -32,6 +43,61 @@ class DeltaP {
 public:
     DeltaP() = default;
     ~DeltaP() = default;
+
+    void init(const UnitCell& ucell,
+              const Grid_Driver& gd,
+              const K_Vectors& kv,
+              const TwoCenterIntegrator* intor,
+              const std::vector<double>& orb_cutoff,
+              double rm,
+              int gdir);
+
+    void compute_atomic_polarization(
+        const UnitCell& ucell,
+        const psi::Psi<std::complex<double>>* psi,
+        const elecstate::ElecState* pelec);
+
+    const AtomicPolarization& get_results() const { return results_; }
+
+private:
+    void compute_real_overlaps(const UnitCell& ucell, const Grid_Driver& gd);
+    void setup_kstring(const K_Vectors& kv);
+    void compute_S_k(int ik);
+    void compute_D_I(int ik, const std::complex<double>* psi_k, int nbands, int nrow_local);
+    void compute_berry_connection(int ik, const std::complex<double>* psi_k,
+                                  int nbands, int nrow_local, const double* wg);
+    void integrate_polarization(const UnitCell& ucell, int nbands);
+    void verify_sum_rule();
+    void write_results(const UnitCell& ucell) const;
+
+    // Configuration
+    const TwoCenterIntegrator* intor_ = nullptr;
+    std::vector<double> orb_cutoff_;
+    double rm_ = 3.0;
+    int gdir_ = 3;
+    int nat_ = 0;
+    int nproj_max_ = 0;
+
+    // Infrastructure pointers
+    const Parallel_Orbitals* paraV_ = nullptr;
+    const Grid_Driver* gd_ = nullptr;
+    const K_Vectors* kv_ = nullptr;
+
+    // Real-space overlaps: overlap_R_[iat][adj_index]
+    std::vector<std::vector<OverlapData>> overlap_R_;
+    std::vector<int> nproj_per_atom_;
+
+    // k-string data
+    std::vector<KSpaceData> kstring_data_;
+    int nppstr_ = 0;
+    int total_string_ = 0;
+    std::vector<std::vector<int>> k_index_;
+
+    // Berry connection: A_nk_[iat][ik][nband][3] (alpha=x,y,z)
+    std::vector<std::vector<std::vector<ModuleBase::Vector3<std::complex<double>>>>> A_nk_;
+
+    // Results
+    AtomicPolarization results_;
 };
 
 } // namespace deltap
