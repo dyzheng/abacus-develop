@@ -23,6 +23,7 @@ berry_phase    1
 gdir    3
 
 deltap_switch    1
+deltap_method    berry_connection
 deltap_rm    3.0
 deltap_gdir    3
 deltap_gauge_mode    smo_anchored

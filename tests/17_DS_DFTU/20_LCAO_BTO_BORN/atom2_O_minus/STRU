@@ -1,0 +1,41 @@
+ATOMIC_SPECIES
+Ba 137.328 Ba_ONCV_PBE-1.0.upf
+Ti 47.867 Ti_ONCV_PBE-1.2.upf
+O  15.999 O.upf
+
+NUMERICAL_ORBITAL
+Ba_gga_10au_100Ry_6s3p3d2f.orb
+Ti_gga_10au_100Ry_6s3p3d2f.orb
+O_gga_10au_100Ry_3s3p2d1f.orb
+
+LATTICE_CONSTANT
+1.8897261254578284
+
+LATTICE_VECTORS
+4.00    0.00    0.00
+0.00    4.00    0.00
+0.00    0.00    4.20
+
+ATOMIC_POSITIONS
+Direct
+
+Ba
+0.0
+1
+0.0   0.0   0.0
+
+Ti
+0.0
+1
+0.5   0.5   0.52
+
+O
+0.0
+1
+0.5   0.5   0.9937002713015476
+
+O
+0.0
+2
+0.5   0.0   0.5
+0.0   0.5   0.5

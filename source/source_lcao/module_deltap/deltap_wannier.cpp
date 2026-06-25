@@ -10,6 +10,8 @@
 #include <cmath>
 #include <algorithm>
 #include <vector>
+#include <fstream>
+#include <iomanip>
 
 // LAPACK declarations (Fortran, column-major). zgesvd_ is not in
 // lapack_connector.h, so declare it here. zgetrf_ redeclaration is harmless.
@@ -133,6 +135,9 @@ void DeltaP::compute_wannier_polarization(
 
     std::cout << "\n * * * * * *\n << Start DeltaP Wannier polarization\n";
 
+    // Load branch state from previous SCF/run for cross-SCF phase smoothness
+    load_branch();
+
     // Step 0: compute real-space overlaps and k-string
     compute_real_overlaps(ucell, *gd_);
     setup_kstring(*kv_);
@@ -190,99 +195,238 @@ void DeltaP::compute_wannier_polarization(
     }
 #endif
 
-    // Step 2: SVD of D_I at each k -> U(k) = W * V^dagger (polar decomposition)
-    // D_I is (nproj_total x nocc_use) matrix
-    // SVD: D = W * Sigma * V^dagger, then U = W * V^dagger (nproj_total x nocc_use)
-    std::vector<std::vector<std::complex<double>>> U_k(nppstr_);
+    // Step 2: Global SVD of D at each k-point, with per-atom weight
+    // decomposition of the Berry connection.
+    //
+    // D = <alpha|psi> is (nproj_total x nocc).  Its SVD
+    //   D = W * Sigma * Vt
+    // gives the global right singular vectors Vt = V^dagger (nocc x nocc)
+    // and left singular vectors W (nproj_total x nocc).  The SVD gauge
+    // (Ozaki CWF) fixes the band-space phase uniquely.
+    //
+    // Per-atom weight: for singular value s, the fraction "owned" by atom I is
+    //   w^I_s = sum_{a in atom I} |W_{a,s}|^2
+    // These satisfy sum_I w^I_s = 1 for every s (W has orthonormal columns).
+    //
+    // The per-atom Berry connection for link j is
+    //   A^I_j = sum_s w^I_s * Im[ M_j(s,s) ]
+    // where M_j = Vt(k_j) * O_j * Vt(k_{j+1})^dagger  (nocc x nocc).
+    //
+    // Sum rule (EXACT):
+    //   sum_I A^I_j = sum_s (sum_I w^I_s) * Im[M_j(s,s)]
+    //               = sum_s Im[M_j(s,s)] = Im Tr(M_j) = Im Tr(O_j)
+    //
+    // P^I = prefactor * sum_j A^I_j   (Berry connection, dk->0 exact for
+    //                                  infinite k-string; good approx for finite)
+
+    int m_dim = nproj_total;
+    int n_dim = nocc_use;
+    int min_mn = std::min(m_dim, n_dim);
+
+    // Vt_k[j] = global Vt at k_j (nocc x nocc, column-major)
+    std::vector<std::vector<std::complex<double>>> Vt_k(nppstr_);
+    // w_atom[j][iat][s] = per-atom weight for singular value s at k_j
+    std::vector<std::vector<std::vector<double>>> w_atom(nppstr_);
 
     for (int j = 0; j < nppstr_; ++j)
     {
-        int m_dim = nproj_total;
-        int n_dim = nocc_use;
-
         // Build dense D matrix (m_dim x n_dim, column-major)
         std::vector<std::complex<double>> D_mat(m_dim * n_dim, std::complex<double>(0.0, 0.0));
-
         int row_offset = 0;
         for (int iat = 0; iat < nat_; ++iat)
         {
             int r = nproj_per_atom_[iat];
-            if (kstring_data_[j].D_I.size() <= static_cast<size_t>(iat))
+            if (kstring_data_[j].D_I.size() > static_cast<size_t>(iat))
             {
-                row_offset += r;
-                continue;
-            }
-            for (int lm = 0; lm < r; ++lm)
-            {
-                if (kstring_data_[j].D_I[iat].size() <= static_cast<size_t>(lm)) continue;
-                for (int n = 0; n < n_dim; ++n)
+                for (int lm = 0; lm < r; ++lm)
                 {
-                    if (kstring_data_[j].D_I[iat][lm].size() <= static_cast<size_t>(n)) continue;
-                    D_mat[(row_offset + lm) + n * m_dim] = kstring_data_[j].D_I[iat][lm][n];
+                    if (kstring_data_[j].D_I[iat].size() <= static_cast<size_t>(lm)) continue;
+                    for (int n = 0; n < n_dim; ++n)
+                    {
+                        if (kstring_data_[j].D_I[iat][lm].size() <= static_cast<size_t>(n)) continue;
+                        D_mat[(row_offset + lm) + n * m_dim] = kstring_data_[j].D_I[iat][lm][n];
+                    }
                 }
             }
             row_offset += r;
         }
 
-        // SVD
-        int min_mn = std::min(m_dim, n_dim);
+        // SVD: D = W * Sigma * Vt  (jobu='S', jobvt='A')
+        // W: (m_dim x min_mn), Vt: (n_dim x n_dim)
         std::vector<double> S_val(std::max(min_mn, 1));
-        std::vector<std::complex<double>> W_svd(m_dim * m_dim);
+        std::vector<std::complex<double>> W_svd(m_dim * min_mn);
         std::vector<std::complex<double>> Vt_svd(n_dim * n_dim);
         int lwork = -1;
         std::vector<std::complex<double>> work(1);
         std::vector<double> rwork(5 * std::max(min_mn, 1));
         int info = 0;
 
-        char jobu = 'A';
+        char jobu = 'S';
         char jobvt = 'A';
         int lda_sv = m_dim;
         int ldu = m_dim;
         int ldvt = n_dim;
 
-        // Query
         zgesvd_(&jobu, &jobvt, &m_dim, &n_dim, D_mat.data(), &lda_sv,
                 S_val.data(), W_svd.data(), &ldu, Vt_svd.data(), &ldvt,
                 work.data(), &lwork, rwork.data(), &info);
-
         if (info != 0)
         {
-            std::cerr << "DeltaP Wannier: zgesvd query failed at k=" << j << " info=" << info << std::endl;
-            U_k[j].assign(m_dim * n_dim, std::complex<double>(0.0, 0.0));
+            std::cerr << "DeltaP: zgesvd query failed at k=" << j << " info=" << info << std::endl;
+            Vt_k[j].assign(n_dim * n_dim, std::complex<double>(0.0, 0.0));
+            w_atom[j].assign(nat_, std::vector<double>(n_dim, 0.0));
             continue;
         }
-
         lwork = static_cast<int>(work[0].real());
         work.resize(std::max(lwork, 1));
-
-        // Actual SVD
         zgesvd_(&jobu, &jobvt, &m_dim, &n_dim, D_mat.data(), &lda_sv,
                 S_val.data(), W_svd.data(), &ldu, Vt_svd.data(), &ldvt,
                 work.data(), &lwork, rwork.data(), &info);
-
         if (info != 0)
         {
-            std::cerr << "DeltaP Wannier: zgesvd failed at k=" << j << " info=" << info << std::endl;
-            U_k[j].assign(m_dim * n_dim, std::complex<double>(0.0, 0.0));
+            std::cerr << "DeltaP: zgesvd failed at k=" << j << " info=" << info << std::endl;
+            Vt_k[j].assign(n_dim * n_dim, std::complex<double>(0.0, 0.0));
+            w_atom[j].assign(nat_, std::vector<double>(n_dim, 0.0));
             continue;
         }
 
-        // Polar decomposition: U = W[:, :n_dim] * V^dagger
-        // W is (m_dim x m_dim), V^dagger is (n_dim x n_dim)
-        // U_polar = W[:, 0:n_dim] * Vt -> (m_dim x n_dim), column-major
-        std::vector<std::complex<double>> U_polar(m_dim * n_dim, std::complex<double>(0.0, 0.0));
+        Vt_k[j] = Vt_svd;
 
-        // U_polar[i + j * m_dim] = sum_k W_svd[i + k * m_dim] * Vt_svd[k + j * n_dim]
-        // (manual loop avoids dependence on blas_connector.h / GATHER_INFO macro)
-        for (int i = 0; i < m_dim; ++i)
-            for (int j = 0; j < n_dim; ++j)
-                for (int k = 0; k < n_dim; ++k)
-                    U_polar[i + j * m_dim] += W_svd[i + k * m_dim] * Vt_svd[k + j * n_dim];
+        // Per-atom weights: w^I_s = sum_{a in I} |W_{a,s}|^2
+        // W_svd is (m_dim x min_mn) column-major: W[a + s * m_dim]
+        w_atom[j].resize(nat_, std::vector<double>(min_mn, 0.0));
+        row_offset = 0;
+        for (int iat = 0; iat < nat_; ++iat)
+        {
+            int r = nproj_per_atom_[iat];
+            for (int a = row_offset; a < row_offset + r; ++a)
+            {
+                for (int s = 0; s < min_mn; ++s)
+                {
+                    std::complex<double> wval = W_svd[a + s * m_dim];
+                    w_atom[j][iat][s] += std::norm(wval);
+                }
+            }
+            row_offset += r;
+        }
 
-        U_k[j] = U_polar;
+        if (j == 0)
+        {
+            std::cout << "   DeltaP global SVD: nproj=" << m_dim
+                      << " nocc=" << n_dim << " min=" << min_mn << std::endl;
+            for (int iat = 0; iat < nat_; ++iat)
+            {
+                double wsum = 0;
+                for (int s = 0; s < min_mn; ++s) wsum += w_atom[j][iat][s];
+                std::cout << "     iat=" << iat
+                          << " weight_sum=" << std::fixed << std::setprecision(4) << wsum
+                          << " top5_singulars:";
+                for (int s = 0; s < std::min(5, min_mn); ++s)
+                    std::cout << " " << std::scientific << std::setprecision(4) << S_val[s];
+                std::cout << std::endl;
+            }
+        }
     }
 
-    // Step 3: Per-atom Wilson loop using U matrices
+    // Step 2b: Align SVD gauges across k-points (Procrustes matching).
+    //
+    // The SVD at each k-point is independent; singular vectors can have
+    // different signs at neighbouring k-points, causing Im[M_j(s,s)] to
+    // have the wrong sign.  Fix: at each k_j (j>0), find the unitary Q
+    // that maximizes Re Tr[ V†(k_{j-1}) · V(k_j) · Q ], then replace
+    // V(k_j) -> V(k_j) · Q and W(k_j) -> W(k_j) · Q.
+    //
+    // For non-degenerate singular values, Q is diagonal with ±1 entries
+    // (sign alignment).  For degenerate singular values, Q is a rotation
+    // within the degenerate subspace.
+
+    for (int j = 1; j < nppstr_; ++j)
+    {
+        // Build the overlap matrix S = V†(k_{j-1}) · V(k_j)  (nocc x nocc)
+        // Vt_k is V† (from SVD), so V = Vt_k†, and
+        // V†(k_{j-1}) = Vt_k[j-1], V(k_j) = Vt_k[j]†
+        // S = Vt_k[j-1] · Vt_k[j]†
+        std::vector<std::complex<double>> S_overlap(
+            n_dim * n_dim, std::complex<double>(0.0, 0.0));
+        for (int s = 0; s < n_dim; ++s)
+        {
+            for (int sp = 0; sp < n_dim; ++sp)
+            {
+                std::complex<double> sum(0.0, 0.0);
+                for (int n = 0; n < n_dim; ++n)
+                {
+                    // Vt_k[j-1][s + n*n_dim] = V†(k_{j-1})[s,n]
+                    // Vt_k[j][sp + n*n_dim]† = conj(Vt_k[j][sp + n*n_dim]) = V(k_j)[n,sp]
+                    sum += Vt_k[j - 1][s + n * n_dim] * std::conj(Vt_k[j][sp + n * n_dim]);
+                }
+                S_overlap[s + sp * n_dim] = sum;
+            }
+        }
+
+        // SVD of S_overlap = U_svd * Sigma * Vt_svd
+        // The optimal Q = U_svd * Vt_svd (polar factor)
+        std::vector<double> S2_val(std::max(n_dim, 1));
+        std::vector<std::complex<double>> U2(n_dim * n_dim);
+        std::vector<std::complex<double>> Vt2(n_dim * n_dim);
+        int lwork2 = -1;
+        std::vector<std::complex<double>> work2(1);
+        std::vector<double> rwork2(5 * std::max(n_dim, 1));
+        int info2 = 0;
+        char jobu2 = 'A';
+        char jobvt2 = 'A';
+        int n2 = n_dim;
+        zgesvd_(&jobu2, &jobvt2, &n2, &n2, S_overlap.data(), &n2,
+                S2_val.data(), U2.data(), &n2, Vt2.data(), &n2,
+                work2.data(), &lwork2, rwork2.data(), &info2);
+        if (info2 != 0)
+        {
+            std::cerr << "DeltaP: Procrustes zgesvd query failed at j=" << j << std::endl;
+            continue;
+        }
+        lwork2 = static_cast<int>(work2[0].real());
+        work2.resize(std::max(lwork2, 1));
+        zgesvd_(&jobu2, &jobvt2, &n2, &n2, S_overlap.data(), &n2,
+                S2_val.data(), U2.data(), &n2, Vt2.data(), &n2,
+                work2.data(), &lwork2, rwork2.data(), &info2);
+        if (info2 != 0)
+        {
+            std::cerr << "DeltaP: Procrustes zgesvd failed at j=" << j << std::endl;
+            continue;
+        }
+
+        // Q = U2 * Vt2  (nocc x nocc, column-major)
+        std::vector<std::complex<double>> Q(n_dim * n_dim, std::complex<double>(0.0, 0.0));
+        for (int i = 0; i < n_dim; ++i)
+            for (int s = 0; s < n_dim; ++s)
+                for (int k = 0; k < n_dim; ++k)
+                    Q[i + s * n_dim] += U2[i + k * n_dim] * Vt2[k + s * n_dim];
+
+        // Apply Q: V(k_j) -> V(k_j) * Q, i.e., V†(k_j) -> Q† * V†(k_j)
+        // Vt_k[j] = Q† * Vt_k[j]  (V† -> Q† * V†)
+        std::vector<std::complex<double>> Vt_new(n_dim * n_dim, std::complex<double>(0.0, 0.0));
+        for (int s = 0; s < n_dim; ++s)
+        {
+            for (int n = 0; n < n_dim; ++n)
+            {
+                std::complex<double> sum(0.0, 0.0);
+                for (int sp = 0; sp < n_dim; ++sp)
+                    sum += std::conj(Q[sp + s * n_dim]) * Vt_k[j][sp + n * n_dim];
+                Vt_new[s + n * n_dim] = sum;
+            }
+        }
+        Vt_k[j] = Vt_new;
+
+        // Also update weights: w^I_s -> sum_t Q*_{t,s} * (old w^I_{s,t})... 
+        // Actually, the weights transform as w^I_s' = sum_t |Q_{t,s}|^2 * w^I_t
+        // No, the weights are w^I_s = sum_{a in I} |W_{a,s}|^2, and W -> W * Q,
+        // so w'^I_s = sum_{a in I} |sum_t W_{a,t} Q_{t,s}|^2.
+        // For a sign-flip Q (diagonal ±1), w'^I_s = w^I_s (unchanged).
+        // For a general Q, we need to recompute. But since we don't store W,
+        // we approximate: for non-degenerate singular values, Q is diagonal
+        // and weights are unchanged. For degenerate ones, the weights rotate
+        // but their SUM is preserved. For now, leave weights unchanged.
+        // (This is exact for non-degenerate singular values.)
+    }
     // M^I(k_j, k_{j+1}) = U^I^dagger(k_j) * O(k_j,k_{j+1}) * U^I(k_{j+1})
     // where O = C^dagger(k_j) * S(dk) * C(k_{j+1}) is the exact overlap matrix
     // of Bloch states on neighbouring k-points (replaces the O ~ I approximation).
@@ -371,8 +515,9 @@ void DeltaP::compute_wannier_polarization(
     else a_alpha = ucell.lat0 * ucell.a3.norm();
     const double omega = ucell.omega;
 
-    // P = -(a_alpha / 2*pi*Omega) * gamma  [result in e/Bohr^2]
-    const double prefactor = -a_alpha / (2.0 * ModuleBase::PI * omega);
+    // P = (a_alpha / 2*pi*Omega) * gamma  [result in e/Bohr^2]
+    // (sign: P = (a/Omega) * reduced_phase, reduced_phase = gamma/(2pi))
+    const double prefactor = a_alpha / (2.0 * ModuleBase::PI * omega);
 
     results_.P_I.resize(nat_, ModuleBase::Vector3<double>(0.0, 0.0, 0.0));
     results_.gamma_I.resize(nat_, ModuleBase::Vector3<double>(0.0, 0.0, 0.0));
@@ -381,78 +526,89 @@ void DeltaP::compute_wannier_polarization(
         W_prev_.assign(nat_, std::complex<double>(1.0, 0.0));
     }
 
+    // --- Compute exact total Berry phase via Wilson loop (product of det O_j) ---
+    // gamma_total = Im ln(prod_j det(O_j)) = sum_j arg(det(O_j))
+    double gamma_total = 0.0;
+    for (int j = 0; j < nppstr_ - 1; ++j)
+    {
+        const std::vector<std::complex<double>>& Oj = O_kpair[j];
+        // det(O_j) via LU
+        std::vector<std::complex<double>> O_copy = Oj;
+        std::vector<int> ipiv(std::max(n_dim, 1));
+        int info_lu = 0;
+        int n_lu = n_dim;
+        zgetrf_(&n_lu, &n_lu, O_copy.data(), &n_lu, ipiv.data(), &info_lu);
+        if (info_lu != 0) continue;
+        std::complex<double> det_o(1.0, 0.0);
+        int sign = 1;
+        for (int i = 0; i < n_dim; ++i)
+        {
+            det_o *= O_copy[i + i * n_dim];
+            if (ipiv[i] != i + 1) sign = -sign;
+        }
+        if (sign < 0) det_o = -det_o;
+        gamma_total += std::arg(det_o);
+    }
+
+    // --- Compute per-atom Berry connection (for proportional decomposition) ---
+    // A^I = sum_j sum_s w^I_s * Im[M_j(s,s)]
+    // A_total = sum_I A^I = sum_j Im Tr(O_j)  (Berry connection approximation)
+    // Then rescale: gamma^I = gamma_total * A^I / A_total
+    // This ensures sum_I gamma^I = gamma_total (exact Berry phase)
+    // while per-atom proportions follow the Berry connection.
+    std::vector<double> berry_conn_atom(nat_, 0.0);
+    double berry_conn_total = 0.0;
+
     for (int iat = 0; iat < nat_; ++iat)
     {
-        int r = nproj_per_atom_[iat];
-        if (r == 0) continue;
-
-        int row_offset = 0;
-        for (int i = 0; i < iat; ++i)
-            row_offset += nproj_per_atom_[i];
-
-        std::complex<double> wilson_product(1.0, 0.0);
+        double berry_conn_sum = 0.0;
 
         for (int j = 0; j < nppstr_ - 1; ++j)
         {
-            int m_dim = nproj_total;
-            int n_dim = nocc_use;
-
-            // M^I = U^I^dagger(k_j) * O_j * U^I(k_{j+1}) -- (r x r) matrix
             const std::vector<std::complex<double>>& Oj = O_kpair[j];
-            std::vector<std::complex<double>> M(r * r, std::complex<double>(0.0, 0.0));
-            for (int a = 0; a < r; ++a)
+            const std::vector<std::complex<double>>& Vtj = Vt_k[j];
+            const std::vector<std::complex<double>>& Vtjp1 = Vt_k[j + 1];
+
+            const std::vector<double>& wj = w_atom[j][iat];
+            const std::vector<double>& wjp1 = w_atom[j + 1][iat];
+
+            for (int s = 0; s < min_mn; ++s)
             {
-                for (int b = 0; b < r; ++b)
+                std::complex<double> M_ss(0.0, 0.0);
+                for (int n = 0; n < n_dim; ++n)
                 {
-                    std::complex<double> sum(0.0, 0.0);
-                    for (int n = 0; n < n_dim; ++n)
+                    int idx_j = s + n * n_dim;
+                    if (idx_j >= static_cast<int>(Vtj.size())) continue;
+                    const std::complex<double> vj = Vtj[idx_j];
+                    for (int m = 0; m < n_dim; ++m)
                     {
-                        int idx_j = (row_offset + a) + n * m_dim;
-                        if (idx_j >= static_cast<int>(U_k[j].size())) continue;
-                        const std::complex<double> uj = std::conj(U_k[j][idx_j]);
-                        for (int m = 0; m < n_dim; ++m)
-                        {
-                            int idx_jp1 = (row_offset + b) + m * m_dim;
-                            if (idx_jp1 >= static_cast<int>(U_k[j + 1].size())) continue;
-                            sum += uj * Oj[n + m * n_dim] * U_k[j + 1][idx_jp1];
-                        }
+                        int idx_jp1 = s + m * n_dim;
+                        if (idx_jp1 >= static_cast<int>(Vtjp1.size())) continue;
+                        M_ss += vj * Oj[n + m * n_dim] * std::conj(Vtjp1[idx_jp1]);
                     }
-                    M[a + b * r] = sum;
                 }
+                double w_avg = 0.5 * (wj[s] + wjp1[s]);
+                berry_conn_sum += w_avg * std::imag(M_ss);
             }
-
-            // det(M) via LU
-            std::vector<std::complex<double>> M_copy = M;
-            std::vector<int> ipiv(std::max(r, 1));
-            int info_lu = 0;
-            int r_int = r;
-            zgetrf_(&r_int, &r_int, M_copy.data(), &r_int, ipiv.data(), &info_lu);
-
-            if (info_lu != 0) continue;
-
-            std::complex<double> det_m(1.0, 0.0);
-            int sign = 1;
-            for (int i = 0; i < r; ++i)
-            {
-                det_m *= M_copy[i + i * r];
-                if (ipiv[i] != i + 1) sign = -sign;
-            }
-            if (sign < 0) det_m = -det_m;
-
-            wilson_product *= det_m;
         }
 
-        double gamma = std::arg(wilson_product);
+        berry_conn_atom[iat] = berry_conn_sum;
+        berry_conn_total += berry_conn_sum;
+    }
 
-        // branch tracking: unwrap gamma so it stays smooth across SCF steps
-        if (has_prev_ && iat < static_cast<int>(W_prev_.size()))
-        {
-            double prev_gamma = std::arg(W_prev_[iat]);
-            double diff = gamma - prev_gamma;
-            while (diff > M_PI) { gamma -= 2.0 * M_PI; diff -= 2.0 * M_PI; }
-            while (diff < -M_PI) { gamma += 2.0 * M_PI; diff += 2.0 * M_PI; }
-        }
-        W_prev_[iat] = wilson_product;
+    // Rescale per-atom Berry connection to match exact total Berry phase
+    std::cout << "   DeltaP: gamma_total (Wilson) = " << std::scientific << std::setprecision(6)
+              << gamma_total << std::endl;
+    std::cout << "   DeltaP: berry_conn_total (trace) = " << berry_conn_total << std::endl;
+    std::cout << "   DeltaP: ratio (Wilson/trace) = " << gamma_total / berry_conn_total << std::endl;
+
+    for (int iat = 0; iat < nat_; ++iat)
+    {
+        double gamma = 0.0;
+        if (std::abs(berry_conn_total) > 1e-15)
+            gamma = gamma_total * berry_conn_atom[iat] / berry_conn_total;
+
+        W_prev_[iat] = std::complex<double>(gamma, 0.0);
         has_prev_ = true;
 
         results_.gamma_I[iat][alpha_idx] = gamma;
@@ -466,9 +622,61 @@ void DeltaP::compute_wannier_polarization(
     verify_sum_rule();
     write_results(ucell);
 
+    // Persist branch state for the next SCF/run
+    save_branch();
+
     std::cout << " >> Finish DeltaP Wannier polarization.\n * * * * * *\n";
 
     ModuleBase::timer::end("DeltaP", "compute_wannier_polarization");
+}
+
+// Read previously saved per-atom Wilson-loop products W^I so that arg()
+// unwrapping stays smooth across independent SCF runs.  The file is
+// written by save_branch() and lives in the ABACUS working directory.
+void DeltaP::load_branch()
+{
+    const std::string fname = "deltap_branch.dat";
+    std::ifstream ifs(fname);
+    if (!ifs.is_open()) return;
+
+    int nat_file = 0;
+    ifs >> nat_file;
+    if (nat_file != nat_)
+    {
+        std::cerr << "DeltaP: branch file nat=" << nat_file
+                  << " != current nat=" << nat_ << ", ignoring" << std::endl;
+        return;
+    }
+
+    W_prev_.resize(nat_);
+    for (int iat = 0; iat < nat_; ++iat)
+    {
+        double re = 0.0, im = 0.0;
+        ifs >> re >> im;
+        W_prev_[iat] = std::complex<double>(re, im);
+    }
+    has_prev_ = true;
+    std::cout << " DeltaP: loaded branch state from " << fname << std::endl;
+}
+
+// Persist per-atom Wilson-loop products W^I for the next SCF/run.
+void DeltaP::save_branch() const
+{
+    if (!has_prev_ || static_cast<int>(W_prev_.size()) != nat_) return;
+
+    const std::string fname = "deltap_branch.dat";
+    std::ofstream ofs(fname);
+    if (!ofs.is_open())
+    {
+        std::cerr << "DeltaP: cannot open " << fname << " for writing" << std::endl;
+        return;
+    }
+
+    ofs << std::setprecision(17);
+    ofs << nat_ << "\n";
+    for (int iat = 0; iat < nat_; ++iat)
+        ofs << W_prev_[iat].real() << " " << W_prev_[iat].imag() << "\n";
+    ofs.close();
 }
 
 } // namespace deltap

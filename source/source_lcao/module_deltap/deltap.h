@@ -85,6 +85,8 @@ private:
                                       const elecstate::ElecState* pelec);
     void verify_sum_rule();
     void write_results(const UnitCell& ucell) const;
+    void load_branch();
+    void save_branch() const;
 
     // Configuration
     const TwoCenterIntegrator* intor_ = nullptr;
