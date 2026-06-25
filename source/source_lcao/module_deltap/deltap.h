@@ -49,6 +49,7 @@ public:
               const Grid_Driver& gd,
               const K_Vectors& kv,
               const TwoCenterIntegrator* intor,
+              const TwoCenterIntegrator* overlap_intor,
               const std::vector<double>& orb_cutoff,
               double rm,
               int gdir,
@@ -73,6 +74,7 @@ private:
     void compute_real_overlaps(const UnitCell& ucell, const Grid_Driver& gd);
     void setup_kstring(const K_Vectors& kv);
     void compute_S_k(int ik);
+    void compute_S_dk(const UnitCell& ucell);
     void compute_D_I(int ik, const std::complex<double>* psi_k, int nbands, int nrow_local);
     void compute_berry_connection(int ik, const std::complex<double>* psi_k,
                                   int nbands, int nrow_local, const double* wg);
@@ -86,11 +88,21 @@ private:
 
     // Configuration
     const TwoCenterIntegrator* intor_ = nullptr;
+    const TwoCenterIntegrator* overlap_intor_ = nullptr;
     std::vector<double> orb_cutoff_;
     double rm_ = 3.0;
     int gdir_ = 3;
     int nat_ = 0;
     int nproj_max_ = 0;
+
+    // S(dk) local block for the exact Wilson-loop overlap O = C^dagger(k_j) * S(dk) * C(k_{j+1})
+    std::vector<std::complex<double>> S_dk_;
+    int S_dk_nrow_ = 0;
+    int S_dk_ncol_ = 0;
+
+    // Branch tracking for cross-SCF phase smoothness
+    std::vector<std::complex<double>> W_prev_;
+    bool has_prev_ = false;
 
     // Infrastructure pointers
     const Parallel_Orbitals* paraV_ = nullptr;
