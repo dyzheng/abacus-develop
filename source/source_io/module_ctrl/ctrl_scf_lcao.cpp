@@ -363,6 +363,14 @@ void ModuleIO::ctrl_scf_lcao(UnitCell& ucell,
     if (inp.calculation == "nscf" && inp.deltap_switch)
     {
         std::cout << FmtCore::format("\n * * * * * *\n << Start %s.\n", "DeltaP decomposition");
+        // If overlap_orb_onsite was not built (onsite_radius was 0 at init time),
+        // build it now with deltap_rm as the SMO radius.
+        if (!two_center_bundle.overlap_orb_onsite)
+        {
+            std::cout << " DeltaP: building orb_onsite with rm=" << inp.deltap_rm << " Bohr" << std::endl;
+            two_center_bundle.build_orb_onsite(inp.deltap_rm);
+            two_center_bundle.tabulate();
+        }
         deltap::DeltaP dp;
         dp.init(ucell, gd, kv,
                 two_center_bundle.overlap_orb_onsite.get(),

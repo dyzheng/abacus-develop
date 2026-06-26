@@ -5,6 +5,8 @@
 #ifdef __MPI
 #include "source_base/parallel_comm.h"
 #endif
+#include <cmath>
+#include <set>
 
 namespace deltap {
 
@@ -133,11 +135,31 @@ void DeltaP::setup_kstring(const K_Vectors& kv)
     const int mp_z = kv.nmp[2];
     const int direction = gdir_;
 
+    // Fallback: with symmetry=-1, nmp may be [0,0,0] even though
+    // the full Monkhorst-Pack grid was generated.  Infer from k-points.
+    int mp_x_use = mp_x, mp_y_use = mp_y, mp_z_use = mp_z;
+    if (mp_x == 0 || mp_y == 0 || mp_z == 0)
+    {
+        std::set<double> kx_set, ky_set, kz_set;
+        for (int ik = 0; ik < kv.get_nkstot(); ++ik)
+        {
+            kx_set.insert(std::round(kv.kvec_d[ik].x * 1e6) / 1e6);
+            ky_set.insert(std::round(kv.kvec_d[ik].y * 1e6) / 1e6);
+            kz_set.insert(std::round(kv.kvec_d[ik].z * 1e6) / 1e6);
+        }
+        mp_x_use = kx_set.size();
+        mp_y_use = ky_set.size();
+        mp_z_use = kz_set.size();
+        std::cout << "   DeltaP: nmp was [0,0,0], inferred ["
+                  << mp_x_use << "," << mp_y_use << "," << mp_z_use
+                  << "] from " << kv.get_nkstot() << " k-points" << std::endl;
+    }
+
     int mp_dir = 0;
     int num_string = 0;
-    if (direction == 1) { mp_dir = mp_x; num_string = mp_y * mp_z; }
-    else if (direction == 2) { mp_dir = mp_y; num_string = mp_x * mp_z; }
-    else { mp_dir = mp_z; num_string = mp_x * mp_y; }
+    if (direction == 1) { mp_dir = mp_x_use; num_string = mp_y_use * mp_z_use; }
+    else if (direction == 2) { mp_dir = mp_y_use; num_string = mp_x_use * mp_z_use; }
+    else { mp_dir = mp_z_use; num_string = mp_x_use * mp_y_use; }
 
     total_string_ = num_string;
     k_index_.resize(total_string_);

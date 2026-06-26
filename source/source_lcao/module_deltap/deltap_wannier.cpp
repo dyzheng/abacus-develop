@@ -159,6 +159,14 @@ void DeltaP::compute_wannier_polarization(
         nproj_total += nproj_per_atom_[iat];
 
     // Step 1: Compute S(k), D_I(k) for all k on string
+    std::cout << "   DeltaP: nppstr_=" << nppstr_ << " total_string_=" << total_string_
+              << " k_index_.size()=" << k_index_.size() << " nks=" << nks << std::endl;
+    if (k_index_.empty() || nppstr_ == 0)
+    {
+        std::cerr << "DeltaP ERROR: k_index_ is empty or nppstr_=0" << std::endl;
+        ModuleBase::timer::end("DeltaP", "compute_wannier_polarization");
+        return;
+    }
     kstring_data_.resize(nppstr_);
     // keep a stable pointer to each k-block of psi for the Wilson-loop overlap
     std::vector<std::complex<double>*> psi_k_ptrs(nppstr_, nullptr);
