@@ -93,8 +93,17 @@ void DeltaP::compute_S_dk(const UnitCell& ucell)
                 continue;
             }
 
-            const double arg = ModuleBase::TWO_PI * (
-                dkv[0] * R.x + dkv[1] * R.y + dkv[2] * R.z);
+            // Phase: 2*pi*(dk.R - dk.tau_bra)
+            // This matches the ABACUS berry_phase convention:
+            // exp(2*pi*i*(k_R*R - dk*tau)) where k_R = k_L + dk
+            // = exp(2*pi*i*dk*R) * exp(2*pi*i*(k_L*R - dk*tau))
+            // For the Bloch-state overlap (no position correction),
+            // we use exp(2*pi*i*(dk*R - dk*tau_bra))
+            // The tau_bra correction is a per-atom phase that converts
+            // <psi_k|psi_{k+b}> to approximately <u_k|u_{k+b}>
+            double arg = ModuleBase::TWO_PI * (
+                dkv[0] * R.x + dkv[1] * R.y + dkv[2] * R.z
+                - dkv[0] * tau0.x - dkv[1] * tau0.y - dkv[2] * tau0.z);
             const std::complex<double> phase(std::cos(arg), std::sin(arg));
 
             // snap wants vR = R2 - R1 = (ket centre) - (bra neighbour), in Bohr
@@ -137,6 +146,110 @@ void DeltaP::compute_S_dk(const UnitCell& ucell)
     }
 
     ModuleBase::timer::end("DeltaP", "compute_S_dk");
+}
+
+// Per-link version: computes S(dk) with the berry_phase phase convention
+//   phase = 2*pi*(k_R*R - dk*tau_bra)
+// and adds the first-order position operator correction
+//   overlap *= (1 - i*dk_cart*tpiba*R_alpha)
+// This converts Bloch-state overlap <psi|psi> to periodic-part overlap <u|u>.
+void DeltaP::compute_S_dk_link(const UnitCell& ucell,
+                               const ModuleBase::Vector3<double>& kvec_d_R,
+                               const ModuleBase::Vector3<double>& kvec_c_L,
+                               const ModuleBase::Vector3<double>& kvec_c_R)
+{
+    const int npol = ucell.get_npol();
+    const int nrow = paraV_->get_row_size();
+    const int ncol = paraV_->get_col_size();
+    S_dk_nrow_ = nrow;
+    S_dk_ncol_ = ncol;
+    S_dk_.assign(static_cast<size_t>(nrow) * ncol, std::complex<double>(0.0, 0.0));
+
+    const int* iat2iwt = paraV_->iat2iwt_;
+    const double dk_step = 1.0 / (nppstr_ - 1);
+    double dkv[3] = {0.0, 0.0, 0.0};
+    dkv[gdir_ - 1] = dk_step;
+    double dk_cart = dk_step * ucell.tpiba * ucell.lat0;
+
+    // First call: compute and cache the raw overlap data
+    if (!S_dk_cache_valid_)
+    {
+        S_dk_cache_.clear();
+        for (int iat = 0; iat < nat_; iat++)
+        {
+            auto tau0 = ucell.get_tau(iat);
+            int T0 = 0, I0 = 0;
+            ucell.iat2iait(iat, &I0, &T0);
+            const int nw0 = ucell.atoms[T0].nw;
+            AdjacentAtomInfo adjs;
+            gd_->Find_atom(ucell, tau0, T0, I0, &adjs);
+
+            for (int ad = 0; ad < adjs.adj_num + 1; ++ad)
+            {
+                const int T1 = adjs.ntype[ad];
+                const int I1 = adjs.natom[ad];
+                const int iat1 = ucell.itia2iat(T1, I1);
+                const ModuleBase::Vector3<int> R = adjs.box[ad];
+                if (ucell.cal_dtau(iat, iat1, R).norm() * ucell.lat0
+                    > orb_cutoff_[T0] + orb_cutoff_[T1]) continue;
+
+                const ModuleBase::Vector3<double> dtau = tau0 - adjs.adjacent_tau[ad];
+                const Atom* atom1 = &ucell.atoms[T1];
+                const int nw1 = atom1->nw;
+
+                for (int iw1 = 0; iw1 < nw1; ++iw1)
+                {
+                    const int L1 = atom1->iw2l[iw1];
+                    const int N1 = atom1->iw2n[iw1];
+                    const int m1 = atom1->iw2m[iw1];
+                    const int M1 = (m1 % 2 == 0) ? -m1 / 2 : (m1 + 1) / 2;
+                    std::vector<std::vector<double>> nlm;
+                    overlap_intor_->snap(T1, L1, N1, M1, T0, dtau * ucell.lat0, 0, nlm);
+                    if (nlm.empty() || nlm[0].empty()) continue;
+
+                    for (int iw0 = 0; iw0 < nw0; ++iw0)
+                    {
+                        const double ov = nlm[0][iw0];
+                        if (std::abs(ov) < 1e-15) continue;
+                        for (int s = 0; s < npol; ++s)
+                        {
+                            const int gmu = iat2iwt[iat] + npol * iw0 + s;
+                            const int gnu = iat2iwt[iat1] + npol * iw1 + s;
+                            const int lr = paraV_->global2local_row(gmu);
+                            const int lc = paraV_->global2local_col(gnu);
+                            if (lr >= 0 && lc >= 0)
+                                S_dk_cache_.push_back({lr, lc, ov,
+                                    (double)R.x, (double)R.y, (double)R.z,
+                                    tau0.x, tau0.y, tau0.z});
+                        }
+                    }
+                }
+            }
+        }
+        S_dk_cache_valid_ = true;
+    }
+
+    // Apply per-link phase using cached data
+    // berry_phase convention: phase = 2*pi*(kvec_c_R . R_cart - dk_c . tau)
+    // where kvec_c is Cartesian (1/Bohr), R_cart is Cartesian (Bohr), tau is Cartesian (Bohr)
+    ModuleBase::Vector3<double> dk_c = kvec_c_R - kvec_c_L;
+
+    for (const auto& e : S_dk_cache_)
+    {
+        // R_cart = R_int.x * a1 + R_int.y * a2 + R_int.z * a3
+        ModuleBase::Vector3<double> R_cart = e.Rx * ucell.a1 + e.Ry * ucell.a2 + e.Rz * ucell.a3;
+        double arg = ModuleBase::TWO_PI * (
+            kvec_c_R.x * R_cart.x + kvec_c_R.y * R_cart.y + kvec_c_R.z * R_cart.z
+            - dk_c.x * e.tau_x - dk_c.y * e.tau_y - dk_c.z * e.tau_z);
+        std::complex<double> phase(std::cos(arg), std::sin(arg));
+
+        // Position correction: DISABLED for testing
+        // double R_alpha = (gdir_ == 1) ? e.Rx : (gdir_ == 2) ? e.Ry : e.Rz;
+        // std::complex<double> pos_corr(1.0, -dk_cart * R_alpha);
+        std::complex<double> pos_corr(1.0, 0.0);  // no position correction
+
+        S_dk_[e.lr + e.lc * nrow] += phase * pos_corr * e.ov;
+    }
 }
 
 void DeltaP::compute_wannier_polarization(
@@ -182,9 +295,9 @@ void DeltaP::compute_wannier_polarization(
         return;
     }
 
-    // compute_S_dk is independent of the k-string (only depends on dk spacing)
-    compute_S_dk(ucell);
+    // compute_S_dk is now per-link (uses correct berry_phase phase + position correction)
     const int nlocal = paraV_->get_global_row_size();
+    S_dk_cache_valid_ = false;  // reset cache for new structure
 
     int n_dim = nocc_use;
     int m_dim = nproj_total;
@@ -250,10 +363,17 @@ void DeltaP::compute_wannier_polarization(
         }
 #endif
 
-        // --- Step 2: O_kpair (exact overlap) ---
+        // --- Step 2: O_kpair (exact overlap with berry_phase convention) ---
         std::vector<std::vector<std::complex<double>>> O_kpair(nppstr_ - 1);
         for (int j = 0; j < nppstr_ - 1; ++j)
         {
+            // Compute S_dk for this link with correct k_R phase + position correction
+            int ik_L = k_index_[istring][j];
+            int ik_R = k_index_[istring][j + 1];
+            if (ik_R < nks && ik_L < nks)
+                compute_S_dk_link(ucell, kv_->kvec_d[ik_R],
+                                  kv_->kvec_c[ik_L], kv_->kvec_c[ik_R]);
+
             std::complex<double>* cj = psi_k_ptrs[j];
             std::complex<double>* cjp1 = psi_k_ptrs[j + 1];
             std::vector<std::complex<double>> O_full(

@@ -75,6 +75,10 @@ private:
     void setup_kstring(const K_Vectors& kv);
     void compute_S_k(int ik);
     void compute_S_dk(const UnitCell& ucell);
+    void compute_S_dk_link(const UnitCell& ucell,
+                           const ModuleBase::Vector3<double>& kvec_d_R,
+                           const ModuleBase::Vector3<double>& kvec_c_L,
+                           const ModuleBase::Vector3<double>& kvec_c_R);
     void compute_D_I(int ik, const std::complex<double>* psi_k, int nbands, int nrow_local);
     void compute_berry_connection(int ik, const std::complex<double>* psi_k,
                                   int nbands, int nrow_local, const double* wg);
@@ -101,6 +105,17 @@ private:
     std::vector<std::complex<double>> S_dk_;
     int S_dk_nrow_ = 0;
     int S_dk_ncol_ = 0;
+
+    // Cache for per-link S_dk computation: stores raw overlap data
+    // so that only the phase needs to be recomputed per link
+    struct S_dk_cache_entry {
+        int lr, lc;  // local row/col indices
+        double ov;   // overlap value
+        double Rx, Ry, Rz;  // lattice vector
+        double tau_x, tau_y, tau_z;  // bra atom position
+    };
+    std::vector<S_dk_cache_entry> S_dk_cache_;
+    bool S_dk_cache_valid_ = false;
 
     // Branch tracking for cross-SCF phase smoothness
     std::vector<std::complex<double>> W_prev_;
