@@ -24,6 +24,20 @@ extern "C" {
                  double* rwork, int* info);
     void zgetrf_(const int* M, const int* N, std::complex<double>* A,
                  const int* lda, int* ipiv, int* info);
+    void zgeev_(const char* jobvl, const char* jobvr, const int* N,
+                std::complex<double>* A, const int* lda,
+                std::complex<double>* W,
+                std::complex<double>* VL, const int* ldvl,
+                std::complex<double>* VR, const int* ldvr,
+                std::complex<double>* work, const int* lwork,
+                double* rwork, int* info);
+    void zgeqrf_(const int* M, const int* N, std::complex<double>* A,
+                 const int* lda, std::complex<double>* tau,
+                 std::complex<double>* work, const int* lwork, int* info);
+    void zungqr_(const int* M, const int* N, const int* K,
+                 std::complex<double>* A, const int* lda,
+                 const std::complex<double>* tau,
+                 std::complex<double>* work, const int* lwork, int* info);
 }
 
 namespace deltap {
@@ -167,460 +181,247 @@ void DeltaP::compute_wannier_polarization(
         ModuleBase::timer::end("DeltaP", "compute_wannier_polarization");
         return;
     }
-    kstring_data_.resize(nppstr_);
-    // keep a stable pointer to each k-block of psi for the Wilson-loop overlap
-    std::vector<std::complex<double>*> psi_k_ptrs(nppstr_, nullptr);
-    for (int j = 0; j < nppstr_; ++j)
-    {
-        int ik_psi = k_index_[0][j];
-        if (ik_psi >= nks) continue;
-        kstring_data_[j].kvec_d = kv_->kvec_d[ik_psi];
-        psi->fix_k(ik_psi);
-        psi_k_ptrs[j] = psi->get_pointer();
-        compute_S_k(j);
-        compute_D_I(j, psi->get_pointer(), nbands, nrow_local);
-    }
 
-    // MPI reduction: D_I is only partially computed on each rank
-#ifdef __MPI
-    for (int j = 0; j < nppstr_; j++)
-    {
-        for (int iat = 0; iat < nat_; iat++)
-        {
-            int r = nproj_per_atom_[iat];
-            for (int lm = 0; lm < r; lm++)
-            {
-                if (kstring_data_[j].D_I.size() <= static_cast<size_t>(iat)) continue;
-                if (kstring_data_[j].D_I[iat].size() <= static_cast<size_t>(lm)) continue;
-                int sz = kstring_data_[j].D_I[iat][lm].size();
-                if (sz > 0)
-                {
-                    MPI_Allreduce(MPI_IN_PLACE, kstring_data_[j].D_I[iat][lm].data(),
-                                  2 * sz, MPI_DOUBLE, MPI_SUM, paraV_->comm());
-                }
-            }
-        }
-    }
-#endif
-
-    // Step 2: Global SVD of D at each k-point, with per-atom weight
-    // decomposition of the Berry connection.
-    //
-    // D = <alpha|psi> is (nproj_total x nocc).  Its SVD
-    //   D = W * Sigma * Vt
-    // gives the global right singular vectors Vt = V^dagger (nocc x nocc)
-    // and left singular vectors W (nproj_total x nocc).  The SVD gauge
-    // (Ozaki CWF) fixes the band-space phase uniquely.
-    //
-    // Per-atom weight: for singular value s, the fraction "owned" by atom I is
-    //   w^I_s = sum_{a in atom I} |W_{a,s}|^2
-    // These satisfy sum_I w^I_s = 1 for every s (W has orthonormal columns).
-    //
-    // The per-atom Berry connection for link j is
-    //   A^I_j = sum_s w^I_s * Im[ M_j(s,s) ]
-    // where M_j = Vt(k_j) * O_j * Vt(k_{j+1})^dagger  (nocc x nocc).
-    //
-    // Sum rule (EXACT):
-    //   sum_I A^I_j = sum_s (sum_I w^I_s) * Im[M_j(s,s)]
-    //               = sum_s Im[M_j(s,s)] = Im Tr(M_j) = Im Tr(O_j)
-    //
-    // P^I = prefactor * sum_j A^I_j   (Berry connection, dk->0 exact for
-    //                                  infinite k-string; good approx for finite)
-
-    int m_dim = nproj_total;
-    int n_dim = nocc_use;
-    int min_mn = std::min(m_dim, n_dim);
-
-    // Vt_k[j] = global Vt at k_j (nocc x nocc, column-major)
-    std::vector<std::vector<std::complex<double>>> Vt_k(nppstr_);
-    // w_atom[j][iat][s] = per-atom weight for singular value s at k_j
-    std::vector<std::vector<std::vector<double>>> w_atom(nppstr_);
-
-    for (int j = 0; j < nppstr_; ++j)
-    {
-        // Build dense D matrix (m_dim x n_dim, column-major)
-        std::vector<std::complex<double>> D_mat(m_dim * n_dim, std::complex<double>(0.0, 0.0));
-        int row_offset = 0;
-        for (int iat = 0; iat < nat_; ++iat)
-        {
-            int r = nproj_per_atom_[iat];
-            if (kstring_data_[j].D_I.size() > static_cast<size_t>(iat))
-            {
-                for (int lm = 0; lm < r; ++lm)
-                {
-                    if (kstring_data_[j].D_I[iat].size() <= static_cast<size_t>(lm)) continue;
-                    for (int n = 0; n < n_dim; ++n)
-                    {
-                        if (kstring_data_[j].D_I[iat][lm].size() <= static_cast<size_t>(n)) continue;
-                        D_mat[(row_offset + lm) + n * m_dim] = kstring_data_[j].D_I[iat][lm][n];
-                    }
-                }
-            }
-            row_offset += r;
-        }
-
-        // SVD: D = W * Sigma * Vt  (jobu='S', jobvt='A')
-        // W: (m_dim x min_mn), Vt: (n_dim x n_dim)
-        std::vector<double> S_val(std::max(min_mn, 1));
-        std::vector<std::complex<double>> W_svd(m_dim * min_mn);
-        std::vector<std::complex<double>> Vt_svd(n_dim * n_dim);
-        int lwork = -1;
-        std::vector<std::complex<double>> work(1);
-        std::vector<double> rwork(5 * std::max(min_mn, 1));
-        int info = 0;
-
-        char jobu = 'S';
-        char jobvt = 'A';
-        int lda_sv = m_dim;
-        int ldu = m_dim;
-        int ldvt = n_dim;
-
-        zgesvd_(&jobu, &jobvt, &m_dim, &n_dim, D_mat.data(), &lda_sv,
-                S_val.data(), W_svd.data(), &ldu, Vt_svd.data(), &ldvt,
-                work.data(), &lwork, rwork.data(), &info);
-        if (info != 0)
-        {
-            std::cerr << "DeltaP: zgesvd query failed at k=" << j << " info=" << info << std::endl;
-            Vt_k[j].assign(n_dim * n_dim, std::complex<double>(0.0, 0.0));
-            w_atom[j].assign(nat_, std::vector<double>(n_dim, 0.0));
-            continue;
-        }
-        lwork = static_cast<int>(work[0].real());
-        work.resize(std::max(lwork, 1));
-        zgesvd_(&jobu, &jobvt, &m_dim, &n_dim, D_mat.data(), &lda_sv,
-                S_val.data(), W_svd.data(), &ldu, Vt_svd.data(), &ldvt,
-                work.data(), &lwork, rwork.data(), &info);
-        if (info != 0)
-        {
-            std::cerr << "DeltaP: zgesvd failed at k=" << j << " info=" << info << std::endl;
-            Vt_k[j].assign(n_dim * n_dim, std::complex<double>(0.0, 0.0));
-            w_atom[j].assign(nat_, std::vector<double>(n_dim, 0.0));
-            continue;
-        }
-
-        Vt_k[j] = Vt_svd;
-
-        // Per-atom weights: w^I_s = sum_{a in I} |W_{a,s}|^2
-        // W_svd is (m_dim x min_mn) column-major: W[a + s * m_dim]
-        w_atom[j].resize(nat_, std::vector<double>(min_mn, 0.0));
-        row_offset = 0;
-        for (int iat = 0; iat < nat_; ++iat)
-        {
-            int r = nproj_per_atom_[iat];
-            for (int a = row_offset; a < row_offset + r; ++a)
-            {
-                for (int s = 0; s < min_mn; ++s)
-                {
-                    std::complex<double> wval = W_svd[a + s * m_dim];
-                    w_atom[j][iat][s] += std::norm(wval);
-                }
-            }
-            row_offset += r;
-        }
-
-        if (j == 0)
-        {
-            std::cout << "   DeltaP global SVD: nproj=" << m_dim
-                      << " nocc=" << n_dim << " min=" << min_mn << std::endl;
-            for (int iat = 0; iat < nat_; ++iat)
-            {
-                double wsum = 0;
-                for (int s = 0; s < min_mn; ++s) wsum += w_atom[j][iat][s];
-                std::cout << "     iat=" << iat
-                          << " weight_sum=" << std::fixed << std::setprecision(4) << wsum
-                          << " top5_singulars:";
-                for (int s = 0; s < std::min(5, min_mn); ++s)
-                    std::cout << " " << std::scientific << std::setprecision(4) << S_val[s];
-                std::cout << std::endl;
-            }
-        }
-    }
-
-    // Step 2b: Align SVD gauges across k-points (Procrustes matching).
-    //
-    // The SVD at each k-point is independent; singular vectors can have
-    // different signs at neighbouring k-points, causing Im[M_j(s,s)] to
-    // have the wrong sign.  Fix: at each k_j (j>0), find the unitary Q
-    // that maximizes Re Tr[ V†(k_{j-1}) · V(k_j) · Q ], then replace
-    // V(k_j) -> V(k_j) · Q and W(k_j) -> W(k_j) · Q.
-    //
-    // For non-degenerate singular values, Q is diagonal with ±1 entries
-    // (sign alignment).  For degenerate singular values, Q is a rotation
-    // within the degenerate subspace.
-
-    for (int j = 1; j < nppstr_; ++j)
-    {
-        // Build the overlap matrix S = V†(k_{j-1}) · V(k_j)  (nocc x nocc)
-        // Vt_k is V† (from SVD), so V = Vt_k†, and
-        // V†(k_{j-1}) = Vt_k[j-1], V(k_j) = Vt_k[j]†
-        // S = Vt_k[j-1] · Vt_k[j]†
-        std::vector<std::complex<double>> S_overlap(
-            n_dim * n_dim, std::complex<double>(0.0, 0.0));
-        for (int s = 0; s < n_dim; ++s)
-        {
-            for (int sp = 0; sp < n_dim; ++sp)
-            {
-                std::complex<double> sum(0.0, 0.0);
-                for (int n = 0; n < n_dim; ++n)
-                {
-                    // Vt_k[j-1][s + n*n_dim] = V†(k_{j-1})[s,n]
-                    // Vt_k[j][sp + n*n_dim]† = conj(Vt_k[j][sp + n*n_dim]) = V(k_j)[n,sp]
-                    sum += Vt_k[j - 1][s + n * n_dim] * std::conj(Vt_k[j][sp + n * n_dim]);
-                }
-                S_overlap[s + sp * n_dim] = sum;
-            }
-        }
-
-        // SVD of S_overlap = U_svd * Sigma * Vt_svd
-        // The optimal Q = U_svd * Vt_svd (polar factor)
-        std::vector<double> S2_val(std::max(n_dim, 1));
-        std::vector<std::complex<double>> U2(n_dim * n_dim);
-        std::vector<std::complex<double>> Vt2(n_dim * n_dim);
-        int lwork2 = -1;
-        std::vector<std::complex<double>> work2(1);
-        std::vector<double> rwork2(5 * std::max(n_dim, 1));
-        int info2 = 0;
-        char jobu2 = 'A';
-        char jobvt2 = 'A';
-        int n2 = n_dim;
-        zgesvd_(&jobu2, &jobvt2, &n2, &n2, S_overlap.data(), &n2,
-                S2_val.data(), U2.data(), &n2, Vt2.data(), &n2,
-                work2.data(), &lwork2, rwork2.data(), &info2);
-        if (info2 != 0)
-        {
-            std::cerr << "DeltaP: Procrustes zgesvd query failed at j=" << j << std::endl;
-            continue;
-        }
-        lwork2 = static_cast<int>(work2[0].real());
-        work2.resize(std::max(lwork2, 1));
-        zgesvd_(&jobu2, &jobvt2, &n2, &n2, S_overlap.data(), &n2,
-                S2_val.data(), U2.data(), &n2, Vt2.data(), &n2,
-                work2.data(), &lwork2, rwork2.data(), &info2);
-        if (info2 != 0)
-        {
-            std::cerr << "DeltaP: Procrustes zgesvd failed at j=" << j << std::endl;
-            continue;
-        }
-
-        // Q = U2 * Vt2  (nocc x nocc, column-major)
-        std::vector<std::complex<double>> Q(n_dim * n_dim, std::complex<double>(0.0, 0.0));
-        for (int i = 0; i < n_dim; ++i)
-            for (int s = 0; s < n_dim; ++s)
-                for (int k = 0; k < n_dim; ++k)
-                    Q[i + s * n_dim] += U2[i + k * n_dim] * Vt2[k + s * n_dim];
-
-        // Apply Q: V(k_j) -> V(k_j) * Q, i.e., V†(k_j) -> Q† * V†(k_j)
-        // Vt_k[j] = Q† * Vt_k[j]  (V† -> Q† * V†)
-        std::vector<std::complex<double>> Vt_new(n_dim * n_dim, std::complex<double>(0.0, 0.0));
-        for (int s = 0; s < n_dim; ++s)
-        {
-            for (int n = 0; n < n_dim; ++n)
-            {
-                std::complex<double> sum(0.0, 0.0);
-                for (int sp = 0; sp < n_dim; ++sp)
-                    sum += std::conj(Q[sp + s * n_dim]) * Vt_k[j][sp + n * n_dim];
-                Vt_new[s + n * n_dim] = sum;
-            }
-        }
-        Vt_k[j] = Vt_new;
-
-        // Also update weights: w^I_s -> sum_t Q*_{t,s} * (old w^I_{s,t})... 
-        // Actually, the weights transform as w^I_s' = sum_t |Q_{t,s}|^2 * w^I_t
-        // No, the weights are w^I_s = sum_{a in I} |W_{a,s}|^2, and W -> W * Q,
-        // so w'^I_s = sum_{a in I} |sum_t W_{a,t} Q_{t,s}|^2.
-        // For a sign-flip Q (diagonal ±1), w'^I_s = w^I_s (unchanged).
-        // For a general Q, we need to recompute. But since we don't store W,
-        // we approximate: for non-degenerate singular values, Q is diagonal
-        // and weights are unchanged. For degenerate ones, the weights rotate
-        // but their SUM is preserved. For now, leave weights unchanged.
-        // (This is exact for non-degenerate singular values.)
-    }
-    // M^I(k_j, k_{j+1}) = U^I^dagger(k_j) * O(k_j,k_{j+1}) * U^I(k_{j+1})
-    // where O = C^dagger(k_j) * S(dk) * C(k_{j+1}) is the exact overlap matrix
-    // of Bloch states on neighbouring k-points (replaces the O ~ I approximation).
-    // The SVD polar factors U make this gauge-invariant; the exact O restores the
-    // true Berry-phase discretization instead of the dk->0 limit.
-
-    // pre-compute the displacement overlap S(dk) once (same for every link)
+    // compute_S_dk is independent of the k-string (only depends on dk spacing)
     compute_S_dk(ucell);
-
     const int nlocal = paraV_->get_global_row_size();
 
-    // ---- exact overlap O_j = C^H(k_j) * S(dk) * C(k_{j+1}) for each link ----
-    // O_j is (nocc_use x nocc_use) and replicated on every rank so that the
-    // per-atom contraction M^I = U^I^dagger * O_j * U^I_next stays local.
-    std::vector<std::vector<std::complex<double>>> O_kpair(nppstr_ - 1);
-    for (int j = 0; j < nppstr_ - 1; ++j)
-    {
-        std::complex<double>* cj = psi_k_ptrs[j];
-        std::complex<double>* cjp1 = psi_k_ptrs[j + 1];
-        std::vector<std::complex<double>> O_full(
-            static_cast<size_t>(nocc_use) * nocc_use, std::complex<double>(0.0, 0.0));
+    int n_dim = nocc_use;
+    int m_dim = nproj_total;
 
-        if (cj == nullptr || cjp1 == nullptr || nocc_use == 0 || nlocal == 0)
-        {
-            O_kpair[j] = O_full;
-            continue;
-        }
-
-#ifdef __MPI
-        // Distributed triple product with the shared paraV descriptor, exactly
-        // as in unkOverlap_lcao::det_berryphase. Two pzgemm calls produce the
-        // 2D-block-cyclic O, which is then gathered into a replicated matrix.
-        std::vector<std::complex<double>> tmp(
-            paraV_->nloc, std::complex<double>(0.0, 0.0));
-        std::vector<std::complex<double>> O_2d(
-            paraV_->nloc, std::complex<double>(0.0, 0.0));
-        const std::complex<double> one(1.0, 0.0);
-        const std::complex<double> zero(0.0, 0.0);
-        // tmp = C^H(k_j) * S(dk)            -- (nocc_use x nlocal)
-        ScalapackConnector::gemm('C', 'N', nocc_use, nlocal, nlocal,
-                                  one, cj, 1, 1, paraV_->desc,
-                                  S_dk_.data(), 1, 1, paraV_->desc,
-                                  zero, tmp.data(), 1, 1, paraV_->desc);
-        // O_2d = tmp * C(k_{j+1})           -- (nocc_use x nocc_use)
-        ScalapackConnector::gemm('N', 'N', nocc_use, nocc_use, nlocal,
-                                  one, tmp.data(), 1, 1, paraV_->desc,
-                                  cjp1, 1, 1, paraV_->desc,
-                                  zero, O_2d.data(), 1, 1, paraV_->desc);
-        // gather the small nocc_use*nocc_use block into a replicated matrix
-        for (int ilc = 0; ilc < paraV_->ncol; ++ilc)
-        {
-            int jg = paraV_->local2global_col(ilc);
-            if (jg >= nocc_use) continue;
-            for (int ilr = 0; ilr < paraV_->nrow; ++ilr)
-            {
-                int ig = paraV_->local2global_row(ilr);
-                if (ig >= nocc_use) continue;
-                O_full[ig + jg * nocc_use] = O_2d[ilr + ilc * paraV_->nrow];
-            }
-        }
-        MPI_Allreduce(MPI_IN_PLACE, O_full.data(), 2 * nocc_use * nocc_use,
-                      MPI_DOUBLE, MPI_SUM, paraV_->comm());
-#else
-        // serial: every index is local, plain triple product
-        for (int a = 0; a < nocc_use; ++a)
-            for (int b = 0; b < nocc_use; ++b)
-            {
-                std::complex<double> s(0.0, 0.0);
-                for (int mu = 0; mu < nlocal; ++mu)
-                {
-                    std::complex<double> sm(0.0, 0.0);
-                    for (int nu = 0; nu < nlocal; ++nu)
-                        sm += S_dk_[mu + nu * nlocal] * cjp1[nu + b * nlocal];
-                    s += std::conj(cj[mu + a * nlocal]) * sm;
-                }
-                O_full[a + b * nocc_use] = s;
-            }
-#endif
-        O_kpair[j] = O_full;
-    }
-
+    // Prefactor and direction (outside loop)
     const int alpha_idx = gdir_ - 1;
     double a_alpha = 0.0;
     if (gdir_ == 1) a_alpha = ucell.lat0 * ucell.a1.norm();
     else if (gdir_ == 2) a_alpha = ucell.lat0 * ucell.a2.norm();
     else a_alpha = ucell.lat0 * ucell.a3.norm();
     const double omega = ucell.omega;
-
-    // P = (a_alpha / 2*pi*Omega) * gamma  [result in e/Bohr^2]
-    // (sign: P = (a/Omega) * reduced_phase, reduced_phase = gamma/(2pi))
     const double prefactor = a_alpha / (2.0 * ModuleBase::PI * omega);
 
     results_.P_I.resize(nat_, ModuleBase::Vector3<double>(0.0, 0.0, 0.0));
     results_.gamma_I.resize(nat_, ModuleBase::Vector3<double>(0.0, 0.0, 0.0));
     if (static_cast<int>(W_prev_.size()) != nat_)
-    {
         W_prev_.assign(nat_, std::complex<double>(1.0, 0.0));
-    }
 
-    // --- Compute exact total Berry phase via Wilson loop (product of det O_j) ---
-    // gamma_total = Im ln(prod_j det(O_j)) = sum_j arg(det(O_j))
-    double gamma_total = 0.0;
-    for (int j = 0; j < nppstr_ - 1; ++j)
+    // Accumulate per-atom Berry phases over all k-strings
+    std::vector<double> gamma_accum(nat_, 0.0);
+    int n_strings_processed = 0;
+
+    kstring_data_.resize(nppstr_);
+    std::vector<std::complex<double>*> psi_k_ptrs(nppstr_, nullptr);
+
+    for (int istring = 0; istring < total_string_; ++istring)
     {
-        const std::vector<std::complex<double>>& Oj = O_kpair[j];
-        // det(O_j) via LU
-        std::vector<std::complex<double>> O_copy = Oj;
-        std::vector<int> ipiv(std::max(n_dim, 1));
-        int info_lu = 0;
-        int n_lu = n_dim;
-        zgetrf_(&n_lu, &n_lu, O_copy.data(), &n_lu, ipiv.data(), &info_lu);
-        if (info_lu != 0) continue;
-        std::complex<double> det_o(1.0, 0.0);
-        int sign = 1;
-        for (int i = 0; i < n_dim; ++i)
+        // --- Step 1a: S_k, D_I for this k-string ---
+        // CRITICAL: clear kstring_data_ to prevent accumulation across strings
+        for (int j = 0; j < nppstr_; ++j)
         {
-            det_o *= O_copy[i + i * n_dim];
-            if (ipiv[i] != i + 1) sign = -sign;
+            kstring_data_[j].S_k.clear();
+            kstring_data_[j].dS_k.clear();
+            kstring_data_[j].D_I.clear();
         }
-        if (sign < 0) det_o = -det_o;
-        gamma_total += std::arg(det_o);
-    }
+        for (int j = 0; j < nppstr_; ++j)
+        {
+            int ik_psi = k_index_[istring][j];
+            if (ik_psi >= nks) continue;
+            kstring_data_[j].kvec_d = kv_->kvec_d[ik_psi];
+            psi->fix_k(ik_psi);
+            psi_k_ptrs[j] = psi->get_pointer();
+            compute_S_k(j);
+            compute_D_I(j, psi->get_pointer(), nbands, nrow_local);
+        }
 
-    // --- Compute per-atom Berry connection (for proportional decomposition) ---
-    // A^I = sum_j sum_s w^I_s * Im[M_j(s,s)]
-    // A_total = sum_I A^I = sum_j Im Tr(O_j)  (Berry connection approximation)
-    // Then rescale: gamma^I = gamma_total * A^I / A_total
-    // This ensures sum_I gamma^I = gamma_total (exact Berry phase)
-    // while per-atom proportions follow the Berry connection.
-    std::vector<double> berry_conn_atom(nat_, 0.0);
-    double berry_conn_total = 0.0;
+#ifdef __MPI
+        for (int j = 0; j < nppstr_; j++)
+        {
+            for (int iat = 0; iat < nat_; iat++)
+            {
+                int r = nproj_per_atom_[iat];
+                for (int lm = 0; lm < r; lm++)
+                {
+                    if (kstring_data_[j].D_I.size() <= static_cast<size_t>(iat)) continue;
+                    if (kstring_data_[j].D_I[iat].size() <= static_cast<size_t>(lm)) continue;
+                    int sz = kstring_data_[j].D_I[iat][lm].size();
+                    if (sz > 0)
+                        MPI_Allreduce(MPI_IN_PLACE, kstring_data_[j].D_I[iat][lm].data(),
+                                      2 * sz, MPI_DOUBLE, MPI_SUM, paraV_->comm());
+                }
+            }
+        }
+#endif
 
-    for (int iat = 0; iat < nat_; ++iat)
-    {
-        double berry_conn_sum = 0.0;
+        // --- Step 2: O_kpair (exact overlap) ---
+        std::vector<std::vector<std::complex<double>>> O_kpair(nppstr_ - 1);
+        for (int j = 0; j < nppstr_ - 1; ++j)
+        {
+            std::complex<double>* cj = psi_k_ptrs[j];
+            std::complex<double>* cjp1 = psi_k_ptrs[j + 1];
+            std::vector<std::complex<double>> O_full(
+                static_cast<size_t>(nocc_use) * nocc_use, std::complex<double>(0.0, 0.0));
+            if (!cj || !cjp1 || nocc_use == 0 || nlocal == 0) { O_kpair[j] = O_full; continue; }
+
+#ifdef __MPI
+            std::vector<std::complex<double>> tmp(paraV_->nloc, std::complex<double>(0.0, 0.0));
+            std::vector<std::complex<double>> O_2d(paraV_->nloc, std::complex<double>(0.0, 0.0));
+            const std::complex<double> one(1.0, 0.0);
+            const std::complex<double> zero(0.0, 0.0);
+            ScalapackConnector::gemm('C', 'N', nocc_use, nlocal, nlocal,
+                                      one, cj, 1, 1, paraV_->desc,
+                                      S_dk_.data(), 1, 1, paraV_->desc,
+                                      zero, tmp.data(), 1, 1, paraV_->desc);
+            ScalapackConnector::gemm('N', 'N', nocc_use, nocc_use, nlocal,
+                                      one, tmp.data(), 1, 1, paraV_->desc,
+                                      cjp1, 1, 1, paraV_->desc,
+                                      zero, O_2d.data(), 1, 1, paraV_->desc);
+            for (int ilc = 0; ilc < paraV_->ncol; ++ilc)
+            {
+                int jg = paraV_->local2global_col(ilc);
+                if (jg >= nocc_use) continue;
+                for (int ilr = 0; ilr < paraV_->nrow; ++ilr)
+                {
+                    int ig = paraV_->local2global_row(ilr);
+                    if (ig >= nocc_use) continue;
+                    O_full[ig + jg * nocc_use] = O_2d[ilr + ilc * paraV_->nrow];
+                }
+            }
+            MPI_Allreduce(MPI_IN_PLACE, O_full.data(), 2 * nocc_use * nocc_use,
+                          MPI_DOUBLE, MPI_SUM, paraV_->comm());
+#else
+            for (int a = 0; a < nocc_use; ++a)
+                for (int b = 0; b < nocc_use; ++b)
+                {
+                    std::complex<double> s(0.0, 0.0);
+                    for (int mu = 0; mu < nlocal; ++mu)
+                    {
+                        std::complex<double> sm(0.0, 0.0);
+                        for (int nu = 0; nu < nlocal; ++nu)
+                            sm += S_dk_[mu + nu * nlocal] * cjp1[nu + b * nlocal];
+                        s += std::conj(cj[mu + a * nlocal]) * sm;
+                    }
+                    O_full[a + b * nocc_use] = s;
+                }
+#endif
+            O_kpair[j] = O_full;
+        }
+
+        // --- Step 3: Build Wilson loop matrix W = O_0 * O_1 * ... * O_{N-1} ---
+        // Normalize after each step by max element to prevent overflow.
+        // Dividing by a real positive number does NOT change arg(eigenvalues).
+        std::vector<std::complex<double>> W_mat(n_dim * n_dim, std::complex<double>(0.0, 0.0));
+        for (int i = 0; i < n_dim; ++i)
+            W_mat[i + i * n_dim] = std::complex<double>(1.0, 0.0);
 
         for (int j = 0; j < nppstr_ - 1; ++j)
         {
-            const std::vector<std::complex<double>>& Oj = O_kpair[j];
-            const std::vector<std::complex<double>>& Vtj = Vt_k[j];
-            const std::vector<std::complex<double>>& Vtjp1 = Vt_k[j + 1];
-
-            const std::vector<double>& wj = w_atom[j][iat];
-            const std::vector<double>& wjp1 = w_atom[j + 1][iat];
-
-            for (int s = 0; s < min_mn; ++s)
-            {
-                std::complex<double> M_ss(0.0, 0.0);
-                for (int n = 0; n < n_dim; ++n)
+            std::vector<std::complex<double>> tmp(n_dim * n_dim, std::complex<double>(0.0, 0.0));
+            const auto& Oj = O_kpair[j];
+            for (int b = 0; b < n_dim; ++b)
+                for (int i = 0; i < n_dim; ++i)
                 {
-                    int idx_j = s + n * n_dim;
-                    if (idx_j >= static_cast<int>(Vtj.size())) continue;
-                    const std::complex<double> vj = Vtj[idx_j];
-                    for (int m = 0; m < n_dim; ++m)
-                    {
-                        int idx_jp1 = s + m * n_dim;
-                        if (idx_jp1 >= static_cast<int>(Vtjp1.size())) continue;
-                        M_ss += vj * Oj[n + m * n_dim] * std::conj(Vtjp1[idx_jp1]);
-                    }
+                    std::complex<double> s(0.0, 0.0);
+                    for (int k = 0; k < n_dim; ++k)
+                        s += W_mat[i + k * n_dim] * Oj[k + b * n_dim];
+                    tmp[i + b * n_dim] = s;
                 }
-                double w_avg = 0.5 * (wj[s] + wjp1[s]);
-                berry_conn_sum += w_avg * std::imag(M_ss);
+            // Normalize by max element (real positive factor, preserves arg)
+            double max_elem = 0.0;
+            for (int i = 0; i < n_dim * n_dim; ++i)
+                max_elem = std::max(max_elem, std::abs(tmp[i]));
+            if (max_elem > 1e-10)
+                for (int i = 0; i < n_dim * n_dim; ++i)
+                    tmp[i] /= max_elem;
+            W_mat = tmp;
+        }
+
+        // --- Step 4: Diagonalize W ---
+        std::vector<std::complex<double>> evals(n_dim);
+        std::vector<std::complex<double>> VR(n_dim * n_dim);
+        {
+            int lwork = -1;
+            std::vector<std::complex<double>> work(1);
+            std::vector<double> rwork(2 * n_dim);
+            int info = 0;
+            char jobvl = 'N', jobvr = 'V';
+            int n_eig = n_dim;
+            std::vector<std::complex<double>> W_copy = W_mat;
+            zgeev_(&jobvl, &jobvr, &n_eig, W_copy.data(), &n_eig,
+                   evals.data(), nullptr, &n_eig, VR.data(), &n_eig,
+                   work.data(), &lwork, rwork.data(), &info);
+            if (info != 0) { std::cerr << "DeltaP: zgeev failed info=" << info << std::endl; continue; }
+            lwork = static_cast<int>(work[0].real());
+            work.resize(std::max(lwork, 1));
+            W_copy = W_mat;
+            zgeev_(&jobvl, &jobvr, &n_eig, W_copy.data(), &n_eig,
+                   evals.data(), nullptr, &n_eig, VR.data(), &n_eig,
+                   work.data(), &lwork, rwork.data(), &info);
+            if (info != 0) { std::cerr << "DeltaP: zgeev failed info=" << info << std::endl; continue; }
+        }
+
+        // --- Step 5: D_mat at k_0, projections, per-atom Berry phases ---
+        std::vector<std::complex<double>> D_mat(m_dim * n_dim, std::complex<double>(0.0, 0.0));
+        {
+            int row_offset = 0;
+            for (int iat = 0; iat < nat_; ++iat)
+            {
+                int r = nproj_per_atom_[iat];
+                if (kstring_data_[0].D_I.size() > static_cast<size_t>(iat))
+                    for (int lm = 0; lm < r; ++lm)
+                        if (kstring_data_[0].D_I[iat].size() > static_cast<size_t>(lm))
+                            for (int n = 0; n < n_dim; ++n)
+                                if (kstring_data_[0].D_I[iat][lm].size() > static_cast<size_t>(n))
+                                    D_mat[(row_offset + lm) + n * m_dim] = kstring_data_[0].D_I[iat][lm][n];
+                row_offset += r;
             }
         }
 
-        berry_conn_atom[iat] = berry_conn_sum;
-        berry_conn_total += berry_conn_sum;
+        // proj[a, n] = sum_m D_mat[a, m] * VR[m, n] = <alpha_a | v_n>
+        std::vector<std::complex<double>> proj(m_dim * n_dim, std::complex<double>(0.0, 0.0));
+        for (int n = 0; n < n_dim; ++n)
+            for (int a = 0; a < m_dim; ++a)
+            {
+                std::complex<double> s(0.0, 0.0);
+                for (int m = 0; m < n_dim; ++m)
+                    s += D_mat[a + m * m_dim] * VR[m + n * n_dim];
+                proj[a + n * m_dim] = s;
+            }
+
+        // Per-atom Berry phases for this k-string
+        for (int iat = 0; iat < nat_; ++iat)
+        {
+            int r = nproj_per_atom_[iat];
+            int row_offset = 0;
+            for (int i = 0; i < iat; ++i)
+                row_offset += nproj_per_atom_[i];
+            double gamma_I = 0.0;
+            for (int n = 0; n < n_dim; ++n)
+            {
+                double w_In = 0.0;
+                for (int a = row_offset; a < row_offset + r; ++a)
+                    w_In += std::norm(proj[a + n * m_dim]);
+                gamma_I += w_In * std::arg(evals[n]);
+            }
+            gamma_accum[iat] += gamma_I;
+        }
+        n_strings_processed++;
+
+        if (istring == 0)
+        {
+            double g_check = 0.0;
+            for (int n = 0; n < n_dim; ++n) g_check += std::arg(evals[n]);
+            std::cout << "   DeltaP Wilson loop (string 0): nocc=" << n_dim
+                      << " gamma=" << std::scientific << std::setprecision(6) << g_check << std::endl;
+        }
     }
 
-    // Rescale per-atom Berry connection to match exact total Berry phase
-    std::cout << "   DeltaP: gamma_total (Wilson) = " << std::scientific << std::setprecision(6)
-              << gamma_total << std::endl;
-    std::cout << "   DeltaP: berry_conn_total (trace) = " << berry_conn_total << std::endl;
-    std::cout << "   DeltaP: ratio (Wilson/trace) = " << gamma_total / berry_conn_total << std::endl;
-
+    // --- Average over k-strings ---
+    std::cout << "   DeltaP: processed " << n_strings_processed << " / " << total_string_ << " k-strings" << std::endl;
     for (int iat = 0; iat < nat_; ++iat)
     {
-        double gamma = 0.0;
-        if (std::abs(berry_conn_total) > 1e-15)
-            gamma = gamma_total * berry_conn_atom[iat] / berry_conn_total;
-
-        W_prev_[iat] = std::complex<double>(gamma, 0.0);
+        double gamma_I = (n_strings_processed > 0) ? gamma_accum[iat] / n_strings_processed : 0.0;
+        W_prev_[iat] = std::complex<double>(gamma_I, 0.0);
         has_prev_ = true;
-
-        results_.gamma_I[iat][alpha_idx] = gamma;
-        results_.P_I[iat][alpha_idx] = prefactor * gamma;
+        results_.gamma_I[iat][alpha_idx] = gamma_I;
+        results_.P_I[iat][alpha_idx] = prefactor * gamma_I;
     }
 
     results_.P_total = ModuleBase::Vector3<double>(0.0, 0.0, 0.0);
