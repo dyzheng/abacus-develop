@@ -127,7 +127,7 @@ struct Input_para
 
     bool lspinorb = false;   ///< consider the spin-orbit interaction
     bool noncolin = false;   ///< using non-collinear-spin
-    int gga_grad = 1;        ///< 1: grad|m|, 2: grad(m·m̂), 3: Scalmani-Frisch transform
+    int gga_grad = 3;        ///< 1: grad|m|, 2: grad(m·m̂), 3: Scalmani-Frisch transform
     double soc_lambda = 1.0; ///< The fraction of averaged SOC pseudopotential
                              ///< is given by (1-soc_lambda)
     int dfthalf_type = 0;    ///< DFT-1/2 type, 0:off, 1:shell DFT-1/2

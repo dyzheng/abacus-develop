@@ -146,6 +146,38 @@ namespace XC_Functional_Libxc
         const std::vector<double> &amag,
         const ModuleBase::matrix &v);
 
+    // compute mag_part = m_mu / |m| for nspin=4
+    extern std::vector<double> compute_mag_part_nspin4(
+        const std::size_t nrxx,
+        const Charge* const chr);
+
+    // cal_gdr with SF decomposition for gga_grad>=2
+    extern std::vector<std::vector<ModuleBase::Vector3<double>>> cal_gdr_sf(
+        const int nspin,
+        const std::size_t nrxx,
+        const std::vector<double> &rho,
+        const std::vector<double> &mag_part,
+        const double tpiba,
+        const Charge* const chr);
+
+    // cal_dh with SF per-mu div(h) for gga_grad==3
+    extern std::vector<std::vector<double>> cal_dh_sf(
+        const int nspin,
+        const std::size_t nrxx,
+        const std::vector<double> &sgn,
+        const std::vector<std::vector<ModuleBase::Vector3<double>>> &gdr,
+        const std::vector<double> &vsigma,
+        const std::vector<double> &mag_part,
+        const double tpiba,
+        const Charge* const chr);
+
+    // convert_v_nspin4 with SF per-mu projection
+    extern ModuleBase::matrix convert_v_nspin4_sf(
+        const std::size_t nrxx,
+        const Charge* const chr,
+        const std::vector<double> &mag_part,
+        const ModuleBase::matrix &v);
+
 
 //-------------------
 //  xc_functional_libxc_wrapper_xc.cpp

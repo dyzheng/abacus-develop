@@ -1025,8 +1025,8 @@ Note: If gamma_only is set to 1, the KPT file will be overwritten. So make sure 
        projects div(h) back via m_hat*m_hat, losing (h1-h2)·grad(m_hat) terms.
 * 3: Scalmani-Frisch transform: same gradient formula as method 2, but
        computes div(h) for each magnetic component independently,
-       retaining all cross-terms. Most accurate for non-uniform magnetization.)";
-        item.default_value = "1";
+        retaining all cross-terms. Most accurate for non-uniform magnetization.)";
+        item.default_value = "3";
         item.unit = "";
         item.availability = "Only for nspin=4 (non-collinear)";
         item.check_value = [](const Input_Item& item, const Parameter& para) {
