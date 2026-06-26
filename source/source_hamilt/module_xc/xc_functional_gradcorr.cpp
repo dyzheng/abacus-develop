@@ -78,7 +78,6 @@ void XC_Functional::gradcorr(double &etxc, double &vtxc, ModuleBase::matrix &v,
 	ModuleBase::Vector3<double>* gdr2 = nullptr;
 	ModuleBase::Vector3<double>* h1 = nullptr;
 	ModuleBase::Vector3<double>* h2 = nullptr;
-	double* neg = nullptr;
 	double** vsave = nullptr;
 	double** vgg = nullptr;
 	std::vector<double> mag_part;
@@ -136,9 +135,8 @@ void XC_Functional::gradcorr(double &etxc, double &vtxc, ModuleBase::matrix &v,
 
 	if(PARAM.inp.nspin == 4&&(PARAM.globalv.domag||PARAM.globalv.domag_z))
 	{
-		rhotmp2 = new double[rhopw->nrxx];
-		rhogsum2 = new std::complex<double>[rhopw->npw];
- 		neg = new double [rhopw->nrxx];
+ 		rhotmp2 = new double[rhopw->nrxx];
+ 		rhogsum2 = new std::complex<double>[rhopw->npw];
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static, 1024)
 #endif
@@ -146,7 +144,6 @@ void XC_Functional::gradcorr(double &etxc, double &vtxc, ModuleBase::matrix &v,
 		{
 			rhotmp1[ir] = 0.0;
 			rhotmp2[ir] = 0.0;
-			neg[ir] = 0.0;
 		}
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static, 1024)
@@ -176,15 +173,8 @@ void XC_Functional::gradcorr(double &etxc, double &vtxc, ModuleBase::matrix &v,
 }
 		}
 
-		if(PARAM.inp.gga_grad >= 2)
-		{
-			mag_part.resize(3 * rhopw->nrxx, 0.0);
-			noncolin_rho(rhotmp1, rhotmp2, mag_part.data(), chr->rho, rhopw->nrxx);
-		}
-		else
-		{
-			noncolin_rho(rhotmp1, rhotmp2, neg, chr->rho, rhopw->nrxx, ucell->magnet.ux_, ucell->magnet.lsign_);
-		}
+ 		mag_part.resize(3 * rhopw->nrxx, 0.0);
+ 		noncolin_rho(rhotmp1, rhotmp2, mag_part.data(), chr->rho, rhopw->nrxx);
 
 		rhopw->real2recip(rhotmp1, rhogsum1);
 		rhopw->real2recip(rhotmp2, rhogsum2);
@@ -444,9 +434,7 @@ void XC_Functional::gradcorr(double &etxc, double &vtxc, ModuleBase::matrix &v,
 						double zeta = ( rhotmp1[ir] - rhotmp2[ir] ) / rh;
 						if(PARAM.inp.nspin==4&&(PARAM.globalv.domag||PARAM.globalv.domag_z))
 						{
-							if(PARAM.inp.gga_grad == 1) { zeta = fabs(zeta) * neg[ir];
-							} else { zeta = fabs(zeta);
-							}
+							zeta = fabs(zeta);
 						}
 						const double grh2 = (gdr1[ir]+gdr2[ir]).norm2();
 						XC_Functional::gcc_spin(rh, zeta, grh2, sc, v1cup, v1cdw, v2c);
@@ -724,13 +712,9 @@ void XC_Functional::gradcorr(double &etxc, double &vtxc, ModuleBase::matrix &v,
 			for(int ir=0;ir<rhopw->nrxx;ir++)
 			{
 				v(0,ir) += 0.5 * (vgg[0][ir] + vgg[1][ir]);
-				double amag = sqrt(pow(chr->rho[1][ir],2)+pow(chr->rho[2][ir],2)+pow(chr->rho[3][ir],2));
-				if(amag>1e-12)
-				{
-					for(int i=1;i<4;i++) {
-						v(i,ir)+= 0.5 *(vgg[0][ir]-vgg[1][ir])*chr->rho[i][ir]/amag;
+				for(int i=1;i<4;i++) {
+					v(i,ir)+= 0.5 *(vgg[0][ir]-vgg[1][ir]) * mag_part[ir + (i-1)*rhopw->nrxx];
 }
-				}
 			}
 		}
 	}
@@ -751,7 +735,6 @@ void XC_Functional::gradcorr(double &etxc, double &vtxc, ModuleBase::matrix &v,
 	}
 	if(PARAM.inp.nspin == 4 && (PARAM.globalv.domag||PARAM.globalv.domag_z))
 	{
-		if(PARAM.inp.gga_grad == 1) delete[] neg;
 		if(!is_stress) 
 		{
 			for(int i=0; i<nspin0; i++) { delete[] vgg[i];
