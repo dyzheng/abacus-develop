@@ -112,6 +112,28 @@ but these must be derived from the 4-component representation.
 
 对于磁化方向空间均匀的系统，SF方法退化为方法1，确认了实现的正确性。
 
+### Stress 验证
+
+#### LCAO nspin=4 (BCC Fe, PBE, ecutwfc=15, no DeltaSpin)
+| 配置 | Etot (eV) | Stress_xx (kbar) | Stress_yy | Stress_zz |
+|------|-----------|-----------------|-----------|-----------|
+| builtin gga_grad=1 | -6267.39291 | -1093.972 | -1682.157 | -1093.973 |
+| builtin gga_grad=3 | -6267.46519 | -1103.396 | -1706.128 | -1103.396 |
+| libxc gga_grad=1 | -6267.39274 | -1093.970 | -1682.152 | -1093.971 |
+| libxc gga_grad=3 | -6267.46519 | -1103.396 | -1706.128 | -1103.396 |
+
+SF 修正对对角应力分量影响约 10 kbar。builtin 和 libxc 在 gga_grad=3 下结果完全一致。
+
+#### PW nspin=4 (BCC Fe, PBE, ecutwfc=20, no DeltaSpin)
+| 配置 | Etot (eV) | Stress_xx (kbar) | Pressure (kbar) |
+|------|-----------|-----------------|-----------------|
+| builtin gga_grad=1 | -6370.62279 | -20479.033 | -20479.032 |
+| builtin gga_grad=3 | -6370.70027 | -20468.299 | -20468.299 |
+| libxc gga_grad=1 | -6370.62279 | -20479.033 | -20479.032 |
+| libxc gga_grad=3 | -6370.70027 | -20468.299 | -20468.299 |
+
+SF 修正对压力影响约 10.7 kbar。builtin 和 libxc 结果完全一致，验证了 libxc 路径的 SF stress 实现正确性。
+
 ### PW DeltaSpin nspin=4 (gga_grad=3 + sc_strategy=accuracy)
 | Configuration | Etot (eV)           |
 |---------------|---------------------|
