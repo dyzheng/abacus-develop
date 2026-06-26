@@ -8,6 +8,7 @@
 #include "source_base/timer.h"
 #include "source_io/module_parameter/parameter.h"
 #include "xc_functional.h"
+#include "xc_functional_gga_noncol_sf_builtin.h"
 
 #ifdef USE_LIBXC
 #include "xc_functional_libxc.h"
@@ -32,6 +33,11 @@ std::tuple<double, double, ModuleBase::matrix> XC_Functional::v_xc(const int& nr
 #else
         ModuleBase::WARNING_QUIT("v_xc", "compile with LIBXC");
 #endif
+    }
+
+    if (PARAM.inp.nspin == 4 && (PARAM.globalv.domag || PARAM.globalv.domag_z) && PARAM.inp.gga_grad == 3)
+    {
+        return ModuleXC::NCGGA_SF_Builtin::v_xc_ncgga_sf_builtin(nrxx, ucell->omega, ucell->tpiba, chr);
     }
 
     ModuleBase::timer::start("XC_Functional", "v_xc");

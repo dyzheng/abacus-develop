@@ -1013,6 +1013,32 @@ Note: If gamma_only is set to 1, the KPT file will be overwritten. So make sure 
         this->add_item(item);
     }
     {
+        Input_Item item("gga_grad");
+        item.annotation = "1: gradient of |m|; 2: gradient of m * hat{m}; 3: Scalmani-Frisch transform";
+        item.category = "Electronic structure";
+        item.type = "Integer";
+        item.description = R"(Method to compute gradients of spin-up/down densities in non-collinear GGA:
+* 1: Approximate rho_up/dn as 0.5*(rho +/- |m|), compute gradients independently.
+       Drops cross-terms involving grad(m_hat). Least accurate.
+* 2: Use grad(rho_up) = 0.5*grad(rho+rho_c) + sum_mu 0.5*m_hat_mu*grad(m_mu),
+       and similarly for rho_dn. Keeps correct density gradients but
+       projects div(h) back via m_hat*m_hat, losing (h1-h2)·grad(m_hat) terms.
+* 3: Scalmani-Frisch transform: same gradient formula as method 2, but
+       computes div(h) for each magnetic component independently,
+       retaining all cross-terms. Most accurate for non-uniform magnetization.)";
+        item.default_value = "1";
+        item.unit = "";
+        item.availability = "Only for nspin=4 (non-collinear)";
+        item.check_value = [](const Input_Item& item, const Parameter& para) {
+            if (para.input.gga_grad != 1 && para.input.gga_grad != 2 && para.input.gga_grad != 3)
+            {
+                ModuleBase::WARNING_QUIT("ReadInput", "gga_grad should be 1, 2, or 3.");
+            }
+        };
+        read_sync_int(input.gga_grad);
+        this->add_item(item);
+    }
+    {
         Input_Item item("soc_lambda");
         item.annotation = "The fraction of SOC based on scalar relativity (SR) of the pseudopotential";
         item.category = "Electronic structure";

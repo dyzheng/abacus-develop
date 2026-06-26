@@ -203,6 +203,11 @@ class XC_Functional
                              const int nrxx,
                              const double* ux_,
                              const bool lsign_);
+    static void noncolin_rho(double* rhoout1,
+                             double* rhoout2,
+                             double* mag_part,
+                             const double* const* const rho,
+                             const int nrxx);
 
     //-------------------
     //  xc_funct_exch_lda.cpp
