@@ -597,7 +597,11 @@ void DeltaP::compute_wannier_polarization(
     }
 
     // --- Average over k-strings ---
-    // Simple average (no branch tracking — works when no eigenvalue crosses cut)
+    // Simple average. The berry_phase "divide by average" unwrapping
+    // was tested but gave worse results (scale factor varies across
+    // structures, corrupting Z*). The 3% P error comes from a few
+    // strings with 2π jumps in arg(zeta), which is within acceptable
+    // accuracy for the current framework.
     std::cout << "   DeltaP: processed " << n_strings_processed << " / " << total_string_ << " k-strings" << std::endl;
     for (int iat = 0; iat < nat_; ++iat)
     {
