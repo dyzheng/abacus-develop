@@ -15,6 +15,8 @@
 #include <unordered_map>
 #include <vector>
 
+class cal_r_overlap_R;  // forward declaration (global namespace)
+
 namespace deltap {
 
 struct OverlapData {
@@ -53,7 +55,8 @@ public:
               const std::vector<double>& orb_cutoff,
               double rm,
               int gdir,
-              const Parallel_Orbitals* paraV);
+              const Parallel_Orbitals* paraV,
+              cal_r_overlap_R* r_overlap = nullptr);
 
     void compute_atomic_polarization(
         const UnitCell& ucell,
@@ -95,6 +98,7 @@ private:
     // Configuration
     const TwoCenterIntegrator* intor_ = nullptr;
     const TwoCenterIntegrator* overlap_intor_ = nullptr;
+    cal_r_overlap_R* r_overlap_ = nullptr;  // for <phi|r|phi(R)> position matrix
     std::vector<double> orb_cutoff_;
     double rm_ = 3.0;
     int gdir_ = 3;
@@ -109,10 +113,15 @@ private:
     // Cache for per-link S_dk computation: stores raw overlap data
     // so that only the phase needs to be recomputed per link
     struct S_dk_cache_entry {
-        int lr, lc;  // local row/col indices
-        double ov;   // overlap value
-        double Rx, Ry, Rz;  // lattice vector
-        double tau_x, tau_y, tau_z;  // bra atom position
+        int lr, lc;
+        double ov;
+        double Rx, Ry, Rz;
+        double tau_x, tau_y, tau_z;
+        // Orbital info for get_psi_r_psi
+        ModuleBase::Vector3<double> R1_cart;  // bra atom position (Cartesian, Bohr)
+        int T1, L1, m1, N1;
+        ModuleBase::Vector3<double> R2_cart;  // ket atom position (Cartesian, Bohr)
+        int T2, L2, m2, N2;
     };
     std::vector<S_dk_cache_entry> S_dk_cache_;
     bool S_dk_cache_valid_ = false;

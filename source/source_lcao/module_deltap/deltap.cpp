@@ -13,10 +13,12 @@ namespace deltap {
 void DeltaP::init(const UnitCell& ucell, const Grid_Driver& gd, const K_Vectors& kv,
                   const TwoCenterIntegrator* intor, const TwoCenterIntegrator* overlap_intor,
                   const std::vector<double>& orb_cutoff,
-                  double rm, int gdir, const Parallel_Orbitals* paraV)
+                  double rm, int gdir, const Parallel_Orbitals* paraV,
+                  cal_r_overlap_R* r_overlap)
 {
     intor_ = intor;
     overlap_intor_ = overlap_intor;
+    r_overlap_ = r_overlap;
     orb_cutoff_ = orb_cutoff;
     rm_ = rm;
     gdir_ = gdir;

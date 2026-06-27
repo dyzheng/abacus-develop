@@ -3,6 +3,7 @@
 #include "source_base/timer.h"
 #include "source_base/tool_title.h"
 #include "source_io/module_parameter/parameter.h"
+#include "source_io/module_hs/cal_r_overlap_R.h"
 #ifdef __MPI
 #include "source_base/parallel_comm.h"
 #include "source_base/module_external/scalapack_connector.h"
@@ -218,9 +219,18 @@ void DeltaP::compute_S_dk_link(const UnitCell& ucell,
                             const int lr = paraV_->global2local_row(gmu);
                             const int lc = paraV_->global2local_col(gnu);
                             if (lr >= 0 && lc >= 0)
+                            {
+                                // R1 = bra atom position (Cartesian Bohr)
+                                // R2 = ket atom position in cell R (Cartesian Bohr)
+                                ModuleBase::Vector3<double> R1_cart = tau0 * ucell.lat0;
+                                ModuleBase::Vector3<double> R2_cart = adjs.adjacent_tau[ad] * ucell.lat0;
                                 S_dk_cache_.push_back({lr, lc, ov,
                                     (double)R.x, (double)R.y, (double)R.z,
-                                    tau0.x, tau0.y, tau0.z});
+                                    tau0.x, tau0.y, tau0.z,
+                                    R1_cart, T0, ucell.atoms[T0].iw2l[iw0],
+                                    ucell.atoms[T0].iw2m[iw0], ucell.atoms[T0].iw2n[iw0],
+                                    R2_cart, T1, L1, m1, N1});
+                            }
                         }
                     }
                 }
@@ -229,26 +239,34 @@ void DeltaP::compute_S_dk_link(const UnitCell& ucell,
         S_dk_cache_valid_ = true;
     }
 
-    // Apply per-link phase using cached data
-    // berry_phase convention: phase = 2*pi*(kvec_c_R . R_cart - dk_c . tau)
-    // where kvec_c is Cartesian (1/Bohr), R_cart is Cartesian (Bohr), tau is Cartesian (Bohr)
+    // Apply per-link phase + position correction using cached data
+    // berry_phase convention:
+    //   phase = 2*pi*(kvec_c_R . R_cart - dk_c . tau)
+    //   overlap = <phi|phi(R)> - i*dk*tpiba*<phi|r|phi(R)>
     ModuleBase::Vector3<double> dk_c = kvec_c_R - kvec_c_L;
 
     for (const auto& e : S_dk_cache_)
     {
-        // R_cart = R_int.x * a1 + R_int.y * a2 + R_int.z * a3
         ModuleBase::Vector3<double> R_cart = e.Rx * ucell.a1 + e.Ry * ucell.a2 + e.Rz * ucell.a3;
         double arg = ModuleBase::TWO_PI * (
             kvec_c_R.x * R_cart.x + kvec_c_R.y * R_cart.y + kvec_c_R.z * R_cart.z
             - dk_c.x * e.tau_x - dk_c.y * e.tau_y - dk_c.z * e.tau_z);
         std::complex<double> phase(std::cos(arg), std::sin(arg));
 
-        // Position correction: DISABLED for testing
-        // double R_alpha = (gdir_ == 1) ? e.Rx : (gdir_ == 2) ? e.Ry : e.Rz;
-        // std::complex<double> pos_corr(1.0, -dk_cart * R_alpha);
-        std::complex<double> pos_corr(1.0, 0.0);  // no position correction
+        // Position correction: <phi|phi> - i*dk*tpiba*<phi|r|phi(R)>
+        std::complex<double> overlap(e.ov, 0.0);
+        if (r_overlap_)
+        {
+            ModuleBase::Vector3<double> r_psi = r_overlap_->get_psi_r_psi(
+                e.R1_cart, e.T1, e.L1, e.m1, e.N1,
+                e.R2_cart, e.T2, e.L2, e.m2, e.N2);
+            // berry_phase convention: imag = -dot(dk, r_psi) * tpiba
+            // where dk is dimensionless (kvec_c diff), r_psi in Bohr, tpiba = 2pi/lat0
+            double imag_part = -(dk_c.x * r_psi.x + dk_c.y * r_psi.y + dk_c.z * r_psi.z) * ucell.tpiba;
+            overlap = std::complex<double>(e.ov, imag_part);
+        }
 
-        S_dk_[e.lr + e.lc * nrow] += phase * pos_corr * e.ov;
+        S_dk_[e.lr + e.lc * nrow] += phase * overlap;
     }
 }
 
