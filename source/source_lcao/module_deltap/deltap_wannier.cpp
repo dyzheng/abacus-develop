@@ -172,7 +172,7 @@ void DeltaP::compute_S_dk_link(const UnitCell& ucell,
     dkv[gdir_ - 1] = dk_step;
     double dk_cart = dk_step * ucell.tpiba * ucell.lat0;
 
-    // First call: compute and cache the raw overlap data
+    // First call: compute and cache the raw overlap data + position matrix
     if (!S_dk_cache_valid_)
     {
         S_dk_cache_.clear();
@@ -197,6 +197,8 @@ void DeltaP::compute_S_dk_link(const UnitCell& ucell,
                 const ModuleBase::Vector3<double> dtau = tau0 - adjs.adjacent_tau[ad];
                 const Atom* atom1 = &ucell.atoms[T1];
                 const int nw1 = atom1->nw;
+                ModuleBase::Vector3<double> R1_cart = tau0 * ucell.lat0;
+                ModuleBase::Vector3<double> R2_cart = adjs.adjacent_tau[ad] * ucell.lat0;
 
                 for (int iw1 = 0; iw1 < nw1; ++iw1)
                 {
@@ -220,16 +222,30 @@ void DeltaP::compute_S_dk_link(const UnitCell& ucell,
                             const int lc = paraV_->global2local_col(gnu);
                             if (lr >= 0 && lc >= 0)
                             {
-                                // R1 = bra atom position (Cartesian Bohr)
-                                // R2 = ket atom position in cell R (Cartesian Bohr)
-                                ModuleBase::Vector3<double> R1_cart = tau0 * ucell.lat0;
-                                ModuleBase::Vector3<double> R2_cart = adjs.adjacent_tau[ad] * ucell.lat0;
-                                S_dk_cache_.push_back({lr, lc, ov,
-                                    (double)R.x, (double)R.y, (double)R.z,
-                                    tau0.x, tau0.y, tau0.z,
-                                    R1_cart, T0, ucell.atoms[T0].iw2l[iw0],
-                                    ucell.atoms[T0].iw2m[iw0], ucell.atoms[T0].iw2n[iw0],
-                                    R2_cart, T1, L1, m1, N1});
+                                S_dk_cache_entry e;
+                                e.lr = lr; e.lc = lc; e.ov = ov;
+                                e.Rx = R.x; e.Ry = R.y; e.Rz = R.z;
+                                e.tau_x = tau0.x; e.tau_y = tau0.y; e.tau_z = tau0.z;
+                                e.R1_cart = R1_cart;
+                                e.T1 = T0; e.L1 = ucell.atoms[T0].iw2l[iw0];
+                                e.m1 = ucell.atoms[T0].iw2m[iw0]; e.N1 = ucell.atoms[T0].iw2n[iw0];
+                                e.R2_cart = R2_cart;
+                                e.T2 = T1; e.L2 = L1; e.m2 = m1; e.N2 = N1;
+
+                                // Pre-compute local position matrix <phi|r'|phi(R)>
+                                if (r_overlap_)
+                                {
+                                    ModuleBase::Vector3<double> r_full = r_overlap_->get_psi_r_psi(
+                                        R1_cart, e.T1, e.L1, e.m1, e.N1,
+                                        R2_cart, e.T2, e.L2, e.m2, e.N2);
+                                    ModuleBase::Vector3<double> r_local = r_full - R1_cart * ov;
+                                    e.r_local_x = r_local.x;
+                                    e.r_local_y = r_local.y;
+                                    e.r_local_z = r_local.z;
+                                    e.r_computed = true;
+                                }
+
+                                S_dk_cache_.push_back(std::move(e));
                             }
                         }
                     }
@@ -253,16 +269,11 @@ void DeltaP::compute_S_dk_link(const UnitCell& ucell,
             - dk_c.x * e.tau_x - dk_c.y * e.tau_y - dk_c.z * e.tau_z);
         std::complex<double> phase(std::cos(arg), std::sin(arg));
 
-        // Position correction: <phi|phi> - i*dk*tpiba*<phi|r|phi(R)>
+        // Position correction using CACHED local position matrix
         std::complex<double> overlap(e.ov, 0.0);
-        if (r_overlap_)
+        if (e.r_computed)
         {
-            ModuleBase::Vector3<double> r_psi = r_overlap_->get_psi_r_psi(
-                e.R1_cart, e.T1, e.L1, e.m1, e.N1,
-                e.R2_cart, e.T2, e.L2, e.m2, e.N2);
-            // berry_phase convention: imag = -dot(dk, r_psi) * tpiba
-            // where dk is dimensionless (kvec_c diff), r_psi in Bohr, tpiba = 2pi/lat0
-            double imag_part = -(dk_c.x * r_psi.x + dk_c.y * r_psi.y + dk_c.z * r_psi.z) * ucell.tpiba;
+            double imag_part = -(dk_c.x * e.r_local_x + dk_c.y * e.r_local_y + dk_c.z * e.r_local_z) * ucell.tpiba;
             overlap = std::complex<double>(e.ov, imag_part);
         }
 
@@ -321,13 +332,18 @@ void DeltaP::compute_wannier_polarization(
     int m_dim = nproj_total;
 
     // Prefactor and direction (outside loop)
+    // For nspin=1, berry_phase multiplies by 2 (spin degeneracy): pdl_elec = 2*phik_ave
+    // DeltaP computes single-spin Berry phase, so divide by 2 to match.
+    // The -1 sign comes from the overlap convention (snap computes <ket|bra>,
+    // which is the transpose of <bra|ket>, flipping the Berry phase sign).
     const int alpha_idx = gdir_ - 1;
     double a_alpha = 0.0;
     if (gdir_ == 1) a_alpha = ucell.lat0 * ucell.a1.norm();
     else if (gdir_ == 2) a_alpha = ucell.lat0 * ucell.a2.norm();
     else a_alpha = ucell.lat0 * ucell.a3.norm();
     const double omega = ucell.omega;
-    const double prefactor = a_alpha / (2.0 * ModuleBase::PI * omega);
+    double spin_factor = (PARAM.inp.nspin == 1) ? -0.5 : -1.0;
+    const double prefactor = spin_factor * a_alpha / (2.0 * ModuleBase::PI * omega);
 
     results_.P_I.resize(nat_, ModuleBase::Vector3<double>(0.0, 0.0, 0.0));
     results_.gamma_I.resize(nat_, ModuleBase::Vector3<double>(0.0, 0.0, 0.0));

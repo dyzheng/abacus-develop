@@ -118,10 +118,13 @@ private:
         double Rx, Ry, Rz;
         double tau_x, tau_y, tau_z;
         // Orbital info for get_psi_r_psi
-        ModuleBase::Vector3<double> R1_cart;  // bra atom position (Cartesian, Bohr)
+        ModuleBase::Vector3<double> R1_cart;
         int T1, L1, m1, N1;
-        ModuleBase::Vector3<double> R2_cart;  // ket atom position (Cartesian, Bohr)
+        ModuleBase::Vector3<double> R2_cart;
         int T2, L2, m2, N2;
+        // Cached position matrix (local part only, in Bohr)
+        double r_local_x = 0, r_local_y = 0, r_local_z = 0;
+        bool r_computed = false;
     };
     std::vector<S_dk_cache_entry> S_dk_cache_;
     bool S_dk_cache_valid_ = false;
