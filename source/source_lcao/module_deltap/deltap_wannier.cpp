@@ -353,6 +353,11 @@ void DeltaP::compute_wannier_polarization(
     // Accumulate per-atom Berry phases over all k-strings
     std::vector<double> gamma_accum(nat_, 0.0);
     int n_strings_processed = 0;
+    // Store det(W) per string for branch tracking (berry_phase convention)
+    std::vector<std::complex<double>> zeta_list;
+    // Store per-atom gamma per string and eigenvalues for branch tracking
+    std::vector<std::vector<double>> gamma_accum_per_string;
+    std::vector<std::vector<std::complex<double>>> evals_all;
 
     kstring_data_.resize(nppstr_);
     std::vector<std::complex<double>*> psi_k_ptrs(nppstr_, nullptr);
@@ -511,6 +516,26 @@ void DeltaP::compute_wannier_polarization(
             if (info != 0) { std::cerr << "DeltaP: zgeev failed info=" << info << std::endl; continue; }
         }
 
+        // --- Step 4b: Compute det(W) for branch tracking ---
+        // det(W) = product of det(O_j), computed via LU on the (normalized) W_mat
+        std::vector<std::complex<double>> W_for_det = W_mat;
+        std::vector<int> ipiv_det(std::max(n_dim, 1));
+        int info_det = 0;
+        int n_det = n_dim;
+        zgetrf_(&n_det, &n_det, W_for_det.data(), &n_det, ipiv_det.data(), &info_det);
+        std::complex<double> zeta(1.0, 0.0);
+        if (info_det == 0)
+        {
+            int sign_det = 1;
+            for (int i = 0; i < n_dim; ++i)
+            {
+                zeta *= W_for_det[i + i * n_dim];
+                if (ipiv_det[i] != i + 1) sign_det = -sign_det;
+            }
+            if (sign_det < 0) zeta = -zeta;
+        }
+        zeta_list.push_back(zeta);
+
         // --- Step 5: D_mat at k_0, projections, per-atom Berry phases ---
         std::vector<std::complex<double>> D_mat(m_dim * n_dim, std::complex<double>(0.0, 0.0));
         {
@@ -540,6 +565,7 @@ void DeltaP::compute_wannier_polarization(
             }
 
         // Per-atom Berry phases for this k-string
+        std::vector<double> gamma_I_per_atom(nat_, 0.0);
         for (int iat = 0; iat < nat_; ++iat)
         {
             int r = nproj_per_atom_[iat];
@@ -555,7 +581,10 @@ void DeltaP::compute_wannier_polarization(
                 gamma_I += w_In * std::arg(evals[n]);
             }
             gamma_accum[iat] += gamma_I;
+            gamma_I_per_atom[iat] = gamma_I;
         }
+        gamma_accum_per_string.push_back(gamma_I_per_atom);
+        evals_all.push_back(evals);
         n_strings_processed++;
 
         if (istring == 0)
@@ -568,6 +597,7 @@ void DeltaP::compute_wannier_polarization(
     }
 
     // --- Average over k-strings ---
+    // Simple average (no branch tracking — works when no eigenvalue crosses cut)
     std::cout << "   DeltaP: processed " << n_strings_processed << " / " << total_string_ << " k-strings" << std::endl;
     for (int iat = 0; iat < nat_; ++iat)
     {
