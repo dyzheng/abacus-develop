@@ -376,17 +376,24 @@ void ModuleIO::ctrl_scf_lcao(UnitCell& ucell,
         // Build position matrix calculator for berry_phase overlap convention
         cal_r_overlap_R r_overlap;
         r_overlap.init(ucell, pv, orb);
-        // Build berry_phase overlap calculator (same integral tables as berry_phase)
-        unkOverlap_lcao berry_overlap;
-        berry_overlap.init(ucell, kv.get_nkstot(), orb);
-        berry_overlap.cal_R_number(ucell, gd);
-        berry_overlap.cal_orb_overlap(ucell);
+        // Build berry_phase overlap calculator
+        // Reuse the berry_phase's lcao_method if available (same integral tables),
+        // otherwise create a new one.
+        unkOverlap_lcao* berry_ovl_ptr = nullptr;
+        unkOverlap_lcao berry_ovl_local;
+        // Try to get berry_phase's lcao_method pointer
+        // (berryphase::lcao_method is public)
+        // If berry_phase ran, its bp object is out of scope, so we create our own.
+        berry_ovl_local.init(ucell, kv.get_nkstot(), orb);
+        berry_ovl_local.cal_R_number(ucell, gd);
+        berry_ovl_local.cal_orb_overlap(ucell);
+        berry_ovl_ptr = &berry_ovl_local;
         deltap::DeltaP dp;
         dp.init(ucell, gd, kv,
                 two_center_bundle.overlap_orb_onsite.get(),
                 two_center_bundle.overlap_orb.get(),
                 orb.cutoffs(),
-                inp.deltap_rm, inp.deltap_gdir, &pv, &r_overlap, &berry_overlap);
+                inp.deltap_rm, inp.deltap_gdir, &pv, &r_overlap, berry_ovl_ptr);
         dp.compute_atomic_polarization(ucell, psi, pelec);
         std::cout << FmtCore::format(" >> Finish %s.\n * * * * * *\n", "DeltaP decomposition");
     }

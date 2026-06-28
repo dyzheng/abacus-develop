@@ -231,6 +231,13 @@ double berryphase::stringPhase(const UnitCell& ucell,
     int ik_2 = 0;
     ModuleBase::Vector3<double> G(0.0, 0.0, 0.0);
     ModuleBase::Vector3<double> dk = kv.kvec_c[k_index[index_str][1]] - kv.kvec_c[k_index[index_str][0]];
+    // Debug: print k_index for this string
+    if (index_str == 0)
+    {
+        std::cout << "   berry string 0: k_index=[";
+        for (int i = 0; i < nppstr; ++i) std::cout << k_index[index_str][i] << " ";
+        std::cout << "] dk=" << dk << std::endl;
+    }
 
     for (int k_start = 0; k_start < (nppstr - 1); k_start++)
     {
@@ -339,15 +346,6 @@ double berryphase::stringPhase(const UnitCell& ucell,
 #endif
     }
 
-    // Debug: output zeta for this string
-    if (GlobalV::MY_RANK == 0)
-    {
-        std::ofstream ofs("berry_zeta_debug.dat", std::ios::app);
-        ofs << index_str << " " << std::setprecision(17)
-            << zeta.real() << " " << zeta.imag() << " "
-            << log(zeta).imag() << std::endl;
-        ofs.close();
-    }
 
     return log(zeta).imag();
 }

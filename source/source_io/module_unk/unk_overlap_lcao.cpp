@@ -716,53 +716,5 @@ void unkOverlap_lcao::berryphase_overlap(const UnitCell& ucell,
     delete[] C_matrix;
     delete[] out_matrix;
 
-    // Debug: compare det(O_matrix) with det_berryphase for the same link
-    {
-        std::complex<double> det_berry = this->det_berryphase(ucell, ik_L, ik_R, dk, occ_bands, para_orb, psi_in, kv);
-        // Compute det of O_matrix via LU (serial, O_matrix is replicated)
-        std::vector<std::complex<double>> O_copy = O_matrix;
-        std::vector<int> ipiv(occBands);
-        int info = 0;
-        // Local LU on replicated matrix
-        int n_lu = occBands;
-        int lda = occBands;
-        // Use LapackConnector zgetrf if available, otherwise skip
-#ifdef __LCAO
-        // ScalapackConnector::getrf won't work on a replicated matrix;
-        // use a manual LU for small matrices
-#endif
-        std::complex<double> det_local(1.0, 0.0);
-        // Simple det for small matrices (nocc <= 20)
-        if (occBands <= 4)
-        {
-            // Direct formula for 2x2 and 4x4
-            if (occBands == 2)
-                det_local = O_matrix[0]*O_matrix[3] - O_matrix[1]*O_matrix[2];
-            else if (occBands == 4)
-                det_local = O_matrix[0]*(O_matrix[5]*(O_matrix[10]*O_matrix[15]-O_matrix[11]*O_matrix[14])
-                         - O_matrix[6]*(O_matrix[9]*O_matrix[15]-O_matrix[11]*O_matrix[12])
-                         + O_matrix[7]*(O_matrix[9]*O_matrix[14]-O_matrix[10]*O_matrix[12]))
-                         - O_matrix[1]*(O_matrix[4]*(O_matrix[10]*O_matrix[15]-O_matrix[11]*O_matrix[14])
-                         - O_matrix[6]*(O_matrix[8]*O_matrix[15]-O_matrix[11]*O_matrix[12])
-                         + O_matrix[7]*(O_matrix[8]*O_matrix[14]-O_matrix[10]*O_matrix[12]))
-                         + O_matrix[2]*(O_matrix[4]*(O_matrix[9]*O_matrix[15]-O_matrix[11]*O_matrix[13])
-                         - O_matrix[5]*(O_matrix[8]*O_matrix[15]-O_matrix[11]*O_matrix[12])
-                         + O_matrix[7]*(O_matrix[8]*O_matrix[13]-O_matrix[9]*O_matrix[12]))
-                         - O_matrix[3]*(O_matrix[4]*(O_matrix[9]*O_matrix[14]-O_matrix[10]*O_matrix[13])
-                         - O_matrix[5]*(O_matrix[8]*O_matrix[14]-O_matrix[10]*O_matrix[12])
-                         + O_matrix[6]*(O_matrix[8]*O_matrix[13]-O_matrix[9]*O_matrix[12]));
-        }
-        static int dbg_count = 0;
-        if (dbg_count < 5 && GlobalV::MY_RANK == 0)
-        {
-            std::cout << "   DEBUG berry_overlap: link=" << dbg_count
-                      << " ik_L=" << ik_L << " ik_R=" << ik_R
-                      << " det_berry=" << det_berry
-                      << " det_overlap=" << det_local
-                      << " match=" << (std::abs(det_berry - det_local) < 1e-6 ? "YES" : "NO")
-                      << " diff=" << std::abs(det_berry - det_local)
-                      << std::endl;
-            dbg_count++;
-        }
-    }
+
 }

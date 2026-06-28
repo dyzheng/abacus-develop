@@ -365,6 +365,13 @@ void DeltaP::compute_wannier_polarization(
 
     for (int istring = 0; istring < total_string_; ++istring)
     {
+        // Debug: print k_index for string 0
+        if (istring == 0)
+        {
+            std::cout << "   DeltaP string 0: k_index=[";
+            for (int j = 0; j < nppstr_; ++j) std::cout << k_index_[0][j] << " ";
+            std::cout << "]" << std::endl;
+        }
         // --- Step 1a: S_k, D_I for this k-string ---
         // CRITICAL: clear kstring_data_ to prevent accumulation across strings
         for (int j = 0; j < nppstr_; ++j)
@@ -404,6 +411,9 @@ void DeltaP::compute_wannier_polarization(
 #endif
 
         // --- Step 2: O_kpair (use berry_phase overlap if available) ---
+        if (istring == 0)
+            std::cout << "   DeltaP: berry_overlap_=" << (berry_overlap_ ? "non-null" : "NULL") << std::endl;
+
         std::vector<std::vector<std::complex<double>>> O_kpair(nppstr_ - 1);
         ModuleBase::Vector3<double> dk_string;
         if (nppstr_ > 1 && k_index_[istring][0] < nks && k_index_[istring][1] < nks)
@@ -416,12 +426,12 @@ void DeltaP::compute_wannier_polarization(
             std::vector<std::complex<double>> O_full(
                 static_cast<size_t>(nocc_use) * nocc_use, std::complex<double>(0.0, 0.0));
 
-            if (ik_L < nks && ik_R < nks && berry_overlap_)
-            {
-                berry_overlap_->berryphase_overlap(ucell, ik_L, ik_R, dk_string,
-                    nocc_use, *paraV_, psi, *kv_, O_full);
-            }
-            else
+            // Always use compute_S_dk_link for O_j matrix (eigenvalue decomposition).
+            // berryphase_overlap has a gathering bug (pzgemm descriptor mismatch).
+            // compute_S_dk_link uses the correct berry_phase phase + position correction.
+            if (ik_R < nks && ik_L < nks)
+                compute_S_dk_link(ucell, kv_->kvec_d[ik_R],
+                                  kv_->kvec_c[ik_L], kv_->kvec_c[ik_R]);
             {
                 std::complex<double>* cj = psi_k_ptrs[j];
                 std::complex<double>* cjp1 = psi_k_ptrs[j + 1];
@@ -472,26 +482,48 @@ void DeltaP::compute_wannier_polarization(
             O_kpair[j] = O_full;
         }
 
-        // --- Step 3a: Compute zeta_scalar = prod_j det(O_j) ---
-        // This matches berry_phase's method exactly (no matrix normalization).
+        // --- Step 3a: Compute zeta = prod_j det(O_j) ---
+        // Use det_berryphase directly (bypasses O_matrix gathering issues)
+        // CRITICAL: det_berryphase does MPI_Allreduce(MPI_PROD) internally,
+        // so ALL ranks must call it for EVERY link, even if ik_L/ik_R are invalid.
         std::complex<double> zeta_scalar(1.0, 0.0);
-        for (int j = 0; j < nppstr_ - 1; ++j)
+        if (berry_overlap_ && nppstr_ > 1)
         {
-            const auto& Oj = O_kpair[j];
-            std::vector<std::complex<double>> O_copy = Oj;
-            std::vector<int> ipiv_lu(std::max(n_dim, 1));
-            int info_lu = 0, n_lu = n_dim;
-            zgetrf_(&n_lu, &n_lu, O_copy.data(), &n_lu, ipiv_lu.data(), &info_lu);
-            if (info_lu != 0) { zeta_scalar = 0; break; }
-            std::complex<double> det_o(1.0, 0.0);
-            int sign_lu = 1;
-            for (int i = 0; i < n_dim; ++i)
+            ModuleBase::Vector3<double> dk_str;
+            if (k_index_[istring][0] < nks && k_index_[istring][1] < nks)
+                dk_str = kv_->kvec_c[k_index_[istring][1]] - kv_->kvec_c[k_index_[istring][0]];
+            for (int j = 0; j < nppstr_ - 1; ++j)
             {
-                det_o *= O_copy[i + i * n_dim];
-                if (ipiv_lu[i] != i + 1) sign_lu = -sign_lu;
+                int ik_L = k_index_[istring][j];
+                int ik_R = k_index_[istring][j + 1];
+                // Clamp to valid range — all ranks must call det_berryphase
+                // to participate in the internal MPI_Allreduce(MPI_PROD)
+                if (ik_L >= nks) ik_L = 0;
+                if (ik_R >= nks) ik_R = 0;
+                zeta_scalar *= berry_overlap_->det_berryphase(
+                    ucell, ik_L, ik_R, dk_str, nocc_use, *paraV_, psi, *kv_);
             }
-            if (sign_lu < 0) det_o = -det_o;
-            zeta_scalar *= det_o;
+        }
+        else
+        {
+            for (int j = 0; j < nppstr_ - 1; ++j)
+            {
+                const auto& Oj = O_kpair[j];
+                std::vector<std::complex<double>> O_copy = Oj;
+                std::vector<int> ipiv_lu(std::max(n_dim, 1));
+                int info_lu = 0, n_lu = n_dim;
+                zgetrf_(&n_lu, &n_lu, O_copy.data(), &n_lu, ipiv_lu.data(), &info_lu);
+                if (info_lu != 0) { zeta_scalar = 0; break; }
+                std::complex<double> det_o(1.0, 0.0);
+                int sign_lu = 1;
+                for (int i = 0; i < n_dim; ++i)
+                {
+                    det_o *= O_copy[i + i * n_dim];
+                    if (ipiv_lu[i] != i + 1) sign_lu = -sign_lu;
+                }
+                if (sign_lu < 0) det_o = -det_o;
+                zeta_scalar *= det_o;
+            }
         }
 
         // --- Step 3b: Build Wilson loop matrix W = O_0 * O_1 * ... * O_{N-1} ---
