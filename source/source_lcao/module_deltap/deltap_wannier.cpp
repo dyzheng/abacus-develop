@@ -365,13 +365,6 @@ void DeltaP::compute_wannier_polarization(
 
     for (int istring = 0; istring < total_string_; ++istring)
     {
-        // Debug: print k_index for string 0
-        if (istring == 0)
-        {
-            std::cout << "   DeltaP string 0: k_index=[";
-            for (int j = 0; j < nppstr_; ++j) std::cout << k_index_[0][j] << " ";
-            std::cout << "]" << std::endl;
-        }
         // --- Step 1a: S_k, D_I for this k-string ---
         // CRITICAL: clear kstring_data_ to prevent accumulation across strings
         for (int j = 0; j < nppstr_; ++j)
@@ -480,29 +473,6 @@ void DeltaP::compute_wannier_polarization(
 #endif
             }
             O_kpair[j] = O_full;
-            // Debug: output per-link det(O_j)
-            if (istring == 0)
-            {
-                std::vector<std::complex<double>> O_copy = O_full;
-                std::vector<int> ipiv_dbg(std::max(n_dim, 1));
-                int info_dbg = 0, n_dbg = n_dim;
-                zgetrf_(&n_dbg, &n_dbg, O_copy.data(), &n_dbg, ipiv_dbg.data(), &info_dbg);
-                std::complex<double> det_o(1.0, 0.0);
-                int sign_o = 1;
-                if (info_dbg == 0)
-                {
-                    for (int i = 0; i < n_dim; ++i)
-                    {
-                        det_o *= O_copy[i + i * n_dim];
-                        if (ipiv_dbg[i] != i + 1) sign_o = -sign_o;
-                    }
-                    if (sign_o < 0) det_o = -det_o;
-                }
-                std::ofstream ofs("dp_link_det.dat", std::ios::app);
-                ofs << j << " " << std::setprecision(17)
-                    << det_o.real() << " " << det_o.imag() << std::endl;
-                ofs.close();
-            }
         }
 
         // --- Step 3a: Compute zeta = prod_j det(O_j) ---

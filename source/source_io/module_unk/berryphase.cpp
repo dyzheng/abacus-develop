@@ -231,13 +231,7 @@ double berryphase::stringPhase(const UnitCell& ucell,
     int ik_2 = 0;
     ModuleBase::Vector3<double> G(0.0, 0.0, 0.0);
     ModuleBase::Vector3<double> dk = kv.kvec_c[k_index[index_str][1]] - kv.kvec_c[k_index[index_str][0]];
-    // Debug: print k_index for this string
-    if (index_str == 0)
-    {
-        std::cout << "   berry string 0: k_index=[";
-        for (int i = 0; i < nppstr; ++i) std::cout << k_index[index_str][i] << " ";
-        std::cout << "] dk=" << dk << std::endl;
-    }
+
 
     for (int k_start = 0; k_start < (nppstr - 1); k_start++)
     {
@@ -345,16 +339,7 @@ double berryphase::stringPhase(const UnitCell& ucell,
         {
             if (PARAM.inp.nspin != 4)
             {
-                std::complex<double> det_lcao = lcao_method.det_berryphase(ucell,ik_1, ik_2, dk, nbands, *(this->paraV), psi_in, kv);
-                zeta = zeta * det_lcao;
-                // Debug: output per-link det (LCAO)
-                if (index_str == 0)
-                {
-                    std::ofstream ofs("berry_link_det.dat", std::ios::app);
-                    ofs << k_start << " " << std::setprecision(17)
-                        << det_lcao.real() << " " << det_lcao.imag() << std::endl;
-                    ofs.close();
-                }
+                zeta = zeta * lcao_method.det_berryphase(ucell,ik_1, ik_2, dk, nbands, *(this->paraV), psi_in, kv);
             }
             else
             {
