@@ -329,6 +329,14 @@ double berryphase::stringPhase(const UnitCell& ucell,
             }
 
             zeta = zeta * det;
+            // Debug: output per-link det
+            if (index_str == 0)
+            {
+                std::ofstream ofs("berry_link_det.dat", std::ios::app);
+                ofs << k_start << " " << std::setprecision(17)
+                    << det.real() << " " << det.imag() << std::endl;
+                ofs.close();
+            }
 
             // delete[] ipiv;
         }
@@ -337,7 +345,16 @@ double berryphase::stringPhase(const UnitCell& ucell,
         {
             if (PARAM.inp.nspin != 4)
             {
-                zeta = zeta * lcao_method.det_berryphase(ucell,ik_1, ik_2, dk, nbands, *(this->paraV), psi_in, kv);
+                std::complex<double> det_lcao = lcao_method.det_berryphase(ucell,ik_1, ik_2, dk, nbands, *(this->paraV), psi_in, kv);
+                zeta = zeta * det_lcao;
+                // Debug: output per-link det (LCAO)
+                if (index_str == 0)
+                {
+                    std::ofstream ofs("berry_link_det.dat", std::ios::app);
+                    ofs << k_start << " " << std::setprecision(17)
+                        << det_lcao.real() << " " << det_lcao.imag() << std::endl;
+                    ofs.close();
+                }
             }
             else
             {
