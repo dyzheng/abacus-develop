@@ -4,6 +4,7 @@
 #include "source_base/tool_title.h"
 #include "source_io/module_parameter/parameter.h"
 #include "source_io/module_hs/cal_r_overlap_R.h"
+#include "source_io/module_unk/unk_overlap_lcao.h"
 #ifdef __MPI
 #include "source_base/parallel_comm.h"
 #include "source_base/module_external/scalapack_connector.h"
@@ -402,68 +403,98 @@ void DeltaP::compute_wannier_polarization(
         }
 #endif
 
-        // --- Step 2: O_kpair (exact overlap with berry_phase convention) ---
+        // --- Step 2: O_kpair (use berry_phase overlap if available) ---
         std::vector<std::vector<std::complex<double>>> O_kpair(nppstr_ - 1);
+        ModuleBase::Vector3<double> dk_string;
+        if (nppstr_ > 1 && k_index_[istring][0] < nks && k_index_[istring][1] < nks)
+            dk_string = kv_->kvec_c[k_index_[istring][1]] - kv_->kvec_c[k_index_[istring][0]];
+
         for (int j = 0; j < nppstr_ - 1; ++j)
         {
-            // Compute S_dk for this link with correct k_R phase + position correction
             int ik_L = k_index_[istring][j];
             int ik_R = k_index_[istring][j + 1];
-            if (ik_R < nks && ik_L < nks)
-                compute_S_dk_link(ucell, kv_->kvec_d[ik_R],
-                                  kv_->kvec_c[ik_L], kv_->kvec_c[ik_R]);
-
-            std::complex<double>* cj = psi_k_ptrs[j];
-            std::complex<double>* cjp1 = psi_k_ptrs[j + 1];
             std::vector<std::complex<double>> O_full(
                 static_cast<size_t>(nocc_use) * nocc_use, std::complex<double>(0.0, 0.0));
-            if (!cj || !cjp1 || nocc_use == 0 || nlocal == 0) { O_kpair[j] = O_full; continue; }
+
+            if (ik_L < nks && ik_R < nks && berry_overlap_)
+            {
+                berry_overlap_->berryphase_overlap(ucell, ik_L, ik_R, dk_string,
+                    nocc_use, *paraV_, psi, *kv_, O_full);
+            }
+            else
+            {
+                std::complex<double>* cj = psi_k_ptrs[j];
+                std::complex<double>* cjp1 = psi_k_ptrs[j + 1];
+                if (!cj || !cjp1 || nocc_use == 0 || nlocal == 0) { O_kpair[j] = O_full; continue; }
 
 #ifdef __MPI
-            std::vector<std::complex<double>> tmp(paraV_->nloc, std::complex<double>(0.0, 0.0));
-            std::vector<std::complex<double>> O_2d(paraV_->nloc, std::complex<double>(0.0, 0.0));
-            const std::complex<double> one(1.0, 0.0);
-            const std::complex<double> zero(0.0, 0.0);
-            ScalapackConnector::gemm('C', 'N', nocc_use, nlocal, nlocal,
-                                      one, cj, 1, 1, paraV_->desc,
-                                      S_dk_.data(), 1, 1, paraV_->desc,
-                                      zero, tmp.data(), 1, 1, paraV_->desc);
-            ScalapackConnector::gemm('N', 'N', nocc_use, nocc_use, nlocal,
-                                      one, tmp.data(), 1, 1, paraV_->desc,
-                                      cjp1, 1, 1, paraV_->desc,
-                                      zero, O_2d.data(), 1, 1, paraV_->desc);
-            for (int ilc = 0; ilc < paraV_->ncol; ++ilc)
-            {
-                int jg = paraV_->local2global_col(ilc);
-                if (jg >= nocc_use) continue;
-                for (int ilr = 0; ilr < paraV_->nrow; ++ilr)
+                std::vector<std::complex<double>> tmp(paraV_->nloc, std::complex<double>(0.0, 0.0));
+                std::vector<std::complex<double>> O_2d(paraV_->nloc, std::complex<double>(0.0, 0.0));
+                const std::complex<double> one_c(1.0, 0.0);
+                const std::complex<double> zero_c(0.0, 0.0);
+                ScalapackConnector::gemm('C', 'N', nocc_use, nlocal, nlocal,
+                                          one_c, cj, 1, 1, paraV_->desc,
+                                          S_dk_.data(), 1, 1, paraV_->desc,
+                                          zero_c, tmp.data(), 1, 1, paraV_->desc);
+                ScalapackConnector::gemm('N', 'N', nocc_use, nocc_use, nlocal,
+                                          one_c, tmp.data(), 1, 1, paraV_->desc,
+                                          cjp1, 1, 1, paraV_->desc,
+                                          zero_c, O_2d.data(), 1, 1, paraV_->desc);
+                for (int ilc = 0; ilc < paraV_->ncol; ++ilc)
                 {
-                    int ig = paraV_->local2global_row(ilr);
-                    if (ig >= nocc_use) continue;
-                    O_full[ig + jg * nocc_use] = O_2d[ilr + ilc * paraV_->nrow];
-                }
-            }
-            MPI_Allreduce(MPI_IN_PLACE, O_full.data(), 2 * nocc_use * nocc_use,
-                          MPI_DOUBLE, MPI_SUM, paraV_->comm());
-#else
-            for (int a = 0; a < nocc_use; ++a)
-                for (int b = 0; b < nocc_use; ++b)
-                {
-                    std::complex<double> s(0.0, 0.0);
-                    for (int mu = 0; mu < nlocal; ++mu)
+                    int jg = paraV_->local2global_col(ilc);
+                    if (jg >= nocc_use) continue;
+                    for (int ilr = 0; ilr < paraV_->nrow; ++ilr)
                     {
-                        std::complex<double> sm(0.0, 0.0);
-                        for (int nu = 0; nu < nlocal; ++nu)
-                            sm += S_dk_[mu + nu * nlocal] * cjp1[nu + b * nlocal];
-                        s += std::conj(cj[mu + a * nlocal]) * sm;
+                        int ig = paraV_->local2global_row(ilr);
+                        if (ig >= nocc_use) continue;
+                        O_full[ig + jg * nocc_use] = O_2d[ilr + ilc * paraV_->nrow];
                     }
-                    O_full[a + b * nocc_use] = s;
                 }
+                MPI_Allreduce(MPI_IN_PLACE, O_full.data(), 2 * nocc_use * nocc_use,
+                              MPI_DOUBLE, MPI_SUM, paraV_->comm());
+#else
+                for (int a = 0; a < nocc_use; ++a)
+                    for (int b = 0; b < nocc_use; ++b)
+                    {
+                        std::complex<double> s(0.0, 0.0);
+                        for (int mu = 0; mu < nlocal; ++mu)
+                        {
+                            std::complex<double> sm(0.0, 0.0);
+                            for (int nu = 0; nu < nlocal; ++nu)
+                                sm += S_dk_[mu + nu * nlocal] * cjp1[nu + b * nlocal];
+                            s += std::conj(cj[mu + a * nlocal]) * sm;
+                        }
+                        O_full[a + b * nocc_use] = s;
+                    }
 #endif
+            }
             O_kpair[j] = O_full;
         }
 
-        // --- Step 3: Build Wilson loop matrix W = O_0 * O_1 * ... * O_{N-1} ---
+        // --- Step 3a: Compute zeta_scalar = prod_j det(O_j) ---
+        // This matches berry_phase's method exactly (no matrix normalization).
+        std::complex<double> zeta_scalar(1.0, 0.0);
+        for (int j = 0; j < nppstr_ - 1; ++j)
+        {
+            const auto& Oj = O_kpair[j];
+            std::vector<std::complex<double>> O_copy = Oj;
+            std::vector<int> ipiv_lu(std::max(n_dim, 1));
+            int info_lu = 0, n_lu = n_dim;
+            zgetrf_(&n_lu, &n_lu, O_copy.data(), &n_lu, ipiv_lu.data(), &info_lu);
+            if (info_lu != 0) { zeta_scalar = 0; break; }
+            std::complex<double> det_o(1.0, 0.0);
+            int sign_lu = 1;
+            for (int i = 0; i < n_dim; ++i)
+            {
+                det_o *= O_copy[i + i * n_dim];
+                if (ipiv_lu[i] != i + 1) sign_lu = -sign_lu;
+            }
+            if (sign_lu < 0) det_o = -det_o;
+            zeta_scalar *= det_o;
+        }
+
+        // --- Step 3b: Build Wilson loop matrix W = O_0 * O_1 * ... * O_{N-1} ---
         // Normalize after each step by max element to prevent overflow.
         // Dividing by a real positive number does NOT change arg(eigenvalues).
         std::vector<std::complex<double>> W_mat(n_dim * n_dim, std::complex<double>(0.0, 0.0));
@@ -595,12 +626,12 @@ void DeltaP::compute_wannier_polarization(
                       << " gamma=" << std::scientific << std::setprecision(6) << g_check << std::endl;
         }
 
-        // Debug: output zeta for this string (det(W) from LU)
+        // Debug: output zeta for this string (scalar product, matching berry_phase)
         {
             std::ofstream ofs("deltap_zeta_debug.dat", std::ios::app);
             ofs << istring << " " << std::setprecision(17)
-                << zeta.real() << " " << zeta.imag() << " "
-                << std::arg(zeta) << std::endl;
+                << zeta_scalar.real() << " " << zeta_scalar.imag() << " "
+                << std::arg(zeta_scalar) << std::endl;
             ofs.close();
         }
     }

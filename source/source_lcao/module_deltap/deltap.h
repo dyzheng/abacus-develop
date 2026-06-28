@@ -15,7 +15,8 @@
 #include <unordered_map>
 #include <vector>
 
-class cal_r_overlap_R;  // forward declaration (global namespace)
+class cal_r_overlap_R;
+class unkOverlap_lcao;
 
 namespace deltap {
 
@@ -56,7 +57,8 @@ public:
               double rm,
               int gdir,
               const Parallel_Orbitals* paraV,
-              cal_r_overlap_R* r_overlap = nullptr);
+              cal_r_overlap_R* r_overlap = nullptr,
+              unkOverlap_lcao* berry_overlap = nullptr);
 
     void compute_atomic_polarization(
         const UnitCell& ucell,
@@ -99,6 +101,7 @@ private:
     const TwoCenterIntegrator* intor_ = nullptr;
     const TwoCenterIntegrator* overlap_intor_ = nullptr;
     cal_r_overlap_R* r_overlap_ = nullptr;  // for <phi|r|phi(R)> position matrix
+    unkOverlap_lcao* berry_overlap_ = nullptr;  // for berry_phase-exact overlap matrix
     std::vector<double> orb_cutoff_;
     double rm_ = 3.0;
     int gdir_ = 3;

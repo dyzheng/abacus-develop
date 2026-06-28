@@ -72,6 +72,15 @@ class unkOverlap_lcao
                                         const Parallel_Orbitals& para_orb,
                                         const psi::Psi<std::complex<double>>* psi_in,
                                         const K_Vectors& kv);
+    void berryphase_overlap(const UnitCell& ucell,
+                            const int ik_L,
+                            const int ik_R,
+                            const ModuleBase::Vector3<double> dk,
+                            const int occ_bands,
+                            const Parallel_Orbitals& para_orb,
+                            const psi::Psi<std::complex<double>>* psi_in,
+                            const K_Vectors& kv,
+                            std::vector<std::complex<double>>& O_matrix);
 };
 
 #endif

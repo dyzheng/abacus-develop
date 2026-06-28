@@ -22,7 +22,8 @@
 #include "../module_wf/write_wfc_nao.h"                       // use ModuleIO::write_wfc_nao()
 #include "source_lcao/module_deltaspin/spin_constrain.h"   // use spinconstrain::SpinConstrain<TK>
 #include "source_lcao/module_deltap/deltap.h"              // use deltap::DeltaP
-#include "source_io/module_hs/cal_r_overlap_R.h"           // use cal_r_overlap_R
+#include "source_io/module_hs/cal_r_overlap_R.h"
+#include "source_io/module_unk/unk_overlap_lcao.h"
 #include "source_lcao/module_operator_lcao/ekinetic.h" // use hamilt::EKinetic
 #ifdef __MLALGO
 #include "source_lcao/module_deepks/LCAO_deepks.h"
@@ -375,12 +376,17 @@ void ModuleIO::ctrl_scf_lcao(UnitCell& ucell,
         // Build position matrix calculator for berry_phase overlap convention
         cal_r_overlap_R r_overlap;
         r_overlap.init(ucell, pv, orb);
+        // Build berry_phase overlap calculator (same integral tables as berry_phase)
+        unkOverlap_lcao berry_overlap;
+        berry_overlap.init(ucell, kv.get_nkstot(), orb);
+        berry_overlap.cal_R_number(ucell, gd);
+        berry_overlap.cal_orb_overlap(ucell);
         deltap::DeltaP dp;
         dp.init(ucell, gd, kv,
                 two_center_bundle.overlap_orb_onsite.get(),
                 two_center_bundle.overlap_orb.get(),
                 orb.cutoffs(),
-                inp.deltap_rm, inp.deltap_gdir, &pv, &r_overlap);
+                inp.deltap_rm, inp.deltap_gdir, &pv, &r_overlap, &berry_overlap);
         dp.compute_atomic_polarization(ucell, psi, pelec);
         std::cout << FmtCore::format(" >> Finish %s.\n * * * * * *\n", "DeltaP decomposition");
     }

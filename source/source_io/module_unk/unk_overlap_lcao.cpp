@@ -640,3 +640,129 @@ std::complex<double> unkOverlap_lcao::det_berryphase(const UnitCell& ucell,
 
     return det;
 }
+
+void unkOverlap_lcao::berryphase_overlap(const UnitCell& ucell,
+                                         const int ik_L,
+                                         const int ik_R,
+                                         const ModuleBase::Vector3<double> dk,
+                                         const int occ_bands,
+                                         const Parallel_Orbitals& para_orb,
+                                         const psi::Psi<std::complex<double>>* psi_in,
+                                         const K_Vectors& kv,
+                                         std::vector<std::complex<double>>& O_matrix)
+{
+    // Same as det_berryphase but returns the full O = C†(k_L) · M · C(k_R) matrix
+    // O_matrix is (occ_bands × occ_bands), replicated on all ranks.
+    std::complex<double>* midmatrix = nullptr;
+    std::complex<double>* C_matrix = new std::complex<double>[para_orb.nloc];
+    std::complex<double>* out_matrix = new std::complex<double>[para_orb.nloc];
+    ModuleBase::GlobalFunc::ZEROS(C_matrix, para_orb.nloc);
+    ModuleBase::GlobalFunc::ZEROS(out_matrix, para_orb.nloc);
+
+    this->prepare_midmatrix_pblas(ucell, ik_L, ik_R, dk, midmatrix, para_orb, kv);
+
+    char transa = 'C';
+    char transb = 'N';
+    int occBands = occ_bands;
+    int nlocal = PARAM.globalv.nlocal;
+    std::complex<double> alpha = {1.0, 0.0}, beta = {0.0, 0.0};
+    int one = 1;
+
+#ifdef __MPI
+    ScalapackConnector::gemm(transa, transb, occBands, nlocal, nlocal,
+            alpha, &psi_in[0](ik_L, 0, 0), one, one, para_orb.desc,
+            midmatrix, one, one, para_orb.desc,
+            beta, C_matrix, one, one, para_orb.desc);
+
+    ScalapackConnector::gemm(transb, transb, occBands, occBands, nlocal,
+            alpha, C_matrix, one, one, para_orb.desc,
+            &psi_in[0](ik_R, 0, 0), one, one, para_orb.desc,
+            beta, out_matrix, one, one, para_orb.desc);
+
+    // Gather out_matrix into replicated O_matrix
+    O_matrix.assign(static_cast<size_t>(occBands) * occBands, std::complex<double>(0.0, 0.0));
+    for (int ilc = 0; ilc < para_orb.ncol; ++ilc)
+    {
+        int jg = para_orb.local2global_col(ilc);
+        if (jg >= occBands) continue;
+        for (int ilr = 0; ilr < para_orb.nrow; ++ilr)
+        {
+            int ig = para_orb.local2global_row(ilr);
+            if (ig >= occBands) continue;
+            O_matrix[ig + jg * occBands] = out_matrix[ilr + ilc * para_orb.nrow];
+        }
+    }
+    MPI_Allreduce(MPI_IN_PLACE, O_matrix.data(), 2 * occBands * occBands,
+                  MPI_DOUBLE, MPI_SUM, para_orb.comm());
+#else
+    // Serial: plain triple product
+    O_matrix.assign(static_cast<size_t>(occBands) * occBands, std::complex<double>(0.0, 0.0));
+    for (int a = 0; a < occBands; ++a)
+        for (int b = 0; b < occBands; ++b)
+        {
+            std::complex<double> s(0.0, 0.0);
+            for (int mu = 0; mu < nlocal; ++mu)
+            {
+                std::complex<double> sm(0.0, 0.0);
+                for (int nu = 0; nu < nlocal; ++nu)
+                    sm += midmatrix[mu + nu * nlocal] * psi_in[0](ik_R, nu, b);
+                s += std::conj(psi_in[0](ik_L, mu, a)) * sm;
+            }
+            O_matrix[a + b * occBands] = s;
+        }
+#endif
+
+    delete[] midmatrix;
+    delete[] C_matrix;
+    delete[] out_matrix;
+
+    // Debug: compare det(O_matrix) with det_berryphase for the same link
+    {
+        std::complex<double> det_berry = this->det_berryphase(ucell, ik_L, ik_R, dk, occ_bands, para_orb, psi_in, kv);
+        // Compute det of O_matrix via LU (serial, O_matrix is replicated)
+        std::vector<std::complex<double>> O_copy = O_matrix;
+        std::vector<int> ipiv(occBands);
+        int info = 0;
+        // Local LU on replicated matrix
+        int n_lu = occBands;
+        int lda = occBands;
+        // Use LapackConnector zgetrf if available, otherwise skip
+#ifdef __LCAO
+        // ScalapackConnector::getrf won't work on a replicated matrix;
+        // use a manual LU for small matrices
+#endif
+        std::complex<double> det_local(1.0, 0.0);
+        // Simple det for small matrices (nocc <= 20)
+        if (occBands <= 4)
+        {
+            // Direct formula for 2x2 and 4x4
+            if (occBands == 2)
+                det_local = O_matrix[0]*O_matrix[3] - O_matrix[1]*O_matrix[2];
+            else if (occBands == 4)
+                det_local = O_matrix[0]*(O_matrix[5]*(O_matrix[10]*O_matrix[15]-O_matrix[11]*O_matrix[14])
+                         - O_matrix[6]*(O_matrix[9]*O_matrix[15]-O_matrix[11]*O_matrix[12])
+                         + O_matrix[7]*(O_matrix[9]*O_matrix[14]-O_matrix[10]*O_matrix[12]))
+                         - O_matrix[1]*(O_matrix[4]*(O_matrix[10]*O_matrix[15]-O_matrix[11]*O_matrix[14])
+                         - O_matrix[6]*(O_matrix[8]*O_matrix[15]-O_matrix[11]*O_matrix[12])
+                         + O_matrix[7]*(O_matrix[8]*O_matrix[14]-O_matrix[10]*O_matrix[12]))
+                         + O_matrix[2]*(O_matrix[4]*(O_matrix[9]*O_matrix[15]-O_matrix[11]*O_matrix[13])
+                         - O_matrix[5]*(O_matrix[8]*O_matrix[15]-O_matrix[11]*O_matrix[12])
+                         + O_matrix[7]*(O_matrix[8]*O_matrix[13]-O_matrix[9]*O_matrix[12]))
+                         - O_matrix[3]*(O_matrix[4]*(O_matrix[9]*O_matrix[14]-O_matrix[10]*O_matrix[13])
+                         - O_matrix[5]*(O_matrix[8]*O_matrix[14]-O_matrix[10]*O_matrix[12])
+                         + O_matrix[6]*(O_matrix[8]*O_matrix[13]-O_matrix[9]*O_matrix[12]));
+        }
+        static int dbg_count = 0;
+        if (dbg_count < 5 && GlobalV::MY_RANK == 0)
+        {
+            std::cout << "   DEBUG berry_overlap: link=" << dbg_count
+                      << " ik_L=" << ik_L << " ik_R=" << ik_R
+                      << " det_berry=" << det_berry
+                      << " det_overlap=" << det_local
+                      << " match=" << (std::abs(det_berry - det_local) < 1e-6 ? "YES" : "NO")
+                      << " diff=" << std::abs(det_berry - det_local)
+                      << std::endl;
+            dbg_count++;
+        }
+    }
+}

@@ -2,6 +2,7 @@
 #include "source_base/timer.h"
 #include "source_base/tool_title.h"
 #include "source_io/module_parameter/parameter.h"
+#include "source_io/module_unk/unk_overlap_lcao.h"
 #ifdef __MPI
 #include "source_base/parallel_comm.h"
 #endif
@@ -13,12 +14,14 @@ namespace deltap {
 void DeltaP::init(const UnitCell& ucell, const Grid_Driver& gd, const K_Vectors& kv,
                   const TwoCenterIntegrator* intor, const TwoCenterIntegrator* overlap_intor,
                   const std::vector<double>& orb_cutoff,
-                  double rm, int gdir, const Parallel_Orbitals* paraV,
-                  cal_r_overlap_R* r_overlap)
+    double rm, int gdir, const Parallel_Orbitals* paraV,
+              cal_r_overlap_R* r_overlap,
+              unkOverlap_lcao* berry_overlap)
 {
     intor_ = intor;
     overlap_intor_ = overlap_intor;
     r_overlap_ = r_overlap;
+    berry_overlap_ = berry_overlap;
     orb_cutoff_ = orb_cutoff;
     rm_ = rm;
     gdir_ = gdir;
@@ -205,6 +208,8 @@ void DeltaP::setup_kstring(const K_Vectors& kv)
     }
     else
     {
+        // gdir=3: k-strings along z. Fix ix, iy, vary iz.
+        // Must match berry_phase: for iy: for ix: for iz: k_index[string][iz] = ix + iy*mp_x + iz*mp_x*mp_y
         for (int iy = 0; iy < mp_y; iy++)
         {
             for (int ix = 0; ix < mp_x; ix++)
