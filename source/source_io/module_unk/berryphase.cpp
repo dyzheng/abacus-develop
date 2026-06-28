@@ -339,6 +339,16 @@ double berryphase::stringPhase(const UnitCell& ucell,
 #endif
     }
 
+    // Debug: output zeta for this string
+    if (GlobalV::MY_RANK == 0)
+    {
+        std::ofstream ofs("berry_zeta_debug.dat", std::ios::app);
+        ofs << index_str << " " << std::setprecision(17)
+            << zeta.real() << " " << zeta.imag() << " "
+            << log(zeta).imag() << std::endl;
+        ofs.close();
+    }
+
     return log(zeta).imag();
 }
 

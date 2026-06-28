@@ -594,6 +594,15 @@ void DeltaP::compute_wannier_polarization(
             std::cout << "   DeltaP Wilson loop (string 0): nocc=" << n_dim
                       << " gamma=" << std::scientific << std::setprecision(6) << g_check << std::endl;
         }
+
+        // Debug: output zeta for this string (det(W) from LU)
+        {
+            std::ofstream ofs("deltap_zeta_debug.dat", std::ios::app);
+            ofs << istring << " " << std::setprecision(17)
+                << zeta.real() << " " << zeta.imag() << " "
+                << std::arg(zeta) << std::endl;
+            ofs.close();
+        }
     }
 
     // --- Average over k-strings ---
