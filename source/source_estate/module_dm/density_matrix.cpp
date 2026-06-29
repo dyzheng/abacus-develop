@@ -266,16 +266,17 @@ void DensityMatrix_Tools::cal_DMR_td(
                 {
                     if(ik_in >= 0 && ik_in != ik) { continue; }
                     // cal k_phase
-                    // if TK==std::complex<double>, kphase is e^{ikR}
+                    // DMR(R) = (1/Nk) Sum_k e^{-i(k+A)R} DMK(k) (inverse Fourier transform with hybrid gauge)
+                    // This is the conjugate of folding_HR_td's e^{+i(k+A)R}, ensuring DMR Hermiticity.
                     const ModuleBase::Vector3<double> dR(R_index[0], R_index[1], R_index[2]);
-                    const double arg = (dm._kvec_d[ik] * dR) * ModuleBase::TWO_PI;
+                    const double arg = -(dm._kvec_d[ik] * dR) * ModuleBase::TWO_PI;
                     double sinp, cosp;
                     ModuleBase::libm::sincos(arg, &sinp, &cosp);
                     kphase_vec[ik][iR] = TK(cosp, sinp);
                     if(PARAM.inp.td_stype==2)
                     {
-                        //phase for hybrid gauge tddft
-                        kphase_vec[ik][iR] *= phase_hybrid.at(R_index);
+                        //phase for hybrid gauge tddft: conjugate to get e^{-iA·R}
+                        kphase_vec[ik][iR] *= std::conj(phase_hybrid.at(R_index));
                     }
                 }
             }
