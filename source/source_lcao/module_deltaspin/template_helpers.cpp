@@ -113,3 +113,80 @@ template <>
 void spinconstrain::SpinConstrain<double>::reset_dspin_operator()
 {
 }
+
+/// @brief cal_ni_lcao stub (TK=double): no-op
+template <>
+void spinconstrain::SpinConstrain<double>::cal_ni_lcao(const int& step, bool print)
+{
+}
+
+/// @brief print_Ni stub (TK=double): no-op
+template <>
+void spinconstrain::SpinConstrain<double>::print_Ni(std::ofstream& ofs_running)
+{
+}
+
+/// @brief print_Charge_Force stub (TK=double): no-op
+template <>
+void spinconstrain::SpinConstrain<double>::print_Charge_Force(std::ofstream& ofs_running)
+{
+}
+
+/// @brief cal_charge_escon stub (TK=double): return 0.0
+template <>
+double spinconstrain::SpinConstrain<double>::cal_charge_escon()
+{
+    return 0.0;
+}
+
+/// @brief write_gradient_file stub (TK=double): no-op
+template <>
+void spinconstrain::SpinConstrain<double>::write_gradient_file(int step)
+{
+}
+
+/// @brief run_qs_outer_loop stub (TK=double): no-op
+template <>
+void spinconstrain::SpinConstrain<double>::run_qs_outer_loop(int outer_step)
+{
+}
+
+/// @brief run_qs_lambda_loop stub (TK=double): no-op
+template <>
+void spinconstrain::SpinConstrain<double>::run_qs_lambda_loop(int outer_step, bool rerun)
+{
+}
+
+/// @brief update_mu_simple stub (TK=double): no-op
+template <>
+void spinconstrain::SpinConstrain<double>::update_mu_simple(double step_factor)
+{
+}
+
+/// @brief run_qs_grid_scan stub (TK=double): no-op
+template <>
+void spinconstrain::SpinConstrain<double>::run_qs_grid_scan(
+    int scan_atom, double N_min, double N_max, double N_step,
+    double M_min, double M_max, double M_step)
+{
+}
+
+/// @brief run_qs_gradient_descent stub (TK=double): no-op
+template <>
+void spinconstrain::SpinConstrain<double>::run_qs_gradient_descent(
+    int max_steps, double step_size, double conv_thr)
+{
+}
+
+/// @brief run_qs_lbfgs stub (TK=double): no-op
+template <>
+void spinconstrain::SpinConstrain<double>::run_qs_lbfgs(
+    int max_steps, double conv_thr, int history_size)
+{
+}
+
+/// @brief run_qs_attribution stub (TK=double): no-op
+template <>
+void spinconstrain::SpinConstrain<double>::run_qs_attribution(const std::string& ref_label)
+{
+}

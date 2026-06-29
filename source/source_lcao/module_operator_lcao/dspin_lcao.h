@@ -194,6 +194,7 @@ class DeltaSpin<OperatorLCAO<TK, TR>> : public OperatorLCAO<TK, TR>
     std::vector<double> tmp_dmr_memory;
     std::vector<TR> tmp_coeff_array;
     std::vector<double> lambda_save;
+    std::vector<double> mu_save;
 
     bool initialized = false;
     int spin_num = 1;

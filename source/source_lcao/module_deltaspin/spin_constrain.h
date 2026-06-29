@@ -218,6 +218,17 @@ public:
 			   elecstate::ElecState* pelec_in,
                 ModulePW::PW_Basis_K* pw_wfc_in = nullptr);
 
+   void init_deltaqs(const UnitCell& ucell,
+                     bool charge_switch,
+                     const std::string& qs_mode,
+                     double sc_charge_thr,
+                     double charge_alpha_trial,
+                     double charge_sccut,
+                     bool ground_state_search,
+                     int outer_max_iter,
+                     double outer_thr,
+                     bool gradient_output);
+
   /**
    * @brief Calculate atomic magnetic moments using real-space projection (LCAO basis).
    *
@@ -795,6 +806,32 @@ public:
     ///   Phase 1: sc.set_direction_only(false); sc.run_lambda_loop(); // magnitude constraint
     ///   Phase 2: sc.set_direction_only(true);  // restore for reporting
     void set_direction_only(bool v) { direction_only_ = v; }
+    const std::vector<double>& get_mu() const { return mu_; }
+    void set_mu(const std::vector<double>& v) { mu_ = v; }
+    const std::vector<double>& get_Ni() const { return Ni_; }
+    const std::vector<double>& get_target_charge() const { return target_charge_; }
+    void set_target_charge(const std::vector<double>& v) { target_charge_ = v; }
+    const std::vector<int>& get_constrain_charge() const { return constrain_charge_; }
+    void set_constrain_charge(const std::vector<int>& v) { constrain_charge_ = v; }
+    bool is_charge_constraint_enabled() const { return charge_constraint_enabled_; }
+    void set_charge_constraint_enabled(bool v) { charge_constraint_enabled_ = v; }
+    std::string get_qs_mode() const { return qs_mode_; }
+    void set_qs_mode(const std::string& mode) { qs_mode_ = mode; }
+    void set_charge_input_parameters(double sc_charge_thr, double charge_alpha_trial, double charge_sccut);
+    void zero_Ni();
+    void cal_ni_lcao(const int& step, bool print = false);
+    void print_Ni(std::ofstream& ofs_running);
+    void print_Charge_Force(std::ofstream& ofs_running);
+    double cal_charge_escon();
+    void run_qs_outer_loop(int outer_step);
+    void write_gradient_file(int step);
+    void run_qs_lambda_loop(int outer_step, bool rerun = true);
+    void update_mu_simple(double step_factor = 1.0);
+    void run_qs_grid_scan(int scan_atom, double N_min, double N_max, double N_step,
+                          double M_min, double M_max, double M_step);
+    void run_qs_gradient_descent(int max_steps, double step_size, double conv_thr);
+    void run_qs_lbfgs(int max_steps, double conv_thr, int history_size = 5);
+    void run_qs_attribution(const std::string& ref_label);
     /// get nat
     int get_nat();
     /// get ntype
@@ -893,6 +930,10 @@ public:
     std::vector<ModuleBase::Vector3<double>> Mi_; ///< Current computed magnetic moments (uB) per atom
     std::vector<std::string> atomLabels_; ///< Human-readable labels: "Fe_0", "Fe_1", etc.
     double escon_ = 0.0; ///< Cached constraint energy from last cal_escon() call (Ry)
+    std::vector<double> mu_; ///< Charge Lagrange multipliers (Ry/e) per atom (DeltaQS)
+    std::vector<double> target_charge_; ///< Target projected charges (electrons) per atom (DeltaQS)
+    std::vector<double> Ni_; ///< Current computed projected charges (electrons) per atom (DeltaQS)
+    std::vector<int> constrain_charge_; ///< Charge constraint flags: 0=free, 1=constrained per atom (DeltaQS)
     int nspin_ = 0; ///< Spin type: 2=collinear, 4=non-collinear
     int npol_ = 1; ///< Number of spinor components: 1 for nspin=2, 2 for nspin=4
     /**
@@ -911,6 +952,15 @@ public:
     double restrict_current_; ///< Maximum allowed lambda change per step (Ry/uB), prevents overshooting
     bool direction_only_ = false; ///< If true, only optimize spin direction (project out parallel lambda component)
     double last_drho_ = -1.0; ///< Last observed SCF charge density error (for convergence-dependent diagnostics)
+    bool charge_constraint_enabled_ = false; ///< Whether charge constraint (DeltaQ/DeltaQS) is active
+    std::string qs_mode_ = "auto"; ///< DeltaQS mode: "deltaspin", "deltaq", "deltaqs", "auto"
+    double sc_charge_thr_ = 1e-4; ///< Charge constraint convergence threshold (electrons RMS)
+    double charge_alpha_trial_; ///< Trial step size for mu update (Ry/e^2)
+    double charge_restrict_current_; ///< Maximum mu change per step (Ry/e)
+    bool ground_state_search_ = false; ///< Enable outer optimization loop
+    int outer_max_iter_ = 50; ///< Maximum outer optimization iterations
+    double outer_thr_ = 1e-4; ///< Outer optimization convergence threshold
+    bool gradient_output_ = false; ///< Output mu and lambda gradients
 
   public:
      /// @brief Set DeltaSpin operator pointer for magnetic moment calculation (LCAO)

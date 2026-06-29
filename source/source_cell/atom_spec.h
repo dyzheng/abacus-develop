@@ -40,6 +40,9 @@ class Atom
     std::vector<ModuleBase::Vector3<double>> force; // force acting on each atom in this type.
     std::vector<ModuleBase::Vector3<double>> lambda; // Lagrange multiplier for each atom in this type. used in deltaspin
     std::vector<ModuleBase::Vector3<int>> constrain; // constrain for each atom in this type. used in deltaspin
+    std::vector<double> target_charge; // target charge for each atom (electrons), used in deltaqs
+    std::vector<double> mu;            // charge Lagrange multiplier mu for each atom (Ry/e), used in deltaqs
+    std::vector<int> constrain_charge; // charge constraint flag for each atom: 0=free, 1=constrained
     std::string label_orb = "\0";                    // atomic Element symbol in the orbital file of lcao
 
     std::vector<double> mag;

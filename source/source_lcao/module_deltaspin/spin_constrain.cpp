@@ -49,6 +49,14 @@ double SpinConstrain<TK>::cal_escon()
         this->escon_ -= this->lambda_[iat].y * this->Mi_[iat].y;
         this->escon_ -= this->lambda_[iat].z * this->Mi_[iat].z;
     }
+    if (this->charge_constraint_enabled_)
+    {
+        for (int iat = 0; iat < nat; iat++)
+        {
+            if (this->constrain_charge_[iat] == 0) continue;
+            this->escon_ -= this->mu_[iat] * this->Ni_[iat];
+        }
+    }
     return this->escon_;
 }
 

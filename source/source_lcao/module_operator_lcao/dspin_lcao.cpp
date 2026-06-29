@@ -28,6 +28,7 @@ hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::DeltaSpin(HS_Matrix_K<TK>* hsk_
     this->spin_num = this->nspin == 2 ? 2 : 1;
 
     this->lambda_save.resize(this->ucell->nat * 3, 0.0);
+    this->mu_save.resize(this->ucell->nat, 0.0);
     this->update_lambda_.resize(this->nspin, false);
     this->B_I_data.resize(this->ucell->nat);
     this->B_I_nproj.resize(this->ucell->nat, 0);
@@ -80,6 +81,20 @@ inline void cal_coeff_lambda(const std::vector<double>& current_lambda, std::vec
     coefficients[1] = -current_lambda[0];
 }
 
+inline void cal_coeff_lambda_qs(const std::vector<double>& current_lambda, double mu, std::vector<double>& coefficients)
+{
+    coefficients[0] = mu + current_lambda[0];
+    coefficients[1] = mu - current_lambda[0];
+}
+
+inline void cal_coeff_lambda_qs(const std::vector<double>& current_lambda, double mu, std::vector<std::complex<double>>& coefficients)
+{
+    coefficients[0] = std::complex<double>(mu + current_lambda[2], 0.0);
+    coefficients[1] = std::complex<double>(current_lambda[0], -current_lambda[1]);
+    coefficients[2] = std::complex<double>(current_lambda[0], current_lambda[1]);
+    coefficients[3] = std::complex<double>(mu - current_lambda[2], 0.0);
+}
+
 inline void cal_coeff_lambda(const std::vector<double>& current_lambda, std::vector<std::complex<double>>& coefficients)
 {
     coefficients[0] = std::complex<double>(current_lambda[2], 0.0);
@@ -103,6 +118,7 @@ void hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::contributeHR()
     {
         // HR is being rebuilt from scratch, so the old DS contribution is gone
         this->lambda_save.assign(this->ucell->nat * 3, 0.0);
+        this->mu_save.assign(this->ucell->nat, 0.0);
     }
     else if(this->sc_hr_done && !this->update_lambda_[this->current_spin])
     {
@@ -118,7 +134,9 @@ void hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::contributeHR()
         this->initialized = true;
     }
     auto& lambda = sc.get_sc_lambda();
-    
+    bool charge_enabled = sc.is_charge_constraint_enabled();
+    auto& mu_vec = sc.get_mu();
+
     for(int iat=0;iat<this->ucell->nat;iat++)
     {
         if(!this->constraint_atom_list[iat])
@@ -139,7 +157,15 @@ void hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::contributeHR()
         }
         std::vector<TR> coefficients(this->nspin);
 
-        cal_coeff_lambda(current_lambda, coefficients);
+        if (charge_enabled)
+        {
+            double mu_delta = mu_vec[iat] - this->mu_save[iat];
+            cal_coeff_lambda_qs(current_lambda, mu_delta, coefficients);
+        }
+        else
+        {
+            cal_coeff_lambda(current_lambda, coefficients);
+        }
 
         // magnetic moment = \sum_{\mu\nu,R} dmR * pre_hr
         for(int iap=0;iap<this->pre_hr[iat]->size_atom_pairs();iap++)
@@ -190,6 +216,10 @@ void hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::contributeHR()
                 for(int j=0;j<3;j++)
                 {   
                     this->lambda_save[i*3+j] = lambda[i][j];
+                }
+                if (charge_enabled)
+                {
+                    this->mu_save[i] = mu_vec[i];
                 }
             }
         }

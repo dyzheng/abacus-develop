@@ -257,6 +257,12 @@ class UnitCell {
     std::vector<ModuleBase::Vector3<double>> get_lambda() const;
     /// @brief get constrain for deltaspin
     std::vector<ModuleBase::Vector3<int>> get_constrain() const;
+    /// @brief get target charge for deltaqs (electrons per atom)
+    std::vector<double> get_target_charge() const;
+    /// @brief get charge Lagrange multiplier mu for deltaqs (Ry/e per atom)
+    std::vector<double> get_mu() const;
+    /// @brief get charge constraint flags for deltaqs (0=free, 1=constrained per atom)
+    std::vector<int> get_constrain_charge() const;
 };
 
 #endif // unitcell class

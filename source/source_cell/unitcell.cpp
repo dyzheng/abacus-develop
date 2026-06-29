@@ -181,6 +181,48 @@ std::vector<ModuleBase::Vector3<int>> UnitCell::get_constrain() const
 	return constrain;
 }
 
+std::vector<double> UnitCell::get_target_charge() const
+{
+	std::vector<double> target_charge(this->nat, 0.0);
+	for (int it = 0; it < this->ntype; it++)
+	{
+		for (int ia = 0; ia < this->atoms[it].na; ia++)
+		{
+			int iat = itia2iat(it, ia);
+			target_charge[iat] = this->atoms[it].target_charge[ia];
+		}
+	}
+	return target_charge;
+}
+
+std::vector<double> UnitCell::get_mu() const
+{
+	std::vector<double> mu(this->nat, 0.0);
+	for (int it = 0; it < this->ntype; it++)
+	{
+		for (int ia = 0; ia < this->atoms[it].na; ia++)
+		{
+			int iat = itia2iat(it, ia);
+			mu[iat] = this->atoms[it].mu[ia];
+		}
+	}
+	return mu;
+}
+
+std::vector<int> UnitCell::get_constrain_charge() const
+{
+	std::vector<int> constrain_charge(this->nat, 0);
+	for (int it = 0; it < this->ntype; it++)
+	{
+		for (int ia = 0; ia < this->atoms[it].na; ia++)
+		{
+			int iat = itia2iat(it, ia);
+			constrain_charge[iat] = this->atoms[it].constrain_charge[ia];
+		}
+	}
+	return constrain_charge;
+}
+
 //==============================================================
 // Calculate various lattice related quantities for given latvec
 //==============================================================

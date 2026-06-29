@@ -12,6 +12,7 @@ list(APPEND objects
     cal_mw_helper.cpp
     lcao_subspace.cpp
     diagonalization_engine.cpp
+    deltaqs.cpp
 )
 
 add_library(

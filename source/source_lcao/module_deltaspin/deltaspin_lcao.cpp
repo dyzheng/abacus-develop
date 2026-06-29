@@ -51,8 +51,8 @@ void init_deltaspin_lcao(const UnitCell& ucell,
                           void* dm,
                           void* pelec)
 {
-    // Early exit if DeltaSpin is not enabled
-    if (!inp.sc_mag_switch)
+    // Early exit if neither DeltaSpin nor DeltaQ is enabled
+    if (!inp.sc_mag_switch && !inp.sc_charge_switch)
     {
         return;
     }
@@ -108,6 +108,18 @@ void init_deltaspin_lcao(const UnitCell& ucell,
                inp.nspin, kv, p_hamilt, psi,
                static_cast<elecstate::ElecState*>(pelec));
 #endif
+
+    // Initialize DeltaQS charge constraint data
+    sc.init_deltaqs(ucell,
+                    inp.sc_charge_switch,
+                    inp.sc_qs_mode,
+                    inp.sc_charge_thr,
+                    inp.sc_charge_alpha,
+                    inp.sc_charge_sccut,
+                    inp.sc_ground_state_search,
+                    inp.sc_outer_max_iter,
+                    inp.sc_outer_thr,
+                    inp.sc_gradient_output);
 }
 
 /**
@@ -119,14 +131,21 @@ void init_deltaspin_lcao(const UnitCell& ucell,
 template <typename TK>
 void cal_mi_lcao_wrapper(const int iter, const Input_para& inp)
 {
-    if (!inp.sc_mag_switch)
+    if (!inp.sc_mag_switch && !inp.sc_charge_switch)
     {
         return;
     }
 
 #ifdef __LCAO
     spinconstrain::SpinConstrain<TK>& sc = spinconstrain::SpinConstrain<TK>::getScInstance();
-    sc.cal_mi_lcao(iter);
+    if (inp.sc_mag_switch)
+    {
+        sc.cal_mi_lcao(iter);
+    }
+    if (inp.sc_charge_switch)
+    {
+        sc.cal_ni_lcao(iter);
+    }
 #endif
 }
 
@@ -158,28 +177,33 @@ void cal_mi_lcao_wrapper(const int iter, const Input_para& inp)
  */
 template <typename TK>
 bool run_deltaspin_lambda_loop_lcao(const int iter,
-                                     const double drho,
-                                     const Input_para& inp)
+                                      const double drho,
+                                      const Input_para& inp)
 {
     bool skip_solve = false;
 
-    if (inp.sc_mag_switch)
+    if (inp.sc_mag_switch || inp.sc_charge_switch)
     {
         spinconstrain::SpinConstrain<TK>& sc = spinconstrain::SpinConstrain<TK>::getScInstance();
+        bool use_qs = sc.is_charge_constraint_enabled() && inp.sc_mag_switch;
 
         if (!sc.mag_converged() && drho > 0 && drho < inp.sc_scf_thr)
         {
-            /// Charge density is stable enough: optimize lambda for the first time
             sc.set_drho(drho);
-            sc.run_lambda_loop(iter);
+            if (use_qs)
+                sc.run_qs_lambda_loop(iter);
+            else if (inp.sc_mag_switch)
+                sc.run_lambda_loop(iter);
             sc.set_mag_converged(true);
             skip_solve = true;
         }
         else if (sc.mag_converged())
         {
-            /// Already converged: refine lambda for the current charge density
             sc.set_drho(drho);
-            sc.run_lambda_loop(iter);
+            if (use_qs)
+                sc.run_qs_lambda_loop(iter);
+            else if (inp.sc_mag_switch)
+                sc.run_lambda_loop(iter);
             skip_solve = true;
         }
     }

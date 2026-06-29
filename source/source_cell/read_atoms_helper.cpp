@@ -62,6 +62,9 @@ void allocate_atom_properties(Atom& atom, int na, double mass)
     atom.m_loc_.resize(na, ModuleBase::Vector3<double>(0,0,0));
     atom.lambda.resize(na, ModuleBase::Vector3<double>(0,0,0));
     atom.constrain.resize(na, ModuleBase::Vector3<int>(0,0,0));
+    atom.target_charge.resize(na, 0.0);
+    atom.mu.resize(na, 0.0);
+    atom.constrain_charge.resize(na, 0);
     atom.mass = mass;
 }
 
@@ -477,6 +480,22 @@ bool parse_atom_properties(std::ifstream& ifpos,
                 ifpos.putback(tmp);
                 atom.constrain[ia].z=tmplam;
             }
+        }
+        else if ( tmpid == "tc")
+        {
+            ifpos >> atom.target_charge[ia];
+        }
+        else if ( tmpid == "cq")
+        {
+            int cq_val = 0;
+            ifpos >> cq_val;
+            atom.constrain_charge[ia] = cq_val;
+        }
+        else if ( tmpid == "mu")
+        {
+            double mu_val = 0.0;
+            ifpos >> mu_val;
+            atom.mu[ia] = mu_val / ModuleBase::Ry_to_eV;
         }
     }
     // move to next line

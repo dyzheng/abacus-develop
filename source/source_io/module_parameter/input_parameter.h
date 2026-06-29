@@ -614,6 +614,17 @@ struct Input_para
     std::string sc_acceleration_mode = "off"; ///< acceleration mode: "off", "first_order", "subspace"
     double sc_acceleration_rms_thr = -1.0;    ///< RMS threshold (uB) to activate acceleration, <0 disables
 
+    // ==============   #Parameters (17b.DeltaQS: charge-spin joint constraint) =========
+    bool sc_charge_switch = false;   ///< Enable charge constraint (DeltaQ mode); combined with sc_mag_switch gives DeltaQS
+    std::string sc_qs_mode = "auto"; ///< "deltaspin" (mu=0), "deltaq" (lambda=0), "deltaqs" (both), "auto" (infer from switches)
+    double sc_charge_thr = 1e-4;     ///< Convergence threshold for charge constraint RMS (electrons)
+    double sc_charge_alpha = 0.01;   ///< Trial step size for mu update (eV/e^2)
+    double sc_charge_sccut = 3.0;    ///< Max mu change per step (eV/e)
+    bool sc_ground_state_search = false; ///< Enable outer optimization loop for ground state search in (N,M) space
+    int sc_outer_max_iter = 50;      ///< Maximum outer optimization iterations
+    double sc_outer_thr = 1e-4;      ///< Outer optimization convergence threshold (RMS of gradient)
+    bool sc_gradient_output = false; ///< Output mu_I and lambda_I gradients for analysis
+
     // ==============   #Parameters (18.Quasiatomic Orbital analysis) =========
     ///<==========================================================
     ///< variables for Quasiatomic Orbital analysis

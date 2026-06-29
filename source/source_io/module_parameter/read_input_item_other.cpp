@@ -352,6 +352,133 @@ Manual override is allowed: if sc_acceleration_mode is explicitly set, it takes 
         this->add_item(item);
     }
 
+    {
+        Input_Item item("sc_charge_switch");
+        item.annotation = "Enable charge constraint for DeltaQ/DeltaQS mode";
+        item.category = "Spin-Constrained DFT";
+        item.type = "Boolean";
+        item.description = "Enable charge constraint (DeltaQ mode). When combined with sc_mag_switch, activates DeltaQS joint charge-spin constraint. Alone, activates DeltaQ charge-only constraint.";
+        item.default_value = "False";
+        item.unit = "";
+        item.availability = "";
+        read_sync_bool(input.sc_charge_switch);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("sc_qs_mode");
+        item.annotation = "DeltaQS operating mode";
+        item.category = "Spin-Constrained DFT";
+        item.type = "String";
+        item.description = R"(DeltaQS operating mode:
+* auto: infer from switches (sc_mag_switch + sc_charge_switch = deltaqs, sc_mag_switch only = deltaspin, sc_charge_switch only = deltaq)
+* deltaspin: spin constraint only (mu=0)
+* deltaq: charge constraint only (lambda=0)
+* deltaqs: joint charge-spin constraint)";
+        item.default_value = "auto";
+        item.unit = "";
+        item.availability = "sc_mag_switch or sc_charge_switch is true";
+        read_sync_string(input.sc_qs_mode);
+        item.check_value = [](const Input_Item& item, const Parameter& para) {
+            const std::string& mode = para.input.sc_qs_mode;
+            if (mode != "auto" && mode != "deltaspin" && mode != "deltaq" && mode != "deltaqs") {
+                ModuleBase::WARNING_QUIT("ReadInput", "sc_qs_mode must be auto, deltaspin, deltaq, or deltaqs");
+            }
+        };
+        this->add_item(item);
+    }
+    {
+        Input_Item item("sc_charge_thr");
+        item.annotation = "Convergence threshold for charge constraint RMS (electrons)";
+        item.category = "Spin-Constrained DFT";
+        item.type = "Real";
+        item.description = "Convergence criterion for the charge constraint RMS error in electrons. Analogous to sc_thr for spin constraint.";
+        item.default_value = "1.0e-4";
+        item.unit = "electrons";
+        item.availability = "sc_charge_switch is true";
+        read_sync_double(input.sc_charge_thr);
+        item.check_value = [](const Input_Item& item, const Parameter& para) {
+            if (para.input.sc_charge_thr < 0)
+                ModuleBase::WARNING_QUIT("ReadInput", "sc_charge_thr must >= 0");
+        };
+        this->add_item(item);
+    }
+    {
+        Input_Item item("sc_charge_alpha");
+        item.annotation = "Trial step size for charge Lagrange multiplier mu (eV/e^2)";
+        item.category = "Spin-Constrained DFT";
+        item.type = "Real";
+        item.description = "Initial trial step size for the charge Lagrange multiplier update, analogous to alpha_trial for spin.";
+        item.default_value = "0.01";
+        item.unit = "eV/e^2";
+        item.availability = "sc_charge_switch is true";
+        read_sync_double(input.sc_charge_alpha);
+        item.check_value = [](const Input_Item& item, const Parameter& para) {
+            if (para.input.sc_charge_alpha <= 0)
+                ModuleBase::WARNING_QUIT("ReadInput", "sc_charge_alpha must > 0");
+        };
+        this->add_item(item);
+    }
+    {
+        Input_Item item("sc_charge_sccut");
+        item.annotation = "Maximum mu change per step (eV/e)";
+        item.category = "Spin-Constrained DFT";
+        item.type = "Real";
+        item.description = "Restriction on mu step size per inner iteration, analogous to sccut for lambda.";
+        item.default_value = "3.0";
+        item.unit = "eV/e";
+        item.availability = "sc_charge_switch is true";
+        read_sync_double(input.sc_charge_sccut);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("sc_ground_state_search");
+        item.annotation = "Enable outer optimization loop for ground state search";
+        item.category = "Spin-Constrained DFT";
+        item.type = "Boolean";
+        item.description = "When true, runs an outer optimization loop that uses mu and lambda gradients to find the unconstrained KS ground state in (N,M) space. Requires DeltaQS mode.";
+        item.default_value = "False";
+        item.unit = "";
+        item.availability = "sc_charge_switch and sc_mag_switch are true";
+        read_sync_bool(input.sc_ground_state_search);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("sc_outer_max_iter");
+        item.annotation = "Maximum outer optimization iterations";
+        item.category = "Spin-Constrained DFT";
+        item.type = "Integer";
+        item.description = "Maximum number of outer optimization iterations for ground state search.";
+        item.default_value = "50";
+        item.unit = "";
+        item.availability = "sc_ground_state_search is true";
+        read_sync_int(input.sc_outer_max_iter);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("sc_outer_thr");
+        item.annotation = "Outer optimization convergence threshold";
+        item.category = "Spin-Constrained DFT";
+        item.type = "Real";
+        item.description = "Convergence threshold for the RMS of the outer optimization gradient (max of |mu_I - mu_J| and |lambda_I|).";
+        item.default_value = "1.0e-4";
+        item.unit = "eV";
+        item.availability = "sc_ground_state_search is true";
+        read_sync_double(input.sc_outer_thr);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("sc_gradient_output");
+        item.annotation = "Output mu and lambda gradients for analysis";
+        item.category = "Spin-Constrained DFT";
+        item.type = "Boolean";
+        item.description = "When true, outputs the charge Lagrange multipliers mu_I and spin Lagrange multipliers lambda_I to a file for post-processing analysis (CP-1/CP-2 verification).";
+        item.default_value = "False";
+        item.unit = "";
+        item.availability = "sc_mag_switch or sc_charge_switch is true";
+        read_sync_bool(input.sc_gradient_output);
+        this->add_item(item);
+    }
+
     // Quasiatomic Orbital analysis
     {
         Input_Item item("qo_switch");
