@@ -218,16 +218,17 @@ public:
 			   elecstate::ElecState* pelec_in,
                 ModulePW::PW_Basis_K* pw_wfc_in = nullptr);
 
-   void init_deltaqs(const UnitCell& ucell,
-                     bool charge_switch,
-                     const std::string& qs_mode,
-                     double sc_charge_thr,
-                     double charge_alpha_trial,
-                     double charge_sccut,
-                     bool ground_state_search,
-                     int outer_max_iter,
-                     double outer_thr,
-                     bool gradient_output);
+    void init_deltaqs(const UnitCell& ucell,
+                      bool charge_switch,
+                      const std::string& qs_mode,
+                      const std::string& charge_mode,
+                      double sc_charge_thr,
+                      double charge_alpha_trial,
+                      double charge_sccut,
+                      bool ground_state_search,
+                      int outer_max_iter,
+                      double outer_thr,
+                      bool gradient_output);
 
   /**
    * @brief Calculate atomic magnetic moments using real-space projection (LCAO basis).
@@ -811,6 +812,10 @@ public:
     const std::vector<double>& get_Ni() const { return Ni_; }
     const std::vector<double>& get_target_charge() const { return target_charge_; }
     void set_target_charge(const std::vector<double>& v) { target_charge_ = v; }
+    const std::vector<double>& get_z_val() const { return z_val_; }
+    void set_z_val(const std::vector<double>& v) { z_val_ = v; }
+    std::string get_charge_mode() const { return charge_mode_; }
+    void set_charge_mode(const std::string& mode) { charge_mode_ = mode; }
     const std::vector<int>& get_constrain_charge() const { return constrain_charge_; }
     void set_constrain_charge(const std::vector<int>& v) { constrain_charge_ = v; }
     bool is_charge_constraint_enabled() const { return charge_constraint_enabled_; }
@@ -832,6 +837,14 @@ public:
     void run_qs_gradient_descent(int max_steps, double step_size, double conv_thr);
     void run_qs_lbfgs(int max_steps, double conv_thr, int history_size = 5);
     void run_qs_attribution(const std::string& ref_label);
+    
+    void run_constraint_loop(int iter) {
+        if (charge_constraint_enabled_) {
+            run_qs_lambda_loop(iter);
+        } else {
+            run_lambda_loop(iter);
+        }
+    }
     /// get nat
     int get_nat();
     /// get ntype
@@ -931,8 +944,10 @@ public:
     std::vector<std::string> atomLabels_; ///< Human-readable labels: "Fe_0", "Fe_1", etc.
     double escon_ = 0.0; ///< Cached constraint energy from last cal_escon() call (Ry)
     std::vector<double> mu_; ///< Charge Lagrange multipliers (Ry/e) per atom (DeltaQS)
-    std::vector<double> target_charge_; ///< Target projected charges (electrons) per atom (DeltaQS)
+    std::vector<double> target_charge_; ///< Target charges per atom (DeltaQS) - interpretation depends on charge_mode_
     std::vector<double> Ni_; ///< Current computed projected charges (electrons) per atom (DeltaQS)
+    std::vector<double> z_val_; ///< Valence electrons from pseudopotential per atom (DeltaQS valence mode)
+    std::string charge_mode_ = "absolute"; ///< Charge constraint mode: "absolute", "delta", or "valence" (DeltaQS)
     std::vector<int> constrain_charge_; ///< Charge constraint flags: 0=free, 1=constrained per atom (DeltaQS)
     int nspin_ = 0; ///< Spin type: 2=collinear, 4=non-collinear
     int npol_ = 1; ///< Number of spinor components: 1 for nspin=2, 2 for nspin=4

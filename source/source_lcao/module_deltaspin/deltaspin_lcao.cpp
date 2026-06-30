@@ -113,6 +113,7 @@ void init_deltaspin_lcao(const UnitCell& ucell,
     sc.init_deltaqs(ucell,
                     inp.sc_charge_switch,
                     inp.sc_qs_mode,
+                    inp.sc_charge_mode,
                     inp.sc_charge_thr,
                     inp.sc_charge_alpha,
                     inp.sc_charge_sccut,
@@ -186,6 +187,12 @@ bool run_deltaspin_lambda_loop_lcao(const int iter,
     {
         spinconstrain::SpinConstrain<TK>& sc = spinconstrain::SpinConstrain<TK>::getScInstance();
         bool use_qs = sc.is_charge_constraint_enabled() && inp.sc_mag_switch;
+        
+        std::cout << "[DEBUG-FACADE] iter=" << iter 
+                  << " sc_mag_switch=" << inp.sc_mag_switch 
+                  << " sc_charge_switch=" << inp.sc_charge_switch
+                  << " charge_enabled=" << sc.is_charge_constraint_enabled()
+                  << " use_qs=" << use_qs << std::endl;
 
         if (!sc.mag_converged() && drho > 0 && drho < inp.sc_scf_thr)
         {

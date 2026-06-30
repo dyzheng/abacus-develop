@@ -15,6 +15,9 @@
 #include "source_hsolver/hsolver_lcao.h"
 #include "source_hsolver/diago_iter_assist.h"
 #include "source_estate/elecstate_tools.h"
+#include "source_base/parallel_reduce.h"
+#include "source_lcao/module_hcontainer/hcontainer.h"
+#include "source_lcao/module_deltaqs/upf_valence_parser.h"
 #endif
 
 template <typename TK>
@@ -22,6 +25,7 @@ void spinconstrain::SpinConstrain<TK>::init_deltaqs(
     const UnitCell& ucell,
     bool charge_switch,
     const std::string& qs_mode,
+    const std::string& charge_mode,
     double sc_charge_thr,
     double charge_alpha_trial,
     double charge_sccut,
@@ -34,6 +38,7 @@ void spinconstrain::SpinConstrain<TK>::init_deltaqs(
 
     this->charge_constraint_enabled_ = charge_switch;
     this->qs_mode_ = qs_mode;
+    this->charge_mode_ = charge_mode;
     this->sc_charge_thr_ = sc_charge_thr;
     this->charge_alpha_trial_ = charge_alpha_trial / ModuleBase::Ry_to_eV;
     this->charge_restrict_current_ = charge_sccut / ModuleBase::Ry_to_eV;
@@ -45,11 +50,59 @@ void spinconstrain::SpinConstrain<TK>::init_deltaqs(
     this->mu_.resize(nat, 0.0);
     this->target_charge_.resize(nat, 0.0);
     this->Ni_.resize(nat, 0.0);
+    this->z_val_.resize(nat, 0.0);
     this->constrain_charge_.resize(nat, 0);
 
-    this->target_charge_ = ucell.get_target_charge();
-    this->mu_ = ucell.get_mu();
-    this->constrain_charge_ = ucell.get_constrain_charge();
+    auto tc_tmp = ucell.get_target_charge();
+    auto mu_tmp = ucell.get_mu();
+    auto cc_tmp = ucell.get_constrain_charge();
+
+    if ((int)tc_tmp.size() >= nat) this->target_charge_.assign(tc_tmp.begin(), tc_tmp.begin() + nat);
+    if ((int)mu_tmp.size() >= nat) this->mu_.assign(mu_tmp.begin(), mu_tmp.begin() + nat);
+    if ((int)cc_tmp.size() >= nat) this->constrain_charge_.assign(cc_tmp.begin(), cc_tmp.begin() + nat);
+
+    // Read Z_val from pseudopotential for valence mode
+    if (charge_mode_ == "valence") {
+        int atom_idx = 0;
+        for (int it = 0; it < ucell.ntype; it++) {
+            for (int ia = 0; ia < ucell.atoms[it].na; ia++) {
+                this->z_val_[atom_idx] = ucell.atoms[it].ncpp.zv;
+                atom_idx++;
+            }
+        }
+        // Convert target charge (valence) to absolute projected charge
+        // valence = N_projected - Z_val => N_projected = valence + Z_val
+        for (int iat = 0; iat < nat; iat++) {
+            if (this->constrain_charge_[iat] != 0) {
+                this->target_charge_[iat] = this->target_charge_[iat] + this->z_val_[iat];
+            }
+        }
+    }
+
+    // Determine CSZ projection basis
+#ifdef __LCAO
+    if (charge_switch) {
+        auto csz_configs = deltaqs::determine_csz_basis(ucell);
+        deltaqs::print_csz_configs(csz_configs, ucell);
+        bool csz_valid = deltaqs::validate_csz_orbitals(ucell, csz_configs);
+        if (!csz_valid) {
+            ModuleBase::WARNING_QUIT("DeltaQS::init_deltaqs",
+                "CSZ basis validation failed. Check pseudopotential and orbital files.");
+        }
+    }
+#endif
+
+    // Expand atomLabels_ to have one label per atom (not per element type)
+    auto type_labels = ucell.get_atomLabels();
+    this->atomLabels_.clear();
+    int atom_idx = 0;
+    for (int it = 0; it < ucell.ntype; it++) {
+        for (int ia = 0; ia < ucell.atoms[it].na; ia++) {
+            std::string label = type_labels[it] + "_" + std::to_string(atom_idx);
+            this->atomLabels_.push_back(label);
+            atom_idx++;
+        }
+    }
 
     if (this->qs_mode_ == "auto")
     {
@@ -72,17 +125,31 @@ void spinconstrain::SpinConstrain<TK>::init_deltaqs(
     if (charge_switch)
     {
         int n_charge_constrained = 0;
-        for (int iat = 0; iat < nat; iat++)
+        int label_size = (int)this->atomLabels_.size();
+        int tc_size = (int)this->target_charge_.size();
+        int mu_size = (int)this->mu_.size();
+        int cc_size = (int)this->constrain_charge_.size();
+        int safe_nat = nat;
+        if (safe_nat > label_size) safe_nat = label_size;
+        if (safe_nat > tc_size) safe_nat = tc_size;
+        if (safe_nat > mu_size) safe_nat = mu_size;
+        if (safe_nat > cc_size) safe_nat = cc_size;
+        for (int iat = 0; iat < safe_nat; iat++)
         {
-            if (this->constrain_charge_[iat] != 0)
+            if (iat < cc_size && this->constrain_charge_[iat] != 0)
             {
                 n_charge_constrained++;
-                std::cout << "[DeltaQS]   Atom " << iat << " (" << this->atomLabels_[iat]
-                          << "): target_N=" << this->target_charge_[iat]
-                          << " mu=" << this->mu_[iat] * ModuleBase::Ry_to_eV << " eV/e" << std::endl;
+                std::string label = (iat < label_size) ? this->atomLabels_[iat] : "?";
+                double tc = (iat < tc_size) ? this->target_charge_[iat] : 0.0;
+                double mu = (iat < mu_size) ? this->mu_[iat] * ModuleBase::Ry_to_eV : 0.0;
+                std::cout << "[DeltaQS]   Atom " << iat << " (" << label
+                          << "): target_N=" << tc
+                          << " mu=" << mu << " eV/e" << std::endl;
+                std::cout.flush();
             }
         }
         std::cout << "[DeltaQS] Charge-constrained atoms: " << n_charge_constrained << "/" << nat << std::endl;
+        std::cout.flush();
     }
     if (ground_state_search)
     {
@@ -117,10 +184,11 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_ni_lcao(const int& 
 
     if (this->nspin_ == 2)
     {
-        this->dm_->switch_dmr(0);
+        this->dm_->switch_dmr(1);
         const hamilt::HContainer<double>* dmr = this->dm_->get_DMR_pointer(1);
         auto moments = static_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double>>*>(
             this->p_operator)->cal_moment(dmr, constrain_all);
+        this->dm_->switch_dmr(0);
         for (int iat = 0; iat < nat; iat++)
         {
             this->Ni_[iat] = moments[iat];
@@ -129,14 +197,44 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_ni_lcao(const int& 
     else if (this->nspin_ == 4)
     {
         const hamilt::HContainer<double>* dmr = this->dm_->get_DMR_pointer(1);
-        auto moments = static_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, std::complex<double>>>*>(
-            this->p_operator)->cal_moment(dmr, constrain_all);
+        auto* dspin_op = static_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, std::complex<double>>>*>(
+            this->p_operator);
         for (int iat = 0; iat < nat; iat++)
         {
-            double n_up = moments[iat * 3 + 2];
-            double n_dn_trace = moments[iat * 3];
-            this->Ni_[iat] = n_up + n_dn_trace;
+            this->Ni_[iat] = 0.0;
+            if (constrain_all[iat].x + constrain_all[iat].y + constrain_all[iat].z == 0) continue;
+            const hamilt::HContainer<std::complex<double>>* pre_hr_iat = dspin_op->get_pre_hr(iat);
+            if (!pre_hr_iat) continue;
+            for (int iap = 0; iap < pre_hr_iat->size_atom_pairs(); iap++)
+            {
+                hamilt::AtomPair<std::complex<double>>& tmp = pre_hr_iat->get_atom_pair(iap);
+                int iat1 = tmp.get_atom_i();
+                int iat2 = tmp.get_atom_j();
+                int row_size = tmp.get_row_size();
+                int col_size = tmp.get_col_size();
+                for (int ir = 0; ir < tmp.get_R_size(); ir++)
+                {
+                    const ModuleBase::Vector3<int> r_index = tmp.get_R_index(ir);
+                    const double* dmr_data = dmr->find_matrix(iat1, iat2, r_index[0], r_index[1], r_index[2])->get_pointer();
+                    const std::complex<double>* hr_data = tmp.get_pointer(ir);
+                    int index = 0;
+                    double charge = 0.0;
+                    for (int irow = 0; irow < row_size; irow += 2)
+                    {
+                        for (int icol = 0; icol < col_size; icol += 2)
+                        {
+                            charge += (dmr_data[index] + dmr_data[index + col_size + 1]) * hr_data[index].real();
+                            index += 2;
+                        }
+                        index += col_size;
+                    }
+                    this->Ni_[iat] += charge;
+                }
+            }
         }
+#ifdef __MPI
+        Parallel_Reduce::reduce_all(this->Ni_.data(), nat);
+#endif
     }
 
     if (print)
@@ -156,17 +254,38 @@ template <>
 void spinconstrain::SpinConstrain<std::complex<double>>::print_Ni(std::ofstream& ofs_running)
 {
     int nat = this->get_nat();
-    ofs_running << "\n CHARGE PROJECTION Ni (electrons):" << std::endl;
-    ofs_running << std::setw(10) << "Atom" << std::setw(15) << "Ni"
-                << std::setw(15) << "Target" << std::setw(15) << "Delta" << std::endl;
-    for (int iat = 0; iat < nat; iat++)
-    {
-        if (this->constrain_charge_[iat] == 0) continue;
-        double delta = this->Ni_[iat] - this->target_charge_[iat];
-        ofs_running << std::setw(10) << this->atomLabels_[iat]
-                    << std::setw(15) << std::fixed << std::setprecision(6) << this->Ni_[iat]
-                    << std::setw(15) << this->target_charge_[iat]
-                    << std::setw(15) << delta << std::endl;
+    
+    if (this->charge_mode_ == "valence") {
+        ofs_running << "\n VALENCE STATE (valence = N_projected - Z_val):" << std::endl;
+        ofs_running << std::setw(10) << "Atom" << std::setw(10) << "Z_val" 
+                    << std::setw(15) << "Ni" << std::setw(15) << "Valence"
+                    << std::setw(15) << "Target" << std::setw(15) << "Delta" << std::endl;
+        for (int iat = 0; iat < nat; iat++)
+        {
+            if (this->constrain_charge_[iat] == 0) continue;
+            double valence = this->Ni_[iat] - this->z_val_[iat];
+            double target_valence = this->target_charge_[iat] - this->z_val_[iat];
+            double delta = valence - target_valence;
+            ofs_running << std::setw(10) << this->atomLabels_[iat]
+                        << std::setw(10) << std::fixed << std::setprecision(2) << this->z_val_[iat]
+                        << std::setw(15) << std::setprecision(6) << this->Ni_[iat]
+                        << std::setw(15) << valence
+                        << std::setw(15) << target_valence
+                        << std::setw(15) << delta << std::endl;
+        }
+    } else {
+        ofs_running << "\n CHARGE PROJECTION Ni (electrons):" << std::endl;
+        ofs_running << std::setw(10) << "Atom" << std::setw(15) << "Ni"
+                    << std::setw(15) << "Target" << std::setw(15) << "Delta" << std::endl;
+        for (int iat = 0; iat < nat; iat++)
+        {
+            if (this->constrain_charge_[iat] == 0) continue;
+            double delta = this->Ni_[iat] - this->target_charge_[iat];
+            ofs_running << std::setw(10) << this->atomLabels_[iat]
+                        << std::setw(15) << std::fixed << std::setprecision(6) << this->Ni_[iat]
+                        << std::setw(15) << this->target_charge_[iat]
+                        << std::setw(15) << delta << std::endl;
+        }
     }
 }
 

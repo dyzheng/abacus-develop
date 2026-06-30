@@ -387,6 +387,27 @@ Manual override is allowed: if sc_acceleration_mode is explicitly set, it takes 
         this->add_item(item);
     }
     {
+        Input_Item item("sc_charge_mode");
+        item.annotation = "Charge constraint target mode";
+        item.category = "Spin-Constrained DFT";
+        item.type = "String";
+        item.description = R"(Charge constraint target mode:
+* absolute: tc in STRU is the absolute projected charge N_projected
+* delta: tc in STRU is the charge change relative to reference (delta = N - N_ref)
+* valence: tc in STRU is the valence state (valence = N_projected - Z_val, where Z_val is from pseudopotential))";
+        item.default_value = "absolute";
+        item.unit = "";
+        item.availability = "sc_charge_switch is true";
+        read_sync_string(input.sc_charge_mode);
+        item.check_value = [](const Input_Item& item, const Parameter& para) {
+            const std::string& mode = para.input.sc_charge_mode;
+            if (mode != "absolute" && mode != "delta" && mode != "valence") {
+                ModuleBase::WARNING_QUIT("ReadInput", "sc_charge_mode must be absolute, delta, or valence");
+            }
+        };
+        this->add_item(item);
+    }
+    {
         Input_Item item("sc_charge_thr");
         item.annotation = "Convergence threshold for charge constraint RMS (electrons)";
         item.category = "Spin-Constrained DFT";

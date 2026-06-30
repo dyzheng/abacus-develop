@@ -617,6 +617,7 @@ struct Input_para
     // ==============   #Parameters (17b.DeltaQS: charge-spin joint constraint) =========
     bool sc_charge_switch = false;   ///< Enable charge constraint (DeltaQ mode); combined with sc_mag_switch gives DeltaQS
     std::string sc_qs_mode = "auto"; ///< "deltaspin" (mu=0), "deltaq" (lambda=0), "deltaqs" (both), "auto" (infer from switches)
+    std::string sc_charge_mode = "absolute"; ///< "absolute" (projected charge), "delta" (relative to reference), "valence" (valence = N - Z_val)
     double sc_charge_thr = 1e-4;     ///< Convergence threshold for charge constraint RMS (electrons)
     double sc_charge_alpha = 0.01;   ///< Trial step size for mu update (eV/e^2)
     double sc_charge_sccut = 3.0;    ///< Max mu change per step (eV/e)

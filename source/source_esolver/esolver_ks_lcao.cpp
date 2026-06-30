@@ -482,7 +482,7 @@ void ESolver_KS_LCAO<TK, TR>::hamilt2rho_single(UnitCell& ucell, int istep, int 
             {
                 sc.set_drho(this->drho);
                 sc.set_direction_only(false);
-                sc.run_lambda_loop(iter - 1);
+                sc.run_constraint_loop(iter - 1);
                 sc.set_direction_only(true);
                 skip_solve = true;
             }
@@ -522,7 +522,7 @@ void ESolver_KS_LCAO<TK, TR>::hamilt2rho_single(UnitCell& ucell, int istep, int 
                 if (iter > 1)
                 {
                     sc.set_drho(this->drho);
-                    sc.run_lambda_loop(iter - 1);
+                    sc.run_constraint_loop(iter - 1);
                     if (!sc.mag_converged()) { sc.set_mag_converged(true); }
                     skip_solve = true;
                 }
@@ -532,14 +532,14 @@ void ESolver_KS_LCAO<TK, TR>::hamilt2rho_single(UnitCell& ucell, int istep, int 
                 if (!sc.mag_converged() && this->drho > 0 && this->drho < PARAM.inp.sc_scf_thr)
                 {
                     sc.set_drho(this->drho);
-                    sc.run_lambda_loop(iter - 1);
+                    sc.run_constraint_loop(iter - 1);
                     sc.set_mag_converged(true);
                     skip_solve = true;
                 }
                 else if (sc.mag_converged())
                 {
                     sc.set_drho(this->drho);
-                    sc.run_lambda_loop(iter - 1);
+                    sc.run_constraint_loop(iter - 1);
                     skip_solve = true;
                 }
             }
@@ -555,7 +555,7 @@ void ESolver_KS_LCAO<TK, TR>::hamilt2rho_single(UnitCell& ucell, int istep, int 
                 if (iter > 1)
                 {
                     sc.set_drho(this->drho);
-                    sc.run_lambda_loop(iter - 1);
+                    sc.run_constraint_loop(iter - 1);
                     if (!sc.mag_converged()) { sc.set_mag_converged(true); }
                     skip_solve = true;
                 }
@@ -567,14 +567,14 @@ void ESolver_KS_LCAO<TK, TR>::hamilt2rho_single(UnitCell& ucell, int istep, int 
                 if (!sc.mag_converged() && this->drho > 0 && this->drho < PARAM.inp.sc_scf_thr)
                 {
                     sc.set_drho(this->drho);
-                    sc.run_lambda_loop(iter - 1);
+                    sc.run_constraint_loop(iter - 1);
                     sc.set_mag_converged(true);
                     skip_solve = true;
                 }
                 else if (sc.mag_converged())
                 {
                     sc.set_drho(this->drho);
-                    sc.run_lambda_loop(iter - 1);
+                    sc.run_constraint_loop(iter - 1);
                     skip_solve = true;
                 }
             }
