@@ -1,5 +1,6 @@
 list(APPEND objects
     upf_valence_parser.cpp
+    deltaqs_projector.cpp
 )
 
 add_library(

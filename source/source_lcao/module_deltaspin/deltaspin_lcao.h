@@ -22,6 +22,10 @@ namespace ModuleESolver
  * @param psi Pointer to wave functions
  * @param dm Density matrix
  * @param pelec Pointer to electronic state
+ * @param gridD Pointer to Grid_Driver (for CSZ projector, can be nullptr)
+ * @param intor Pointer to TwoCenterIntegrator (for CSZ projector, can be nullptr)
+ * @param orb_cutoff Orbital cutoffs (for CSZ projector, can be empty)
+ * @param hR Pointer to HContainer (for CSZ projector, can be nullptr)
  */
 template <typename TK>
 void init_deltaspin_lcao(const UnitCell& ucell,
@@ -31,7 +35,11 @@ void init_deltaspin_lcao(const UnitCell& ucell,
                           void* p_hamilt,
                           void* psi,
                           void* dm,
-                          void* pelec);
+                          void* pelec,
+                          void* gridD = nullptr,
+                          void* intor = nullptr,
+                          const std::vector<double>& orb_cutoff = {},
+                          void* hR = nullptr);
 
 /**
  * @brief Calculate magnetic moments for DeltaSpin in LCAO method

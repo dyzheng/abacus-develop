@@ -18,6 +18,9 @@
 #include "source_base/parallel_reduce.h"
 #include "source_lcao/module_hcontainer/hcontainer.h"
 #include "source_lcao/module_deltaqs/upf_valence_parser.h"
+#include "source_lcao/module_deltaqs/deltaqs_projector.h"
+#include "source_cell/module_neighbor/sltk_grid_driver.h"
+#include "source_basis/module_nao/two_center_integrator.h"
 #endif
 
 template <typename TK>
@@ -32,7 +35,11 @@ void spinconstrain::SpinConstrain<TK>::init_deltaqs(
     bool ground_state_search,
     int outer_max_iter,
     double outer_thr,
-    bool gradient_output)
+    bool gradient_output,
+    void* gridD,
+    void* intor,
+    const std::vector<double>& orb_cutoff,
+    void* hR)
 {
     int nat = this->get_nat();
 
@@ -79,15 +86,53 @@ void spinconstrain::SpinConstrain<TK>::init_deltaqs(
         }
     }
 
-    // Determine CSZ projection basis
+    // Determine CSZ projection basis and build projector
 #ifdef __LCAO
     if (charge_switch) {
-        auto csz_configs = deltaqs::determine_csz_basis(ucell);
-        deltaqs::print_csz_configs(csz_configs, ucell);
-        bool csz_valid = deltaqs::validate_csz_orbitals(ucell, csz_configs);
+        this->csz_configs_ = deltaqs::determine_csz_basis(ucell);
+        deltaqs::print_csz_configs(this->csz_configs_, ucell);
+        bool csz_valid = deltaqs::validate_csz_orbitals(ucell, this->csz_configs_);
         if (!csz_valid) {
             ModuleBase::WARNING_QUIT("DeltaQS::init_deltaqs",
                 "CSZ basis validation failed. Check pseudopotential and orbital files.");
+        }
+        
+        // Build CSZ projector if all dependencies are available
+        if (gridD != nullptr && intor != nullptr && !orb_cutoff.empty() && hR != nullptr) {
+            deltaqs::CSZProjector* csz_proj = new deltaqs::CSZProjector();
+            
+            // Build constraint atom list for charge constraints
+            std::vector<bool> constraint_atoms(nat, false);
+            for (int iat = 0; iat < nat; iat++) {
+                if (this->constrain_charge_[iat] != 0) {
+                    constraint_atoms[iat] = true;
+                }
+            }
+            
+            csz_proj->build(ucell,
+                           this->csz_configs_,
+                           this->ParaV,
+                           static_cast<Grid_Driver*>(gridD),
+                           static_cast<TwoCenterIntegrator*>(intor),
+                           orb_cutoff,
+                           static_cast<hamilt::HContainer<double>*>(hR),
+                           constraint_atoms);
+            
+            this->csz_projector_ = static_cast<void*>(csz_proj);
+            
+            std::cout << "[DeltaQS] CSZ projector built successfully." << std::endl;
+            for (int iat = 0; iat < nat; iat++) {
+                if (constraint_atoms[iat]) {
+                    std::cout << "[DeltaQS]   Atom " << iat << ": " 
+                              << csz_proj->get_nproj(iat) << " projector functions" << std::endl;
+                }
+            }
+        } else {
+            std::cout << "[DeltaQS] Warning: CSZ projector dependencies missing, projector not built." << std::endl;
+            std::cout << "[DeltaQS]   gridD=" << (gridD != nullptr ? "yes" : "no")
+                      << ", intor=" << (intor != nullptr ? "yes" : "no")
+                      << ", orb_cutoff=" << (orb_cutoff.empty() ? "empty" : "ok")
+                      << ", hR=" << (hR != nullptr ? "yes" : "no") << std::endl;
         }
     }
 #endif
@@ -186,13 +231,15 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_ni_lcao(const int& 
     {
         this->dm_->switch_dmr(1);
         const hamilt::HContainer<double>* dmr = this->dm_->get_DMR_pointer(1);
+        
+        // Use first-zeta projector (CSZ projector needs orthogonalization to avoid over-counting)
         auto moments = static_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double>>*>(
             this->p_operator)->cal_moment(dmr, constrain_all);
-        this->dm_->switch_dmr(0);
         for (int iat = 0; iat < nat; iat++)
         {
             this->Ni_[iat] = moments[iat];
         }
+        this->dm_->switch_dmr(0);
     }
     else if (this->nspin_ == 4)
     {

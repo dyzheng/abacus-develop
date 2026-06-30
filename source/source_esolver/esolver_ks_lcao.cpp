@@ -155,7 +155,18 @@ void ESolver_KS_LCAO<TK, TR>::before_scf(UnitCell& ucell, const int istep)
     this->deepks.build_overlap(ucell, orb_, pv, gd, *(two_center_bundle_.overlap_orb_alpha), PARAM.inp);
 
     // 10) prepare sc calculation
-    init_deltaspin_lcao<TK>(ucell, PARAM.inp, &(this->pv), this->kv, this->p_hamilt, this->psi, this->dmat.dm, this->pelec);
+    // Get HContainer for CSZ projector
+    auto* hamilt_lcao_tmp = dynamic_cast<hamilt::HamiltLCAO<TK, TR>*>(this->p_hamilt);
+    void* hR_ptr = nullptr;
+    if (hamilt_lcao_tmp) {
+        hR_ptr = static_cast<void*>(hamilt_lcao_tmp->getHR());
+    }
+    
+    init_deltaspin_lcao<TK>(ucell, PARAM.inp, &(this->pv), this->kv, this->p_hamilt, this->psi, this->dmat.dm, this->pelec,
+                            static_cast<void*>(&this->gd),
+                            static_cast<void*>(two_center_bundle_.overlap_orb.get()),
+                            orb_.cutoffs(),
+                            hR_ptr);
 
     // 11) set xc type before the first cal of xc in pelec->init_scf, Peize Lin add 2016-12-03
     this->exx_nao.before_scf(ucell, this->kv, orb_, this->p_chgmix, istep, PARAM.inp);

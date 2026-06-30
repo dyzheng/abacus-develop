@@ -86,6 +86,11 @@
 // Always include diagonalization_engine for type definitions (needed by template)
 #include "source_lcao/module_deltaspin/diagonalization_engine.h"
 
+// DeltaQS: include CSZ projector types
+#ifdef __LCAO
+#include "source_lcao/module_deltaqs/upf_valence_parser.h"
+#endif
+
 namespace spinconstrain
 {
 
@@ -228,7 +233,11 @@ public:
                       bool ground_state_search,
                       int outer_max_iter,
                       double outer_thr,
-                      bool gradient_output);
+                      bool gradient_output,
+                      void* gridD = nullptr,
+                      void* intor = nullptr,
+                      const std::vector<double>& orb_cutoff = {},
+                      void* hR = nullptr);
 
   /**
    * @brief Calculate atomic magnetic moments using real-space projection (LCAO basis).
@@ -1113,13 +1122,21 @@ public:
        bool subspace_just_activated_ = false;      ///< Was subspace just activated? (signals BFGS to reset search direction)
        std::vector<ModuleBase::Vector3<double>> lambda_at_acceleration_; ///< Lambda when acceleration was activated
 
-      // =================================================================
-      // DiagonalizationEngine integration (Phase 2 refactoring)
-      // =================================================================
-      std::unique_ptr<DiagonalizationEngine> diagonalization_engine_;
-      DiagonalizationStrategy current_strategy_ = DiagonalizationStrategy::FullSpace;
-      std::vector<ModuleBase::Vector3<double>> engine_lambda_ref_;
+       // =================================================================
+       // DiagonalizationEngine integration (Phase 2 refactoring)
+       // =================================================================
+       std::unique_ptr<DiagonalizationEngine> diagonalization_engine_;
+       DiagonalizationStrategy current_strategy_ = DiagonalizationStrategy::FullSpace;
+       std::vector<ModuleBase::Vector3<double>> engine_lambda_ref_;
        double accel_fallback_rms_thr_ = -1.0;
+
+       // =================================================================
+       // DeltaQS CSZ projector (Phase 1)
+       // =================================================================
+       void* csz_projector_ = nullptr;  ///< Pointer to deltaqs::CSZProjector (owned, deleted in destructor)
+#ifdef __LCAO
+       std::vector<deltaqs::ValenceConfig> csz_configs_;  ///< CSZ basis configuration per element type
+#endif
     };
 
 

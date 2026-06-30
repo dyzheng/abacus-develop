@@ -49,7 +49,11 @@ void init_deltaspin_lcao(const UnitCell& ucell,
                           void* p_hamilt,
                           void* psi,
                           void* dm,
-                          void* pelec)
+                          void* pelec,
+                          void* gridD,
+                          void* intor,
+                          const std::vector<double>& orb_cutoff,
+                          void* hR)
 {
     // Early exit if neither DeltaSpin nor DeltaQ is enabled
     if (!inp.sc_mag_switch && !inp.sc_charge_switch)
@@ -120,7 +124,11 @@ void init_deltaspin_lcao(const UnitCell& ucell,
                     inp.sc_ground_state_search,
                     inp.sc_outer_max_iter,
                     inp.sc_outer_thr,
-                    inp.sc_gradient_output);
+                    inp.sc_gradient_output,
+                    gridD,
+                    intor,
+                    orb_cutoff,
+                    hR);
 }
 
 /**
@@ -240,7 +248,11 @@ template void init_deltaspin_lcao<double>(const UnitCell& ucell,
                                            void* p_hamilt,
                                            void* psi,
                                            void* dm,
-                                           void* pelec);
+                                           void* pelec,
+                                           void* gridD,
+                                           void* intor,
+                                           const std::vector<double>& orb_cutoff,
+                                           void* hR);
 template void init_deltaspin_lcao<std::complex<double>>(const UnitCell& ucell,
                                                           const Input_para& inp,
                                                           void* pv,
@@ -248,7 +260,11 @@ template void init_deltaspin_lcao<std::complex<double>>(const UnitCell& ucell,
                                                           void* p_hamilt,
                                                           void* psi,
                                                           void* dm,
-                                                          void* pelec);
+                                                          void* pelec,
+                                                          void* gridD,
+                                                          void* intor,
+                                                          const std::vector<double>& orb_cutoff,
+                                                          void* hR);
 
 template void cal_mi_lcao_wrapper<double>(const int iter, const Input_para& inp);
 template void cal_mi_lcao_wrapper<std::complex<double>>(const int iter, const Input_para& inp);
