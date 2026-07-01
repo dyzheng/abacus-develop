@@ -239,8 +239,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_ni_lcao(const int& 
         std::cout << "[DeltaQS] Ni at step " << step << ":";
         for (int iat = 0; iat < nat; iat++)
         {
-            if (this->constrain_charge_[iat] != 0)
-                std::cout << " " << this->atomLabels_[iat] << "=" << this->Ni_[iat];
+            std::cout << " " << this->atomLabels_[iat] << "=" << this->Ni_[iat];
         }
         std::cout << std::endl;
     }
@@ -606,6 +605,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_qs_lambda_loop(int 
         if (i_step >= 2)
         {
             double beta = mean_error / (mean_error_old + 1e-30);
+            if (beta < 0.0 || beta > 10.0) beta = 0.0;
             for (int iat = 0; iat < nat; iat++)
             {
                 for (int ic = 0; ic < 3; ic++)
@@ -648,8 +648,8 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_qs_lambda_loop(int 
         if (std::abs(rms_plus - rms_error) > 1e-15)
         {
             alpha_factor = rms_error / (rms_error - rms_plus + 1e-30);
-            if (alpha_factor < 0) alpha_factor = 1.0;
-            if (std::abs(alpha_factor) > 3.0) alpha_factor = 3.0;
+            if (alpha_factor < 0.0) alpha_factor = 0.0;
+            if (alpha_factor > 3.0) alpha_factor = 3.0;
         }
 
         double correction_spin = (alpha_factor - 1.0) * alpha_spin;
@@ -666,9 +666,17 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_qs_lambda_loop(int 
         mean_error_old = mean_error;
         mean_error = rms_error * rms_error;
 
-        double g = 1.5 * std::abs(alpha_factor);
-        if (g > 2.0) g = 2.0;
-        else if (g < 0.5) g = 0.5;
+        double g;
+        if (alpha_factor <= 0.1)
+        {
+            g = 0.3;
+        }
+        else
+        {
+            g = 1.5 * alpha_factor;
+            if (g > 2.0) g = 2.0;
+            else if (g < 0.5) g = 0.5;
+        }
         alpha_spin *= std::pow(g, 0.7);
         alpha_mu *= std::pow(g, 0.7);
     }

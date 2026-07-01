@@ -457,11 +457,11 @@ void ESolver_KS_LCAO<TK, TR>::hamilt2rho_single(UnitCell& ucell, int istep, int 
     //   - mixing_restart is auto-set based on sc_scf_thr_mode
     // =====================================================================
     bool skip_solve = false;
-    if (PARAM.inp.sc_mag_switch)
+    if (PARAM.inp.sc_mag_switch || PARAM.inp.sc_charge_switch)
     {
         spinconstrain::SpinConstrain<TK>& sc = spinconstrain::SpinConstrain<TK>::getScInstance();
 
-        if (PARAM.inp.sc_lambda_strategy == "linear_scan")
+        if (PARAM.inp.sc_lambda_strategy == "linear_scan" && PARAM.inp.sc_mag_switch)
         {
             sc.set_drho(this->drho);
             sc.run_lambda_linear_scan(iter - 1);
@@ -474,7 +474,7 @@ void ESolver_KS_LCAO<TK, TR>::hamilt2rho_single(UnitCell& ucell, int istep, int 
             // Lambda values are loaded from STRU and used as constant constraints.
             // Replaces the old convention of setting sc_scf_thr=1e-10.
         }
-        else if (PARAM.inp.sc_direction_only && PARAM.inp.nspin == 2)
+        else if (PARAM.inp.sc_direction_only && PARAM.inp.nspin == 2 && PARAM.inp.sc_mag_switch)
         {
             // ================================================================
             // Collinear direction_only: two-phase strategy
@@ -523,7 +523,7 @@ void ESolver_KS_LCAO<TK, TR>::hamilt2rho_single(UnitCell& ucell, int istep, int 
                 sc.set_lambda(lambda);
             }
         }
-        else if (PARAM.inp.sc_direction_only && PARAM.inp.nspin == 4)
+        else if (PARAM.inp.sc_direction_only && PARAM.inp.nspin == 4 && PARAM.inp.sc_mag_switch)
         {
             // Non-collinear direction_only: direction_only projection works
             // correctly for nspin=4 (only removes parallel component, leaving

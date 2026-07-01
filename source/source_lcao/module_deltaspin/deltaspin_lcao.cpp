@@ -92,6 +92,13 @@ void init_deltaspin_lcao(const UnitCell& ucell,
         }
     }
 
+    if (inp.sc_charge_switch)
+    {
+        accel_mode = "off";
+        accel_rms_thr = -1.0;
+        std::cout << "[DeltaQS] Subspace acceleration disabled for charge constraint mode" << std::endl;
+    }
+
 #ifdef __LCAO
     // LCAO build: pass density matrix pointer
     sc.init_sc(inp.sc_thr, inp.nsc, inp.nsc_min, inp.alpha_trial,
@@ -153,7 +160,7 @@ void cal_mi_lcao_wrapper(const int iter, const Input_para& inp)
     }
     if (inp.sc_charge_switch)
     {
-        sc.cal_ni_lcao(iter);
+        sc.cal_ni_lcao(iter, true);
     }
 #endif
 }
@@ -195,12 +202,6 @@ bool run_deltaspin_lambda_loop_lcao(const int iter,
     {
         spinconstrain::SpinConstrain<TK>& sc = spinconstrain::SpinConstrain<TK>::getScInstance();
         bool use_qs = sc.is_charge_constraint_enabled();
-        
-        std::cout << "[DEBUG-FACADE] iter=" << iter 
-                  << " sc_mag_switch=" << inp.sc_mag_switch 
-                  << " sc_charge_switch=" << inp.sc_charge_switch
-                  << " charge_enabled=" << sc.is_charge_constraint_enabled()
-                  << " use_qs=" << use_qs << std::endl;
 
         if (!sc.mag_converged() && drho > 0 && drho < inp.sc_scf_thr)
         {
