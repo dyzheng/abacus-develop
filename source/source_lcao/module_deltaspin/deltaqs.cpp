@@ -688,6 +688,16 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_qs_lambda_loop(int 
         this->mu_[iat] = initial_mu[iat] + dnu_mu[iat];
     }
 
+    std::cout << "[DeltaQS] Final multipliers:";
+    for (int iat = 0; iat < nat; iat++)
+    {
+        if (this->constrain_charge_[iat] != 0)
+            std::cout << " mu[" << this->atomLabels_[iat] << "]=" << this->mu_[iat] << "Ry";
+        if (has_spin_constraint && (this->constrain_[iat].x != 0 || this->constrain_[iat].y != 0 || this->constrain_[iat].z != 0))
+            std::cout << " lam_z[" << this->atomLabels_[iat] << "]=" << this->lambda_[iat][2] << "Ry";
+    }
+    std::cout << std::endl;
+
     if (this->gradient_output_)
     {
         this->write_gradient_file(outer_step);
