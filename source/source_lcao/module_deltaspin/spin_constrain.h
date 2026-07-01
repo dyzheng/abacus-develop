@@ -86,11 +86,6 @@
 // Always include diagonalization_engine for type definitions (needed by template)
 #include "source_lcao/module_deltaspin/diagonalization_engine.h"
 
-// DeltaQS: include CSZ projector types
-#ifdef __LCAO
-#include "source_lcao/module_deltaqs/upf_valence_parser.h"
-#endif
-
 namespace spinconstrain
 {
 
@@ -1160,13 +1155,6 @@ public:
        std::vector<ModuleBase::Vector3<double>> engine_lambda_ref_;
        double accel_fallback_rms_thr_ = -1.0;
 
-       // =================================================================
-       // DeltaQS CSZ projector (Phase 1)
-       // =================================================================
-       void* csz_projector_ = nullptr;  ///< Pointer to deltaqs::CSZProjector (owned, deleted in destructor)
-#ifdef __LCAO
-       std::vector<deltaqs::ValenceConfig> csz_configs_;  ///< CSZ basis configuration per element type
-#endif
     };
 
 

@@ -255,16 +255,13 @@ void hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::cal_constraint_atom_list(c
 #ifdef __DEBUG
     assert(this->ucell->nat == constraints.size());
 #endif
+    spinconstrain::SpinConstrain<TK>& sc = spinconstrain::SpinConstrain<TK>::getScInstance();
+    const auto& cc = sc.get_constrain_charge();
     for(int iat=0;iat<this->ucell->nat;iat++)
     {
-        if(constraints[iat][0] + constraints[iat][1] + constraints[iat][2] == 0)
-        {
-            this->constraint_atom_list[iat] = false;
-        }
-        else
-        {
-            this->constraint_atom_list[iat] = true;
-        }
+        bool has_spin = (constraints[iat][0] + constraints[iat][1] + constraints[iat][2] != 0);
+        bool has_charge = (iat < (int)cc.size() && cc[iat] != 0);
+        this->constraint_atom_list[iat] = has_spin || has_charge;
     }
 }
 

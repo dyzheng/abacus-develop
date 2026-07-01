@@ -17,10 +17,7 @@
 #include "source_estate/elecstate_tools.h"
 #include "source_base/parallel_reduce.h"
 #include "source_lcao/module_hcontainer/hcontainer.h"
-#include "source_lcao/module_deltaqs/upf_valence_parser.h"
-#include "source_lcao/module_deltaqs/deltaqs_projector.h"
-#include "source_cell/module_neighbor/sltk_grid_driver.h"
-#include "source_basis/module_nao/two_center_integrator.h"
+
 #endif
 
 template <typename TK>
@@ -85,57 +82,6 @@ void spinconstrain::SpinConstrain<TK>::init_deltaqs(
             }
         }
     }
-
-    // Determine CSZ projection basis and build projector
-#ifdef __LCAO
-    if (charge_switch) {
-        this->csz_configs_ = deltaqs::determine_csz_basis(ucell);
-        deltaqs::print_csz_configs(this->csz_configs_, ucell);
-        bool csz_valid = deltaqs::validate_csz_orbitals(ucell, this->csz_configs_);
-        if (!csz_valid) {
-            ModuleBase::WARNING_QUIT("DeltaQS::init_deltaqs",
-                "CSZ basis validation failed. Check pseudopotential and orbital files.");
-        }
-        
-        // Build CSZ projector if all dependencies are available
-        if (gridD != nullptr && intor != nullptr && !orb_cutoff.empty() && hR != nullptr) {
-            deltaqs::CSZProjector* csz_proj = new deltaqs::CSZProjector();
-            
-            // Build constraint atom list for charge constraints
-            std::vector<bool> constraint_atoms(nat, false);
-            for (int iat = 0; iat < nat; iat++) {
-                if (this->constrain_charge_[iat] != 0) {
-                    constraint_atoms[iat] = true;
-                }
-            }
-            
-            csz_proj->build(ucell,
-                           this->csz_configs_,
-                           this->ParaV,
-                           static_cast<Grid_Driver*>(gridD),
-                           static_cast<TwoCenterIntegrator*>(intor),
-                           orb_cutoff,
-                           static_cast<hamilt::HContainer<double>*>(hR),
-                           constraint_atoms);
-            
-            this->csz_projector_ = static_cast<void*>(csz_proj);
-            
-            std::cout << "[DeltaQS] CSZ projector built successfully." << std::endl;
-            for (int iat = 0; iat < nat; iat++) {
-                if (constraint_atoms[iat]) {
-                    std::cout << "[DeltaQS]   Atom " << iat << ": " 
-                              << csz_proj->get_nproj(iat) << " projector functions" << std::endl;
-                }
-            }
-        } else {
-            std::cout << "[DeltaQS] Warning: CSZ projector dependencies missing, projector not built." << std::endl;
-            std::cout << "[DeltaQS]   gridD=" << (gridD != nullptr ? "yes" : "no")
-                      << ", intor=" << (intor != nullptr ? "yes" : "no")
-                      << ", orb_cutoff=" << (orb_cutoff.empty() ? "empty" : "ok")
-                      << ", hR=" << (hR != nullptr ? "yes" : "no") << std::endl;
-        }
-    }
-#endif
 
     // Expand atomLabels_ to have one label per atom (not per element type)
     auto type_labels = ucell.get_atomLabels();
@@ -225,16 +171,20 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_ni_lcao(const int& 
     int nat = this->get_nat();
     this->Ni_.resize(nat, 0.0);
 
-    std::vector<ModuleBase::Vector3<int>> constrain_all(nat, ModuleBase::Vector3<int>(1, 1, 1));
+    std::vector<ModuleBase::Vector3<int>> constrain_charge(nat, ModuleBase::Vector3<int>(0, 0, 0));
+    for (int iat = 0; iat < nat; iat++)
+    {
+        if (this->constrain_charge_[iat] != 0)
+            constrain_charge[iat] = ModuleBase::Vector3<int>(1, 1, 1);
+    }
 
     if (this->nspin_ == 2)
     {
         this->dm_->switch_dmr(1);
         const hamilt::HContainer<double>* dmr = this->dm_->get_DMR_pointer(1);
-        
-        // Use first-zeta projector (CSZ projector needs orthogonalization to avoid over-counting)
+
         auto moments = static_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double>>*>(
-            this->p_operator)->cal_moment(dmr, constrain_all);
+            this->p_operator)->cal_moment(dmr, constrain_charge);
         for (int iat = 0; iat < nat; iat++)
         {
             this->Ni_[iat] = moments[iat];
@@ -249,7 +199,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_ni_lcao(const int& 
         for (int iat = 0; iat < nat; iat++)
         {
             this->Ni_[iat] = 0.0;
-            if (constrain_all[iat].x + constrain_all[iat].y + constrain_all[iat].z == 0) continue;
+            if (this->constrain_charge_[iat] == 0) continue;
             const hamilt::HContainer<std::complex<double>>* pre_hr_iat = dspin_op->get_pre_hr(iat);
             if (!pre_hr_iat) continue;
             for (int iap = 0; iap < pre_hr_iat->size_atom_pairs(); iap++)
@@ -360,7 +310,7 @@ double spinconstrain::SpinConstrain<std::complex<double>>::cal_charge_escon()
     for (int iat = 0; iat < nat; iat++)
     {
         if (this->constrain_charge_[iat] == 0) continue;
-        escon_q -= this->mu_[iat] * (this->Ni_[iat] - this->target_charge_[iat]);
+        escon_q -= this->mu_[iat] * this->Ni_[iat];
     }
     return escon_q;
 }
@@ -483,8 +433,10 @@ void spinconstrain::SpinConstrain<std::complex<double>>::update_mu_simple(double
 template <>
 void spinconstrain::SpinConstrain<std::complex<double>>::run_qs_lambda_loop(int outer_step, bool rerun)
 {
-    bool has_spin_constraint = false;
     int nat = this->get_nat();
+
+    bool has_spin_constraint = false;
+    bool has_charge_constraint = this->charge_constraint_enabled_;
     for (int iat = 0; iat < nat; iat++)
     {
         if (this->constrain_[iat].x != 0 || this->constrain_[iat].y != 0 || this->constrain_[iat].z != 0)
@@ -494,69 +446,252 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_qs_lambda_loop(int 
         }
     }
 
-    if (has_spin_constraint)
+    if (!has_charge_constraint)
     {
-        this->run_lambda_loop(outer_step, rerun);
+        if (has_spin_constraint) this->run_lambda_loop(outer_step, rerun);
+        return;
     }
 
-    if (this->charge_constraint_enabled_)
+    if (!has_spin_constraint)
     {
-        this->cal_ni_lcao(outer_step, false);
+        has_spin_constraint = false;
+    }
 
-        double rms_charge = 0.0;
-        int n_charge = 0;
+    const int ndim_spin = (this->nspin_ == 4) ? 3 : 1;
+
+    std::vector<ModuleBase::Vector3<double>> initial_lambda(nat, {0,0,0});
+    std::vector<ModuleBase::Vector3<double>> delta_lambda(nat, {0,0,0});
+    std::vector<ModuleBase::Vector3<double>> dnu_spin(nat, {0,0,0});
+    std::vector<ModuleBase::Vector3<double>> search_spin(nat, {0,0,0});
+    std::vector<ModuleBase::Vector3<double>> search_spin_old(nat, {0,0,0});
+    std::vector<ModuleBase::Vector3<double>> delta_spin(nat, {0,0,0});
+
+    std::vector<double> initial_mu(nat, 0.0);
+    std::vector<double> delta_mu(nat, 0.0);
+    std::vector<double> dnu_mu(nat, 0.0);
+    std::vector<double> search_mu(nat, 0.0);
+    std::vector<double> search_mu_old(nat, 0.0);
+    std::vector<double> delta_charge(nat, 0.0);
+
+    double alpha_spin = this->alpha_trial_;
+    double alpha_mu = this->charge_alpha_trial_;
+    if (alpha_mu <= 0) alpha_mu = alpha_spin;
+    double mean_error_old = 0.0;
+    double mean_error = 0.0;
+    double rms_error = 0.0;
+
+    int n_active = 0;
+    for (int iat = 0; iat < nat; iat++)
+    {
+        if (this->constrain_[iat].z != 0) n_active++;
+        if (this->nspin_ == 4)
+        {
+            if (this->constrain_[iat].x != 0) n_active++;
+            if (this->constrain_[iat].y != 0) n_active++;
+        }
+        if (has_charge_constraint && this->constrain_charge_[iat] != 0) n_active++;
+    }
+    if (n_active == 0) n_active = 1;
+
+    std::cout << "[DeltaQS] Unified CG loop: n_active_dims=" << n_active << std::endl;
+
+    for (int iat = 0; iat < nat; iat++)
+    {
+        for (int ic = 0; ic < 3; ic++)
+        {
+            if (this->constrain_[iat][ic] != 0)
+                initial_lambda[iat][ic] = this->lambda_[iat][ic];
+        }
+        if (has_charge_constraint && this->constrain_charge_[iat] != 0)
+            initial_mu[iat] = this->mu_[iat];
+    }
+
+    auto apply_and_solve = [this, nat, has_spin_constraint, has_charge_constraint, &delta_lambda, &delta_mu](int step)
+    {
         for (int iat = 0; iat < nat; iat++)
         {
-            if (this->constrain_charge_[iat] == 0) continue;
-            double dN = this->Ni_[iat] - this->target_charge_[iat];
-            rms_charge += dN * dN;
-            n_charge++;
+            for (int ic = 0; ic < 3; ic++)
+            {
+                if (this->constrain_[iat][ic] != 0)
+                    this->lambda_[iat][ic] = delta_lambda[iat][ic];
+                else
+                    this->lambda_[iat][ic] = 0.0;
+            }
+            if (has_charge_constraint && this->constrain_charge_[iat] != 0)
+                this->mu_[iat] = delta_mu[iat];
         }
-        if (n_charge > 0) rms_charge = std::sqrt(rms_charge / n_charge);
 
-        std::cout << "[DeltaQS] Charge RMS: " << rms_charge << " e (threshold: " << this->sc_charge_thr_ << ")" << std::endl;
+        auto* dspin_op = dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double>>*>(
+            this->p_operator);
+        if (dspin_op) dspin_op->update_lambda();
 
-        for (int mu_step = 0; mu_step < this->nsc_; mu_step++)
+        psi::Psi<std::complex<double>>* psi_t = static_cast<psi::Psi<std::complex<double>>*>(this->psi);
+        hamilt::Hamilt<std::complex<double>>* hamilt_t = static_cast<hamilt::Hamilt<std::complex<double>>*>(this->p_hamilt);
+        hsolver::HSolverLCAO<std::complex<double>> hsolver_t(this->ParaV, PARAM.inp.ks_solver);
+        hsolver_t.solve(hamilt_t, psi_t[0], this->pelec, *this->dm_, *this->pelec->charge, this->nspin_, true);
+        elecstate::calculate_weights(this->pelec->ekb, this->pelec->wg, this->pelec->klist,
+                                     this->pelec->eferm, this->pelec->f_en, this->pelec->nelec_spin,
+                                     this->pelec->skip_weights);
+        elecstate::calEBand(this->pelec->ekb, this->pelec->wg, this->pelec->f_en);
+
+        if (has_spin_constraint) this->cal_mi_lcao(step);
+        if (has_charge_constraint) this->cal_ni_lcao(step, false);
+    };
+
+    auto compute_residual_and_rms = [this, nat, has_spin_constraint, has_charge_constraint, n_active, ndim_spin,
+                                      &delta_spin, &delta_charge]() -> double
+    {
+        double sum_sq = 0.0;
+        for (int iat = 0; iat < nat; iat++)
         {
-            this->update_mu_simple(1.0);
-
             if (has_spin_constraint)
             {
-                auto* dspin_op = dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double>>*>(
-                    this->p_operator);
-                if (dspin_op) dspin_op->update_lambda();
+                for (int ic = 0; ic < 3; ic++)
+                {
+                    if (this->constrain_[iat][ic] != 0)
+                    {
+                        delta_spin[iat][ic] = this->Mi_[iat][ic] - this->target_mag_[iat][ic];
+                        sum_sq += delta_spin[iat][ic] * delta_spin[iat][ic];
+                    }
+                    else
+                    {
+                        delta_spin[iat][ic] = 0.0;
+                    }
+                }
             }
-
-            psi::Psi<std::complex<double>>* psi_t = static_cast<psi::Psi<std::complex<double>>*>(this->psi);
-            hamilt::Hamilt<std::complex<double>>* hamilt_t = static_cast<hamilt::Hamilt<std::complex<double>>*>(this->p_hamilt);
-            hsolver::HSolverLCAO<std::complex<double>> hsolver_t(this->ParaV, PARAM.inp.ks_solver);
-            hsolver_t.solve(hamilt_t, psi_t[0], this->pelec, *this->dm_, *this->pelec->charge, this->nspin_, true);
-            elecstate::calculate_weights(this->pelec->ekb, this->pelec->wg, this->pelec->klist,
-                                         this->pelec->eferm, this->pelec->f_en, this->pelec->nelec_spin,
-                                         this->pelec->skip_weights);
-            elecstate::calEBand(this->pelec->ekb, this->pelec->wg, this->pelec->f_en);
-
-            this->cal_ni_lcao(mu_step, false);
-            if (has_spin_constraint) this->cal_mi_lcao(mu_step);
-
-            rms_charge = 0.0;
-            n_charge = 0;
-            for (int iat = 0; iat < nat; iat++)
+            if (has_charge_constraint && this->constrain_charge_[iat] != 0)
             {
-                if (this->constrain_charge_[iat] == 0) continue;
-                double dN = this->Ni_[iat] - this->target_charge_[iat];
-                rms_charge += dN * dN;
-                n_charge++;
+                delta_charge[iat] = this->Ni_[iat] - this->target_charge_[iat];
+                sum_sq += delta_charge[iat] * delta_charge[iat];
             }
-            if (n_charge > 0) rms_charge = std::sqrt(rms_charge / n_charge);
-            std::cout << "[DeltaQS] mu step " << mu_step << ": charge RMS = " << rms_charge << std::endl;
-
-            if (rms_charge < this->sc_charge_thr_)
+            else
             {
-                std::cout << "[DeltaQS] Charge constraint converged." << std::endl;
-                break;
+                delta_charge[iat] = 0.0;
             }
         }
+        return std::sqrt(sum_sq / n_active);
+    };
+
+    for (int i_step = -1; i_step < this->nsc_; i_step++)
+    {
+        if (i_step == -1)
+        {
+            for (int iat = 0; iat < nat; iat++)
+            {
+                for (int ic = 0; ic < 3; ic++)
+                    delta_lambda[iat][ic] = initial_lambda[iat][ic];
+                delta_mu[iat] = initial_mu[iat];
+            }
+            apply_and_solve(-1);
+
+            rms_error = compute_residual_and_rms();
+            std::cout << "[DeltaQS] Step -1: RMS = " << rms_error << std::endl;
+            i_step++;
+        }
+        else
+        {
+            for (int iat = 0; iat < nat; iat++)
+            {
+                for (int ic = 0; ic < 3; ic++)
+                    delta_lambda[iat][ic] = initial_lambda[iat][ic] + dnu_spin[iat][ic];
+                delta_mu[iat] = initial_mu[iat] + dnu_mu[iat];
+            }
+            apply_and_solve(i_step);
+            rms_error = compute_residual_and_rms();
+            std::cout << "[DeltaQS] Step " << i_step << ": RMS = " << rms_error << std::endl;
+        }
+
+        search_spin = delta_spin;
+        search_mu = delta_charge;
+
+        double thr = std::max(this->sc_thr_, this->sc_charge_thr_);
+        if (i_step == 0)
+        {
+            this->current_sc_thr_ = std::max(rms_error * this->sc_drop_thr_, thr);
+        }
+
+        if (rms_error < this->current_sc_thr_)
+        {
+            std::cout << "[DeltaQS] Converged: RMS = " << rms_error
+                      << " < thr = " << this->current_sc_thr_ << std::endl;
+            break;
+        }
+
+        if (i_step >= 2)
+        {
+            double beta = mean_error / (mean_error_old + 1e-30);
+            for (int iat = 0; iat < nat; iat++)
+            {
+                for (int ic = 0; ic < 3; ic++)
+                    search_spin[iat][ic] = delta_spin[iat][ic] + beta * search_spin_old[iat][ic];
+                search_mu[iat] = delta_charge[iat] + beta * search_mu_old[iat];
+            }
+        }
+
+        double max_search_spin = 0.0;
+        double max_search_mu = 0.0;
+        for (int iat = 0; iat < nat; iat++)
+        {
+            for (int ic = 0; ic < 3; ic++)
+                max_search_spin = std::max(max_search_spin, std::abs(search_spin[iat][ic]));
+            max_search_mu = std::max(max_search_mu, std::abs(search_mu[iat]));
+        }
+        if (max_search_spin * alpha_spin > this->restrict_current_ && max_search_spin > 0)
+            alpha_spin = this->restrict_current_ / max_search_spin;
+        if (has_charge_constraint && max_search_mu * alpha_mu > this->charge_restrict_current_ && max_search_mu > 0)
+            alpha_mu = this->charge_restrict_current_ / max_search_mu;
+
+        for (int iat = 0; iat < nat; iat++)
+        {
+            for (int ic = 0; ic < 3; ic++)
+                dnu_spin[iat][ic] += alpha_spin * search_spin[iat][ic];
+            dnu_mu[iat] += alpha_mu * search_mu[iat];
+        }
+
+        for (int iat = 0; iat < nat; iat++)
+        {
+            for (int ic = 0; ic < 3; ic++)
+                delta_lambda[iat][ic] = initial_lambda[iat][ic] + dnu_spin[iat][ic];
+            delta_mu[iat] = initial_mu[iat] + dnu_mu[iat];
+        }
+        apply_and_solve(i_step);
+
+        double rms_plus = compute_residual_and_rms();
+
+        double alpha_factor = 1.0;
+        if (std::abs(rms_plus - rms_error) > 1e-15)
+        {
+            alpha_factor = rms_error / (rms_error - rms_plus + 1e-30);
+            if (alpha_factor < 0) alpha_factor = 1.0;
+            if (std::abs(alpha_factor) > 3.0) alpha_factor = 3.0;
+        }
+
+        double correction_spin = (alpha_factor - 1.0) * alpha_spin;
+        double correction_mu = (alpha_factor - 1.0) * alpha_mu;
+        for (int iat = 0; iat < nat; iat++)
+        {
+            for (int ic = 0; ic < 3; ic++)
+                dnu_spin[iat][ic] += correction_spin * search_spin[iat][ic];
+            dnu_mu[iat] += correction_mu * search_mu[iat];
+        }
+
+        search_spin_old = search_spin;
+        search_mu_old = search_mu;
+        mean_error_old = mean_error;
+        mean_error = rms_error * rms_error;
+
+        double g = 1.5 * std::abs(alpha_factor);
+        if (g > 2.0) g = 2.0;
+        else if (g < 0.5) g = 0.5;
+        alpha_spin *= std::pow(g, 0.7);
+        alpha_mu *= std::pow(g, 0.7);
+    }
+
+    for (int iat = 0; iat < nat; iat++)
+    {
+        for (int ic = 0; ic < 3; ic++)
+            this->lambda_[iat][ic] = initial_lambda[iat][ic] + dnu_spin[iat][ic];
+        this->mu_[iat] = initial_mu[iat] + dnu_mu[iat];
     }
 
     if (this->gradient_output_)

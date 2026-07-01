@@ -194,7 +194,7 @@ bool run_deltaspin_lambda_loop_lcao(const int iter,
     if (inp.sc_mag_switch || inp.sc_charge_switch)
     {
         spinconstrain::SpinConstrain<TK>& sc = spinconstrain::SpinConstrain<TK>::getScInstance();
-        bool use_qs = sc.is_charge_constraint_enabled() && inp.sc_mag_switch;
+        bool use_qs = sc.is_charge_constraint_enabled();
         
         std::cout << "[DEBUG-FACADE] iter=" << iter 
                   << " sc_mag_switch=" << inp.sc_mag_switch 

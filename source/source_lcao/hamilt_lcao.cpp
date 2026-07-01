@@ -394,7 +394,7 @@ HamiltLCAO<TK, TR>::HamiltLCAO(const UnitCell& ucell,
             }
             this->getOperator()->add(plus_u);
         }
-        if (PARAM.inp.sc_mag_switch)
+        if (PARAM.inp.sc_mag_switch || PARAM.inp.sc_charge_switch)
         {
             Operator<TK>* sc_lambda = new DeltaSpin<OperatorLCAO<TK, TR>>(this->hsk,
                                                                           this->kv->kvec_d,
