@@ -911,6 +911,255 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_qs_attribution(cons
     std::cout << "[DeltaQS] Attribution written to: " << fname << std::endl;
     std::cout << std::string(60, '=') << "\n" << std::endl;
 }
+
+// ============================================================================
+// Phase 7: Multi-start optimization and dataset generation
+// ============================================================================
+
+template <>
+void spinconstrain::SpinConstrain<std::complex<double>>::run_qs_multistart(
+    int n_starts,
+    std::pair<double, double> N_range,
+    std::pair<double, double> M_range,
+    const std::string& optimizer_type,
+    int max_steps,
+    double conv_thr)
+{
+    int nat = this->get_nat();
+    
+    std::cout << "\n" << std::string(60, '=') << std::endl;
+    std::cout << "[DeltaQS] Multi-Start Optimization" << std::endl;
+    std::cout << "[DeltaQS] n_starts=" << n_starts 
+              << ", optimizer=" << optimizer_type << std::endl;
+    std::cout << "[DeltaQS] N range: [" << N_range.first << ", " << N_range.second << "]" << std::endl;
+    std::cout << "[DeltaQS] M range: [" << M_range.first << ", " << M_range.second << "]" << std::endl;
+    std::cout << std::string(60, '=') << std::endl;
+
+    // Count optimization variables
+    int n_vars = 0;
+    for (int iat = 0; iat < nat; iat++) {
+        if (this->constrain_charge_[iat] != 0) n_vars++;
+        if (this->constrain_[iat].z != 0) n_vars++;
+    }
+
+    if (n_vars == 0) {
+        std::cerr << "[DeltaQS] Error: no constrained atoms found" << std::endl;
+        return;
+    }
+
+    std::string fname = "deltaqs_multistart.dat";
+    std::ofstream ofs(fname);
+    ofs << "# Phase 7: Multi-Start Optimization" << std::endl;
+    ofs << "# Optimizer: " << optimizer_type << std::endl;
+    ofs << "# start  E_final(Ry)  grad_norm  converged  N_init  M_init  N_final  M_final" << std::endl;
+
+    double E_global_min = 1e10;
+    int best_start = -1;
+
+    // Simple random number generator (seed with time)
+    std::srand(std::time(nullptr));
+
+    for (int start = 0; start < n_starts; start++) {
+        std::cout << "\n[DeltaQS] Start " << (start + 1) << "/" << n_starts << std::endl;
+
+        // Random initialization
+        double N_init = N_range.first + (N_range.second - N_range.first) * 
+                        (double)std::rand() / RAND_MAX;
+        double M_init = M_range.first + (M_range.second - M_range.first) * 
+                        (double)std::rand() / RAND_MAX;
+
+        // Set initial targets for first constrained atom
+        bool set_init = false;
+        for (int iat = 0; iat < nat; iat++) {
+            if (this->constrain_charge_[iat] != 0 && !set_init) {
+                this->target_charge_[iat] = N_init;
+                set_init = true;
+            }
+            if (this->constrain_[iat].z != 0 && !set_init) {
+                this->target_mag_[iat].z = M_init;
+                set_init = true;
+            }
+        }
+
+        std::cout << "[DeltaQS] Initial: N=" << N_init << ", M=" << M_init << std::endl;
+
+        // Run optimizer
+        if (optimizer_type == "gradient") {
+            this->run_qs_gradient_descent(max_steps, 0.1, conv_thr);
+        } else if (optimizer_type == "lbfgs") {
+            this->run_qs_lbfgs(max_steps, conv_thr, 5);
+        } else {
+            std::cerr << "[DeltaQS] Error: unknown optimizer type: " << optimizer_type << std::endl;
+            return;
+        }
+
+        // Get final results
+        double E_final = this->pelec->f_en.etot;
+        
+        // Compute gradient norm
+        double grad_norm = 0.0;
+        for (int iat = 0; iat < nat; iat++) {
+            if (this->constrain_charge_[iat] != 0) {
+                grad_norm += this->mu_[iat] * this->mu_[iat];
+            }
+            if (this->constrain_[iat].z != 0) {
+                grad_norm += this->lambda_[iat].z * this->lambda_[iat].z;
+            }
+        }
+        grad_norm = std::sqrt(grad_norm);
+
+        bool converged = (grad_norm < conv_thr);
+
+        // Get final N, M
+        double N_final = 0.0, M_final = 0.0;
+        for (int iat = 0; iat < nat; iat++) {
+            if (this->constrain_charge_[iat] != 0) {
+                N_final = this->target_charge_[iat];
+            }
+            if (this->constrain_[iat].z != 0) {
+                M_final = this->target_mag_[iat].z;
+            }
+        }
+
+        ofs << start << "  " << E_final << "  " << grad_norm << "  " 
+            << (converged ? "yes" : "no") << "  "
+            << N_init << "  " << M_init << "  "
+            << N_final << "  " << M_final << std::endl;
+
+        std::cout << "[DeltaQS] Final: E=" << E_final << " Ry"
+                  << ", |grad|=" << grad_norm << " Ry"
+                  << ", converged=" << (converged ? "yes" : "no") << std::endl;
+
+        // Track global minimum
+        if (E_final < E_global_min) {
+            E_global_min = E_final;
+            best_start = start;
+        }
+    }
+
+    ofs.close();
+    std::cout << "\n[DeltaQS] Multi-start optimization complete" << std::endl;
+    std::cout << "[DeltaQS] Global minimum: E=" << E_global_min << " Ry"
+              << " (start " << best_start << ")" << std::endl;
+    std::cout << "[DeltaQS] Results written to: " << fname << std::endl;
+    std::cout << std::string(60, '=') << "\n" << std::endl;
+}
+
+template <>
+void spinconstrain::SpinConstrain<std::complex<double>>::run_qs_dataset_generation(
+    const std::string& output_file,
+    int n_samples,
+    std::pair<double, double> N_range,
+    std::pair<double, double> M_range,
+    const std::string& sampling_method)
+{
+    int nat = this->get_nat();
+    
+    std::cout << "\n" << std::string(60, '=') << std::endl;
+    std::cout << "[DeltaQS] Dataset Generation" << std::endl;
+    std::cout << "[DeltaQS] n_samples=" << n_samples 
+              << ", method=" << sampling_method << std::endl;
+    std::cout << "[DeltaQS] N range: [" << N_range.first << ", " << N_range.second << "]" << std::endl;
+    std::cout << "[DeltaQS] M range: [" << M_range.first << ", " << M_range.second << "]" << std::endl;
+    std::cout << std::string(60, '=') << std::endl;
+
+    std::ofstream ofs(output_file);
+    ofs << "# Phase 7: DeltaQS Dataset" << std::endl;
+    ofs << "# Sampling method: " << sampling_method << std::endl;
+    ofs << "# N_range: [" << N_range.first << ", " << N_range.second << "]" << std::endl;
+    ofs << "# M_range: [" << M_range.first << ", " << M_range.second << "]" << std::endl;
+    ofs << "#" << std::endl;
+    ofs << "# sample  N_target(e)  M_target(uB)  E(Ry)  N_actual(e)  M_actual(uB)  mu(Ry/e)  lambda(Ry/uB)" << std::endl;
+
+    // Simple random number generator
+    std::srand(std::time(nullptr));
+
+    int successful_samples = 0;
+
+    for (int sample = 0; sample < n_samples; sample++) {
+        std::cout << "\n[DeltaQS] Sample " << (sample + 1) << "/" << n_samples << std::endl;
+
+        // Generate random (N, M)
+        double N_target, M_target;
+        
+        if (sampling_method == "uniform") {
+            N_target = N_range.first + (N_range.second - N_range.first) * 
+                       (double)std::rand() / RAND_MAX;
+            M_target = M_range.first + (M_range.second - M_range.first) * 
+                       (double)std::rand() / RAND_MAX;
+        } else if (sampling_method == "gaussian") {
+            // Box-Muller transform for Gaussian sampling
+            double u1 = (double)std::rand() / RAND_MAX;
+            double u2 = (double)std::rand() / RAND_MAX;
+            double z0 = std::sqrt(-2.0 * std::log(u1)) * std::cos(2.0 * M_PI * u2);
+            double z1 = std::sqrt(-2.0 * std::log(u1)) * std::sin(2.0 * M_PI * u2);
+            
+            // Center and scale
+            double N_center = (N_range.first + N_range.second) / 2.0;
+            double N_std = (N_range.second - N_range.first) / 4.0;
+            double M_center = (M_range.first + M_range.second) / 2.0;
+            double M_std = (M_range.second - M_range.first) / 4.0;
+            
+            N_target = N_center + N_std * z0;
+            M_target = M_center + M_std * z1;
+            
+            // Clamp to range
+            N_target = std::max(N_range.first, std::min(N_range.second, N_target));
+            M_target = std::max(M_range.first, std::min(M_range.second, M_target));
+        } else {
+            std::cerr << "[DeltaQS] Error: unknown sampling method: " << sampling_method << std::endl;
+            return;
+        }
+
+        std::cout << "[DeltaQS] Target: N=" << N_target << ", M=" << M_target << std::endl;
+
+        // Set targets for first constrained atom
+        bool set_target = false;
+        for (int iat = 0; iat < nat; iat++) {
+            if (this->constrain_charge_[iat] != 0 && !set_target) {
+                this->target_charge_[iat] = N_target;
+                set_target = true;
+            }
+            if (this->constrain_[iat].z != 0 && !set_target) {
+                this->target_mag_[iat].z = M_target;
+                set_target = true;
+            }
+        }
+
+        // Run DeltaQS optimization
+        this->run_qs_lambda_loop(sample, false);
+
+        // Get results
+        double E = this->pelec->f_en.etot;
+        double N_actual = 0.0, M_actual = 0.0;
+        double mu = 0.0, lambda = 0.0;
+        
+        for (int iat = 0; iat < nat; iat++) {
+            if (this->constrain_charge_[iat] != 0) {
+                N_actual = this->Ni_[iat];
+                mu = this->mu_[iat];
+            }
+            if (this->constrain_[iat].z != 0) {
+                M_actual = this->Mi_[iat].z;
+                lambda = this->lambda_[iat].z;
+            }
+        }
+
+        ofs << sample << "  " << N_target << "  " << M_target << "  " << E << "  "
+            << N_actual << "  " << M_actual << "  " << mu << "  " << lambda << std::endl;
+
+        std::cout << "[DeltaQS] Result: E=" << E << " Ry"
+                  << ", N_actual=" << N_actual << ", M_actual=" << M_actual << std::endl;
+
+        successful_samples++;
+    }
+
+    ofs.close();
+    std::cout << "\n[DeltaQS] Dataset generation complete" << std::endl;
+    std::cout << "[DeltaQS] Successful samples: " << successful_samples << "/" << n_samples << std::endl;
+    std::cout << "[DeltaQS] Dataset written to: " << output_file << std::endl;
+    std::cout << std::string(60, '=') << "\n" << std::endl;
+}
 #endif
 
 template class spinconstrain::SpinConstrain<std::complex<double>>;

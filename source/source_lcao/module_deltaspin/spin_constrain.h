@@ -847,6 +847,36 @@ public:
     void run_qs_lbfgs(int max_steps, double conv_thr, int history_size = 5);
     void run_qs_attribution(const std::string& ref_label);
     
+    /**
+     * @brief Multi-start optimization for finding global minimum in E(N,M) space.
+     * @param n_starts Number of random starting points
+     * @param N_range Pair of (N_min, N_max) for random initialization
+     * @param M_range Pair of (M_min, M_max) for random initialization
+     * @param optimizer_type Type of optimizer to use ("gradient" or "lbfgs")
+     * @param max_steps Maximum steps per optimization run
+     * @param conv_thr Convergence threshold
+     */
+    void run_qs_multistart(int n_starts, 
+                           std::pair<double, double> N_range,
+                           std::pair<double, double> M_range,
+                           const std::string& optimizer_type = "lbfgs",
+                           int max_steps = 50,
+                           double conv_thr = 0.01);
+    
+    /**
+     * @brief Generate dataset of (N, M, E, μ, λ) for machine learning.
+     * @param output_file Output file name
+     * @param n_samples Number of samples to generate
+     * @param N_range Pair of (N_min, N_max) for sampling
+     * @param M_range Pair of (M_min, M_max) for sampling
+     * @param sampling_method Sampling method ("uniform" or "gaussian")
+     */
+    void run_qs_dataset_generation(const std::string& output_file,
+                                    int n_samples,
+                                    std::pair<double, double> N_range,
+                                    std::pair<double, double> M_range,
+                                    const std::string& sampling_method = "uniform");
+    
     void run_constraint_loop(int iter) {
         if (charge_constraint_enabled_) {
             run_qs_lambda_loop(iter);
