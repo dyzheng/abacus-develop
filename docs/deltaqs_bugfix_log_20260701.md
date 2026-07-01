@@ -70,20 +70,31 @@
 | T0 | Natural charges | PASS | N₀=N₁=13.7563 e, p=86% |
 | T1 | Pure spin | PASS | Mi=±2.0 μB, E=-6773.088 eV |
 | T2 | Pure charge ±0.3e | PASS | Ni=14.059/13.461, targets=14.056/13.456 |
-| T3 | Q+S combined | SLOW | Converges with accuracy mode, slow with auto-override |
-| T5 | Thermodynamic scan | PENDING | Waiting for T3 convergence |
+| T3 | Q+S combined | PASS | Ni=14.057/13.453, |M|=4.11μB, 35 SCF iters |
+| T5 | Thermodynamic scan | PENDING | Ready to run |
 | T7 | Single atom charge | PASS | Ni=14.257, target=14.256 |
-| T8 | Q+S target=natural | SLOW | Very slow convergence, needs investigation |
+| T8 | Q+S target=natural | SCF FAIL | Inner CG converges (45/50), outer SCF diverges at GE50 |
+
+### T8 Analysis
+T8 targets: Mi=±2.2μB (10% above natural ±2.0), Ni=13.7563 (natural charge).
+Inner CG loops converge in most iterations, but outer SCF drho oscillates at ~1e-3
+and diverges at GE50 (drho jumps to 1.1e-2). This is a physics/convergence issue,
+not a code bug. Possible causes: spin target too far from natural, mixing parameters
+suboptimal, or charge+spin coupling instability.
 
 ## Files Modified
 
 1. `source/source_io/module_parameter/read_input_item_exx_dftu.cpp` - onsite_radius autoset
 2. `source/source_esolver/esolver_ks_lcao.cpp` - lambda loop activation gate
 3. `source/source_lcao/module_deltaspin/deltaqs.cpp` - CG line search and restart
-4. `source/source_lcao/module_deltaspin/deltaspin_lcao.cpp` - subspace auto-disable
+4. `source/source_lcao/module_deltaspin/deltaspin_lcao.cpp` - subspace auto-disable + debug cleanup
+
+## Commits
+
+- `a1e554d3f`: fix(deltaqs): pure charge segfault, CG oscillation, subspace incompatibility
 
 ## Remaining Issues
 
-1. **Slow convergence for combined Q+S**: The unified CG loop converges but slowly. May need better preconditioning or step size adaptation.
-2. **Temporary debug prints**: `cal_ni_lcao` prints all atoms (not just constrained), `cal_mi_lcao_wrapper` has `print=true`. Should revert after testing.
-3. **4-process MPI segfault**: Pre-existing issue, not related to DeltaQS changes.
+1. **T8 SCF convergence**: Outer SCF diverges for spin targets 10% above natural. Needs mixing parameter tuning or smaller spin targets.
+2. **4-process MPI segfault**: Pre-existing issue, not related to DeltaQS changes.
+3. **Performance**: Full diagonalization per CG step is expensive. Subspace acceleration could be re-enabled with adaptive cache rebuild.
