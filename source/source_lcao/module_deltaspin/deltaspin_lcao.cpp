@@ -92,11 +92,15 @@ void init_deltaspin_lcao(const UnitCell& ucell,
         }
     }
 
-    if (inp.sc_charge_switch)
+    if (inp.sc_charge_switch && !user_overrode_accel_mode)
     {
         accel_mode = "off";
         accel_rms_thr = -1.0;
         std::cout << "[DeltaQS] Subspace acceleration disabled for charge constraint mode" << std::endl;
+    }
+    else if (inp.sc_charge_switch && user_overrode_accel_mode)
+    {
+        std::cout << "[DeltaQS] WARNING: Subspace acceleration with charge constraint may be inaccurate" << std::endl;
     }
 
 #ifdef __LCAO
