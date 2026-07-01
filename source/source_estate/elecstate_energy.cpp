@@ -326,8 +326,8 @@ void ElecState::cal_energies(const int type)
         this->f_en.esol_cav = get_solvent_model_Acav();
     }
 
-    //! spin constrained energy
-    if (PARAM.inp.sc_mag_switch)
+    //! spin/charge constrained energy
+    if (PARAM.inp.sc_mag_switch || PARAM.inp.sc_charge_switch)
     {
         this->f_en.escon = get_spin_constrain_energy();
     }

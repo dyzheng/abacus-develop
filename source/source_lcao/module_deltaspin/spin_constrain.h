@@ -1139,6 +1139,7 @@ public:
     std::vector<double> lcao_ekb_save_; ///< Cached eigenvalues [nk * nbands]
     /// Lambda values when subspace data was saved (for incremental H correction)
      std::vector<ModuleBase::Vector3<double>> lcao_lambda_in_sub_;
+     std::vector<double> lcao_mu_in_sub_; ///< Mu values when subspace was saved (for incremental H correction)
       /// Acceleration mode parameters
       std::string sc_acceleration_mode_ = "off"; ///< "off", "first_order", "subspace"
       double sc_acceleration_rms_thr_ = -1.0;    ///< RMS threshold (uB) to activate acceleration, <0 disables

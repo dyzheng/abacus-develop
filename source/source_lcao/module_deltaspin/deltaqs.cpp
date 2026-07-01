@@ -506,7 +506,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_qs_lambda_loop(int 
             initial_mu[iat] = this->mu_[iat];
     }
 
-    auto apply_and_solve = [this, nat, has_spin_constraint, has_charge_constraint, &delta_lambda, &delta_mu](int step)
+    auto apply_lambda_mu_and_solve = [this, nat, has_charge_constraint, &delta_lambda, &delta_mu](int step)
     {
         for (int iat = 0; iat < nat; iat++)
         {
@@ -521,21 +521,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_qs_lambda_loop(int 
                 this->mu_[iat] = delta_mu[iat];
         }
 
-        auto* dspin_op = dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double>>*>(
-            this->p_operator);
-        if (dspin_op) dspin_op->update_lambda();
-
-        psi::Psi<std::complex<double>>* psi_t = static_cast<psi::Psi<std::complex<double>>*>(this->psi);
-        hamilt::Hamilt<std::complex<double>>* hamilt_t = static_cast<hamilt::Hamilt<std::complex<double>>*>(this->p_hamilt);
-        hsolver::HSolverLCAO<std::complex<double>> hsolver_t(this->ParaV, PARAM.inp.ks_solver);
-        hsolver_t.solve(hamilt_t, psi_t[0], this->pelec, *this->dm_, *this->pelec->charge, this->nspin_, true);
-        elecstate::calculate_weights(this->pelec->ekb, this->pelec->wg, this->pelec->klist,
-                                     this->pelec->eferm, this->pelec->f_en, this->pelec->nelec_spin,
-                                     this->pelec->skip_weights);
-        elecstate::calEBand(this->pelec->ekb, this->pelec->wg, this->pelec->f_en);
-
-        if (has_spin_constraint) this->cal_mi_lcao(step);
-        if (has_charge_constraint) this->cal_ni_lcao(step, false);
+        this->cal_mw_from_lambda(step, delta_lambda.data());
     };
 
     auto compute_residual_and_rms = [this, nat, has_spin_constraint, has_charge_constraint, n_active, ndim_spin,
@@ -582,7 +568,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_qs_lambda_loop(int 
                     delta_lambda[iat][ic] = initial_lambda[iat][ic];
                 delta_mu[iat] = initial_mu[iat];
             }
-            apply_and_solve(-1);
+            apply_lambda_mu_and_solve(-1);
 
             rms_error = compute_residual_and_rms();
             std::cout << "[DeltaQS] Step -1: RMS = " << rms_error << std::endl;
@@ -596,7 +582,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_qs_lambda_loop(int 
                     delta_lambda[iat][ic] = initial_lambda[iat][ic] + dnu_spin[iat][ic];
                 delta_mu[iat] = initial_mu[iat] + dnu_mu[iat];
             }
-            apply_and_solve(i_step);
+            apply_lambda_mu_and_solve(i_step);
             rms_error = compute_residual_and_rms();
             std::cout << "[DeltaQS] Step " << i_step << ": RMS = " << rms_error << std::endl;
         }
@@ -654,7 +640,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_qs_lambda_loop(int 
                 delta_lambda[iat][ic] = initial_lambda[iat][ic] + dnu_spin[iat][ic];
             delta_mu[iat] = initial_mu[iat] + dnu_mu[iat];
         }
-        apply_and_solve(i_step);
+        apply_lambda_mu_and_solve(i_step);
 
         double rms_plus = compute_residual_and_rms();
 

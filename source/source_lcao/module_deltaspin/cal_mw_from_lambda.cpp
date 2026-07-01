@@ -715,8 +715,9 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mw_from_lambda(
                 for (int ib = 0; ib < nbands; ib++)
                     this->lcao_ekb_save_[ik * nbands + ib] = this->pelec->ekb(ik, ib);
             }
-            // Record the lambda at which subspace was built
+            // Record the lambda and mu at which subspace was built
             this->lcao_lambda_in_sub_ = this->lambda_;
+            this->lcao_mu_in_sub_ = this->mu_;
             this->lcao_subspace_initialized_ = true;
 
             // Compute Mi via subspace method at lambda_ref (V=I).
@@ -817,6 +818,10 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mw_from_lambda(
                 }
                 this->dm_->cal_DMR();
                 this->cal_mi_lcao(i_step);
+                if (this->charge_constraint_enabled_)
+                {
+                    this->cal_ni_lcao(i_step, false);
+                }
             }
             else // sc_acceleration_mode_ == "subspace"
             {
@@ -925,6 +930,10 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mw_from_lambda(
             elecstate::calEBand(this->pelec->ekb, this->pelec->wg, this->pelec->f_en);
 
             this->cal_mi_lcao(i_step);
+            if (this->charge_constraint_enabled_)
+            {
+                this->cal_ni_lcao(i_step, false);
+            }
         }
     }
     else

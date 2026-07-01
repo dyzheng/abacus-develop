@@ -571,6 +571,7 @@ void SpinConstrain<std::complex<double>>::calculate_delta_hcc_lcao(
     const int nat = this->get_nat();
     std::vector<ModuleBase::Vector3<double>> actual_delta;
     const ModuleBase::Vector3<double>* effective_lambda = lambda;
+    std::vector<double> mu_delta(nat, 0.0);
 
     if (full_update)
     {
@@ -580,6 +581,14 @@ void SpinConstrain<std::complex<double>>::calculate_delta_hcc_lcao(
             actual_delta[iat] = lambda[iat] - this->lcao_lambda_in_sub_[iat];
         }
         effective_lambda = actual_delta.data();
+
+        if (this->charge_constraint_enabled_ && !this->lcao_mu_in_sub_.empty())
+        {
+            for (int iat = 0; iat < nat; iat++)
+            {
+                mu_delta[iat] = this->mu_[iat] - this->lcao_mu_in_sub_[iat];
+            }
+        }
     }
 
     const int nloc_eij = ParaV->nrow * ParaV->ncol_bands;
@@ -592,10 +601,10 @@ void SpinConstrain<std::complex<double>>::calculate_delta_hcc_lcao(
 
         for (const auto& [iat, pi_local] : PI_sub_local)
         {
-            const std::complex<double> coeff0(effective_lambda[iat][2], 0.0);
+            const std::complex<double> coeff0(effective_lambda[iat][2] + mu_delta[iat], 0.0);
             const std::complex<double> coeff1(effective_lambda[iat][0], -effective_lambda[iat][1]);
             const std::complex<double> coeff2(effective_lambda[iat][0], effective_lambda[iat][1]);
-            const std::complex<double> coeff3(-effective_lambda[iat][2], 0.0);
+            const std::complex<double> coeff3(-effective_lambda[iat][2] + mu_delta[iat], 0.0);
 
             const std::complex<double>* pi_ptr = pi_local.data();
             for (int j_local = 0; j_local < ncol_bands; j_local++)
@@ -640,7 +649,7 @@ void SpinConstrain<std::complex<double>>::calculate_delta_hcc_lcao(
 
         for (const auto& [iat, pi_local] : PI_sub_local)
         {
-            const std::complex<double> coeff(effective_lambda[iat][2] * spin_sign, 0.0);
+            const std::complex<double> coeff(effective_lambda[iat][2] * spin_sign + mu_delta[iat], 0.0);
             const std::complex<double>* pi_ptr = pi_local.data();
             for (int ij = 0; ij < nloc_eij; ij++)
             {
@@ -854,6 +863,10 @@ void SpinConstrain<std::complex<double>>::cal_mi_lcao_subspace(
     this->dm_->cal_DMR();
 
     this->cal_mi_lcao(0);
+    if (this->charge_constraint_enabled_)
+    {
+        this->cal_ni_lcao(0, false);
+    }
 
     for (int ik = 0; ik < nk; ik++)
     {
