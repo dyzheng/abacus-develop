@@ -79,6 +79,67 @@ void DeltaP::write_results(const UnitCell& ucell) const
         << " " << std::setw(14) << results_.P_abacus.y
         << " " << std::setw(14) << results_.P_abacus.z << std::endl;
 
+    // Output per-atom electronic center displacement (from phase unwrapping)
+    const int alpha_idx_io = gdir_ - 1;
+    double a_alpha_io = 0.0;
+    if (gdir_ == 1) a_alpha_io = ucell.lat0 * ucell.a1.norm();
+    else if (gdir_ == 2) a_alpha_io = ucell.lat0 * ucell.a2.norm();
+    else a_alpha_io = ucell.lat0 * ucell.a3.norm();
+
+    ofs << "#" << std::endl;
+    ofs << "# Per-atom electronic center displacement (phase unwrapping)" << std::endl;
+    ofs << "# Atom    r_elec(bohr)   r_ion(bohr)   delta_r(bohr)  delta_r(A)" << std::endl;
+    for (int iat = 0; iat < nat_; iat++)
+    {
+        int ia, it;
+        ucell.iat2iait(iat, &ia, &it);
+        double r_elec = results_.r_elec_center[iat][alpha_idx_io];
+        double r_ion = 0.0;
+        if (gdir_ == 1) r_ion = ucell.get_tau(iat).x * ucell.lat0;
+        else if (gdir_ == 2) r_ion = ucell.get_tau(iat).y * ucell.lat0;
+        else r_ion = ucell.get_tau(iat).z * ucell.lat0;
+        double delta_r = r_ion - r_elec;
+        double delta_r_A = delta_r / 1.8897259886;
+        ofs << "  " << std::setw(4) << ucell.atom_label[it]
+            << " " << std::setw(4) << ia
+            << "  " << std::setw(14) << r_elec
+            << "  " << std::setw(14) << r_ion
+            << "  " << std::setw(14) << delta_r
+            << "  " << std::setw(14) << delta_r_A
+            << std::endl;
+    }
+
+    (void)a_alpha_io;
+
+    // Output full w_In matrix for post-processing with Wannier90 WF centers
+    {
+        const std::string wfile = out_dir + "/deltap_smo_weights.dat";
+        std::ofstream wfs(wfile);
+        if (wfs.is_open())
+        {
+            int nocc_w = results_.smo_weights.size();
+            int nat_w = (nocc_w > 0) ? results_.smo_weights[0].size() : 0;
+
+            wfs << "# DeltaP SMO projection weights w_In" << std::endl;
+            wfs << "# w_In = sum_{a in I} |<alpha_a|v_n>|^2" << std::endl;
+            wfs << "# Non-orthogonal: normalize per n as w_In_norm = w_In / sum_I w_In" << std::endl;
+            wfs << "# Row = WF index n (0-based), Column = atom index I (0-based)" << std::endl;
+            wfs << "# n_occ = " << nocc_w << "  nat = " << nat_w << std::endl;
+            wfs << std::scientific << std::setprecision(8);
+            for (int n = 0; n < nocc_w; n++)
+            {
+                for (int iat = 0; iat < nat_w; iat++)
+                {
+                    if (iat > 0) wfs << " ";
+                    wfs << results_.smo_weights[n][iat];
+                }
+                wfs << "\n";
+            }
+            wfs.close();
+            std::cout << " * DeltaP SMO weights written to " << wfile << std::endl;
+        }
+    }
+
     ofs.close();
     std::cout << " * DeltaP results written to " << filename << std::endl;
 }

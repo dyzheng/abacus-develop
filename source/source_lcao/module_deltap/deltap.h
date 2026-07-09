@@ -39,6 +39,10 @@ struct KSpaceData {
 struct AtomicPolarization {
     std::vector<ModuleBase::Vector3<double>> P_I;
     std::vector<ModuleBase::Vector3<double>> gamma_I;
+    std::vector<double> smo_weight_sum;
+    std::vector<ModuleBase::Vector3<double>> gamma_I_raw;
+    std::vector<ModuleBase::Vector3<double>> r_elec_center;
+    std::vector<std::vector<double>> smo_weights;  // w_In: [n_occ][nat]
     ModuleBase::Vector3<double> P_total;
     ModuleBase::Vector3<double> P_abacus;
 };
@@ -53,6 +57,7 @@ public:
               const K_Vectors& kv,
               const TwoCenterIntegrator* intor,
               const TwoCenterIntegrator* overlap_intor,
+              const TwoCenterIntegrator* onsite_onsite_intor,
               const std::vector<double>& orb_cutoff,
               double rm,
               int gdir,
@@ -75,6 +80,22 @@ public:
 
     const AtomicPolarization& get_results() const { return results_; }
 
+    /// Lightweight Wilson loop for SCF inner loop (public for esolver access).
+    void compute_gamma_scf(const UnitCell& ucell,
+                           const psi::Psi<std::complex<double>>* psi,
+                           const elecstate::ElecState* pelec);
+
+    /// Compute k-dependent HK correction for constrained DFT (Berry connection operator).
+    /// M(k_j) = (i/2) * S(k_j,k_{j+1}) * C(k_{j+1}) * W_eff(k_j) * C†(k_j)
+    /// Serial only for now (nrow == ncol).
+    void compute_hk_correction(const UnitCell& ucell,
+                               const psi::Psi<std::complex<double>>* psi,
+                               const std::vector<double>& lambda,
+                               std::unordered_map<int, std::vector<std::complex<double>>>& hk_correction);
+
+    /// Load branch state from file (public for esolver access).
+    void load_branch();
+
 private:
     void compute_real_overlaps(const UnitCell& ucell, const Grid_Driver& gd);
     void setup_kstring(const K_Vectors& kv);
@@ -86,20 +107,38 @@ private:
                            const ModuleBase::Vector3<double>& kvec_c_R);
     void compute_D_I(int ik, const std::complex<double>* psi_k, int nbands, int nrow_local);
     void compute_berry_connection(int ik, const std::complex<double>* psi_k,
-                                  int nbands, int nrow_local, const double* wg);
+                                   int nbands, int nrow_local, const double* wg);
     void integrate_polarization(const UnitCell& ucell, int nbands);
+    void compute_smo_overlap_matrix(const UnitCell& ucell);
+    int M_a_for_snap(const UnitCell& ucell, int T, int L, int m_idx) const;
+    void compute_resta_z(const UnitCell& ucell,
+                         const psi::Psi<std::complex<double>>* psi,
+                         const elecstate::ElecState* pelec);
     void gauge_fix_smo_anchored(int nbands);
     void compute_wannier_polarization(const UnitCell& ucell,
                                       const psi::Psi<std::complex<double>>* psi,
                                       const elecstate::ElecState* pelec);
+
     void verify_sum_rule();
     void write_results(const UnitCell& ucell) const;
-    void load_branch();
     void save_branch() const;
+
+    /// Select the 2π branch nearest to a reference value.
+    /// Given principal value γ^I_0 = Σ_n w^I_n·arg(λ_n) and weights w^I_n,
+    /// searches the set {γ^I_0 + 2π·w^I·k : k ∈ Z^N_occ} for the element
+    /// closest to gamma_prev.  Returns the selected value and the integer
+    /// shift vector k (for diagnostics).
+    double select_branch_set(
+        const std::vector<double>& weights,   // w^I_n  [nbands]
+        const std::vector<double>& arg_evals, // arg(λ_n) [nbands]
+        int nbands,
+        double gamma_prev,
+        std::vector<int>& k_selected) const;  // output: k_n [nbands]
 
     // Configuration
     const TwoCenterIntegrator* intor_ = nullptr;
     const TwoCenterIntegrator* overlap_intor_ = nullptr;
+    const TwoCenterIntegrator* onsite_onsite_intor_ = nullptr;  // <phi_onsite|phi_onsite>
     cal_r_overlap_R* r_overlap_ = nullptr;  // for <phi|r|phi(R)> position matrix
     unkOverlap_lcao* berry_overlap_ = nullptr;  // for berry_phase-exact overlap matrix
     std::vector<double> orb_cutoff_;
@@ -136,6 +175,16 @@ private:
     std::vector<std::complex<double>> W_prev_;
     bool has_prev_ = false;
 
+    // SCF mode: skip file I/O during inner loop iterations
+    bool scf_mode_ = false;
+    bool scf_initialized_ = false;
+
+    // Branch-set selection diagnostics: per-atom principal value, selected
+    // value, and integer shift vector k_n that was applied.
+    std::vector<double> gamma_principal_;       // γ^I_0 before selection
+    std::vector<double> gamma_selected_;        // γ^I after selection
+    std::vector<std::vector<int>> branch_k_;    // k_n[iat][n] shift applied
+
     // Infrastructure pointers
     const Parallel_Orbitals* paraV_ = nullptr;
     const Grid_Driver* gd_ = nullptr;
@@ -144,6 +193,11 @@ private:
     // Real-space overlaps: overlap_R_[iat][adj_index]
     std::vector<std::vector<OverlapData>> overlap_R_;
     std::vector<int> nproj_per_atom_;
+
+    // SMO overlap matrix S_{ab} = <alpha_a | alpha_b> and its inverse
+    std::vector<double> smo_overlap_;     // m_dim × m_dim
+    std::vector<double> smo_overlap_inv_; // m_dim × m_dim
+    int smo_m_dim_ = 0;
 
     // k-string data
     std::vector<KSpaceData> kstring_data_;

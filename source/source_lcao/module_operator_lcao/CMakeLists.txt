@@ -13,6 +13,7 @@ add_library(
     td_nonlocal_lcao.cpp
     td_pot_hybrid.cpp
     dspin_lcao.cpp
+    deltap_lcao.cpp
     dftu_lcao.cpp
     operator_force_stress_utils.cpp
 )

@@ -44,6 +44,7 @@ class TwoCenterBundle
     std::unique_ptr<TwoCenterIntegrator> overlap_orb_beta;
     std::unique_ptr<TwoCenterIntegrator> overlap_orb_alpha;
     std::unique_ptr<TwoCenterIntegrator> overlap_orb_onsite;
+    std::unique_ptr<TwoCenterIntegrator> overlap_onsite_onsite;
 
     std::unique_ptr<RadialCollection> orb_;
     std::unique_ptr<RadialCollection> beta_;

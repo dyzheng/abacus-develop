@@ -392,6 +392,7 @@ void ModuleIO::ctrl_scf_lcao(UnitCell& ucell,
         dp.init(ucell, gd, kv,
                 two_center_bundle.overlap_orb_onsite.get(),
                 two_center_bundle.overlap_orb.get(),
+                two_center_bundle.overlap_onsite_onsite.get(),
                 orb.cutoffs(),
                 inp.deltap_rm, inp.deltap_gdir, &pv, &r_overlap, berry_ovl_ptr);
         dp.compute_atomic_polarization(ucell, psi, pelec);

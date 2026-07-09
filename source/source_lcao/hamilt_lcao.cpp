@@ -29,6 +29,7 @@
 #include "source_hsolver/hsolver_lcao.h"
 #include "module_operator_lcao/dftu_lcao.h"
 #include "module_operator_lcao/dspin_lcao.h"
+#include "module_operator_lcao/deltap_lcao.h"
 #include "module_operator_lcao/ekinetic.h"
 #include "module_operator_lcao/meta_lcao.h"
 #include "module_operator_lcao/nonlocal.h"
@@ -406,6 +407,20 @@ HamiltLCAO<TK, TR>::HamiltLCAO(const UnitCell& ucell,
             this->getOperator()->add(sc_lambda);
             spinconstrain::SpinConstrain<TK>& sc = spinconstrain::SpinConstrain<TK>::getScInstance();
             sc.set_operator(sc_lambda);
+        }
+        if (PARAM.inp.deltap_switch && PARAM.inp.deltap_corr)
+        {
+            Operator<TK>* dp_op = new DeltaPOperator<TK, TR>(this->hsk,
+                                                              this->kv->kvec_d,
+                                                              this->hR,
+                                                              ucell,
+                                                              &grid_d,
+                                                              two_center_bundle.overlap_orb_onsite.get(),
+                                                              orb.cutoffs(),
+                                                              PARAM.inp.deltap_rm);
+            this->getOperator()->add(dp_op);
+            this->dp_operator = dynamic_cast<DeltaPOperator<TK, TR>*>(dp_op);
+            this->dp_operator->set_gdir(PARAM.inp.deltap_gdir);
         }
     }
 

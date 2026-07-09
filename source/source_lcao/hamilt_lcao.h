@@ -24,6 +24,9 @@
 namespace hamilt
 {
 
+template <typename TK, typename TR>
+class DeltaPOperator;
+
 // template first for type of k space H matrix elements
 // template second for type of temporary matrix, 
 // gamma_only fix-gamma-matrix + S-gamma, 
@@ -134,6 +137,9 @@ class HamiltLCAO : public Hamilt<TK>
     /// refresh the status of HR
     void refresh(bool yes) override;
 
+    /// get DeltaP correction operator (nullptr if not active)
+    hamilt::DeltaPOperator<TK, TR>* get_dp_operator() const { return this->dp_operator; }
+
     // for target K point, update consequence of hPsi() and matrix()
     virtual void updateHk(const int ik) override;
 
@@ -185,6 +191,8 @@ class HamiltLCAO : public Hamilt<TK>
     int current_spin = 0;
 
     const int istep = 0;
+
+    hamilt::DeltaPOperator<TK, TR>* dp_operator = nullptr;
 };
 
 } // namespace hamilt

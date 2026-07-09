@@ -103,6 +103,13 @@ class ESolver_KS_LCAO : public ESolver_KS
     
     GintPrecisionController gint_precision_controller_;
 
+    // DeltaP SCF constraint members (only used for TK=complex<double>, multi-k)
+    void* dp_scf_ = nullptr;            // deltap::DeltaP* (opaque to avoid template issues)
+    void* berry_ovl_scf_ = nullptr;     // unkOverlap_lcao*
+    void* r_overlap_scf_ = nullptr;     // cal_r_overlap_R*
+    std::vector<double> deltap_target_;
+    bool deltap_scf_initialized_ = false;
+
 
   public:
     const Record_adj & get_RA() const { return RA; }

@@ -24,6 +24,7 @@ enum class calculation_type
     lcao_exx,
     lcao_dftu,
     lcao_sc_lambda,
+    lcao_dp_lambda,
     lcao_tddft_periodic,
 };
 

@@ -13,6 +13,7 @@ namespace deltap {
 
 void DeltaP::init(const UnitCell& ucell, const Grid_Driver& gd, const K_Vectors& kv,
                   const TwoCenterIntegrator* intor, const TwoCenterIntegrator* overlap_intor,
+                  const TwoCenterIntegrator* onsite_onsite_intor,
                   const std::vector<double>& orb_cutoff,
     double rm, int gdir, const Parallel_Orbitals* paraV,
               cal_r_overlap_R* r_overlap,
@@ -20,6 +21,7 @@ void DeltaP::init(const UnitCell& ucell, const Grid_Driver& gd, const K_Vectors&
 {
     intor_ = intor;
     overlap_intor_ = overlap_intor;
+    onsite_onsite_intor_ = onsite_onsite_intor;
     r_overlap_ = r_overlap;
     berry_overlap_ = berry_overlap;
     orb_cutoff_ = orb_cutoff;
@@ -41,6 +43,7 @@ void DeltaP::compute_atomic_polarization(const UnitCell& ucell,
     if (PARAM.inp.deltap_method == "wannier")
     {
         compute_wannier_polarization(ucell, psi, pelec);
+        compute_resta_z(ucell, psi, pelec);
         ModuleBase::timer::end("DeltaP", "compute_atomic_polarization");
         return;
     }
@@ -176,15 +179,15 @@ void DeltaP::setup_kstring(const K_Vectors& kv)
     int string_index = -1;
     if (direction == 1)
     {
-        for (int iz = 0; iz < mp_z; iz++)
+        for (int iz = 0; iz < mp_z_use; iz++)
         {
-            for (int iy = 0; iy < mp_y; iy++)
+            for (int iy = 0; iy < mp_y_use; iy++)
             {
                 string_index++;
-                for (int ix = 0; ix < mp_x; ix++)
+                for (int ix = 0; ix < mp_x_use; ix++)
                 {
-                    k_index_[string_index][ix] = ix + iy * mp_x + iz * mp_x * mp_y;
-                    if (ix == mp_x - 1)
+                    k_index_[string_index][ix] = ix + iy * mp_x_use + iz * mp_x_use * mp_y_use;
+                    if (ix == mp_x_use - 1)
                         k_index_[string_index][ix + 1] = k_index_[string_index][0];
                 }
             }
@@ -192,15 +195,15 @@ void DeltaP::setup_kstring(const K_Vectors& kv)
     }
     else if (direction == 2)
     {
-        for (int iz = 0; iz < mp_z; iz++)
+        for (int iz = 0; iz < mp_z_use; iz++)
         {
-            for (int ix = 0; ix < mp_x; ix++)
+            for (int ix = 0; ix < mp_x_use; ix++)
             {
                 string_index++;
-                for (int iy = 0; iy < mp_y; iy++)
+                for (int iy = 0; iy < mp_y_use; iy++)
                 {
-                    k_index_[string_index][iy] = ix + iy * mp_x + iz * mp_x * mp_y;
-                    if (iy == mp_y - 1)
+                    k_index_[string_index][iy] = ix + iy * mp_x_use + iz * mp_x_use * mp_y_use;
+                    if (iy == mp_y_use - 1)
                         k_index_[string_index][iy + 1] = k_index_[string_index][0];
                 }
             }
@@ -210,15 +213,15 @@ void DeltaP::setup_kstring(const K_Vectors& kv)
     {
         // gdir=3: k-strings along z. Fix ix, iy, vary iz.
         // Must match berry_phase: for iy: for ix: for iz: k_index[string][iz] = ix + iy*mp_x + iz*mp_x*mp_y
-        for (int iy = 0; iy < mp_y; iy++)
+        for (int iy = 0; iy < mp_y_use; iy++)
         {
-            for (int ix = 0; ix < mp_x; ix++)
+            for (int ix = 0; ix < mp_x_use; ix++)
             {
                 string_index++;
-                for (int iz = 0; iz < mp_z; iz++)
+                for (int iz = 0; iz < mp_z_use; iz++)
                 {
-                    k_index_[string_index][iz] = ix + iy * mp_x + iz * mp_x * mp_y;
-                    if (iz == mp_z - 1)
+                    k_index_[string_index][iz] = ix + iy * mp_x_use + iz * mp_x_use * mp_y_use;
+                    if (iz == mp_z_use - 1)
                         k_index_[string_index][iz + 1] = k_index_[string_index][0];
                 }
             }

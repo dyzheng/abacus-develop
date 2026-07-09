@@ -300,7 +300,12 @@ void ReadInput::item_postprocess()
                 }
                 if (para.input.calculation != "nscf")
                 {
-                    ModuleBase::WARNING_QUIT("ReadInput", "calculate berry phase, please set calculation = nscf");
+                    // Allow berry_phase with calculation=scf if deltap_corr is enabled
+                    // (for constrained DFT with Berry phase constraint)
+                    if (!(para.input.calculation == "scf" && para.input.deltap_corr))
+                    {
+                        ModuleBase::WARNING_QUIT("ReadInput", "calculate berry phase, please set calculation = nscf");
+                    }
                 }
                 if (!(para.input.gdir == 1 || para.input.gdir == 2 || para.input.gdir == 3))
                 {

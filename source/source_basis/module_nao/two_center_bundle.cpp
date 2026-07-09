@@ -114,6 +114,9 @@ void TwoCenterBundle::tabulate()
     {
         overlap_orb_onsite = std::unique_ptr<TwoCenterIntegrator>(new TwoCenterIntegrator);
         overlap_orb_onsite->tabulate(*orb_, *orb_onsite_, 'S', nr, cutoff);
+
+        overlap_onsite_onsite = std::unique_ptr<TwoCenterIntegrator>(new TwoCenterIntegrator);
+        overlap_onsite_onsite->tabulate(*orb_onsite_, *orb_onsite_, 'S', nr, cutoff);
     }
 
     ModuleBase::Memory::record("RealGauntTable", RealGauntTable::instance().memory());
@@ -197,6 +200,9 @@ void TwoCenterBundle::tabulate(const double lcao_ecut,
         const int nr_onsite = static_cast<int>(cutoff_onsite / lcao_dr) + 5;
         overlap_orb_onsite = std::unique_ptr<TwoCenterIntegrator>(new TwoCenterIntegrator);
         overlap_orb_onsite->tabulate(*orb_, *orb_onsite_, 'S', nr_onsite, cutoff_onsite);
+
+        overlap_onsite_onsite = std::unique_ptr<TwoCenterIntegrator>(new TwoCenterIntegrator);
+        overlap_onsite_onsite->tabulate(*orb_onsite_, *orb_onsite_, 'S', nr_onsite, cutoff_onsite);
     }
 
     ModuleBase::Memory::record("RealGauntTable", RealGauntTable::instance().memory());

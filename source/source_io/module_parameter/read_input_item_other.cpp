@@ -1216,5 +1216,53 @@ Manual override is allowed: if sc_acceleration_mode is explicitly set, it takes 
         };
         this->add_item(item);
     }
+    {
+        Input_Item item("deltap_corr");
+        item.annotation = "enable DeltaP Hamiltonian correction for constrained DFT";
+        item.category = "DeltaP";
+        item.type = "Boolean";
+        item.description = "Enable SCF constraint: H^lambda = -sum_I lambda_I * tau^I_alpha * P^I";
+        item.default_value = "False";
+        item.unit = "";
+        item.availability = "deltap_switch is true";
+        read_sync_bool(input.deltap_corr);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("deltap_lambda_step");
+        item.annotation = "Lagrange multiplier update step size";
+        item.category = "DeltaP";
+        item.type = "Real";
+        item.description = "Step size for lambda gradient descent: lambda += step * (gamma - target)";
+        item.default_value = "0.5";
+        item.unit = "";
+        item.availability = "deltap_corr is true";
+        read_sync_double(input.deltap_lambda_step);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("deltap_target_file");
+        item.annotation = "file with per-atom target Berry phase for SCF constraint";
+        item.category = "DeltaP";
+        item.type = "String";
+        item.description = "File with per-atom target Berry phase gamma^I (one value per line, nat lines)";
+        item.default_value = "";
+        item.unit = "";
+        item.availability = "deltap_corr is true";
+        read_sync_string(input.deltap_target_file);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("deltap_lambda_init");
+        item.annotation = "initial lambda for all atoms (testing)";
+        item.category = "DeltaP";
+        item.type = "Real";
+        item.description = "Initial Lagrange multiplier value for all atoms (for lambda sweep tests)";
+        item.default_value = "0.0";
+        item.unit = "";
+        item.availability = "deltap_corr is true";
+        read_sync_double(input.deltap_lambda_init);
+        this->add_item(item);
+    }
 }
 } // namespace ModuleIO

@@ -11,6 +11,10 @@
 #include "source_lcao/FORCE_STRESS.h"
 #include "source_estate/elecstate_lcao.h"
 #include "source_lcao/hamilt_lcao.h"
+#include "source_lcao/module_operator_lcao/deltap_lcao.h"
+#include "source_lcao/module_deltap/deltap.h"
+#include "source_io/module_unk/unk_overlap_lcao.h"
+#include "source_io/module_hs/cal_r_overlap_R.h"
 #include "source_hsolver/hsolver_lcao.h"
 #ifdef __EXX
 #include "../source_lcao/module_ri/exx_opt_orb.h"
@@ -657,6 +661,105 @@ void ESolver_KS_LCAO<TK, TR>::iter_finish(UnitCell& ucell, const int istep, int&
 
     // 3) for delta spin
     cal_mi_lcao_wrapper<TK>(iter, PARAM.inp);
+
+    // 3c) DeltaP SCF constraint: compute gamma^I, update lambda
+    if (PARAM.inp.deltap_switch && PARAM.inp.deltap_corr)
+    {
+        if constexpr (std::is_same<TK, std::complex<double>>::value)
+        {
+        auto* dp_op = hamilt_lcao->get_dp_operator();
+        if (!dp_op)
+        {
+            ModuleBase::WARNING_QUIT("ESolver_KS_LCAO::iter_finish", "dp_operator is null but deltap_corr=1");
+        }
+
+        // Initialize Wilson loop infrastructure (first call only)
+        if (!deltap_scf_initialized_)
+        {
+            // Build orb_onsite if not already built
+            if (!two_center_bundle_.overlap_orb_onsite)
+            {
+                two_center_bundle_.build_orb_onsite(PARAM.inp.deltap_rm);
+                two_center_bundle_.tabulate();
+            }
+            // Build position matrix and berry overlap calculators
+            r_overlap_scf_ = new cal_r_overlap_R();
+            static_cast<cal_r_overlap_R*>(r_overlap_scf_)->init(ucell, pv, orb_);
+            berry_ovl_scf_ = new unkOverlap_lcao();
+            static_cast<unkOverlap_lcao*>(berry_ovl_scf_)->init(ucell, kv.get_nkstot(), orb_);
+            static_cast<unkOverlap_lcao*>(berry_ovl_scf_)->cal_R_number(ucell, gd);
+            static_cast<unkOverlap_lcao*>(berry_ovl_scf_)->cal_orb_overlap(ucell);
+            // Create DeltaP object
+            auto* dp = new deltap::DeltaP();
+            dp_scf_ = dp;
+            dp->init(ucell, gd, kv,
+                      two_center_bundle_.overlap_orb_onsite.get(),
+                      two_center_bundle_.overlap_orb.get(),
+                      two_center_bundle_.overlap_onsite_onsite.get(),
+                      orb_.cutoffs(),
+                      PARAM.inp.deltap_rm, PARAM.inp.deltap_gdir,
+                      &pv, static_cast<cal_r_overlap_R*>(r_overlap_scf_),
+                      static_cast<unkOverlap_lcao*>(berry_ovl_scf_));
+            dp->load_branch();
+            // Read target file
+            if (!PARAM.inp.deltap_target_file.empty())
+            {
+                std::ifstream ifs(PARAM.inp.deltap_target_file);
+                if (ifs.is_open())
+                {
+                    deltap_target_.assign(ucell.nat, 0.0);
+                    for (int iat = 0; iat < ucell.nat; ++iat)
+                        ifs >> deltap_target_[iat];
+                    std::cout << " [DeltaP] Loaded target from " << PARAM.inp.deltap_target_file << std::endl;
+                }
+            }
+            if (deltap_target_.empty())
+                deltap_target_.assign(ucell.nat, 0.0);
+            deltap_scf_initialized_ = true;
+        }
+
+        // Compute per-atom Berry phase with branch selection
+        auto* dp = static_cast<deltap::DeltaP*>(dp_scf_);
+        dp->compute_gamma_scf(ucell, psi, this->pelec);
+
+        // Get results
+        const int alpha = PARAM.inp.deltap_gdir - 1;
+        const auto& gamma_I = dp->get_results().gamma_I;
+
+        // Lambda update: gradient descent
+        // Sign convention: increase lambda when gamma > target (drive gamma down)
+        std::vector<double> lambda = dp_op->get_lambda();
+        double step = PARAM.inp.deltap_lambda_step;
+        double max_dev = 0.0;
+        for (int iat = 0; iat < ucell.nat; ++iat)
+        {
+            double gamma = gamma_I[iat][alpha];
+            double target = deltap_target_[iat];
+            lambda[iat] += step * (gamma - target);  // positive update when gamma > target
+            max_dev = std::max(max_dev, std::abs(gamma - target));
+        }
+        dp_op->set_lambda(lambda);
+
+        // Compute k-dependent HK correction (Berry connection operator)
+        // and pass to operator for next SCF step
+        std::unordered_map<int, std::vector<std::complex<double>>> hk_corr;
+        dp->compute_hk_correction(ucell, psi, lambda, hk_corr);
+        dp_op->set_hk_correction(hk_corr);
+
+        // Print status
+        std::cout << " [DeltaP] iter=" << iter
+                  << " max|gamma-target|=" << std::scientific << std::setprecision(4) << max_dev;
+        for (int iat = 0; iat < std::min(ucell.nat, 5); ++iat)
+            std::cout << " g" << iat << "=" << gamma_I[iat][alpha]
+                      << " l" << iat << "=" << lambda[iat];
+        std::cout << std::endl;
+        }
+        else
+        {
+            ModuleBase::WARNING("ESolver_KS_LCAO::iter_finish",
+                "deltap_corr only supports multi-k (complex<double>) calculations");
+        }
+    }
 
     // 3b) direction_only: report magnetic moment status
     if (PARAM.inp.sc_direction_only && PARAM.inp.sc_mag_switch)
