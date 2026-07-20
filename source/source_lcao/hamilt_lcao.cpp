@@ -238,6 +238,20 @@ HamiltLCAO<TK, TR>::HamiltLCAO(const UnitCell& ucell,
             }
             this->getOperator()->add(plus_u);
         }
+
+        if (PARAM.inp.sc_mag_switch || PARAM.inp.sc_charge_switch)
+        {
+            Operator<TK>* sc_lambda = new DeltaSpin<OperatorLCAO<TK, TR>>(this->hsk,
+                                                                          this->kv->kvec_d,
+                                                                          this->hR,
+                                                                          ucell,
+                                                                          &grid_d,
+                                                                          two_center_bundle.overlap_orb_onsite.get(),
+                                                                          orb.cutoffs());
+            this->getOperator()->add(sc_lambda);
+            spinconstrain::SpinConstrain<TK>& sc = spinconstrain::SpinConstrain<TK>::getScInstance();
+            sc.set_operator(sc_lambda);
+        }
     }
     // multi-k-points case to initialize HamiltLCAO, ops will be used
     else if (std::is_same<TK, std::complex<double>>::value)

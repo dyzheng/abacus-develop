@@ -934,6 +934,9 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mw_from_lambda(
                                          this->pelec->skip_weights);
             elecstate::calEBand(this->pelec->ekb, this->pelec->wg, this->pelec->f_en);
 
+            elecstate::cal_dm_psi(this->ParaV, this->pelec->wg, *psi_t, *this->dm_);
+            this->dm_->cal_DMR();
+
             this->cal_mi_lcao(i_step);
             if (this->charge_constraint_enabled_)
             {
