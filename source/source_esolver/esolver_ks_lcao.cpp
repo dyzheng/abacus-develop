@@ -222,6 +222,10 @@ void ESolver_KS_LCAO<TK, TR>::before_scf(UnitCell& ucell, const int istep)
         rdmft_solver.update_ion(ucell, *(this->pw_rho), this->locpp.vloc, this->sf.strucFac);
     }
 
+#ifdef __MPI
+    MPI_Barrier(MPI_COMM_WORLD);
+#endif
+
     ModuleBase::timer::end("ESolver_KS_LCAO", "before_scf");
     return;
 }
