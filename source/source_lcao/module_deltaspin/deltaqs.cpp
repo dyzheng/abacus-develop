@@ -4,6 +4,8 @@
 #include <cmath>
 #include <fstream>
 #include <iomanip>
+#include <tuple>
+#include <utility>
 
 #include "basic_funcs.h"
 #include "source_io/module_parameter/parameter.h"
@@ -166,6 +168,7 @@ template <>
 void spinconstrain::SpinConstrain<std::complex<double>>::cal_ni_lcao(const int& step, bool print)
 {
     if (!this->charge_constraint_enabled_) return;
+    if (!this->p_operator) return;
 
     this->zero_Ni();
     int nat = this->get_nat();
@@ -432,6 +435,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::update_mu_simple(double
 template <>
 void spinconstrain::SpinConstrain<std::complex<double>>::run_qs_lambda_loop(int outer_step, bool rerun)
 {
+    if (!this->p_operator) return;
     int nat = this->get_nat();
 
     bool has_spin_constraint = false;
@@ -475,24 +479,31 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_qs_lambda_loop(int 
     double alpha_spin = this->alpha_trial_;
     double alpha_mu = this->charge_alpha_trial_;
     if (alpha_mu <= 0) alpha_mu = alpha_spin;
-    double mean_error_old = 0.0;
-    double mean_error = 0.0;
-    double rms_error = 0.0;
+    double mean_spin_old = 0.0;
+    double mean_charge_old = 0.0;
+    double mean_spin = 0.0;
+    double mean_charge = 0.0;
 
-    int n_active = 0;
+    int n_spin_active = 0;
+    int n_charge_active = 0;
     for (int iat = 0; iat < nat; iat++)
     {
-        if (this->constrain_[iat].z != 0) n_active++;
-        if (this->nspin_ == 4)
+        if (has_spin_constraint)
         {
-            if (this->constrain_[iat].x != 0) n_active++;
-            if (this->constrain_[iat].y != 0) n_active++;
+            if (this->constrain_[iat].z != 0) n_spin_active++;
+            if (this->nspin_ == 4)
+            {
+                if (this->constrain_[iat].x != 0) n_spin_active++;
+                if (this->constrain_[iat].y != 0) n_spin_active++;
+            }
         }
-        if (has_charge_constraint && this->constrain_charge_[iat] != 0) n_active++;
+        if (has_charge_constraint && this->constrain_charge_[iat] != 0) n_charge_active++;
     }
-    if (n_active == 0) n_active = 1;
+    if (n_spin_active == 0) n_spin_active = 1;
+    if (n_charge_active == 0) n_charge_active = 1;
 
-    std::cout << "[DeltaQS] Unified CG loop: n_active_dims=" << n_active << std::endl;
+    std::cout << "[DeltaQS] Separated CG: n_spin=" << n_spin_active
+              << " n_charge=" << n_charge_active << std::endl;
 
     for (int iat = 0; iat < nat; iat++)
     {
@@ -505,7 +516,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_qs_lambda_loop(int 
             initial_mu[iat] = this->mu_[iat];
     }
 
-    auto apply_lambda_mu_and_solve = [this, nat, has_charge_constraint, &delta_lambda, &delta_mu](int step)
+    auto apply_and_solve = [this, nat, has_charge_constraint, &delta_lambda, &delta_mu](int step)
     {
         for (int iat = 0; iat < nat; iat++)
         {
@@ -519,14 +530,15 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_qs_lambda_loop(int 
             if (has_charge_constraint && this->constrain_charge_[iat] != 0)
                 this->mu_[iat] = delta_mu[iat];
         }
-
         this->cal_mw_from_lambda(step, delta_lambda.data());
     };
 
-    auto compute_residual_and_rms = [this, nat, has_spin_constraint, has_charge_constraint, n_active, ndim_spin,
-                                      &delta_spin, &delta_charge]() -> double
+    auto compute_separated_rms = [this, nat, has_spin_constraint, has_charge_constraint,
+                                   n_spin_active, n_charge_active,
+                                   &delta_spin, &delta_charge]() -> std::pair<double, double>
     {
-        double sum_sq = 0.0;
+        double sum_sq_spin = 0.0;
+        double sum_sq_charge = 0.0;
         for (int iat = 0; iat < nat; iat++)
         {
             if (has_spin_constraint)
@@ -536,7 +548,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_qs_lambda_loop(int 
                     if (this->constrain_[iat][ic] != 0)
                     {
                         delta_spin[iat][ic] = this->Mi_[iat][ic] - this->target_mag_[iat][ic];
-                        sum_sq += delta_spin[iat][ic] * delta_spin[iat][ic];
+                        sum_sq_spin += delta_spin[iat][ic] * delta_spin[iat][ic];
                     }
                     else
                     {
@@ -547,15 +559,21 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_qs_lambda_loop(int 
             if (has_charge_constraint && this->constrain_charge_[iat] != 0)
             {
                 delta_charge[iat] = this->Ni_[iat] - this->target_charge_[iat];
-                sum_sq += delta_charge[iat] * delta_charge[iat];
+                sum_sq_charge += delta_charge[iat] * delta_charge[iat];
             }
             else
             {
                 delta_charge[iat] = 0.0;
             }
         }
-        return std::sqrt(sum_sq / n_active);
+        return std::make_pair(std::sqrt(sum_sq_spin / n_spin_active),
+                              std::sqrt(sum_sq_charge / n_charge_active));
     };
+
+    double rms_spin = 0.0;
+    double rms_charge = 0.0;
+    bool spin_converged = !has_spin_constraint;
+    bool charge_converged = !has_charge_constraint;
 
     for (int i_step = -1; i_step < this->nsc_; i_step++)
     {
@@ -567,10 +585,10 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_qs_lambda_loop(int 
                     delta_lambda[iat][ic] = initial_lambda[iat][ic];
                 delta_mu[iat] = initial_mu[iat];
             }
-            apply_lambda_mu_and_solve(-1);
-
-            rms_error = compute_residual_and_rms();
-            std::cout << "[DeltaQS] Step -1: RMS = " << rms_error << std::endl;
+            apply_and_solve(-1);
+            std::tie(rms_spin, rms_charge) = compute_separated_rms();
+            std::cout << "[DeltaQS] Step -1: RMS_spin=" << rms_spin
+                      << " RMS_charge=" << rms_charge << std::endl;
             i_step++;
         }
         else
@@ -581,36 +599,44 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_qs_lambda_loop(int 
                     delta_lambda[iat][ic] = initial_lambda[iat][ic] + dnu_spin[iat][ic];
                 delta_mu[iat] = initial_mu[iat] + dnu_mu[iat];
             }
-            apply_lambda_mu_and_solve(i_step);
-            rms_error = compute_residual_and_rms();
-            std::cout << "[DeltaQS] Step " << i_step << ": RMS = " << rms_error << std::endl;
+            apply_and_solve(i_step);
+            std::tie(rms_spin, rms_charge) = compute_separated_rms();
+            std::cout << "[DeltaQS] Step " << i_step
+                      << ": RMS_spin=" << rms_spin
+                      << " RMS_charge=" << rms_charge << std::endl;
+        }
+
+        if (i_step == 0)
+        {
+            if (has_spin_constraint)
+                this->current_sc_thr_ = std::max(rms_spin * this->sc_drop_thr_, this->sc_thr_);
+        }
+
+        spin_converged = !has_spin_constraint || (rms_spin < this->sc_thr_);
+        charge_converged = !has_charge_constraint || (rms_charge < this->sc_charge_thr_);
+        if (spin_converged && charge_converged)
+        {
+            std::cout << "[DeltaQS] Converged: RMS_spin=" << rms_spin
+                      << " < " << this->sc_thr_
+                      << ", RMS_charge=" << rms_charge
+                      << " < " << this->sc_charge_thr_ << std::endl;
+            break;
         }
 
         search_spin = delta_spin;
         search_mu = delta_charge;
 
-        double thr = std::max(this->sc_thr_, this->sc_charge_thr_);
-        if (i_step == 0)
-        {
-            this->current_sc_thr_ = std::max(rms_error * this->sc_drop_thr_, thr);
-        }
-
-        if (rms_error < this->current_sc_thr_)
-        {
-            std::cout << "[DeltaQS] Converged: RMS = " << rms_error
-                      << " < thr = " << this->current_sc_thr_ << std::endl;
-            break;
-        }
-
         if (i_step >= 2)
         {
-            double beta = mean_error / (mean_error_old + 1e-30);
-            if (beta < 0.0 || beta > 10.0) beta = 0.0;
+            double beta_spin = mean_spin / (mean_spin_old + 1e-30);
+            if (beta_spin < 0.0 || beta_spin > 10.0) beta_spin = 0.0;
+            double beta_mu = mean_charge / (mean_charge_old + 1e-30);
+            if (beta_mu < 0.0 || beta_mu > 10.0) beta_mu = 0.0;
             for (int iat = 0; iat < nat; iat++)
             {
                 for (int ic = 0; ic < 3; ic++)
-                    search_spin[iat][ic] = delta_spin[iat][ic] + beta * search_spin_old[iat][ic];
-                search_mu[iat] = delta_charge[iat] + beta * search_mu_old[iat];
+                    search_spin[iat][ic] = delta_spin[iat][ic] + beta_spin * search_spin_old[iat][ic];
+                search_mu[iat] = delta_charge[iat] + beta_mu * search_mu_old[iat];
             }
         }
 
@@ -640,20 +666,29 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_qs_lambda_loop(int 
                 delta_lambda[iat][ic] = initial_lambda[iat][ic] + dnu_spin[iat][ic];
             delta_mu[iat] = initial_mu[iat] + dnu_mu[iat];
         }
-        apply_lambda_mu_and_solve(i_step);
+        apply_and_solve(i_step);
 
-        double rms_plus = compute_residual_and_rms();
+        double rms_spin_plus, rms_charge_plus;
+        std::tie(rms_spin_plus, rms_charge_plus) = compute_separated_rms();
 
-        double alpha_factor = 1.0;
-        if (std::abs(rms_plus - rms_error) > 1e-15)
+        double alpha_factor_spin = 1.0;
+        if (has_spin_constraint && std::abs(rms_spin_plus - rms_spin) > 1e-15)
         {
-            alpha_factor = rms_error / (rms_error - rms_plus + 1e-30);
-            if (alpha_factor < 0.0) alpha_factor = 0.0;
-            if (alpha_factor > 3.0) alpha_factor = 3.0;
+            alpha_factor_spin = rms_spin / (rms_spin - rms_spin_plus + 1e-30);
+            if (alpha_factor_spin < 0.0) alpha_factor_spin = 0.0;
+            if (alpha_factor_spin > 3.0) alpha_factor_spin = 3.0;
         }
 
-        double correction_spin = (alpha_factor - 1.0) * alpha_spin;
-        double correction_mu = (alpha_factor - 1.0) * alpha_mu;
+        double alpha_factor_mu = 1.0;
+        if (has_charge_constraint && std::abs(rms_charge_plus - rms_charge) > 1e-15)
+        {
+            alpha_factor_mu = rms_charge / (rms_charge - rms_charge_plus + 1e-30);
+            if (alpha_factor_mu < 0.0) alpha_factor_mu = 0.0;
+            if (alpha_factor_mu > 3.0) alpha_factor_mu = 3.0;
+        }
+
+        double correction_spin = (alpha_factor_spin - 1.0) * alpha_spin;
+        double correction_mu = (alpha_factor_mu - 1.0) * alpha_mu;
         for (int iat = 0; iat < nat; iat++)
         {
             for (int ic = 0; ic < 3; ic++)
@@ -663,22 +698,20 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_qs_lambda_loop(int 
 
         search_spin_old = search_spin;
         search_mu_old = search_mu;
-        mean_error_old = mean_error;
-        mean_error = rms_error * rms_error;
+        mean_spin_old = mean_spin;
+        mean_charge_old = mean_charge;
+        mean_spin = rms_spin * rms_spin;
+        mean_charge = rms_charge * rms_charge;
 
-        double g;
-        if (alpha_factor <= 0.1)
-        {
-            g = 0.3;
-        }
-        else
-        {
-            g = 1.5 * alpha_factor;
-            if (g > 2.0) g = 2.0;
-            else if (g < 0.5) g = 0.5;
-        }
-        alpha_spin *= std::pow(g, 0.7);
-        alpha_mu *= std::pow(g, 0.7);
+        double g_spin;
+        if (alpha_factor_spin <= 0.1) g_spin = 0.3;
+        else { g_spin = 1.5 * alpha_factor_spin; if (g_spin > 2.0) g_spin = 2.0; else if (g_spin < 0.5) g_spin = 0.5; }
+        alpha_spin *= std::pow(g_spin, 0.7);
+
+        double g_mu;
+        if (alpha_factor_mu <= 0.1) g_mu = 0.3;
+        else { g_mu = 1.5 * alpha_factor_mu; if (g_mu > 2.0) g_mu = 2.0; else if (g_mu < 0.5) g_mu = 0.5; }
+        alpha_mu *= std::pow(g_mu, 0.7);
     }
 
     for (int iat = 0; iat < nat; iat++)
