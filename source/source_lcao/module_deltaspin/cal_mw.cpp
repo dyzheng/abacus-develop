@@ -69,6 +69,11 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mi_lcao(const int& 
 {
     ModuleBase::TITLE("module_deltaspin", "cal_mi_lcao");
     ModuleBase::timer::start("spinconstrain::SpinConstrain", "cal_mi_lcao");
+    if (!this->p_operator)
+    {
+        ModuleBase::timer::end("spinconstrain::SpinConstrain", "cal_mi_lcao");
+        return;
+    }
     // Reset Mi before calculation
     this->zero_Mi();
     std::vector<double> moments;

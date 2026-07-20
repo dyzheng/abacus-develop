@@ -547,6 +547,11 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mw_from_lambda(
 #ifdef __LCAO
     if (PARAM.inp.basis_type == "lcao")
     {
+        if (!this->p_operator)
+        {
+            ModuleBase::timer::end("spinconstrain::SpinConstrain", "cal_mw_from_lambda");
+            return;
+        }
         // =============================================================
         // LCAO PATH: Update lambda in operator, solve, compute Mi
         // =============================================================
@@ -1113,7 +1118,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::update_psi_charge(const
         // not at the converged lambda. Must do a final full diag to get correct psi
         // for charge density construction.
         if (this->acceleration_active_ && this->acceleration_subspace_built_
-            && this->nspin_ == 2)
+            && this->nspin_ == 2 && this->p_operator)
         {
             hamilt::Hamilt<std::complex<double>>* hamilt_t
                 = static_cast<hamilt::Hamilt<std::complex<double>>*>(this->p_hamilt);

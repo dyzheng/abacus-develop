@@ -186,6 +186,7 @@ std::vector<double> UnitCell::get_target_charge() const
 	std::vector<double> target_charge(this->nat, 0.0);
 	for (int it = 0; it < this->ntype; it++)
 	{
+		if ((int)this->atoms[it].target_charge.size() < this->atoms[it].na) continue;
 		for (int ia = 0; ia < this->atoms[it].na; ia++)
 		{
 			int iat = itia2iat(it, ia);
@@ -200,6 +201,7 @@ std::vector<double> UnitCell::get_mu() const
 	std::vector<double> mu(this->nat, 0.0);
 	for (int it = 0; it < this->ntype; it++)
 	{
+		if ((int)this->atoms[it].mu.size() < this->atoms[it].na) continue;
 		for (int ia = 0; ia < this->atoms[it].na; ia++)
 		{
 			int iat = itia2iat(it, ia);
@@ -214,6 +216,7 @@ std::vector<int> UnitCell::get_constrain_charge() const
 	std::vector<int> constrain_charge(this->nat, 0);
 	for (int it = 0; it < this->ntype; it++)
 	{
+		if ((int)this->atoms[it].constrain_charge.size() < this->atoms[it].na) continue;
 		for (int ia = 0; ia < this->atoms[it].na; ia++)
 		{
 			int iat = itia2iat(it, ia);

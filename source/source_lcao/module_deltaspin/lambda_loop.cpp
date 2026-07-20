@@ -452,6 +452,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_local_diagno
 template <>
 void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_loop(int outer_step, bool rerun)
 {
+    if (!this->p_operator) return;
     int nat = this->get_nat();
     int ntype = this->get_ntype();
 

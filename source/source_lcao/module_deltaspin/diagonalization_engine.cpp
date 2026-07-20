@@ -148,17 +148,20 @@ DiagonalizationResult FullSpaceDiagonalizer::solve(int i_step)
         = static_cast<hamilt::Hamilt<std::complex<double>>*>(sc_.p_hamilt);
 
     // Update DeltaSpin operator with current lambda
-    if (sc_.get_nspin() == 2)
+    if (sc_.p_operator)
     {
-        dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double>>*>(
-            sc_.p_operator)
-            ->update_lambda();
-    }
-    else if (sc_.get_nspin() == 4)
-    {
-        dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, std::complex<double>>>* >(
-            sc_.p_operator)
-            ->update_lambda();
+        if (sc_.get_nspin() == 2)
+        {
+            dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double>>*>(
+                sc_.p_operator)
+                ->update_lambda();
+        }
+        else if (sc_.get_nspin() == 4)
+        {
+            dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, std::complex<double>>>* >(
+                sc_.p_operator)
+                ->update_lambda();
+        }
     }
 
     // Full diagonalization without charge update (last param = true)
@@ -251,17 +254,20 @@ DiagonalizationResult SubspaceDiagonalizer::solve(int i_step)
     }
 
     // Update DeltaSpin operator with current lambda
-    if (sc_.get_nspin() == 2)
+    if (sc_.p_operator)
     {
-        dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double>>*>(
-            sc_.p_operator)
-            ->update_lambda();
-    }
-    else if (sc_.get_nspin() == 4)
-    {
-        dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, std::complex<double>>>* >(
-            sc_.p_operator)
-            ->update_lambda();
+        if (sc_.get_nspin() == 2)
+        {
+            dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double>>*>(
+                sc_.p_operator)
+                ->update_lambda();
+        }
+        else if (sc_.get_nspin() == 4)
+        {
+            dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, std::complex<double>>>* >(
+                sc_.p_operator)
+                ->update_lambda();
+        }
     }
 
     // Storage for eigenvectors per k-point
@@ -355,15 +361,18 @@ bool SubspaceDiagonalizer::build_subspace(
     // Without this step, psi is stale (from BFGS trial step) and H0_sub
     // will have large off-diagonal elements, breaking the perturbation theory.
     {
-        if (sc_.get_nspin() == 2)
+        if (sc_.p_operator)
         {
-            dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double> > *>(
-                sc_.p_operator)->update_lambda();
-        }
-        else if (sc_.get_nspin() == 4)
-        {
-            dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, std::complex<double> > > *>(
-                sc_.p_operator)->update_lambda();
+            if (sc_.get_nspin() == 2)
+            {
+                dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double> > *>(
+                    sc_.p_operator)->update_lambda();
+            }
+            else if (sc_.get_nspin() == 4)
+            {
+                dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, std::complex<double> > > *>(
+                    sc_.p_operator)->update_lambda();
+            }
         }
 
         hsolver::HSolverLCAO<std::complex<double>> hsolver_t(sc_.ParaV, PARAM.inp.ks_solver);
@@ -583,15 +592,18 @@ bool FirstOrderResponseEngine::build_subspace(
     // CRITICAL: Same as SubspaceDiagonalizer - must run full diagonalization
     // first to update psi to eigenvectors of H(lambda_ref).
     {
-        if (sc_.get_nspin() == 2)
+        if (sc_.p_operator)
         {
-            dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double> > *>(
-                sc_.p_operator)->update_lambda();
-        }
-        else if (sc_.get_nspin() == 4)
-        {
-            dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, std::complex<double> > > *>(
-                sc_.p_operator)->update_lambda();
+            if (sc_.get_nspin() == 2)
+            {
+                dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double> > *>(
+                    sc_.p_operator)->update_lambda();
+            }
+            else if (sc_.get_nspin() == 4)
+            {
+                dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, std::complex<double> > > *>(
+                    sc_.p_operator)->update_lambda();
+            }
         }
 
         hamilt::Hamilt<std::complex<double>>* hamilt_t
