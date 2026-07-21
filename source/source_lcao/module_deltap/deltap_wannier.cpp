@@ -353,6 +353,7 @@ void DeltaP::compute_wannier_polarization(
         std::vector<double> gamma_raw_accum(nat_, 0.0);
         std::vector<double> r_elec_accum(nat_, 0.0);
         int n_strings_processed = 0;
+        std::vector<std::vector<double>> w_In_first_string_;  // current alpha's first-string weights
         std::vector<std::complex<double>> zeta_list;
 
         // Branch reference: if previous converged value exists, use it;
@@ -1059,6 +1060,7 @@ void DeltaP::compute_wannier_polarization(
         if (n_strings_processed == 1)
         {
             results_.smo_weights = w_In_matrix;
+            w_In_first_string_ = w_In_matrix;  // save for global branch search (current alpha)
         }
 
         // Per-atom polarization: zeta rescaling (preserves relative distribution
@@ -1091,78 +1093,14 @@ void DeltaP::compute_wannier_polarization(
                 }
             }
 
-            // Step 2: cross-structure branch-set selection.
-            // First, target-aware pre-alignment: search multi-band shifts
-            // that bring per-atom γ as close as possible to the target
-            // polarization.  Single-band shifts are too coarse when all
-            // w_norm[n] are large (shift_amp > 1.2 rad).  Multi-band
-            // combinations (e.g. band_a +1, band_b -1) achieve fine shifts
-            // like 2.18 - 1.44 = 0.74 rad that single bands cannot reach.
-            if (!target_gamma_.empty())
-            {
-                for (int iat = 0; iat < nat_; ++iat)
-                {
-                    double g = gamma_I_per_atom[iat];
-                    double target = target_gamma_[iat];
-                    double best_val = g;
-                    double best_dist = std::abs(g - target);
-                    double w_total = 0.0;
-                    for (int n = 0; n < n_dim; ++n)
-                        w_total += w_In_matrix[n][iat];
-                    if (w_total < 1e-12) continue;
-
-                    // Pre-compute normalized shift amplitudes
-                    std::vector<double> shift_amp(n_dim);
-                    for (int n = 0; n < n_dim; ++n)
-                        shift_amp[n] = 2.0 * M_PI * w_In_matrix[n][iat] / w_total;
-
-                    // Bounded exhaustive search over all k vectors.
-                    // For n_dim=4 and K=3: 7^4 = 2401 candidates (fast).
-                    const int K = 3;
-                    std::vector<int> kvec(n_dim, 0);
-                    bool done = false;
-                    while (!done)
-                    {
-                        // Skip all-zeros (no shift)
-                        bool all_zero = true;
-                        double shift = 0.0;
-                        for (int n = 0; n < n_dim; ++n)
-                        {
-                            if (kvec[n] != 0) { all_zero = false; }
-                            shift += kvec[n] * shift_amp[n];
-                        }
-                        if (!all_zero)
-                        {
-                            double candidate = g + shift;
-                            double dist = std::abs(candidate - target);
-                            if (dist < best_dist)
-                            {
-                                best_dist = dist;
-                                best_val = candidate;
-                            }
-                        }
-                        // Increment kvec (odometer-style)
-                        int carry_pos = 0;
-                        while (carry_pos < n_dim)
-                        {
-                            kvec[carry_pos]++;
-                            if (kvec[carry_pos] > K)
-                            {
-                                kvec[carry_pos] = -K;
-                                carry_pos++;
-                            }
-                            else
-                            {
-                                break;
-                            }
-                        }
-                        if (carry_pos >= n_dim) done = true;
-                    }
-
-                    gamma_accum[iat] += best_val - gamma_I_per_atom[iat];
-                    gamma_I_per_atom[iat] = best_val;
-                }
-            }
+            // Step 2: DELETED — per-string target-aware search moved to
+            // post-loop global search.  Different Wilson-loop strings have
+            // different w_In weights and thus different shift lattices.
+            // Independent per-string searches can fail when a string's
+            // shift lattice is too sparse to reach the target, corrupting
+            // the final average.  The global search on the accumulated
+            // average uses the first string's shift amplitudes (representative)
+            // and is much more robust.
 
             // Step 3: cross-structure branch-set consistency.
             // Ensure per-atom γ stays within π of its previous value
@@ -1275,6 +1213,81 @@ void DeltaP::compute_wannier_polarization(
             }
         }
         std::cout << std::endl;
+    }
+
+    // Global target-aware branch selection.
+    // Applied ONCE on the accumulated average (not per-string), to avoid
+    // branch inconsistency when different Wilson-loop strings have
+    // different w_In weights (different shift lattices).
+    // Uses the first string's w_In (stored in results_.smo_weights) as
+    // representative shift amplitudes.
+    if (!target_gamma_.empty() && n_strings_processed > 0 && !w_In_first_string_.empty())
+    {
+        const auto& wm = w_In_first_string_;
+        for (int iat = 0; iat < nat_; ++iat)
+        {
+            double avg_raw = gamma_accum[iat] / n_strings_processed;
+            double target = target_gamma_[iat];
+
+            double w_total = 0.0;
+            if (!wm.empty())
+                for (int n = 0; n < static_cast<int>(wm.size()) && static_cast<size_t>(iat) < wm[n].size(); ++n)
+                    w_total += wm[n][iat];
+
+            if (w_total < 1e-12) continue;
+
+            std::vector<double> shift_amp;
+            if (!wm.empty())
+                for (int n = 0; n < static_cast<int>(wm.size()) && static_cast<size_t>(iat) < wm[n].size(); ++n)
+                    shift_amp.push_back(2.0 * M_PI * wm[n][iat] / w_total);
+
+            const int n_dim_shift = static_cast<int>(shift_amp.size());
+            if (n_dim_shift == 0) continue;
+
+            double best_val = avg_raw;
+            double best_dist = std::abs(avg_raw - target);
+            const int K = 5;
+            std::vector<int> kvec(n_dim_shift, 0);
+            bool done = false;
+            while (!done)
+            {
+                bool all_zero = true;
+                double shift = 0.0;
+                for (int n = 0; n < n_dim_shift; ++n)
+                {
+                    if (kvec[n] != 0) { all_zero = false; }
+                    shift += kvec[n] * shift_amp[n];
+                }
+                if (!all_zero)
+                {
+                    double candidate = avg_raw + shift;
+                    double dist = std::abs(candidate - target);
+                    if (dist < best_dist)
+                    {
+                        best_dist = dist;
+                        best_val = candidate;
+                    }
+                }
+                // Increment kvec (odometer-style)
+                int carry_pos = 0;
+                while (carry_pos < n_dim_shift)
+                {
+                    kvec[carry_pos]++;
+                    if (kvec[carry_pos] > K)
+                    {
+                        kvec[carry_pos] = -K;
+                        carry_pos++;
+                    }
+                    else { break; }
+                }
+                if (carry_pos >= n_dim_shift) done = true;
+            }
+
+            // Apply the global branch shift to gamma_accum
+            // gamma_accum = raw_sum + zeta_corrections; we need to add the branch shift
+            double delta = best_val - avg_raw;
+            gamma_accum[iat] += delta * n_strings_processed;
+        }
     }
 
     // Initialize results arrays (once, before alpha loop)
