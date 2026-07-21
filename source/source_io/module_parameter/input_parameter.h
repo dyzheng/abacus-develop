@@ -630,6 +630,7 @@ struct Input_para
     std::string deltap_target_file = "";  ///< file with per-atom target Berry phase gamma^I
     double deltap_lambda_init = 0.0;      ///< initial lambda for all atoms (testing)
     double deltap_lambda_mixing = 0.0;     ///< damping factor for lambda: λ_new = β·λ_opt + (1-β)·λ_old (0=no mixing, 1=full BFGS)
+    std::string deltap_constraint_mode = "per_atom";  ///< "per_atom": per-atom constraint; "total": constrain sum Σγ_I
 
     // ==============   #Parameters (18.Quasiatomic Orbital analysis) =========
     ///<==========================================================

@@ -1219,15 +1219,92 @@ void DeltaP::compute_wannier_polarization(
     // Applied ONCE on the accumulated average (not per-string), to avoid
     // branch inconsistency when different Wilson-loop strings have
     // different w_In weights (different shift lattices).
-    // Uses the first string's w_In (stored in results_.smo_weights) as
+    // Uses the first string's w_In (stored in w_In_first_string_) as
     // representative shift amplitudes.
     if (!target_gamma_.empty() && n_strings_processed > 0 && !w_In_first_string_.empty())
     {
         const auto& wm = w_In_first_string_;
-        for (int iat = 0; iat < nat_; ++iat)
+        bool total_mode = (PARAM.inp.deltap_constraint_mode == "total");
+
+        if (total_mode)
         {
-            double avg_raw = gamma_accum[iat] / n_strings_processed;
-            double target = target_gamma_[iat];
+            // Sequential greedy: each atom targets the remaining total
+            double total_target = 0.0;
+            for (int iat = 0; iat < nat_; ++iat)
+                total_target += target_gamma_[iat];
+
+            double running_sum = 0.0;
+            for (int iat = 0; iat < nat_; ++iat)
+            {
+                double avg_raw = gamma_accum[iat] / n_strings_processed;
+                int remaining = nat_ - iat;
+                // The remaining atoms need to contribute: total_target - running_sum
+                // This atom's fair share (assuming equal): (total_target - running_sum) / remaining
+                double effective_target = avg_raw;  // default: no shift
+                if (remaining > 1)
+                    effective_target = (total_target - running_sum) / remaining;
+                else
+                    effective_target = total_target - running_sum;  // last atom takes the remainder
+
+                double w_total = 0.0;
+                if (!wm.empty())
+                    for (int n = 0; n < static_cast<int>(wm.size()) && static_cast<size_t>(iat) < wm[n].size(); ++n)
+                        w_total += wm[n][iat];
+                if (w_total < 1e-12) { running_sum += avg_raw; continue; }
+
+                std::vector<double> shift_amp;
+                if (!wm.empty())
+                    for (int n = 0; n < static_cast<int>(wm.size()) && static_cast<size_t>(iat) < wm[n].size(); ++n)
+                        shift_amp.push_back(2.0 * M_PI * wm[n][iat] / w_total);
+
+                const int n_dim_shift = static_cast<int>(shift_amp.size());
+                if (n_dim_shift == 0) { running_sum += avg_raw; continue; }
+
+                double best_val = avg_raw;
+                double best_dist = std::abs(avg_raw - effective_target);
+                const int K = 5;
+                std::vector<int> kvec(n_dim_shift, 0);
+                bool done = false;
+                while (!done)
+                {
+                    bool all_zero = true;
+                    double shift = 0.0;
+                    for (int n = 0; n < n_dim_shift; ++n)
+                    {
+                        if (kvec[n] != 0) { all_zero = false; }
+                        shift += kvec[n] * shift_amp[n];
+                    }
+                    if (!all_zero)
+                    {
+                        double candidate = avg_raw + shift;
+                        double dist = std::abs(candidate - effective_target);
+                        if (dist < best_dist)
+                        {
+                            best_dist = dist;
+                            best_val = candidate;
+                        }
+                    }
+                    int carry_pos = 0;
+                    while (carry_pos < n_dim_shift)
+                    {
+                        kvec[carry_pos]++;
+                        if (kvec[carry_pos] > K) { kvec[carry_pos] = -K; carry_pos++; }
+                        else { break; }
+                    }
+                    if (carry_pos >= n_dim_shift) done = true;
+                }
+
+                double delta = best_val - avg_raw;
+                gamma_accum[iat] += delta * n_strings_processed;
+                running_sum += best_val;
+            }
+        }
+        else
+        {
+            for (int iat = 0; iat < nat_; ++iat)
+            {
+                double avg_raw = gamma_accum[iat] / n_strings_processed;
+                double target = target_gamma_[iat];
 
             double w_total = 0.0;
             if (!wm.empty())
@@ -1288,6 +1365,7 @@ void DeltaP::compute_wannier_polarization(
             double delta = best_val - avg_raw;
             gamma_accum[iat] += delta * n_strings_processed;
         }
+    }
     }
 
     // Initialize results arrays (once, before alpha loop)

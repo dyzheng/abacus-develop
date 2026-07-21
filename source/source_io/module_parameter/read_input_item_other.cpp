@@ -1312,5 +1312,17 @@ Manual override is allowed: if sc_acceleration_mode is explicitly set, it takes 
         read_sync_double(input.deltap_conv_thr);
         this->add_item(item);
     }
+    {
+        Input_Item item("deltap_constraint_mode");
+        item.annotation = "constraint mode: per-atom or total sum";
+        item.category = "DeltaP";
+        item.type = "String";
+        item.description = "per_atom: constrain each atom's gamma individually. total: constrain the sum Sigma_i gamma_I to a single target.";
+        item.default_value = "per_atom";
+        item.unit = "";
+        item.availability = "deltap_corr is true";
+        read_sync_string(input.deltap_constraint_mode);
+        this->add_item(item);
+    }
 }
 } // namespace ModuleIO

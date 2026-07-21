@@ -715,25 +715,44 @@ void ESolver_KS_LCAO<TK, TR>::iter_finish(UnitCell& ucell, const int istep, int&
             std::vector<double> lambda = dp_op->get_lambda();
 
             // Phase indicator: P1 (λ=0), P2 (transition), P3 (λ frozen)
+            bool total_mode = (PARAM.inp.deltap_constraint_mode == "total");
             std::string phase = deltap_lambda_set_ ? "P3" : "P1";
 
             std::cout << " [DeltaP " << phase << "] iter=" << std::setw(3) << iter
                       << " γ=(" << std::fixed << std::setprecision(3);
-            for (int iat = 0; iat < std::min(ucell.nat, 3); ++iat)
+
+            if (total_mode)
             {
-                if (iat > 0) std::cout << ", ";
-                std::cout << gamma_I[iat][alpha];
-            }
-            std::cout << ") λ=(";
-            for (int iat = 0; iat < std::min(ucell.nat, 3); ++iat)
-            {
-                if (iat > 0) std::cout << ", ";
-                if (std::abs(lambda[iat]) < 1e-10)
-                    std::cout << std::scientific << std::setprecision(1) << lambda[iat];
+                double total_g = 0.0, total_t = 0.0;
+                for (int iat = 0; iat < ucell.nat; ++iat)
+                    total_g += gamma_I[iat][alpha];
+                std::cout << total_g << ") Σγ=" << total_g;
+                // show single λ
+                std::cout << " λ=";
+                if (std::abs(lambda[0]) < 1e-10)
+                    std::cout << std::scientific << std::setprecision(1) << lambda[0];
                 else
-                    std::cout << std::scientific << std::setprecision(2) << lambda[iat];
+                    std::cout << std::scientific << std::setprecision(2) << lambda[0];
             }
-            std::cout << ") |γ-t|=" << std::scientific << std::setprecision(3) << max_dev
+            else
+            {
+                for (int iat = 0; iat < ucell.nat; ++iat)
+                {
+                    if (iat > 0) std::cout << ", ";
+                    std::cout << gamma_I[iat][alpha];
+                }
+                std::cout << ") λ=(";
+                for (int iat = 0; iat < ucell.nat; ++iat)
+                {
+                    if (iat > 0) std::cout << ", ";
+                    if (std::abs(lambda[iat]) < 1e-10)
+                        std::cout << std::scientific << std::setprecision(1) << lambda[iat];
+                    else
+                        std::cout << std::scientific << std::setprecision(2) << lambda[iat];
+                }
+                std::cout << ")";
+            }
+            std::cout << " |γ-t|=" << std::scientific << std::setprecision(3) << max_dev
                       << "\n";
         }
         else
@@ -873,19 +892,37 @@ void ESolver_KS_LCAO<TK, TR>::deltap_init(UnitCell& ucell)
     dp->load_branch();
     dp->init_inner_loop();
     // Read target file
+    // total mode: file has ONE value (Σγ target); distribute equally to
+    // all atoms for branch selection, but constraint uses the total sum.
     if (!PARAM.inp.deltap_target_file.empty())
     {
         std::ifstream ifs(PARAM.inp.deltap_target_file);
         if (ifs.is_open())
         {
-            deltap_target_.assign(ucell.nat, 0.0);
-            for (int iat = 0; iat < ucell.nat; ++iat)
-                ifs >> deltap_target_[iat];
-            std::cout << " [DeltaP] Loaded target from " << PARAM.inp.deltap_target_file << std::endl;
+            bool total_mode = (PARAM.inp.deltap_constraint_mode == "total");
+            if (total_mode)
+            {
+                deltap_target_.resize(ucell.nat, 0.0);
+                double total_target = 0.0;
+                ifs >> total_target;
+                for (int iat = 0; iat < ucell.nat; ++iat)
+                    deltap_target_[iat] = total_target / ucell.nat;
+                std::cout << " [DeltaP] Loaded total target Σγ=" << total_target
+                          << " → per-atom=" << total_target / ucell.nat << std::endl;
+            }
+            else
+            {
+                deltap_target_.assign(ucell.nat, 0.0);
+                for (int iat = 0; iat < ucell.nat; ++iat)
+                    ifs >> deltap_target_[iat];
+                std::cout << " [DeltaP] Loaded target from " << PARAM.inp.deltap_target_file << std::endl;
+            }
         }
     }
-    if (deltap_target_.empty())
-        deltap_target_.assign(ucell.nat, 0.0);
+    // When no target file is specified, leave deltap_target_ empty.
+    // This allows ground-state γ determination without target-aware
+    // branch selection, while constraint (deltap_corr=1) still applies
+    // the Hamiltonian correction with the current (possibly zero) λ.
     // Set target on DeltaP object for target-aware branch selection
     static_cast<deltap::DeltaP*>(dp_scf_)->set_target_gamma(deltap_target_);
     deltap_scf_initialized_ = true;
@@ -908,8 +945,9 @@ double ESolver_KS_LCAO<TK, TR>::deltap_compute_gamma(UnitCell& ucell, const int 
         const auto& gamma_I = dp->get_results().gamma_I;
 
         double max_dev = 0.0;
-        for (int iat = 0; iat < ucell.nat; ++iat)
-            max_dev = std::max(max_dev, std::abs(gamma_I[iat][alpha] - deltap_target_[iat]));
+        if (!deltap_target_.empty())
+            for (int iat = 0; iat < ucell.nat; ++iat)
+                max_dev = std::max(max_dev, std::abs(gamma_I[iat][alpha] - deltap_target_[iat]));
 
         return max_dev;
     }
@@ -1074,8 +1112,29 @@ void ESolver_KS_LCAO<TK, TR>::deltap_update_lambda(UnitCell& ucell, const int it
             if (mixing == 0.0) mixing = 1.0;
 
             std::vector<double> lambda_raw = lambda;
-            for (int iat = 0; iat < ucell.nat; ++iat)
-                lambda_raw[iat] += step * (gamma_I[iat][alpha] - deltap_target_[iat]);
+            bool total_mode = (PARAM.inp.deltap_constraint_mode == "total");
+            if (!deltap_target_.empty())
+            {
+                if (total_mode)
+                {
+                    // total mode: one λ shared by all atoms
+                    // λ_new = λ + step * (Σγ_actual - Σγ_target)
+                    double total_actual = 0.0, total_target = 0.0;
+                    for (int iat = 0; iat < ucell.nat; ++iat)
+                    {
+                        total_actual += gamma_I[iat][alpha];
+                        total_target += deltap_target_[iat];
+                    }
+                    double delta = step * (total_actual - total_target);
+                    for (int iat = 0; iat < ucell.nat; ++iat)
+                        lambda_raw[iat] += delta;
+                }
+                else
+                {
+                    for (int iat = 0; iat < ucell.nat; ++iat)
+                        lambda_raw[iat] += step * (gamma_I[iat][alpha] - deltap_target_[iat]);
+                }
+            }
             for (int iat = 0; iat < ucell.nat; ++iat)
                 lambda[iat] = mixing * lambda_raw[iat] + (1.0 - mixing) * lambda[iat];
 
