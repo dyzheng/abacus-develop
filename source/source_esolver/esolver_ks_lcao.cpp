@@ -16,6 +16,7 @@
 #include "source_io/module_unk/unk_overlap_lcao.h"
 #include "source_io/module_hs/cal_r_overlap_R.h"
 #include "source_hsolver/hsolver_lcao.h"
+#include <iomanip>
 #ifdef __EXX
 #include "../source_lcao/module_ri/exx_opt_orb.h"
 #endif
@@ -602,6 +603,22 @@ void ESolver_KS_LCAO<TK, TR>::hamilt2rho_single(UnitCell& ucell, int istep, int 
         }
     }
 
+    // =====================================================================
+    // 2b) DeltaP: inner lambda loop to constrain atomic polarization
+    // =====================================================================
+    // The constrained energy functional adds a penalty term with
+    // Lagrange multiplier lambda for each atom:
+    //   E'[rho] = E[rho] + sum_I lambda_I * (gamma_I - gamma_target_I)
+    //
+    // The inner loop runs BFGS-CG optimization on lambda within a single
+    // SCF iteration, WITHOUT updating the charge density.  This follows
+    // the same pattern as DeltaSpin (above).
+    // =====================================================================
+    if (PARAM.inp.deltap_switch && PARAM.inp.deltap_corr && deltap_scf_initialized_)
+    {
+        deltap_inner_loop(ucell, iter, skip_solve);
+    }
+
     // 3) run Hsolver
     if (!skip_solve)
     {
@@ -667,92 +684,57 @@ void ESolver_KS_LCAO<TK, TR>::iter_finish(UnitCell& ucell, const int istep, int&
     {
         if constexpr (std::is_same<TK, std::complex<double>>::value)
         {
-        auto* dp_op = hamilt_lcao->get_dp_operator();
-        if (!dp_op)
-        {
-            ModuleBase::WARNING_QUIT("ESolver_KS_LCAO::iter_finish", "dp_operator is null but deltap_corr=1");
-        }
-
-        // Initialize Wilson loop infrastructure (first call only)
-        if (!deltap_scf_initialized_)
-        {
-            // Build orb_onsite if not already built
-            if (!two_center_bundle_.overlap_orb_onsite)
+            auto* hamilt_lcao = dynamic_cast<hamilt::HamiltLCAO<TK, TR>*>(this->p_hamilt);
+            if (!hamilt_lcao)
             {
-                two_center_bundle_.build_orb_onsite(PARAM.inp.deltap_rm);
-                two_center_bundle_.tabulate();
+                ModuleBase::WARNING_QUIT("ESolver_KS_LCAO::iter_finish", "p_hamilt does not exist");
             }
-            // Build position matrix and berry overlap calculators
-            r_overlap_scf_ = new cal_r_overlap_R();
-            static_cast<cal_r_overlap_R*>(r_overlap_scf_)->init(ucell, pv, orb_);
-            berry_ovl_scf_ = new unkOverlap_lcao();
-            static_cast<unkOverlap_lcao*>(berry_ovl_scf_)->init(ucell, kv.get_nkstot(), orb_);
-            static_cast<unkOverlap_lcao*>(berry_ovl_scf_)->cal_R_number(ucell, gd);
-            static_cast<unkOverlap_lcao*>(berry_ovl_scf_)->cal_orb_overlap(ucell);
-            // Create DeltaP object
-            auto* dp = new deltap::DeltaP();
-            dp_scf_ = dp;
-            dp->init(ucell, gd, kv,
-                      two_center_bundle_.overlap_orb_onsite.get(),
-                      two_center_bundle_.overlap_orb.get(),
-                      two_center_bundle_.overlap_onsite_onsite.get(),
-                      orb_.cutoffs(),
-                      PARAM.inp.deltap_rm, PARAM.inp.deltap_gdir,
-                      &pv, static_cast<cal_r_overlap_R*>(r_overlap_scf_),
-                      static_cast<unkOverlap_lcao*>(berry_ovl_scf_));
-            dp->load_branch();
-            // Read target file
-            if (!PARAM.inp.deltap_target_file.empty())
+
+            auto* dp_op = hamilt_lcao->get_dp_operator();
+            if (!dp_op)
             {
-                std::ifstream ifs(PARAM.inp.deltap_target_file);
-                if (ifs.is_open())
-                {
-                    deltap_target_.assign(ucell.nat, 0.0);
-                    for (int iat = 0; iat < ucell.nat; ++iat)
-                        ifs >> deltap_target_[iat];
-                    std::cout << " [DeltaP] Loaded target from " << PARAM.inp.deltap_target_file << std::endl;
-                }
+                ModuleBase::WARNING_QUIT("ESolver_KS_LCAO::iter_finish", "dp_operator is null but deltap_corr=1");
             }
-            if (deltap_target_.empty())
-                deltap_target_.assign(ucell.nat, 0.0);
-            deltap_scf_initialized_ = true;
-        }
 
-        // Compute per-atom Berry phase with branch selection
-        auto* dp = static_cast<deltap::DeltaP*>(dp_scf_);
-        dp->compute_gamma_scf(ucell, psi, this->pelec);
+            // Initialize Wilson loop infrastructure (first call only)
+            if (!deltap_scf_initialized_)
+            {
+                deltap_init(ucell);
+            }
 
-        // Get results
-        const int alpha = PARAM.inp.deltap_gdir - 1;
-        const auto& gamma_I = dp->get_results().gamma_I;
+            // Compute gamma (post inner-loop or for diagnostic)
+            double max_dev = deltap_compute_gamma(ucell, iter);
 
-        // Lambda update: gradient descent
-        // Sign convention: increase lambda when gamma > target (drive gamma down)
-        std::vector<double> lambda = dp_op->get_lambda();
-        double step = PARAM.inp.deltap_lambda_step;
-        double max_dev = 0.0;
-        for (int iat = 0; iat < ucell.nat; ++iat)
-        {
-            double gamma = gamma_I[iat][alpha];
-            double target = deltap_target_[iat];
-            lambda[iat] += step * (gamma - target);  // positive update when gamma > target
-            max_dev = std::max(max_dev, std::abs(gamma - target));
-        }
-        dp_op->set_lambda(lambda);
+            // Fallback: if inner loop is inactive (nscf==0), use gradient descent
+            deltap_update_lambda(ucell, iter);
 
-        // Compute k-dependent HK correction (Berry connection operator)
-        // and pass to operator for next SCF step
-        std::unordered_map<int, std::vector<std::complex<double>>> hk_corr;
-        dp->compute_hk_correction(ucell, psi, lambda, hk_corr);
-        dp_op->set_hk_correction(hk_corr);
+            // Print status with phase indicator
+            auto* dp = static_cast<deltap::DeltaP*>(dp_scf_);
+            const int alpha = PARAM.inp.deltap_gdir - 1;
+            const auto& gamma_I = dp->get_results().gamma_I;
+            std::vector<double> lambda = dp_op->get_lambda();
 
-        // Print status
-        std::cout << " [DeltaP] iter=" << iter
-                  << " max|gamma-target|=" << std::scientific << std::setprecision(4) << max_dev;
-        for (int iat = 0; iat < std::min(ucell.nat, 5); ++iat)
-            std::cout << " g" << iat << "=" << gamma_I[iat][alpha]
-                      << " l" << iat << "=" << lambda[iat];
-        std::cout << std::endl;
+            // Phase indicator: P1 (λ=0), P2 (transition), P3 (λ frozen)
+            std::string phase = deltap_lambda_set_ ? "P3" : "P1";
+
+            std::cout << " [DeltaP " << phase << "] iter=" << std::setw(3) << iter
+                      << " γ=(" << std::fixed << std::setprecision(3);
+            for (int iat = 0; iat < std::min(ucell.nat, 3); ++iat)
+            {
+                if (iat > 0) std::cout << ", ";
+                std::cout << gamma_I[iat][alpha];
+            }
+            std::cout << ") λ=(";
+            for (int iat = 0; iat < std::min(ucell.nat, 3); ++iat)
+            {
+                if (iat > 0) std::cout << ", ";
+                if (std::abs(lambda[iat]) < 1e-10)
+                    std::cout << std::scientific << std::setprecision(1) << lambda[iat];
+                else
+                    std::cout << std::scientific << std::setprecision(2) << lambda[iat];
+            }
+            std::cout << ") |γ-t|=" << std::scientific << std::setprecision(3) << max_dev
+                      << "\n";
         }
         else
         {
@@ -858,6 +840,267 @@ void ESolver_KS_LCAO<TK, TR>::after_scf(UnitCell& ucell, const int istep, const 
     }
 
     ModuleBase::timer::end("ESolver_KS_LCAO", "after_scf");
+}
+
+template <typename TK, typename TR>
+void ESolver_KS_LCAO<TK, TR>::deltap_init(UnitCell& ucell)
+{
+    // Branch A: Initialize Wilson loop infrastructure (first call only)
+    // Build orb_onsite if not already built
+    if (!two_center_bundle_.overlap_orb_onsite)
+    {
+        two_center_bundle_.build_orb_onsite(PARAM.inp.deltap_rm);
+        two_center_bundle_.tabulate();
+    }
+    // Build position matrix and berry overlap calculators
+    r_overlap_scf_ = new cal_r_overlap_R();
+    static_cast<cal_r_overlap_R*>(r_overlap_scf_)->init(ucell, pv, orb_);
+    berry_ovl_scf_ = new unkOverlap_lcao();
+    static_cast<unkOverlap_lcao*>(berry_ovl_scf_)->init(ucell, kv.get_nkstot(), orb_);
+    static_cast<unkOverlap_lcao*>(berry_ovl_scf_)->cal_R_number(ucell, gd);
+    static_cast<unkOverlap_lcao*>(berry_ovl_scf_)->cal_orb_overlap(ucell);
+    // Create DeltaP object
+    auto* dp = new deltap::DeltaP();
+    dp_scf_ = dp;
+    dp->init(ucell, gd, kv,
+              two_center_bundle_.overlap_orb_onsite.get(),
+              two_center_bundle_.overlap_orb.get(),
+              two_center_bundle_.overlap_onsite_onsite.get(),
+              orb_.cutoffs(),
+              PARAM.inp.deltap_rm, PARAM.inp.deltap_gdir,
+              &pv, static_cast<cal_r_overlap_R*>(r_overlap_scf_),
+              static_cast<unkOverlap_lcao*>(berry_ovl_scf_));
+    dp->load_branch();
+    dp->init_inner_loop();
+    // Read target file
+    if (!PARAM.inp.deltap_target_file.empty())
+    {
+        std::ifstream ifs(PARAM.inp.deltap_target_file);
+        if (ifs.is_open())
+        {
+            deltap_target_.assign(ucell.nat, 0.0);
+            for (int iat = 0; iat < ucell.nat; ++iat)
+                ifs >> deltap_target_[iat];
+            std::cout << " [DeltaP] Loaded target from " << PARAM.inp.deltap_target_file << std::endl;
+        }
+    }
+    if (deltap_target_.empty())
+        deltap_target_.assign(ucell.nat, 0.0);
+    // Set target on DeltaP object for target-aware branch selection
+    static_cast<deltap::DeltaP*>(dp_scf_)->set_target_gamma(deltap_target_);
+    deltap_scf_initialized_ = true;
+}
+
+template <typename TK, typename TR>
+double ESolver_KS_LCAO<TK, TR>::deltap_compute_gamma(UnitCell& ucell, const int iter)
+{
+    if constexpr (!std::is_same<TK, std::complex<double>>::value)
+    {
+        // Branch A: DeltaP compute gamma only supports complex<double> (multi-k)
+        return 0.0;
+    }
+    else
+    {
+        // Compute gamma (post inner-loop or for diagnostic)
+        auto* dp = static_cast<deltap::DeltaP*>(dp_scf_);
+        dp->compute_gamma_scf(ucell, psi, this->pelec);
+        const int alpha = PARAM.inp.deltap_gdir - 1;
+        const auto& gamma_I = dp->get_results().gamma_I;
+
+        double max_dev = 0.0;
+        for (int iat = 0; iat < ucell.nat; ++iat)
+            max_dev = std::max(max_dev, std::abs(gamma_I[iat][alpha] - deltap_target_[iat]));
+
+        return max_dev;
+    }
+}
+
+template <typename TK, typename TR>
+void ESolver_KS_LCAO<TK, TR>::deltap_inner_loop(UnitCell& ucell, const int iter, bool& skip_solve)
+{
+    if constexpr (!std::is_same<TK, std::complex<double>>::value)
+    {
+        // Branch B: DeltaP inner loop only supports complex<double> (multi-k)
+        return;
+    }
+    else
+    {
+        auto* hamilt_lcao = dynamic_cast<hamilt::HamiltLCAO<TK, TR>*>(this->p_hamilt);
+        if (!hamilt_lcao || dp_scf_ == nullptr)
+        {
+            return;
+        }
+
+        auto* dp_op = hamilt_lcao->get_dp_operator();
+        auto* dp = static_cast<deltap::DeltaP*>(dp_scf_);
+        if (!dp_op || !dp || !dp->inner_loop_active())
+        {
+            return;
+        }
+
+        std::vector<double> lambda = dp_op->get_lambda();
+        std::vector<double> residual(ucell.nat, 0.0);
+        const int alpha = PARAM.inp.deltap_gdir - 1;
+
+        // Measure current gamma
+        dp->compute_gamma_scf(ucell, psi, this->pelec);
+        const auto& gamma_I = dp->get_results().gamma_I;
+        for (int iat = 0; iat < ucell.nat; ++iat)
+            residual[iat] = gamma_I[iat][alpha] - deltap_target_[iat];
+
+        // BFGS-CG inner loop
+        auto& bfgs = dp->bfgs();
+        bfgs.start_outer(lambda);
+        bool bfgs_converged = false;
+        const int nscf = dp->inner_loop_nscf();
+
+        hsolver::HSolverLCAO<TK> hsolver_lcao_obj(&(this->pv), PARAM.inp.ks_solver);
+
+        // Diagnostics: print initial state
+        std::cout << " [DeltaP] inner loop start: nscf=" << nscf;
+        for (int iat = 0; iat < ucell.nat; ++iat)
+            std::cout << " l" << iat << "=" << lambda[iat];
+        std::cout << " rms=" << std::scientific << std::setprecision(4)
+                  << bfgs.get_rms() << std::endl;
+
+        for (int inner = 0; inner < nscf && !bfgs_converged; ++inner)
+        {
+            std::vector<double> lam_trial(ucell.nat);
+            bfgs.step(residual, inner, lam_trial, bfgs_converged);
+
+            // Diagnostics: print trial lambda and predicted residual
+            std::cout << " [DeltaP]   inner=" << inner
+                      << " rms=" << std::scientific << std::setprecision(4)
+                      << bfgs.get_rms();
+            for (int iat = 0; iat < ucell.nat; ++iat)
+                std::cout << " l" << iat << "=" << lam_trial[iat];
+            if (bfgs_converged)
+            {
+                std::cout << " converged" << std::endl;
+                break;
+            }
+            std::cout << std::endl;
+
+            // Apply trial lambda and re-diagonalize
+            dp_op->set_lambda(lam_trial);
+            std::unordered_map<int, std::vector<std::complex<double>>> hk_corr;
+            dp->compute_hk_correction(ucell, psi, lam_trial, hk_corr);
+            dp_op->set_hk_correction(hk_corr);
+
+            // Re-solve with trial lambda (charge density frozen)
+            hsolver_lcao_obj.solve(static_cast<hamilt::Hamilt<TK>*>(this->p_hamilt),
+                this->psi[0], this->pelec, *this->dmat.dm, this->chr,
+                PARAM.inp.nspin, true);  // skip_charge = true
+
+            // Measure residual at trial point
+            dp->compute_gamma_scf(ucell, psi, this->pelec);
+            const auto& gamma_trial = dp->get_results().gamma_I;
+            for (int iat = 0; iat < ucell.nat; ++iat)
+                residual[iat] = gamma_trial[iat][alpha] - deltap_target_[iat];
+
+            double alpha_opt = bfgs.accept_trial(residual);
+
+            // Diagnostics: print actual residual after solve
+            std::cout << " [DeltaP]   result:";
+            for (int iat = 0; iat < ucell.nat; ++iat)
+                std::cout << " g" << iat << "=" << gamma_trial[iat][alpha];
+            std::cout << " alpha_opt=" << alpha_opt << std::endl;
+        }
+
+        // Set final lambda and reconstruct HK correction
+        bfgs.get_lambda(lambda);
+        dp_op->set_lambda(lambda);
+        std::unordered_map<int, std::vector<std::complex<double>>> hk_corr_final;
+        dp->compute_hk_correction(ucell, psi, lambda, hk_corr_final);
+        dp_op->set_hk_correction(hk_corr_final);
+        skip_solve = true;  // inner loop already solved
+
+        std::cout << " [DeltaP] inner loop done: final";
+        for (int iat = 0; iat < ucell.nat; ++iat)
+            std::cout << " l" << iat << "=" << lambda[iat];
+        std::cout << std::endl;
+    }
+}
+
+template <typename TK, typename TR>
+void ESolver_KS_LCAO<TK, TR>::deltap_update_lambda(UnitCell& ucell, const int iter)
+{
+    if constexpr (!std::is_same<TK, std::complex<double>>::value)
+    {
+        // Branch B: DeltaP lambda update only supports complex<double> (multi-k)
+        return;
+    }
+    else
+    {
+        auto* dp = static_cast<deltap::DeltaP*>(dp_scf_);
+        if (!dp || dp->inner_loop_active())
+        {
+            // Branch C: If inner loop is active, lambda update is handled in deltap_inner_loop
+            return;
+        }
+
+        auto* hamilt_lcao = dynamic_cast<hamilt::HamiltLCAO<TK, TR>*>(this->p_hamilt);
+        if (!hamilt_lcao)
+        {
+            return;
+        }
+
+        auto* dp_op = hamilt_lcao->get_dp_operator();
+        if (!dp_op)
+        {
+            return;
+        }
+
+        // Branch D: Two-phase strategy (nscf==0).
+        // Phase 1: SCF converges with λ=0.  Gamma is computed (target-aware
+        // branch selection runs) but λ remains zero — updating λ against
+        // the crude atomic-guess charge density (drho~0.5) produces wrong λ.
+        // Phase 2: once drho drops below deltap_inner_thr, the charge density
+        // is converged enough for a single gradient-descent λ update.  λ is
+        // then frozen for all remaining iterations.
+        if (!deltap_lambda_set_ && this->drho > 0.0
+            && this->drho < PARAM.inp.deltap_inner_thr)
+        {
+            deltap_lambda_set_ = true;
+
+            const int alpha = PARAM.inp.deltap_gdir - 1;
+            const auto& gamma_I = dp->get_results().gamma_I;
+            std::vector<double> lambda = dp_op->get_lambda();
+
+            double step = PARAM.inp.deltap_lambda_step;
+            double mixing = PARAM.inp.deltap_lambda_mixing;
+            if (mixing < 0.0) mixing = 0.0;
+            if (mixing > 1.0) mixing = 1.0;
+            if (mixing == 0.0) mixing = 1.0;
+
+            std::vector<double> lambda_raw = lambda;
+            for (int iat = 0; iat < ucell.nat; ++iat)
+                lambda_raw[iat] += step * (gamma_I[iat][alpha] - deltap_target_[iat]);
+            for (int iat = 0; iat < ucell.nat; ++iat)
+                lambda[iat] = mixing * lambda_raw[iat] + (1.0 - mixing) * lambda[iat];
+
+            dp_op->set_lambda(lambda);
+            dp->start_cooldown(1);
+
+            // Reset charge mixing history: Broyden's approximate Jacobian
+            // from the unconstrained iter=1 is invalid for the constrained
+            // Hamiltonian.  Without this reset, the stale history causes
+            // charge sloshing (drho oscillation at 3e-4~5e-4 level).
+            // Reference: same pattern used in DeltaSpin Phase 1→2 transition.
+            this->p_chgmix->mix_reset();
+
+            // Phase 2 transition: print summary
+            std::cout << " [DeltaP P2] iter=" << iter << " drho=" << std::scientific
+                      << std::setprecision(2) << this->drho << " < " << PARAM.inp.deltap_inner_thr
+                      << " → λ updated, mix_reset()\n";
+        }
+
+        // Always recompute HK correction with latest wavefunctions
+        std::vector<double> lambda = dp_op->get_lambda();
+        std::unordered_map<int, std::vector<std::complex<double>>> hk_corr;
+        dp->compute_hk_correction(ucell, psi, lambda, hk_corr);
+        dp_op->set_hk_correction(hk_corr);
+    }
 }
 
 template class ESolver_KS_LCAO<double, double>;

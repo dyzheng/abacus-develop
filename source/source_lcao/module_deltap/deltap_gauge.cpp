@@ -128,6 +128,10 @@ void DeltaP::gauge_fix_smo_anchored(int nbands)
                     anchor_lm_[n] = new_lm;
                     D_anchor = D_new;
                     abs_D = std::abs(D_new);
+                    // Retroactively apply anchor phase correction to all
+                    // previously computed gauge phases for this band.
+                    for (int jj = 0; jj < j; ++jj)
+                        gauge_phase_[jj][n] *= std::polar(1.0, -delta_phi);
                 }
             }
 

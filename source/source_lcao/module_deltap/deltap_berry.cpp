@@ -204,49 +204,45 @@ void DeltaP::integrate_polarization(const UnitCell& ucell, int nbands)
     ModuleBase::timer::start("DeltaP", "integrate_polarization");
 
     const int nat = nat_;
-    const int alpha_idx = gdir_ - 1;
-
-    // Lattice vector length along gdir (in Bohr) and cell volume
-    double a_alpha = 0.0;
-    if (gdir_ == 1) { a_alpha = ucell.lat0 * ucell.a1.norm(); }
-    else if (gdir_ == 2) { a_alpha = ucell.lat0 * ucell.a2.norm(); }
-    else { a_alpha = ucell.lat0 * ucell.a3.norm(); }
-    const double omega = ucell.omega;
-
-    const double dk_dir = 1.0 / (nppstr_ - 1);
-    // P = -(a_alpha / 2*pi*Omega) * dk * gamma  [result in e/Bohr^2]
-    const double prefactor = -a_alpha / (2.0 * ModuleBase::PI * omega) * dk_dir;
 
     results_.P_I.resize(nat, ModuleBase::Vector3<double>(0.0, 0.0, 0.0));
     results_.gamma_I.resize(nat, ModuleBase::Vector3<double>(0.0, 0.0, 0.0));
 
     double occupied_bands = static_cast<double>(PARAM.inp.nelec / ModuleBase::DEGSPIN);
     if ((occupied_bands - std::floor(occupied_bands)) > 0.0)
-    {
         occupied_bands = std::floor(occupied_bands) + 1.0;
-    }
     const int occ_nbands = static_cast<int>(occupied_bands);
+    const double dk_dir = 1.0 / (nppstr_ - 1);
 
-    for (int iat = 0; iat < nat; iat++)
+    // Integrate A_nk over k-points for all three directions
+    for (int alpha = 0; alpha < 3; ++alpha)
     {
-        double gamma = 0.0;
-        for (int j = 0; j < nppstr_; j++)
+        double a_alpha = 0.0;
+        if (alpha == 0)      a_alpha = ucell.lat0 * ucell.a1.norm();
+        else if (alpha == 1) a_alpha = ucell.lat0 * ucell.a2.norm();
+        else                 a_alpha = ucell.lat0 * ucell.a3.norm();
+        const double omega = ucell.omega;
+        const double prefactor = -a_alpha / (2.0 * ModuleBase::PI * omega) * dk_dir;
+
+        for (int iat = 0; iat < nat; iat++)
         {
-            for (int n = 0; n < occ_nbands && n < nbands; n++)
-            {
-                double a_imag = A_nk_[iat][j][n][alpha_idx].imag();
-                gamma += a_imag;
-            }
+            double gamma = 0.0;
+            for (int j = 0; j < nppstr_; j++)
+                for (int n = 0; n < occ_nbands && n < nbands; n++)
+                    gamma += A_nk_[iat][j][n][alpha].imag();
+            results_.gamma_I[iat][alpha] = gamma;
+            results_.P_I[iat][alpha] = prefactor * gamma;
         }
-        results_.gamma_I[iat][alpha_idx] = gamma;
-        results_.P_I[iat][alpha_idx] = prefactor * gamma;
     }
 
     results_.P_total = ModuleBase::Vector3<double>(0.0, 0.0, 0.0);
     for (int iat = 0; iat < nat; iat++)
-    {
         results_.P_total += results_.P_I[iat];
-    }
+
+    std::cout << "   [A_nk integration] P_total = ("
+              << std::scientific << std::setprecision(6)
+              << results_.P_total.x << ", " << results_.P_total.y << ", "
+              << results_.P_total.z << ")" << std::endl;
 
     ModuleBase::timer::end("DeltaP", "integrate_polarization");
 }

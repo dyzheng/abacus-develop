@@ -1264,5 +1264,53 @@ Manual override is allowed: if sc_acceleration_mode is explicitly set, it takes 
         read_sync_double(input.deltap_lambda_init);
         this->add_item(item);
     }
+    {
+        Input_Item item("deltap_lambda_mixing");
+        item.annotation = "damping factor for lambda update";
+        item.category = "DeltaP";
+        item.type = "Real";
+        item.description = "Lambda mixing factor: lambda_new = beta * lambda_from_BFGS + (1-beta) * lambda_old. 0 = no mixing (full BFGS step).";
+        item.default_value = "0.0";
+        item.unit = "";
+        item.availability = "deltap_corr is true and deltap_nscf > 0";
+        read_sync_double(input.deltap_lambda_mixing);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("deltap_nscf");
+        item.annotation = "max inner SCF steps for lambda convergence";
+        item.category = "DeltaP";
+        item.type = "Integer";
+        item.description = "Number of inner lambda optimization steps per outer SCF step. Set to 0 for synchronous mode (lambda updated once per SCF step).";
+        item.default_value = "5";
+        item.unit = "";
+        item.availability = "deltap_corr is true";
+        read_sync_int(input.deltap_nscf);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("deltap_inner_thr");
+        item.annotation = "drho threshold for inner loop activation";
+        item.category = "DeltaP";
+        item.type = "Real";
+        item.description = "Charge density error threshold below which the inner lambda optimization loop activates. Analogous to sc_scf_thr in DeltaSpin.";
+        item.default_value = "1.0e-4";
+        item.unit = "";
+        item.availability = "deltap_corr is true";
+        read_sync_double(input.deltap_inner_thr);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("deltap_conv_thr");
+        item.annotation = "|gamma-target| convergence threshold";
+        item.category = "DeltaP";
+        item.type = "Real";
+        item.description = "Inner loop convergence threshold: stops when max|gamma_I - target_I| < deltap_conv_thr.";
+        item.default_value = "1.0e-3";
+        item.unit = "";
+        item.availability = "deltap_corr is true";
+        read_sync_double(input.deltap_conv_thr);
+        this->add_item(item);
+    }
 }
 } // namespace ModuleIO

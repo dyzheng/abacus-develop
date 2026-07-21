@@ -12,18 +12,24 @@ void DeltaP::verify_sum_rule()
 {
     ModuleBase::TITLE("DeltaP", "verify_sum_rule");
 
-    const int alpha_idx = gdir_ - 1;
-    const double p_total = results_.P_total[alpha_idx];
-    const double p_abacus = results_.P_abacus[alpha_idx];
-
     std::cout << " * DeltaP Sum Rule Check:" << std::endl;
-    std::cout << "   P_total (DeltaP)  = " << std::scientific << std::setprecision(6)
-              << p_total << std::endl;
-    std::cout << "   P_total (ABACUS)  = " << p_abacus << std::endl;
+    std::cout << "   P_total (DeltaP)  = (" << std::scientific << std::setprecision(6)
+              << results_.P_total.x << ", " << results_.P_total.y << ", " << results_.P_total.z
+              << ")" << std::endl;
+    std::cout << "   P_total (ABACUS)  = (" << results_.P_abacus.x << ", "
+              << results_.P_abacus.y << ", " << results_.P_abacus.z << ")" << std::endl;
 
-    if (std::abs(p_abacus) > 1e-10)
+    if ((std::abs(results_.P_abacus.x) + std::abs(results_.P_abacus.y) + std::abs(results_.P_abacus.z)) > 1e-10)
     {
-        const double rel_error = std::abs(p_total - p_abacus) / std::abs(p_abacus);
+        double num = 0.0, denom = 0.0;
+        double p_ref[3] = {results_.P_abacus.x, results_.P_abacus.y, results_.P_abacus.z};
+        double p_cal[3] = {results_.P_total.x, results_.P_total.y, results_.P_total.z};
+        for (int a = 0; a < 3; ++a)
+        {
+            num += (p_cal[a] - p_ref[a]) * (p_cal[a] - p_ref[a]);
+            denom += p_ref[a] * p_ref[a];
+        }
+        const double rel_error = std::sqrt(num) / std::sqrt(denom);
         std::cout << "   Relative error    = " << rel_error << std::endl;
         if (rel_error < 0.01)
         {

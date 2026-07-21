@@ -297,14 +297,12 @@ void DeltaP::compute_wannier_polarization(
     // Load branch state from previous SCF/run for cross-SCF phase smoothness
     if (!scf_mode_)
         load_branch();
+    load_match();
 
     // Step 0: compute real-space overlaps and k-string (skip if already done in SCF)
     if (!scf_initialized_)
     {
         compute_real_overlaps(ucell, *gd_);
-        setup_kstring(*kv_);
-
-    // Compute SMO overlap matrix and its inverse for Löwdin orthogonalization
         compute_smo_overlap_matrix(ucell);
         scf_initialized_ = true;
     }
@@ -325,73 +323,82 @@ void DeltaP::compute_wannier_polarization(
     for (int iat = 0; iat < nat_; ++iat)
         nproj_total += nproj_per_atom_[iat];
 
-    // Step 1: Compute S(k), D_I(k) for all k on string
-    std::cout << "   DeltaP: nppstr_=" << nppstr_ << " total_string_=" << total_string_
-              << " k_index_.size()=" << k_index_.size() << " nks=" << nks << std::endl;
-    if (k_index_.empty() || nppstr_ == 0)
-    {
-        std::cerr << "DeltaP ERROR: k_index_ is empty or nppstr_=0" << std::endl;
-        ModuleBase::timer::end("DeltaP", "compute_wannier_polarization");
-        return;
-    }
+    // Save original gdir for restore
+    const int gdir_orig = gdir_;
 
-    // compute_S_dk is now per-link (uses correct berry_phase phase + position correction)
-    const int nlocal = paraV_->get_global_row_size();
-    S_dk_cache_valid_ = false;  // reset cache for new structure
-
-    int n_dim = nocc_use;
-    int m_dim = nproj_total;
-
-    // Prefactor and direction (outside loop)
-    // For nspin=1, berry_phase multiplies by 2 (spin degeneracy): pdl_elec = 2*phik_ave
-    // DeltaP computes single-spin Berry phase, so divide by 2 to match.
-    // The polarization formula is: P = (R/V) * gamma / π
-    // For spin-degenerate (nspin=1): 2 electrons per band, so prefactor = 2 * R / (2π * V) = R / (π * V)
-    // For spin-polarized (nspin=2): 1 electron per band, so prefactor = R / (2π * V)
-    const int alpha_idx = gdir_ - 1;
-    double a_alpha = 0.0;
-    if (gdir_ == 1) a_alpha = ucell.lat0 * ucell.a1.norm();
-    else if (gdir_ == 2) a_alpha = ucell.lat0 * ucell.a2.norm();
-    else a_alpha = ucell.lat0 * ucell.a3.norm();
-    const double omega = ucell.omega;
-    double spin_factor = (PARAM.inp.nspin == 1) ? 2.0 : 1.0;
-    const double prefactor = spin_factor * a_alpha / (2.0 * ModuleBase::PI * omega);
-
+    // Initialize 3-component results
     results_.P_I.resize(nat_, ModuleBase::Vector3<double>(0.0, 0.0, 0.0));
     results_.gamma_I.resize(nat_, ModuleBase::Vector3<double>(0.0, 0.0, 0.0));
+    results_.gamma_I_raw.resize(nat_, ModuleBase::Vector3<double>(0.0, 0.0, 0.0));
+    results_.r_elec_center.resize(nat_, ModuleBase::Vector3<double>(0.0, 0.0, 0.0));
     if (static_cast<int>(W_prev_.size()) != nat_)
-        W_prev_.assign(nat_, std::complex<double>(1.0, 0.0));
+        W_prev_.assign(nat_, ModuleBase::Vector3<double>(std::numeric_limits<double>::quiet_NaN(),
+                                                          std::numeric_limits<double>::quiet_NaN(),
+                                                          std::numeric_limits<double>::quiet_NaN()));
 
-    // Accumulate over k-strings
-    std::vector<double> gamma_accum(nat_, 0.0);
-    std::vector<double> smo_w_accum(nat_, 0.0);
-    std::vector<double> gamma_raw_accum(nat_, 0.0);
-    std::vector<double> r_elec_accum(nat_, 0.0);  // accumulate <r_elec^I> across strings
-    int n_strings_processed = 0;
-    // Store det(W) per string for branch tracking (berry_phase convention)
-    std::vector<std::complex<double>> zeta_list;
-    // Store per-atom gamma per string and eigenvalues for branch tracking
-    std::vector<std::vector<double>> gamma_accum_per_string;
-    std::vector<std::vector<std::complex<double>>> evals_all;
+    // ---- Compute polarization for all three directions ----
+    for (int alpha = 0; alpha < 3; ++alpha)
+    {
+        gdir_ = alpha + 1;
+        const int alpha_idx = gdir_ - 1;
+        setup_kstring(*kv_);
+        S_dk_.clear();
+        S_dk_cache_valid_ = false;
 
-    // Per-atom "previous" gamma for branch-set nearest-neighbor selection.
-    // Initialized from W_prev_ (loaded from deltap_branch.dat) for the first
-    // string; updated to the selected value after each string.
-    // When has_prev_ is false (first run ever), use NaN sentinel so that
-    // select_branch_set returns the principal value without selection.
-    std::vector<double> prev_gamma(nat_, std::numeric_limits<double>::quiet_NaN());
-    for (int iat = 0; iat < nat_; ++iat)
-        if (has_prev_) prev_gamma[iat] = W_prev_[iat].real();
+        // Per-alpha: isolated accumulators.  Each direction has its own
+        // gamma_accum, string count, prev_gamma, etc. — no cross-direction
+        // contamination from the Wilson loop or branch selection.
+        std::vector<double> gamma_accum(nat_, 0.0);
+        std::vector<double> smo_w_accum(nat_, 0.0);
+        std::vector<double> gamma_raw_accum(nat_, 0.0);
+        std::vector<double> r_elec_accum(nat_, 0.0);
+        int n_strings_processed = 0;
+        std::vector<std::complex<double>> zeta_list;
 
-    // Branch-set selection diagnostics (per atom, accumulated across strings)
-    gamma_principal_.assign(nat_, 0.0);
-    gamma_selected_.assign(nat_, 0.0);
-    branch_k_.assign(nat_, std::vector<int>());
+        // Branch reference: if previous converged value exists, use it;
+        // otherwise use NaN to skip branch selection on first iteration.
+        // This ensures the first iteration records raw gamma without being
+        // pulled toward 0 by the branch selection logic.
+        std::vector<double> prev_gamma(nat_, std::numeric_limits<double>::quiet_NaN());
+        for (int iat = 0; iat < nat_; ++iat)
+            if (has_prev_ && static_cast<int>(W_prev_.size()) > iat
+                && !std::isnan(W_prev_[iat][alpha]))
+                prev_gamma[iat] = W_prev_[iat][alpha];
+        gamma_principal_.assign(nat_, 0.0);
+        gamma_selected_.assign(nat_, 0.0);
 
-    kstring_data_.resize(nppstr_);
-    std::vector<std::complex<double>*> psi_k_ptrs(nppstr_, nullptr);
+        std::cout << "   DeltaP [gdir=" << gdir_ << "]: nppstr_=" << nppstr_ << " total_string_=" << total_string_
+                  << " k_index_.size()=" << k_index_.size() << " nks=" << nks << std::endl;
+        if (k_index_.empty() || nppstr_ == 0)
+            continue;  // skip this direction
 
-    for (int istring = 0; istring < total_string_; ++istring)
+        // compute_S_dk for this direction
+        S_dk_cache_valid_ = false;
+
+        int n_dim = nocc_use;
+        int m_dim = nproj_total;
+
+        double a_alpha = 0.0;
+        if (gdir_ == 1) a_alpha = ucell.lat0 * ucell.a1.norm();
+        else if (gdir_ == 2) a_alpha = ucell.lat0 * ucell.a2.norm();
+        else a_alpha = ucell.lat0 * ucell.a3.norm();
+        const double omega = ucell.omega;
+        double spin_factor = (PARAM.inp.nspin == 1) ? 2.0 : 1.0;
+        const double prefactor = spin_factor * a_alpha / (2.0 * ModuleBase::PI * omega);
+
+        // String layout and diagnostics (per direction)
+        kstring_data_.resize(nppstr_);
+        std::vector<std::complex<double>*> psi_k_ptrs(nppstr_, nullptr);
+        std::vector<std::vector<double>> gamma_accum_per_string;
+        std::vector<std::vector<std::complex<double>>> evals_all;
+        std::vector<std::vector<double>> gamma_raw_per_string;
+        std::vector<std::vector<double>> gamma_sel_per_string;
+
+        // Persistent reference for zeta rescaling (consistent across strings)
+        double ref_gamma_unw_sum = 0.0;
+        bool ref_captured = false;
+
+        for (int istring = 0; istring < total_string_; ++istring)
     {
         // --- Step 1a: S_k, D_I for this k-string ---
         // CRITICAL: clear kstring_data_ to prevent accumulation across strings
@@ -440,6 +447,12 @@ void DeltaP::compute_wannier_polarization(
         if (nppstr_ > 1 && k_index_[istring][0] < nks && k_index_[istring][1] < nks)
             dk_string = kv_->kvec_c[k_index_[istring][1]] - kv_->kvec_c[k_index_[istring][0]];
 
+        // Pre-compute S_dk and allocate SC workspace for fast O_kpair path.
+        if (S_dk_.empty() && !berry_overlap_)
+            compute_S_dk(ucell);
+        const int nrow_ov = paraV_->get_row_size();
+        std::vector<std::complex<double>> SC(static_cast<size_t>(nrow_ov) * nocc_use, {0.0, 0.0});
+
         for (int j = 0; j < nppstr_ - 1; ++j)
         {
             int ik_L = k_index_[istring][j];
@@ -452,9 +465,42 @@ void DeltaP::compute_wannier_polarization(
             // (gives -0.75 instead of +0.25 for a 4-point string).
             if (ik_R < nks && ik_L < nks)
             {
-                berry_overlap_->berryphase_overlap(ucell, ik_L, ik_R,
-                    dk_string,
-                    nocc_use, *paraV_, psi, *kv_, O_full);
+                if (berry_overlap_)
+                {
+                    berry_overlap_->berryphase_overlap(ucell, ik_L, ik_R,
+                        dk_string,
+                        nocc_use, *paraV_, psi, *kv_, O_full);
+                }
+                else
+                {
+                    // Fast path: O = C†(k_L) · S(dk) · C(k_R) via manual GEMM.
+                    // compute_S_dk is called once before the string loop.
+                    psi->fix_k(ik_L);
+                    const std::complex<double>* c_L = psi->get_pointer();
+                    psi->fix_k(ik_R);
+                    const std::complex<double>* c_R = psi->get_pointer();
+
+                    const int nrow = paraV_->get_row_size();
+                    const int ncol = paraV_->get_col_size();
+                    // SC = S_dk * C_R  (nrow × nocc_use)
+                    for (int p = 0; p < nocc_use; ++p)
+                        for (int alpha = 0; alpha < nrow; ++alpha)
+                        {
+                            std::complex<double> s(0.0, 0.0);
+                            for (int gamma = 0; gamma < ncol; ++gamma)
+                                s += S_dk_[alpha + gamma * nrow] * c_R[gamma + p * nrow];
+                            SC[alpha + p * nrow] = s;
+                        }
+                    // O = C_L† * SC  (nocc_use × nocc_use)
+                    for (int q = 0; q < nocc_use; ++q)
+                        for (int p = 0; p < nocc_use; ++p)
+                        {
+                            std::complex<double> s(0.0, 0.0);
+                            for (int alpha = 0; alpha < nrow; ++alpha)
+                                s += std::conj(c_L[alpha + q * nrow]) * SC[alpha + p * nrow];
+                            O_full[q + p * nocc_use] = s;
+                        }
+                }
             }
 
             O_kpair[j] = O_full;
@@ -567,47 +613,184 @@ void DeltaP::compute_wannier_polarization(
 
             if (first_diag)
             {
-                // First diagonalization: initialize phases
+                // Sort eigenvalues by argument (ascending) for deterministic
+                // band ordering. zgeev provides no ordering guarantee.
+                std::vector<int> perm(n_dim);
+                for (int n = 0; n < n_dim; ++n) perm[n] = n;
+                std::sort(perm.begin(), perm.end(),
+                    [&evals_j](int a, int b) { return std::arg(evals_j[a]) < std::arg(evals_j[b]); });
+                std::vector<std::complex<double>> evals_sorted(n_dim);
+                std::vector<double> gamma_sorted(n_dim);
+                std::vector<std::complex<double>> VR_sorted(n_dim * n_dim);
                 for (int n = 0; n < n_dim; ++n)
-                    gamma_unwrapped[n] = std::arg(evals_j[n]);
+                {
+                    evals_sorted[n] = evals_j[perm[n]];
+                    gamma_sorted[n] = std::arg(evals_j[perm[n]]);
+                    for (int i = 0; i < n_dim; ++i)
+                        VR_sorted[i + n * n_dim] = VR_j[i + perm[n] * n_dim];
+                }
+                evals_j = evals_sorted;
+                gamma_unwrapped = gamma_sorted;
+                VR_j = VR_sorted;
                 first_diag = false;
             }
             else
             {
-                // Track eigenvalue continuity: match each new eigenvalue
-                // to the closest previous eigenvalue (by phase difference)
-                std::vector<bool> matched(n_dim, false);
-                std::vector<double> gamma_new(n_dim, 0.0);
-
-                for (int n = 0; n < n_dim; ++n)
-                {
-                    double best_diff = 1e10;
-                    int best_m = -1;
-                    for (int m = 0; m < n_dim; ++m)
+                // Cost matrix: |phase gap| between new eval[n] and prev eval[m]
+                const int N = n_dim;
+                std::vector<std::vector<double>> cost(N, std::vector<double>(N));
+                for (int m = 0; m < N; ++m)
+                    for (int nn = 0; nn < N; ++nn)
                     {
-                        if (matched[m]) continue;
-                        // Phase difference between new eigenvalue n and previous eigenvalue m
-                        double diff = std::arg(evals_j[n] / evals_prev[m]);
-                        // Wrap to (-π, π]
+                        double diff = std::arg(evals_j[nn] / evals_prev[m]);
                         while (diff > M_PI) diff -= 2.0 * M_PI;
                         while (diff <= -M_PI) diff += 2.0 * M_PI;
-                        if (std::abs(diff) < best_diff)
+                        cost[m][nn] = std::abs(diff);
+                    }
+                // NaN guard: fall back to greedy if eigenvalues are pathological
+                bool has_nan = false;
+                for (int m = 0; m < N && !has_nan; ++m)
+                    if (std::abs(evals_j[m]) != std::abs(evals_j[m])
+                        || std::abs(evals_prev[m]) != std::abs(evals_prev[m]))
+                        has_nan = true;
+                if (has_nan)
+                {
+                    std::vector<bool> matched(N, false);
+                    std::vector<double> gamma_new(N, 0.0);
+                    for (int nn = 0; nn < N; ++nn)
+                    {
+                        double best_diff = 1e10; int best_m = -1;
+                        for (int m = 0; m < N; ++m)
                         {
-                            best_diff = std::abs(diff);
-                            best_m = m;
+                            if (matched[m]) continue;
+                            if (cost[nn][m] < best_diff) { best_diff = cost[nn][m]; best_m = m; }
+                        }
+                        if (best_m >= 0)
+                        {
+                            double diff = std::arg(evals_j[nn] / evals_prev[best_m]);
+                            while (diff > M_PI) diff -= 2.0 * M_PI;
+                            while (diff <= -M_PI) diff += 2.0 * M_PI;
+                            gamma_new[best_m] = gamma_unwrapped[best_m] + diff;
+                            matched[best_m] = true;
                         }
                     }
-                    if (best_m >= 0)
+                    gamma_unwrapped = gamma_new;
+                }
+                else
+                {
+                    // Check if we have a saved matching from a previous run
+                    bool has_saved = false;
+                    if (match_loaded_ && alpha < static_cast<int>(saved_matches_.size())
+                        && istring < static_cast<int>(saved_matches_[alpha].size())
+                        && j < static_cast<int>(saved_matches_[alpha][istring].size())
+                        && static_cast<int>(saved_matches_[alpha][istring][j].size()) == N)
+                        has_saved = true;
+
+                    if (has_saved)
                     {
-                        // Unwrapped phase = previous phase + continuous increment
-                        double diff = std::arg(evals_j[n] / evals_prev[best_m]);
+                        // Replay saved matching: use the saved match_to directly.
+                        // This ensures identical eigenvalue tracking across independent
+                        // runs (e.g., lambda sweep), eliminating Hungarian ambiguity.
+                        const auto& saved = saved_matches_[alpha][istring][j];
+                        std::vector<double> gamma_new(N, 0.0);
+                        for (int nn = 0; nn < N; ++nn)
+                        {
+                            int m = saved[nn];
+                            if (m < 0 || m >= N) continue;  // Skip invalid matches
+                            double diff = std::arg(evals_j[nn] / evals_prev[m]);
+                            while (diff > M_PI) diff -= 2.0 * M_PI;
+                            while (diff <= -M_PI) diff += 2.0 * M_PI;
+                            gamma_new[m] = gamma_unwrapped[m] + diff;
+                        }
+                        gamma_unwrapped = gamma_new;
+                    }
+                    else
+                    {
+                    // Kuhn-Munkres (Hungarian) global optimal matching
+                    std::vector<double> u(N, 0.0), v(N, 0.0);
+                    std::vector<int> p(N, -1), way(N, -1);
+                    for (int i = 0; i < N; ++i)
+                    {
+                        p[0] = i; int j0 = 0;
+                        std::vector<double> minv(N, 1e300);
+                        std::vector<bool> used(N, false);
+                        int hung_iter = 0;
+                        do {
+                            if (++hung_iter > N * N + 5) { j0 = 0; break; }
+                            if (j0 < 0 || j0 >= N) break;
+                            used[j0] = true;
+                            int i0 = p[j0];
+                            if (i0 < 0 || i0 >= N) break;
+                            double delta = 1e300; int j1 = 0;
+                            for (int j = 1; j < N; ++j)
+                            {
+                                if (!used[j])
+                                {
+                                    double cur = cost[i0][j] - u[i0] - v[j];
+                                    if (cur == cur && cur < minv[j]) { minv[j] = cur; way[j] = j0; }
+                                    if (minv[j] < delta) { delta = minv[j]; j1 = j; }
+                                }
+                            }
+                            for (int j = 0; j < N; ++j)
+                            {
+                                if (used[j]) { 
+                                    if (p[j] >= 0 && p[j] < N) u[p[j]] += delta; 
+                                    v[j] -= delta; 
+                                }
+                                else         { minv[j] -= delta; }
+                            }
+                            j0 = j1;
+                        } while (j0 >= 0 && j0 < N && p[j0] != -1);
+                        while (j0 != 0) { 
+                            if (j0 < 0 || j0 >= N) break;
+                            int j1 = way[j0]; 
+                            if (j1 < 0 || j1 >= N) break;
+                            p[j0] = p[j1]; 
+                            j0 = j1; 
+                        }
+                    }
+                    // Extract matching and unwrap phases
+                    std::vector<int> match_to(N, -1);
+                    for (int j = 1; j < N; ++j)
+                        if (p[j] != -1) match_to[p[j]] = j;
+                    for (int nn = 0; nn < N; ++nn)
+                    {
+                        if (match_to[nn] < 0)
+                        {
+                            double best_diff = 1e10; int best_m = -1;
+                            for (int m = 0; m < N; ++m)
+                            {
+                                bool taken = false;
+                                for (int nn2 = 0; nn2 < N; ++nn2)
+                                    if (match_to[nn2] == m) { taken = true; break; }
+                                if (taken) continue;
+                                if (cost[nn][m] < best_diff) { best_diff = cost[nn][m]; best_m = m; }
+                            }
+                            if (best_m >= 0) match_to[nn] = best_m;
+                        }
+                    }
+                    std::vector<double> gamma_new(N, 0.0);
+                    for (int nn = 0; nn < N; ++nn)
+                    {
+                        int m = match_to[nn];
+                        if (m < 0 || m >= N) continue;  // Skip invalid matches
+                        double diff = std::arg(evals_j[nn] / evals_prev[m]);
                         while (diff > M_PI) diff -= 2.0 * M_PI;
                         while (diff <= -M_PI) diff += 2.0 * M_PI;
-                        gamma_new[best_m] = gamma_unwrapped[best_m] + diff;
-                        matched[best_m] = true;
+                        gamma_new[m] = gamma_unwrapped[m] + diff;
                     }
+                    gamma_unwrapped = gamma_new;
+
+                    // Save matching for future runs (lambda sweep determinism)
+                    if (alpha >= static_cast<int>(saved_matches_.size()))
+                        saved_matches_.resize(alpha + 1);
+                    if (istring >= static_cast<int>(saved_matches_[alpha].size()))
+                        saved_matches_[alpha].resize(istring + 1);
+                    if (j >= static_cast<int>(saved_matches_[alpha][istring].size()))
+                        saved_matches_[alpha][istring].resize(j + 1);
+                    saved_matches_[alpha][istring][j] = match_to;
+                    } // end Hungarian else
                 }
-                gamma_unwrapped = gamma_new;
             }
             evals_prev = evals_j;
         }
@@ -759,37 +942,25 @@ void DeltaP::compute_wannier_polarization(
                         s += smo_overlap_inv_[a + b * m_dim] * proj[b + n * m_dim];
                     tilde_proj[a + n * m_dim] = s;
                 }
-            // Debug: verify S * S^{-1} = I and check sum rule
+            // Verify Löwdin S^{-1/2}: smo_overlap_inv_ stores S^{-1/2}, not S^{-1}.
+            // The correct identity check is S^{-1/2}·S·S^{-1/2} = I.
             if (istring == 0)
             {
-                // Check S * Sinv = I
                 double max_err = 0.0;
                 for (int i = 0; i < m_dim; ++i)
                     for (int j = 0; j < m_dim; ++j)
                     {
                         double val = 0.0;
                         for (int k = 0; k < m_dim; ++k)
-                            val += smo_overlap_[i + k * m_dim] * smo_overlap_inv_[k + j * m_dim];
+                            for (int l = 0; l < m_dim; ++l)
+                                val += smo_overlap_inv_[i + k * m_dim]
+                                     * smo_overlap_[k + l * m_dim]
+                                     * smo_overlap_inv_[l + j * m_dim];
                         double expected = (i == j) ? 1.0 : 0.0;
                         max_err = std::max(max_err, std::abs(val - expected));
                     }
-                std::cout << "   DeltaP: S * Sinv max_err = " << max_err << " (should be ~0)" << std::endl;
+                std::cout << "   DeltaP: S^{-1/2}*S*S^{-1/2} - I max_err = " << max_err << " (should be ~0)" << std::endl;
 
-                // Check S * Sinv * S = S (verify Sinv is S^{-1})
-                double max_err2 = 0.0;
-                for (int i = 0; i < m_dim; ++i)
-                    for (int j = 0; j < m_dim; ++j)
-                    {
-                        double val = 0.0;
-                        for (int k = 0; k < m_dim; ++k)
-                            for (int l = 0; l < m_dim; ++l)
-                                val += smo_overlap_[i + k * m_dim] * smo_overlap_inv_[k + l * m_dim] * smo_overlap_[l + j * m_dim];
-                        max_err2 = std::max(max_err2, std::abs(val - smo_overlap_[i + j * m_dim]));
-                    }
-                std::cout << "   DeltaP: S * Sinv * S - S max_err = " << max_err2 << " (should be ~0)" << std::endl;
-
-                // Check Sinv is S^{-1/2}: Sinv * Sinv should = S^{-1}
-                // i.e., Sinv * Sinv * S should = I
                 double max_err3 = 0.0;
                 for (int i = 0; i < m_dim; ++i)
                     for (int j = 0; j < m_dim; ++j)
@@ -797,11 +968,13 @@ void DeltaP::compute_wannier_polarization(
                         double val = 0.0;
                         for (int k = 0; k < m_dim; ++k)
                             for (int l = 0; l < m_dim; ++l)
-                                val += smo_overlap_inv_[i + k * m_dim] * smo_overlap_inv_[k + l * m_dim] * smo_overlap_[l + j * m_dim];
+                                val += smo_overlap_inv_[i + k * m_dim]
+                                     * smo_overlap_inv_[k + l * m_dim]
+                                     * smo_overlap_[l + j * m_dim];
                         double expected = (i == j) ? 1.0 : 0.0;
                         max_err3 = std::max(max_err3, std::abs(val - expected));
                     }
-                std::cout << "   DeltaP: Sinv * Sinv * S - I max_err = " << max_err3 << " (should be ~0)" << std::endl;
+                std::cout << "   DeltaP: (Sinv)^2 * S - I max_err = " << max_err3 << " (should be ~0)" << std::endl;
 
                 for (int n = 0; n < n_dim; ++n)
                 {
@@ -892,16 +1065,24 @@ void DeltaP::compute_wannier_polarization(
         // from SMO weights, which empirically matches Wannier90 better than
         // normalized weights). The branch-set selection is applied as a
         // separate cross-structure correction below.
+        std::vector<double> gamma_pre_branch = gamma_I_per_atom;
         if (n_strings_processed > 0 && n_dim > 0)
         {
-            // Step 1: zeta rescale (same as original code)
+            // Step 1: zeta rescale using consistent reference across strings.
+            // Different strings may unwrap eigenvalues differently (2π-per-band
+            // ambiguity), making per-string gamma_unw_sum inconsistent.  Use
+            // the FIRST string's unwrapped sum as the reference for all strings
+            // so that the scale factor is deterministic.
             double gamma_raw_sum = 0.0;
             for (int iat = 0; iat < nat_; ++iat) gamma_raw_sum += gamma_I_per_atom[iat];
-            double gamma_correct = std::arg(zeta_scalar);
+            double gamma_unw_sum = 0.0;
+            for (int n = 0; n < n_dim; ++n) gamma_unw_sum += gamma_unwrapped[n];
+            if (!ref_captured) { ref_gamma_unw_sum = gamma_unw_sum; ref_captured = true; }
+            else               { gamma_unw_sum = ref_gamma_unw_sum; }
             double scale = 1.0;
-            if (std::abs(gamma_raw_sum) > 1e-15 && std::abs(gamma_raw_sum - gamma_correct) > 1e-10)
+            if (std::abs(gamma_raw_sum) > 1e-15 && std::abs(gamma_raw_sum - gamma_unw_sum) > 1e-10)
             {
-                scale = gamma_correct / gamma_raw_sum;
+                scale = gamma_unw_sum / gamma_raw_sum;
                 for (int iat = 0; iat < nat_; ++iat)
                 {
                     double old_val = gamma_I_per_atom[iat];
@@ -911,10 +1092,81 @@ void DeltaP::compute_wannier_polarization(
             }
 
             // Step 2: cross-structure branch-set selection.
-            // If a previous value exists and the current value differs by
-            // more than π, search for a 2π correction. The 2π spacing is
-            // approximated as 2π * (w_sum^I / N_occ) * scale (the rescaled
-            // per-atom 2π shift for one band).
+            // First, target-aware pre-alignment: search multi-band shifts
+            // that bring per-atom γ as close as possible to the target
+            // polarization.  Single-band shifts are too coarse when all
+            // w_norm[n] are large (shift_amp > 1.2 rad).  Multi-band
+            // combinations (e.g. band_a +1, band_b -1) achieve fine shifts
+            // like 2.18 - 1.44 = 0.74 rad that single bands cannot reach.
+            if (!target_gamma_.empty())
+            {
+                for (int iat = 0; iat < nat_; ++iat)
+                {
+                    double g = gamma_I_per_atom[iat];
+                    double target = target_gamma_[iat];
+                    double best_val = g;
+                    double best_dist = std::abs(g - target);
+                    double w_total = 0.0;
+                    for (int n = 0; n < n_dim; ++n)
+                        w_total += w_In_matrix[n][iat];
+                    if (w_total < 1e-12) continue;
+
+                    // Pre-compute normalized shift amplitudes
+                    std::vector<double> shift_amp(n_dim);
+                    for (int n = 0; n < n_dim; ++n)
+                        shift_amp[n] = 2.0 * M_PI * w_In_matrix[n][iat] / w_total;
+
+                    // Bounded exhaustive search over all k vectors.
+                    // For n_dim=4 and K=3: 7^4 = 2401 candidates (fast).
+                    const int K = 3;
+                    std::vector<int> kvec(n_dim, 0);
+                    bool done = false;
+                    while (!done)
+                    {
+                        // Skip all-zeros (no shift)
+                        bool all_zero = true;
+                        double shift = 0.0;
+                        for (int n = 0; n < n_dim; ++n)
+                        {
+                            if (kvec[n] != 0) { all_zero = false; }
+                            shift += kvec[n] * shift_amp[n];
+                        }
+                        if (!all_zero)
+                        {
+                            double candidate = g + shift;
+                            double dist = std::abs(candidate - target);
+                            if (dist < best_dist)
+                            {
+                                best_dist = dist;
+                                best_val = candidate;
+                            }
+                        }
+                        // Increment kvec (odometer-style)
+                        int carry_pos = 0;
+                        while (carry_pos < n_dim)
+                        {
+                            kvec[carry_pos]++;
+                            if (kvec[carry_pos] > K)
+                            {
+                                kvec[carry_pos] = -K;
+                                carry_pos++;
+                            }
+                            else
+                            {
+                                break;
+                            }
+                        }
+                        if (carry_pos >= n_dim) done = true;
+                    }
+
+                    gamma_accum[iat] += best_val - gamma_I_per_atom[iat];
+                    gamma_I_per_atom[iat] = best_val;
+                }
+            }
+
+            // Step 3: cross-structure branch-set consistency.
+            // Ensure per-atom γ stays within π of its previous value
+            // (from branch.dat or previous SCF iteration).
             if (!std::isnan(prev_gamma[0]))
             {
                 for (int iat = 0; iat < nat_; ++iat)
@@ -923,15 +1175,19 @@ void DeltaP::compute_wannier_polarization(
                     double prev = prev_gamma[iat];
                     if (std::abs(g - prev) < M_PI) { prev_gamma[iat] = g; continue; }
 
-                    // Search single 2π shifts (k = ±1, ±2)
+                    // Search single-band shifts: each band contributes ±2π·w_In
                     double best_val = g;
                     double best_dist = std::abs(g - prev);
-                    for (int k = -2; k <= 2; ++k)
+                    for (int n = 0; n < n_dim; ++n)
                     {
-                        if (k == 0) continue;
-                        double candidate = g + k * 2.0 * M_PI * scale;
-                        double dist = std::abs(candidate - prev);
-                        if (dist < best_dist) { best_dist = dist; best_val = candidate; }
+                        double w_In = w_In_matrix[n][iat];
+                        if (std::abs(w_In) < 1e-12) continue;
+                        for (int sign = -1; sign <= 1; sign += 2)
+                        {
+                            double candidate = g + sign * 2.0 * M_PI * w_In;
+                            double dist = std::abs(candidate - prev);
+                            if (dist < best_dist) { best_dist = dist; best_val = candidate; }
+                        }
                     }
                     gamma_accum[iat] += best_val - gamma_I_per_atom[iat];
                     gamma_I_per_atom[iat] = best_val;
@@ -950,6 +1206,8 @@ void DeltaP::compute_wannier_polarization(
                 for (int iat = 0; iat < nat_; ++iat)
                     prev_gamma[iat] = gamma_I_per_atom[iat];
             }
+            gamma_raw_per_string.push_back(gamma_pre_branch);
+            gamma_sel_per_string.push_back(gamma_I_per_atom);
         }
 
         if (istring == 0)
@@ -978,15 +1236,54 @@ void DeltaP::compute_wannier_polarization(
     // accuracy for the current framework.
     std::cout << "   DeltaP: processed " << n_strings_processed << " / " << total_string_ << " k-strings" << std::endl;
 
-    // Initialize results arrays
+    if (n_strings_processed >= 2)
+    {
+        std::cout << "\n   === Cross-String Branch Consistency ===" << std::endl;
+        std::cout << "   Strings processed: " << n_strings_processed << " / " << total_string_ << std::endl;
+        for (int iat = 0; iat < nat_; ++iat)
+        {
+            double gamma_min = 1e300, gamma_max = -1e300;
+            double gamma_sum = 0.0, gamma_sum2 = 0.0;
+            std::cout << "   Atom " << iat << " per-string gamma:";
+            for (int ist = 0; ist < n_strings_processed; ++ist)
+            {
+                double g = gamma_sel_per_string[ist][iat];
+                double g_raw = gamma_raw_per_string[ist][iat];
+                double shift = g - g_raw;
+                std::cout << " [" << ist << "] raw=" << std::scientific << std::setprecision(6) << g_raw
+                          << " sel=" << g << " Δ=" << shift;
+                gamma_min = std::min(gamma_min, g);
+                gamma_max = std::max(gamma_max, g);
+                gamma_sum += g; gamma_sum2 += g * g;
+            }
+            double gamma_mean = gamma_sum / n_strings_processed;
+            double gamma_std = (n_strings_processed > 1)
+                ? std::sqrt((gamma_sum2 - gamma_sum * gamma_sum / n_strings_processed) / (n_strings_processed - 1))
+                : 0.0;
+            std::cout << std::endl << "        spread: min=" << gamma_min << " max=" << gamma_max
+                      << " mean=" << gamma_mean << " σ=" << gamma_std << std::endl;
+            if (!gamma_sel_per_string.empty())
+            {
+                double w_sum_I = 0.0;
+                const auto& wm = results_.smo_weights;
+                if (!wm.empty())
+                    for (int n = 0; n < static_cast<int>(wm.size()) && static_cast<size_t>(iat) < wm[n].size(); ++n)
+                        w_sum_I += wm[n][iat];
+                if (w_sum_I > 1e-12)
+                    std::cout << "        w_sum^I=" << w_sum_I << " 2π·w_sum^I=" << (2.0*M_PI*w_sum_I)
+                              << (gamma_std > 0.1 * 2.0*M_PI*w_sum_I ? "  ← BRANCH INCONSISTENT!" : "  OK") << std::endl;
+            }
+        }
+        std::cout << std::endl;
+    }
+
+    // Initialize results arrays (once, before alpha loop)
     results_.smo_weight_sum.resize(nat_, 0.0);
-    results_.gamma_I_raw.resize(nat_, ModuleBase::Vector3<double>(0.0, 0.0, 0.0));
-    results_.r_elec_center.resize(nat_, ModuleBase::Vector3<double>(0.0, 0.0, 0.0));
 
     for (int iat = 0; iat < nat_; ++iat)
     {
         double gamma_I = (n_strings_processed > 0) ? gamma_accum[iat] / n_strings_processed : 0.0;
-        W_prev_[iat] = std::complex<double>(gamma_I, 0.0);
+        W_prev_[iat][alpha] = gamma_I;
         has_prev_ = true;
         results_.gamma_I[iat][alpha_idx] = gamma_I;
         results_.P_I[iat][alpha_idx] = prefactor * gamma_I;
@@ -994,6 +1291,10 @@ void DeltaP::compute_wannier_polarization(
         results_.gamma_I_raw[iat][alpha_idx] = (n_strings_processed > 0) ? gamma_raw_accum[iat] / n_strings_processed : 0.0;
         results_.r_elec_center[iat][alpha_idx] = (n_strings_processed > 0) ? r_elec_accum[iat] / n_strings_processed : 0.0;
     }
+
+    } // alpha loop
+
+    gdir_ = gdir_orig;  // restore original direction for downstream use
 
     results_.P_total = ModuleBase::Vector3<double>(0.0, 0.0, 0.0);
     for (int iat = 0; iat < nat_; ++iat)
@@ -1003,9 +1304,11 @@ void DeltaP::compute_wannier_polarization(
     if (!scf_mode_)
     {
         write_results(ucell);
-        // Persist branch state for the next SCF/run
-        save_branch();
     }
+    // Always persist branch state and eigenvalue matching
+    // (SCF and non-SCF mode) for cross-run determinism.
+    save_branch();
+    save_match();
 
     std::cout << " >> Finish DeltaP Wannier polarization.\n * * * * * *\n";
 
@@ -1180,9 +1483,9 @@ void DeltaP::load_branch()
     W_prev_.resize(nat_);
     for (int iat = 0; iat < nat_; ++iat)
     {
-        double re = 0.0, im = 0.0;
-        ifs >> re >> im;
-        W_prev_[iat] = std::complex<double>(re, im);
+        double gx = 0.0, gy = 0.0, gz = 0.0;
+        ifs >> gx >> gy >> gz;
+        W_prev_[iat] = ModuleBase::Vector3<double>(gx, gy, gz);
     }
     has_prev_ = true;
     std::cout << " DeltaP: loaded branch state from " << fname << std::endl;
@@ -1204,7 +1507,53 @@ void DeltaP::save_branch() const
     ofs << std::setprecision(17);
     ofs << nat_ << "\n";
     for (int iat = 0; iat < nat_; ++iat)
-        ofs << W_prev_[iat].real() << " " << W_prev_[iat].imag() << "\n";
+        ofs << W_prev_[iat].x << " " << W_prev_[iat].y << " " << W_prev_[iat].z << "\n";
+    ofs.close();
+}
+
+void DeltaP::load_match()
+{
+    const std::string fname = "deltap_match.dat";
+    std::ifstream ifs(fname);
+    if (!ifs.is_open()) { match_loaded_ = false; return; }
+
+    saved_matches_.clear();
+    int alpha, istring, j, N;
+    while (ifs >> alpha >> istring >> j >> N)
+    {
+        if (alpha < 0 || alpha >= 3) continue;
+        if (alpha >= static_cast<int>(saved_matches_.size()))
+            saved_matches_.resize(alpha + 1);
+        if (istring >= static_cast<int>(saved_matches_[alpha].size()))
+            saved_matches_[alpha].resize(istring + 1);
+        if (j >= static_cast<int>(saved_matches_[alpha][istring].size()))
+            saved_matches_[alpha][istring].resize(j + 1);
+        saved_matches_[alpha][istring][j].resize(N, -1);
+        for (int n = 0; n < N; ++n)
+            ifs >> saved_matches_[alpha][istring][j][n];
+    }
+    match_loaded_ = !saved_matches_.empty();
+    if (match_loaded_)
+        std::cout << " DeltaP: loaded eigenvalue matching from " << fname << std::endl;
+}
+
+void DeltaP::save_match() const
+{
+    if (saved_matches_.empty()) return;
+    const std::string fname = "deltap_match.dat";
+    std::ofstream ofs(fname);
+    if (!ofs.is_open()) return;
+    ofs << std::setprecision(10);
+    for (size_t a = 0; a < saved_matches_.size(); ++a)
+        for (size_t s = 0; s < saved_matches_[a].size(); ++s)
+            for (size_t j = 0; j < saved_matches_[a][s].size(); ++j)
+            {
+                const auto& m = saved_matches_[a][s][j];
+                if (m.empty()) continue;
+                ofs << a << " " << s << " " << j << " " << m.size();
+                for (int v : m) ofs << " " << v;
+                ofs << "\n";
+            }
     ofs.close();
 }
 
@@ -1595,6 +1944,12 @@ void DeltaP::compute_resta_z(const UnitCell& ucell,
 
     std::cout << " >> Finish DeltaP Resta-Z.\n * * * * * *\n";
     ModuleBase::timer::end("DeltaP", "compute_resta_z");
+}
+
+void DeltaP::init_inner_loop()
+{
+    nscf_ = PARAM.inp.deltap_nscf;
+    bfgs_.init(nat_, 0.5, PARAM.inp.deltap_conv_thr, 2, 0.01, 0.005);
 }
 
 } // namespace deltap

@@ -15,6 +15,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include "module_optimizer/bfgs.h"
+
 class cal_r_overlap_R;
 class unkOverlap_lcao;
 
@@ -93,8 +95,51 @@ public:
                                const std::vector<double>& lambda,
                                std::unordered_map<int, std::vector<std::complex<double>>>& hk_correction);
 
+    /// Initialize Fletcher-Reeves CG inner-loop optimizer for constrained polarization.
+    void init_inner_loop();
+
+    /// Access the Fletcher-Reeves CG optimizer for inner-loop control.
+    ModuleOptimizer::FletcherReevesCG& bfgs() { return bfgs_; }
+
+    /// Check if inner loop is active (deltap_nscf > 0).
+    bool inner_loop_active() const { return nscf_ > 0; }
+
+    /// Get max inner loop steps.
+    int inner_loop_nscf() const { return nscf_; }
+
+    /// Check if inner loop has been triggered (after first drho gate).
+    bool inner_loop_triggered() const { return inner_triggered_; }
+
+    /// Set inner loop triggered flag.
+    void set_inner_triggered(bool v) { inner_triggered_ = v; }
+
+    /// Cooldown after inner loop: skip N iterations to let charge re-equilibrate.
+    bool inner_loop_cooldown() const { return cooldown_counter_ > 0; }
+    void start_cooldown(int n = 5) { cooldown_counter_ = n; }
+    void tick_cooldown() { if (cooldown_counter_ > 0) --cooldown_counter_; }
+
+    /// Pre-allocate D_I storage for all k-points.
+    void ensure_D_I_all(int nks, int nat, const std::vector<int>& nproj, int nbands);
+
+    /// Save/restore branch state for inner-loop consistency.
+    void save_branch_state(std::vector<ModuleBase::Vector3<double>>& w_prev, bool& has_prev) const
+    {
+        w_prev = W_prev_;
+        has_prev = has_prev_;
+    }
+    void restore_branch_state(const std::vector<ModuleBase::Vector3<double>>& w_prev, bool has_prev)
+    {
+        W_prev_ = w_prev;
+        has_prev_ = has_prev;
+    }
+
     /// Load branch state from file (public for esolver access).
     void load_branch();
+
+    /// Set per-atom target Berry phase (for target-aware branch selection).
+    void set_target_gamma(const std::vector<double>& target) { target_gamma_ = target; }
+    /// Get per-atom target Berry phase.
+    const std::vector<double>& get_target_gamma() const { return target_gamma_; }
 
 private:
     void compute_real_overlaps(const UnitCell& ucell, const Grid_Driver& gd);
@@ -171,9 +216,17 @@ private:
     std::vector<S_dk_cache_entry> S_dk_cache_;
     bool S_dk_cache_valid_ = false;
 
-    // Branch tracking for cross-SCF phase smoothness
-    std::vector<std::complex<double>> W_prev_;
+    // Branch tracking for cross-SCF phase smoothness (per atom, 3 directions)
+    std::vector<ModuleBase::Vector3<double>> W_prev_;
     bool has_prev_ = false;
+
+    // Eigenvalue matching freeze: save/load Hungarian match results
+    // across independent runs for deterministic lambda sweep.
+    // saved_matches_[alpha][istring][j][n] = matched prev-index for band n.
+    std::vector<std::vector<std::vector<std::vector<int>>>> saved_matches_;
+    bool match_loaded_ = false;
+    void load_match();
+    void save_match() const;
 
     // SCF mode: skip file I/O during inner loop iterations
     bool scf_mode_ = false;
@@ -218,6 +271,18 @@ private:
 
     // Results
     AtomicPolarization results_;
+
+    // Fletcher-Reeves CG optimizer + inner loop state
+    ModuleOptimizer::FletcherReevesCG bfgs_;
+    int nscf_ = 0;
+    bool inner_triggered_ = false;
+    int cooldown_counter_ = 0;  ///< skip inner-loop for this many outer iterations
+
+    /// Per-atom target Berry phase gamma^I (for target-aware branch selection).
+    std::vector<double> target_gamma_;
+
+    // D_I_all_[ik][iat][lm][n] = SMO projection at k-point ik (B13)
+    std::vector<std::vector<std::vector<std::vector<std::complex<double> > > > > D_I_all_;
 };
 
 } // namespace deltap

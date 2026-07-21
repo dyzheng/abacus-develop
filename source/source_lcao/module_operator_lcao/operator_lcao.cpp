@@ -194,10 +194,7 @@ void OperatorLCAO<TK, TR>::init(const int ik_in) {
         case calculation_type::lcao_dp_lambda:
         {
             // DeltaP lambda operator: incremental update, no HR zeroing.
-            // contributeHR checks internally whether lambda changed.
             this->contributeHR();
-            // Add k-dependent Berry connection correction to HK
-            std::cout << "   [OperatorLCAO] lcao_dp_lambda: calling contributeHk(ik=" << ik_in << ")" << std::endl;
             this->contributeHk(ik_in);
             break;
         }

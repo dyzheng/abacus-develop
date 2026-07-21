@@ -624,9 +624,12 @@ struct Input_para
     std::string deltap_method = "berry_connection";  ///< P^I computation method: "berry_connection" or "wannier"
     bool deltap_corr = false;        ///< switch to enable DeltaP Hamiltonian correction (constrained DFT)
     double deltap_lambda_step = 0.5; ///< Lagrange multiplier update step size
-    int deltap_nscf = 5;             ///< max inner SCF iterations for lambda convergence
+    int deltap_nscf = 5;             ///< max inner SCF iterations for lambda convergence (0=sync mode)
+    double deltap_inner_thr = 1.0e-4; ///< drho threshold to activate inner lambda loop
+    double deltap_conv_thr = 1.0e-3;  ///< |gamma-target| convergence threshold for inner loop
     std::string deltap_target_file = "";  ///< file with per-atom target Berry phase gamma^I
     double deltap_lambda_init = 0.0;      ///< initial lambda for all atoms (testing)
+    double deltap_lambda_mixing = 0.0;     ///< damping factor for lambda: λ_new = β·λ_opt + (1-β)·λ_old (0=no mixing, 1=full BFGS)
 
     // ==============   #Parameters (18.Quasiatomic Orbital analysis) =========
     ///<==========================================================

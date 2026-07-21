@@ -40,9 +40,17 @@ hamilt::DeltaPOperator<TK, TR>::~DeltaPOperator()
 template <typename TK, typename TR>
 void hamilt::DeltaPOperator<TK, TR>::contributeHR()
 {
+    // Branch A: first time ever — lambda_save_ already equals lambda_
+    // from the constructor, so dλ = 0 (no HR perturbation at iter=1).
+    // This avoids destabilizing the initial SCF convergence.
+    // Previously (B16-era), lambda_save_ was reset to 0 here, causing
+    // dλ = λ_init at iter=1, which created a large Hamiltonian
+    // perturbation that prevented gamma convergence.
+    // HR is applied only when set_lambda() changes λ, which resets
+    // dp_hr_done → the else-if below is skipped → dλ computed.
     if (!this->hr_done)
     {
-        this->lambda_save_.assign(this->ucell->nat, 0.0);
+        // lambda_save_ stays at constructor value (= lambda_ → dλ = 0)
     }
     else if (this->dp_hr_done)
     {

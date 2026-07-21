@@ -109,6 +109,13 @@ class ESolver_KS_LCAO : public ESolver_KS
     void* r_overlap_scf_ = nullptr;     // cal_r_overlap_R*
     std::vector<double> deltap_target_;
     bool deltap_scf_initialized_ = false;
+    bool deltap_lambda_set_ = false;  ///< true after Phase-2 λ update
+
+    // DeltaP helper methods (refactored for maintainability)
+    void deltap_init(UnitCell& ucell);
+    double deltap_compute_gamma(UnitCell& ucell, const int iter);
+    void deltap_inner_loop(UnitCell& ucell, const int iter, bool& skip_solve);
+    void deltap_update_lambda(UnitCell& ucell, const int iter);
 
 
   public:
