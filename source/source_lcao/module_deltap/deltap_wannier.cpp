@@ -1334,24 +1334,12 @@ void DeltaP::compute_hk_correction(const UnitCell& ucell,
     ModuleBase::TITLE("DeltaP", "compute_hk_correction");
     hk_correction.clear();
 
-    std::cout << "   [compute_hk_correction] nppstr_=" << nppstr_
-              << " kstring_data_.size()=" << kstring_data_.size()
-              << " S_dk_.size()=" << S_dk_.size() << std::endl;
-
     if (nppstr_ < 2 || kstring_data_.empty()) return;
 
     const int nks = psi->get_nk();
     const int nbands = psi->get_nbands();
     const int nrow = paraV_->get_row_size();
     const int ncol = paraV_->get_col_size();
-
-    // Serial only for now
-    if (nrow != ncol)
-    {
-        std::cerr << "DeltaP::compute_hk_correction: parallel not implemented (nrow="
-                  << nrow << " ncol=" << ncol << ")" << std::endl;
-        return;
-    }
 
     // Ensure S_dk_ is computed
     if (S_dk_.empty())
@@ -1368,6 +1356,11 @@ void DeltaP::compute_hk_correction(const UnitCell& ucell,
     if (nocc_use <= 0) return;
 
     const std::complex<double> half_i(0.0, 0.5);
+
+    // Note: In MPI mode, each rank computes its LOCAL block of the
+    // HK correction matrix using its local wavefunctions and local S_dk.
+    // The Hamiltonian is distributed, so each rank's correction is applied
+    // to its own block — no MPI communication needed here.
 
     // For each link on the first k-string
     for (int j = 0; j < nppstr_ - 1; ++j)
@@ -1407,7 +1400,6 @@ void DeltaP::compute_hk_correction(const UnitCell& ucell,
         }
 
         // Step 1: SC = S_dk * C_R -> (nrow x nocc_use)
-        // SC[alpha + p*nrow] = sum_gamma S_dk_[alpha + gamma*nrow] * c_R[gamma + p*nrow]
         std::vector<std::complex<double>> SC(nrow * nocc_use, {0.0, 0.0});
         for (int p = 0; p < nocc_use; ++p)
         {
@@ -1433,7 +1425,6 @@ void DeltaP::compute_hk_correction(const UnitCell& ucell,
         }
 
         // Step 3: M = F * C_L^dagger -> (nrow x nrow)
-        // M[alpha + beta*nrow] = sum_p F[alpha + p*nrow] * conj(c_L[beta + p*nrow])
         std::vector<std::complex<double>> M(nrow * nrow, {0.0, 0.0});
         for (int beta = 0; beta < nrow; ++beta)
         {
