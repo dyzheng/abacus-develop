@@ -16,7 +16,7 @@ namespace elecstate
 double fenergy::calculate_etot()
 {
     etot = eband + deband + (etxc - etxcc) + ewald_energy + hartree_energy + demet + descf + exx + efield
-            + gatefield + evdw + esol_el + esol_cav + edftu + edeepks_scf + escon + ml_exx;
+            + gatefield + evdw + esol_el + esol_cav + edftu + edeepks_scf + escon + dp_escon + ml_exx;
     return etot;
 }
 

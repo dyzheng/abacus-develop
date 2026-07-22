@@ -769,6 +769,26 @@ void ESolver_KS_LCAO<TK, TR>::iter_finish(UnitCell& ucell, const int istep, int&
             }
             std::cout << " |γ-t|=" << std::scientific << std::setprecision(3) << max_dev
                       << "\n";
+
+            // DeltaP constraint energy correction (analogous to DeltaSpin's escon):
+            // H_corr contributes ~Σλ·γ to eband. Subtract it to get physical E_DFT.
+            double dp_escon = 0.0;
+            if (use_constraint_matrix)
+            {
+                for (int a = 0; a < static_cast<int>(deltap_constraint_matrix_.size()); ++a)
+                {
+                    double cv = 0.0;
+                    for (int i = 0; i < ucell.nat; ++i)
+                        cv += deltap_constraint_matrix_[a][i] * gamma_I[i][alpha];
+                    dp_escon -= deltap_constraint_lambda_[a] * cv;
+                }
+            }
+            else
+            {
+                for (int iat = 0; iat < ucell.nat; ++iat)
+                    dp_escon -= lambda[iat] * gamma_I[iat][alpha];
+            }
+            this->pelec->f_en.dp_escon = dp_escon;
         }
         else
         {
@@ -959,7 +979,7 @@ void ESolver_KS_LCAO<TK, TR>::deltap_init(UnitCell& ucell)
                         ifs >> deltap_constraint_matrix_[a][i];
                     ifs >> deltap_constraint_target_[a];
                 }
-                deltap_constraint_lambda_.assign(m, 0.0);
+                deltap_constraint_lambda_.assign(m, PARAM.inp.deltap_lambda_init);
                 static_cast<deltap::DeltaP*>(dp_scf_)->set_constraint_matrix(
                     deltap_constraint_matrix_, deltap_constraint_target_);
                 std::cout << " [DeltaP] Loaded constraint matrix " << m << "x" << n
