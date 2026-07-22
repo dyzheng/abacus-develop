@@ -711,8 +711,6 @@ void ESolver_KS_LCAO<TK, TR>::iter_finish(UnitCell& ucell, const int istep, int&
             // Print status with phase indicator
             auto* dp = static_cast<deltap::DeltaP*>(dp_scf_);
             // Diagnostic: raw gamma (pre-branch) for Born effective charge
-            static int raw_print_count = 0;
-            if (raw_print_count < 2)
             {
                 const auto& gamma_raw = dp->get_results().gamma_I_raw;
                 if (!gamma_raw.empty())
@@ -726,7 +724,6 @@ void ESolver_KS_LCAO<TK, TR>::iter_finish(UnitCell& ucell, const int istep, int&
                         std::cout << " γ" << iat << "=" << gamma_raw[iat][a];
                     std::cout << std::endl;
                 }
-                raw_print_count++;
             }
             const int alpha = PARAM.inp.deltap_gdir - 1;
             const auto& gamma_I = dp->get_results().gamma_I;

@@ -355,6 +355,7 @@ void DeltaP::compute_wannier_polarization(
         int n_strings_processed = 0;
         std::vector<std::vector<double>> w_In_first_string_;  // current alpha's first-string weights
         std::vector<std::complex<double>> zeta_list;
+        std::vector<double> total_bp_per_string;      // total Berry phase (arg(zeta)) per string
 
         // Branch reference: if previous converged value exists, use it;
         // otherwise use NaN to skip branch selection on first iteration.
@@ -1146,6 +1147,7 @@ void DeltaP::compute_wannier_polarization(
             }
             gamma_raw_per_string.push_back(gamma_pre_branch);
             gamma_sel_per_string.push_back(gamma_I_per_atom);
+            total_bp_per_string.push_back(std::arg(zeta_scalar));  // for [totalBP] diagnostic
         }
 
         if (istring == 0)
@@ -1173,6 +1175,18 @@ void DeltaP::compute_wannier_polarization(
     // strings with 2π jumps in arg(zeta), which is within acceptable
     // accuracy for the current framework.
     std::cout << "   DeltaP: processed " << n_strings_processed << " / " << total_string_ << " k-strings" << std::endl;
+
+    // Total Berry phase diagnostic (bypasses per-atom decomposition)
+    if (n_strings_processed > 0 && !total_bp_per_string.empty())
+    {
+        double total_bp_avg = 0.0;
+        for (size_t i = 0; i < total_bp_per_string.size(); ++i)
+            total_bp_avg += total_bp_per_string[i];
+        total_bp_avg /= total_bp_per_string.size();
+        std::cout << "   [totalBP] alpha=" << alpha << " avg_arg(zeta)="
+                  << std::scientific << std::setprecision(6) << total_bp_avg
+                  << " nstrings=" << total_bp_per_string.size() << std::endl;
+    }
 
     if (n_strings_processed >= 2)
     {

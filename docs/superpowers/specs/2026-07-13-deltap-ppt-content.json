@@ -1,0 +1,549 @@
+{
+  "title": "ABACUS DeltaP 算法开发与测试进展",
+  "slides": [
+    {
+      "page": 1,
+      "title": "ABACUS DeltaP：Berry 联络约束 SCF",
+      "subtitle": "算法原理、测试进展与问题分析",
+      "layout": "title",
+      "content": []
+    },
+    {
+      "page": 2,
+      "title": "目录",
+      "layout": "list",
+      "content": [
+        "1. DeltaP 算法概述 — 背景、架构、HK/HR、Wilson loop",
+        "2. 三阶段验证 — 策略、Stage 2 数据、Stage 3 振荡",
+        "3. Bug 追踪与 B16 根因诊断",
+        "4. 风险评审共识 — 18 项风险点总结",
+        "5. 理论补充 — HK 推导、ζ rescaling、分支选择",
+        "6. 代码现状、TODO 与展望"
+      ]
+    },
+    {
+      "page": 3,
+      "title": "物理背景：宏观极化与 Berry Phase",
+      "layout": "two_column",
+      "content": [
+        {
+          "column": "left",
+          "title": "问题",
+          "items": [
+            "ABACUS 可计算电子结构，但无法直接约束宏观极化（铁电材料的关键序参量）",
+            "DeltaP 目标：在 SCF 中施加极化约束",
+            "$\\mathbf{P} = -\\frac{2e}{(2\\pi)^3}\\mathrm{Im}\\sum_n\\int d\\mathbf{k} \\langle u_{n\\mathbf{k}}|\\nabla_\\mathbf{k}|u_{n\\mathbf{k}}\\rangle$"
+          ]
+        },
+        {
+          "column": "right",
+          "title": "方案",
+          "items": [
+            "Berry connection: $\\gamma_{\\alpha,n} = \\oint \\mathbf{A}_{nn}^{(\\alpha)} \\cdot d\\mathbf{k}$",
+            "约束: $\\gamma^I(\\psi) = \\gamma^I_{\\mathrm{target}}$（per-atom 极化）",
+            "通过拉格朗日乘子 $\\lambda^I$ 将约束加入 Hamiltonian:",
+            "$H_\\mathrm{eff} = H_\\mathrm{KS} + \\sum_I \\lambda^I \\cdot \\frac{\\partial\\gamma^I}{\\partial\\psi}$"
+          ]
+        }
+      ]
+    },
+    {
+      "page": 4,
+      "title": "算法架构：双层 SCF",
+      "layout": "diagram",
+      "content": [
+        {
+          "block": "外层 SCF：电荷自洽 (Broyden mixing)",
+          "detail": [
+            "构建 Hamiltonian: $H_\\mathrm{KS}[\\rho] + H_\\mathrm{HK}(\\lambda) + H_\\mathrm{HR}(\\Delta\\lambda)$",
+            "对角化 → 更新 $\\rho$ → mixing → 循环",
+            "收敛判据: $|\\rho^{(n+1)} - \\rho^{(n)}| < 10^{-8}$",
+            "每轮: 计算 $\\gamma^I$；当 $\\Delta\\rho < \\epsilon_\\mathrm{inner}$ 时触发内层"
+          ]
+        },
+        {
+          "block": "内层循环：$\\lambda$ 优化 (Fletcher-Reeves CG) [deltap_nscf > 0]",
+          "detail": [
+            "冻结 $\\rho$，优化 $\\lambda$ 使 $r^I = \\gamma^I - \\gamma^I_{\\mathrm{target}} = 0$",
+            "CG 方向: $d_k = r_k + \\beta \\cdot d_{k-1}$（Fletcher-Reeves）",
+            "Secant 线搜索: $\\alpha_{\\mathrm{opt}} = \\alpha_{\\mathrm{trial}} \\cdot \\frac{-\\mathbf{r}^T \\Delta\\mathbf{r}}{|\\Delta\\mathbf{r}|^2}$, $\\Delta\\mathbf{r} = \\mathbf{r}(\\lambda+\\alpha_{\\mathrm{trial}}\\mathbf{d}) - \\mathbf{r}(\\lambda)$"
+          ]
+        },
+        {
+          "arrow": "drho < ε_inner → 触发内层(冻结 ρ) → 内层收敛 → λ mixing + cooldown → 回到外层"
+        }
+      ]
+    },
+    {
+      "page": 5,
+      "title": "DeltaP 对 Hamiltonian 的两种贡献",
+      "layout": "two_column_formula",
+      "content": [
+        {
+          "column": "left",
+          "title": "HK 修正（k-space 位移重叠）",
+          "formula": "$M_{\\mathbf{k}_j} = -\\frac{i}{2}\\, S_{\\mathrm{dk}}\\, C_R\\, \\mathrm{diag}(w^\\mathrm{eff})\\, C_L^\\dagger$,  $H_\\mathrm{sym} = \\frac{M + M^\\dagger}{2}$",
+          "detail": [
+            "来源: $\\partial\\gamma/\\partial c^*_{\\mu n}$ — Berry phase 对波函数的依赖",
+            "$w^I_\\mathrm{eff} = \\sum_I \\lambda^I \\cdot w^I_n / S_I$（per-atom 预条件器）",
+            "$S_\\mathrm{dk}$: 位移重叠矩阵 $\\sum_R e^{2\\pi i\\,\\Delta\\mathbf{k}\\cdot\\mathbf{R}} \\langle\\phi_\\mu|\\phi_\\nu(\\mathbf{R})\\rangle$",
+            "$C_L, C_R$: 相邻 k 点 $\\mathbf{k}_j, \\mathbf{k}_{j+1}$ 的波函数系数",
+            "厄米对称化: $H_\\mathrm{sym} = (M + M^\\dagger)/2$",
+            "k 依赖: 每个 link $(\\mathbf{k}_j, \\mathbf{k}_{j+1})$ 独立修正"
+          ]
+        },
+        {
+          "column": "right",
+          "title": "HR 修正（位置矩阵）",
+          "formula": "$H^\\mathrm{HR}_{\\mu\\nu}(R) = -\\sum_I \\Delta\\lambda^I \\cdot \\langle\\phi_\\mu^0|\\mathbf{e}_\\alpha \\cdot \\hat{\\mathbf{r}}|\\phi_\\nu^R\\rangle$",
+          "detail": [
+            "来源: $\\partial\\gamma/\\partial S$ — Berry phase 对 overlap matrix 的依赖",
+            "$\\Delta\\lambda = \\lambda - \\lambda_{\\mathrm{prev}}$",
+            "(仅当 $\\lambda$ 变化时贡献，固定 $\\lambda$ 时 dλ=0)",
+            "R-space: 全局实空间位置矩阵 (预计算 pre_HR)",
+            "与 k 无关: 相同的 HR 应用于所有 k 点",
+            "施加时机: 只在 iter=1 之后 (延迟: HR 随 dλ 启动)"
+          ]
+        }
+      ]
+    },
+    {
+      "page": 6,
+      "title": "Wilson Loop 与 Per-atom Berry Phase",
+      "layout": "formula_centered",
+      "content": [
+        {
+          "section": "单个 k-string (沿 $\\mathbf{b}_\\alpha$ 方向)",
+          "formulas": [
+            "重叠矩阵: $O_j^{mn} = \\langle u_{m,\\mathbf{k}_j}|u_{n,\\mathbf{k}_{j+1}}\\rangle \\approx \\langle\\psi_{m,\\mathbf{k}_j}|e^{-i\\Delta\\mathbf{k}\\cdot\\hat{\\mathbf{r}}}|\\psi_{n,\\mathbf{k}_{j+1}}\\rangle$",
+            "Wilson loop: $W = O_0 \\cdot O_1 \\cdots O_{N_k-1}$",
+            "本征值: $W|v_n\\rangle = e^{i\\gamma_n}|v_n\\rangle$"
+          ]
+        },
+        {
+          "section": "Per-atom 极化分配 — 将总 γ_n 分解到每个原子",
+          "formulas": [
+            "SMO 投影: $D^I_{lm,n} = \\langle\\alpha^I_{lm}(\\mathbf{k})|\\psi_n(\\mathbf{k})\\rangle$  (每个原子的 first-zeta 轨道)",
+            "Löwdin 正交化: $\\tilde{D}^I = S^{-1/2} \\cdot D^I$  ($S_{ab}=\\langle\\alpha_a|\\alpha_b\\rangle$)",
+            "权重: $w^I_n = \\sum_{lm} |\\tilde{D}^I_{lm,n}|^2$, 满足 $\\sum_I w^I_n \\leq 1$",
+            "Per-atom Berry phase: $\\gamma^I = \\sum_n w^I_n \\cdot \\gamma_n$"
+          ]
+        }
+      ]
+    },
+    {
+      "page": 7,
+      "title": "三阶段验证策略",
+      "layout": "flowchart",
+      "content": [
+        {
+          "stage": 1,
+          "title": "Stage 1: Wannier90 参照",
+          "status": "⚠️ 部分完成",
+          "items": [
+            "测试系统: BN, BTO",
+            "方法: 对比 ABACUS DeltaP 与 Wannier90 计算的极化",
+            "BN: O/H Pz 比 ≈ 1.8，定性符合电负性",
+            "BTO: per-atom Pz (Ti 主导 −2.11×10⁻³ a.u.) 物理合理",
+            "待完成: BTO Wannier90 流程"
+          ]
+        },
+        {
+          "stage": 2,
+          "title": "Stage 2: λ→γ 响应",
+          "status": "✅ 通过",
+          "items": [
+            "测试: frozen charge (mixing_beta=0), 消除 ψ 变化干扰",
+            "纯 HK 效应: dγ/dλ ≈ 0.1-0.3 per unit λ",
+            "27 k-point 全覆盖验证",
+            "结论: HK 修正产生系统性、可测量的 γ 响应"
+          ]
+        },
+        {
+          "stage": 3,
+          "title": "Stage 3: 内循环约束收敛",
+          "status": "❌ 阻滞于 B16",
+          "items": [
+            "目标: λ 自动优化 → γ 收敛到 target",
+            "λ=0: SCF 15 轮收敛",
+            "λ=0.05: gamma 持续振荡, 60 轮不收敛",
+            "根因: 冻结电荷下 gamma 跨运行不同 → Wilson loop 本征值非确定性"
+          ]
+        }
+      ]
+    },
+    {
+      "page": 8,
+      "title": "Stage 2 实测结果：BN λ→γ 响应",
+      "layout": "data_table",
+      "content": [
+        {
+          "table_header": ["λ", "γ₀ (atom 1)", "Δγ/Δλ (finite diff)", "Δγ = γ(λ)−γ(0)"],
+          "rows": [
+            ["0.00", "−0.0842 rad", "—", "—"],
+            ["0.05", "−0.0791 rad", "0.102", "+0.0051"],
+            ["0.10", "−0.0738 rad", "0.104", "+0.0104"],
+            ["1.00", "−0.0325 rad", "0.052", "+0.0517"],
+            ["5.00", "−0.3866 rad", "−0.077", "−0.3024"]
+          ]
+        },
+        {
+          "note": "实测证明: mixing_beta=0 (冻结电荷) → 纯 HK 效应。||dγ/dλ||≈0.05–0.2，小 λ 为正、大 λ 处 dγ/dλ 反号（γ 越过 −π→+π 分界）。HK 修正覆盖全部 27 k-point。"
+        }
+      ]
+    },
+    {
+      "page": 9,
+      "title": "Stage 3 实测：内循环激活与振荡",
+      "layout": "data_chart",
+      "content": [
+        {
+          "description": "BN, lambda_init=0.05, lambda_step=0.0, nscf=0 (sync 模式), 60 轮"
+        },
+        {
+          "table_header": ["Iter", "1", "5", "10", "15", "20", "25", "30", "35", "40"],
+          "rows": [
+            ["γ₀(λ=0.05)", "0.260", "0.588", "−0.080", "−0.085", "−0.818", "0.266", "−1.82×10⁻³", "0.156", "0.426"],
+            ["γ₀(λ=0)", "0.246", "−0.022", "−0.083", "−0.085", "−0.085", "−0.085", "−0.085", "−0.085", "−0.085"]
+          ]
+        },
+        {
+          "observation": [
+            "λ=0 (基线): gamma 在 iter 10 收敛到 −0.085, 之后平稳",
+            "λ=0.05: iter 10–15 短暂匹配基线, iter 16 开始发散, 振幅 ±0.5 rad",
+            "关键: 波长 > π, 非分支跳变; 冻结电荷下 gamma 仍跨运行不同 → 根因在 Wilson loop 本征值计算内部 (B16)"
+          ]
+        }
+      ]
+    },
+    {
+      "page": 10,
+      "title": "Bug 追踪时间线 (已修复 7 项)",
+      "layout": "timeline",
+      "content": [
+        {
+          "id": "B14",
+          "name": "k-index 非对称映射 (时间反演删除)",
+          "date": "2026-07",
+          "detail": [
+            "ABACUS 默认 `symmetry=1` → 删除 1/2 的 k 点（时间反演对称）→ 剩余 k 点索引>0 但与全网格 kvec 数组不对齐",
+            "DeltaP 用全网格 kvec_d 索引访问 k 点 → 部分 k 点 HK 修正未施加",
+            "修复: `symmetry=-1` 禁用时间反演删除, 强制全网格 k 索引",
+            "影响: 27 点 k-mesh 中 ~14 点 HK 缺失 → dγ/dλ 低估 ~40%"
+          ]
+        },
+        {
+          "id": "P1",
+          "name": "SVD polar factor 矩阵乘序错误",
+          "date": "2026-07",
+          "detail": [
+            "代码: `C = A × B` (A,B 为 complex<double>, column-major)",
+            "预期: `C_{ik} = Σ_j A_{ij} × B_{jk}` → `U · V†`",
+            "实际: 矩阵乘法隐式转置了第二个参数 → 计算了 `U · V` 而非 `U · V†`",
+            "后果: 非酉投影导致 Wilson loop 脱离 U(n) → 错误 γ"
+          ]
+        },
+        {
+          "id": "P4",
+          "name": "zgeev 特征值初始顺序不确定",
+          "date": "2026-07",
+          "detail": [
+            "LAPACK zgeev 不保证返回的 evals/evecs 顺序",
+            "Wilson loop 第一个 k-string 的贪心匹配依赖顺序初始化",
+            "修复: 在 j=0 处按 arg(λ_n) 升序排序 evals 和 evecs",
+            "影响: 不同运行匹配到不同带 → 不同 gamma_unwrapped"
+          ]
+        },
+        {
+          "id": "NS",
+          "name": "Newton-Schulz 替换 SVD 酉投影",
+          "date": "2026-07",
+          "detail": [
+            "SVD: zgesvd 的 U,V 矩阵符号依赖于 LAPACK 实现、BLAS 版本、MPI 划分",
+            "NS: $X_{k+1}=X_k(3I-X_k^\\dagger X_k)/2$, 算法确定性 → 结果仅取决于输入和迭代公式",
+            "代价: 20 次矩阵乘法 ×4 (每次 4×4 sqmatmul)"
+          ]
+        },
+        {
+          "id": "HR",
+          "name": "HR 贡献延迟 (iter=1 不施加)",
+          "date": "2026-07",
+          "detail": [
+            "原代码: 构造函数中 lambda_save_=0 → iter=1 时 dλ=λ_init → 非零 HR 扰乱初始电荷",
+            "修复: 移除 lambda_save_=0 赋值, dλ=0 at iter=1",
+            "效果: iter=1 的 H 与 λ=0 完全一致"
+          ]
+        },
+        {
+          "id": "HK",
+          "name": "HK 缓存 (λ 不变时冻结 HK 修正)",
+          "date": "2026-07",
+          "detail": [
+            "原代码: 每轮 iter_finish 从当前 ψ 重算 HK → ψ 变化 → HK 变化 → H 变化 → ψ 再变 → ψ-HK 自洽循环",
+            "修复: λ 不变时跳过 `compute_hk_correction`, 复用首轮缓存",
+            "原理: HK 应为固定外部约束势, 不应随 ψ 演化"
+          ]
+        },
+        {
+          "id": "branch",
+          "name": "分支跨运行 persist (save/load)",
+          "date": "2026-07",
+          "detail": [
+            "SCF mode: 每轮加载已保存的分支文件 (deltap_branch.dat), 保证跨轮一致性",
+            "first-run-only save: 仅首次运行时写入 (原子写入 .tmp → rename), 后续不再覆盖"
+          ]
+        }
+      ]
+    },
+    {
+      "page": 11,
+      "title": "B16 根因分析与诊断方案",
+      "layout": "analysis",
+      "content": [
+        {
+          "section": "实验设置",
+          "items": [
+            "冻结电荷 (mixing_beta=0) + HR 延迟 (dλ=0 iter=1) + HK 缓存 (不重算)",
+            "→ H_KS[ρ] 不变, HK 不变, HR=0 → 全部 Hamiltonian 每轮完全相同"
+          ]
+        },
+        {
+          "section": "现象: 相同输入 → 不同 γ",
+          "data": [
+            "Trial 1: γ₀ = +0.098",
+            "Trial 2: γ₀ = −0.062",
+            "Trial 3: γ₀ = −0.098"
+          ]
+        },
+        {
+          "section": "推理链",
+          "items": [
+            "1. 相同 Hamiltonian → 相同对角化 → 相同 ψ",
+            "2. 相同 ψ → 相同 overlap O_j → 相同 Wilson loop W",
+            "3. 但 γ 不同 → 非确定性在 W 的后续处理 (对角化、退绕、匹配)"
+          ]
+        },
+        {
+          "section": "可能根因",
+          "items": [
+            "1. zgeev 特征值返回顺序不保证",
+            "2. 编译器优化 (−O3, −ffast−math) 改变乘加结合",
+            "3. Newton-Schulz 浮点非结合: 1e-15 级差异可跨越匹配阈值",
+            "4. MPI Allreduce 归约顺序依赖进程调度"
+          ]
+        },
+        {
+          "section": "诊断方案 (逐层排除)",
+          "items": [
+            "输出 ||W||_F: 跨运行不同 → NS 迭代或矩阵构建非确定",
+            "W 同但 evals 不同 → zgeev 非确定性 (特征向量不稳定)",
+            "evals 同但 γ_unwrapped 不同 → 贪心匹配错误 → 触发 L1 匈牙利算法",
+            "第 1 个 k-string 一致但后续不一致 → 分支选择错误"
+          ]
+        }
+      ]
+    },
+    {
+      "page": 12,
+      "title": "风险评审：18 项风险点的共识结论",
+      "layout": "table_summary",
+      "content": [
+        {
+          "table_header": ["ID", "描述", "原评级", "复审评级", "共识"],
+          "rows": [
+            ["C2", "Zeta rescaling 参照值错误", "Critical", "Critical", "✅ 唯一真正的 Critical bug，采用方案 B"],
+            ["C1", "compute_S_dk vs berryphase_overlap", "Critical", "High", "✅ 降级 (实测有效，O(dk) 精度)"],
+            ["C3", "psi-lambda mixing 不一致", "Critical", "Medium", "✅ 降级 (电荷 mixing 同质)"],
+            ["H4", "Gauge phase_corrections_ 未应用", "High", "High", "✅ 一致确认"],
+            ["H3", "分支选择间距错误", "High", "High", "✅ 一致确认，启用 select_branch_set"],
+            ["H5", "fmod 丢失累积相位", "High", "Low", "✅ 降级 (fmod 正确，匹配歧义由 L1 解决)"],
+            ["H1", "SMO 重叠矩阵非对称", "High", "待验证", "⚠️ 需先确认 max_asym"],
+            ["H2", "D_I conj 约定", "High", "待验证", "⚠️ 需先确认 Bloch 相位符号"],
+            ["M1-6", "命名/状态/诊断", "Medium", "Medium", "✅ 评级准确"],
+            ["L1-4", "简并/步长/注释/预条件", "Low", "Low", "✅ 评级准确"],
+            ["B16", "本征值非确定性", "未评级", "P0 阻滞", "✅ 确认是实际根因 (见上页)"]
+          ]
+        },
+        {
+          "note": "核心发现: 静态代码审查的 3 个 Critical 均非 SCF 不收敛的直接根因。实际阻滞 (B16) 需要运行时诊断而非静态审查。详细理论推导见后续补充页。"
+        }
+      ]
+    },
+    {
+      "page": 13,
+      "title": "理论补充：HK 修正推导",
+      "layout": "formula_centered",
+      "content": [
+        {
+          "section": "约束 Lagrangian",
+          "formula": "$\\mathcal{L} = E_{\\mathrm{tot}} + \\sum_I \\lambda^I \\cdot (\\gamma^I - \\gamma^I_{\\mathrm{target}})$"
+        },
+        {
+          "section": "HK 修正 (从 ∂γ/∂ψ* 的线性化近似)",
+          "formulas": [
+            "$\\frac{\\partial\\mathcal{L}}{\\partial c^*_{\\mu n \\mathbf{k}}} = H^{\\mathrm{KS}}_{\\mu n \\mathbf{k}} + \\sum_I \\lambda^I \\frac{\\partial\\gamma^I}{\\partial c^*_{\\mu n \\mathbf{k}}}$",
+            "$\\gamma^I = \\sum_m w_m^I \\cdot \\gamma_m$,  $\\gamma_m = \\mathrm{arg}(\\mathrm{eig}_m(W))$",
+            "对 $O_j = C_L^\\dagger \\hat{O}_j C_R$ 取变分, 保留一阶项:",
+            "$\\frac{\\partial \\gamma_m}{\\partial c^*_{\\mu n}} \\approx -\\frac{i}{2} [S_\\mathrm{dk} C_R]_{\\mu m}\\, C_{L,\\mu n}^* \\cdot w_m^I + \\mathrm{h.c.}$",
+            "$\\Downarrow$（矩阵形式, 省略厄米对称化）",
+            "$M_{\\mathbf{k}_j} = -\\frac{i}{2}\\, S_\\mathrm{dk}\\, C_R\\, \\mathrm{diag}(w^\\mathrm{eff})\\, C_L^\\dagger$"
+          ]
+        },
+        {
+          "section": "关键性质",
+          "items": [
+            "厄米性: $H_{\\mathrm{sym}} = (M + M^\\dagger)/2$ → 数值保证",
+            "k-link 依赖: 每个 link $(\\mathbf{k}_j, \\mathbf{k}_{j+1})$ 独立修正",
+            "预条件器: $w^I_{\\mathrm{eff},n} = \\lambda^I w^I_n / S_I$ 归一化不同原子的灵敏度",
+            "线性化近似: 省略了 $O^{-1}$ 因子, 对密集 k-mesh ($\\Delta\\mathbf{k}$ 小) 成立",
+            "符号: 由 $\\Delta\\gamma/\\Delta\\lambda$ 响应实测确定 (负号驱动 γ 趋向 target)"
+          ]
+        }
+      ]
+    },
+    {
+      "page": 14,
+      "title": "理论补充：ζ Rescaling 数学错误 (C2)",
+      "layout": "formula_centered",
+      "content": [
+        {
+          "section": "当前代码",
+          "formulas": [
+            "$\\gamma_{\\mathrm{correct}} = \\arg(\\det W) \\in (-\\pi, \\pi]$",
+            "$\\gamma_{\\mathrm{raw}} = \\sum_n \\sum_I w_n^I \\cdot \\gamma_n^{\\mathrm{unwrapped}}$",
+            "$\\text{scale} = \\gamma_{\\mathrm{correct}} / \\gamma_{\\mathrm{raw}}$",
+            "$\\gamma^I \\leftarrow \\gamma^I \\cdot \\text{scale}$"
+          ]
+        },
+        {
+          "section": "为什么错误",
+          "formulas": [
+            "$\\sum_n \\gamma_n^{\\mathrm{unwrapped}} = \\arg(\\det W) + 2\\pi k \\quad (k \\neq 0)$",
+            "$\\text{scale} = \\frac{\\arg(\\det W)}{\\arg(\\det W) + 2\\pi k} \\neq 1$",
+            "例: $\\arg(\\det W)=0.5$, $\\sum\\gamma=0.5+2\\pi \\approx 6.78$ → scale=0.074"
+          ]
+        },
+        {
+          "section": "修复方案 (方案 B, 已共识)",
+          "formulas": [
+            "$\\text{scale} = \\sum_n \\gamma_n^{\\mathrm{unwrapped}} / \\gamma_{\\mathrm{raw}}$",
+            "保持 per-atom γ 的相对分布，仅修正 SMO 不完备性"
+          ]
+        }
+      ]
+    },
+    {
+      "page": 15,
+      "title": "理论补充：分支选择问题 (H3)",
+      "layout": "formula_centered",
+      "content": [
+        {
+          "section": "Berry phase 的多值性",
+          "formulas": [
+            "$\\gamma_{\\alpha,n} = \\mathrm{Im}\\ln\\prod_j O_j^{nn} + 2\\pi m_n, \\quad m_n \\in \\mathbb{Z}$",
+            "Per-atom: $\\gamma_{\\alpha}^I = \\sum_n w_n^I \\cdot \\gamma_{\\alpha,n}$",
+            "分支集合: $\\Gamma^I = \\{\\gamma^I_0 + 2\\pi \\sum_n w_n^I k_n : k_n \\in \\mathbb{Z}\\}$"
+          ]
+        },
+        {
+          "section": "分支选择策略",
+          "formulas": [
+            "最近分支: $\\gamma^I_{k+1} = \\arg\\min_{m_n \\in \\mathbb{Z}} |(\\gamma^I_0 + 2\\pi\\sum_n w_n^I m_n) - \\gamma^I_{\\mathrm{prev}}|$"
+          ]
+        },
+        {
+          "section": "当前问题 (风险评 High)",
+          "items": [
+            "当前内联代码: 均匀间距 $2\\pi \\cdot \\text{scale}$ 搜索 ($k_n = \\pm 1, \\pm 2$) → 覆盖少的分支",
+            "正确做法: 对每个带用 per-band 权重间距 $2\\pi \\cdot w_n^I \\cdot \\text{scale}$ 搜索",
+            "粗 mesh (dk 大): 不同权重差异大，影响精度",
+            "细 mesh (dk → 0): 各带权重一致性恢复"
+          ]
+        }
+      ]
+    },
+    {
+      "page": 16,
+      "title": "代码现状总览",
+      "layout": "summary_grid",
+      "content": [
+        {
+          "section": "已完成的代码修改",
+          "items": [
+            "✅ HR 延迟: iter=1 dλ=0, HR 不施加 (deltap_lcao.cpp)",
+            "✅ HK 缓存: λ 不变时不重算 (esolver_ks_lcao.cpp)",
+            "✅ Newton-Schulz 确定酉投影 (deltap_wannier.cpp:557-632)",
+            "✅ zgeev 初态 arg 排序 (deltap_wannier.cpp:675)",
+            "✅ λ mixing + cooldown 机制 (esolver_ks_lcao.cpp:620-681)",
+            "✅ 分支 save/load: always load, first-run-only save",
+            "✅ 诊断: 全 k 点 HK|max, 逐轮 gamma, 分支变化"
+          ]
+        },
+        {
+          "section": "待修改的文件",
+          "items": [
+            "deltap_wannier.cpp: C2(zeta fix), H3(branch), L1(Hungarian), B16(diag)",
+            "deltap_gauge.cpp: H4(phase_corrections_ apply)",
+            "deltap_overlap.cpp: H1(verify → symmetric if needed)",
+            "deltap_berry.cpp: H2(verify Bloch convention)",
+            "bfgs.h: M1(rename to FletcherReevesCG)"
+          ]
+        }
+      ]
+    },
+    {
+      "page": 17,
+      "title": "TODO 优先级",
+      "layout": "priority_table",
+      "content": [
+        {
+          "table_header": ["优先级", "项目", "操作", "验证标准"],
+          "rows": [
+            ["P0", "B16 运行时诊断", "添加 W/evals/gamma 诊断输出 → 定位非确定性来源", "3 次运行输出完全一致"],
+            ["P0", "B16 确定性实施", "zgeev 排序 + 匈牙利匹配 + NS 收敛检查", "冻结电荷 max|Δγ| < 1e-10"],
+            ["P1", "C2 zeta rescaling", "改用 Σγ_unwrapped / Σγ_raw", "unwrapped sum ≈ arg(det W) mod 2π"],
+            ["P1", "H4 gauge fix", "回溯应用 phase_corrections_", "anchor 切换点无跳过跳回"],
+            ["P1", "H3 branch spacing", "启用 select_branch_set (per-band spacing)", "粗 mesh 精准度"],
+            ["P2", "H1/H2 验证", "先确认 max_asym 和 Bloch 约定", "确认后按结论修"],
+            ["P3", "C1 精度提升", "使用 compute_S_dk_link", "dγ/dλ 变化 < 0.05 rad"],
+            ["P3", "L1 匈牙利算法", "替换两个贪心匹配", "简并点跨运行匹配一致"],
+            ["P3", "维护 M1-6,L2-4", "重命名/删代码/修注释", "—"]
+          ]
+        }
+      ]
+    },
+    {
+      "page": 18,
+      "title": "总结与展望",
+      "layout": "conclusion",
+      "content": [
+        {
+          "section": "当前状态",
+          "items": [
+            "Stage 2 (λ→γ 响应) 通过 — HK 修正产生正确物理行为",
+            "Stage 3 (内循环收敛) ❌ 阻滞 — 根因 B16",
+            "7 项代码修复 + 6 项共识风险点待修复",
+            "18 项静态审查 → 1 个 Critical bug (C2), 2 个 High (H3/H4)",
+            "静态审查效率有限 — B16 为运行时非确定性，代码审查无法发现"
+          ]
+        },
+        {
+          "section": "下一步",
+          "items": [
+            "P0: B16 运行时诊断 (需 < 1 天)",
+            "P1: C2 + H4 + H3 修复 (需 < 3 天)",
+            "回归: λ=0.05 SCF 内循环完整测试",
+            "长期: BTO Wannier90 pipeline, 非共线支持"
+          ]
+        },
+        {
+          "section": "预期",
+          "items": [
+            "B16 修复后: λ=0.05 应表现出与 λ=0 同质的收敛行为",
+            "B16 + C2 修复后: dγ/dλ ~ 0.05-0.15, 预期 5-10 步 CG 达到 target"
+          ]
+        }
+      ]
+    }
+  ]
+}
