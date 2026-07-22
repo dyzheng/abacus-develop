@@ -1235,12 +1235,113 @@ void DeltaP::compute_wannier_polarization(
     // different w_In weights (different shift lattices).
     // Uses the first string's w_In (stored in w_In_first_string_) as
     // representative shift amplitudes.
-    if (!target_gamma_.empty() && n_strings_processed > 0 && !w_In_first_string_.empty())
+    if ((!target_gamma_.empty() || !constraint_matrix_.empty())
+        && n_strings_processed > 0 && !w_In_first_string_.empty())
     {
         const auto& wm = w_In_first_string_;
         bool total_mode = (PARAM.inp.deltap_constraint_mode == "total");
+        bool use_constraint_matrix = !constraint_matrix_.empty();
 
-        if (total_mode)
+        if (use_constraint_matrix)
+        {
+            // Constraint-space sequential greedy search
+            // C·γ = t, where C is m×n, t is m×1
+            const auto& C = constraint_matrix_;
+            const auto& t = constraint_target_;
+            int m = static_cast<int>(C.size());
+
+            // Build shift amplitudes and raw gamma for each atom
+            std::vector<std::vector<double>> shift_amps(nat_);
+            std::vector<double> raw_gamma(nat_);
+            for (int iat = 0; iat < nat_; ++iat)
+            {
+                raw_gamma[iat] = gamma_accum[iat] / n_strings_processed;
+                double w_total = 0.0;
+                if (!wm.empty())
+                    for (int n = 0; n < static_cast<int>(wm.size()) && static_cast<size_t>(iat) < wm[n].size(); ++n)
+                        w_total += wm[n][iat];
+                if (w_total < 1e-12) continue;
+                if (!wm.empty())
+                    for (int n = 0; n < static_cast<int>(wm.size()) && static_cast<size_t>(iat) < wm[n].size(); ++n)
+                        shift_amps[iat].push_back(2.0 * M_PI * wm[n][iat] / w_total);
+            }
+
+            // Greedy forward pass
+            std::vector<double> gamma_best(nat_);
+            for (int iat = 0; iat < nat_; ++iat) gamma_best[iat] = raw_gamma[iat];
+
+            // Running contribution from already-selected atoms
+            std::vector<double> contrib(m, 0.0);
+
+            for (int iat = 0; iat < nat_; ++iat)
+            {
+                int n_dim_shift = static_cast<int>(shift_amps[iat].size());
+                if (n_dim_shift == 0) continue;
+
+                // Compute remaining residual: t - C·gamma_running - C_future·raw
+                std::vector<double> r_current(m, 0.0);
+                for (int a = 0; a < m; ++a)
+                {
+                    r_current[a] = t[a] - contrib[a];  // remove already-selected
+                    // remove future atoms' raw contribution
+                    for (int j = iat + 1; j < nat_; ++j)
+                        r_current[a] -= C[a][j] * raw_gamma[j];
+                }
+
+                // Effective target for this atom: min ||C_i * γ - r_current||
+                double c_i_sq = 0.0;
+                double c_dot_r = 0.0;
+                for (int a = 0; a < m; ++a)
+                {
+                    c_i_sq += C[a][iat] * C[a][iat];
+                    c_dot_r += C[a][iat] * r_current[a];
+                }
+                double effective_target = raw_gamma[iat];  // default: no shift
+                if (c_i_sq > 1e-10)
+                    effective_target = c_dot_r / c_i_sq;
+
+                // Exhaustive search K=5
+                double best_val = raw_gamma[iat];
+                double best_dist = std::abs(raw_gamma[iat] - effective_target);
+                const int K = 5;
+                std::vector<int> kvec(n_dim_shift, 0);
+                bool done = false;
+                while (!done)
+                {
+                    bool all_zero = true;
+                    double shift = 0.0;
+                    for (int n = 0; n < n_dim_shift; ++n)
+                    {
+                        if (kvec[n] != 0) all_zero = false;
+                        shift += kvec[n] * shift_amps[iat][n];
+                    }
+                    if (!all_zero)
+                    {
+                        double candidate = raw_gamma[iat] + shift;
+                        double dist = std::abs(candidate - effective_target);
+                        if (dist < best_dist) { best_dist = dist; best_val = candidate; }
+                    }
+                    int carry_pos = 0;
+                    while (carry_pos < n_dim_shift)
+                    {
+                        kvec[carry_pos]++;
+                        if (kvec[carry_pos] > K) { kvec[carry_pos] = -K; carry_pos++; }
+                        else break;
+                    }
+                    if (carry_pos >= n_dim_shift) done = true;
+                }
+
+                // Apply shift and record
+                double delta = best_val - raw_gamma[iat];
+                gamma_accum[iat] += delta * n_strings_processed;
+                gamma_best[iat] = best_val;
+
+                // Update contribution
+                for (int a = 0; a < m; ++a)
+                    contrib[a] += C[a][iat] * best_val;
+            }
+        }
+        else if (total_mode)
         {
             // Sequential greedy: each atom targets the remaining total
             double total_target = 0.0;

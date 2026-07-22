@@ -729,8 +729,8 @@ void ESolver_KS_LCAO<TK, TR>::iter_finish(UnitCell& ucell, const int istep, int&
             const auto& gamma_I = dp->get_results().gamma_I;
             std::vector<double> lambda = dp_op->get_lambda();
 
-            // Phase indicator: P1 (λ=0), P2 (transition), P3 (λ frozen)
             bool total_mode = (PARAM.inp.deltap_constraint_mode == "total");
+            bool use_constraint_matrix = !deltap_constraint_matrix_.empty();
             std::string phase = deltap_lambda_set_ ? "P3" : "P1";
 
             std::cout << " [DeltaP " << phase << "] iter=" << std::setw(3) << iter
@@ -940,6 +940,42 @@ void ESolver_KS_LCAO<TK, TR>::deltap_init(UnitCell& ucell)
     // the Hamiltonian correction with the current (possibly zero) λ.
     // Set target on DeltaP object for target-aware branch selection
     static_cast<deltap::DeltaP*>(dp_scf_)->set_target_gamma(deltap_target_);
+
+    // Load constraint matrix (overrides constraint_mode when set)
+    if (!PARAM.inp.deltap_constraint_matrix.empty())
+    {
+        std::ifstream ifs(PARAM.inp.deltap_constraint_matrix);
+        if (ifs.is_open())
+        {
+            int m = 0, n = 0;
+            ifs >> m >> n;
+            if (n == ucell.nat && m > 0)
+            {
+                deltap_constraint_matrix_.resize(m, std::vector<double>(n, 0.0));
+                deltap_constraint_target_.resize(m, 0.0);
+                for (int a = 0; a < m; ++a)
+                {
+                    for (int i = 0; i < n; ++i)
+                        ifs >> deltap_constraint_matrix_[a][i];
+                    ifs >> deltap_constraint_target_[a];
+                }
+                deltap_constraint_lambda_.assign(m, 0.0);
+                static_cast<deltap::DeltaP*>(dp_scf_)->set_constraint_matrix(
+                    deltap_constraint_matrix_, deltap_constraint_target_);
+                std::cout << " [DeltaP] Loaded constraint matrix " << m << "x" << n
+                          << " from " << PARAM.inp.deltap_constraint_matrix << std::endl;
+            }
+            else
+            {
+                std::cerr << "DeltaP: constraint matrix size mismatch (expected "
+                          << ucell.nat << " columns, got " << n << ")" << std::endl;
+            }
+        }
+    }
+    // Initialize constraint lambda vector
+    if (deltap_constraint_lambda_.empty())
+        deltap_constraint_lambda_.assign(ucell.nat, 0.0);
+
     deltap_scf_initialized_ = true;
 }
 
@@ -960,7 +996,17 @@ double ESolver_KS_LCAO<TK, TR>::deltap_compute_gamma(UnitCell& ucell, const int 
         const auto& gamma_I = dp->get_results().gamma_I;
 
         double max_dev = 0.0;
-        if (!deltap_target_.empty())
+        if (!deltap_constraint_matrix_.empty())
+        {
+            for (int a = 0; a < static_cast<int>(deltap_constraint_matrix_.size()); ++a)
+            {
+                double cv = 0.0;
+                for (int i = 0; i < ucell.nat; ++i)
+                    cv += deltap_constraint_matrix_[a][i] * gamma_I[i][alpha];
+                max_dev = std::max(max_dev, std::abs(cv - deltap_constraint_target_[a]));
+            }
+        }
+        else if (!deltap_target_.empty())
             for (int iat = 0; iat < ucell.nat; ++iat)
                 max_dev = std::max(max_dev, std::abs(gamma_I[iat][alpha] - deltap_target_[iat]));
 
@@ -1128,9 +1174,63 @@ void ESolver_KS_LCAO<TK, TR>::deltap_update_lambda(UnitCell& ucell, const int it
 
             std::vector<double> lambda_raw = lambda;
             bool total_mode = (PARAM.inp.deltap_constraint_mode == "total");
-            if (!deltap_target_.empty())
+            bool use_constraint_matrix = !deltap_constraint_matrix_.empty();
+
+            if (use_constraint_matrix)
             {
-                if (total_mode)
+                // Constraint matrix mode: update λ in constraint space
+                // r[α] = Σ_i C[α][i]·γ_i - t[α]
+                // λ[α] += step · r[α]
+                // Then convert to effective per-atom lambda
+                int m = static_cast<int>(deltap_constraint_matrix_.size());
+                deltap_constraint_lambda_.resize(m);
+                std::vector<double> lambda_raw_cstr = deltap_constraint_lambda_;
+                for (int a = 0; a < m; ++a)
+                {
+                    double residual = 0.0;
+                    for (int i = 0; i < ucell.nat; ++i)
+                        residual += deltap_constraint_matrix_[a][i] * gamma_I[i][alpha];
+                    residual -= deltap_constraint_target_[a];
+                    lambda_raw_cstr[a] += step * residual;
+                }
+                for (int a = 0; a < m; ++a)
+                    deltap_constraint_lambda_[a] = mixing * lambda_raw_cstr[a]
+                                                 + (1.0 - mixing) * deltap_constraint_lambda_[a];
+
+                // Convert to effective per-atom lambda: λ_eff[i] = Σ_a λ[a]·C[a][i]
+                lambda.assign(ucell.nat, 0.0);
+                for (int i = 0; i < ucell.nat; ++i)
+                    for (int a = 0; a < m; ++a)
+                        lambda[i] += deltap_constraint_lambda_[a] * deltap_constraint_matrix_[a][i];
+            }
+            else if (!deltap_target_.empty())
+            {
+            if (use_constraint_matrix)
+            {
+                // Show per-atom γ and constraint-space λ
+                for (int iat = 0; iat < ucell.nat; ++iat)
+                {
+                    if (iat > 0) std::cout << ", ";
+                    std::cout << gamma_I[iat][alpha];
+                }
+                std::cout << ") C·γ=(" << std::setprecision(4);
+                int m = static_cast<int>(deltap_constraint_matrix_.size());
+                for (int a = 0; a < m; ++a)
+                {
+                    if (a > 0) std::cout << ", ";
+                    double cv = 0.0;
+                    for (int i = 0; i < ucell.nat; ++i)
+                        cv += deltap_constraint_matrix_[a][i] * gamma_I[i][alpha];
+                    std::cout << cv;
+                }
+                std::cout << ") λ=" << std::setprecision(2);
+                for (int a = 0; a < m; ++a)
+                {
+                    if (a > 0) std::cout << ", ";
+                    std::cout << std::scientific << deltap_constraint_lambda_[a];
+                }
+            }
+            else if (total_mode)
                 {
                     // total mode: one λ shared by all atoms
                     // λ_new = λ + step * (Σγ_actual - Σγ_target)
@@ -1150,8 +1250,11 @@ void ESolver_KS_LCAO<TK, TR>::deltap_update_lambda(UnitCell& ucell, const int it
                         lambda_raw[iat] += step * (gamma_I[iat][alpha] - deltap_target_[iat]);
                 }
             }
-            for (int iat = 0; iat < ucell.nat; ++iat)
-                lambda[iat] = mixing * lambda_raw[iat] + (1.0 - mixing) * lambda[iat];
+            if (!use_constraint_matrix)
+            {
+                for (int iat = 0; iat < ucell.nat; ++iat)
+                    lambda[iat] = mixing * lambda_raw[iat] + (1.0 - mixing) * lambda[iat];
+            }
 
             dp_op->set_lambda(lambda);
             dp->start_cooldown(1);

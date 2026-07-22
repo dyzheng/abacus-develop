@@ -108,6 +108,10 @@ class ESolver_KS_LCAO : public ESolver_KS
     void* berry_ovl_scf_ = nullptr;     // unkOverlap_lcao*
     void* r_overlap_scf_ = nullptr;     // cal_r_overlap_R*
     std::vector<double> deltap_target_;
+    // Constraint matrix mode: C (m×n) with targets t, overrides constraint_mode when set
+    std::vector<std::vector<double>> deltap_constraint_matrix_;
+    std::vector<double> deltap_constraint_target_;
+    std::vector<double> deltap_constraint_lambda_;  // constraint-space λ (m-dim)
     bool deltap_scf_initialized_ = false;
     bool deltap_lambda_set_ = false;  ///< true after Phase-2 λ update
 

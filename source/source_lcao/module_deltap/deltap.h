@@ -140,6 +140,17 @@ public:
     void set_target_gamma(const std::vector<double>& target) { target_gamma_ = target; }
     /// Get per-atom target Berry phase.
     const std::vector<double>& get_target_gamma() const { return target_gamma_; }
+    /// Set linear constraint matrix C (m×n) and target vector t: C·γ = t.
+    void set_constraint_matrix(const std::vector<std::vector<double>>& C,
+                               const std::vector<double>& t)
+    {
+        constraint_matrix_ = C;
+        constraint_target_ = t;
+    }
+    /// Check if constraint matrix mode is active.
+    bool has_constraint_matrix() const { return !constraint_matrix_.empty(); }
+    const std::vector<std::vector<double>>& get_constraint_matrix() const { return constraint_matrix_; }
+    const std::vector<double>& get_constraint_target() const { return constraint_target_; }
 
 private:
     void compute_real_overlaps(const UnitCell& ucell, const Grid_Driver& gd);
@@ -280,6 +291,9 @@ private:
 
     /// Per-atom target Berry phase gamma^I (for target-aware branch selection).
     std::vector<double> target_gamma_;
+    /// Constraint matrix C (m×n) and target t for C·γ = t.
+    std::vector<std::vector<double>> constraint_matrix_;
+    std::vector<double> constraint_target_;
 
     // D_I_all_[ik][iat][lm][n] = SMO projection at k-point ik (B13)
     std::vector<std::vector<std::vector<std::vector<std::complex<double> > > > > D_I_all_;

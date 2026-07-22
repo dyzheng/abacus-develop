@@ -1324,5 +1324,17 @@ Manual override is allowed: if sc_acceleration_mode is explicitly set, it takes 
         read_sync_string(input.deltap_constraint_mode);
         this->add_item(item);
     }
+    {
+        Input_Item item("deltap_constraint_matrix");
+        item.annotation = "path to linear constraint matrix file";
+        item.category = "DeltaP";
+        item.type = "String";
+        item.description = "File defining constraint matrix C and targets t: C*gamma = t. Overrides deltap_constraint_mode when set.";
+        item.default_value = "";
+        item.unit = "";
+        item.availability = "deltap_corr is true";
+        read_sync_string(input.deltap_constraint_matrix);
+        this->add_item(item);
+    }
 }
 } // namespace ModuleIO
