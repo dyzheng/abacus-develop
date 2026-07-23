@@ -1116,10 +1116,10 @@ Manual override is allowed: if sc_acceleration_mode is explicitly set, it takes 
     }
     {
         Input_Item item("deltap_rm");
-        item.annotation = "SMO modulation radius (Bohr)";
+        item.annotation = "SMO radius for overlap computation (Bohr)";
         item.category = "DeltaP";
         item.type = "Real";
-        item.description = "SMO modulation radius (Bohr); if 0, reuse onsite_radius";
+        item.description = "SMO radius for overlap computation (Bohr)";
         item.default_value = "3.0";
         item.unit = "Bohr";
         item.availability = "deltap_switch is true";
@@ -1154,18 +1154,6 @@ Manual override is allowed: if sc_acceleration_mode is explicitly set, it takes 
         item.unit = "";
         item.availability = "deltap_switch is true";
         read_sync_double(input.deltap_dk_fd);
-        this->add_item(item);
-    }
-    {
-        Input_Item item("deltap_npk_string");
-        item.annotation = "override k-string density (0 = use KPT mesh)";
-        item.category = "DeltaP";
-        item.type = "Integer";
-        item.description = "Override k-string density; 0 means use KPT mesh density";
-        item.default_value = "0";
-        item.unit = "";
-        item.availability = "deltap_switch is true";
-        read_sync_int(input.deltap_npk_string);
         this->add_item(item);
     }
     {

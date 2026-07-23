@@ -108,6 +108,7 @@ class ESolver_KS_LCAO : public ESolver_KS
     void* berry_ovl_scf_ = nullptr;     // unkOverlap_lcao*
     void* r_overlap_scf_ = nullptr;     // cal_r_overlap_R*
     std::vector<double> deltap_target_;
+    std::vector<int> deltap_constrain_;       ///< DeltaP: 1=constrained, 0=free per atom
     // Constraint matrix mode: C (m×n) with targets t, overrides constraint_mode when set
     std::vector<std::vector<double>> deltap_constraint_matrix_;
     std::vector<double> deltap_constraint_target_;

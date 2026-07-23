@@ -181,6 +181,24 @@ std::vector<ModuleBase::Vector3<int>> UnitCell::get_constrain() const
 	return constrain;
 }
 
+std::vector<double> UnitCell::get_dp_target() const
+{
+	std::vector<double> dp_target(this->nat, 0.0);
+	for (int it = 0; it < this->ntype; it++)
+		for (int ia = 0; ia < this->atoms[it].na; ia++)
+			dp_target[itia2iat(it, ia)] = this->atoms[it].dp_target[ia];
+	return dp_target;
+}
+
+std::vector<int> UnitCell::get_dp_constrain() const
+{
+	std::vector<int> dp_constrain(this->nat, 1);
+	for (int it = 0; it < this->ntype; it++)
+		for (int ia = 0; ia < this->atoms[it].na; ia++)
+			dp_constrain[itia2iat(it, ia)] = this->atoms[it].dp_constrain[ia];
+	return dp_constrain;
+}
+
 //==============================================================
 // Calculate various lattice related quantities for given latvec
 //==============================================================

@@ -257,6 +257,10 @@ class UnitCell {
     std::vector<ModuleBase::Vector3<double>> get_lambda() const;
     /// @brief get constrain for deltaspin
     std::vector<ModuleBase::Vector3<int>> get_constrain() const;
+    /// @brief get DeltaP target Berry phase per atom
+    std::vector<double> get_dp_target() const;
+    /// @brief get DeltaP constrain flags per atom
+    std::vector<int> get_dp_constrain() const;
 };
 
 #endif // unitcell class

@@ -46,6 +46,8 @@ class Atom
     std::vector<double> angle1; // spin angle, added by zhengdy-soc
     std::vector<double> angle2;
     std::vector<ModuleBase::Vector3<double>> m_loc_;
+    std::vector<double> dp_target;     ///< DeltaP: target Berry phase per atom (rad)
+    std::vector<int> dp_constrain;     ///< DeltaP: 1=constrained, 0=free per atom
     // Coulomb potential v(r) = z/r
     // It is a local potentail, and has no non-local potential parts.
     bool coulomb_potential = false;

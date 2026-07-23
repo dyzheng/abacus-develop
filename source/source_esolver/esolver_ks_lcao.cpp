@@ -926,9 +926,7 @@ void ESolver_KS_LCAO<TK, TR>::deltap_init(UnitCell& ucell)
               static_cast<unkOverlap_lcao*>(berry_ovl_scf_));
     dp->load_branch();
     dp->init_inner_loop();
-    // Read target file
-    // total mode: file has ONE value (Σγ target); distribute equally to
-    // all atoms for branch selection, but constraint uses the total sum.
+    // Read target file (or STRU if not specified)
     if (!PARAM.inp.deltap_target_file.empty())
     {
         std::ifstream ifs(PARAM.inp.deltap_target_file);
@@ -954,7 +952,21 @@ void ESolver_KS_LCAO<TK, TR>::deltap_init(UnitCell& ucell)
             }
         }
     }
-    // When no target file is specified, leave deltap_target_ empty.
+    else
+    {
+        // Read targets from STRU (DeltaSpin-style per-atom keywords)
+        deltap_target_ = ucell.get_dp_target();
+        deltap_constrain_ = ucell.get_dp_constrain();
+        bool has_any_target = false;
+        for (int iat = 0; iat < ucell.nat; ++iat)
+            if (deltap_constrain_[iat] != 0 && deltap_target_[iat] != 0.0)
+                has_any_target = true;
+        if (has_any_target)
+            std::cout << " [DeltaP] Loaded targets from STRU (dp_target/dp_constrain)" << std::endl;
+        else
+            std::cout << " [DeltaP] No targets specified; γ measured without constraint" << std::endl;
+    }
+    // When no target is specified, leave deltap_target_ empty.
     // This allows ground-state γ determination without target-aware
     // branch selection, while constraint (deltap_corr=1) still applies
     // the Hamiltonian correction with the current (possibly zero) λ.
@@ -1267,7 +1279,13 @@ void ESolver_KS_LCAO<TK, TR>::deltap_update_lambda(UnitCell& ucell, const int it
                 else
                 {
                     for (int iat = 0; iat < ucell.nat; ++iat)
-                        lambda_raw[iat] += step * (gamma_I[iat][alpha] - deltap_target_[iat]);
+                    {
+                        bool constrained = (deltap_constrain_.empty()
+                            || static_cast<size_t>(iat) >= deltap_constrain_.size()
+                            || deltap_constrain_[iat] != 0);
+                        if (constrained)
+                            lambda_raw[iat] += step * (gamma_I[iat][alpha] - deltap_target_[iat]);
+                    }
                 }
             }
             if (!use_constraint_matrix)

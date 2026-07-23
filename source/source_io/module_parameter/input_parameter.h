@@ -615,10 +615,9 @@ struct Input_para
 
     // ==============   #Parameters (20.DeltaP atomic polarization) =============
     bool deltap_switch = false;       ///< switch to enable DeltaP atomic polarization decomposition
-    double deltap_rm = 3.0;          ///< SMO modulation radius (Bohr); if 0, reuse onsite_radius
+    double deltap_rm = 3.0;          ///< SMO radius for overlap computation (Bohr)
     int deltap_gdir = 3;             ///< polarization direction: 1=x, 2=y, 3=z
     double deltap_dk_fd = 1e-6;      ///< finite-difference delta-k for T0 validation
-    int deltap_npk_string = 0;       ///< override k-string density (0 = use KPT mesh)
     std::string deltap_gauge_mode = "none";   ///< gauge fixing mode: "none" or "smo_anchored"
     double deltap_anchor_thr = 1e-8;          ///< threshold for anchor SMO re-selection
     std::string deltap_method = "berry_connection";  ///< P^I computation method: "berry_connection" or "wannier"
