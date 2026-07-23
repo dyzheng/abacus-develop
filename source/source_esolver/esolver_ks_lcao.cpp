@@ -1023,6 +1023,7 @@ void ESolver_KS_LCAO<TK, TR>::deltap_init(UnitCell& ucell)
         deltap_constraint_lambda_.assign(ucell.nat, 0.0);
 
     deltap_scf_initialized_ = true;
+    deltap_inner_loop_done_ = false;
 }
 
 template <typename TK, typename TR>
@@ -1063,33 +1064,19 @@ double ESolver_KS_LCAO<TK, TR>::deltap_compute_gamma(UnitCell& ucell, const int 
 template <typename TK, typename TR>
 void ESolver_KS_LCAO<TK, TR>::deltap_inner_loop(UnitCell& ucell, const int iter, bool& skip_solve)
 {
-    if constexpr (!std::is_same<TK, std::complex<double>>::value)
-    {
-        // Branch B: DeltaP inner loop only supports complex<double> (multi-k)
-        return;
-    }
+    if constexpr (!std::is_same<TK, std::complex<double>>::value) { return; }
     else
     {
         auto* hamilt_lcao = dynamic_cast<hamilt::HamiltLCAO<TK, TR>*>(this->p_hamilt);
-        if (!hamilt_lcao || dp_scf_ == nullptr)
-        {
-            return;
-        }
-
+        if (!hamilt_lcao || dp_scf_ == nullptr) { std::cout << " [DEBUG] hamilt or dp null" << std::endl; return; }
         auto* dp_op = hamilt_lcao->get_dp_operator();
         auto* dp = static_cast<deltap::DeltaP*>(dp_scf_);
-        if (!dp_op || !dp || !dp->inner_loop_active())
-        {
-            return;
-        }
+        if (!dp_op || !dp || !dp->inner_loop_active()) { return; }
 
-        // Gating: only activate inner loop when charge density is converged.
-        // Before this threshold, λ=0 and SCF converges naturally (Phase 1).
-        // This is analogous to DeltaSpin's sc_scf_thr gate.
-        if (this->drho > PARAM.inp.deltap_inner_thr)
-        {
-            return;
-        }
+        // Gating: activate only when density is converged (Phase 1 done)
+        if (this->drho > PARAM.inp.deltap_inner_thr) { return; }
+        // Skip if inner loop already converged in a previous SCF iteration
+        if (deltap_inner_loop_done_) { return; }
 
         // Measure current gamma
         dp->compute_gamma_scf(ucell, psi, this->pelec);
@@ -1231,6 +1218,7 @@ void ESolver_KS_LCAO<TK, TR>::deltap_inner_loop(UnitCell& ucell, const int iter,
         for (int iat = 0; iat < ucell.nat; ++iat)
             std::cout << " l" << iat << "=" << lam_final[iat];
         std::cout << std::endl;
+        deltap_inner_loop_done_ = true;
     }
 }
 

@@ -115,6 +115,7 @@ class ESolver_KS_LCAO : public ESolver_KS
     std::vector<double> deltap_constraint_lambda_;  // constraint-space λ (m-dim)
     bool deltap_scf_initialized_ = false;
     bool deltap_lambda_set_ = false;  ///< true after Phase-2 λ update
+    bool deltap_inner_loop_done_ = false;  ///< true after inner loop converged once
 
     // DeltaP helper methods (refactored for maintainability)
     void deltap_init(UnitCell& ucell);
