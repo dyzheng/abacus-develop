@@ -19,7 +19,7 @@ symmetry    -1
 
 deltap_switch    1
 deltap_corr      1
-deltap_nscf      0
+deltap_inner_nmax      0
 deltap_lambda_init  0.0
 deltap_lambda_step  0.01
 deltap_lambda_mixing  0.1

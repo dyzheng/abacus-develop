@@ -22,7 +22,7 @@ export OMP_NUM_THREADS=1
 
 - `deltap_switch = 1`：启用 DeltaP
 - `deltap_corr = 1`：启用约束修正
-- `deltap_nscf = 0`：使用梯度下降（非 BFGS 内循环）
+- `deltap_inner_nmax = 0`：使用梯度下降（非 BFGS 内循环）
 - `deltap_lambda_init = 0.0`：从 λ=0 开始
 - `deltap_inner_thr = 1e-3`：drho 阈值，低于此值触发 λ 更新
 - `deltap_lambda_mixing = 0.1`：λ 更新混合系数

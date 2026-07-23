@@ -789,6 +789,20 @@ void ESolver_KS_LCAO<TK, TR>::iter_finish(UnitCell& ucell, const int istep, int&
                     dp_escon -= lambda[iat] * gamma_I[iat][alpha];
             }
             this->pelec->f_en.dp_escon = dp_escon;
+
+            // Effective electric field: E_eff = -λ_avg × π / a_alpha (a.u.)
+            // Convert: 1 a.u. = 51.42 V/Å
+            double a_alpha = ucell.lat0;
+            if (PARAM.inp.deltap_gdir == 1)      a_alpha *= ucell.a1.norm();
+            else if (PARAM.inp.deltap_gdir == 2) a_alpha *= ucell.a2.norm();
+            else                                  a_alpha *= ucell.a3.norm();
+            double lam_avg = 0.0;
+            for (int iat = 0; iat < ucell.nat; ++iat) lam_avg += lambda[iat];
+            lam_avg /= ucell.nat;
+            double E_eff_au = -lam_avg * ModuleBase::PI / a_alpha;  // Hartree/(e·Bohr)
+            double E_eff_V_per_A = E_eff_au * 51.422;                // V/Å
+            std::cout << "   [E-field] E_eff=" << std::scientific << std::setprecision(3)
+                      << E_eff_V_per_A << " V/Angstrom  (λ_avg=" << lam_avg << " Ry)" << std::endl;
         }
         else
         {
@@ -1069,53 +1083,95 @@ void ESolver_KS_LCAO<TK, TR>::deltap_inner_loop(UnitCell& ucell, const int iter,
             return;
         }
 
-        std::vector<double> lambda = dp_op->get_lambda();
-        std::vector<double> residual(ucell.nat, 0.0);
-        const int alpha = PARAM.inp.deltap_gdir - 1;
+        // Gating: only activate inner loop when charge density is converged.
+        // Before this threshold, λ=0 and SCF converges naturally (Phase 1).
+        // This is analogous to DeltaSpin's sc_scf_thr gate.
+        if (this->drho > PARAM.inp.deltap_inner_thr)
+        {
+            return;
+        }
 
         // Measure current gamma
         dp->compute_gamma_scf(ucell, psi, this->pelec);
         const auto& gamma_I = dp->get_results().gamma_I;
-        for (int iat = 0; iat < ucell.nat; ++iat)
-            residual[iat] = gamma_I[iat][alpha] - deltap_target_[iat];
+        const int alpha = PARAM.inp.deltap_gdir - 1;
 
-        // BFGS-CG inner loop
+        // Compute residual: per_atom or constraint_matrix mode
+        std::vector<double> residual;
+        bool use_constraint_matrix = !deltap_constraint_matrix_.empty();
+
+        if (use_constraint_matrix)
+        {
+            int m = static_cast<int>(deltap_constraint_matrix_.size());
+            residual.resize(m, 0.0);
+            for (int a = 0; a < m; ++a)
+            {
+                double cv = 0.0;
+                for (int i = 0; i < ucell.nat; ++i)
+                    cv += deltap_constraint_matrix_[a][i] * gamma_I[i][alpha];
+                residual[a] = cv - deltap_constraint_target_[a];
+            }
+        }
+        else
+        {
+            residual.resize(ucell.nat, 0.0);
+            for (int iat = 0; iat < ucell.nat; ++iat)
+                residual[iat] = gamma_I[iat][alpha] - deltap_target_[iat];
+        }
+
+        // BFGS-CG inner loop: optimize lambda with frozen charge density.
+        // Each inner iteration re-diagonalizes with trial lambda (no density mixing),
+        // which is ~10× faster than a full SCF step.
+        int n_inner_atoms = use_constraint_matrix
+            ? static_cast<int>(deltap_constraint_matrix_.size()) : ucell.nat;
+
         auto& bfgs = dp->bfgs();
-        bfgs.start_outer(lambda);
+        bfgs.init(n_inner_atoms, 0.5, PARAM.inp.deltap_conv_thr, 2, 0.01, 0.005);
+
+        std::vector<double> lambda_inner;
+        if (use_constraint_matrix)
+        {
+            lambda_inner = deltap_constraint_lambda_;
+            bfgs.start_outer(lambda_inner);
+        }
+        else
+        {
+            lambda_inner = dp_op->get_lambda();
+            bfgs.start_outer(lambda_inner);
+        }
+
         bool bfgs_converged = false;
         const int nscf = dp->inner_loop_nscf();
 
         hsolver::HSolverLCAO<TK> hsolver_lcao_obj(&(this->pv), PARAM.inp.ks_solver);
 
-        // Diagnostics: print initial state
-        std::cout << " [DeltaP] inner loop start: nscf=" << nscf;
-        for (int iat = 0; iat < ucell.nat; ++iat)
-            std::cout << " l" << iat << "=" << lambda[iat];
-        std::cout << " rms=" << std::scientific << std::setprecision(4)
+        std::cout << " [DeltaP] inner loop start: nscf=" << nscf
+                  << " rms=" << std::scientific << std::setprecision(4)
                   << bfgs.get_rms() << std::endl;
 
         for (int inner = 0; inner < nscf && !bfgs_converged; ++inner)
         {
-            std::vector<double> lam_trial(ucell.nat);
+            std::vector<double> lam_trial = lambda_inner;
             bfgs.step(residual, inner, lam_trial, bfgs_converged);
+            if (bfgs_converged) break;
 
-            // Diagnostics: print trial lambda and predicted residual
-            std::cout << " [DeltaP]   inner=" << inner
-                      << " rms=" << std::scientific << std::setprecision(4)
-                      << bfgs.get_rms();
-            for (int iat = 0; iat < ucell.nat; ++iat)
-                std::cout << " l" << iat << "=" << lam_trial[iat];
-            if (bfgs_converged)
+            // Apply trial lambda (convert to effective per-atom lambda)
+            std::vector<double> lam_eff(ucell.nat, 0.0);
+            if (use_constraint_matrix)
             {
-                std::cout << " converged" << std::endl;
-                break;
+                int m = static_cast<int>(deltap_constraint_matrix_.size());
+                for (int i = 0; i < ucell.nat; ++i)
+                    for (int a = 0; a < m; ++a)
+                        lam_eff[i] += lam_trial[a] * deltap_constraint_matrix_[a][i];
             }
-            std::cout << std::endl;
+            else
+            {
+                lam_eff = lam_trial;
+            }
+            dp_op->set_lambda(lam_eff);
 
-            // Apply trial lambda and re-diagonalize
-            dp_op->set_lambda(lam_trial);
             std::unordered_map<int, std::vector<std::complex<double>>> hk_corr;
-            dp->compute_hk_correction(ucell, psi, lam_trial, hk_corr);
+            dp->compute_hk_correction(ucell, psi, lam_eff, hk_corr);
             dp_op->set_hk_correction(hk_corr);
 
             // Re-solve with trial lambda (charge density frozen)
@@ -1126,29 +1182,54 @@ void ESolver_KS_LCAO<TK, TR>::deltap_inner_loop(UnitCell& ucell, const int iter,
             // Measure residual at trial point
             dp->compute_gamma_scf(ucell, psi, this->pelec);
             const auto& gamma_trial = dp->get_results().gamma_I;
-            for (int iat = 0; iat < ucell.nat; ++iat)
-                residual[iat] = gamma_trial[iat][alpha] - deltap_target_[iat];
+            if (use_constraint_matrix)
+            {
+                int m = static_cast<int>(deltap_constraint_matrix_.size());
+                for (int a = 0; a < m; ++a)
+                {
+                    double cv = 0.0;
+                    for (int i = 0; i < ucell.nat; ++i)
+                        cv += deltap_constraint_matrix_[a][i] * gamma_trial[i][alpha];
+                    residual[a] = cv - deltap_constraint_target_[a];
+                }
+            }
+            else
+            {
+                for (int iat = 0; iat < ucell.nat; ++iat)
+                    residual[iat] = gamma_trial[iat][alpha] - deltap_target_[iat];
+            }
 
             double alpha_opt = bfgs.accept_trial(residual);
+            lambda_inner = lam_trial;
 
-            // Diagnostics: print actual residual after solve
-            std::cout << " [DeltaP]   result:";
-            for (int iat = 0; iat < ucell.nat; ++iat)
-                std::cout << " g" << iat << "=" << gamma_trial[iat][alpha];
-            std::cout << " alpha_opt=" << alpha_opt << std::endl;
+            std::cout << " [DeltaP]   inner=" << inner
+                      << " rms=" << std::scientific << std::setprecision(4)
+                      << bfgs.get_rms() << " alpha_opt=" << alpha_opt << std::endl;
         }
 
         // Set final lambda and reconstruct HK correction
-        bfgs.get_lambda(lambda);
-        dp_op->set_lambda(lambda);
+        std::vector<double> lam_final(ucell.nat, 0.0);
+        if (use_constraint_matrix)
+        {
+            int m = static_cast<int>(deltap_constraint_matrix_.size());
+            for (int i = 0; i < ucell.nat; ++i)
+                for (int a = 0; a < m; ++a)
+                    lam_final[i] += lambda_inner[a] * deltap_constraint_matrix_[a][i];
+            deltap_constraint_lambda_ = lambda_inner;
+        }
+        else
+        {
+            lam_final = lambda_inner;
+        }
+        dp_op->set_lambda(lam_final);
         std::unordered_map<int, std::vector<std::complex<double>>> hk_corr_final;
-        dp->compute_hk_correction(ucell, psi, lambda, hk_corr_final);
+        dp->compute_hk_correction(ucell, psi, lam_final, hk_corr_final);
         dp_op->set_hk_correction(hk_corr_final);
         skip_solve = true;  // inner loop already solved
 
         std::cout << " [DeltaP] inner loop done: final";
         for (int iat = 0; iat < ucell.nat; ++iat)
-            std::cout << " l" << iat << "=" << lambda[iat];
+            std::cout << " l" << iat << "=" << lam_final[iat];
         std::cout << std::endl;
     }
 }
