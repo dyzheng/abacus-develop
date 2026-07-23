@@ -2145,7 +2145,7 @@ void DeltaP::compute_resta_z(const UnitCell& ucell,
 
 void DeltaP::init_inner_loop()
 {
-    nscf_ = PARAM.inp.deltap_nscf;
+    nscf_ = PARAM.inp.deltap_inner_nmax;
     bfgs_.init(nat_, 0.5, PARAM.inp.deltap_conv_thr, 2, 0.01, 0.005);
 }
 

@@ -1260,20 +1260,20 @@ Manual override is allowed: if sc_acceleration_mode is explicitly set, it takes 
         item.description = "Lambda mixing factor: lambda_new = beta * lambda_from_BFGS + (1-beta) * lambda_old. 0 = no mixing (full BFGS step).";
         item.default_value = "0.0";
         item.unit = "";
-        item.availability = "deltap_corr is true and deltap_nscf > 0";
+        item.availability = "deltap_corr is true and deltap_inner_nmax > 0";
         read_sync_double(input.deltap_lambda_mixing);
         this->add_item(item);
     }
     {
-        Input_Item item("deltap_nscf");
-        item.annotation = "max inner SCF steps for lambda convergence";
+        Input_Item item("deltap_inner_nmax");
+        item.annotation = "max inner lambda optimization iterations (0=two-phase)";
         item.category = "DeltaP";
         item.type = "Integer";
-        item.description = "Number of inner lambda optimization steps per outer SCF step. Set to 0 for synchronous mode (lambda updated once per SCF step).";
-        item.default_value = "5";
+        item.description = "Max inner lambda optimization steps. 0 = two-phase threshold mode (lambda updated once at Phase 2, then frozen).";
+        item.default_value = "0";
         item.unit = "";
         item.availability = "deltap_corr is true";
-        read_sync_int(input.deltap_nscf);
+        read_sync_int(input.deltap_inner_nmax);
         this->add_item(item);
     }
     {

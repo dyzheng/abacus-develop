@@ -1,0 +1,9 @@
+
+deltap_switch    1
+deltap_corr      1
+deltap_method    wannier
+deltap_nscf      0
+deltap_lambda_step 0.1
+deltap_lambda_init 0.0
+deltap_gdir      3
+deltap_gauge_mode    smo_anchored

@@ -1,0 +1,33 @@
+INPUT_PARAMETERS
+suffix      water
+calculation nscf
+basis_type  lcao
+ecutwfc     100
+gamma_only  0
+
+nspin       1
+scf_thr     1.0e-7
+scf_nmax    100
+out_chg     0
+smearing_method gauss
+smearing_sigma  0.01
+mixing_type     broyden
+mixing_beta     0.4
+ks_solver       genelpa
+symmetry        0
+
+init_chg    file
+read_file_dir ../scf/OUT.water
+
+berry_phase 1
+gdir        3
+
+deltap_switch       1
+deltap_method       wannier
+deltap_rm           3.0
+deltap_gdir         3
+deltap_gauge_mode   smo_anchored
+
+nelec    32
+pseudo_dir  /root/pporb/apns-pseudopotentials-v1
+orbital_dir /root/pporb/apns-orbitals-efficiency-v1

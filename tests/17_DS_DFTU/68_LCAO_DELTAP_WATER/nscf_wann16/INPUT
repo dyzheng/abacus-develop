@@ -1,0 +1,32 @@
+INPUT_PARAMETERS
+suffix      water
+calculation nscf
+basis_type  lcao
+ecutwfc     100
+gamma_only  0
+
+nspin       1
+scf_thr     1.0e-7
+scf_nmax    100
+out_chg     0
+smearing_method fixed
+smearing_sigma  0.01
+mixing_type     broyden
+mixing_beta     0.4
+ks_solver       genelpa
+symmetry       -1
+nbands          16
+
+init_chg    file
+read_file_dir ../scf/OUT.water
+
+towannier90       1
+wannier_method    2
+out_wannier_mmn   1
+out_wannier_amn   1
+out_wannier_eig   1
+wannier_spin      up
+nnkpfile          water.nnkp
+
+pseudo_dir  /root/pporb/apns-pseudopotentials-v1
+orbital_dir /root/pporb/apns-orbitals-efficiency-v1
