@@ -7,6 +7,7 @@
 #include "source_lcao/module_dftu/dftu.h"
 #include "source_pw/module_pwdft/onsite_proj.h"
 #include "source_pw/module_pwdft/kernels/onsite_op.h"
+#include "source_pw/module_pwdft/deltap_pw.h"
 
 
 namespace hamilt {
@@ -16,7 +17,8 @@ OnsiteProj<OperatorPW<T, Device>>::OnsiteProj(const int* isk_in,
 		const UnitCell* ucell_in,
 		Plus_U *p_dftu, // mohan add 2025-11-06 
 		const bool cal_delta_spin,
-		const bool cal_dftu)
+		const bool cal_dftu,
+		const bool cal_deltap)
 {
     this->classname = "OnsiteProj";
     this->cal_type = calculation_type::pw_onsite;
@@ -24,6 +26,7 @@ OnsiteProj<OperatorPW<T, Device>>::OnsiteProj(const int* isk_in,
     this->ucell = ucell_in;
     this->has_delta_spin = cal_delta_spin;
     this->has_dftu = cal_dftu;
+    this->has_deltap = cal_deltap;
     this->dftu = p_dftu; // mohan add 2025-11-08
 }
 
@@ -177,6 +180,98 @@ void OnsiteProj<OperatorPW<T, Device>>::cal_ps_delta_spin(const int npol, const 
         npol,
         this->ip_iat, 
         tnp,  
+        this->lambda_coeff,
+        this->ps, becp);
+}
+
+// cal_ps_deltap — compute ps = lambda_deltap * becp for DeltaP Hamiltonian correction
+//
+// For npol=1: ps[ip][ib] += lambda[iat] * becp[ip][ib]
+// For npol=2: ps_up += lambda[iat] * becp_up, ps_dn += lambda[iat] * becp_dn
+//   (DeltaP is spin-independent — same lambda applied to both spin channels)
+//
+// Reuses the same onsite_ps_op kernel as DeltaSpin.  The lambda_coeff layout
+// matches the kernel expectations:
+//   npol=1: lambda_coeff[iat] = lambda_deltap[iat]  (real scalar)
+//   npol=2: lambda_coeff[iat*4+0] = lambda, lambda_coeff[iat*4+3] = lambda
+//           (diagonal 2×2 identity-scaled matrix for spinor space)
+template<typename T, typename Device>
+void OnsiteProj<OperatorPW<T, Device>>::cal_ps_deltap(const int npol, const int m) const
+{
+    if(!this->has_deltap) return;
+
+    const auto& deltap_lambda = pw_deltap::get_deltap_pw_lambda();
+    const auto& deltap_constrain = pw_deltap::get_deltap_pw_constrain();
+
+    if(deltap_lambda.empty()) return;
+
+    auto* onsite_p = projectors::OnsiteProjector<double, Device>::get_instance();
+    const std::complex<double>* becp = onsite_p->get_becp();
+
+    if (this->nkb_m < m * tnp) {
+        resmem_complex_op()(this->ps, tnp * m, "OnsiteProj<PW>::ps");
+        this->nkb_m = m * tnp;
+    }
+    // Zero ps only if no previous operator (DeltaSpin or DFT+U) has filled it.
+    if(!this->has_delta_spin && !this->has_dftu)
+    {
+        setmem_complex_op()(this->ps, 0, tnp * m);
+    }
+
+    // Initialize projector→atom mapping (same as DeltaSpin)
+    if(!this->init_deltap)
+    {
+        this->init_deltap = true;
+        resmem_int_op()(this->ip_iat, onsite_p->get_tot_nproj());
+        resmem_complex_op()(this->lambda_coeff, this->ucell->nat * 4);
+        std::vector<int> ip_iat0(onsite_p->get_tot_nproj());
+        int ip0 = 0;
+        for(int iat = 0; iat < this->ucell->nat; iat++)
+        {
+            for(int ip = 0; ip < onsite_p->get_nh(iat); ip++)
+            {
+                ip_iat0[ip0++] = iat;
+            }
+        }
+        syncmem_int_h2d_op()(this->ip_iat, ip_iat0.data(), onsite_p->get_tot_nproj());
+    }
+
+    // Prepare lambda array for the onsite_ps_op kernel
+    int nat = this->ucell->nat;
+    std::vector<std::complex<double>> tmp_lambda_coeff(nat * 4, std::complex<double>(0.0, 0.0));
+    if (npol == 1)
+    {
+        for (int iat = 0; iat < nat; iat++)
+        {
+            bool constrained = (deltap_constrain.empty()
+                || static_cast<size_t>(iat) >= deltap_constrain.size()
+                || deltap_constrain[iat] != 0);
+            tmp_lambda_coeff[iat] = std::complex<double>(
+                constrained ? deltap_lambda[iat] : 0.0, 0.0);
+        }
+    }
+    else // npol == 2, spinor
+    {
+        for (int iat = 0; iat < nat; iat++)
+        {
+            bool constrained = (deltap_constrain.empty()
+                || static_cast<size_t>(iat) >= deltap_constrain.size()
+                || deltap_constrain[iat] != 0);
+            double lam = constrained ? deltap_lambda[iat] : 0.0;
+            tmp_lambda_coeff[iat * 4 + 0] = std::complex<double>(lam, 0.0);
+            tmp_lambda_coeff[iat * 4 + 1] = std::complex<double>(0.0, 0.0);
+            tmp_lambda_coeff[iat * 4 + 2] = std::complex<double>(0.0, 0.0);
+            tmp_lambda_coeff[iat * 4 + 3] = std::complex<double>(lam, 0.0);
+        }
+    }
+    syncmem_complex_h2d_op()(this->lambda_coeff, tmp_lambda_coeff.data(), nat * 4);
+
+    hamilt::onsite_ps_op<Real, Device>()(
+        this->ctx,
+        m,
+        npol,
+        this->ip_iat,
+        tnp,
         this->lambda_coeff,
         this->ps, becp);
 }
@@ -335,6 +430,12 @@ void OnsiteProj<OperatorPW<std::complex<float>, base_device::DEVICE_CPU>>::cal_p
 		const int m) const
 {}
 
+template<>
+void OnsiteProj<OperatorPW<std::complex<float>, base_device::DEVICE_CPU>>::cal_ps_deltap(
+		const int npol, 
+		const int m) const
+{}
+
 #if ((defined __CUDA) || (defined __ROCM))
 template<>
 void OnsiteProj<OperatorPW<std::complex<float>, base_device::DEVICE_GPU>>::add_onsite_proj(
@@ -360,6 +461,12 @@ void OnsiteProj<OperatorPW<std::complex<float>, base_device::DEVICE_GPU>>::cal_p
 
 template<>
 void OnsiteProj<OperatorPW<std::complex<float>, base_device::DEVICE_GPU>>::cal_ps_dftu(
+		const int npol, 
+		const int m) const
+{}
+
+template<>
+void OnsiteProj<OperatorPW<std::complex<float>, base_device::DEVICE_GPU>>::cal_ps_deltap(
 		const int npol, 
 		const int m) const
 {}
@@ -395,6 +502,7 @@ void OnsiteProj<OperatorPW<T, Device>>::act(
     this->update_becp(tmpsi_in, npol, nbands, ld_psi);
     this->cal_ps_delta_spin(npol, nbands);
     this->cal_ps_dftu(npol, nbands);
+    this->cal_ps_deltap(npol, nbands);
     this->add_onsite_proj(tmhpsi, npol, nbands, ld_psi);
     ModuleBase::timer::end("Operator", "OnsiteProjPW");
 }

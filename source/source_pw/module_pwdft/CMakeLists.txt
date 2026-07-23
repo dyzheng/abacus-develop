@@ -18,6 +18,7 @@ list(APPEND objects
     update_cell_pw.cpp
     dftu_pw.cpp
     deltaspin_pw.cpp
+    deltap_pw.cpp
     forces_nl.cpp
     forces_cc.cpp
     forces_scc.cpp

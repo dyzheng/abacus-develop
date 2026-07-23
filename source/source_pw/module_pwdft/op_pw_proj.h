@@ -29,7 +29,8 @@ class OnsiteProj<OperatorPW<T, Device>> : public OperatorPW<T, Device>
              const UnitCell* ucell_in,
              Plus_U *p_dftu, // mohan add 2025-11-06 
              const bool cal_delta_spin,
-             const bool cal_dftu);
+             const bool cal_dftu,
+             const bool cal_deltap = false);
 
     template<typename T_in, typename Device_in = Device>
     explicit OnsiteProj(const OnsiteProj<OperatorPW<T_in, Device_in>>* onsite_proj);
@@ -51,6 +52,8 @@ class OnsiteProj<OperatorPW<T, Device>> : public OperatorPW<T, Device>
 
   private:
     void cal_ps_delta_spin(const int npol, const int m) const;
+
+    void cal_ps_deltap(const int npol, const int m) const;
 
     void cal_ps_dftu(const int npol, const int m) const;
 
@@ -78,9 +81,11 @@ class OnsiteProj<OperatorPW<T, Device>> : public OperatorPW<T, Device>
 
     bool has_delta_spin = false;
     bool has_dftu = false;
+    bool has_deltap = false;
 
     mutable bool init_dftu = false;
     mutable bool init_delta_spin = false;
+    mutable bool init_deltap = false;
 
     mutable T *ps = nullptr;
     int tnp = 0;

@@ -1,0 +1,29 @@
+ATOMIC_SPECIES
+O 15.999 O.upf
+H 1.008 H_ONCV_PBE-1.0.upf
+
+NUMERICAL_ORBITAL
+8_O_gga_100Ry_7au_2s2p1d.orb
+1_H_gga_100Ry_7au_2s1p.orb
+
+LATTICE_CONSTANT
+1.8897261254578284
+
+LATTICE_VECTORS
+15.0 0.0 0.0
+0.0 15.0 0.0
+0.0 0.0 15.0
+
+ATOMIC_POSITIONS
+Cartesian_angstrom
+
+O
+0.0
+1
+7.500 7.500 7.500 dp_target 0.5
+
+H
+0.0
+2
+6.744 7.500 8.086 dp_target -0.25
+8.256 7.500 8.086 dp_target -0.25

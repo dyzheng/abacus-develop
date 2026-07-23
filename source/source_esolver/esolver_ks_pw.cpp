@@ -32,6 +32,7 @@
 #include "source_pw/module_pwdft/update_cell_pw.h" // mohan add 20250309
 #include "source_pw/module_pwdft/dftu_pw.h" // mohan add 20250309
 #include "source_pw/module_pwdft/deltaspin_pw.h" // mohan add 20250309
+#include "source_pw/module_pwdft/deltap_pw.h"
 
 #include "source_hamilt/module_xc/exx_info.h" // use GlobalC::exx_info
 
@@ -94,6 +95,18 @@ void ESolver_KS_PW<T, Device>::before_all_runners(UnitCell& ucell, const Input_p
       this->pw_rhod, this->pw_big, this->solvent, inp);
 
     this->stp.before_runner(ucell, this->kv, this->sf, *this->pw_wfc, this->ppcell, PARAM.inp);
+
+    // Initialize DeltaP PW: read per-atom lambda/constrain from STRU
+    if (PARAM.inp.deltap_switch)
+    {
+        std::vector<double> dp_target = ucell.get_dp_target();
+        std::vector<int> dp_constrain = ucell.get_dp_constrain();
+        // Use raw target as initial lambda (constant constraint mode for Phase A)
+        pw_deltap::set_deltap_pw_lambda(dp_target, dp_constrain);
+        pw_deltap::set_deltap_pw_active(true);
+        std::cout << " [DeltaP-PW] Initialized with " << dp_target.size()
+                  << " atoms (constant-lambda mode)" << std::endl;
+    }
 
     ModuleBase::GlobalFunc::DONE(GlobalV::ofs_running, "INIT BASIS");
 
@@ -209,6 +222,9 @@ void ESolver_KS_PW<T, Device>::hamilt2rho_single(UnitCell& ucell, const int iste
 
     // run the inner lambda loop to contrain atomic moments with the DeltaSpin method
     bool skip_solve = pw::run_deltaspin_lambda_loop(iter - 1, this->drho, PARAM.inp);
+
+    // DeltaP lambda loop (Phase A: constant-lambda, no inner loop)
+    pw_deltap::run_deltap_lambda_loop(iter, this->drho, PARAM.inp);
 
     if (!skip_solve)
     {
