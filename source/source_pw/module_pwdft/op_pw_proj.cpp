@@ -434,7 +434,10 @@ template<>
 void OnsiteProj<OperatorPW<std::complex<float>, base_device::DEVICE_CPU>>::cal_ps_deltap(
 		const int npol, 
 		const int m) const
-{}
+{
+    // DeltaP not supported in single precision — silently skip.
+    // The double-precision implementation is at line 199-277.
+}
 
 #if ((defined __CUDA) || (defined __ROCM))
 template<>
@@ -469,7 +472,9 @@ template<>
 void OnsiteProj<OperatorPW<std::complex<float>, base_device::DEVICE_GPU>>::cal_ps_deltap(
 		const int npol, 
 		const int m) const
-{}
+{
+    // DeltaP not supported in single precision — silently skip.
+}
 #endif
 
 // OnsiteProj::act — apply DFT+U and/or DeltaSpin Hamiltonian correction

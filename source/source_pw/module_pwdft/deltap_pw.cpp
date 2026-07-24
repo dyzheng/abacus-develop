@@ -6,8 +6,6 @@
 #include "source_cell/klist.h"
 #include "source_cell/unitcell.h"
 #include "source_pw/module_pwdft/onsite_proj.h"
-#include "source_hsolver/diago_iter_assist.h"
-#include "source_hamilt/hamilt.h"
 #include "source_base/constants.h"
 #include <iomanip>
 #include <iostream>
@@ -22,14 +20,7 @@ namespace {
     std::vector<int> s_constrain;       // per-atom constrain flags
     double s_gamma_total = 0.0;         // cached total gamma from last computation
     double s_dp_escon = 0.0;            // cached dp_escon from last computation
-    void* s_hamilt = nullptr;           // stored HamiltPW pointer for inner loop
-    
-    // Subspace data for inner lambda loop (saved once per SCF, reused across inner steps)
-    bool s_sub_saved = false;
-    std::vector<std::complex<double>> s_sub_h;     // H_sub per k-point [nk*nbands*nbands]
-    std::vector<std::complex<double>> s_sub_s;     // S_sub per k-point
-    std::vector<std::complex<double>> s_becp;      // becp per k-point [nk*nproj*nbands*npol]
-    int s_nk = 0, s_nbands = 0, s_nproj = 0, s_npol = 0;
+    void* s_hamilt = nullptr;           // stored HamiltPW pointer for inner loop (Phase D.2)
 }
 
 void set_deltap_pw_lambda(const std::vector<double>& lambda,
@@ -73,7 +64,6 @@ bool is_deltap_pw_active()
 void set_deltap_pw_hamilt(void* hamilt)
 {
     s_hamilt = hamilt;
-    s_sub_saved = false;
     s_lambda_set = false;  // re-enable lambda update for new SCF cycle
 }
 
@@ -183,37 +173,12 @@ void deltap_iter_finish(
             if (nk > 0 && nbands > 0 && nproj > 0)
             {
                 inner_loop_ok = true;
-                const int* nh_iat = &onsite_p->get_nh(0);
-                auto* hamilt_t = static_cast<hamilt::Hamilt<std::complex<double>, base_device::DEVICE_CPU>*>(s_hamilt);
-
-                // Save subspace data (once per SCF)
-                if (!s_sub_saved)
-                {
-                    s_nk = nk; s_nbands = nbands; s_nproj = nproj; s_npol = npol;
-                    s_sub_h.resize(nk * nbands * nbands);
-                    s_sub_s.resize(nk * nbands * nbands);
-                    int size_becp = nbands * nproj * npol;
-                    s_becp.resize(nk * size_becp);
-
-                    auto* psi_nc = const_cast<psi::Psi<std::complex<double>>*>(psi_cpu);
-                    for (int ik = 0; ik < nk; ik++)
-                    {
-                        psi_nc->fix_k(ik);
-                        auto* h_k = s_sub_h.data() + ik * nbands * nbands;
-                        auto* s_k = s_sub_s.data() + ik * nbands * nbands;
-                        auto* becp_k = s_becp.data() + ik * size_becp;
-                        hamilt_t->updateHk(ik);
-                        hsolver::DiagoIterAssist<std::complex<double>>::cal_hs_subspace(
-                            hamilt_t, *psi_nc, h_k, s_k);
-                        memcpy(becp_k, onsite_p->get_becp(),
-                            sizeof(std::complex<double>) * size_becp);
-                    }
-                    s_sub_saved = true;
-                }
 
                 // Inner loop: re-compute gamma via becp re-weighting
-                // Phase D.1: simple gradient descent, no subspace diagonalization
+                // Phase D.1: simple gradient descent (no subspace diag)
                 // Phase D.2 (TODO): subspace diag with GEMM + diag_responce
+                //   Requires: save H_sub/S_sub/becp (see git history ad25e6be8)
+                //             then H_sub(λ) = H_sub(0) + becp†·ps via GEMM
                 for (int inner = 0; inner < inner_nmax; inner++)
                 {
                     std::vector<double> gamma_trial(nat, 0.0);
