@@ -281,6 +281,10 @@ void ESolver_KS_PW<T, Device>::iter_finish(UnitCell& ucell, const int istep, int
     // check if oscillate for delta_spin method
     pw::check_deltaspin_oscillation(iter, this->drho, this->p_chgmix, PARAM.inp);
 
+    // DeltaP: compute gamma and update lambda after SCF iteration
+    pw_deltap::deltap_iter_finish(ucell, this->drho,
+        this->stp.psi_cpu, this->kv, this->pw_wfc, this->pw_rhod, PARAM.inp);
+
     // the output quantities
     ModuleIO::ctrl_iter_pw(istep, iter, conv_esolver, this->stp.psi_cpu, 
               this->kv, this->pw_wfc, PARAM.inp);

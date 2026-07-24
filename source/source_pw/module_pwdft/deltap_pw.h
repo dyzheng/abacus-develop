@@ -18,6 +18,7 @@ void set_deltap_pw_lambda(const std::vector<double>& lambda,
 
 const std::vector<double>& get_deltap_pw_lambda();
 const std::vector<int>& get_deltap_pw_constrain();
+const std::vector<double>& get_deltap_pw_targets();
 
 void set_deltap_pw_active(bool active);
 bool is_deltap_pw_active();
@@ -36,6 +37,7 @@ bool run_deltap_lambda_loop(const int iter,
  * specified direction.  Returns the unwrapped Berry phase in radians,
  * summed over occupied bands and all k-strings.
  *
+ * @param ucell   Unit cell.
  * @param psi_in  Wavefunctions (host-side, complex<double>).
  * @param kv      K-point vectors.
  * @param wfcpw   PW basis for wavefunctions.
@@ -52,6 +54,34 @@ double compute_total_gamma_pw(
     const ModulePW::PW_Basis* rhopw,
     int gdir,
     int nbands);
+
+/**
+ * @brief Per-iteration logic for DeltaP PW: compute gamma and update lambda.
+ *
+ * This is called from ESolver_KS_PW::iter_finish() after each SCF iteration.
+ * When charge density is converged enough (drho < deltap_inner_thr), it:
+ *   1. Computes total Berry phase gamma from current wavefunctions
+ *   2. Updates per-atom lambda via gradient descent (gamma - target)
+ *   3. Stores updated lambda so the OnsiteProj picks it up next iteration
+ *
+ * Phase A behavior (no multi-k, Gamma-only): falls through without update.
+ *
+ * @param ucell     Unit cell.
+ * @param drho      Current charge density deviation.
+ * @param psi_cpu   Host-side wavefunctions.
+ * @param kv        K-point vectors.
+ * @param wfcpw     PW basis for wavefunctions.
+ * @param rhopw     PW basis for charge density.
+ * @param inp       Input parameters.
+ */
+void deltap_iter_finish(
+    const UnitCell& ucell,
+    double drho,
+    const psi::Psi<std::complex<double>>* psi_cpu,
+    const K_Vectors& kv,
+    const ModulePW::PW_Basis_K* wfcpw,
+    const ModulePW::PW_Basis* rhopw,
+    const Input_para& inp);
 
 } // namespace pw_deltap
 
