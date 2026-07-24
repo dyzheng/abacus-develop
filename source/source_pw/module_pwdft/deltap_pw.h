@@ -13,6 +13,11 @@
 
 class UnitCell;
 
+namespace hamilt {
+template <typename T, typename Device>
+class Hamilt;
+}
+
 namespace pw_deltap {
 
 void set_deltap_pw_lambda(const std::vector<double>& lambda,
@@ -83,6 +88,7 @@ void deltap_iter_finish(
     const K_Vectors& kv,
     const ModulePW::PW_Basis_K* wfcpw,
     const ModulePW::PW_Basis* rhopw,
+    hamilt::Hamilt<std::complex<double>, base_device::DEVICE_CPU>* p_hamilt,
     const Input_para& inp);
 
 void compute_per_atom_gamma_from_becp(
