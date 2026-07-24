@@ -8,6 +8,9 @@
 #include "source_lcao/module_dftu/dftu.h"
 #include "source_lcao/module_deltaspin/spin_constrain.h"
 #include "source_pw/module_pwdft/deltap_pw.h"
+#include "source_base/constants.h"
+#include <iomanip>
+#include <iostream>
 
 template <typename FPTYPE, typename Device>
 void Forces<FPTYPE, Device>::cal_force_onsite(ModuleBase::matrix& force_onsite,
@@ -69,7 +72,40 @@ void Forces<FPTYPE, Device>::cal_force_onsite(ModuleBase::matrix& force_onsite,
                 bool ok = (dp_constrain.empty() || static_cast<size_t>(iat) >= dp_constrain.size() || dp_constrain[iat] != 0);
                 lam[iat].z = ok ? dp_lambda[iat] : 0.0;
             }
-            onsite_p->cal_force_onsite_dspin(ik, npm, force, lam.data(), wg.c);
+
+            // Allocate temp force buffer for DeltaP contribution only
+            FPTYPE* f_deltap = nullptr;
+            resmem_var_op()(f_deltap, nat * 3);
+            base_device::memory::set_memory_op<FPTYPE, Device>()(f_deltap, 0.0, nat * 3);
+            onsite_p->cal_force_onsite_dspin(ik, npm, f_deltap, lam.data(), wg.c);
+
+            // Print DeltaP force contribution separately for verification
+            std::cout << " [DeltaP-F] λ=(";
+            for (int iat = 0; iat < nat; iat++)
+            {
+                double val = (dp_constrain.empty() || static_cast<size_t>(iat) >= dp_constrain.size() || dp_constrain[iat] != 0) ? dp_lambda[iat] : 0.0;
+                if (iat > 0) std::cout << ", ";
+                std::cout << std::scientific << std::setprecision(3) << val;
+            }
+            std::cout << ") Ry";
+            for (int iat = 0; iat < nat; iat++)
+            {
+                std::cout << " F" << iat+1 << "=(";
+                for (int ipol = 0; ipol < 3; ipol++)
+                {
+                    if (ipol > 0) std::cout << ", ";
+                    double f_eV_A = f_deltap[iat * 3 + ipol] * ModuleBase::Ry_to_eV / ModuleBase::BOHR_TO_A;
+                    std::cout << std::fixed << std::setprecision(6) << f_eV_A;
+                }
+                std::cout << ")";
+            }
+            std::cout << " eV/A" << std::endl;
+
+            // Accumulate into total force
+            for (int iat = 0; iat < nat; iat++)
+                for (int ipol = 0; ipol < 3; ipol++)
+                    force[iat * 3 + ipol] += f_deltap[iat * 3 + ipol];
+            delmem_var_op()(f_deltap);
         }
         
     }
