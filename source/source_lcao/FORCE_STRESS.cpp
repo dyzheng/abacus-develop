@@ -21,6 +21,7 @@
 #endif
 #include "source_lcao/module_operator_lcao/dftu_lcao.h"
 #include "source_lcao/module_operator_lcao/dspin_lcao.h"
+#include "source_lcao/module_operator_lcao/deltap_lcao.h"
 #include "source_lcao/module_operator_lcao/nonlocal.h"
 #include "source_lcao/module_operator_lcao/ekinetic.h"
 #include "source_lcao/module_operator_lcao/overlap.h"
@@ -429,6 +430,29 @@ void Force_Stress_LCAO<T>::getForceStress(UnitCell& ucell,
         }
     }
 
+    // atomic force and stress for DeltaP
+    ModuleBase::matrix force_deltap;
+    ModuleBase::matrix stress_deltap;
+    if (PARAM.inp.deltap_switch && PARAM.inp.deltap_corr)
+    {
+        const auto& dp_lambda = hamilt::DeltaPOperator<std::complex<double>, double>::get_stored_lambda();
+        if (!dp_lambda.empty())
+        {
+            if (isforce) force_deltap.create(nat, 3);
+            if (isstress) stress_deltap.create(3, 3);
+
+            double rm = PARAM.inp.deltap_rm > 0.0 ? PARAM.inp.deltap_rm : 3.0;
+            hamilt::DeltaPOperator<std::complex<double>, double> tmp_dp(
+                nullptr, kv.kvec_d, nullptr, ucell, &gd,
+                two_center_bundle.overlap_orb_onsite.get(), orb.cutoffs(), rm);
+            tmp_dp.set_lambda(dp_lambda);
+            tmp_dp.set_gdir(PARAM.inp.deltap_gdir);
+
+            const hamilt::HContainer<double>* dmr = dmat.dm->get_DMR_pointer(1);
+            tmp_dp.cal_force_stress(isforce, isstress, dmr, force_deltap, stress_deltap);
+        }
+    }
+
     // NOTE: finish_ftable is no longer needed as we don't use ForceStressArrays for overlap/kinetic
     // if (!PARAM.globalv.gamma_only_local)
     // {
@@ -497,6 +521,10 @@ void Force_Stress_LCAO<T>::getForceStress(UnitCell& ucell,
                 if (PARAM.inp.sc_mag_switch)
                 {
                     fcs(iat, i) += force_dspin(iat, i);
+                }
+                if (PARAM.inp.deltap_switch && PARAM.inp.deltap_corr)
+                {
+                    fcs(iat, i) += force_deltap(iat, i);
                 }
 #ifdef __EXX
                 // Force contribution from exx
@@ -708,6 +736,10 @@ void Force_Stress_LCAO<T>::getForceStress(UnitCell& ucell,
                 if (PARAM.inp.sc_mag_switch)
                 {
                     scs(i, j) += stress_dspin(i, j);
+                }
+                if (PARAM.inp.deltap_switch && PARAM.inp.deltap_corr)
+                {
+                    scs(i, j) += stress_deltap(i, j);
                 }
 #ifdef __EXX
                 // Stress contribution from exx

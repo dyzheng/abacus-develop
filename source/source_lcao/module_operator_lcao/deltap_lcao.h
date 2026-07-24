@@ -51,6 +51,33 @@ class DeltaPOperator : public OperatorLCAO<TK, TR>
         hk_correction_ = correction;
     }
 
+    /**
+     * @brief Static storage of per-atom lambda for force/stress computation.
+     *
+     * Set by ESolver_KS_LCAO before calling getForceStress.
+     * Accessed by FORCE_STRESS.cpp via DeltaPOperator::get_stored_lambda().
+     */
+    static void store_lambda_for_force(const std::vector<double>& lam) { s_stored_lambda = lam; }
+    static const std::vector<double>& get_stored_lambda() { return s_stored_lambda; }
+
+    /**
+     * @brief Compute force and stress from the DeltaP constraint Hamiltonian.
+     *
+     * Follows the same pattern as DeltaSpin::cal_force_stress().
+     * Uses intor_->snap(cal_deri=1) for projector derivatives.
+     *
+     * @param cal_force  Compute forces if true
+     * @param cal_stress Compute stresses if true
+     * @param dmR        Density matrix in HContainer format
+     * @param force      Output force [nat][3]
+     * @param stress     Output stress [3][3] (Voigt order)
+     */
+    void cal_force_stress(const bool cal_force,
+                          const bool cal_stress,
+                          const HContainer<double>* dmR,
+                          ModuleBase::matrix& force,
+                          ModuleBase::matrix& stress);
+
   private:
     const UnitCell* ucell = nullptr;
     const Grid_Driver* gridD = nullptr;
@@ -65,6 +92,7 @@ class DeltaPOperator : public OperatorLCAO<TK, TR>
 
     std::vector<double> lambda_;
     std::vector<double> lambda_save_;
+    static std::vector<double> s_stored_lambda;  // for force/stress access
     bool initialized = false;
     bool dp_hr_done = false;
 
@@ -77,6 +105,27 @@ class DeltaPOperator : public OperatorLCAO<TK, TR>
                     const std::unordered_map<int, std::vector<double>>& nlm1_all,
                     const std::unordered_map<int, std::vector<double>>& nlm2_all,
                     TR* data_pointer);
+
+    void cal_force_IJR(const int& iat1,
+                       const int& iat2,
+                       const Parallel_Orbitals* paraV,
+                       const std::unordered_map<int, std::vector<double>>& nlm1_all,
+                       const std::unordered_map<int, std::vector<double>>& nlm2_all,
+                       const hamilt::BaseMatrix<double>* dmR_pointer,
+                       double lambda,
+                       double* force1,
+                       double* force2);
+
+    void cal_stress_IJR(const int& iat1,
+                        const int& iat2,
+                        const int* r_vector,
+                        const Parallel_Orbitals* paraV,
+                        const std::unordered_map<int, std::vector<double>>& nlm1_all,
+                        const std::unordered_map<int, std::vector<double>>& nlm2_all,
+                        const hamilt::BaseMatrix<double>* dmR_pointer,
+                        double lambda,
+                        int gdir,
+                        double* stress);
 };
 
 } // namespace hamilt

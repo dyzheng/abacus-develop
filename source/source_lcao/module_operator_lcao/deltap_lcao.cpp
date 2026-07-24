@@ -6,6 +6,10 @@
 #include "source_io/module_parameter/parameter.h"
 #include <type_traits>
 
+// Static storage for force/stress computation
+template <typename TK, typename TR>
+std::vector<double> hamilt::DeltaPOperator<TK, TR>::s_stored_lambda;
+
 template <typename TK, typename TR>
 hamilt::DeltaPOperator<TK, TR>::DeltaPOperator(
     HS_Matrix_K<TK>* hsk_in,
@@ -308,6 +312,9 @@ void hamilt::DeltaPOperator<TK, TR>::contributeHk(int ik)
 
     add_hk_correction<TK>(hk, H_sym);
 }
+
+// Include force/stress template implementations
+#include "deltap_force_stress.hpp"
 
 template class hamilt::DeltaPOperator<std::complex<double>, double>;
 template class hamilt::DeltaPOperator<std::complex<double>, std::complex<double>>;

@@ -236,6 +236,18 @@ void ESolver_KS_LCAO<TK, TR>::cal_force(UnitCell& ucell, ModuleBase::matrix& for
 
     Force_Stress_LCAO<TK> fsl(this->RA, ucell.nat);
 
+    // Store DeltaP lambda for force/stress computation
+    if (PARAM.inp.deltap_switch && PARAM.inp.deltap_corr)
+    {
+        auto* hamilt_lcao = dynamic_cast<hamilt::HamiltLCAO<TK, TR>*>(this->p_hamilt);
+        if (hamilt_lcao != nullptr)
+        {
+            auto* dp_op = hamilt_lcao->get_dp_operator();
+            if (dp_op != nullptr)
+                hamilt::DeltaPOperator<TK, TR>::store_lambda_for_force(dp_op->get_lambda());
+        }
+    }
+
     deepks.dpks_out_type = "tot";  // for deepks method
 
     fsl.getForceStress(ucell, PARAM.inp.cal_force, PARAM.inp.cal_stress, 
