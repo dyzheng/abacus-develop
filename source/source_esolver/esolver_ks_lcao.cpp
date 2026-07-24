@@ -13,6 +13,7 @@
 #include "source_lcao/hamilt_lcao.h"
 #include "source_lcao/module_operator_lcao/deltap_lcao.h"
 #include "source_lcao/module_deltap/deltap.h"
+#include "deltap_common.h"
 #include "source_io/module_unk/unk_overlap_lcao.h"
 #include "source_io/module_hs/cal_r_overlap_R.h"
 #include "source_hsolver/hsolver_lcao.h"
@@ -772,23 +773,10 @@ void ESolver_KS_LCAO<TK, TR>::iter_finish(UnitCell& ucell, const int istep, int&
 
             // DeltaP constraint energy correction (analogous to DeltaSpin's escon):
             // H_corr contributes ~Σλ·γ to eband. Subtract it to get physical E_DFT.
-            double dp_escon = 0.0;
-            if (use_constraint_matrix)
-            {
-                for (int a = 0; a < static_cast<int>(deltap_constraint_matrix_.size()); ++a)
-                {
-                    double cv = 0.0;
-                    for (int i = 0; i < ucell.nat; ++i)
-                        cv += deltap_constraint_matrix_[a][i] * gamma_I[i][alpha];
-                    dp_escon -= deltap_constraint_lambda_[a] * cv;
-                }
-            }
-            else
-            {
-                for (int iat = 0; iat < ucell.nat; ++iat)
-                    dp_escon -= lambda[iat] * gamma_I[iat][alpha];
-            }
-            this->pelec->f_en.dp_escon = dp_escon;
+            std::vector<double> gamma_1d(ucell.nat);
+            for (int iat = 0; iat < ucell.nat; ++iat)
+                gamma_1d[iat] = gamma_I[iat][alpha];
+            this->pelec->f_en.dp_escon = deltap_common::compute_dp_escon(lambda, gamma_1d);
 
             // Effective electric field: E_eff = -λ_avg × π / a_alpha (a.u.)
             // Convert: 1 a.u. = 51.42 V/Å
