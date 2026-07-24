@@ -21,6 +21,7 @@ void set_deltap_pw_lambda(const std::vector<double>& lambda,
 const std::vector<double>& get_deltap_pw_lambda();
 const std::vector<int>& get_deltap_pw_constrain();
 const std::vector<double>& get_deltap_pw_targets();
+double get_deltap_pw_escon();
 
 void set_deltap_pw_active(bool active);
 bool is_deltap_pw_active();

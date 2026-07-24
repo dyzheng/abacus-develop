@@ -287,6 +287,9 @@ void ESolver_KS_PW<T, Device>::iter_finish(UnitCell& ucell, const int istep, int
     // DeltaP: compute gamma and update lambda after SCF iteration
     pw_deltap::deltap_iter_finish(ucell, this->drho,
         this->stp.psi_cpu, this->kv, this->pw_wfc, this->pw_rho, PARAM.inp);
+    // Apply DeltaP constraint energy correction to f_en
+    if (PARAM.inp.deltap_switch && PARAM.inp.deltap_corr)
+        this->pelec->f_en.dp_escon = pw_deltap::get_deltap_pw_escon();
 
     // the output quantities
     ModuleIO::ctrl_iter_pw(istep, iter, conv_esolver, this->stp.psi_cpu, 

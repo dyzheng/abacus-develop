@@ -21,6 +21,7 @@ namespace {
     std::vector<double> s_targets;      // target per-atom gamma (rad)
     std::vector<int> s_constrain;       // per-atom constrain flags
     double s_gamma_total = 0.0;         // cached total gamma from last computation
+    double s_dp_escon = 0.0;            // cached dp_escon from last computation
     void* s_hamilt = nullptr;           // stored HamiltPW pointer for inner loop
     
     // Subspace data for inner lambda loop (saved once per SCF, reused across inner steps)
@@ -54,6 +55,11 @@ const std::vector<double>& get_deltap_pw_targets()
     return s_targets;
 }
 
+double get_deltap_pw_escon()
+{
+    return s_dp_escon;
+}
+
 void set_deltap_pw_active(bool active)
 {
     s_active = active;
@@ -67,7 +73,8 @@ bool is_deltap_pw_active()
 void set_deltap_pw_hamilt(void* hamilt)
 {
     s_hamilt = hamilt;
-    s_sub_saved = false; // reset subspace cache when hamilt changes (new SCF)
+    s_sub_saved = false;
+    s_lambda_set = false;  // re-enable lambda update for new SCF cycle
 }
 
 bool run_deltap_lambda_loop(const int iter,
@@ -245,7 +252,7 @@ void deltap_iter_finish(
 
     set_deltap_pw_lambda(lambda, constrain);
 
-    // Compute final max_res for output
+    // Compute final max_res and per-atom gamma for output
     std::vector<double> gamma_final(nat, 0.0);
     compute_per_atom_gamma_from_becp(ucell, nocc, gamma_total, gamma_final);
     double max_res = 0.0;
@@ -256,6 +263,14 @@ void deltap_iter_finish(
             max_res = std::max(max_res, std::abs(gamma_final[iat] - targets[iat]));
     }
 
+    // Compute dp_escon = -Σ λ_I · γ_I (constraint energy correction)
+    // Subtracted from band energy to recover physical DFT energy
+    // Follows same formula as DeltaSpin's escon = -Σ λ·M
+    double dp_escon = 0.0;
+    for (int iat = 0; iat < nat; iat++)
+        dp_escon -= lambda[iat] * gamma_final[iat];
+    s_dp_escon = dp_escon;
+
     double lam_avg = 0.0;
     for (int iat = 0; iat < nat; iat++) lam_avg += lambda[iat];
     lam_avg /= nat;
@@ -265,7 +280,8 @@ void deltap_iter_finish(
               << gamma_total << " rad  λ_avg=";
     std::cout << std::scientific << std::setprecision(3) << lam_avg
               << " |res|=" << max_res
-              << " γ/atom=(" << std::fixed << std::setprecision(4);
+              << " escon=" << std::fixed << std::setprecision(6) << dp_escon << " Ry"
+              << " γ/atom=(";
     for (int iat = 0; iat < nat; iat++)
     {
         if (iat > 0) std::cout << ", ";
