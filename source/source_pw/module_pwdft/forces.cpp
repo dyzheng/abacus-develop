@@ -73,9 +73,8 @@ void Forces<FPTYPE, Device>::cal_force(UnitCell& ucell,
             this->cal_force_us(forcenl, rho_basis, *p_nlpp, elec, ucell);
         }
 
-        // DFT+U and DeltaSpin
-        // here maybe a bug when OFDFT calls +U, mohan add 20251107
-        if(PARAM.inp.dft_plus_u || PARAM.inp.sc_mag_switch)
+        // DFT+U, DeltaSpin, and DeltaP onsite force corrections
+        if(PARAM.inp.dft_plus_u || PARAM.inp.sc_mag_switch || (PARAM.inp.deltap_switch && PARAM.inp.deltap_corr))
         {
             this->cal_force_onsite(forceonsite, wg, wfc_basis, ucell, *p_dftu, psi_in);
         }
@@ -173,7 +172,7 @@ void Forces<FPTYPE, Device>::cal_force(UnitCell& ucell,
                     force(iat, ipol) = force(iat, ipol) + forcesol(iat, ipol);
                 }
 
-                if(PARAM.inp.dft_plus_u || PARAM.inp.sc_mag_switch)
+                if(PARAM.inp.dft_plus_u || PARAM.inp.sc_mag_switch || (PARAM.inp.deltap_switch && PARAM.inp.deltap_corr))
                 {
                     force(iat, ipol) += forceonsite(iat, ipol);
                 }

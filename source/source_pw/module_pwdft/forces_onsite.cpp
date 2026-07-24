@@ -7,6 +7,7 @@
 #include "source_io/module_parameter/parameter.h"
 #include "source_lcao/module_dftu/dftu.h"
 #include "source_lcao/module_deltaspin/spin_constrain.h"
+#include "source_pw/module_pwdft/deltap_pw.h"
 
 template <typename FPTYPE, typename Device>
 void Forces<FPTYPE, Device>::cal_force_onsite(ModuleBase::matrix& force_onsite,
@@ -56,6 +57,19 @@ void Forces<FPTYPE, Device>::cal_force_onsite(ModuleBase::matrix& force_onsite,
             spinconstrain::SpinConstrain<std::complex<double>>& sc = 
               spinconstrain::SpinConstrain<std::complex<double>>::getScInstance();
             onsite_p->cal_force_onsite_dspin(ik, npm, force, sc.get_sc_lambda().data(), wg.c);
+        }
+        if(PARAM.inp.deltap_switch && PARAM.inp.deltap_corr)
+        {
+            const auto& dp_lambda = pw_deltap::get_deltap_pw_lambda();
+            const auto& dp_constrain = pw_deltap::get_deltap_pw_constrain();
+            int nat = ucell_in.nat;
+            std::vector<ModuleBase::Vector3<double>> lam(nat, ModuleBase::Vector3<double>(0,0,0));
+            for (int iat = 0; iat < nat; iat++)
+            {
+                bool ok = (dp_constrain.empty() || static_cast<size_t>(iat) >= dp_constrain.size() || dp_constrain[iat] != 0);
+                lam[iat].z = ok ? dp_lambda[iat] : 0.0;
+            }
+            onsite_p->cal_force_onsite_dspin(ik, npm, force, lam.data(), wg.c);
         }
         
     }
