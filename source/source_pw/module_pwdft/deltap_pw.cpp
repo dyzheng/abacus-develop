@@ -6,6 +6,7 @@
 #include "source_cell/klist.h"
 #include "source_cell/unitcell.h"
 #include "source_pw/module_pwdft/onsite_proj.h"
+#include "source_base/constants.h"
 #include <iomanip>
 #include <iostream>
 
@@ -117,23 +118,23 @@ void deltap_iter_finish(
     int gdir = inp.deltap_gdir;
     if (gdir < 1 || gdir > 3) return;
 
-    // Compute gamma only when charge is converged enough
+    // Compute gamma only when charge is converged enough and lambda not yet set.
+    // This mirrors the LCAO Branch D two-phase strategy: SCF converges with
+    // λ=0 first, then once drho < inner_thr we do a single λ update.
     if (drho <= 0.0 || drho >= inp.deltap_inner_thr)
         return;
 
-    // Get current lambda (from previous iteration, or initial from STRU)
+    if (s_lambda_set)
+        return;
+    s_lambda_set = true;
+
+    // Get current lambda (from STRU initialization)
     std::vector<double> lambda = get_deltap_pw_lambda();
     if (lambda.empty()) lambda.assign(nat, 0.0);
     const std::vector<int>& constrain = get_deltap_pw_constrain();
 
-    // Get targets
-    // We don't have direct access to ucell.get_dp_target() here but we stored
-    // both target and constrain at initialization — the init lambda IS the target.
-    // Actually, we need separate storage for target values.  Use stored lambda as
-    // initial guess, and read targets from STRU initialization data.
-
-    // Compute total gamma from wavefunctions
-    int nocc = inp.nelec / 2; // nspin=1, nelec/2 = occupied bands
+    int nspin = inp.nspin;
+    int nocc = inp.nelec / ModuleBase::DEGSPIN;
     if (nocc < 1) nocc = 1;
 
     double gamma_total = compute_total_gamma_pw(

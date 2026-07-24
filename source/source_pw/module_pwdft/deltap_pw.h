@@ -11,6 +11,8 @@
 #include "source_basis/module_pw/pw_basis_k.h"
 #include "source_cell/klist.h"
 
+class UnitCell;
+
 namespace pw_deltap {
 
 void set_deltap_pw_lambda(const std::vector<double>& lambda,
