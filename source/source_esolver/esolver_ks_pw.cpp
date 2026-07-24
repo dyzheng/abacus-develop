@@ -171,6 +171,9 @@ void ESolver_KS_PW<T, Device>::before_scf(UnitCell& ucell, const int istep)
     //! Allocate HamiltPW
     this->allocate_hamilt(ucell);
 
+    // Store hamilt pointer for DeltaP inner loop (follows SpinConstrain pattern)
+    pw_deltap::set_deltap_pw_hamilt(static_cast<void*>(this->p_hamilt));
+
     //! Setup potentials (local, non-local, sc, +U, DFT-1/2)
     // note: init DFT+U is done here for pw basis for every scf iteration, however, 
     // init DFT+U is done in "before_all_runners" in LCAO basis. This should be refactored, mohan note 2025-11-06
@@ -282,12 +285,8 @@ void ESolver_KS_PW<T, Device>::iter_finish(UnitCell& ucell, const int istep, int
     pw::check_deltaspin_oscillation(iter, this->drho, this->p_chgmix, PARAM.inp);
 
     // DeltaP: compute gamma and update lambda after SCF iteration
-    {
-        auto* hamilt_cpu = dynamic_cast<hamilt::Hamilt<std::complex<double>, base_device::DEVICE_CPU>*>(this->p_hamilt);
-        pw_deltap::deltap_iter_finish(ucell, this->drho,
-            this->stp.psi_cpu, this->kv, this->pw_wfc, this->pw_rho,
-            hamilt_cpu, PARAM.inp);
-    }
+    pw_deltap::deltap_iter_finish(ucell, this->drho,
+        this->stp.psi_cpu, this->kv, this->pw_wfc, this->pw_rho, PARAM.inp);
 
     // the output quantities
     ModuleIO::ctrl_iter_pw(istep, iter, conv_esolver, this->stp.psi_cpu, 

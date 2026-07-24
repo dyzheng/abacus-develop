@@ -9,7 +9,6 @@
 #include "source_hsolver/diago_iter_assist.h"
 #include "source_hamilt/hamilt.h"
 #include "source_base/constants.h"
-#include "source_base/kernels/math_kernel_op.h"
 #include <iomanip>
 #include <iostream>
 
@@ -22,6 +21,7 @@ namespace {
     std::vector<double> s_targets;      // target per-atom gamma (rad)
     std::vector<int> s_constrain;       // per-atom constrain flags
     double s_gamma_total = 0.0;         // cached total gamma from last computation
+    void* s_hamilt = nullptr;           // stored HamiltPW pointer for inner loop
     
     // Subspace data for inner lambda loop (saved once per SCF, reused across inner steps)
     bool s_sub_saved = false;
@@ -62,6 +62,12 @@ void set_deltap_pw_active(bool active)
 bool is_deltap_pw_active()
 {
     return s_active;
+}
+
+void set_deltap_pw_hamilt(void* hamilt)
+{
+    s_hamilt = hamilt;
+    s_sub_saved = false; // reset subspace cache when hamilt changes (new SCF)
 }
 
 bool run_deltap_lambda_loop(const int iter,
@@ -113,7 +119,6 @@ void deltap_iter_finish(
     const K_Vectors& kv,
     const ModulePW::PW_Basis_K* wfcpw,
     const ModulePW::PW_Basis* rhopw,
-    hamilt::Hamilt<std::complex<double>>* p_hamilt,
     const Input_para& inp)
 {
     if (!inp.deltap_switch || !inp.deltap_corr)
@@ -157,10 +162,9 @@ void deltap_iter_finish(
     if (mixing > 1.0) mixing = 1.0;
     if (mixing == 0.0) mixing = 1.0;
 
-    // ---- Subspace inner loop (only if deltap_inner_nmax > 0) ----
     int inner_nmax = inp.deltap_inner_nmax;
     bool inner_loop_ok = false;
-    if (inner_nmax > 0 && p_hamilt != nullptr && psi_cpu != nullptr)
+    if (inner_nmax > 0 && s_hamilt != nullptr && psi_cpu != nullptr)
     {
         auto* onsite_p = projectors::OnsiteProjector<double, base_device::DEVICE_CPU>::get_instance();
         if (onsite_p != nullptr)
@@ -173,6 +177,7 @@ void deltap_iter_finish(
             {
                 inner_loop_ok = true;
                 const int* nh_iat = &onsite_p->get_nh(0);
+                auto* hamilt_t = static_cast<hamilt::Hamilt<std::complex<double>, base_device::DEVICE_CPU>*>(s_hamilt);
 
                 // Save subspace data (once per SCF)
                 if (!s_sub_saved)
@@ -190,88 +195,23 @@ void deltap_iter_finish(
                         auto* h_k = s_sub_h.data() + ik * nbands * nbands;
                         auto* s_k = s_sub_s.data() + ik * nbands * nbands;
                         auto* becp_k = s_becp.data() + ik * size_becp;
-                        p_hamilt->updateHk(ik);
+                        hamilt_t->updateHk(ik);
                         hsolver::DiagoIterAssist<std::complex<double>>::cal_hs_subspace(
-                            p_hamilt, *psi_nc, h_k, s_k);
+                            hamilt_t, *psi_nc, h_k, s_k);
                         memcpy(becp_k, onsite_p->get_becp(),
                             sizeof(std::complex<double>) * size_becp);
                     }
                     s_sub_saved = true;
                 }
 
-                // Inner loop: gradient descent with subspace re-solve
+                // Inner loop: re-compute gamma via becp re-weighting
+                // Phase D.1: simple gradient descent, no subspace diagonalization
+                // Phase D.2 (TODO): subspace diag with GEMM + diag_responce
                 for (int inner = 0; inner < inner_nmax; inner++)
                 {
-                    int size_becp = s_nbands * s_nproj * s_npol;
-                    std::vector<std::complex<double>> h_tmp(s_nbands * s_nbands);
-                    std::vector<std::complex<double>> s_tmp(s_nbands * s_nbands);
-                    std::vector<std::complex<double>> becp_tmp(size_becp);
-                    std::vector<std::complex<double>> ps(size_becp, 0.0);
-                    std::vector<double> w_tot(nat, 0.0);
-
-                    for (int ik = 0; ik < s_nk; ik++)
-                    {
-                        auto* h_k = s_sub_h.data() + ik * s_nbands * s_nbands;
-                        auto* s_k = s_sub_s.data() + ik * s_nbands * s_nbands;
-                        auto* becp_k = s_becp.data() + ik * size_becp;
-
-                        // Build ps = diag(lambda[atom_of(proj)]) * becp
-                        std::fill(ps.begin(), ps.end(), std::complex<double>(0.0, 0.0));
-                        int iproj = 0;
-                        for (int iat = 0; iat < nat; iat++)
-                        {
-                            int nh = nh_iat[iat];
-                            std::complex<double> coeff(lambda[iat], 0.0);
-                            for (int ip = 0; ip < nh; ip++)
-                            {
-                                for (int ib = 0; ib < s_nbands; ib++)
-                                    ps[ib * s_nproj + iproj] += coeff * becp_k[ib * s_nproj + iproj];
-                                iproj++;
-                            }
-                        }
-
-                        // H_sub(lambda) = H_sub(0) + becp† * ps
-                        memcpy(h_tmp.data(), h_k, sizeof(std::complex<double>) * s_nbands * s_nbands);
-                        memcpy(s_tmp.data(), s_k, sizeof(std::complex<double>) * s_nbands * s_nbands);
-                        memcpy(becp_tmp.data(), becp_k, sizeof(std::complex<double>) * size_becp);
-
-                        ModuleBase::gemm_op<std::complex<double>, base_device::DEVICE_CPU>()(
-                            'C', 'N', s_nbands, s_nbands, s_nproj * s_npol,
-                            &ModuleBase::ONE, becp_k, s_nproj * s_npol,
-                            ps.data(), s_nproj * s_npol,
-                            &ModuleBase::ONE, h_tmp.data(), s_nbands);
-
-                        // Subspace diagonalization: H·V = S·V·E
-                        hsolver::DiagoIterAssist<std::complex<double>>::diag_responce(
-                            h_tmp.data(), s_tmp.data(), s_nbands,
-                            becp_tmp.data(), becp_tmp.data(), s_nproj * s_npol, nullptr);
-
-                        // Compute per-atom weights from rotated becp
-                        iproj = 0;
-                        for (int iat = 0; iat < nat; iat++)
-                        {
-                            int nh = nh_iat[iat];
-                            for (int ip = 0; ip < nh; ip++)
-                            {
-                                for (int ib = 0; ib < nocc; ib++)
-                                {
-                                    auto b = becp_tmp[ib * s_nproj + iproj];
-                                    w_tot[iat] += b.real() * b.real() + b.imag() * b.imag();
-                                }
-                                iproj++;
-                            }
-                        }
-                    } // end k-point loop
-
-                    // Normalize per-atom gamma
                     std::vector<double> gamma_trial(nat, 0.0);
-                    double w_sum = 0.0;
-                    for (int iat = 0; iat < nat; iat++) w_sum += w_tot[iat];
-                    if (w_sum < 1e-30) break;
-                    for (int iat = 0; iat < nat; iat++)
-                        gamma_trial[iat] = gamma_total * w_tot[iat] / w_sum;
+                    compute_per_atom_gamma_from_becp(ucell, nocc, gamma_total, gamma_trial);
 
-                    // Compute residual and update lambda
                     double max_res_inner = 0.0;
                     for (int iat = 0; iat < nat; iat++)
                     {
@@ -284,7 +224,7 @@ void deltap_iter_finish(
 
                     if (max_res_inner < inp.deltap_inner_thr)
                         break;
-                } // end inner loop
+                }
             }
         }
     }

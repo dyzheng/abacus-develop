@@ -13,11 +13,6 @@
 
 class UnitCell;
 
-namespace hamilt {
-template <typename T, typename Device>
-class Hamilt;
-}
-
 namespace pw_deltap {
 
 void set_deltap_pw_lambda(const std::vector<double>& lambda,
@@ -29,6 +24,14 @@ const std::vector<double>& get_deltap_pw_targets();
 
 void set_deltap_pw_active(bool active);
 bool is_deltap_pw_active();
+
+/**
+ * @brief Store the PW Hamiltonian pointer for inner loop use.
+ *
+ * Must be called during before_scf where the template type is known.
+ * Follows the DeltaSpin pattern (SpinConstrain stores hamilt as void*).
+ */
+void set_deltap_pw_hamilt(void* hamilt);
 
 /**
  * @brief Run the inner lambda loop for DeltaP in PW basis.
@@ -88,7 +91,6 @@ void deltap_iter_finish(
     const K_Vectors& kv,
     const ModulePW::PW_Basis_K* wfcpw,
     const ModulePW::PW_Basis* rhopw,
-    hamilt::Hamilt<std::complex<double>, base_device::DEVICE_CPU>* p_hamilt,
     const Input_para& inp);
 
 void compute_per_atom_gamma_from_becp(
