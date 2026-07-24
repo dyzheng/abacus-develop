@@ -83,6 +83,12 @@ void deltap_iter_finish(
     const ModulePW::PW_Basis* rhopw,
     const Input_para& inp);
 
+void compute_per_atom_gamma_from_becp(
+    const UnitCell& ucell,
+    int nocc,
+    double gamma_total,
+    std::vector<double>& gamma_per_atom);
+
 } // namespace pw_deltap
 
 #endif // DELTAP_PW_H

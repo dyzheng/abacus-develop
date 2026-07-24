@@ -5,6 +5,7 @@
 #include "source_basis/module_pw/pw_basis_k.h"
 #include "source_cell/klist.h"
 #include "source_cell/unitcell.h"
+#include "source_pw/module_pwdft/onsite_proj.h"
 #include <iomanip>
 #include <iostream>
 
@@ -141,25 +142,9 @@ void deltap_iter_finish(
     if (gamma_total == 0.0)
         return; // no valid k-strings (Gamma-only grid)
 
-    // For Phase B2: assign gamma equally to constrained atoms
-    // Phase B3 will add proper per-atom decomposition via becp weights
-    int nconstrained = 0;
-    for (int iat = 0; iat < nat; iat++)
-    {
-        bool ok = (constrain.empty() || static_cast<size_t>(iat) >= constrain.size() || constrain[iat] != 0);
-        if (ok) nconstrained++;
-    }
-    if (nconstrained == 0) return;
-
-    double gamma_per_atom = gamma_total / nconstrained;
-
-    // Build per-atom gamma and update lambda via gradient descent
+    // Phase B3: decompose total gamma per atom via becp weights
     std::vector<double> gamma_1d(nat, 0.0);
-    for (int iat = 0; iat < nat; iat++)
-    {
-        bool ok = (constrain.empty() || static_cast<size_t>(iat) >= constrain.size() || constrain[iat] != 0);
-        gamma_1d[iat] = ok ? gamma_per_atom : 0.0;
-    }
+    compute_per_atom_gamma_from_becp(ucell, nocc, gamma_total, gamma_1d);
 
     // Target values (fixed, from STRU at initialization)
     const std::vector<double>& targets = get_deltap_pw_targets();
@@ -189,7 +174,66 @@ void deltap_iter_finish(
     for (int iat = 0; iat < nat; iat++) lam_avg += lambda[iat];
     lam_avg /= nat;
     std::cout << std::scientific << std::setprecision(3) << lam_avg
-              << " |res|=" << max_res << std::endl;
+              << " |res|=" << max_res
+              << " γ/atom=(" << std::fixed << std::setprecision(4);
+    for (int iat = 0; iat < nat; iat++)
+    {
+        if (iat > 0) std::cout << ", ";
+        std::cout << gamma_1d[iat];
+    }
+    std::cout << ")" << std::endl;
+}
+
+void compute_per_atom_gamma_from_becp(
+    const UnitCell& ucell,
+    int nocc,
+    double gamma_total,
+    std::vector<double>& gamma_per_atom)
+{
+    int nat = ucell.nat;
+    gamma_per_atom.assign(nat, 0.0);
+
+    auto* onsite_p = projectors::OnsiteProjector<double, base_device::DEVICE_CPU>::get_instance();
+    if (onsite_p == nullptr) return;
+
+    int tot_nproj = onsite_p->get_tot_nproj();
+    if (tot_nproj == 0) return;
+
+    const std::complex<double>* becp = onsite_p->get_becp();
+    if (becp == nullptr) return;
+
+    // Compute per-atom weights: w[I] = Σ_n Σ_{α∈I} |<alpha|psi_n>|^2
+    std::vector<double> w(nat, 0.0);
+    int iproj = 0;
+    for (int iat = 0; iat < nat; iat++)
+    {
+        int nh = onsite_p->get_nh(iat);
+        for (int ip = 0; ip < nh; ip++)
+        {
+            double w_ip = 0.0;
+            for (int ib = 0; ib < nocc; ib++)
+            {
+                std::complex<double> b = becp[ib * tot_nproj + iproj];
+                w_ip += b.real() * b.real() + b.imag() * b.imag();
+            }
+            w[iat] += w_ip;
+            iproj++;
+        }
+    }
+
+    double w_total = 0.0;
+    for (int iat = 0; iat < nat; iat++) w_total += w[iat];
+
+    if (w_total < 1e-30)
+    {
+        // Fallback: equal division
+        for (int iat = 0; iat < nat; iat++)
+            gamma_per_atom[iat] = gamma_total / nat;
+        return;
+    }
+
+    for (int iat = 0; iat < nat; iat++)
+        gamma_per_atom[iat] = gamma_total * w[iat] / w_total;
 }
 
 } // namespace pw_deltap
