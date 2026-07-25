@@ -472,10 +472,6 @@ void DeltaP::compute_wannier_polarization(
             {
                 G_cart_bdy = dk_string * static_cast<double>(kv_->nmp[gdir_ - 1]);
                 G_add_ptr = &G_cart_bdy;
-                std::cout << " [LCAO-G] boundary j=" << j << " G=(" 
-                          << G_cart_bdy.x << "," << G_cart_bdy.y << "," << G_cart_bdy.z 
-                          << ") dk=(" << dk_string.x << "," << dk_string.y << "," << dk_string.z
-                          << ") nmp=" << kv_->nmp[gdir_-1] << std::endl;
             }
             if (ik_R < nks && ik_L < nks)
             {
@@ -519,8 +515,8 @@ void DeltaP::compute_wannier_polarization(
                 }
             }
 
-            O_kpair[j] = O_full;
-        }
+             O_kpair[j] = O_full;
+         }
 
         // --- Step 3a: Compute zeta = prod_j det(O_j) ---
         // Use det_berryphase directly (bypasses O_matrix gathering issues)
@@ -542,23 +538,6 @@ void DeltaP::compute_wannier_polarization(
                 if (ik_R >= nks) ik_R = 0;
                  zeta_scalar *= berry_overlap_->det_berryphase(
                      ucell, ik_L, ik_R, dk_str, nocc_use, *paraV_, psi, *kv_);
-                 // Debug: compute det of O_kpair boundary link
-                 if (j == nppstr_ - 2) {
-                     std::vector<std::complex<double>> O_copy = O_kpair[j];
-                     std::vector<int> ipiv(nocc_use);
-                     int info = 0;
-                     zgetrf_(&nocc_use, &nocc_use, O_copy.data(), &nocc_use, ipiv.data(), &info);
-                     if (info == 0) {
-                         std::complex<double> det_O(1.0, 0.0); int sign = 1;
-                         for (int i = 0; i < nocc_use; i++) {
-                             det_O *= O_copy[i * nocc_use + i];
-                             if (ipiv[i] != i + 1) sign = -sign;
-                         }
-                         if (sign < 0) det_O = -det_O;
-                         std::cout << " [LCAO-debug] O_boundary det=(" << det_O.real() << "," << det_O.imag() 
-                                   << ") |phase|=" << atan2(det_O.imag(), det_O.real()) << std::endl;
-                     }
-                 }
             }
         }
         else
