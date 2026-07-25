@@ -398,7 +398,6 @@ void compute_per_atom_gamma_wilson(
     }
 
     // Normalize per-band weights and compute per-atom gamma
-    double gamma_sum_check = 0.0;
     for (int n = 0; n < m_dim; n++)
     {
         double w_tot = 0.0;
@@ -407,9 +406,6 @@ void compute_per_atom_gamma_wilson(
         for (int iat = 0; iat < nat; iat++)
             gamma_per_atom[iat] += w_atom_band[iat][n] * theta[n] / w_tot;
     }
-    for (int iat = 0; iat < nat; iat++) gamma_sum_check += gamma_per_atom[iat];
-    double th_sum = 0; for (int n=0; n<m_dim; n++) th_sum += theta[n];
-    std::cout << " [Wilson] Σγ=" << gamma_sum_check << " Σθ=" << th_sum << std::endl;
 }
 
 } // namespace pw_deltap
