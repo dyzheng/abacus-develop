@@ -22,6 +22,7 @@ namespace {
     std::vector<int> s_constrain;       // per-atom constrain flags
     double s_gamma_total = 0.0;         // cached total gamma from last computation
     double s_dp_escon = 0.0;            // cached dp_escon from last computation
+    std::vector<double> s_gamma_prev;   // per-atom gamma from previous SCF step (branch tracking)
     void* s_hamilt = nullptr;           // stored HamiltPW pointer for inner loop (Phase D.2)
 }
 
@@ -66,7 +67,8 @@ bool is_deltap_pw_active()
 void set_deltap_pw_hamilt(void* hamilt)
 {
     s_hamilt = hamilt;
-    s_lambda_set = false;  // re-enable lambda update for new SCF cycle
+    s_lambda_set = false;
+    s_gamma_prev.clear();  // reset branch tracking for new SCF cycle
 }
 
 bool run_deltap_lambda_loop(const int iter,
@@ -222,6 +224,23 @@ void deltap_iter_finish(
     // Compute final max_res and per-atom gamma for output
     std::vector<double> gamma_final(nat, 0.0);
     compute_per_atom_gamma_kstring(ucell, nocc, psi_cpu, kv, wfcpw, rhopw, gdir, gamma_final);
+
+    // Branch tracking: unwrap per-atom gamma across SCF iterations
+    // Same algorithm as LCAO deltap_wannier.cpp branch selection:
+    // choose the 2π branch nearest to the previous step's value
+    if (!s_gamma_prev.empty())
+    {
+        for (int iat = 0; iat < nat; iat++)
+        {
+            double raw = gamma_final[iat];
+            double prev = s_gamma_prev[iat];
+            double diff = raw - prev;
+            double n2pi = std::round(diff / (2.0 * ModuleBase::PI));
+            gamma_final[iat] = raw - n2pi * 2.0 * ModuleBase::PI;
+        }
+    }
+    s_gamma_prev = gamma_final;
+
     double max_res = 0.0;
     for (int iat = 0; iat < nat; iat++)
     {
