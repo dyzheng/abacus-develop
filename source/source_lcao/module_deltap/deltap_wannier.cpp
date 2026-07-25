@@ -1011,26 +1011,32 @@ void DeltaP::compute_wannier_polarization(
         std::vector<double> smo_weight_sum_per_atom(nat_, 0.0);
         std::vector<double> r_elec_per_atom(nat_, 0.0);
         std::vector<std::vector<double>> w_In_matrix(n_dim, std::vector<double>(nat_, 0.0));
-        for (int iat = 0; iat < nat_; ++iat)
-        {
-            int r = nproj_per_atom_[iat];
-            int row_offset = 0;
-            for (int i = 0; i < iat; ++i)
-                row_offset += nproj_per_atom_[i];
-            double gamma_I = 0.0;
-            double w_sum = 0.0;
-            double r_weighted = 0.0;
-            for (int n = 0; n < n_dim; ++n)
+        // First pass: compute raw weights per band per atom
+        for (int n = 0; n < n_dim; ++n)
+            for (int iat = 0; iat < nat_; ++iat)
             {
+                int row_offset = 0;
+                for (int i = 0; i < iat; ++i) row_offset += nproj_per_atom_[i];
+                int r = nproj_per_atom_[iat];
                 double w_In = 0.0;
                 for (int a = row_offset; a < row_offset + r; ++a)
                     w_In += std::norm(tilde_proj[a + n * m_dim]);
                 if (w_In < 0) w_In = 0;
                 w_In_matrix[n][iat] = w_In;
-                gamma_I += w_In * gamma_unwrapped[n];
-                w_sum += w_In;
-                double r_n = -a_alpha * gamma_unwrapped[n] / (2.0 * ModuleBase::PI);
-                r_weighted += w_In * r_n;
+            }
+
+        // Normalize per band and compute per-atom gamma
+        for (int iat = 0; iat < nat_; ++iat)
+        {
+            double gamma_I = 0.0, w_sum = 0.0, r_weighted = 0.0;
+            for (int n = 0; n < n_dim; ++n)
+            {
+                double w_tot = 0.0;
+                for (int j = 0; j < nat_; ++j) w_tot += w_In_matrix[n][j];
+                double w_norm = (w_tot > 1e-30) ? w_In_matrix[n][iat] / w_tot : 0.0;
+                gamma_I += w_norm * gamma_unwrapped[n];
+                w_sum += w_norm;
+                r_weighted += w_norm * (-a_alpha * gamma_unwrapped[n] / (2.0 * ModuleBase::PI));
             }
             gamma_accum[iat] += gamma_I;
             gamma_I_per_atom[iat] = gamma_I;
