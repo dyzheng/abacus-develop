@@ -1251,7 +1251,14 @@ void DeltaP::compute_wannier_polarization(
     // different w_In weights (different shift lattices).
     // Uses the first string's w_In (stored in w_In_first_string_) as
     // representative shift amplitudes.
-    if ((!target_gamma_.empty() || !constraint_matrix_.empty())
+    // Check if any meaningful target is set (non-zero within tolerance)
+    bool has_target = false;
+    if (!target_gamma_.empty())
+        for (size_t i = 0; i < target_gamma_.size(); ++i)
+            if (std::abs(target_gamma_[i]) > 1e-12) { has_target = true; break; }
+    bool has_constraint = !constraint_matrix_.empty();
+
+    if ((has_target || has_constraint)
         && n_strings_processed > 0 && !w_In_first_string_.empty())
     {
         const auto& wm = w_In_first_string_;
