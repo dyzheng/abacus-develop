@@ -75,10 +75,15 @@ bool run_deltap_lambda_loop(const int iter,
                             const double drho,
                             const Input_para& inp)
 {
-    if (!inp.deltap_switch)
+    if (!inp.deltap_switch || !inp.deltap_corr)
         return false;
 
     set_deltap_pw_active(true);
+
+    // Phase A: no inner loop — always run normal HSolver.
+    // Lambda is updated in deltap_iter_finish() after charge convergence.
+    // Phase D (deferred): inner BFGS with subspace diag, would return true
+    //   to skip HSolver and run cal_hs_subspace + diag_responce instead.
     return false;
 }
 

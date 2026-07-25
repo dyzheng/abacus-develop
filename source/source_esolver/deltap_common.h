@@ -7,6 +7,9 @@
  * Separates the linear algebra of lambda updates, constraint matrix handling,
  * and residual computation from the basis-specific Hamiltonian application
  * and gamma computation.
+ *
+ * Currently only compute_dp_escon() is used (by LCAO).  The other functions
+ * are kept for future constraint-matrix / total-mode refactoring.
  */
 
 #include <vector>
@@ -27,6 +30,9 @@ namespace deltap_common {
  * @param mixing       Damping factor (0 = no mixing, 1 = full step).
  * @param lambda_out   Effective per-atom lambda [n_atoms] (output).
  * @return             Max residual norm (for convergence check).
+ * @note This function is currently unused — both LCAO and PW paths
+ *   implement lambda updates inline.  Kept for future total/constraint-matrix
+ *   refactoring.
  */
 inline double update_lambda(
     const std::vector<std::vector<double>>& C,
