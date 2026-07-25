@@ -506,7 +506,8 @@ void unkOverlap_lcao::prepare_midmatrix_pblas(const UnitCell& ucell,
                                               const ModuleBase::Vector3<double> dk,
                                               std::complex<double>*& midmatrix,
                                               const Parallel_Orbitals& pv,
-                                              const K_Vectors& kv)
+                                              const K_Vectors& kv,
+                                              const ModuleBase::Vector3<double>* G_add)
 {
     assert(pv.nloc>0);
  
@@ -526,6 +527,8 @@ void unkOverlap_lcao::prepare_midmatrix_pblas(const UnitCell& ucell,
                 for (int iR = 0; iR < orb1_orb2_R[iw_row][iw_col].size(); iR++)
                 {
                     double kRn = (kv.kvec_c[ik_R] * orb1_orb2_R[iw_row][iw_col][iR] - dk * tau1) * ModuleBase::TWO_PI;
+                    if (G_add != nullptr)
+                        kRn += (*G_add * orb1_orb2_R[iw_row][iw_col][iR]) * ModuleBase::TWO_PI;
                     std::complex<double> kRn_phase(cos(kRn), sin(kRn));
                     std::complex<double> orb_overlap(psi_psi[iw_row][iw_col][iR],
                                                      (-dk * ucell.tpiba * psi_r_psi[iw_row][iw_col][iR]));
@@ -649,7 +652,8 @@ void unkOverlap_lcao::berryphase_overlap(const UnitCell& ucell,
                                          const Parallel_Orbitals& para_orb,
                                          const psi::Psi<std::complex<double>>* psi_in,
                                          const K_Vectors& kv,
-                                         std::vector<std::complex<double>>& O_matrix)
+                                         std::vector<std::complex<double>>& O_matrix,
+                                         const ModuleBase::Vector3<double>* G_add)
 {
     // Same as det_berryphase but returns the full O = C†(k_L) · M · C(k_R) matrix
     // O_matrix is (occ_bands × occ_bands), replicated on all ranks.
@@ -659,7 +663,7 @@ void unkOverlap_lcao::berryphase_overlap(const UnitCell& ucell,
     ModuleBase::GlobalFunc::ZEROS(C_matrix, para_orb.nloc);
     ModuleBase::GlobalFunc::ZEROS(out_matrix, para_orb.nloc);
 
-    this->prepare_midmatrix_pblas(ucell, ik_L, ik_R, dk, midmatrix, para_orb, kv);
+    this->prepare_midmatrix_pblas(ucell, ik_L, ik_R, dk, midmatrix, para_orb, kv, G_add);
 
     char transa = 'C';
     char transb = 'N';

@@ -63,7 +63,8 @@ class unkOverlap_lcao
                                  const ModuleBase::Vector3<double> dk,
                                  std::complex<double>*& midmatrix,
                                  const Parallel_Orbitals& pv,
-                                 const K_Vectors& kv);
+                                 const K_Vectors& kv,
+                                 const ModuleBase::Vector3<double>* G_add = nullptr);
     std::complex<double> det_berryphase(const UnitCell& ucell,
                                         const int ik_L,
                                         const int ik_R,
@@ -80,7 +81,8 @@ class unkOverlap_lcao
                             const Parallel_Orbitals& para_orb,
                             const psi::Psi<std::complex<double>>* psi_in,
                             const K_Vectors& kv,
-                            std::vector<std::complex<double>>& O_matrix);
+                            std::vector<std::complex<double>>& O_matrix,
+                            const ModuleBase::Vector3<double>* G_add = nullptr);
 };
 
 #endif

@@ -462,18 +462,28 @@ void DeltaP::compute_wannier_polarization(
             std::vector<std::complex<double>> O_full(
                 static_cast<size_t>(nocc_use) * nocc_use, std::complex<double>(0.0, 0.0));
 
-            // G-phase exp(i·G·r) for PBC boundary link (j==nppstr-2) is
-            // included automatically via berryphase_overlap path.
-            // The fast S_dk path does NOT include it.
-            // Use dk_string (uniform spacing) for ALL links.
-            // (gives -0.75 instead of +0.25 for a 4-point string).
+            // G-phase for PBC-wrapped boundary link.
+            // G_cart = (2π/a_gdir, 0, 0) etc. for direction gdir.
+            // For a uniform Gamma mesh: G_cart = n_p · dk_string, where
+            // n_p = number of k-points along gdir (kvec_d stores spacing dk).
+            ModuleBase::Vector3<double> G_cart_bdy(0.0, 0.0, 0.0);
+            const ModuleBase::Vector3<double>* G_add_ptr = nullptr;
+            if (j == nppstr_ - 2 && gdir_ > 0 && gdir_ <= 3)
+            {
+                G_cart_bdy = dk_string * static_cast<double>(kv_->nmp[gdir_ - 1]);
+                G_add_ptr = &G_cart_bdy;
+                std::cout << " [LCAO-G] boundary j=" << j << " G=(" 
+                          << G_cart_bdy.x << "," << G_cart_bdy.y << "," << G_cart_bdy.z 
+                          << ") dk=(" << dk_string.x << "," << dk_string.y << "," << dk_string.z
+                          << ") nmp=" << kv_->nmp[gdir_-1] << std::endl;
+            }
             if (ik_R < nks && ik_L < nks)
             {
                 if (berry_overlap_)
                 {
                     berry_overlap_->berryphase_overlap(ucell, ik_L, ik_R,
                         dk_string,
-                        nocc_use, *paraV_, psi, *kv_, O_full);
+                        nocc_use, *paraV_, psi, *kv_, O_full, G_add_ptr);
                 }
                 else
                 {
@@ -530,8 +540,25 @@ void DeltaP::compute_wannier_polarization(
                 // to participate in the internal MPI_Allreduce(MPI_PROD)
                 if (ik_L >= nks) ik_L = 0;
                 if (ik_R >= nks) ik_R = 0;
-                zeta_scalar *= berry_overlap_->det_berryphase(
-                    ucell, ik_L, ik_R, dk_str, nocc_use, *paraV_, psi, *kv_);
+                 zeta_scalar *= berry_overlap_->det_berryphase(
+                     ucell, ik_L, ik_R, dk_str, nocc_use, *paraV_, psi, *kv_);
+                 // Debug: compute det of O_kpair boundary link
+                 if (j == nppstr_ - 2) {
+                     std::vector<std::complex<double>> O_copy = O_kpair[j];
+                     std::vector<int> ipiv(nocc_use);
+                     int info = 0;
+                     zgetrf_(&nocc_use, &nocc_use, O_copy.data(), &nocc_use, ipiv.data(), &info);
+                     if (info == 0) {
+                         std::complex<double> det_O(1.0, 0.0); int sign = 1;
+                         for (int i = 0; i < nocc_use; i++) {
+                             det_O *= O_copy[i * nocc_use + i];
+                             if (ipiv[i] != i + 1) sign = -sign;
+                         }
+                         if (sign < 0) det_O = -det_O;
+                         std::cout << " [LCAO-debug] O_boundary det=(" << det_O.real() << "," << det_O.imag() 
+                                   << ") |phase|=" << atan2(det_O.imag(), det_O.real()) << std::endl;
+                     }
+                 }
             }
         }
         else
