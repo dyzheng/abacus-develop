@@ -101,30 +101,35 @@ void compute_per_atom_gamma_from_becp(
     std::vector<double>& gamma_per_atom);
 
 /**
- * @brief Compute per-atom gamma via Wilson loop eigenvalue decomposition.
+ * @brief Compute per-atom gamma via k-string Wilson loop eigenvalue decomposition.
  *
- * Builds the Wilson loop matrix M_{nm} = <u_n(k0)|e^{iG·r}|u_m(k0)>
- * (G-phase overlap at Gamma point), diagonalizes to get eigenvalues
- * e^{iθ_n} and eigenvectors V, then projects becp at k0 onto V:
+ * For each k-string along gdir:
+ *   1. Build overlap matrices M_j = <u_n(k_j)|u_m(k_{j+1})> (unkdotp_G)
+ *      with G-phase for the boundary link (unkdotp_G0).
+ *   2. Compute Wilson loop product M_total = Π_j M_j.
+ *   3. Diagonalize M_total via zgeev → eigenvalues e^{iθ_n}, eigenvectors V.
+ *   4. Project becp at k₀ onto V: proj[α,n] = Σ_m V_{mn}* × becp[α,m,k₀].
+ *   5. Weights: w[I,n] = Σ_{α∈I} |proj[α,n]|².
+ *   6. gamma[I] += w[I,n] × θ_n / Σ_J w[J,n].
  *
- *   proj[α, n] = Σ_m V_{nm}^* × becp(α, m, k₀)
- *   w[I] = Σ_{α∈I} |proj[α,n]|²
- *   γ_I = Σ_n w[I,n] × θ_n / Σ_J w[J,n]
+ * For multi-string meshes (e.g. 3x3x3), eigenvalues across strings are
+ * matched via Hungarian algorithm to resolve 2π branch ambiguity.
+ * For single-string meshes (1x1xN), direct diagonalization is sufficient.
  *
- * This replaces the physically-wrong becp-weight partition.
- *
- * @param ucell      Unit cell (for atom/projector mapping)
+ * @param ucell      Unit cell
  * @param nocc       Number of occupied bands
- * @param psi_cpu    Wavefunctions
+ * @param psi_cpu    Wavefunctions (host-side)
+ * @param kv         K-point vectors
  * @param wfcpw      PW basis for wavefunctions
  * @param rhopw      PW basis for charge density (G-phase FFT)
- * @param gdir       Direction (1=x,2=y,3=z)
+ * @param gdir       Direction (1=x, 2=y, 3=z)
  * @param gamma_per_atom Output: per-atom gamma [nat]
  */
-void compute_per_atom_gamma_wilson(
+void compute_per_atom_gamma_kstring(
     const UnitCell& ucell,
     int nocc,
     const psi::Psi<std::complex<double>>* psi_cpu,
+    const K_Vectors& kv,
     const ModulePW::PW_Basis_K* wfcpw,
     const ModulePW::PW_Basis* rhopw,
     int gdir,

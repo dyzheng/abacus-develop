@@ -153,7 +153,7 @@ void deltap_iter_finish(
 
     // Compute per-atom gamma via Wilson loop decomposition
     std::vector<double> gamma_baseline(nat, 0.0);
-    compute_per_atom_gamma_wilson(ucell, nocc, psi_cpu, wfcpw, rhopw, gdir, gamma_baseline);
+    compute_per_atom_gamma_kstring(ucell, nocc, psi_cpu, kv, wfcpw, rhopw, gdir, gamma_baseline);
 
     double step = inp.deltap_lambda_step;
     double mixing = inp.deltap_lambda_mixing;
@@ -184,7 +184,7 @@ void deltap_iter_finish(
                 for (int inner = 0; inner < inner_nmax; inner++)
                 {
                     std::vector<double> gamma_trial(nat, 0.0);
-                    compute_per_atom_gamma_wilson(ucell, nocc, psi_cpu, wfcpw, rhopw, gdir, gamma_trial);
+                    compute_per_atom_gamma_kstring(ucell, nocc, psi_cpu, kv, wfcpw, rhopw, gdir, gamma_trial);
 
                     double max_res_inner = 0.0;
                     for (int iat = 0; iat < nat; iat++)
@@ -221,7 +221,7 @@ void deltap_iter_finish(
 
     // Compute final max_res and per-atom gamma for output
     std::vector<double> gamma_final(nat, 0.0);
-    compute_per_atom_gamma_wilson(ucell, nocc, psi_cpu, wfcpw, rhopw, gdir, gamma_final);
+    compute_per_atom_gamma_kstring(ucell, nocc, psi_cpu, kv, wfcpw, rhopw, gdir, gamma_final);
     double max_res = 0.0;
     for (int iat = 0; iat < nat; iat++)
     {
@@ -309,10 +309,11 @@ void compute_per_atom_gamma_from_becp(
         gamma_per_atom[iat] = gamma_total * w[iat] / w_total;
 }
 
-void compute_per_atom_gamma_wilson(
+void compute_per_atom_gamma_kstring(
     const UnitCell& ucell,
     int nocc,
     const psi::Psi<std::complex<double>>* psi_cpu,
+    const K_Vectors& kv,
     const ModulePW::PW_Basis_K* wfcpw,
     const ModulePW::PW_Basis* rhopw,
     int gdir,
@@ -322,90 +323,105 @@ void compute_per_atom_gamma_wilson(
     gamma_per_atom.assign(nat, 0.0);
     if (nocc < 1 || psi_cpu == nullptr || wfcpw == nullptr || rhopw == nullptr) return;
 
-    int nk = psi_cpu->get_nk();
-    int npol = psi_cpu->get_npol();
-
-    // Build Wilson loop matrix M_{nm} = <u_n(k0)|e^{iG·r}|u_m(k0)>
-    // For Gamma-only: single k-point, G-phase overlap gives the Berry phase matrix
     int m_dim = nocc;
-    std::vector<std::complex<double>> M(m_dim * m_dim);
     unkOverlap_pw uw;
 
+    // Set up k-strings
+    berryphase bp;
+    bp.direction = gdir;
+    bp.GDIR = gdir;
+    bp.set_kpoints(kv, gdir);
+    if (bp.total_string == 0 || bp.nppstr < 2) return;
+
     ModuleBase::Vector3<double> G(0.0, 0.0, 0.0);
-    if (gdir == 1) G = ModuleBase::Vector3<double>(1.0, 0.0, 0.0);
+    if (gdir == 1)      G = ModuleBase::Vector3<double>(1.0, 0.0, 0.0);
     else if (gdir == 2) G = ModuleBase::Vector3<double>(0.0, 1.0, 0.0);
-    else G = ModuleBase::Vector3<double>(0.0, 0.0, 1.0);
+    else                G = ModuleBase::Vector3<double>(0.0, 0.0, 1.0);
 
-    for (int nb = 0; nb < m_dim; nb++)
-        for (int mb = 0; mb < m_dim; mb++)
-            M[nb * m_dim + mb] = uw.unkdotp_G0(rhopw, wfcpw, 0, 0, nb, mb, psi_cpu, G);
-
-    // Diagonalize: M = V · diag(lambda) · V^{-1}
-    // LAPACK zgeev: column-major layout (Fortran order)
-    // M is n×n column-major: M(nb, mb) = M[nb * n + mb]
-    // For right eigenvectors: M * V = V * lambda
-    int info = 0;
-    std::vector<std::complex<double>> eigenvalues(m_dim);
-    std::vector<std::complex<double>> VR(m_dim * m_dim);
-    std::vector<std::complex<double>> work(4 * m_dim);
-    std::vector<double> rwork(2 * m_dim);
-
-    char jobvl = 'N';
-    char jobvr = 'V';
-    int lwork = 4 * m_dim;
-    zgeev_(&jobvl, &jobvr, &m_dim, M.data(), &m_dim, eigenvalues.data(),
-            nullptr, &m_dim, VR.data(), &m_dim,
-            work.data(), &lwork, rwork.data(), &info);
-
-    if (info != 0) return;
-
-    std::vector<double> theta(m_dim);
-    for (int n = 0; n < m_dim; n++)
-        theta[n] = atan2(eigenvalues[n].imag(), eigenvalues[n].real());
-
-    // Get becp at k0 from OnsiteProjector
     auto* onsite_p = projectors::OnsiteProjector<double, base_device::DEVICE_CPU>::get_instance();
     if (onsite_p == nullptr) return;
     int tot_nproj = onsite_p->get_tot_nproj();
     if (tot_nproj == 0) return;
-    const std::complex<double>* becp = onsite_p->get_becp();
-    if (becp == nullptr) return;
+    const std::complex<double>* becp_k0 = onsite_p->get_becp();
+    if (becp_k0 == nullptr) return;
 
-    // Project becp onto Wilson loop eigenvectors: proj[α, n] = Σ_m VR[m,n] × becp[α,m]
-    // VR is column-major: VR(m, n) = VR[n * m_dim + m]
-    std::vector<std::vector<double>> w_atom_band(nat, std::vector<double>(m_dim, 0.0));
+    std::vector<std::vector<double>> theta_str(bp.total_string, std::vector<double>(m_dim, 0.0));
 
-    int iproj = 0;
-    for (int iat = 0; iat < nat; iat++)
+    for (int istr = 0; istr < bp.total_string; istr++)
     {
-        int nh = onsite_p->get_nh(iat);
-        for (int ip = 0; ip < nh; ip++)
+        // Wilson loop product M_total = Π_j M_j
+        std::vector<std::complex<double>> M_total(m_dim * m_dim);
+        for (int i = 0; i < m_dim; i++) M_total[i * m_dim + i] = 1.0;
+
+        for (int ks = 0; ks < (bp.nppstr - 1); ks++)
         {
-            for (int n = 0; n < m_dim; n++)
+            int ik1 = bp.k_index[istr][ks];
+            int ik2 = bp.k_index[istr][ks + 1];
+            std::vector<std::complex<double>> M_j(m_dim * m_dim);
+
+            if (ks == (bp.nppstr - 2))
+                for (int nb = 0; nb < m_dim; nb++)
+                    for (int mb = 0; mb < m_dim; mb++)
+                        M_j[nb * m_dim + mb] = uw.unkdotp_G0(rhopw, wfcpw, ik1, ik2, nb, mb, psi_cpu, G);
+            else
+                for (int nb = 0; nb < m_dim; nb++)
+                    for (int mb = 0; mb < m_dim; mb++)
+                        M_j[nb * m_dim + mb] = uw.unkdotp_G(wfcpw, ik1, ik2, nb, mb, psi_cpu);
+
+            // M_total = M_j · M_total
+            std::vector<std::complex<double>> tmp(m_dim * m_dim);
+            for (int i = 0; i < m_dim; i++)
+                for (int j = 0; j < m_dim; j++)
+                    for (int k = 0; k < m_dim; k++)
+                        tmp[i * m_dim + j] += M_j[i * m_dim + k] * M_total[k * m_dim + j];
+            M_total = tmp;
+        }
+
+        // Diagonalize
+        std::vector<std::complex<double>> ev(m_dim), VR(m_dim * m_dim);
+        std::vector<std::complex<double>> work(4 * m_dim);
+        std::vector<double> rwork(2 * m_dim);
+        char jl = 'N', jr = 'V';
+        int lw = 4 * m_dim, info = 0;
+        zgeev_(&jl, &jr, &m_dim, M_total.data(), &m_dim, ev.data(),
+                nullptr, &m_dim, VR.data(), &m_dim, work.data(), &lw, rwork.data(), &info);
+        if (info != 0) continue;
+
+        for (int n = 0; n < m_dim; n++)
+            theta_str[istr][n] = atan2(ev[n].imag(), ev[n].real());
+
+        // Project becp onto eigenvectors → per-atom weights
+        std::vector<std::vector<double>> w_ab(nat, std::vector<double>(m_dim, 0.0));
+        int ip = 0;
+        for (int iat = 0; iat < nat; iat++)
+        {
+            int nh = onsite_p->get_nh(iat);
+            for (int ih = 0; ih < nh; ih++)
             {
-                std::complex<double> proj_val(0.0, 0.0);
-                for (int m = 0; m < m_dim; m++)
+                for (int n = 0; n < m_dim; n++)
                 {
-                    std::complex<double> vr_mn = VR[n * m_dim + m];
-                    std::complex<double> becp_val = becp[m * tot_nproj + iproj];
-                    proj_val += vr_mn * std::conj(becp_val);
+                    std::complex<double> p(0,0);
+                    for (int m = 0; m < m_dim; m++)
+                        p += VR[n * m_dim + m] * std::conj(becp_k0[m * tot_nproj + ip]);
+                    w_ab[iat][n] += p.real()*p.real() + p.imag()*p.imag();
                 }
-                double weight = proj_val.real() * proj_val.real() + proj_val.imag() * proj_val.imag();
-                w_atom_band[iat][n] += weight;
+                ip++;
             }
-            iproj++;
+        }
+
+        // Per-atom gamma for this string
+        for (int n = 0; n < m_dim; n++)
+        {
+            double w_t = 0; for (int iat = 0; iat < nat; iat++) w_t += w_ab[iat][n];
+            if (w_t < 1e-30) continue;
+            for (int iat = 0; iat < nat; iat++)
+                gamma_per_atom[iat] += w_ab[iat][n] * theta_str[istr][n] / w_t;
         }
     }
 
-    // Normalize per-band weights and compute per-atom gamma
-    for (int n = 0; n < m_dim; n++)
-    {
-        double w_tot = 0.0;
-        for (int iat = 0; iat < nat; iat++) w_tot += w_atom_band[iat][n];
-        if (w_tot < 1e-30) continue;
-        for (int iat = 0; iat < nat; iat++)
-            gamma_per_atom[iat] += w_atom_band[iat][n] * theta[n] / w_tot;
-    }
+    // Average over k-strings
+    for (int iat = 0; iat < nat; iat++)
+        gamma_per_atom[iat] /= bp.total_string;
 }
 
 } // namespace pw_deltap
