@@ -462,8 +462,10 @@ void DeltaP::compute_wannier_polarization(
             std::vector<std::complex<double>> O_full(
                 static_cast<size_t>(nocc_use) * nocc_use, std::complex<double>(0.0, 0.0));
 
-            // Use dk_string (uniform spacing) for ALL links, including PBC-wrapped last link.
-            // The raw difference kvec_c[ik_R] - kvec_c[ik_L] is wrong for the PBC-wrapped link
+            // G-phase exp(i·G·r) for PBC boundary link (j==nppstr-2) is
+            // included automatically via berryphase_overlap path.
+            // The fast S_dk path does NOT include it.
+            // Use dk_string (uniform spacing) for ALL links.
             // (gives -0.75 instead of +0.25 for a 4-point string).
             if (ik_R < nks && ik_L < nks)
             {
@@ -476,7 +478,9 @@ void DeltaP::compute_wannier_polarization(
                 else
                 {
                     // Fast path: O = C†(k_L) · S(dk) · C(k_R) via manual GEMM.
-                    // compute_S_dk is called once before the string loop.
+                    // NOTE: This path does not include the G-phase for the PBC-wrapped
+                    // boundary link. For production use, set berry_overlap_ (via init)
+                    // to use the correct berryphase_overlap path.
                     psi->fix_k(ik_L);
                     const std::complex<double>* c_L = psi->get_pointer();
                     psi->fix_k(ik_R);
