@@ -100,6 +100,36 @@ void compute_per_atom_gamma_from_becp(
     double gamma_total,
     std::vector<double>& gamma_per_atom);
 
+/**
+ * @brief Compute per-atom gamma via Wilson loop eigenvalue decomposition.
+ *
+ * Builds the Wilson loop matrix M_{nm} = <u_n(k0)|e^{iG·r}|u_m(k0)>
+ * (G-phase overlap at Gamma point), diagonalizes to get eigenvalues
+ * e^{iθ_n} and eigenvectors V, then projects becp at k0 onto V:
+ *
+ *   proj[α, n] = Σ_m V_{nm}^* × becp(α, m, k₀)
+ *   w[I] = Σ_{α∈I} |proj[α,n]|²
+ *   γ_I = Σ_n w[I,n] × θ_n / Σ_J w[J,n]
+ *
+ * This replaces the physically-wrong becp-weight partition.
+ *
+ * @param ucell      Unit cell (for atom/projector mapping)
+ * @param nocc       Number of occupied bands
+ * @param psi_cpu    Wavefunctions
+ * @param wfcpw      PW basis for wavefunctions
+ * @param rhopw      PW basis for charge density (G-phase FFT)
+ * @param gdir       Direction (1=x,2=y,3=z)
+ * @param gamma_per_atom Output: per-atom gamma [nat]
+ */
+void compute_per_atom_gamma_wilson(
+    const UnitCell& ucell,
+    int nocc,
+    const psi::Psi<std::complex<double>>* psi_cpu,
+    const ModulePW::PW_Basis_K* wfcpw,
+    const ModulePW::PW_Basis* rhopw,
+    int gdir,
+    std::vector<double>& gamma_per_atom);
+
 } // namespace pw_deltap
 
 #endif // DELTAP_PW_H
