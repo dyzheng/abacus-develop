@@ -721,7 +721,9 @@ void ESolver_KS_LCAO<TK, TR>::iter_finish(UnitCell& ucell, const int istep, int&
             // Fallback: if inner loop is inactive (nscf==0), use gradient descent
             deltap_update_lambda(ucell, iter);
 
-            // Print status with phase indicator
+            // Print status with phase indicator (rank 0 only)
+            if (GlobalV::MY_RANK == 0)
+            {
             auto* dp = static_cast<deltap::DeltaP*>(dp_scf_);
             // Diagnostic: raw gamma (pre-branch) for Born effective charge
             {
@@ -803,6 +805,7 @@ void ESolver_KS_LCAO<TK, TR>::iter_finish(UnitCell& ucell, const int istep, int&
             double E_eff_V_per_A = E_eff_au * 51.422;                // V/Å
             std::cout << "   [E-field] E_eff=" << std::scientific << std::setprecision(3)
                       << E_eff_V_per_A << " V/Angstrom  (λ_avg=" << lam_avg << " Ry)" << std::endl;
+            } // rank 0 scope
         }
         else
         {
@@ -954,6 +957,7 @@ void ESolver_KS_LCAO<TK, TR>::deltap_init(UnitCell& ucell)
                 ifs >> total_target;
                 for (int iat = 0; iat < ucell.nat; ++iat)
                     deltap_target_[iat] = total_target / ucell.nat;
+            if (GlobalV::MY_RANK == 0)
                 std::cout << " [DeltaP] Loaded total target Σγ=" << total_target
                           << " → per-atom=" << total_target / ucell.nat << std::endl;
             }
@@ -962,6 +966,7 @@ void ESolver_KS_LCAO<TK, TR>::deltap_init(UnitCell& ucell)
                 deltap_target_.assign(ucell.nat, 0.0);
                 for (int iat = 0; iat < ucell.nat; ++iat)
                     ifs >> deltap_target_[iat];
+            if (GlobalV::MY_RANK == 0)
                 std::cout << " [DeltaP] Loaded target from " << PARAM.inp.deltap_target_file << std::endl;
             }
         }
@@ -976,9 +981,11 @@ void ESolver_KS_LCAO<TK, TR>::deltap_init(UnitCell& ucell)
             if (deltap_constrain_[iat] != 0 && deltap_target_[iat] != 0.0)
                 has_any_target = true;
         if (has_any_target)
-            std::cout << " [DeltaP] Loaded targets from STRU (dp_target/dp_constrain)" << std::endl;
+            if (GlobalV::MY_RANK == 0)
+                std::cout << " [DeltaP] Loaded targets from STRU (dp_target/dp_constrain)" << std::endl;
         else
-            std::cout << " [DeltaP] No targets specified; γ measured without constraint" << std::endl;
+            if (GlobalV::MY_RANK == 0)
+                std::cout << " [DeltaP] No targets specified; γ measured without constraint" << std::endl;
     }
     // When no target is specified, leave deltap_target_ empty.
     // This allows ground-state γ determination without target-aware
@@ -1008,7 +1015,8 @@ void ESolver_KS_LCAO<TK, TR>::deltap_init(UnitCell& ucell)
                 deltap_constraint_lambda_.assign(m, PARAM.inp.deltap_lambda_init);
                 static_cast<deltap::DeltaP*>(dp_scf_)->set_constraint_matrix(
                     deltap_constraint_matrix_, deltap_constraint_target_);
-                std::cout << " [DeltaP] Loaded constraint matrix " << m << "x" << n
+                if (GlobalV::MY_RANK == 0)
+                    std::cout << " [DeltaP] Loaded constraint matrix " << m << "x" << n
                           << " from " << PARAM.inp.deltap_constraint_matrix << std::endl;
             }
             else
@@ -1132,7 +1140,8 @@ void ESolver_KS_LCAO<TK, TR>::deltap_inner_loop(UnitCell& ucell, const int iter,
 
         hsolver::HSolverLCAO<TK> hsolver_lcao_obj(&(this->pv), PARAM.inp.ks_solver);
 
-        std::cout << " [DeltaP] inner loop start: nscf=" << nscf
+        if (GlobalV::MY_RANK == 0)
+            std::cout << " [DeltaP] inner loop start: nscf=" << nscf
                   << " rms=" << std::scientific << std::setprecision(4)
                   << bfgs.get_rms() << std::endl;
 
@@ -1189,7 +1198,8 @@ void ESolver_KS_LCAO<TK, TR>::deltap_inner_loop(UnitCell& ucell, const int iter,
             double alpha_opt = bfgs.accept_trial(residual);
             lambda_inner = lam_trial;
 
-            std::cout << " [DeltaP]   inner=" << inner
+            if (GlobalV::MY_RANK == 0)
+                std::cout << " [DeltaP]   inner=" << inner
                       << " rms=" << std::scientific << std::setprecision(4)
                       << bfgs.get_rms() << " alpha_opt=" << alpha_opt << std::endl;
         }
@@ -1214,10 +1224,13 @@ void ESolver_KS_LCAO<TK, TR>::deltap_inner_loop(UnitCell& ucell, const int iter,
         dp_op->set_hk_correction(hk_corr_final);
         skip_solve = true;  // inner loop already solved
 
-        std::cout << " [DeltaP] inner loop done: final";
-        for (int iat = 0; iat < ucell.nat; ++iat)
-            std::cout << " l" << iat << "=" << lam_final[iat];
-        std::cout << std::endl;
+        if (GlobalV::MY_RANK == 0)
+        {
+            std::cout << " [DeltaP] inner loop done: final";
+            for (int iat = 0; iat < ucell.nat; ++iat)
+                std::cout << " l" << iat << "=" << lam_final[iat];
+            std::cout << std::endl;
+        }
         deltap_inner_loop_done_ = true;
     }
 }
@@ -1364,6 +1377,19 @@ void ESolver_KS_LCAO<TK, TR>::deltap_update_lambda(UnitCell& ucell, const int it
             }
 
             dp_op->set_lambda(lambda);
+
+            // MPI: broadcast lambda to ensure consistency across ranks
+            // (gamma is synced in compute_gamma_scf; lambda must be too)
+#ifdef __MPI
+            if (this->pv.comm() != MPI_COMM_NULL)
+            {
+                int nproc = 1;
+                MPI_Comm_size(this->pv.comm(), &nproc);
+                if (nproc > 1)
+                    MPI_Bcast(lambda.data(), ucell.nat, MPI_DOUBLE, 0, this->pv.comm());
+            }
+#endif
+
             dp->start_cooldown(1);
 
             // Reset charge mixing history: Broyden's approximate Jacobian
@@ -1374,9 +1400,10 @@ void ESolver_KS_LCAO<TK, TR>::deltap_update_lambda(UnitCell& ucell, const int it
             this->p_chgmix->mix_reset();
 
             // Phase 2 transition: print summary
-            std::cout << " [DeltaP P2] iter=" << iter << " drho=" << std::scientific
-                      << std::setprecision(2) << this->drho << " < " << PARAM.inp.deltap_inner_thr
-                      << " → λ updated, mix_reset()\n";
+            if (GlobalV::MY_RANK == 0)
+                std::cout << " [DeltaP P2] iter=" << iter << " drho=" << std::scientific
+                          << std::setprecision(2) << this->drho << " < " << PARAM.inp.deltap_inner_thr
+                          << " → λ updated, mix_reset()\n";
         }
 
         // Always recompute HK correction with latest wavefunctions

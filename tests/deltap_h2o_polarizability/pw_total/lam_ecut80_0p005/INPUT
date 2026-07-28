@@ -1,0 +1,26 @@
+INPUT_PARAMETERS
+suffix            autotest
+calculation       scf
+init_wfc          random
+nbands            8
+symmetry          0
+pseudo_dir        /root/abacus-develop/tests/PP_ORB
+orbital_dir       /root/abacus-develop/tests/PP_ORB
+nelec             8
+ecutwfc           80
+scf_thr           1e-04
+scf_nmax          30
+basis_type        pw
+smearing_method   gauss
+smearing_sigma    0.002
+mixing_type       broyden
+mixing_beta       0.7
+deltap_switch     true
+deltap_corr       1
+deltap_gdir       3
+deltap_lambda_init 0.005
+deltap_lambda_step     0.0
+deltap_lambda_mixing   0.0
+deltap_inner_thr       1e-2
+deltap_inner_nmax      0
+onsite_radius     6.0
