@@ -1,247 +1,262 @@
-# DeltaP P 系列测试说明
+# DeltaP P 系列测试辅助说明
 
-> 对应: `可靠性测试设计集/P01–P18`
-> 本文只写测试执行者需要的内容——每个测试的设置、工作流、判据、陷阱。不包含代码实现细节或 bug 清单。
-
----
-
-## 一、测试前必读
-
-### 两种运行模式
-
-| 模式 | 用途 | 关键参数 |
-|------|------|---------|
-| **测量模式** | 读 γ 值（偶极等平衡量） | `deltap_lambda_step 0.0`, 无 target_file |
-| **约束模式** | 施加 λ 扰动（极化率等响应量） | `deltap_lambda_step 0.01`, 有 target_file 或 λ 主动更新 |
-
-测量模式只计算一次 γ（在 drho < deltap_inner_thr 时触发），不修改 λ。约束模式每 SCF 步更新 λ 以逼近 target。
-
-### 哪个 γ 值是对的
-
-- **响应用 `raw γ`**: 屏幕 `[rawG]` 行，或 `gamma_I_raw`。其总和 = Wilson 行列式 = 物理 Berry 相位。
-- **`branch γ`** (`gamma_I`, 屏幕 `[DeltaP P1/P3]` 行): 每原子独立分支选择后累加，总和不严格守恒。仅用作 SCF 迭代追踪辅助量，**不做定量分析**。
-
-### 当前已知局限（影响测试设计）
-
-1. **负 λ SCF 不稳定** (LCAO total 模式): 均匀负 λ 使密度收缩，混迭参数默认值下常不收敛。回避: 减小 |λ|、降低 mixing_beta、或从 λ=0 热启动。
-2. **PW SMO 覆盖率低**: PW 下 SMO 投影球半径（onsite_radius=6 Bohr）在 15 Bohr 盒子中仅覆盖 ~19% 体积。PW 的 per-atom λ 约束对 Berry 相位的耦合效率比 LCAO 差约 6–10×。PW 平衡测量 (λ=0) 不受影响。
-3. **标准 Berry 相位输出 (`berry_phase 1`)** 在 SCF 计算中不产出（需 nscf 模式或单独编译）。PW 体系的 Berry 相位对照目前只能从 DeltaP 的 `γ_total` (PW 路径) 获取。
-4. **λ↔E 换算因子** 的 Ry↔Ha 转换尚未在代码级核实（esolver 中的 `E_eff_au` 打印可能缺 `/2`）。在核实完成前，跨方法能量对标以 efield 的能量 FD 作为裁判。
-
-### 参数红线
-
-| 测试类型 | 最小盒子 | 推荐基组 |
-|---------|---------|---------|
-| 平衡偶极 | 12 Å | DZP |
-| 极化率/响应 | 15 Å | TZDP |
-| 跨方法绝对值对比 | 18 Å | TZDP |
+> 本文是对 `可靠性测试设计集/P01–P18` 各测试文档的 DeltaP 操作补充——只写**怎么跑 DeltaP、怎么看结果**，不重复测试设计文档中已有的目的、原理、判据。
 
 ---
 
-## 二、可立即执行的测试
+## 一、DeltaP 操作速查
 
-### P02: H₂O 平衡偶极 (LCAO)
+### 1.1 开关与模式
 
-**目的**: 验证 λ=0 测量模式下 raw γ 换算的偶极是否正确。
-
-**INPUT 关键参数**:
 ```
-calculation       scf
-basis_type        lcao
-gamma_only        0
-nspin             1
-scf_thr           1e-06
-smearing_method   gauss
-smearing_sigma    0.01
-mixing_type       broyden
-mixing_beta       0.4
-ks_solver         genelpa
-symmetry          -1
-deltap_switch     true
-deltap_corr       1
-deltap_gdir       3
-deltap_lambda_init 0.0
-deltap_lambda_step  0.0
-deltap_inner_thr    1e-2
-onsite_radius      6.0
-deltap_rm          6.0
+deltap_switch  true      # 总开关（必须）
+deltap_corr    1         # 约束核开关。1=计算 γ 并允许 λ 更新，0=不计算
+deltap_gdir    3         # 方向: 1=x, 2=y, 3=z
 ```
 
-**STRU**: H₂O 实验几何 (rOH=0.9572 Å, ∠=104.52°), C2 轴沿 z。盒 ≥12 Å。
+两种常用配置：
 
-**工作流**: 单次 SCF → 读取 `[rawG] Σγ_raw` → 偶极 μ_z = (a/π)·Σγ_raw (a 为盒子 z 边长 Bohr, Σγ_raw 为 rad)。注: 此公式中的 spin 因子需用已知偶极校准。
+| 用途 | deltap_lambda_step | deltap_target_file | 效果 |
+|------|-------------------|-------------------|------|
+| 读平衡 γ | 0.0 | 不设 | λ 冻结在 lambda_init，SCF 收敛后输出一次 γ |
+| 驱动 γ 到 target | 0.01 | target.dat | λ 自动更新，最终 γ 趋近 target |
 
-**判据**: 所得偶极 ≈ 0.73 e·Bohr ≈ 1.85 D (PBE 下略高是正常系统差)。
+### 1.2 约束模式
 
-**陷阱**: 若分子不沿 z 对齐, 需要三方向 (gdir=1,2,3) 各跑一次取矢量合成。
+```
+deltap_constraint_mode  total       # 单个 λ 控制全部原子的 Σγ
+deltap_constraint_mode  per_atom    # 每个原子独立 λ
+```
 
----
+total 模式搭配 target.dat（第一行一个目标 Σγ 值）。
+per_atom 模式搭配 target.dat（每行一个原子的目标 γ）。
 
-### P04: 小分子偶极组 (LCAO)
+约束矩阵模式（`deltap_constraint_matrix cmat.dat`）可覆盖 constraint_mode，文件格式:
+```
+m  n                          # m 个约束, n 个原子
+C[0][0] ... C[0][n-1] t[0]   # m 行, 每行 n 个矩阵元素 + 1 个 target
+```
 
-**目的**: 校验 P02 在 5 个不同极性分子的推广性。
+### 1.3 Lambda 控制参数
 
-**体系**: CH₄, CO, NH₃, HF, H₂S——实验几何, 主轴沿 z。盒 ≥12 Å。设置同 P02。
+```
+deltap_lambda_init     0.0    # 初始 λ (Ry)
+deltap_lambda_step     0.01   # 梯度下降步长。0=冻结
+deltap_lambda_mixing   0.1    # λ 更新混合因子 (0–1)
+deltap_inner_nmax      0      # 内层循环步数。0=同步单步梯度下降
+deltap_inner_thr       1e-2   # λ 更新触发条件: drho < inner_thr
+```
 
-**工作流**: 逐分子单次 SCF → raw γ → 偶极。汇总 MAE, 符号检查 (CO 方向为 C⁻O⁺)。
+### 1.4 投影半径
 
-**判据**: 对 CCSD(T) MAE ≤0.03 D; CH₄ |μ|≤0.01 D; CO 方向正确。
-
-**陷阱**:
-- CH₄ 须关对称性 (`symmetry -1`) 避免代码分支差异。
-- CO 偶极小 (~0.12 D), 对 SCF 收敛敏感, scf_thr 降至 1e-8。
-
----
-
-### P08: 约束线性与 ±λ 对称性 (LCAO)
-
-**目的**: 确定 total 约束的线性响应窗口, 找失稳边界。
-
-**设置**: H₂O, 15 Å 盒, TZDP, total 模式。λ = 0, ±0.01, ±0.02, ±0.04, ±0.08 Ry (九点)。step=0 (固定 λ)。
-
-**工作流**:
-1. 九点逐点 SCF, 读 raw γ。
-2. 绘 Σγ_raw vs λ, 拟合全线性 R²。
-3. 检查 ±λ 反对称: |γ(+λ) + γ(−λ) − 2γ(0)| / |γ(+λ) − γ(0)| < 5%。
-4. 分窗口 (±0.02 内 vs 全窗口) 斜率对比 ≤3%。
-
-**判据**: R²≥0.98, 反对称 ≤5%, 子窗口一致。
-
-**陷阱**: 负 λ 大概率发散 (见 §一)。策略:
-1. 先用 λ=±0.01 测试收敛性。
-2. 负 λ 点从 λ=0 的 OUT.autotest/ 复制电荷密度文件热启动。
-3. 降低 mixing_beta 到 0.3。
-4. 若 ±0.01 仍不收敛, 缩小到 ±0.005。
-5. 记录失稳边界 λ_crit, 后续测试只用 |λ| < λ_crit 窗口。
+```
+onsite_radius  6.0            # SMO 投影轨道半径 (Bohr)
+deltap_rm      6.0            # LCAO 邻居搜索半径，与 onsite_radius 一致
+```
 
 ---
 
-### P09: 无缓存确定性
+## 二、输出解读
 
-**目的**: 确保同一输入三次独立运行结果逐位一致。
+### 2.1 屏幕输出
 
-**工作流**:
-1. H₂O, 12 Å 盒, LCAO, 同 P02 设置。
-2. `rm -rf OUT.autotest`, 运行, 记录 raw γ。重复 3 次。
-3. 对比 raw γ 差 ≤1e-6 rad, 总能量差 ≤1e-8 Ha。
-4. 改变 `OMP_NUM_THREADS=1/4/8` 各再跑一次。
+运行后在 stdout 中搜索以下关键行：
 
-**陷阱**: 必须清理缓存, 不能用之前 OUT 目录。
+```
+[rawG] Σγ_raw=-6.734419e+00 γ0=-2.284088e+00 γ1=-2.225081e+00 γ2=-2.225250e+00
+```
+raw γ：Wilson 行列式直接分解，不经任何修改。**取 Σγ_raw 做偶极/极化率换算。**
 
----
+```
+[DeltaP P1] iter=1   γ=(-6.748) Σγ=-6.748 λ=0.0e+00 |γ-t|=2.386e+00
+[DeltaP P3] iter=16  γ=(-6.734) Σγ=-6.734 λ=2.06e-06 |γ-t|=1.607e-03
+```
+branch γ（经分支选择处理，总和与 raw γ 可能有 ~0.1 rad 量级差异）。P1 = λ 尚未更新，P3 = λ 已更新。
 
-### P06: 盒尺寸收敛 (偶极部分)
+PW 路径输出:
+```
+[DeltaP-PW] drho=5.8e-03 γ_total=-0.1827 rad  λ_avg=0.000e+00 |res|=4.733
+```
+`γ_total` 是标准 Berry 相位 (mod [−π,π])。和 LCAO 的 Σγ_raw 差 2πN 量级，**但差值（dγ）应一致**。
 
-**目的**: 确定偶极的收敛盒尺寸。
+### 2.2 文件输出
 
-**设置**: H₂O, L=12/15/18/21/24 Å 五点, DZP, λ=0 测量模式。
-
-**工作流**: 逐 L 运行 → raw γ → 偶极 → 绘制 μ(L)。取 L=24 Å 为平台参照。
-
-**判据**: 15 Å 处 |Δμ|/μ ≤3% (相对 24 Å)。
-
----
-
-### P07: 基组收敛 (偶极部分)
-
-**目的**: 确定基组对偶极的系统误差。
-
-**设置**: H₂O, 15 Å 盒, DZP/SZP/TZDP 三点, λ=0。
-
-**工作流**: 逐基组运行 → raw γ → 偶极 → 列表对比。TZDP 为基组收敛参照。
+| 文件 | 用途 |
+|------|------|
+| `OUT.suffix/deltap_results.dat` | 每原子 P_I (极化密度)，电子中心位移 |
+| `OUT.suffix/deltap_branch_enum.dat` | Wilson 本征值、SMO 权重（调试分支问题用） |
+| `OUT.suffix/deltap_zeta_debug.dat` | k-string 标积（调试 Wilson 循环用） |
 
 ---
 
-## 三、待前置条件满足后方可执行的测试
+## 三、常见问题处理
 
-### P01: H₂O 极化率三步裁决
+### SCF 不收敛
 
-**阻塞**: 单位备忘录 (F1 λ↔E 因子核实, F2 γ↔μ spin 因子核实)。
+- 降低 `mixing_beta`（默认 0.7 → 0.3–0.4）
+- 增大 `scf_nmax`
+- 用已收敛计算的电荷密度热启动（复制 `OUT.suffix/` 中 charge 文件）
+- LCAO total 模式下，负 λ 值常比正 λ 更难收敛——从 λ=0 热启动、减小 |λ|
 
-**工作流**:
-1. efield FD 裁判: `efield_flag 1, dip_cor_flag 1, efield_amp ±0.0005/±0.001` → E_KS → α_ref = −ΔE/δE²。
-2. DeltaP total ±λ 扫描 (λ=±0.02, ±0.08 Ry) → raw γ → dγ/dλ。
-3. 经 F1/F2 换算得 α_DeltaP, 对比 α_ref。
+### PW 路径 λ_init 没生效
 
-**判据**: |α_DeltaP − α_ref| / α_ref ≤ 10%。
+检查 stdout 中初始化行: `[DeltaP-PW] Initialized with N atoms (lambda_init=X)`。
+若 X=0 而 INPUT 设了非零值，说明 STRU 中有 `dp_target` 关键字覆盖了 `deltap_lambda_init`。
 
-**陷阱**: 负 λ 使用 §二 P08 的热启动协议。若负 λ 确认物理性不通, 改单侧 FD。
+### DeltaP 不输出 γ
 
----
+- 确认 `deltap_corr = 1`
+- 确认 `deltap_inner_thr > 0` 且 SCF 已收敛到 drho < inner_thr
+- PW: 确认 `deltap_switch true`（需要字符串 true，不是 1）
 
-### P03/P05/P10–P12/P17/P18
+### PW vs LCAO 的 γ 值差异
 
-**阻塞**: P01 裁决通过。在此之前, DeltaP 不能输出定量响应结论。
-
----
-
-### P13–P15
-
-**阻塞**: P01 + P08。需要较大的计算资源（体材料 k 点、大超胞）。P16 待 PW 代码整改。
+LCAO 的 `Σγ_raw` 和 PW 的 `γ_total` 绝对值差 2πN 量级是正常的（前者 unwrapped，后者 wrapped）。比较时用**差值**（dγ/dλ 或 Δγ/ΔE），不用绝对值。
 
 ---
 
-## 四、常用命令模板
+## 四、逐测试 DeltaP 操作要点
 
-### LCAO 单次测量 (P02/P04)
+以下仅补充各测试设计文档中未涵盖的 DeltaP 操作细节。测试的目的、原理、判据见对应设计文档。
 
+### P02/P04 — 平衡偶极
+
+**DeltaP 配置**: `lambda_step 0.0`, 无 target_file, 测量模式。
+
+跑完后取 `[rawG] Σγ_raw`。偶极换算:
+```
+μ = (a/π) × Σγ_raw      (a = 盒子沿 gdir 方向的边长, Bohr)
+```
+若分子不沿 gdir 方向对齐，需 gdir=1,2,3 各跑一次合成矢量。
+
+PW 路径用 `[DeltaP-PW] γ_total` 代替 Σγ_raw，公式相同。
+
+---
+
+### P08 — 约束线性与对称性
+
+**DeltaP 配置**: `lambda_step 0.0`（固定 λ）, total 模式, 无 target_file。
+
+对每个 λ 值独立跑一次 SCF，收集 Σγ_raw。注意:
+- 从 |λ| 较小开始（如 ±0.01 Ry），若 SCF 发散再缩小。
+- 负 λ 发散时用 §三 中热启动方案。
+- 每个 λ 值记 SCF 迭代数——迭代数骤增是靠近失稳边界的信号。
+
+---
+
+### P01/P05 — 极化率
+
+**阻塞**: F1 (λ↔E 换算因子) 和 F2 (γ↔μ spin 因子) 两项待核实。
+
+**DeltaP 配置**: `lambda_step 0.0`, total 模式, ±λ 扫描（具体 λ 值由 P08 确定的有效窗口给出）。
+
+**efield 参照侧**: `efield_flag 1, dip_cor_flag 1, efield_amp ±0.0005/±0.001, efield_dir = gdir`。能量取 `OUT.suffix/running_scf.log` 中 `E_KohnSham`，FD 公式:
+```
+α = [E(+δ) + E(−δ) − 2E(0)] / δ²
+```
+注意 E_KohnSham 单位为 Ry，efield_amp 单位为 Hartree，换算需除以 2。
+
+---
+
+### P09 — 无缓存确定性
+
+每次运行前 `rm -rf OUT.autotest`。分别用 `OMP_NUM_THREADS=1/4/8` 各测一次。对比 `[rawG] Σγ_raw` 和 `E_KohnSham`。
+
+---
+
+### P06/P07 — 盒尺寸/基组收敛
+
+**偶极部分** (当前可做): 同 P02 的测量配置，逐盒子/基组运行，取 Σγ_raw。
+
+**极化率部分** (阻塞于 P01): 待换算链就绪后，每盒子/基组做 efield FD + DeltaP ±λ 扫描双通道。
+
+---
+
+### P10 — E–D 曲线: 约束 vs 外场
+
+**DeltaP 侧**: 在 P08 确定的线性窗口内取 4–6 个 λ 值。计算 E_phys = E_KS − Σλ·γ（减去约束能）。绘 E_phys vs μ。
+
+**efield 侧**: 相同的 E 场值（由 F1 从 λ 值换算），绘 E_phys vs μ。
+
+两曲线比较曲率（= 1/α）。
+
+---
+
+### P03/P12 — Born 有效电荷
+
+DeltaP total 约束 ±λ 扫描，取各 λ 下的原子力输出。`Z* = ΔF / ΔE`（需 F1 换算 λ→E）。
+
+力在 `OUT.suffix/running_scf.log` 中 `TOTAL-FORCE` 行。
+
+---
+
+### P11 — h-BN 介电常数
+
+**DeltaP 配置**: total 模式, `deltap_gdir 3`（沿 c 轴）, k 点网格 ≥6×6×2。±λ 扫描。`ε = 1 + 4πα/V_cell`。
+
+---
+
+### P13 — BaTiO₃ 自发极化
+
+**DeltaP 配置**: λ=0 测量模式, 三方向各跑一次，取 Σγ_raw。换算同 P02。
+
+---
+
+### P14 — wannier90 交叉验证
+
+跑完 LCAO 或 PW 后，导出电荷密度用于 wannier90 后处理。DeltaP 的 per-atom γ 分解（`[rawG]` 行中各原子分量）与 MLWF 中心分解对比——两者划分方案不同，预期趋势一致但数值不对齐。
+
+---
+
+### P15 — 极化率张量
+
+对 gdir=1,2,3 三个方向分别做 P01 流程，得到 α_xx, α_yy, α_zz。
+
+---
+
+### P16 — PW 约束核整改验证
+
+扫描 `onsite_radius = 6/10/14/20 Bohr`，测各半径下 PW 的 dγ/dλ。与同设置 LCAO 的 dγ/dλ 对比。预期大半径时两者趋近。
+
+---
+
+### P17/P18 — 场致弛豫/实空间密度
+
+P17: efield 或 DeltaP 约束下开启 `cal_force 1` + `relax`。P18: `out_chg 1`, 对比 `λ≠0` 和 `λ=0` 两轮 SCF 的电荷密度差。
+
+---
+
+## 五、命令模板
+
+### 采集 raw γ
 ```bash
-# 准备 INPUT (见 §二 P02), STRU (几何对齐 z), KPT (Γ 1×1×1)
-abacus > out.log 2>&1
-grep "rawG.*Σγ_raw" out.log   # 取 raw γ
+abacus > run.log 2>&1
+grep "rawG.*Σγ_raw" run.log
 ```
 
-### LCAO ±λ 扫描 (P08)
-
+### ±λ 批量扫描
 ```bash
 for lam in -0.01 -0.005 0.0 0.005 0.01; do
-    dir="lam_${lam}"
-    mkdir -p $dir && cp STRU KPT $dir/
-    sed "s/LAMBDA_INIT/$lam/" INPUT.template > $dir/INPUT
-    (cd $dir && abacus > run.log 2>&1)
+    d="lam_$(echo $lam | sed 's/-/m/;s/\./p/')"
+    mkdir -p $d && cp STRU KPT $d/
+    sed "s/LAMBDA_INIT/$lam/" INPUT.tmpl > $d/INPUT
+    (cd $d && abacus > run.log 2>&1)
 done
-# 汇总: grep "rawG.*Σγ_raw" lam_*/run.log
+grep "rawG.*Σγ_raw" lam_*/run.log
 ```
 
-### efield 有限差分 (P01 裁判侧)
-
+### efield 有限差分
 ```bash
 for eamp in -0.001 -0.0005 0.0 0.0005 0.001; do
-    dir="ef_${eamp}"
-    mkdir -p $dir && cp STRU KPT $dir/
-    sed "s/EFIELD_AMP/$eamp/" INPUT.template > $dir/INPUT
-    (cd $dir && abacus > run.log 2>&1)
+    d="ef_$(echo $eamp | sed 's/-/m/;s/\./p/')"
+    mkdir -p $d && cp STRU KPT $d/
+    sed "s/EFIELD_AMP/$eamp/" INPUT.tmpl > $d/INPUT
+    (cd $d && abacus > run.log 2>&1)
 done
-# 取能量: grep "E_KohnSham" ef_*/OUT.autotest/running_scf.log
-# α = [E(+δ) + E(−δ) − 2E(0)] / δ²  (注意 Ry↔Ha 转换)
+grep "E_KohnSham" ef_*/OUT.autotest/running_scf.log
 ```
 
-### SCF 收敛检查
-
+### 收敛巡检
 ```bash
-grep "SCF IS NOT CONVERGED\|achieved" */run.log
-grep "ETOT/eV" */run.log | tail -1   # 最终迭代总能量
-grep "ITER.*DRHO" */run.log | tail -3 # 最后几轮密度残差
+grep -l "SCF IS NOT CONVERGED" */run.log    # 列出未收敛的目录
 ```
-
-### 确定性复测 (P09)
-
-```bash
-for i in 1 2 3; do
-    rm -rf OUT.autotest
-    abacus > run_${i}.log 2>&1
-    grep "rawG.*Σγ_raw" run_${i}.log
-done
-```
-
----
-
-## 五、输出文件快速参考
-
-| 文件 | 内容 |
-|------|------|
-| `OUT.suffix/running_scf.log` | SCF 迭代详情 + E_KohnSham |
-| 屏幕 stdout | `[rawG]` raw γ, `[DeltaP P1/P3]` branch γ |
-| `OUT.suffix/deltap_results.dat` | P_I (极化密度), r_elec (电子中心) |
-| `OUT.suffix/deltap_branch_enum.dat` | Wilson 特征值 + SMO 权重 (调试用) |
-| `OUT.suffix/deltap_zeta_debug.dat` | k-string zeta 标积 (调试用) |
