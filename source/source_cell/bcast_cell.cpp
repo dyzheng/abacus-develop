@@ -15,6 +15,9 @@ namespace unitcell
         MPI_Barrier(MPI_COMM_WORLD);
         for (int i = 0; i < ntype; i++) {
             atoms[i].bcast_atom(); // bcast tau array
+            // Broadcast DeltaP per-atom constraint data (added for deltap)
+            Parallel_Common::bcast_double(atoms[i].dp_target.data(), atoms[i].dp_target.size());
+            Parallel_Common::bcast_int(atoms[i].dp_constrain.data(), atoms[i].dp_constrain.size());
         }
     #endif
     }

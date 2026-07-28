@@ -111,6 +111,8 @@ void Atom::bcast_atom()
             this->mbl.resize(na, ModuleBase::Vector3<int>(0, 0, 0));
             this->lambda.resize(na, ModuleBase::Vector3<double>(0, 0, 0));
             this->constrain.resize(na, ModuleBase::Vector3<int>(0, 0, 0));
+            this->dp_target.resize(na, 0.0);
+            this->dp_constrain.resize(na, 1);
         }
 
         for (int i = 0; i < na; i++)

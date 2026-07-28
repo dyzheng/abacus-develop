@@ -91,7 +91,9 @@ void hamilt::DeltaPOperator<TK, TR>::contributeHR()
             {
                 const ModuleBase::Vector3<int> r_index = tmp.get_R_index(ir);
                 const TR* pre_hr_data = tmp.get_pointer(ir);
-                TR* dhr_data = this->hR->find_matrix(iat1, iat2, r_index[0], r_index[1], r_index[2])->get_pointer();
+                hamilt::BaseMatrix<TR>* dmat = this->hR->find_matrix(iat1, iat2, r_index[0], r_index[1], r_index[2]);
+                if (dmat == nullptr) continue;
+                TR* dhr_data = dmat->get_pointer();
                 for (int i = 0; i < tmp.get_size(); i++)
                 {
                     dhr_data[i] += pre_hr_data[i] * coeff;
