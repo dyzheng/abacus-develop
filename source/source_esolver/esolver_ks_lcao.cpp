@@ -1411,19 +1411,6 @@ void ESolver_KS_LCAO<TK, TR>::deltap_update_lambda(UnitCell& ucell, const int it
         std::unordered_map<int, std::vector<std::complex<double>>> hk_corr;
         dp->compute_hk_correction(ucell, psi, lambda, hk_corr);
         dp_op->set_hk_correction(hk_corr);
-
-        // Apply HK correction on rank 0 only (operator not in chain for MPI)
-#ifdef __MPI
-        if (this->pv.comm() != MPI_COMM_NULL) {
-            int rank = 0;
-            MPI_Comm_rank(this->pv.comm(), &rank);
-            if (rank == 0)
-#endif
-                for (int ik = 0; ik < this->kv.get_nks(); ++ik)
-                    dp_op->contributeHk(ik);
-#ifdef __MPI
-        }
-#endif
     }
 }
 

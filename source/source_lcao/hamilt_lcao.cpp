@@ -417,12 +417,10 @@ HamiltLCAO<TK, TR>::HamiltLCAO(const UnitCell& ucell,
                                                               &grid_d,
                                                               two_center_bundle.overlap_orb_onsite.get(),
                                                               orb.cutoffs(),
-                                                              PARAM.inp.deltap_rm);
+                                                               PARAM.inp.deltap_rm);
+            this->getOperator()->add(dp_op);
             this->dp_operator = dynamic_cast<DeltaPOperator<TK, TR>*>(dp_op);
             this->dp_operator->set_gdir(PARAM.inp.deltap_gdir);
-            // Note: NOT added to operator chain (getOperator()->add) due to
-            // MPI distributed-k-point crash. HK correction applied directly
-            // from esolver iter_finish.
         }
     }
 
