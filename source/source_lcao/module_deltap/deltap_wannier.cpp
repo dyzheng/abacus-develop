@@ -1562,56 +1562,24 @@ void DeltaP::compute_gamma_scf(const UnitCell& ucell,
         MPI_Comm_size(comm, &nproc);
         if (nproc > 1)
         {
-            // Gamma-only (single k-point replicated): each rank computed the same
-            // gamma values independently. Sum and divide by nproc for consensus.
-            // Multi-k (distributed k-points): partial contributions from each rank
-            // combine via sum. Both cases are handled by MPI_Allreduce(SUM) followed
-            // by division check (for Gamma-only, all ranks have identical data and
-            // the sum = nproc × correct value).
-            int nks = (psi != nullptr) ? psi->get_nk() : 1;
-            bool gamma_only = (nks == 1);
-
+            // Broadcast gamma results from rank 0 to all ranks.
+            // This handles both Gamma-only (all ranks have same data)
+            // and distributed multi-k (only rank 0 has correct k-point-0 data).
             int nat = static_cast<int>(results_.gamma_I.size());
             for (int iat = 0; iat < nat; ++iat)
             {
                 for (int dir = 0; dir < 3; ++dir)
                 {
-                    double gamma_val = results_.gamma_I[iat][dir];
-                    double gamma_raw_val = results_.gamma_I_raw[iat][dir];
-                    double P_val = results_.P_I[iat][dir];
-                    double r_val = results_.r_elec_center[iat][dir];
-                    MPI_Allreduce(MPI_IN_PLACE, &gamma_val, 1, MPI_DOUBLE, MPI_SUM, comm);
-                    MPI_Allreduce(MPI_IN_PLACE, &gamma_raw_val, 1, MPI_DOUBLE, MPI_SUM, comm);
-                    MPI_Allreduce(MPI_IN_PLACE, &P_val, 1, MPI_DOUBLE, MPI_SUM, comm);
-                    MPI_Allreduce(MPI_IN_PLACE, &r_val, 1, MPI_DOUBLE, MPI_SUM, comm);
-                    if (gamma_only)
-                    {
-                        double inv_nproc = 1.0 / nproc;
-                        gamma_val *= inv_nproc;
-                        gamma_raw_val *= inv_nproc;
-                        P_val *= inv_nproc;
-                        r_val *= inv_nproc;
-                    }
-                    results_.gamma_I[iat][dir] = gamma_val;
-                    results_.gamma_I_raw[iat][dir] = gamma_raw_val;
-                    results_.P_I[iat][dir] = P_val;
-                    results_.r_elec_center[iat][dir] = r_val;
+                    MPI_Bcast(&results_.gamma_I[iat][dir], 1, MPI_DOUBLE, 0, comm);
+                    MPI_Bcast(&results_.gamma_I_raw[iat][dir], 1, MPI_DOUBLE, 0, comm);
+                    MPI_Bcast(&results_.P_I[iat][dir], 1, MPI_DOUBLE, 0, comm);
+                    MPI_Bcast(&results_.r_elec_center[iat][dir], 1, MPI_DOUBLE, 0, comm);
                 }
             }
             for (int iat = 0; iat < nat; ++iat)
-            {
-                double w_val = results_.smo_weight_sum[iat];
-                MPI_Allreduce(MPI_IN_PLACE, &w_val, 1, MPI_DOUBLE, MPI_SUM, comm);
-                if (gamma_only) w_val /= nproc;
-                results_.smo_weight_sum[iat] = w_val;
-            }
+                MPI_Bcast(&results_.smo_weight_sum[iat], 1, MPI_DOUBLE, 0, comm);
             for (int dir = 0; dir < 3; ++dir)
-            {
-                double ptot = results_.P_total[dir];
-                MPI_Allreduce(MPI_IN_PLACE, &ptot, 1, MPI_DOUBLE, MPI_SUM, comm);
-                if (gamma_only) ptot /= nproc;
-                results_.P_total[dir] = ptot;
-            }
+                MPI_Bcast(&results_.P_total[dir], 1, MPI_DOUBLE, 0, comm);
         }
     }
 #endif
