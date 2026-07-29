@@ -97,6 +97,40 @@
 
 ---
 
+## 2026-07-29 (round 2): 第二阶段修复 — C-05, C-11, C-02 Step1, C-07
+
+### What was done
+Executed TODO-1 through TODO-4 from the Phase-2 review/todo document:
+- **C-05 + S-01**: Fixed gdir≠3 direction mismatch in compute_hk_correction.
+  Added kstring_gdir_/kstring_string_ tracking members; on stale detection,
+  rebuilds kstring_data_ (setup_kstring + compute_S_k/D_I + MPI Allreduce) for
+  string 0 and input gdir.  gdir=3 single-string meshes incur no extra work.
+- **C-11**: Unified branch shift lattice to per-band normalized amplitudes.
+  Added current_zeta_scale tracking; Step-3 uses per-band normalized shifts ×
+  zeta scale; all three global search locations (constraint matrix, total,
+  per_atom) now use `current_zeta_scale * 2π·w_In(n,I) / Σ_i w_In(n,i)` from
+  `w_In_first_string_` instead of the inconsistent per-atom normalization.
+- **C-02 Step 1**: Force/stress corrections:
+  1. lambda multiplied by tau_alpha (atomic fractional coordinate)
+  2. Removed unjustified `force = force * 2.0`
+  3. Fixed stress: integer r_vector → Cartesian coordinates via a1/a2/a3
+  4. Added documentation header noting H_HK + dtau/dR terms not yet implemented
+- **C-07**: compute_resta_z now skips with WARNING under MPI (2D block-cyclic
+  indexing bug; function is experimental).
+
+### Files modified
+- `deltap.h`: +2 members (kstring_gdir_, kstring_string_)
+- `deltap_wannier.cpp`: C-05 rebuild logic, C-11 lattice unification (3 sites),
+  C-07 MPI guard
+- `deltap_force_stress.hpp`: tau_alpha factor, removed ×2, Cartesian stress,
+  limitations header
+
+### Test plan (TODO-3b, deferred)
+FD force validation requires coordinated ABACUS runs with frozen λ — planned
+as a separate round.  See `2026-07-29-deltap-phase2-review-todo.md` §TODO-3b.
+
+---
+
 ## 2026-07-29: 全面风险评审（理论+实现）
 
 ### What was done
