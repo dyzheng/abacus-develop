@@ -54,7 +54,16 @@ void hamilt::DeltaPOperator<TK, TR>::contributeHR()
     // dp_hr_done → the else-if below is skipped → dλ computed.
     if (!this->hr_done)
     {
-        // lambda_save_ stays at constructor value (= lambda_ → dλ = 0)
+        // hR is being rebuilt from scratch (e.g., new ionic step).
+        if (this->initialized)
+        {
+            // Not the first time — reset lambda_save_ to zero so the FULL
+            // current lambda_ is re-added to the newly zeroed hR.
+            // (The cumulative incremental model relied on hR persistence.)
+            this->lambda_save_.assign(this->ucell->nat, 0.0);
+        }
+        // Else: first time ever — lambda_save_ already equals lambda_
+        // (both were set to lambda_init in the constructor), so dλ = 0.
     }
     else if (this->dp_hr_done)
     {
