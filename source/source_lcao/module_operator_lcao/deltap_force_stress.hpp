@@ -16,9 +16,16 @@ void DeltaPOperator<TK, TR>::cal_force_stress(const bool cal_force,
     ModuleBase::TITLE("DeltaPOperator", "cal_force_stress");
     ModuleBase::timer::start("DeltaPOperator", "cal_force_stress");
 
+    // LIMITATION: This force/stress only covers the real-space projector
+    // (H_HR) contribution.  The k-space Berry-connection part (H_HK) does
+    // not have an analytic force contribution.  Relax/MD with deltap_corr
+    // is therefore experimental.  The ∂τ/∂R Hellmann-Feynman term is also
+    // not yet implemented.
+
     const Parallel_Orbitals* paraV = dmR->get_paraV();
     const int npol = this->ucell->get_npol();
     const int gdir = this->gdir_ - 1; // 0-based direction index
+    const int alpha_idx = gdir;       // same, for clarity
     std::vector<double> stress_tmp(6, 0);
 
     if (cal_force) force.zero_out();
@@ -38,6 +45,13 @@ void DeltaPOperator<TK, TR>::cal_force_stress(const bool cal_force,
             auto tau0 = this->ucell->get_tau(iat0);
             int T0, I0;
             this->ucell->iat2iait(iat0, &I0, &T0);
+
+            // The HR operator is H_HR = Σ λ_I·τ_α(I)·P̂_I.  The force
+            // contribution from the projector derivative is therefore
+            // λ_I·τ_α(I) times the derivative of ⟨P̂_I⟩.  (The ∂τ/∂R
+            // Hellmann-Feynman term is not yet implemented.)
+            double tau_alpha = this->ucell->atoms[T0].tau[I0][alpha_idx];
+            double lam_eff = lam * tau_alpha;
 
             // Find adjacent atoms
             AdjacentAtomInfo adjs;
@@ -146,7 +160,7 @@ void DeltaPOperator<TK, TR>::cal_force_stress(const bool cal_force,
                         double force1[3] = {0, 0, 0};
                         double force2[3] = {0, 0, 0};
                         cal_force_IJR(iat1, iat2, paraV, nlm_iat0[ad1], nlm_iat0[ad2],
-                                       dmR_pointer, lam, force1, force2);
+                                       dmR_pointer, lam_eff, force1, force2);
 
                         for (int ipol = 0; ipol < 3; ipol++)
                         {
@@ -158,7 +172,7 @@ void DeltaPOperator<TK, TR>::cal_force_stress(const bool cal_force,
                     if (cal_stress)
                     {
                         cal_stress_IJR(iat1, iat2, r_vector, paraV, nlm_iat0[ad1], nlm_iat0[ad2],
-                                        dmR_pointer, lam, gdir, stress_local.data());
+                                        dmR_pointer, lam_eff, gdir, stress_local.data());
                     }
                 }
             }
@@ -177,7 +191,6 @@ void DeltaPOperator<TK, TR>::cal_force_stress(const bool cal_force,
 
     if (cal_force)
     {
-        force = force * 2.0;  // Hermitian conjugate contribution
         Parallel_Reduce::reduce_all(force.c, force.nr * force.nc);
     }
 
@@ -298,7 +311,12 @@ void DeltaPOperator<TK, TR>::cal_stress_IJR(const int& iat1,
     // Stress: σ_αβ = (1/Ω) * Σ dE/dε_αβ
     // For atom-pair (R1, R2), stress contribution:
     // σ_αβ += F_α(R1) * R1_β + F_α(R2) * R2_β
-    // (simplified — the exact formula needs λ * deriv * DM * R_vector projection)
+    // R_vector in lattice units; convert to Cartesian for correct units.
+
+    ModuleBase::Vector3<double> R_cart = this->ucell->a1 * static_cast<double>(r_vector[0])
+                                       + this->ucell->a2 * static_cast<double>(r_vector[1])
+                                       + this->ucell->a3 * static_cast<double>(r_vector[2]);
+    R_cart *= this->ucell->lat0;
 
     double tmp[3] = {0.0};
     for (int is = 1; is < nspin; is++)
@@ -333,13 +351,13 @@ void DeltaPOperator<TK, TR>::cal_stress_IJR(const int& iat1,
                         dbb = lambda * nlm1[index + length * 3] * nlm2[index] * dm_pointer[step_trace[is]];
                         tmp[2] = dbb;
 
-                        // Stress: σ_αβ = Σ_k F_α[k] * R_vector[k]_β
+                        // Stress: σ_αβ = Σ_k F_α[k] * R_cart_β
                         for (int ipol = 0; ipol < 3; ipol++)
                         {
                             double F_alpha = tmp[ipol];
-                            stress[ipol * 3 + 0] += F_alpha * r_vector[0];  // σ_x,ε  → xx,xy,xz
-                            stress[ipol * 3 + 1] += F_alpha * r_vector[1];
-                            stress[ipol * 3 + 2] += F_alpha * r_vector[2];
+                            stress[ipol * 3 + 0] += F_alpha * R_cart.x;
+                            stress[ipol * 3 + 1] += F_alpha * R_cart.y;
+                            stress[ipol * 3 + 2] += F_alpha * R_cart.z;
                         }
                     }
                 }
