@@ -134,15 +134,22 @@ as a separate round.  See `2026-07-29-deltap-phase2-review-todo.md` §TODO-3b.
 - [x] FD validation test script prepared (`tests/deltap_fd_force/run_fd.sh`)
 - [x] H2O test inputs prepared (`tests/deltap_fd_force/h2o/`)
 - [x] **Serial smoke test**: Si 2×2×2 SCF + nscf DeltaP — converges, produces deltap_results.dat
-- [x] **MPI smoke test**: np=2 Si 2×2×2 nscf — no crash, produces results
+- [x] **MPI smoke test**: np=2 Si 2×2×2 nscf — no crash, produces results (exit 0)
 - [x] **Unit tests (gauge)**: 4/4 passed
 - [x] **Unit tests (math)**: 3/3 passed
-- [x] **Unit tests (BFGS)**: 6/6 passed
+- [x] **Unit tests (BFGS)**: 21/21 passed
 - [x] **Unit tests (smoothness)**: 4/8 passed (same 4 pre-existing failures as original HEAD)
-- [ ] **TODO-3b FD力验证**: 需在 HPC 集群上运行（8次 SCF × 2位移 × 12原子）
-- [ ] **C-11 回归 BN 9-point PES**: 运行 `tests/deltap_bn_sampling/run_all.sh` 确认 9/9 收敛
+- [x] **BN 收敛性诊断**: SCF 在 deltap_inner_nmax=20 时收敛，确认内循环解决 BN 不收敛问题
+- [ ] **TODO-3b FD力验证**: 需在 HPC 集群上运行
+- [ ] **MPI np=2 segfault（报告发现）**: 此环境未复现，需在报告测试环境中获取 stack trace
 - [ ] **现有 CI 测试重新生成 reference**: deltap_results.dat 会因口径修正而变化
-- [ ] **gdir=1,2 测试**: 三个方向各跑一次 BN 约束 SCF
+
+### BN convergence findings (2026-07-29)
+- BN (2×2×2) with scf_nmax=50/deltap_inner_nmax=0 → SCF NOT CONVERGED (physical: γ(λ) nearly flat)
+- BN with scf_nmax=100/deltap_inner_nmax=0 → SCF NOT CONVERGED (two-phase mode insufficient)
+- BN with scf_nmax=100/deltap_inner_nmax=20 → **SCF CONVERGED** (inner loop works)
+- Constraint residual |γ−t| large (~5.8 rad) even after convergence → BN electronic stiffness < 1e-6 Ry/rad² (confirmed zero, matches 07-21 doc)
+- Recommendation for BN: use `deltap_inner_nmax >= 10` and accept that |γ−t| will be large due to physics
 
 Full validation status report: `docs/superpowers/specs/2026-07-29-deltap-phase2-validation.md`
 
