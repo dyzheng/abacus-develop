@@ -17,6 +17,7 @@ namespace pw_deltap {
 
 void set_deltap_pw_lambda(const std::vector<double>& lambda,
                           const std::vector<int>& constrain);
+void set_deltap_pw_targets(const std::vector<double>& targets);
 
 const std::vector<double>& get_deltap_pw_lambda();
 const std::vector<int>& get_deltap_pw_constrain();

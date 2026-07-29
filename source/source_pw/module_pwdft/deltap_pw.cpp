@@ -11,6 +11,7 @@
 #include "source_base/module_external/lapack_connector.h"
 #include <iomanip>
 #include <iostream>
+#include <limits>
 
 namespace pw_deltap {
 
@@ -30,8 +31,12 @@ void set_deltap_pw_lambda(const std::vector<double>& lambda,
                           const std::vector<int>& constrain)
 {
     s_lambda = lambda;
-    s_targets = lambda; // initial lambda = target (constant for now)
     s_constrain = constrain;
+}
+
+void set_deltap_pw_targets(const std::vector<double>& targets)
+{
+    s_targets = targets;
 }
 
 const std::vector<double>& get_deltap_pw_lambda()
@@ -96,8 +101,9 @@ double compute_total_gamma_pw(
     int gdir,
     int nbands)
 {
-    if (gdir < 1 || gdir > 3) return 0.0;
-    if (wfcpw == nullptr || psi_in == nullptr || rhopw == nullptr) return 0.0;
+    if (gdir < 1 || gdir > 3) return std::numeric_limits<double>::quiet_NaN();
+    if (wfcpw == nullptr || psi_in == nullptr || rhopw == nullptr)
+        return std::numeric_limits<double>::quiet_NaN();
 
     berryphase bp;
     bp.direction = gdir;
@@ -105,7 +111,7 @@ double compute_total_gamma_pw(
     bp.set_kpoints(kv, gdir);
 
     if (bp.total_string == 0 || bp.nppstr < 2)
-        return 0.0;
+        return std::numeric_limits<double>::quiet_NaN();
 
     double gamma_total = 0.0;
     for (int istr = 0; istr < bp.total_string; istr++)
@@ -155,7 +161,7 @@ void deltap_iter_finish(
     double gamma_total = compute_total_gamma_pw(
         ucell, psi_cpu, kv, wfcpw, rhopw, gdir, nocc);
 
-    if (gamma_total == 0.0)
+    if (std::isnan(gamma_total))
         return;
 
     // Compute per-atom gamma via Wilson loop decomposition
@@ -166,9 +172,18 @@ void deltap_iter_finish(
     double mixing = inp.deltap_lambda_mixing;
     if (mixing < 0.0) mixing = 0.0;
     if (mixing > 1.0) mixing = 1.0;
-    if (mixing == 0.0) mixing = 1.0;
 
     int inner_nmax = inp.deltap_inner_nmax;
+    // The PW inner loop is not implemented: it re-computes gamma from the
+    // same wavefunctions without re-diagonalizing the Hamiltonian, so every
+    // iteration sees the same residual and lambda overshoots by inner_nmax×.
+    // Use the synchronous two-phase mode (deltap_inner_nmax=0) instead.
+    if (inner_nmax > 0)
+    {
+        ModuleBase::WARNING_QUIT("deltap_pw",
+            "DeltaP-PW inner loop (deltap_inner_nmax > 0) is not implemented. "
+            "Set deltap_inner_nmax to 0 for synchronous two-phase mode.");
+    }
     bool inner_loop_ok = false;
     if (inner_nmax > 0 && s_hamilt != nullptr && psi_cpu != nullptr)
     {
@@ -426,7 +441,7 @@ void compute_per_atom_gamma_kstring(
                 {
                     std::complex<double> p(0,0);
                     for (int m = 0; m < m_dim; m++)
-                        p += VR[n * m_dim + m] * std::conj(becp_k0[m * tot_nproj + ip]);
+                        p += VR[m + n * m_dim] * std::conj(becp_k0[m * tot_nproj + ip]);
                     w_ab[iat][n] += p.real()*p.real() + p.imag()*p.imag();
                 }
                 ip++;

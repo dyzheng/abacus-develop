@@ -126,7 +126,7 @@ HamiltPW<T, Device>::HamiltPW(elecstate::Potential* pot_in,
         Operator<T, Device>* onsite_proj
             = new OnsiteProj<OperatorPW<T, Device>>(isk, ucell, p_dftu, 
                     PARAM.inp.sc_mag_switch, (PARAM.inp.dft_plus_u>0),
-                    PARAM.inp.deltap_switch);
+                    PARAM.inp.deltap_switch && PARAM.inp.deltap_corr);
         this->ops->add(onsite_proj);
     }
     if (GlobalC::exx_info.info_global.cal_exx)

@@ -101,24 +101,24 @@ void ESolver_KS_PW<T, Device>::before_all_runners(UnitCell& ucell, const Input_p
     {
         std::vector<double> dp_target = ucell.get_dp_target();
         std::vector<int> dp_constrain = ucell.get_dp_constrain();
-        // Use deltap_lambda_init as initial lambda. If STRU provides explicit
-        // per-atom targets via dp_target, use those instead (priority: STRU > INPUT).
+        // Targets are per-atom gamma targets (rad). Initial lambda is a
+        // separate parameter (Ry). These MUST NOT be conflated.
+        pw_deltap::set_deltap_pw_targets(dp_target);
+
+        // Initial lambda: independent of targets.
+        std::vector<double> dp_lambda(ucell.nat, PARAM.inp.deltap_lambda_init);
+        pw_deltap::set_deltap_pw_lambda(dp_lambda, dp_constrain);
         bool has_strutarget = false;
         for (size_t i = 0; i < dp_target.size(); ++i)
             if (std::abs(dp_target[i]) > 1e-12) { has_strutarget = true; break; }
-        if (!has_strutarget)
-        {
-            double lam_init = PARAM.inp.deltap_lambda_init;
-            std::fill(dp_target.begin(), dp_target.end(), lam_init);
-        }
-        pw_deltap::set_deltap_pw_lambda(dp_target, dp_constrain);
         pw_deltap::set_deltap_pw_active(true);
         std::cout << " [DeltaP-PW] Initialized with " << dp_target.size()
                   << " atoms";
         if (has_strutarget)
             std::cout << " (STRU targets)";
         else
-            std::cout << " (lambda_init=" << PARAM.inp.deltap_lambda_init << ")";
+            std::cout << " (no targets)";
+        std::cout << " lambda_init=" << PARAM.inp.deltap_lambda_init << " Ry";
         std::cout << std::endl;
     }
 
