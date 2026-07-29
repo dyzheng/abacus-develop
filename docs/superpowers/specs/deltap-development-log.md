@@ -129,6 +129,17 @@ Executed TODO-1 through TODO-4 from the Phase-2 review/todo document:
 FD force validation requires coordinated ABACUS runs with frozen λ — planned
 as a separate round.  See `2026-07-29-deltap-phase2-review-todo.md` §TODO-3b.
 
+### Validation status (2026-07-29 end-of-day)
+- [x] Main binary compiles and links (`abacus_basic_para`)
+- [x] FD validation test script prepared (`tests/deltap_fd_force/run_fd.sh`)
+- [x] H2O test inputs prepared (`tests/deltap_fd_force/h2o/`)
+- [ ] **TODO-3b FD力验证**: 需在 HPC 集群上运行（8次 SCF × 2位移 × 12原子）
+- [ ] **C-11 回归 BN 9-point PES**: 运行 `tests/deltap_bn_sampling/run_all.sh` 确认 9/9 收敛
+- [ ] **现有 CI 测试重新生成 reference**: deltap_results.dat 会因口径修正而变化
+- [ ] **gdir=1,2 测试**: 三个方向各跑一次 BN 约束 SCF
+
+Full validation status report: `docs/superpowers/specs/2026-07-29-deltap-phase2-validation.md`
+
 ---
 
 ## 2026-07-29: 全面风险评审（理论+实现）
