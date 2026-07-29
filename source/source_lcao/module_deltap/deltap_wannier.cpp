@@ -470,7 +470,7 @@ void DeltaP::compute_wannier_polarization(
             const ModuleBase::Vector3<double>* G_add_ptr = nullptr;
             if (j == nppstr_ - 2 && gdir_ > 0 && gdir_ <= 3)
             {
-                G_cart_bdy = dk_string * static_cast<double>(kv_->nmp[gdir_ - 1]);
+                G_cart_bdy = dk_string * static_cast<double>(nmp_use_[gdir_ - 1]);
                 G_add_ptr = &G_cart_bdy;
             }
             if (ik_R < nks && ik_L < nks)
@@ -1050,20 +1050,25 @@ void DeltaP::compute_wannier_polarization(
         // Debug: output eigenvalues, weights, and prefactor for branch enumeration
         if (n_strings_processed == 1)
         {
-            std::ofstream ofs("deltap_branch_enum.dat");
-            ofs << std::setprecision(17);
-            ofs << n_dim << " " << nat_ << " " << prefactor << " " << a_alpha << " " << omega << "\n";
-            ofs << zeta_scalar.real() << " " << zeta_scalar.imag() << " " << std::arg(zeta_scalar) << "\n";
-            for (int n = 0; n < n_dim; ++n)
-                ofs << evals[n].real() << " " << evals[n].imag() << " " << std::arg(evals[n]) << " " << gamma_unwrapped[n] << "\n";
-            for (int n = 0; n < n_dim; ++n)
+#ifdef __MPI
+            if (GlobalV::MY_RANK == 0)
+#endif
             {
-                for (int iat = 0; iat < nat_; ++iat)
-                    ofs << w_In_matrix[n][iat] << " ";
-                ofs << "\n";
+                std::ofstream ofs("deltap_branch_enum.dat");
+                ofs << std::setprecision(17);
+                ofs << n_dim << " " << nat_ << " " << prefactor << " " << a_alpha << " " << omega << "\n";
+                ofs << zeta_scalar.real() << " " << zeta_scalar.imag() << " " << std::arg(zeta_scalar) << "\n";
+                for (int n = 0; n < n_dim; ++n)
+                    ofs << evals[n].real() << " " << evals[n].imag() << " " << std::arg(evals[n]) << " " << gamma_unwrapped[n] << "\n";
+                for (int n = 0; n < n_dim; ++n)
+                {
+                    for (int iat = 0; iat < nat_; ++iat)
+                        ofs << w_In_matrix[n][iat] << " ";
+                    ofs << "\n";
+                }
+                ofs.close();
+                std::cout << "   DeltaP: branch enumeration data written to deltap_branch_enum.dat" << std::endl;
             }
-            ofs.close();
-            std::cout << "   DeltaP: branch enumeration data written to deltap_branch_enum.dat" << std::endl;
         }
 
         // Accumulate SMO weights, raw gamma, r_elec, and w_In matrix
@@ -1175,6 +1180,9 @@ void DeltaP::compute_wannier_polarization(
         }
 
         // Debug: output zeta for this string (scalar product, matching berry_phase)
+#ifdef __MPI
+        if (GlobalV::MY_RANK == 0)
+#endif
         {
             std::ofstream ofs("deltap_zeta_debug.dat", std::ios::app);
             ofs << istring << " " << std::setprecision(17)
@@ -1600,6 +1608,18 @@ void DeltaP::compute_hk_correction(const UnitCell& ucell,
     const int nrow = paraV_->get_row_size();
     const int ncol = paraV_->get_col_size();
 
+    // The HK correction matrix is built as nrow×nrow and written into
+    // hsk->get_hk() which has nrow×ncol local entries.  This is safe only
+    // when the 2D block-cyclic grid distributes the same number of rows
+    // and columns to each MPI rank, i.e. nrow == ncol.
+    if (nrow != ncol)
+    {
+        ModuleBase::WARNING_QUIT("DeltaP::compute_hk_correction",
+            "The LCAO parallel grid has nrow != ncol.  "
+            "DeltaP currently requires a square process grid.  "
+            "Try running with a square number of MPI ranks.");
+    }
+
     // Ensure S_dk_ is computed
     if (S_dk_.empty())
     {
@@ -1745,6 +1765,9 @@ void DeltaP::load_branch()
 void DeltaP::save_branch() const
 {
     if (!has_prev_ || static_cast<int>(W_prev_.size()) != nat_) return;
+#ifdef __MPI
+    if (GlobalV::MY_RANK != 0) return;
+#endif
 
     const std::string fname = "deltap_branch.dat";
     std::ofstream ofs(fname);
@@ -1790,6 +1813,9 @@ void DeltaP::load_match()
 void DeltaP::save_match() const
 {
     if (saved_matches_.empty()) return;
+#ifdef __MPI
+    if (GlobalV::MY_RANK != 0) return;
+#endif
     const std::string fname = "deltap_match.dat";
     std::ofstream ofs(fname);
     if (!ofs.is_open()) return;

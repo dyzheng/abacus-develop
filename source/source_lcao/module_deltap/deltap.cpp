@@ -162,6 +162,9 @@ void DeltaP::setup_kstring(const K_Vectors& kv)
                   << mp_x_use << "," << mp_y_use << "," << mp_z_use
                   << "] from " << kv.get_nkstot() << " k-points" << std::endl;
     }
+    nmp_use_[0] = mp_x_use;
+    nmp_use_[1] = mp_y_use;
+    nmp_use_[2] = mp_z_use;
 
     int mp_dir = 0;
     int num_string = 0;

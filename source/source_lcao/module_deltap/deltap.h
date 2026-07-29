@@ -202,6 +202,7 @@ private:
     int gdir_ = 3;
     int nat_ = 0;
     int nproj_max_ = 0;
+    int nmp_use_[3] = {0, 0, 0};  // inferred Monkhorst-Pack mesh per direction (fallback when nmp==0)
 
     // S(dk) local block for the exact Wilson-loop overlap O = C^dagger(k_j) * S(dk) * C(k_{j+1})
     std::vector<std::complex<double>> S_dk_;
