@@ -269,6 +269,8 @@ private:
     int nppstr_ = 0;
     int total_string_ = 0;
     std::vector<std::vector<int>> k_index_;
+    int kstring_gdir_ = -1;    ///< gdir of last compute_S_k/D_I fill (-1 = invalid)
+    int kstring_string_ = -1;  ///< string index of last fill (-1 = invalid)
 
     // Berry connection: A_nk_[iat][ik][nband][3] (alpha=x,y,z)
     std::vector<std::vector<std::vector<ModuleBase::Vector3<std::complex<double>>>>> A_nk_;

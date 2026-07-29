@@ -440,6 +440,11 @@ void DeltaP::compute_wannier_polarization(
         }
 #endif
 
+        // Mark which gdir and string kstring_data_ belongs to.
+        // compute_hk_correction uses this to detect stale data.
+        kstring_gdir_ = gdir_;
+        kstring_string_ = istring;
+
         // --- Step 2: O_kpair (use berry_phase overlap if available) ---
         if (istring == 0)
             std::cout << "   DeltaP: berry_overlap_=" << (berry_overlap_ ? "non-null" : "NULL") << std::endl;
@@ -1618,6 +1623,44 @@ void DeltaP::compute_hk_correction(const UnitCell& ucell,
             "The LCAO parallel grid has nrow != ncol.  "
             "DeltaP currently requires a square process grid.  "
             "Try running with a square number of MPI ranks.");
+    }
+
+    // Rebuild S_k/D_I if they belong to a different direction or string.
+    // compute_gamma_scf leaves kstring_data_ from the last alpha (gdir=3)
+    // and the last string; we need the INPUT gdir and string 0.
+    if (kstring_gdir_ != gdir_ || kstring_string_ != 0)
+    {
+        setup_kstring(*kv_);
+        kstring_data_.assign(nppstr_, KSpaceData());
+        for (int j = 0; j < nppstr_; ++j)
+        {
+            int ik = k_index_[0][j];
+            if (ik >= nks) continue;
+            kstring_data_[j].kvec_d = kv_->kvec_d[ik];
+            psi->fix_k(ik);
+            compute_S_k(j);
+            compute_D_I(j, psi->get_pointer(), nbands, nrow);
+        }
+        kstring_gdir_ = gdir_;
+        kstring_string_ = 0;
+#ifdef __MPI
+        for (int j = 0; j < nppstr_; ++j)
+        {
+            for (int iat = 0; iat < nat_; ++iat)
+            {
+                int r = nproj_per_atom_[iat];
+                for (int lm = 0; lm < r; ++lm)
+                {
+                    if (kstring_data_[j].D_I.size() <= static_cast<size_t>(iat)) continue;
+                    if (kstring_data_[j].D_I[iat].size() <= static_cast<size_t>(lm)) continue;
+                    int sz = kstring_data_[j].D_I[iat][lm].size();
+                    if (sz > 0)
+                        MPI_Allreduce(MPI_IN_PLACE, kstring_data_[j].D_I[iat][lm].data(),
+                                      2 * sz, MPI_DOUBLE, MPI_SUM, paraV_->comm());
+                }
+            }
+        }
+#endif
     }
 
     // Ensure S_dk_ is computed
