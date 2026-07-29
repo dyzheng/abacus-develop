@@ -7,6 +7,10 @@
 
 #include <complex>
 
+#ifdef __MPI
+#include "source_base/parallel_comm.h"
+#endif
+
 // functions
 #include "../module_unk/berryphase.h"                          // use berryphase
 #include "../module_hs/cal_pLpR.h"                            // use AngularMomentumCalculator()
@@ -364,6 +368,17 @@ void ModuleIO::ctrl_scf_lcao(UnitCell& ucell,
     //------------------------------------------------------------------
     if (inp.calculation == "nscf" && inp.deltap_switch)
     {
+#ifdef __MPI
+        // All ranks must participate in DeltaP collectives.  Ensure the
+        // communicator is valid before entering the decomposition.
+        MPI_Comm comm = pv.comm();
+        if (comm == MPI_COMM_NULL)
+        {
+            std::cerr << "DeltaP decomposition: MPI communicator is NULL, skipping" << std::endl;
+            return;
+        }
+        MPI_Barrier(comm);
+#endif
         std::cout << FmtCore::format("\n * * * * * *\n << Start %s.\n", "DeltaP decomposition");
         // If overlap_orb_onsite was not built (onsite_radius was 0 at init time),
         // build it now with deltap_rm as the SMO radius.

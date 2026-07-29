@@ -434,8 +434,12 @@ void DeltaP::compute_wannier_polarization(
                     if (kstring_data_[j].D_I[iat].size() <= static_cast<size_t>(lm)) continue;
                     int sz = kstring_data_[j].D_I[iat][lm].size();
                     if (sz > 0)
-                        MPI_Allreduce(MPI_IN_PLACE, kstring_data_[j].D_I[iat][lm].data(),
-                                      2 * sz, MPI_DOUBLE, MPI_SUM, paraV_->comm());
+                    {
+                        MPI_Comm comm = paraV_->comm();
+                        if (comm != MPI_COMM_NULL)
+                            MPI_Allreduce(MPI_IN_PLACE, kstring_data_[j].D_I[iat][lm].data(),
+                                          2 * sz, MPI_DOUBLE, MPI_SUM, comm);
+                    }
                 }
             }
         }
@@ -1604,6 +1608,7 @@ void DeltaP::compute_gamma_scf(const UnitCell& ucell,
     if (paraV_ != nullptr)
     {
         MPI_Comm comm = paraV_->comm();
+        if (comm == MPI_COMM_NULL) { scf_mode_ = false; return; }
         int nproc = 1;
         MPI_Comm_size(comm, &nproc);
         if (nproc > 1)
@@ -1688,8 +1693,12 @@ void DeltaP::compute_hk_correction(const UnitCell& ucell,
                     if (kstring_data_[j].D_I[iat].size() <= static_cast<size_t>(lm)) continue;
                     int sz = kstring_data_[j].D_I[iat][lm].size();
                     if (sz > 0)
-                        MPI_Allreduce(MPI_IN_PLACE, kstring_data_[j].D_I[iat][lm].data(),
-                                      2 * sz, MPI_DOUBLE, MPI_SUM, paraV_->comm());
+                    {
+                        MPI_Comm comm = paraV_->comm();
+                        if (comm != MPI_COMM_NULL)
+                            MPI_Allreduce(MPI_IN_PLACE, kstring_data_[j].D_I[iat][lm].data(),
+                                          2 * sz, MPI_DOUBLE, MPI_SUM, comm);
+                    }
                 }
             }
         }
