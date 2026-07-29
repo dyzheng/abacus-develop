@@ -715,11 +715,35 @@ void ESolver_KS_LCAO<TK, TR>::iter_finish(UnitCell& ucell, const int istep, int&
                 deltap_init(ucell);
             }
 
+            // Reset per-atom lambda-set flags at the start of each ionic SCF cycle.
+            // These flags persist across SCF iterations within one ionic step.
+            // When a new ionic step restarts the SCF loop (iter = 1), they must
+            // be cleared so that lambda re-updates for the changed geometry.
+            if (iter == 1)
+            {
+                deltap_lambda_set_ = false;
+                deltap_inner_loop_done_ = false;
+            }
+
             // Compute gamma (post inner-loop or for diagnostic)
             double max_dev = deltap_compute_gamma(ucell, iter);
 
             // Fallback: if inner loop is inactive (nscf==0), use gradient descent
             deltap_update_lambda(ucell, iter);
+
+            // DeltaP constraint energy correction (analogous to DeltaSpin's escon):
+            // H_corr contributes ~Σλ·γ to eband. Subtract it to get physical E_DFT.
+            // Must be applied on ALL MPI ranks so that etot is globally consistent.
+            {
+                auto* dp = static_cast<deltap::DeltaP*>(dp_scf_);
+                const int alpha = PARAM.inp.deltap_gdir - 1;
+                const auto& gamma_I = dp->get_results().gamma_I;
+                std::vector<double> lambda = dp_op->get_lambda();
+                std::vector<double> gamma_1d(ucell.nat);
+                for (int iat = 0; iat < ucell.nat; ++iat)
+                    gamma_1d[iat] = gamma_I[iat][alpha];
+                this->pelec->f_en.dp_escon = deltap_common::compute_dp_escon(lambda, gamma_1d);
+            }
 
             // Print status with phase indicator (rank 0 only)
             if (GlobalV::MY_RANK == 0)
@@ -785,15 +809,10 @@ void ESolver_KS_LCAO<TK, TR>::iter_finish(UnitCell& ucell, const int istep, int&
             std::cout << " |γ-t|=" << std::scientific << std::setprecision(3) << max_dev
                       << "\n";
 
-            // DeltaP constraint energy correction (analogous to DeltaSpin's escon):
-            // H_corr contributes ~Σλ·γ to eband. Subtract it to get physical E_DFT.
-            std::vector<double> gamma_1d(ucell.nat);
-            for (int iat = 0; iat < ucell.nat; ++iat)
-                gamma_1d[iat] = gamma_I[iat][alpha];
-            this->pelec->f_en.dp_escon = deltap_common::compute_dp_escon(lambda, gamma_1d);
-
-            // Effective electric field: E_eff = -λ_avg × π / a_alpha (a.u.)
-            // Convert: 1 a.u. = 51.42 V/Å
+            // Effective electric field: E_eff = -λ_avg × π / (2·a_alpha) (a.u.)
+            // λ is in Ry; converting Ry → Hartree gives an extra factor of 1/2.
+            // Equivalently: E_eff(Ha/(e·Bohr)) = -λ_avg(Ry) · π / (2·a_alpha)
+            // Convert: 1 a.u. = 51.422 V/Å
             double a_alpha = ucell.lat0;
             if (PARAM.inp.deltap_gdir == 1)      a_alpha *= ucell.a1.norm();
             else if (PARAM.inp.deltap_gdir == 2) a_alpha *= ucell.a2.norm();
@@ -801,8 +820,8 @@ void ESolver_KS_LCAO<TK, TR>::iter_finish(UnitCell& ucell, const int istep, int&
             double lam_avg = 0.0;
             for (int iat = 0; iat < ucell.nat; ++iat) lam_avg += lambda[iat];
             lam_avg /= ucell.nat;
-            double E_eff_au = -lam_avg * ModuleBase::PI / a_alpha;  // Hartree/(e·Bohr)
-            double E_eff_V_per_A = E_eff_au * 51.422;                // V/Å
+            double E_eff_au = -lam_avg * ModuleBase::PI / (2.0 * a_alpha);  // Hartree/(e·Bohr)
+            double E_eff_V_per_A = E_eff_au * 51.422;                        // V/Å
             std::cout << "   [E-field] E_eff=" << std::scientific << std::setprecision(3)
                       << E_eff_V_per_A << " V/Angstrom  (λ_avg=" << lam_avg << " Ry)" << std::endl;
             } // rank 0 scope
@@ -1284,7 +1303,6 @@ void ESolver_KS_LCAO<TK, TR>::deltap_update_lambda(UnitCell& ucell, const int it
             double mixing = PARAM.inp.deltap_lambda_mixing;
             if (mixing < 0.0) mixing = 0.0;
             if (mixing > 1.0) mixing = 1.0;
-            if (mixing == 0.0) mixing = 1.0;
 
             std::vector<double> lambda_raw = lambda;
             bool total_mode = (PARAM.inp.deltap_constraint_mode == "total");
@@ -1319,32 +1337,7 @@ void ESolver_KS_LCAO<TK, TR>::deltap_update_lambda(UnitCell& ucell, const int it
             }
             else if (!deltap_target_.empty())
             {
-            if (use_constraint_matrix)
-            {
-                // Show per-atom γ and constraint-space λ
-                for (int iat = 0; iat < ucell.nat; ++iat)
-                {
-                    if (iat > 0) std::cout << ", ";
-                    std::cout << gamma_I[iat][alpha];
-                }
-                std::cout << ") C·γ=(" << std::setprecision(4);
-                int m = static_cast<int>(deltap_constraint_matrix_.size());
-                for (int a = 0; a < m; ++a)
-                {
-                    if (a > 0) std::cout << ", ";
-                    double cv = 0.0;
-                    for (int i = 0; i < ucell.nat; ++i)
-                        cv += deltap_constraint_matrix_[a][i] * gamma_I[i][alpha];
-                    std::cout << cv;
-                }
-                std::cout << ") λ=" << std::setprecision(2);
-                for (int a = 0; a < m; ++a)
-                {
-                    if (a > 0) std::cout << ", ";
-                    std::cout << std::scientific << deltap_constraint_lambda_[a];
-                }
-            }
-            else if (total_mode)
+            if (total_mode)
                 {
                     // total mode: one λ shared by all atoms
                     // λ_new = λ + step * (Σγ_actual - Σγ_target)
