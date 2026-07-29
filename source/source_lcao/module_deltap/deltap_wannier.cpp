@@ -356,6 +356,7 @@ void DeltaP::compute_wannier_polarization(
         std::vector<std::vector<double>> w_In_first_string_;  // current alpha's first-string weights
         std::vector<std::complex<double>> zeta_list;
         std::vector<double> total_bp_per_string;      // total Berry phase (arg(zeta)) per string
+        double current_zeta_scale = 1.0;               // scale factor from last zeta rescale
 
         // Branch reference: if previous converged value exists, use it;
         // otherwise use NaN to skip branch selection on first iteration.
@@ -1119,6 +1120,7 @@ void DeltaP::compute_wannier_polarization(
                     gamma_accum[iat] += gamma_I_per_atom[iat] - old_val;
                 }
             }
+            current_zeta_scale = scale;
 
             // Step 2: DELETED — per-string target-aware search moved to
             // post-loop global search.  Different Wilson-loop strings have
@@ -1134,22 +1136,31 @@ void DeltaP::compute_wannier_polarization(
             // (from branch.dat or previous SCF iteration).
             if (!std::isnan(prev_gamma[0]))
             {
+                // Pre-compute per-band normalization denominators
+                // γ_I = Σ_n (w_In(n,I) / w_tot_n(n)) · γ_unwrapped(n)
+                // A 2π shift of band n changes γ_I by 2π·w_In/w_tot_n.
+                std::vector<double> w_tot_n(n_dim, 0.0);
+                for (int n = 0; n < n_dim; ++n)
+                    for (int i = 0; i < nat_; ++i)
+                        w_tot_n[n] += w_In_matrix[n][i];
+
                 for (int iat = 0; iat < nat_; ++iat)
                 {
                     double g = gamma_I_per_atom[iat];
                     double prev = prev_gamma[iat];
                     if (std::abs(g - prev) < M_PI) { prev_gamma[iat] = g; continue; }
 
-                    // Search single-band shifts: each band contributes ±2π·w_In
+                    // Search single-band shifts using per-band normalized amplitudes
                     double best_val = g;
                     double best_dist = std::abs(g - prev);
                     for (int n = 0; n < n_dim; ++n)
                     {
                         double w_In = w_In_matrix[n][iat];
-                        if (std::abs(w_In) < 1e-12) continue;
+                        if (std::abs(w_In) < 1e-12 || std::abs(w_tot_n[n]) < 1e-12) continue;
                         for (int sign = -1; sign <= 1; sign += 2)
                         {
-                            double candidate = g + sign * 2.0 * M_PI * w_In;
+                            double shift = current_zeta_scale * 2.0 * M_PI * w_In / w_tot_n[n];
+                            double candidate = g + sign * shift;
                             double dist = std::abs(candidate - prev);
                             if (dist < best_dist) { best_dist = dist; best_val = candidate; }
                         }
@@ -1292,14 +1303,17 @@ void DeltaP::compute_wannier_polarization(
             for (int iat = 0; iat < nat_; ++iat)
             {
                 raw_gamma[iat] = gamma_accum[iat] / n_strings_processed;
-                double w_total = 0.0;
                 if (!wm.empty())
                     for (int n = 0; n < static_cast<int>(wm.size()) && static_cast<size_t>(iat) < wm[n].size(); ++n)
-                        w_total += wm[n][iat];
-                if (w_total < 1e-12) continue;
-                if (!wm.empty())
-                    for (int n = 0; n < static_cast<int>(wm.size()) && static_cast<size_t>(iat) < wm[n].size(); ++n)
-                        shift_amps[iat].push_back(2.0 * M_PI * wm[n][iat] / w_total);
+                    {
+                        if (std::abs(wm[n][iat]) < 1e-12) continue;
+                        // Per-band normalization: see Step-3 comment.
+                        double w_tot_n = 0.0;
+                        for (int j = 0; j < nat_; ++j)
+                            w_tot_n += wm[n][j];
+                        if (w_tot_n < 1e-12) continue;
+                        shift_amps[iat].push_back(current_zeta_scale * 2.0 * M_PI * wm[n][iat] / w_tot_n);
+                    }
             }
 
             // Greedy forward pass
@@ -1398,6 +1412,7 @@ void DeltaP::compute_wannier_polarization(
                     effective_target = total_target - running_sum;  // last atom takes the remainder
 
                 double w_total = 0.0;
+                // Check per-band normalization validity
                 if (!wm.empty())
                     for (int n = 0; n < static_cast<int>(wm.size()) && static_cast<size_t>(iat) < wm[n].size(); ++n)
                         w_total += wm[n][iat];
@@ -1406,7 +1421,14 @@ void DeltaP::compute_wannier_polarization(
                 std::vector<double> shift_amp;
                 if (!wm.empty())
                     for (int n = 0; n < static_cast<int>(wm.size()) && static_cast<size_t>(iat) < wm[n].size(); ++n)
-                        shift_amp.push_back(2.0 * M_PI * wm[n][iat] / w_total);
+                    {
+                        if (std::abs(wm[n][iat]) < 1e-12) continue;
+                        double w_tot_n = 0.0;
+                        for (int j = 0; j < nat_; ++j)
+                            w_tot_n += wm[n][j];
+                        if (w_tot_n < 1e-12) continue;
+                        shift_amp.push_back(current_zeta_scale * 2.0 * M_PI * wm[n][iat] / w_tot_n);
+                    }
 
                 const int n_dim_shift = static_cast<int>(shift_amp.size());
                 if (n_dim_shift == 0) { running_sum += avg_raw; continue; }
@@ -1458,6 +1480,7 @@ void DeltaP::compute_wannier_polarization(
                 double target = target_gamma_[iat];
 
             double w_total = 0.0;
+            // Check per-band normalization validity
             if (!wm.empty())
                 for (int n = 0; n < static_cast<int>(wm.size()) && static_cast<size_t>(iat) < wm[n].size(); ++n)
                     w_total += wm[n][iat];
@@ -1467,7 +1490,14 @@ void DeltaP::compute_wannier_polarization(
             std::vector<double> shift_amp;
             if (!wm.empty())
                 for (int n = 0; n < static_cast<int>(wm.size()) && static_cast<size_t>(iat) < wm[n].size(); ++n)
-                    shift_amp.push_back(2.0 * M_PI * wm[n][iat] / w_total);
+                {
+                    if (std::abs(wm[n][iat]) < 1e-12) continue;
+                    double w_tot_n = 0.0;
+                    for (int j = 0; j < nat_; ++j)
+                        w_tot_n += wm[n][j];
+                    if (w_tot_n < 1e-12) continue;
+                    shift_amp.push_back(current_zeta_scale * 2.0 * M_PI * wm[n][iat] / w_tot_n);
+                }
 
             const int n_dim_shift = static_cast<int>(shift_amp.size());
             if (n_dim_shift == 0) continue;
