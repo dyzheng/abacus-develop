@@ -32,8 +32,8 @@
 
 | ID | Bug | Status |
 |----|-----|--------|
-| B16 | Branch unwrapping inconsistent across λ | Fixed (P0 Hungarian matching) |
-| Z01 | unkOverlap_lcao performance bottleneck (~30s/k-pair) | Open — blocks SCF test |
+| C-01~C-20 | 07-29 评审新发现（dp_escon rank0、力不自洽、PW λ 混淆、gdir≠3 错配、MPI 越界、PW 过冲、分支晶格口径等） | **Open — 见 `2026-07-29-deltap-risk-assessment-review.md` §3/§4** |
+| B16 | Branch unwrapping inconsistent across λ | Fixed (P0 Hungarian matching)（注：match 文件 MPI 写竞争 C-10 削弱其跨 run 可靠性） |
 
 ## Closed Bugs
 
@@ -50,6 +50,7 @@
 | M5 | Wrong S^{-1/2} diagnostic checks | replaced with correct identity | R-3 |
 | C3 | psi-lambda inconsistency | downgraded to Medium | R-0 |
 | H5 | fmod loses accumulated phase | downgraded to Low | R-0 |
+| Z01 | unkOverlap_lcao 性能瓶颈 | 07-20 快速 O_kpair 路径上线（~30000×），07-29 核实 | R-6 |
 
 ---
 
@@ -86,11 +87,48 @@
 
 ## Next Steps (Priority)
 
-1. **Fix Z01** — profile/fix `unkOverlap_lcao` performance (~30s/k-pair) to unblock SCF integration
+> 2026-07-29 起以 `2026-07-29-deltap-risk-assessment-review.md` §9 的 P0/P1/P2 清单为准。以下旧条目保留备查。
+
+1. ~~**Fix Z01**~~ — 07-20 快速 O_kpair 路径已上线（本文档此前状态滞后，07-29 核实）
 2. **B16 diagnostics** — add runtime diagnostic output to verify Hungarian algorithm eliminates non-determinism
 3. **Run regression** — SCF smoke test (λ=0 baseline, λ=0.05 constraint, 3-run determinism, inner loop)
-4. **C1** — `compute_S_dk_link` for O(dk²) precision (deferred P3)
+4. **C1** — `compute_S_dk_link` for O(dk²) precision (deferred P3)（07-29 确认：函数已写但从未被调用，为死代码）
 5. **BTO W90** — full Wannier90 validation (after Stage 3 passes)
+
+---
+
+## 2026-07-29: 全面风险评审（理论+实现）
+
+### What was done
+对 feat/deltap 分支（merge-base b9669d37..HEAD 93a0d782）做系统静态风险评审：19 份设计文档 + 30 余源文件（deltap_wannier.cpp 2205 行全量、deltap_lcao、deltap_force_stress、esolver_ks_lcao/PW、deltap_pw、op_pw_proj、bfgs.h、deltap_common 及共享文件 diff）。产出 `2026-07-29-deltap-risk-assessment-review.md`，登记 61 项风险。
+
+### Key new findings (不在 07-12/13 评审覆盖内)
+- **C-01 (Critical)**：`dp_escon` 在 rank0 守卫内赋值（esolver_ks_lcao.cpp:793）→ MPI etot 跨 rank 不一致。
+- **C-02 (Critical)**：力/应力与 H 不自洽——HR 算符含 τ_α（deltap_lcao.cpp:81）但力无 τ_α（deltap_force_stress.hpp:255）且比 dspin 模板多 ×2（:180）；HK 部分无力贡献；应力用整数晶格矢量量纲错。→ relax/MD 结果无效。
+- **C-03/04 (Critical, PW)**：PW 初始 λ=目标 γ 值（deltap_pw.cpp:33）；has_deltap 误传 deltap_switch（hamilt_pw.cpp:127）→ corr=0 也被微扰。
+- **C-05 (Critical)**：gdir≠3 时 hk_correction 的 k-string 方向（恒 z）与 S_dk 方向（输入 gdir）错配（deltap_wannier.cpp:1627 + 340-344）。
+- **C-06 (Critical, MPI)**：hk_correction 假设 nrow==ncol，非方形 2D 网格越界写——np>1 crash 系列提交未根治。
+- **C-08 (Critical, PW)**：PW 内循环不重解 psi，λ 线性过冲 inner_nmax 倍（deltap_pw.cpp:191-208）。
+- **C-11 (Critical)**：分支平移晶格三种口径不一致（γ 定义 per-band 归一 vs 搜索 per-atom 归一 vs Step-3 未归一），与 dev log 第 5 条自相矛盾。
+- **C-12/13 (relax/MD 失效)**：deltap_lambda_set_ 跨离子步不重置；hR 重建时不补加已有 λ（dspin 有处理，dp 没有）。
+- **T-13 确认**：E_eff 换算漏 Ry→Ha 因子 2（esolver_ks_lcao.cpp:804），07-27 R8 怀疑属实。
+
+### Bug list updates
+| ID | 内容 | 状态 |
+|----|------|------|
+| C-01~C-20 | 见评审报告 §3/§4 | **Open（全部新建）** |
+| S-01~S-17 | 疑似/脆弱点 | Open（需测试裁决） |
+| Z01 | unkOverlap_lcao 性能 | **Closed**（07-20 快速路径已上线，本文档状态滞后已更正） |
+
+### Files modified this round
+- 新增 `docs/superpowers/specs/2026-07-29-deltap-risk-assessment-review.md`（本报告）；更新本文档。源码未动。
+
+### Next steps
+按评审报告 §9：P0 = C-01/C-03/C-04/C-06/C-02(+声明不支持 relax/MD)/C-12/C-13/R-2 回归；每项配可复现测试（MPI np=2 smoke、FD 力验证、gdir=1 约束、PW STRU-target 启动）。
+
+---
+
+## 2026-07-21: BN PES Sampling (γ Directional Stiffness)
 
 ---
 
