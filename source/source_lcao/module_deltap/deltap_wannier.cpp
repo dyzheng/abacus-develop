@@ -1110,7 +1110,10 @@ void DeltaP::compute_wannier_polarization(
             if (!ref_captured) { ref_gamma_unw_sum = gamma_unw_sum; ref_captured = true; }
             else               { gamma_unw_sum = ref_gamma_unw_sum; }
             double scale = 1.0;
-            if (std::abs(gamma_raw_sum) > 1e-15 && std::abs(gamma_raw_sum - gamma_unw_sum) > 1e-10)
+            // Use a relative threshold: raw_sum must be meaningful (>1e-6 rad
+            // per band) to avoid dividing tiny numerical noise by gamma_unw_sum.
+            double tol = 1e-6 * n_dim;
+            if (std::abs(gamma_raw_sum) > tol && std::abs(gamma_raw_sum - gamma_unw_sum) > 1e-10)
             {
                 scale = gamma_unw_sum / gamma_raw_sum;
                 for (int iat = 0; iat < nat_; ++iat)

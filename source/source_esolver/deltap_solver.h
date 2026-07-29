@@ -7,7 +7,6 @@
  *   logic for both LCAO and PW is implemented directly in the ESolver
  *   classes (esolver_ks_lcao.cpp, deltap_pw.cpp).  This file may be
  *   removed in a future cleanup.
- */
  *
  * The inner BFGS loop needs to apply trial lambda values and re-solve
  * the KS equation with frozen charge density.  This is basis-specific:

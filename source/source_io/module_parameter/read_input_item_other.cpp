@@ -1209,7 +1209,7 @@ Manual override is allowed: if sc_acceleration_mode is explicitly set, it takes 
         item.annotation = "enable DeltaP Hamiltonian correction for constrained DFT";
         item.category = "DeltaP";
         item.type = "Boolean";
-        item.description = "Enable SCF constraint: H^lambda = -sum_I lambda_I * tau^I_alpha * P^I";
+        item.description = "Enable SCF constraint: H^lambda = -sum_I lambda_I * tau^I_alpha * P^I.  CAUTION: constraint forces are approximate (H_HK contribution missing); relax/MD with deltap_corr is experimental.";
         item.default_value = "False";
         item.unit = "";
         item.availability = "deltap_switch is true";
