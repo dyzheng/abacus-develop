@@ -2017,6 +2017,18 @@ void DeltaP::compute_resta_z(const UnitCell& ucell,
                              const elecstate::ElecState* pelec)
 {
     ModuleBase::TITLE("DeltaP", "compute_resta_z");
+
+#ifdef __MPI
+    // This function uses a Mulliken-population approximation that assumes
+    // serial psi layout.  The 2D block-cyclic MPI indexing in the DM loop
+    // is incorrect (see line ~2140).  Skip with a warning.
+    ModuleBase::WARNING("DeltaP::compute_resta_z",
+        "compute_resta_z is experimental and serial-only — skipping under MPI");
+    ModuleBase::timer::start("DeltaP", "compute_resta_z");
+    ModuleBase::timer::end("DeltaP", "compute_resta_z");
+    return;
+#endif
+
     ModuleBase::timer::start("DeltaP", "compute_resta_z");
 
     std::cout << "\n * * * * * *\n << Start DeltaP Resta-Z displacement\n";
