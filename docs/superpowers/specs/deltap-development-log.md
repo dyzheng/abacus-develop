@@ -133,6 +133,12 @@ as a separate round.  See `2026-07-29-deltap-phase2-review-todo.md` §TODO-3b.
 - [x] Main binary compiles and links (`abacus_basic_para`)
 - [x] FD validation test script prepared (`tests/deltap_fd_force/run_fd.sh`)
 - [x] H2O test inputs prepared (`tests/deltap_fd_force/h2o/`)
+- [x] **Serial smoke test**: Si 2×2×2 SCF + nscf DeltaP — converges, produces deltap_results.dat
+- [x] **MPI smoke test**: np=2 Si 2×2×2 nscf — no crash, produces results
+- [x] **Unit tests (gauge)**: 4/4 passed
+- [x] **Unit tests (math)**: 3/3 passed
+- [x] **Unit tests (BFGS)**: 6/6 passed
+- [x] **Unit tests (smoothness)**: 4/8 passed (same 4 pre-existing failures as original HEAD)
 - [ ] **TODO-3b FD力验证**: 需在 HPC 集群上运行（8次 SCF × 2位移 × 12原子）
 - [ ] **C-11 回归 BN 9-point PES**: 运行 `tests/deltap_bn_sampling/run_all.sh` 确认 9/9 收敛
 - [ ] **现有 CI 测试重新生成 reference**: deltap_results.dat 会因口径修正而变化
