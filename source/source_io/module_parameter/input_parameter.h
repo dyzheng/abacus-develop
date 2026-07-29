@@ -620,7 +620,7 @@ struct Input_para
     double deltap_dk_fd = 1e-6;      ///< finite-difference delta-k for T0 validation
     std::string deltap_gauge_mode = "none";   ///< gauge fixing mode: "none" or "smo_anchored"
     double deltap_anchor_thr = 1e-8;          ///< threshold for anchor SMO re-selection
-    std::string deltap_method = "berry_connection";  ///< P^I computation method: "berry_connection" or "wannier"
+    std::string deltap_method = "wannier";  ///< P^I computation method: "berry_connection" or "wannier"
     bool deltap_corr = false;        ///< switch to enable DeltaP Hamiltonian correction (constrained DFT)
     double deltap_lambda_step = 0.5; ///< Lagrange multiplier update step size
     int deltap_inner_nmax = 0;        ///< max inner lambda iterations (0=two-phase threshold mode)
@@ -628,7 +628,7 @@ struct Input_para
     double deltap_conv_thr = 1.0e-3;  ///< |gamma-target| convergence threshold for inner loop
     std::string deltap_target_file = "";  ///< file with per-atom target Berry phase gamma^I
     double deltap_lambda_init = 0.0;      ///< initial lambda for all atoms (testing)
-    double deltap_lambda_mixing = 0.0;     ///< damping factor for lambda: λ_new = β·λ_opt + (1-β)·λ_old (0=no mixing, 1=full BFGS)
+    double deltap_lambda_mixing = 1.0;     ///< damping factor for λ: λ_new = β·λ_opt + (1-β)·λ_old (1=full step, 0=frozen, 0.5=half-damped)
     std::string deltap_constraint_mode = "per_atom";  ///< "per_atom": per-atom constraint; "total": constrain sum Σγ_I
     std::string deltap_constraint_matrix = "";  ///< path to constraint matrix file (overrides constraint_mode when set)
 

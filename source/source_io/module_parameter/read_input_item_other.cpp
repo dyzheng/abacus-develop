@@ -1257,10 +1257,10 @@ Manual override is allowed: if sc_acceleration_mode is explicitly set, it takes 
         item.annotation = "damping factor for lambda update";
         item.category = "DeltaP";
         item.type = "Real";
-        item.description = "Lambda mixing factor: lambda_new = beta * lambda_from_BFGS + (1-beta) * lambda_old. 0 = no mixing (full BFGS step).";
-        item.default_value = "0.0";
+        item.description = "Lambda mixing factor: lambda_new = beta * lambda_from_BFGS + (1-beta) * lambda_old. 1 = full step (default), 0 = frozen, 0.5 = half-damped.";
+        item.default_value = "1.0";
         item.unit = "";
-        item.availability = "deltap_corr is true and deltap_inner_nmax > 0";
+        item.availability = "deltap_corr is true";
         read_sync_double(input.deltap_lambda_mixing);
         this->add_item(item);
     }
