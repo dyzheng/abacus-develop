@@ -1,5 +1,6 @@
 remove_definitions(-D__MPI)
 remove_definitions(-D__EXX)
+remove_definitions(-D__LCAO)
 remove_definitions(-D__CUDA)
 remove_definitions(-D__UT_USE_CUDA)
 remove_definitions(-D__UT_USE_ROCM)
@@ -58,7 +59,6 @@ AddTest(
     ../occupy.cpp
     ../module_charge/charge_mpi.cpp
     ../../source_psi/psi.cpp
-    # ../../source_psi/kernels/psi_memory_op.cpp
     ../../source_base/module_device/memory_op.cpp
 )
 
