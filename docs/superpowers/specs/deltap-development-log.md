@@ -212,3 +212,129 @@ At diag_minus iter 44, γ jumped from (3.90, 3.40) → (-4.59, 15.12) → (-0.81
 - `tests/deltap_bn_sampling/` — 9-point sampling dirs + run_all.sh
 - `tests/deltap_bn_sampling/results.csv` — extracted data
 - `docs/superpowers/specs/2026-07-21-deltap-bn-pes-sampling.md` — full analysis
+
+---
+
+## 2026-07-30: P 系列算例构建 A 组（P01/P02/P08/P09）
+
+### What was done
+按 `2026-07-30-pseries-test-cases-design.md` 为 4 个 P0 旗舰测试构建自包含算例目录（README/run.sh/cases），未运行 ABACUS。`bash -n` 4/4 通过。提取键（rawG/E_KohnSham/TOTAL-FORCE/DeltaP-PW γ_total）与既有测试输出样例逐一比对一致。
+
+### Files modified this round
+- 新增 `可靠性测试设计集/P01-H2O极化率三步裁决/{README.md,run.sh,cases/h2o/{STRU,KPT}}`
+- 新增 `可靠性测试设计集/P02-H2O平衡偶极四方对标/{README.md,run.sh,cases/h2o/{STRU,KPT}}`
+- 新增 `可靠性测试设计集/P08-约束线性与对称性/{README.md,run.sh,cases/h2o/{STRU,KPT}}`
+- 新增 `可靠性测试设计集/P09-无缓存确定性B16复测/{README.md,run.sh,cases/h2o/{STRU,KPT},cases/hbn/{STRU,KPT}}`
+- 新增 `docs/superpowers/specs/2026-07-30-pseries-groupA-cases-built.md`（含假设/偏差清单 7 条）
+
+### Key decisions
+- P01 α_ref 按任务字面公式实现后取绝对值进判据（dip_cor 记账符号属 F1/F2 阻塞）
+- P02 PW 通道 ks_solver=cg（genelpa 仅 LCAO）
+- P09 仅 LCAO 通道（PW wrapped γ 比较口径待定），E 判据按 Ry→Ha 换算后 1e-8 Ha
+
+### Next steps
+冒烟运行 P02 LCAO 通道与 P09 H₂O 单次；构建 B/C/D 组其余 14 个测试。
+
+---
+
+## 2026-07-30: P 系列算例构建 B 组（P03/P04/P05/P15）
+
+### What was done
+按 `2026-07-30-pseries-test-cases-design.md` 为 4 个分子响应测试构建自包含算例目录（README/run.sh/cases），未运行 ABACUS。`bash -n` 4/4 通过；awk 拟合/提取/位移生成逻辑用样例数据冒烟通过；提取键与真实输出样例比对一致。
+
+### Files modified this round
+- 新增 `可靠性测试设计集/P03-H2O-Born有效电荷/{README.md,run.sh,cases/h2o/{STRU,KPT},cases/INPUT_lcao_force.tmpl,cases/INPUT_pw_berry.tmpl}`
+- 新增 `可靠性测试设计集/P04-小分子偶极组/{README.md,run.sh,cases/{ch4,co,nh3,hf,h2s}/{STRU,KPT},cases/INPUT_lcao.tmpl,cases/INPUT_pw.tmpl}`
+- 新增 `可靠性测试设计集/P05-小分子极化率组/{README.md,run.sh,cases/{tzdp,dzp}/{h2o,nh3,ch4,co,hf}/{STRU,KPT},cases/INPUT_efield.tmpl,cases/INPUT_deltap.tmpl}`
+- 新增 `可靠性测试设计集/P15-极化率张量各向异性/{README.md,run.sh,cases/{h2o,nh3,co}/{STRU,KPT},cases/INPUT_efield.tmpl,cases/INPUT_deltap.tmpl}`
+- 新增 `docs/superpowers/specs/2026-07-30-pseries-groupB-cases-built.md`（含假设/偏差清单 8 条）
+
+### Key decisions
+- P15 DeltaP 窗口加 λ=0 点（R² 判据需 ≥3 点）
+- P04 CO 符号按任务书"O 端为负"约定（CO_EXPECT_SIGN=-1，README 说明与文献 C⁻O⁺ 冲突）
+- P05 dzp 层级轨道缺失 → 运行时自动 SKIP；α 换算链系数集中常量区待 F1/F2 定稿
+- awk 数值重建 STRU 需同时设 OFMT/CONVFMT 保 7 位精度
+
+### Next steps
+冒烟运行 P04 验证端到端；F1/F2 定稿后回填 P03/P05/P15 常量区；构建 C/D 组。
+
+---
+
+## 2026-07-30: P 系列算例构建 D 组（P11/P12/P13/P14 固体）
+
+### What was done
+按 `2026-07-30-pseries-test-cases-design.md` 为 4 个固体测试构建自包含算例目录（README/run.sh/cases），未运行真实 ABACUS。`bash -n` 4/4 通过；用 stub 二进制端到端干跑 4/4（提取/判据/计数/退出码/阻塞 WARNING 全部验证）；P14 的 `wannier90.x -pp` 用真实程序验证 seed.win 模板合法（seed.nnkp 正常生成）。
+
+### Files modified this round
+- 新增 `可靠性测试设计集/P11-hBN介电常数/{README.md,run.sh,cases/{STRU,KPT_664,KPT_996,INPUT_lcao.tmpl,INPUT_pw.tmpl}}`
+- 新增 `可靠性测试设计集/P12-NaCl-Si-Born有效电荷/{README.md,run.sh,cases/{STRU_NaCl,STRU_Si,KPT,INPUT_lcao.tmpl,INPUT_pw.tmpl}}`
+- 新增 `可靠性测试设计集/P13-BaTiO3自发极化/{README.md,run.sh,cases/{STRU.tmpl,KPT,INPUT_lcao.tmpl,INPUT_lcao_target.tmpl,INPUT_pw.tmpl}}`
+- 新增 `可靠性测试设计集/P14-wannier90交叉验证/{README.md,run.sh,cases/{STRU_H2O,STRU_NH3,STRU_CH4,STRU_Si,KPT_GAMMA,KPT_SI,INPUT_lcao.tmpl,INPUT_pw.tmpl,INPUT_nscf.tmpl}}`
+- 新增 `docs/superpowers/specs/2026-07-30-pseries-groupD-cases-built.md`（含假设/偏差清单 10 条）
+
+### Key decisions
+- P11 通道② 选 Z* 路径（周期 PW 无宏观场）；ε 两通道判据随 F1/F2 挂起
+- P12 fcc 初基胞 F1 有效盒长取 a/√3（常量区标注待备忘录）；阳离子位移分数化 (δ/a,δ/a,−δ/a)
+- P13 PW wrapped γ 用 LCAO Δγ 做 2π 预测-校正；w90 通道仅检测+模板
+- P14 w90 管线 scf→-pp→nscf(towannier90)→wannier90 全脚手架，mmn 用 find 通配收集；Si 不进 w90 循环
+
+### Next steps
+首次实跑 D 组核对提取正则；F1/F2 定稿后回填 P11/P12 常量区；C 组（P06/P07/P10/P16/P17/P18）构建。
+
+---
+
+## 2026-07-30: P 系列算例构建 C 组（P06/P07/P10/P16/P17/P18）
+
+### What was done
+按 `2026-07-30-pseries-test-cases-design.md` 为 6 个收敛/等效测试构建自包含算例目录（README/run.sh/cases），未运行 ABACUS。`bash -n` 6/6 通过；内嵌 awk 全部编译通过；P18 cube 分析双路径（python3/awk）、P17 STRU_ION_D 几何解析、P06 拟合 awk 用合成数据冒烟通过；提取键与真实输出样例逐一比对一致。
+
+### Files modified this round
+- 新增 `可靠性测试设计集/P06-盒尺寸收敛/{README.md,run.sh,.gitignore,cases/{KPT,STRU_L12,STRU_L15,STRU_L18,STRU_L21,STRU_L24,INPUT.deltap.tmpl,INPUT.efield.tmpl}}`
+- 新增 `可靠性测试设计集/P07-基组与截断双收敛/{README.md,run.sh,.gitignore,cases/{KPT,basis_dzp/STRU,basis_tzdp/STRU,basis_qzdp/STRU,INPUT.deltap.tmpl,INPUT.efield.tmpl,INPUT.pw.tmpl,INPUT.pw_efield.tmpl}}`
+- 新增 `可靠性测试设计集/P10-ED曲线约束vs外场/{README.md,run.sh,.gitignore,cases/{KPT,STRU,INPUT.deltap.tmpl,INPUT.efield.tmpl}}`
+- 新增 `可靠性测试设计集/P16-PW约束核整改验证/{README.md,run.sh,.gitignore,cases/{KPT,STRU_15BOHR,STRU_30BOHR,INPUT.pw.tmpl,INPUT.lcao.tmpl}}`
+- 新增 `可靠性测试设计集/P17-场致几何弛豫对照/{README.md,run.sh,.gitignore,cases/{KPT,STRU,INPUT.relax.deltap.tmpl,INPUT.relax.efield.tmpl}}`
+- 新增 `可靠性测试设计集/P18-实空间密度对照/{README.md,run.sh,.gitignore,cases/{KPT,STRU,INPUT.deltap.tmpl,INPUT.efield.tmpl,INPUT.pw.tmpl}}`
+- 新增 `docs/superpowers/specs/2026-07-30-pseries-groupC-cases-built.md`（含假设/偏差清单 10 条）
+
+### Key decisions
+- P17 弛豫末帧解析 OUT.*/STRU_ION_D（STRU.cif 经源码核实为初始结构不可用）
+- P17 的 E 对应值按任务书 F1=−πλ/(2a)（与设计文档 ±0.002/±0.004 不一致，属 F1 阻塞项，常量区单点可改）
+- P10 κ 三方量纲不同，输出各自 α 等价量比对；P18 判据在 z 平面平均剖面上计算
+- P07 J3 跨通道 μ 比较在 γ 域 mod 2π 最小差后换算；PW 通道显式 nbands 8
+- P16 覆盖率无直接输出键（留 TODO），判据只依赖 dγ/dλ 响应
+
+### Next steps
+冒烟运行 P07 验证端到端；F1/F2 定稿后回填 P06/P10/P17/P18 常量区；P07 dzp/qzdp 层级轨道待用户补充。
+
+---
+
+## 2026-07-30: P 系列整体验证 + 冒烟修复（KPT/gamma_only/F2）
+
+### What was done
+18/18 run.sh `bash -n` 复核通过；真实 ABACUS 冒烟（H₂O 30 Bohr LCAO）发现三个系统性问题并全部修复：
+1. **KPT 沿 gdir 需 ≥2 k 点**（Wilson 环 k-string）：分子算例 KPT 全部 `1 1 1`→`1 1 2`；P02/P05/P15 多方向测试 run.sh 改按 gdir 动态生成 KPT。
+2. **gamma_only 必须为 0**（源码 `esolver_ks_lcao.cpp:832`：deltap_corr 仅支持 multi-k）：确认全部 39 处 INPUT 模板已为 0。
+3. **F2 自旋因子实测 = 2**（nspin=1）：Σγ_raw=−12.718 rad → unwrap(−π,π]=−0.1514 → ÷2 → μ=1.838 D vs 实验 1.855 D（差 0.017 D，判据 0.05 内）。F2 写入 P01/P02/P04/P05/P06/P10/P11/P14/P15 常量区并附证据注释；raw γ→μ 一律先 unwrap。F1 公式同步经源码（`esolver_ks_lcao.cpp:823` E=−πλ/(2a) Ha）确认。
+另加 `可靠性测试设计集/.gitignore`（runs/）。
+
+### Files modified this round
+- `可靠性测试设计集/P*/cases/**/KPT*`（30 个分子 KPT 改 1 1 2）
+- `可靠性测试设计集/{P02,P05,P15}*/run.sh`（per-gdir KPT 生成）
+- `可靠性测试设计集/{P01,P02,P04,P05,P06,P10,P11,P14,P15}*/run.sh`（F2 常量区 + unwrap）
+- 新增 `可靠性测试设计集/.gitignore`、`docs/superpowers/specs/2026-07-30-pseries-cases-build-round.md`
+
+### Key decisions
+- F1/F2 常量区工作值从"占位"升级为"实测依据值"（F2=2、F1=−πλ/(2a)），保留"待备忘录定稿"WARNING 与单点修改机制
+- 本机算力不足以跑完整测试矩阵（ecut100+thr 1e-8 单点 >15 min），冒烟用降级设置（ecut50/thr 1e-6，50 s 收敛），生产设置留给 HPC
+
+### Bug/fix list update
+- 修复：分子算例 KPT 缺 gdir 方向 k-string（致命，所有分子 DeltaP 算例跑不出 γ）
+- 修复：偶极换算缺 unwrap + 自旋因子（不修复则 P02/P04 数值必 FAIL）
+
+### Next steps
+1. HPC 完整跑 P02（四通道）与 P09（确定性）两个无前置 P0
+2. P08 九点扫描定 λ 窗口 → 喂 P01
+3. F3（frozen-λ 能量记账）核实后备忘录定稿
+4. PW 通道小成本冒烟（验证 γ_total 提取端到端）
+5. groupA–D 文档假设/偏差清单逐条复核关闭

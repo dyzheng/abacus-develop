@@ -1,0 +1,31 @@
+INPUT_PARAMETERS
+suffix    SUFFIX
+calculation    scf
+basis_type    lcao
+ecutwfc    100
+gamma_only    0
+
+nspin    1
+scf_thr    1.0e-8
+scf_nmax    200
+smearing_method    gauss
+smearing_sigma    0.002
+mixing_type    broyden
+mixing_beta    0.4
+ks_solver    genelpa
+symmetry    0
+
+deltap_switch    1
+deltap_corr    1
+deltap_gdir    3
+deltap_rm    6.0
+onsite_radius    6.0
+deltap_lambda_init    0.0
+deltap_lambda_step    0.01
+deltap_lambda_mixing    0.1
+deltap_inner_thr    1.0e-2
+deltap_constraint_mode    total
+deltap_target_file    target.dat
+
+pseudo_dir    PSEUDO_DIR
+orbital_dir    ORBITAL_DIR
