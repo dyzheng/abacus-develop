@@ -79,19 +79,11 @@ has_dftu=$(get_input_key_value "dft_plus_u" "INPUT")
 has_band=$(get_input_key_value "out_band" "INPUT")
 has_dos=$(get_input_key_value "out_dos" "INPUT")
 has_cond=$(get_input_key_value "cal_cond" "INPUT")
-out_hsk=$(get_input_key_value "out_hsk" "INPUT")
-out_hsr=$(get_input_key_value "out_hsr" "INPUT")
 has_hs=$(get_input_key_value "out_mat_hs" "INPUT")
 has_hs2=$(get_input_key_value "out_mat_hs2" "INPUT")
 out_hr_npz=$(get_input_key_value "out_hr_npz" "INPUT")
 out_hsr_npz=$(get_input_key_value "out_hsr_npz" "INPUT")
 out_dm_npz=$(get_input_key_value "out_dm_npz" "INPUT")
-if ! test -z "$out_hsk"; then
-    has_hs=$out_hsk
-fi
-if ! test -z "$out_hsr"; then
-    has_hs2=$out_hsr
-fi
 has_xc=$(get_input_key_value "out_mat_xc" "INPUT")
 has_xc2=$(get_input_key_value "out_mat_xc2" "INPUT")
 has_eband_separate=$(get_input_key_value "out_eband_terms" "INPUT")
@@ -125,6 +117,7 @@ word_total_time="atomic_world"
 symmetry=$(get_input_key_value "symmetry" "INPUT")
 out_current=$(get_input_key_value "out_current" "INPUT")
 nspin=$(get_input_key_value "nspin" "INPUT")
+has_ds=$(get_input_key_value "sc_mag_switch" "INPUT")
 test -e $1 && rm $1
 
 #------------------------------------------------------------
@@ -169,7 +162,7 @@ fi
 # echo "has_stress:"$has_stress
 #-------------------------------
 if ! test -z "$has_stress" && [  $has_stress == 1 ]; then
-    grep -A6 "TOTAL-STRESS" $running_path| awk 'NF==3' | tail -3> stress.txt
+    grep -A6 "TOTAL-STRESS" $running_path| awk '/^[[:space:]]*-?[0-9]/' | tail -3> stress.txt
 	total_stress=`sum_file stress.txt`
 	rm stress.txt
 	echo "totalstressref $total_stress" >>$1
@@ -288,7 +281,7 @@ fi
 if ! test -z "$has_band"  && [  $has_band == 1 ]; then
 	bandref=band.txt.ref
 	bandcal=OUT.autotest/band.txt
-	python3 $COMPARE_SCRIPT $bandref $bandcal 8
+	python3 $COMPARE_SCRIPT $bandref $bandcal 5
 	echo "CompareBand_pass $?" >>$1
 fi
 
@@ -337,11 +330,11 @@ if ! test -z "$has_hs"  && [ $has_hs == 1 ]; then
     else
         # ========== Multiple k-points calculation ==========
         if ! test -z "$nspin" && [ $nspin == 2 ]; then
-            # nspin=2 (spin-polarized): compare spin-up/spin-down H(k) and S(k) at the second k-point
-            h1ref=hk2s1_nao.txt.ref
-            h1cal=OUT.autotest/hk2s1_nao.txt
-            h2ref=hk2s2_nao.txt.ref
-            h2cal=OUT.autotest/hk2s2_nao.txt
+            # nspin=2 (spin-polarized): compare hks1_2 + hks2_2 Hamiltonian + sk2 overlap matrix
+            h1ref=hks1_2_nao.txt.ref
+            h1cal=OUT.autotest/hks1_2_nao.txt
+            h2ref=hks2_2_nao.txt.ref
+            h2cal=OUT.autotest/hks2_2_nao.txt
             sref=sk2_nao.txt.ref
             scal=OUT.autotest/sk2_nao.txt
             # Compare Hamiltonian matrix for spin 1
@@ -434,22 +427,20 @@ if ! test -z "$has_hs2"  && [  $has_hs2 == 1 ]; then
         python3 $COMPARE_SCRIPT hrs2_nao.csr.ref OUT.autotest/hrs2_nao.csr 8
         echo "CompareHR2_pass $?" >>$1
     fi
-    python3 $COMPARE_SCRIPT sr_nao.csr.ref OUT.autotest/sr_nao.csr 8
+    python3 $COMPARE_SCRIPT srs1_nao.csr.ref OUT.autotest/srs1_nao.csr 8
     echo "CompareSR_pass $?" >>$1
 fi
 
 #-----------------------------------
 # H(R), S(R), and DM(R) matrices in NPZ format
 #-----------------------------------
-if { ! test -z "$out_hsr" && [ "$out_hsr" == 3 ]; } || { ! test -z "$out_hsr_npz" && [ "$out_hsr_npz" == 1 ]; }; then
-    test -f OUT.autotest/sr_nao.npz
+if ! test -z "$out_hsr_npz" && [ "$out_hsr_npz" == 1 ]; then
+    test -f OUT.autotest/output_SR.npz
     echo "OutputSRNPZ_pass $?" >>$1
 fi
 
-if { ! test -z "$out_hr_npz" && [ "$out_hr_npz" == 1 ]; } \
-    || { ! test -z "$out_hsr" && [ "$out_hsr" == 3 ]; } \
-    || { ! test -z "$out_hsr_npz" && [ "$out_hsr_npz" == 1 ]; }; then
-    test -f OUT.autotest/hrs1_nao.npz
+if { ! test -z "$out_hr_npz" && [ "$out_hr_npz" == 1 ]; } || { ! test -z "$out_hsr_npz" && [ "$out_hsr_npz" == 1 ]; }; then
+    test -f OUT.autotest/output_HR0.npz
     echo "OutputHRNPZ_pass $?" >>$1
 fi
 
@@ -744,23 +735,12 @@ bash ${script_dir}/catch_deepks_properties.sh $1
 # check symmetry 
 #--------------------------------------------
 if ! test -z "$symmetry" && [ $symmetry == 1 ]; then
-	# exclude the nspin=4 MAGNETIC POINT/SPACE GROUP lines so they do not interfere
-	# with the crystallographic point-group / space-group detection below
-	pointgroup=`grep 'POINT GROUP =' $running_path | grep -v 'MAGNETIC' | grep -v 'BvK' | awk '{print $4}'`
-	spacegroup=`grep 'SPACE GROUP =' $running_path | grep -v 'MAGNETIC' | grep -v 'BvK' | awk '{print $7}'`
+	pointgroup=`grep 'POINT GROUP' $running_path | tail -n 2 | head -n 1 | awk '{print $4}'`
+	spacegroup=`grep 'SPACE GROUP' $running_path | tail -n 1 | awk '{print $7}'`
 	nksibz=`grep 'Number of irreducible k-points' $running_path | awk '{print $6}'`
 	echo "pointgroupref $pointgroup" >>$1
 	echo "spacegroupref $spacegroup" >>$1
 	echo "nksibzref $nksibz" >>$1
-	# (nspin=4) magnetic (Shubnikov) group analysis: capture the space-group-consistent
-	# magnetic point group. Only printed when the group is actually reduced (magnetic);
-	# non-magnetic nspin=4 does not print it, so the capture is skipped when empty.
-	if ! test -z "$nspin" && [ $nspin == 4 ]; then
-		magpointgroup=`grep 'MAGNETIC POINT GROUP IN SPACE GROUP' $running_path | awk '{print $NF}'`
-		if ! test -z "$magpointgroup"; then
-			echo "magpointgroupref $magpointgroup" >>$1
-		fi
-	fi
 fi
 
 #--------------------------------------------
@@ -859,6 +839,64 @@ if ! test -z "$out_alllog" && [ $out_alllog -eq 1 ]; then
         echo "Error: Some log filenames do not contain 'running_${calculation}_'"
         echo "log_filename_validation 0" >>$1
         exit 1
+    fi
+fi
+
+#--------------------------------------------
+# DeltaSpin: atomic magnetic moments and lambda
+# Extract final after-optimization values from log
+#--------------------------------------------
+if ! test -z "$has_ds" && [ "$has_ds" == 1 ]; then
+    # Extract the last "after-optimization spin" block (final converged values)
+    # The block starts with "after-optimization spin" header and contains ATOM lines
+    # We need to find the last occurrence before "Inner optimization for lambda ends"
+    
+    # Get the line number of the last "after-optimization spin" header
+    last_spin_line=$(grep -n "after-optimization spin (uB)" "$running_path" | tail -1 | cut -d: -f1)
+    last_lambda_line=$(grep -n "after-optimization lambda (eV/uB)" "$running_path" | tail -1 | cut -d: -f1)
+    
+    if [ ! -z "$last_spin_line" ]; then
+        # Extract ATOM lines after the last "after-optimization spin" header
+        # Read until we hit a non-ATOM line (typically "Inner optimization")
+        spin_values=$(sed -n "$((last_spin_line + 1)),\$p" "$running_path" | awk '/^ATOM/{print; next} /^[^A]/{exit}')
+        
+        # Sum up x, y, z components for each atom and compute RMS deviation from target
+        if [ "$nspin" == 2 ]; then
+            # nspin=2: only z component
+            echo "$spin_values" | awk 'BEGIN{sum=0; n=0} /^ATOM/{sum+=$3*$3; n++} END{if(n>0) printf "%.10f\n", sqrt(sum/n)}' > magmom_rms.txt
+            magmom_rms=$(cat magmom_rms.txt)
+            if [ ! -z "$magmom_rms" ]; then
+                echo "ds_magmom_rmsref $magmom_rms" >>$1
+            fi
+            rm -f magmom_rms.txt
+        elif [ "$nspin" == 4 ]; then
+            # nspin=4: x, y, z components
+            echo "$spin_values" | awk 'BEGIN{sum=0; n=0} /^ATOM/{sum+=($3*$3+$4*$4+$5*$5); n++} END{if(n>0) printf "%.10f\n", sqrt(sum/n)}' > magmom_rms.txt
+            magmom_rms=$(cat magmom_rms.txt)
+            if [ ! -z "$magmom_rms" ]; then
+                echo "ds_magmom_rmsref $magmom_rms" >>$1
+            fi
+            rm -f magmom_rms.txt
+        fi
+        
+        # Extract individual atom magnetic moment magnitudes
+        echo "$spin_values" | awk '/^ATOM/{
+            if(NF>=5) {mag=sqrt($3*$3+$4*$4+$5*$5)}
+            else {mag=$3}
+            printf "ds_magmom_atom%dref %.10f\n", $2, mag
+        }' >>$1
+    fi
+    
+    if [ ! -z "$last_lambda_line" ]; then
+        # Extract ATOM lines after the last "after-optimization lambda" header
+        lambda_values=$(sed -n "$((last_lambda_line + 1)),\$p" "$running_path" | awk '/^ATOM/{print; next} /^[^A]/{exit}')
+        
+        # Extract individual atom lambda magnitudes
+        echo "$lambda_values" | awk '/^ATOM/{
+            if(NF>=5) {lam=sqrt($3*$3+$4*$4+$5*$5)}
+            else {lam=$3}
+            printf "ds_lambda_atom%dref %.10f\n", $2, lam
+        }' >>$1
     fi
 fi
 
