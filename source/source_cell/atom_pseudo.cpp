@@ -1,7 +1,3 @@
-/**
- * @file atom_pseudo.cpp
- * @brief Implementation of Atom_pseudo class.
- */
 #include "atom_pseudo.h"
 
 Atom_pseudo::Atom_pseudo()

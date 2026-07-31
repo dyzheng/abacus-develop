@@ -1,7 +1,3 @@
-/**
- * @file sep_cell.cpp
- * @brief Implementation of SepCell class.
- */
 #include "sep_cell.h"
 
 #include "source_base/global_function.h"

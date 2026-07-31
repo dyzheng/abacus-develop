@@ -18,9 +18,7 @@
 
 #include <cstdio>
 #include <cuda_runtime.h>
-#include <map>
 #include <string>
-#include <tuple>
 #include <vector>
 
 namespace module_rt
@@ -67,15 +65,6 @@ struct OrbitalMapping
 {
     int neighbor_idx; ///< Index of neighbor atom in adjacency list
     int iw_index;     ///< Global orbital index for output mapping
-};
-
-struct OrbitalRadialMapping
-{
-    int value_offset = 0;
-    int grid_offset = 0;
-    int mesh = 0;
-    double rcut = 0.0;
-    RadialGridInfo grid_info;
 };
 
 //=============================================================================
@@ -160,9 +149,7 @@ void snap_psibeta_atom_batch_gpu(
 
     std::vector<NeighborOrbitalData> neighbor_orbitals_h;
     std::vector<double> psi_radial_h;
-    std::vector<double> psi_radial_grid_h;
     std::vector<OrbitalMapping> orbital_mappings;
-    std::map<std::tuple<int, int, int>, OrbitalRadialMapping> orbital_radial_mappings;
 
     for (int ad = 0; ad < adjs.adj_num + 1; ++ad)
     {
@@ -193,28 +180,15 @@ void snap_psibeta_atom_batch_gpu(
                 continue;
             }
 
-            const std::tuple<int, int, int> radial_key(T1, L1, N1);
-            auto radial_mapping = orbital_radial_mappings.find(radial_key);
-            if (radial_mapping == orbital_radial_mappings.end())
-            {
-                const auto& phi_ln = orb.Phi[T1].PhiLN(L1, N1);
-                const double* phi_psi = phi_ln.getPsi();
-                const double* phi_radial = phi_ln.getRadial();
+            // Get orbital radial function (use getPsi(), not getPsi_r())
+            const double* phi_psi = orb.Phi[T1].PhiLN(L1, N1).getPsi();
+            int mesh = orb.Phi[T1].PhiLN(L1, N1).getNr();
+            double dk = orb.Phi[T1].PhiLN(L1, N1).getDk();
+            double rcut = orb.Phi[T1].getRcut();
 
-                OrbitalRadialMapping mapping;
-                mapping.value_offset = static_cast<int>(psi_radial_h.size());
-                mapping.grid_offset = static_cast<int>(psi_radial_grid_h.size());
-                mapping.mesh = phi_ln.getNr();
-                mapping.rcut = orb.Phi[T1].getRcut();
-                mapping.grid_info = validate_radial_grid(phi_radial,
-                                                         phi_psi,
-                                                         mapping.mesh,
-                                                         "snap_psibeta_gpu",
-                                                         "LCAO orbital");
-                psi_radial_h.insert(psi_radial_h.end(), phi_psi, phi_psi + mapping.mesh);
-                psi_radial_grid_h.insert(psi_radial_grid_h.end(), phi_radial, phi_radial + mapping.mesh);
-                radial_mapping = orbital_radial_mappings.insert(std::make_pair(radial_key, mapping)).first;
-            }
+            // Append to flattened psi array
+            size_t psi_offset = psi_radial_h.size();
+            psi_radial_h.insert(psi_radial_h.end(), phi_psi, phi_psi + mesh);
 
             // Create neighbor-orbital data
             NeighborOrbitalData norb;
@@ -224,11 +198,10 @@ void snap_psibeta_atom_batch_gpu(
             norb.m1 = m1;
             norb.N1 = N1;
             norb.iw_index = all_indexes[iw1l];
-            norb.psi_offset = radial_mapping->second.value_offset;
-            norb.psi_grid_offset = radial_mapping->second.grid_offset;
-            norb.psi_mesh = radial_mapping->second.mesh;
-            norb.psi_rcut = radial_mapping->second.rcut;
-            norb.grid_info = radial_mapping->second.grid_info;
+            norb.psi_offset = static_cast<int>(psi_offset);
+            norb.psi_mesh = mesh;
+            norb.psi_dk = dk;
+            norb.psi_rcut = rcut;
 
             neighbor_orbitals_h.push_back(norb);
 
@@ -253,28 +226,26 @@ void snap_psibeta_atom_batch_gpu(
 
     std::vector<ProjectorData> projectors_h(nproj);
     std::vector<double> beta_radial_h;
-    std::vector<double> beta_radial_grid_h;
 
     for (int ip = 0; ip < nproj; ip++)
     {
         const auto& proj = infoNL_.Beta[T0].Proj[ip];
-        const int L0 = proj.getL();
-        const int mesh = proj.getNr();
-        const double rcut = proj.getRcut();
+        int L0 = proj.getL();
+        int mesh = proj.getNr();
+        double dk = proj.getDk();
+        double rcut = proj.getRcut();
         const double* beta_r = proj.getBeta_r();
         const double* radial = proj.getRadial();
-        const RadialGridInfo grid_info
-            = validate_radial_grid(radial, beta_r, mesh, "snap_psibeta_gpu", "nonlocal beta projector");
 
         projectors_h[ip].L0 = L0;
         projectors_h[ip].beta_offset = static_cast<int>(beta_radial_h.size());
-        projectors_h[ip].beta_grid_offset = static_cast<int>(beta_radial_grid_h.size());
         projectors_h[ip].beta_mesh = mesh;
+        projectors_h[ip].beta_dk = dk;
         projectors_h[ip].beta_rcut = rcut;
-        projectors_h[ip].grid_info = grid_info;
+        projectors_h[ip].r_min = radial[0];
+        projectors_h[ip].r_max = radial[mesh - 1];
 
         beta_radial_h.insert(beta_radial_h.end(), beta_r, beta_r + mesh);
-        beta_radial_grid_h.insert(beta_radial_grid_h.end(), radial, radial + mesh);
     }
 
     //=========================================================================
@@ -284,31 +255,16 @@ void snap_psibeta_atom_batch_gpu(
     NeighborOrbitalData* neighbor_orbitals_d = nullptr;
     ProjectorData* projectors_d = nullptr;
     double* psi_radial_d = nullptr;
-    double* psi_radial_grid_d = nullptr;
     double* beta_radial_d = nullptr;
-    double* beta_radial_grid_d = nullptr;
     int* proj_m0_offset_d = nullptr;
     cuDoubleComplex* nlm_out_d = nullptr;
-
-    const auto release_device_data = [&]() {
-        cudaFree(neighbor_orbitals_d);
-        cudaFree(projectors_d);
-        cudaFree(psi_radial_d);
-        cudaFree(psi_radial_grid_d);
-        cudaFree(beta_radial_d);
-        cudaFree(beta_radial_grid_d);
-        cudaFree(proj_m0_offset_d);
-        cudaFree(nlm_out_d);
-    };
 
     size_t output_size = total_neighbor_orbitals * nlm_dim * natomwfc;
 
     CHECK_CUDA(cudaMalloc(&neighbor_orbitals_d, total_neighbor_orbitals * sizeof(NeighborOrbitalData)));
     CHECK_CUDA(cudaMalloc(&projectors_d, nproj * sizeof(ProjectorData)));
     CHECK_CUDA(cudaMalloc(&psi_radial_d, psi_radial_h.size() * sizeof(double)));
-    CHECK_CUDA(cudaMalloc(&psi_radial_grid_d, psi_radial_grid_h.size() * sizeof(double)));
     CHECK_CUDA(cudaMalloc(&beta_radial_d, beta_radial_h.size() * sizeof(double)));
-    CHECK_CUDA(cudaMalloc(&beta_radial_grid_d, beta_radial_grid_h.size() * sizeof(double)));
     CHECK_CUDA(cudaMalloc(&proj_m0_offset_d, nproj * sizeof(int)));
     CHECK_CUDA(cudaMalloc(&nlm_out_d, output_size * sizeof(cuDoubleComplex)));
 
@@ -324,16 +280,7 @@ void snap_psibeta_atom_batch_gpu(
     CHECK_CUDA(
         cudaMemcpy(psi_radial_d, psi_radial_h.data(), psi_radial_h.size() * sizeof(double), cudaMemcpyHostToDevice));
     CHECK_CUDA(
-        cudaMemcpy(psi_radial_grid_d,
-                   psi_radial_grid_h.data(),
-                   psi_radial_grid_h.size() * sizeof(double),
-                   cudaMemcpyHostToDevice));
-    CHECK_CUDA(
         cudaMemcpy(beta_radial_d, beta_radial_h.data(), beta_radial_h.size() * sizeof(double), cudaMemcpyHostToDevice));
-    CHECK_CUDA(cudaMemcpy(beta_radial_grid_d,
-                          beta_radial_grid_h.data(),
-                          beta_radial_grid_h.size() * sizeof(double),
-                          cudaMemcpyHostToDevice));
     CHECK_CUDA(cudaMemcpy(proj_m0_offset_d, proj_m0_offset_h.data(), nproj * sizeof(int), cudaMemcpyHostToDevice));
     CHECK_CUDA(cudaMemset(nlm_out_d, 0, output_size * sizeof(cuDoubleComplex)));
 
@@ -352,9 +299,7 @@ void snap_psibeta_atom_batch_gpu(
                                                     neighbor_orbitals_d,
                                                     projectors_d,
                                                     psi_radial_d,
-                                                    psi_radial_grid_d,
                                                     beta_radial_d,
-                                                    beta_radial_grid_d,
                                                     proj_m0_offset_d,
                                                     total_neighbor_orbitals,
                                                     nproj,
@@ -366,18 +311,17 @@ void snap_psibeta_atom_batch_gpu(
     cudaError_t err = cudaGetLastError();
     if (err != cudaSuccess)
     {
-        release_device_data();
+        cudaFree(neighbor_orbitals_d);
+        cudaFree(projectors_d);
+        cudaFree(psi_radial_d);
+        cudaFree(beta_radial_d);
+        cudaFree(proj_m0_offset_d);
+        cudaFree(nlm_out_d);
         ModuleBase::WARNING_QUIT("snap_psibeta_gpu",
                                  std::string("Atom batch kernel launch error: ") + cudaGetErrorString(err));
     }
 
-    err = cudaDeviceSynchronize();
-    if (err != cudaSuccess)
-    {
-        release_device_data();
-        ModuleBase::WARNING_QUIT("snap_psibeta_gpu",
-                                 std::string("Atom batch kernel execution error: ") + cudaGetErrorString(err));
-    }
+    CHECK_CUDA(cudaDeviceSynchronize());
 
     //=========================================================================
     // Retrieve results
@@ -417,7 +361,12 @@ void snap_psibeta_atom_batch_gpu(
     // Cleanup GPU memory
     //=========================================================================
 
-    release_device_data();
+    cudaFree(neighbor_orbitals_d);
+    cudaFree(projectors_d);
+    cudaFree(psi_radial_d);
+    cudaFree(beta_radial_d);
+    cudaFree(proj_m0_offset_d);
+    cudaFree(nlm_out_d);
 
     ModuleBase::timer::end("module_rt", "snap_psibeta_gpu");
 }

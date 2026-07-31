@@ -55,19 +55,16 @@ template <typename TK>
 void output_SR(Parallel_Orbitals& pv,
                const Grid_Driver& grid,
                hamilt::Hamilt<TK>* p_ham,
-               const std::string& SR_filename = "sr_nao.csr",
+               const std::string& SR_filename = "srs1_nao.csr",
                const bool& binary = false,
                const double& sparse_threshold = 1e-10,
                const int precision = 16);
 
-/// Generate filename for spin-dependent HR CSR output.
+/// Generate filename for HR/SR CSR output.
 std::string hsr_gen_fname(const std::string& prefix,
                           const int ispin,
                           const bool append,
                           const int istep);
-
-/// Generate filename for spin-independent SR CSR output.
-std::string sr_gen_fname(const bool append, const int istep);
 
 /// Generate filename for derivative matrices (dH/dR, dS/dR).
 std::string dhr_gen_fname(const std::string& prefix,
@@ -84,8 +81,7 @@ void write_hcontainer_csr(const std::string& fname,
                           const int istep,
                           const int ispin,
                           const int nspin,
-                          const std::string& label,
-                          const std::string& representation_note);
+                          const std::string& label);
 
 /// Write H(R) and S(R) in CSR format, unified with write_dmr interface.
 template <typename TR>
@@ -95,7 +91,6 @@ void write_hsr(const std::vector<hamilt::HContainer<TR>*>& hr_vec,
                const int precision,
                const Parallel_2D& paraV,
                const bool append,
-               const bool gamma_only,
                const int* iat2iwt,
                const int nat,
                const int istep);

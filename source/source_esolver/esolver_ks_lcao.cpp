@@ -9,7 +9,7 @@
 #include "source_estate/module_charge/symmetry_rho.h"
 #include "source_lcao/LCAO_domain.h" // need DeePKS_init
 #include "source_lcao/FORCE_STRESS.h"
-#include "source_hamilt/module_gint/gint.h"
+#include "source_lcao/module_gint/gint.h"
 #include "source_estate/elecstate_lcao.h"
 #include "source_lcao/hamilt_lcao.h"
 #include "source_hsolver/hsolver_lcao.h"
@@ -47,11 +47,8 @@ ESolver_KS_LCAO<TK, TR>::~ESolver_KS_LCAO()
 }
 
 template <typename TK, typename TR>
-void ESolver_KS_LCAO<TK, TR>::before_all_runners(BaseCell& basecell, const Input_para& inp)
+void ESolver_KS_LCAO<TK, TR>::before_all_runners(UnitCell& ucell, const Input_para& inp)
 {
-    basecell.require_kind(BaseCell::Kind::unit_cell, __FUNCTION__);
-    UnitCell& ucell = static_cast<UnitCell&>(basecell);
-
     ModuleBase::TITLE("ESolver_KS_LCAO", "before_all_runners");
     ModuleBase::timer::start("ESolver_KS_LCAO", "before_all_runners");
 
@@ -236,11 +233,8 @@ double ESolver_KS_LCAO<TK, TR>::cal_energy()
 }
 
 template <typename TK, typename TR>
-void ESolver_KS_LCAO<TK, TR>::cal_force(BaseCell& basecell, ModuleBase::matrix& force)
+void ESolver_KS_LCAO<TK, TR>::cal_force(UnitCell& ucell, ModuleBase::matrix& force)
 {
-    basecell.require_kind(BaseCell::Kind::unit_cell, __FUNCTION__);
-    UnitCell& ucell = static_cast<UnitCell&>(basecell);
-
     ModuleBase::TITLE("ESolver_KS_LCAO", "cal_force");
     ModuleBase::timer::start("ESolver_KS_LCAO", "cal_force");
 
@@ -266,11 +260,8 @@ void ESolver_KS_LCAO<TK, TR>::cal_force(BaseCell& basecell, ModuleBase::matrix& 
 }
 
 template <typename TK, typename TR>
-void ESolver_KS_LCAO<TK, TR>::cal_stress(BaseCell& basecell, ModuleBase::matrix& stress)
+void ESolver_KS_LCAO<TK, TR>::cal_stress(UnitCell& ucell, ModuleBase::matrix& stress)
 {
-    basecell.require_kind(BaseCell::Kind::unit_cell, __FUNCTION__);
-    UnitCell& ucell = static_cast<UnitCell&>(basecell);
-
     ModuleBase::TITLE("ESolver_KS_LCAO", "cal_stress");
     ModuleBase::timer::start("ESolver_KS_LCAO", "cal_stress");
 
@@ -288,11 +279,8 @@ void ESolver_KS_LCAO<TK, TR>::cal_stress(BaseCell& basecell, ModuleBase::matrix&
 }
 
 template <typename TK, typename TR>
-void ESolver_KS_LCAO<TK, TR>::after_all_runners(BaseCell& basecell)
+void ESolver_KS_LCAO<TK, TR>::after_all_runners(UnitCell& ucell)
 {
-    basecell.require_kind(BaseCell::Kind::unit_cell, __FUNCTION__);
-    UnitCell& ucell = static_cast<UnitCell&>(basecell);
-
     ModuleBase::TITLE("ESolver_KS_LCAO", "after_all_runners");
     ModuleBase::timer::start("ESolver_KS_LCAO", "after_all_runners");
 
@@ -343,6 +331,16 @@ void ESolver_KS_LCAO<TK, TR>::iter_init(UnitCell& ucell, const int istep, const 
             GlobalV::ofs_running << "\n >> Gint mixed-precision mode: starting SCF with fp32"
                                  << " (will switch to fp64 when drho is small enough)" << std::endl;
             std::cout << " >> NOTICE: Gint grid-integration starts with fp32 (mixed-precision mode)" << std::endl;
+        }
+        else if (PARAM.inp.gint_precision == "single")
+        {
+            std::cout << " >> NOTICE: Gint grid-integration runs in fp32 (single-precision mode)" << std::endl;
+        }
+
+        if (PARAM.inp.sc_mag_switch)
+        {
+            spinconstrain::SpinConstrain<TK>& sc = spinconstrain::SpinConstrain<TK>::getScInstance();
+            sc.set_subspace_exec_precision(this->gint_precision_controller_.current_precision());
         }
         else if (PARAM.inp.gint_precision == "single")
         {
@@ -415,55 +413,232 @@ void ESolver_KS_LCAO<TK, TR>::hamilt2rho_single(UnitCell& ucell, int istep, int 
 {
     ModuleBase::TITLE("ESolver_KS_LCAO", "hamilt2rho_single");
 
+    const int nspin = PARAM.inp.nspin;
+    const bool ds_mag_switch = PARAM.inp.sc_mag_switch;
+    const bool ds_dir_only = PARAM.inp.sc_direction_only;
+    const std::string& ds_scf_mode = PARAM.inp.sc_scf_thr_mode;
+    const double ds_scf_thr = PARAM.inp.sc_scf_thr;
+    const int ds_phase1_steps = PARAM.inp.sc_dir_phase1_steps;
+    const std::string& ds_accel_mode = PARAM.inp.sc_acceleration_mode;
+    const std::string& ds_lambda_strat = PARAM.inp.sc_lambda_strategy;
+    const int scf_nmax = PARAM.inp.scf_nmax;
+    const std::string& calc_type = PARAM.inp.calculation;
+    const std::string& basis = PARAM.inp.basis_type;
+    const std::string& ks_solver = PARAM.inp.ks_solver;
+
     // 1) reset energy
     this->pelec->f_en.eband = 0.0;
     this->pelec->f_en.demet = 0.0;
-    bool skip_charge = PARAM.inp.calculation == "nscf" ? true : false;
+    bool skip_charge = calc_type == "nscf" ? true : false;
 
-    // 2) run the inner lambda loop to contrain atomic moments with the DeltaSpin method
+    // =====================================================================
+    // 2) DeltaSpin: inner lambda loop to constrain atomic magnetic moments
+    // =====================================================================
+    // The DeltaSpin method implements constrained LSDA via Lagrange multipliers:
+    //   E'[rho] = E[rho] - sum_i lambda_i . (M_i - M_target_i)
+    //
+    // The constrained energy functional adds a penalty term that drives each
+    // atom's magnetic moment M_i toward its target value M_target_i.
+    // The Lagrange multiplier lambda_i acts as a "magnetic force" (eV/uB).
+    //
+    // Code paths by spin type:
+    // ---------------------------------------------------------------
+    // nspin=2 (collinear):
+    //   - Only z-component of magnetization is constrained (M_z per atom)
+    //   - H_delta = lambda_z * sigma_z (diagonal, opposite sign per spin channel)
+    //   - DMR: uses switch_dmr(2) -> spin-difference density (rho_up - rho_dn)
+    //   - cal_coeff_lambda: coefficients[spin] = +/- lambda_z
+    //
+    // nspin=4 (non-collinear):
+    //   - Full 3D magnetization vector constrained (Mx, My, Mz per atom)
+    //   - H_delta = lambda . sigma (full 2x2 Pauli matrix with spin-flip terms)
+    //   - DMR: spinor density matrix (2x2 blocks interleaved)
+    //   - cal_coeff_lambda: 4 coeffs for 2x2 spinor block
+    //
+    // direction_only mode:
+    //   - Designed for non-collinear: removes parallel lambda component so
+    //     only transverse (directional) constraint remains
+    //   - CRITICAL: for nspin=2, direction_only projects lambda to ZERO because
+    //     the only constrained direction (z) IS the parallel direction.
+    //     Therefore direction_only MUST be disabled during Phase 1 BFGS.
+    //
+    // sc_scf_thr_mode parameter:
+    //   - "threshold" (default): lambda loop activates when drho < sc_scf_thr
+    //   - "immediate": lambda loop activates from iter>=2 (for PW basis)
+    //   - "off": lambda loop never activates (lambda used as constant constraint)
+    //   - For "threshold" mode, sc_scf_thr should be 10-100x larger than scf_thr
+    //   - mixing_restart is auto-set based on sc_scf_thr_mode
+    // =====================================================================
     bool skip_solve = false;
-    if (PARAM.inp.sc_mag_switch)
+    if (ds_mag_switch)
     {
         spinconstrain::SpinConstrain<TK>& sc = spinconstrain::SpinConstrain<TK>::getScInstance();
-        if (PARAM.inp.sc_lambda_strategy == "linear_scan")
+
+        if (ds_lambda_strat == "linear_scan")
         {
+            sc.set_drho(this->drho);
             sc.run_lambda_linear_scan(iter - 1);
+
             skip_solve = true;
         }
-        else if (!sc.mag_converged() && this->drho > 0 && this->drho < PARAM.inp.sc_scf_thr)
+        else if (ds_scf_mode == "off")
         {
-            sc.run_lambda_loop(iter - 1);
-            sc.set_mag_converged(true);
-            skip_solve = true;
+            // "off" mode: never activate the lambda loop.
+            // Lambda values are loaded from STRU and used as constant constraints.
+            // Replaces the old convention of setting sc_scf_thr=1e-10.
         }
-        else if (sc.mag_converged())
+        else if (ds_dir_only && nspin == 2)
         {
-            sc.run_lambda_loop(iter - 1);
-            skip_solve = true;
+            // ================================================================
+            // Collinear direction_only: two-phase strategy
+            // ================================================================
+            // For nspin=2, direction_only projection zeroes lambda entirely
+            // (see lambda_loop.cpp). The two-phase strategy works around this:
+            //
+            // Phase 1 (iter 1..sc_dir_phase1_steps): BFGS with direction_only
+            //   temporarily disabled, constraining moment MAGNITUDE to target.
+            //   skip_solve=true: BFGS inner loop handles diagonalization.
+            //
+            // Phase 2 (iter > sc_dir_phase1_steps): Lambda decays gradually,
+            //   normal SCF runs, system relaxes to magnetic ground state.
+            // ================================================================
+            if (iter <= ds_phase1_steps)
+            {
+                sc.set_drho(this->drho);
+                sc.set_direction_only(false);
+                sc.run_lambda_loop(iter - 1);
+                sc.set_direction_only(true);
+                skip_solve = true;
+            }
+            else
+            {
+                if (iter == ds_phase1_steps + 1)
+                {
+                    // Reset mixing at Phase 1->2 transition.
+                    // Phase 1 BFGS updates DM directly without charge mixing,
+                    // so Broyden history is incompatible with Phase 2 SCF.
+                    // Also reset mixing_restart_count and mixing_restart_step
+                    // to avoid polluting mixing_dmr logic.
+                    this->p_chgmix->mix_reset();
+                    this->p_chgmix->mixing_restart_count = 0;
+                    this->p_chgmix->mixing_restart_step = scf_nmax + 1;
+                }
+
+                // Gradual lambda decay: factor = 0.5^(1/3) per step
+                // (~halves every 3 steps). Gradual decay avoids discontinuous
+                // Hamiltonian change that would cause charge density oscillations.
+                int nat = sc.get_nat();
+                auto lambda = sc.get_sc_lambda();
+                const double DECAY = std::pow(0.5, 1.0 / 3.0);
+                for (int ia = 0; ia < nat; ++ia)
+                    for (int ic = 0; ic < 3; ++ic)
+                        lambda[ia][ic] *= DECAY;
+                sc.set_lambda(lambda);
+            }
+        }
+        else if (ds_dir_only && nspin == 4)
+        {
+            // Non-collinear direction_only: direction_only projection works
+            // correctly for nspin=4 (only removes parallel component, leaving
+            // transverse constraint). Use standard sc_scf_thr_mode gate.
+            if (ds_scf_mode == "immediate")
+            {
+                if (iter > 1)
+                {
+                    sc.set_drho(this->drho);
+                    sc.run_lambda_loop(iter - 1);
+                    if (!sc.mag_converged()) { sc.set_mag_converged(true); }
+                    skip_solve = true;
+                }
+            }
+            else // "threshold"
+            {
+                if (!sc.mag_converged() && this->drho > 0 && this->drho < ds_scf_thr)
+                {
+                    sc.set_drho(this->drho);
+                    sc.run_lambda_loop(iter - 1);
+                    sc.set_mag_converged(true);
+                    skip_solve = true;
+                }
+                else if (sc.mag_converged())
+                {
+                    sc.set_drho(this->drho);
+                    sc.run_lambda_loop(iter - 1);
+                    skip_solve = true;
+                }
+            }
+        }
+        else
+        {
+            // Standard DeltaSpin (no direction_only)
+            if (ds_scf_mode == "immediate")
+            {
+                // "immediate" mode: activate lambda loop from iter>=2.
+                // iter=1 is skipped because initial wavefunctions are not
+                // available to compute initial magnetic moments.
+                if (iter > 1)
+                {
+                    sc.set_drho(this->drho);
+                    sc.run_lambda_loop(iter - 1);
+                    if (!sc.mag_converged()) { sc.set_mag_converged(true); }
+                    skip_solve = true;
+                }
+            }
+            else // "threshold"
+            {
+                // "threshold" mode: activate when drho < sc_scf_thr.
+                // drho > 0 excludes iter=1 where drho has not been computed yet.
+                if (!sc.mag_converged() && this->drho > 0 && this->drho < ds_scf_thr)
+                {
+                    sc.set_drho(this->drho);
+                    sc.run_lambda_loop(iter - 1);
+                    sc.set_mag_converged(true);
+                    skip_solve = true;
+                }
+                else if (sc.mag_converged())
+                {
+                    sc.set_drho(this->drho);
+                    sc.run_lambda_loop(iter - 1);
+                    skip_solve = true;
+                }
+            }
+        }
+
+        // Run trace vs DMR diagnostic once near SCF convergence
+        if (nspin == 2 && basis == "lcao"
+            && this->drho > 0 && this->drho < 1e-3
+            && ds_accel_mode != "off"
+            && !sc.local_diag_run_)
+        {
+            double lambda_ref_ry = 0.0;
+            for (int ia = 0; ia < sc.get_nat(); ia++) {
+                if (sc.get_constrain()[ia].z != 0) {
+                    lambda_ref_ry = sc.get_sc_lambda()[ia].z;
+                    break;
+                }
+            }
+            sc.run_trace_vs_dmr_diagnostic(iter - 1, lambda_ref_ry);
+            sc.local_diag_run_ = true;
         }
     }
 
     // 3) run Hsolver
     if (!skip_solve)
     {
-        hsolver::HSolverLCAO<TK> hsolver_lcao_obj(&(this->pv),
-                                                  PARAM.inp.ks_solver,
-                                                  PARAM.globalv.kpar_lcao,
-                                                  PARAM.globalv.nlocal,
-                                                  PARAM.inp.nelec);
+        hsolver::HSolverLCAO<TK> hsolver_lcao_obj(&(this->pv), ks_solver);
         hsolver_lcao_obj.solve(static_cast<hamilt::Hamilt<TK>*>(this->p_hamilt), this->psi[0], this->pelec, *this->dmat.dm, 
-          this->chr, PARAM.inp.nspin, skip_charge);
+          this->chr, nspin, skip_charge);
     }
     else
     {
         // Lambda loop updated the density matrix (DM) but not the real-space charge density.
         // HSolver was skipped, so we need to sync rho from DM manually.
-        LCAO_domain::dm2rho(this->dmat.dm->get_DMR_vector(), PARAM.inp.nspin, &this->chr);
+        LCAO_domain::dm2rho(this->dmat.dm->get_DMR_vector(), nspin, &this->chr);
     }
 
     // 4) EXX
 #ifdef __EXX
-    if (PARAM.inp.calculation != "nscf")
+    if (calc_type != "nscf")
     {
         if (GlobalC::exx_info.info_ri.real_number)
         {
@@ -477,7 +652,7 @@ void ESolver_KS_LCAO<TK, TR>::hamilt2rho_single(UnitCell& ucell, int istep, int 
 #endif
 
     // 5) symmetrize the charge density
-    Symmetry_rho::symmetrize_rho(PARAM.inp.nspin, this->chr, this->pw_rho, ucell.symm);
+    Symmetry_rho::symmetrize_rho(nspin, this->chr, this->pw_rho, ucell.symm);
 
     // 6) calculate delta energy
     this->pelec->f_en.deband = this->pelec->cal_delta_eband(ucell);
@@ -507,6 +682,30 @@ void ESolver_KS_LCAO<TK, TR>::iter_finish(UnitCell& ucell, const int istep, int&
     // 3) for delta spin
     cal_mi_lcao_wrapper<TK>(iter, PARAM.inp);
 
+    // 3b) direction_only: report magnetic moment status
+    if (PARAM.inp.sc_direction_only && PARAM.inp.sc_mag_switch)
+    {
+        spinconstrain::SpinConstrain<TK>& sc = spinconstrain::SpinConstrain<TK>::getScInstance();
+        const int nat = sc.get_nat();
+        const auto& Mi = sc.get_Mi();
+        const auto& target = sc.get_target_mag();
+        const auto& constrain = sc.get_constrain();
+        auto lambda = sc.get_sc_lambda();
+
+        double lambda_abs = 0;
+        for (int ia = 0; ia < nat; ++ia)
+            for (int ic = 0; ic < 3; ++ic)
+                if (constrain[ia][ic] != 0)
+                    lambda_abs += std::abs(lambda[ia][ic] * ModuleBase::Ry_to_eV);
+
+        GlobalV::ofs_running << " [DS-dir] iter " << iter << "  |lambda|=" << lambda_abs << " eV/uB" << std::endl;
+        for (int ia = 0; ia < nat; ++ia)
+            for (int ic = 0; ic < 3; ++ic)
+                if (constrain[ia][ic] != 0)
+                    GlobalV::ofs_running << "   Atom " << ia << " comp " << ic << ": Mi=" << Mi[ia][ic]
+                                         << "  T=" << target[ia][ic] << std::endl;
+    }
+
     // call iter_finish() of ESolver_KS, where band gap is printed,
     // eig and occ are printed, magnetization is calculated,
     // charge mixing is performed, potential is updated, 
@@ -519,6 +718,12 @@ void ESolver_KS_LCAO<TK, TR>::iter_finish(UnitCell& ucell, const int istep, int&
         GlobalV::ofs_running << "\n >> Gint precision switched: fp32 -> fp64 (drho = "
                              << this->drho << ")" << std::endl;
         std::cout << " >> NOTICE: Gint grid-integration precision switched from fp32 to fp64" << std::endl;
+    }
+
+    if (PARAM.inp.sc_mag_switch)
+    {
+        spinconstrain::SpinConstrain<TK>& sc = spinconstrain::SpinConstrain<TK>::getScInstance();
+        sc.set_subspace_exec_precision(this->gint_precision_controller_.current_precision());
     }
 
     // mix density matrix if mixing_restart + mixing_dmr + not first

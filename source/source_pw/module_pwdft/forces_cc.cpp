@@ -9,7 +9,7 @@
 #include "source_base/mathzone.h"
 #include "source_base/timer.h"
 #include "source_base/tool_threading.h"
-#include "source_cell/cal_ux.h"
+#include "source_estate/cal_ux.h"
 #include "source_estate/module_pot/efield.h"
 #include "source_estate/module_pot/gatefield.h"
 #include "source_hamilt/module_ewald/H_Ewald_pw.h"
@@ -77,7 +77,7 @@ void Forces<FPTYPE, Device>::cal_force_cc(ModuleBase::matrix& forcecc,
     }
     else
     {
-        unitcell::cal_ux(ucell_in, PARAM.inp.nspin);
+        elecstate::cal_ux(ucell_in, PARAM.inp.nspin);
         const auto etxc_vtxc_v = XC_Functional::v_xc(rho_basis->nrxx, chr, &ucell_in,
                                               PARAM.inp.nspin,
                                               PARAM.globalv.domag,

@@ -2,7 +2,7 @@
 
 #include "source_base/timer.h"
 #include "source_base/tool_title.h"
-#include "source_hamilt/module_hcontainer/hcontainer_funcs.h"
+#include "source_lcao/module_hcontainer/hcontainer_funcs.h"
 #include "source_hsolver/hsolver_lcao.h"
 
 #include "source_io/module_parameter/parameter.h"
@@ -21,7 +21,7 @@ template <>
 void OperatorLCAO<double, double>::get_hs_pointers() {
     ModuleBase::timer::start("OperatorLCAO", "get_hs_pointers");
     this->hmatrix_k = this->hsk->get_hk();
-    if ((this->new_e_iteration && ik == 0) || PARAM.inp.out_hsk[0] == 1)
+    if ((this->new_e_iteration && ik == 0) || PARAM.inp.out_mat_hs[0])
     {
         if (this->smatrix_k == nullptr)
         {
@@ -78,6 +78,14 @@ void OperatorLCAO<TK, TR>::init(const int ik_in) {
             // refresh HR
             this->hR->set_zero();
         }
+    }
+    // propagate current_spin to next operator so all nodes in the chain
+    // share the same spin state, set by HamiltLCAO::updateHk via set_current_spin.
+    // This is done before processing this node so that children receive the
+    // correct spin regardless of any local toggling that may happen inside
+    // this operator's contributeHR().
+    if (this->next_op != nullptr) {
+        dynamic_cast<OperatorLCAO<TK, TR>*>(this->next_op)->current_spin = this->current_spin;
     }
     switch (this->cal_type) {
         case calculation_type::lcao_overlap: {
@@ -172,9 +180,9 @@ void OperatorLCAO<TK, TR>::init(const int ik_in) {
         case calculation_type::lcao_sc_lambda:
         {
             //update HR first
+            // Only contribute once per SCF iteration (when hr_done=false)
+            // or when lambda has changed (checked inside contributeHR)
             this->contributeHR();
-            //in cal_type=lcao_sc_mag, 
-            //this->contributeHk(ik_in);
             break;
         }
         case calculation_type::lcao_exx:
@@ -250,6 +258,7 @@ void OperatorLCAO<double, double>::contributeHk(int ik) {
         const int ncol = this->hsk->get_pv()->get_col_size();
         hamilt::folding_HR(*this->hR, this->hsk->get_hk(), this->kvec_d[ik], ncol, 0);
     }
+
     ModuleBase::timer::end("OperatorLCAO", "contributeHk");
 }
 // contributeHk()
@@ -281,6 +290,7 @@ void OperatorLCAO<TK, TR>::contributeHk(int ik) {
             hamilt::folding_HR(*this->hR, this->hsk->get_hk(), this->kvec_d[ik], ncol, 0);
         }
     }
+
     ModuleBase::timer::end("OperatorLCAO", "contributeHk");
 }
 

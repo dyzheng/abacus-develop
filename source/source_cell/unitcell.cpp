@@ -1,7 +1,3 @@
-/**
- * @file unitcell.cpp
- * @brief Implementation of UnitCell class.
- */
 #include <cstdlib>
 #include <cstring> // Peize Lin fix bug about strcmp 2016-08-02
 
@@ -25,7 +21,6 @@
 #endif
 
 #include "update_cell.h"
-
 UnitCell::UnitCell()
 {
     itia2iat.create(1, 1);
@@ -187,8 +182,7 @@ std::vector<ModuleBase::Vector3<int>> UnitCell::get_constrain() const
 void UnitCell::setup_cell(const std::string& fn, std::ofstream& log, const double symmetry_prec, const int dfthalf_type, const std::string& pseudo_dir, const int nspin,
     const std::string& basis_type, const std::string& orbital_dir, const std::string& init_wfc,
     const double onsite_radius, const bool deepks_setorb, const bool rpa,
-    const bool fixed_atoms, const bool noncolin, const std::string& calculation, const std::string& esolver_type,
-    const int symmetry)
+    const bool fixed_atoms, const bool noncolin, const std::string& calculation, const std::string& esolver_type)
 {
     ModuleBase::TITLE("UnitCell", "setup_cell");
 
@@ -263,7 +257,7 @@ void UnitCell::setup_cell(const std::string& fn, std::ofstream& log, const doubl
             //==========================
             ok2 = unitcell::read_atom_positions(*this, ifa, log, GlobalV::ofs_warning, nspin,
                 basis_type, orbital_dir, init_wfc, onsite_radius, fixed_atoms, noncolin,
-                calculation, esolver_type, symmetry);
+                calculation, esolver_type);
         }
     }
 #ifdef __MPI

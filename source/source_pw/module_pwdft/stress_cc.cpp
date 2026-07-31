@@ -4,7 +4,7 @@
 #include "source_io/module_parameter/parameter.h"
 #include "source_base/math_integral.h"
 #include "source_base/timer.h"
-#include "source_cell/cal_ux.h"
+#include "source_estate/cal_ux.h"
 
 #ifdef __LIBXC
 #include "source_hamilt/module_xc/libxc_abacus.h"
@@ -73,7 +73,7 @@ void Stress_Func<FPTYPE, Device>::stress_cc(ModuleBase::matrix& sigma,
 	}
 	else
 	{
-		unitcell::cal_ux(ucell, PARAM.inp.nspin);
+		elecstate::cal_ux(ucell, PARAM.inp.nspin);
         const auto etxc_vtxc_v = XC_Functional::v_xc(rho_basis->nrxx, chr, &ucell,
                                               PARAM.inp.nspin,
                                               PARAM.globalv.domag,

@@ -1,7 +1,3 @@
-/**
- * @file sep.cpp
- * @brief Implementation of Sep class.
- */
 #include "sep.h"
 
 #include "source_base/global_variable.h"

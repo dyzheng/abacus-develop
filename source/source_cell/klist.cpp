@@ -1,7 +1,3 @@
-/**
- * @file klist.cpp
- * @brief Implementation of K_Vectors class.
- */
 #include "klist.h"
 
 #include "k_vector_utils.h"

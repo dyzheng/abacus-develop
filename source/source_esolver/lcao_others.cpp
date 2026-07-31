@@ -1,9 +1,9 @@
 #include "source_esolver/esolver_ks_lcao.h"
-#include "source_cell/cal_ux.h"
+#include "source_estate/cal_ux.h"
 #include "source_estate/module_charge/symmetry_rho.h"
 #include "source_lcao/hamilt_lcao.h"
 #include "source_lcao/module_dftu/dftu.h"
-#include "source_hamilt/module_gint/gint.h"
+#include "source_lcao/module_gint/gint.h"
 #include "source_base/formatter.h"
 #include "source_base/timer.h"
 #include "source_cell/module_neighbor/sltk_atom_arrange.h"
@@ -29,11 +29,8 @@ namespace ModuleESolver
 {
 
 template <typename TK, typename TR>
-void ESolver_KS_LCAO<TK, TR>::others(BaseCell& basecell, const int istep)
+void ESolver_KS_LCAO<TK, TR>::others(UnitCell& ucell, const int istep)
 {
-    basecell.require_kind(BaseCell::Kind::unit_cell, __FUNCTION__);
-    UnitCell& ucell = static_cast<UnitCell&>(basecell);
-
     ModuleBase::TITLE("ESolver_KS_LCAO", "others");
     ModuleBase::timer::start("ESolver_KS_LCAO", "others");
 
@@ -148,6 +145,42 @@ void ESolver_KS_LCAO<TK, TR>::others(BaseCell& basecell, const int istep)
 
     if (PARAM.inp.sc_mag_switch)
     {
+        // ================================================================
+        // Derive acceleration parameters from sc_strategy
+        // ================================================================
+        std::string accel_mode = PARAM.inp.sc_acceleration_mode;
+        double accel_rms_thr = PARAM.inp.sc_acceleration_rms_thr;
+
+        // Only apply strategy defaults if user hasn't explicitly overridden
+        // (explicit acceleration_mode != "off" or explicit rms_thr > 0 takes precedence)
+        bool user_overrode_accel_mode = (PARAM.inp.sc_acceleration_mode != "off");
+        bool user_overrode_rms_thr = (PARAM.inp.sc_acceleration_rms_thr > 0.0);
+
+        if (!user_overrode_accel_mode || !user_overrode_rms_thr)
+        {
+            if (PARAM.inp.sc_strategy == "fast")
+            {
+                // fast: subspace from step 0 (huge threshold ensures immediate activation)
+                accel_mode = "subspace";
+                accel_rms_thr = 1e10;
+            }
+            else if (PARAM.inp.sc_strategy == "accuracy")
+            {
+                // accuracy: always full diagonalization
+                accel_mode = "off";
+                accel_rms_thr = -1.0;
+            }
+            else // normal
+            {
+                // normal: threshold-triggered subspace acceleration
+                accel_mode = "subspace";
+                if (!user_overrode_rms_thr)
+                {
+                    accel_rms_thr = 1e-2;  // default threshold for normal strategy
+                }
+            }
+        }
+
         spinconstrain::SpinConstrain<TK>& sc = spinconstrain::SpinConstrain<TK>::getScInstance();
         sc.init_sc(PARAM.inp.sc_thr,
                    PARAM.inp.nsc,
@@ -155,6 +188,8 @@ void ESolver_KS_LCAO<TK, TR>::others(BaseCell& basecell, const int istep)
                    PARAM.inp.alpha_trial,
                    PARAM.inp.sccut,
                    PARAM.inp.sc_drop_thr,
+                   accel_mode,
+                   accel_rms_thr,
                    ucell,
                    PARAM.inp.sc_direction_only,
                    &(this->pv),
@@ -170,7 +205,7 @@ void ESolver_KS_LCAO<TK, TR>::others(BaseCell& basecell, const int istep)
     // cal_ux should be called before init_scf because
     // the direction of ux is used in noncoline_rho
     //=========================================================
-    unitcell::cal_ux(ucell, PARAM.inp.nspin);
+    elecstate::cal_ux(ucell, PARAM.inp.nspin);
 
     // pelec should be initialized before these calculations
     elecstate::init_scf(ucell, this->Pgrid, this->sf.strucFac, this->locpp.numeric, 

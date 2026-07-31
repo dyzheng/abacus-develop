@@ -21,7 +21,6 @@ void ModuleIO::write_hsk(
         const bool gamma_only,
         const bool out_app_flag,
         const int istep,
-        const int precision,
         std::ofstream &ofs_running)    
 {
 
@@ -59,7 +58,7 @@ void ModuleIO::write_hsk(
                 h_mat.p,
                 PARAM.globalv.nlocal,
                 bit,
-                precision,
+                PARAM.inp.out_mat_hs[1],
                 1,
                 out_app_flag,
                 h_fn,
@@ -85,7 +84,7 @@ void ModuleIO::write_hsk(
                 s_mat.p,
                 PARAM.globalv.nlocal,
                 bit,
-                precision,
+                PARAM.inp.out_mat_hs[1],
                 1,
                 out_app_flag,
                 s_fn,    

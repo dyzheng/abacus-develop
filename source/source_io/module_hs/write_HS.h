@@ -26,7 +26,6 @@ namespace ModuleIO
 				const bool gamma_only,
 				const bool out_app_flag,
 				const int istep,
-				const int precision,
 				std::ofstream &ofs_running);	
 
     /// @brief save a square matrix, such as H(k) and S(k)

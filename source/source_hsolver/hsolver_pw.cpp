@@ -12,6 +12,7 @@
 #include "source_hsolver/diago_dav_subspace.h"
 #include "source_hsolver/diago_david.h"
 #include "source_hsolver/diago_iter_assist.h"
+#include "source_io/module_parameter/parameter.h"
 #include "source_psi/psi.h"
 #include "source_estate/elecstate_tools.h"
 
@@ -109,13 +110,15 @@ void HSolverPW<T, Device>::solve(hamilt::Hamilt<T, Device>* pHamilt,
             // update H(k) for each k point
             pHamilt->updateHk(ik);
 
-
+            psi.load_k_to_gpu(ik);
 
             // update psi pointer for each k point
             psi.fix_k(ik);
 
             // If using k-point continuity and not first k-point, propagate from parent
-            if (ik > 0 && count == 0 && k_parent.find(ik) != k_parent.end()) {
+            // Skip in PAGED_GPU mode: only one k-point resides on GPU at a time
+            if (ik > 0 && count == 0 && k_parent.find(ik) != k_parent.end()
+                && psi.get_storage_mode() != psi::PsiStorageMode::PAGED_GPU) {
                 propagate_psi(psi, k_parent[ik], ik);
             }
 
@@ -123,7 +126,7 @@ void HSolverPW<T, Device>::solve(hamilt::Hamilt<T, Device>* pHamilt,
             update_precondition(precondition, ik, this->wfc_basis->npwk[ik], Real(pes->pot->get_vl_of_0()));
 
             // use smooth threshold for all iter methods
-            if (this->diago_smooth_ethr == true)
+            if (PARAM.inp.diago_smooth_ethr == true)
             {
                 this->cal_smooth_ethr(pes->klist->wk[ik],
                                     &pes->wg(ik, 0),
@@ -135,6 +138,8 @@ void HSolverPW<T, Device>::solve(hamilt::Hamilt<T, Device>* pHamilt,
 
             // solve eigenvector and eigenvalue for H(k)
             this->hamiltSolvePsiK(pHamilt, psi, precondition, eigenvalues.data() + ik * psi.get_nbands(), this->wfc_basis->nks);
+
+            psi.store_k_from_gpu(ik);
 
             if (skip_charge)
             {
@@ -152,7 +157,7 @@ void HSolverPW<T, Device>::solve(hamilt::Hamilt<T, Device>* pHamilt,
             // update H(k) for each k point
             pHamilt->updateHk(ik);
 
-
+            psi.load_k_to_gpu(ik);
 
             // update psi pointer for each k point
             psi.fix_k(ik);
@@ -161,7 +166,7 @@ void HSolverPW<T, Device>::solve(hamilt::Hamilt<T, Device>* pHamilt,
             update_precondition(precondition, ik, this->wfc_basis->npwk[ik], Real(pes->pot->get_vl_of_0()));
 
             // use smooth threshold for all iter methods
-            if (this->diago_smooth_ethr == true)
+            if (PARAM.inp.diago_smooth_ethr == true)
             {
                 this->cal_smooth_ethr(pes->klist->wk[ik],
                                     &pes->wg(ik, 0),
@@ -173,6 +178,8 @@ void HSolverPW<T, Device>::solve(hamilt::Hamilt<T, Device>* pHamilt,
 
             // solve eigenvector and eigenvalue for H(k)
             this->hamiltSolvePsiK(pHamilt, psi, precondition, eigenvalues.data() + ik * psi.get_nbands(), this->wfc_basis->nks);
+
+            psi.store_k_from_gpu(ik);
 
             // output iteration information and reset avg_iter
             if (skip_charge)
@@ -211,7 +218,7 @@ void HSolverPW<T, Device>::solve(hamilt::Hamilt<T, Device>* pHamilt,
     elecstate::calEBand(_pes_pw->ekb,_pes_pw->wg,_pes_pw->f_en);
     if (skip_charge)
     {
-        if (this->use_uspp)
+        if (PARAM.globalv.use_uspp)
         {
             reinterpret_cast<elecstate::ElecStatePW<T, Device>*>(pes)->cal_becsum(psi);
         }
@@ -319,7 +326,7 @@ void HSolverPW<T, Device>::hamiltSolvePsiK(hamilt::Hamilt<T, Device>* hm,
         const int nbasis = psi.get_nbasis();
         const int ndim = psi.get_current_ngk();
         DiagoBPCG<T, Device> bpcg(pre_condition.data());
-        bpcg.init_iter(this->nbands, nband_l, nbasis, ndim);
+        bpcg.init_iter(PARAM.inp.nbands, nband_l, nbasis, ndim);
         bpcg.diag(hpsi_func, psi.get_pointer(), eigenvalue, this->ethr_band);
     }
     else if (this->method == "dav_subspace")
@@ -330,12 +337,12 @@ void HSolverPW<T, Device>::hamiltSolvePsiK(hamilt::Hamilt<T, Device>* hm,
                                                   psi.get_nbands(),
                                                   psi.get_k_first() ? psi.get_current_ngk()
                                                                     : psi.get_nk() * psi.get_nbasis(),
-                                                  this->pw_diag_ndim,
+                                                  PARAM.inp.pw_diag_ndim,
                                                   this->diag_thr,
                                                   this->diag_iter_max,
                                                   comm_info,
-                                                  this->diag_subspace,
-                                                  this->nb2d);
+                                                  PARAM.inp.diag_subspace,
+                                                  PARAM.inp.nb2d);
 
         DiagoIterAssist<T, Device>::avg_iter += static_cast<double>(
             dav_subspace.diag(hpsi_func,
@@ -365,7 +372,7 @@ void HSolverPW<T, Device>::hamiltSolvePsiK(hamilt::Hamilt<T, Device>* hm,
         const int nband = psi.get_nbands();            /// number of eigenpairs sought
         const int ld_psi = psi.get_nbasis();           /// leading dimension of psi
 
-        DiagoDavid<T, Device> david(pre_condition.data(), nband, dim, this->pw_diag_ndim, comm_info);
+        DiagoDavid<T, Device> david(pre_condition.data(), nband, dim, PARAM.inp.pw_diag_ndim, comm_info);
         // do diag and add davidson iteration counts up to avg_iter
         DiagoIterAssist<T, Device>::avg_iter += static_cast<double>(
              david.diag(hpsi_func,

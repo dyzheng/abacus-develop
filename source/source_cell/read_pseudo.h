@@ -1,7 +1,3 @@
-/**
- * @file read_pseudo.h
- * @brief Functions for reading pseudopotential files.
- */
 #ifndef READ_PSEUDO_H
 #define READ_PSEUDO_H
 
@@ -10,33 +6,6 @@
 
 namespace unitcell {
 
-    /**
-     * @brief Read pseudopotential files and calculate atom information.
-     *
-     * @param ofs output file stream [in]
-     * @param ucell unit cell [in/out]
-     * @param pseudo_dir pseudopotential directory [in]
-     * @param global_out_dir global output directory [in]
-     * @param out_element_info whether to output element information [in]
-     * @param dft_functional DFT functional [in]
-     * @param lspinorb spin-orbit coupling flag [in]
-     * @param pseudo_rcut pseudo cut-off radius [in]
-     * @param soc_lambda SOC lambda parameter [in]
-     * @param nspin number of spin components [in]
-     * @param npol number of polarizations [in]
-     * @param basis_type basis type [in]
-     * @param esolver_type solver type [in]
-     * @param init_wfc initial wavefunction type [in]
-     * @param nbands number of bands [in]
-     * @param two_fermi two Fermi levels flag [in]
-     * @param nelec_delta electron number delta [in]
-     * @param smearing_method smearing method [in]
-     * @param ks_solver KS solver type [in]
-     * @param bndpar band parallel parameter [in]
-     * @param nelec number of electrons [in]
-     * @param nupdown spin polarization [in]
-     * @return AtomsInfoResult containing calculated atom information
-     */
     AtomsInfoResult read_pseudo(std::ofstream& ofs, UnitCell& ucell,
                    const std::string& pseudo_dir,
                    const std::string& global_out_dir,
@@ -59,18 +28,7 @@ namespace unitcell {
                    const double nelec,
                    const double nupdown);
 
-    /**
-     * @brief Read pseudopotential from files for each type of atom.
-     *
-     * @param fn filename [in]
-     * @param log output file stream [in]
-     * @param ucell unit cell [in/out]
-     * @param global_out_dir global output directory [in]
-     * @param dft_functional DFT functional [in]
-     * @param lspinorb spin-orbit coupling flag [in]
-     * @param pseudo_rcut pseudo cut-off radius [in]
-     * @param soc_lambda SOC lambda parameter [in]
-     */
+    // read in pseudopotential from files for each type of atom
     void read_cell_pseudopots(const std::string& fn, std::ofstream& log, UnitCell& ucell,
                               const std::string& global_out_dir,
                               const std::string& dft_functional,
@@ -78,55 +36,30 @@ namespace unitcell {
                               const double pseudo_rcut,
                               const double soc_lambda);
 
-    /**
-     * @brief Print unit cell pseudopotential information.
-     *
-     * @param fn filename [in]
-     * @param ucell unit cell [in]
-     */
     void print_unitcell_pseudo(const std::string& fn, UnitCell& ucell);
     
-    /**
-     * @brief Calculate the total number of local basis.
-     *
-     * Target: nwfc, lmax, atoms[].stapos_wf, PARAM.inp.nbands
-     *
-     * @param log output file stream [in]
-     * @param ucell unit cell [in/out]
-     * @param atoms atom pointer [in/out]
-     * @param nspin number of spin components [in]
-     * @param nlocal total number of local basis [in]
-     * @param npol number of polarizations [in]
-     * @param basis_type basis type [in]
-     * @param esolver_type solver type [in]
-     * @param init_wfc initial wavefunction type [in]
-     * @param nbands number of bands [in]
-     */
+    //===========================================
+    // calculate the total number of local basis
+    // Target : nwfc, lmax,
+    // 			atoms[].stapos_wf
+    // 			PARAM.inp.nbands
+    //===========================================
     void cal_nwfc(std::ofstream& log, UnitCell& ucell,Atom* atoms, const int nspin, const int nlocal, const int npol,
                const std::string& basis_type, const std::string& esolver_type, const std::string& init_wfc, const int nbands);
 
-    /**
-     * @brief Calculate meshx.
-     *
-     * Demand: atoms[].msh
-     *
-     * @param meshx output mesh size [out]
-     * @param atoms atom pointer [in]
-     * @param ntype number of atom types [in]
-     */
+    //======================
+    // Target : meshx
+    // Demand : atoms[].msh
+    //======================
     void cal_meshx(int& meshx,const Atom* atoms, const int ntype);
 
-    /**
-     * @brief Calculate natomwfc.
-     *
-     * Demand: atoms[].nchi, atoms[].lchi, atoms[].oc, atoms[].na
-     *
-     * @param log output file stream [in]
-     * @param natomwfc output number of atomic wavefunctions [out]
-     * @param ntype number of atom types [in]
-     * @param atoms atom pointer [in]
-     * @param nspin number of spin components [in]
-     */
+    //=========================
+    // Target : natomwfc
+    // Demand : atoms[].nchi
+    // 			atoms[].lchi
+    // 			atoms[].oc
+    // 			atoms[].na
+    //=========================
     void cal_natomwfc(std::ofstream& log,int& natomwfc,const int ntype,const Atom* atoms,const int nspin);
 
 }

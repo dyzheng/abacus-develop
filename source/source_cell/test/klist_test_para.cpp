@@ -11,6 +11,7 @@
 #include <streambuf>
 #define private public
 #include "source_cell/klist.h"
+#include "source_basis/module_ao/ORB_gaunt_table.h"
 #include "source_cell/atom_pseudo.h"
 #include "source_cell/atom_spec.h"
 #include "source_cell/parallel_kpoints.h"
@@ -18,6 +19,9 @@
 
 #include "source_cell/unitcell.h"
 #include "source_cell/magnetism.h"
+#include "source_pw/module_pwdft/vl_pw.h"
+#include "source_pw/module_pwdft/vnl_pw.h"
+#include "source_pw/module_pwdft/parallel_grid.h"
 #undef private
 
 pseudo::pseudo()
@@ -39,8 +43,6 @@ Atom_pseudo::~Atom_pseudo()
 {
 }
 
-SepPot::SepPot(){} 
-SepPot::~SepPot(){}
 UnitCell::UnitCell()
 {
 }
@@ -50,11 +52,37 @@ UnitCell::~UnitCell()
 Magnetism::Magnetism()
 {
 }
-Sep_Cell::Sep_Cell() noexcept {}
-Sep_Cell::~Sep_Cell() noexcept {}
 Magnetism::~Magnetism()
 {
 }
+ORB_gaunt_table::ORB_gaunt_table()
+{
+}
+ORB_gaunt_table::~ORB_gaunt_table()
+{
+}
+pseudopot_cell_vl::pseudopot_cell_vl()
+{
+}
+pseudopot_cell_vl::~pseudopot_cell_vl()
+{
+}
+pseudopot_cell_vnl::pseudopot_cell_vnl()
+{
+}
+pseudopot_cell_vnl::~pseudopot_cell_vnl()
+{
+}
+Soc::~Soc()
+{
+}
+Fcoef::~Fcoef()
+{
+}
+SepPot::SepPot(){}
+SepPot::~SepPot(){}
+Sep_Cell::Sep_Cell() noexcept {}
+Sep_Cell::~Sep_Cell() noexcept {}
 
 
 /************************************************

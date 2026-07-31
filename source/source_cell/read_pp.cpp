@@ -1,7 +1,3 @@
-/**
- * @file read_pp.cpp
- * @brief Implementation of Pseudopot_upf class.
- */
 #include "read_pp.h"
 
 #include <cmath>
