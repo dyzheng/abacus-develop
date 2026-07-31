@@ -149,7 +149,7 @@ add_test(NAME MODULE_CELL_parallel_kpoints_test
 AddTest(
   TARGET MODULE_CELL_unitcell_test
   LIBS base device cell_info symmetry
-  SOURCES unitcell_test.cpp ../cal_ux.cpp
+  SOURCES unitcell_test.cpp ../../source_estate/cal_ux.cpp
 
 )
 

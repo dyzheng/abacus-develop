@@ -6,7 +6,7 @@
 #include "source_cell/module_neighbor/sltk_grid_driver.h"
 #include "source_cell/unitcell.h"
 #include "source_lcao/module_operator_lcao/operator_lcao.h"
-#include "source_hamilt/module_hcontainer/hcontainer.h"
+#include "source_lcao/module_hcontainer/hcontainer.h"
 #include <unordered_map>
 #include <complex>
 
@@ -102,6 +102,13 @@ class DeltaSpin<OperatorLCAO<TK, TR>> : public OperatorLCAO<TK, TR>
                     const std::complex<double>* psi_k,
                     const int nbands_global,
                     std::vector<std::vector<std::complex<double>>>& PI_sub) const;
+
+    /// @brief Get the pre-computed real-space projector HContainer for atom iat
+    /// pre_hr[iat](μ,ν;R) = Σ_lm <φ_μ(0)|α_lm(I)><α_lm(I)|φ_ν(R)>
+    const hamilt::HContainer<TR>* get_pre_hr(int iat) const { return pre_hr[iat]; }
+
+    /// @brief Get the constraint atom list
+    const std::vector<bool>& get_constraint_atom_list() const { return constraint_atom_list; }
 
   private:
     const UnitCell* ucell = nullptr;

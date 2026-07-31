@@ -1,7 +1,3 @@
-/**
- * @file read_pseudo.cpp
- * @brief Implementation of pseudopotential reading functions.
- */
 #include "read_pseudo.h"
 #include "source_base/global_file.h"
 #include "cal_atoms_info.h"

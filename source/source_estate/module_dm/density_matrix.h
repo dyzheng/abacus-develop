@@ -5,7 +5,7 @@
 
 #include "source_cell/module_neighbor/sltk_grid_driver.h"
 #include "source_lcao/record_adj.h"
-#include "source_hamilt/module_hcontainer/hcontainer.h"
+#include "source_lcao/module_hcontainer/hcontainer.h"
 
 namespace elecstate
 {
@@ -59,6 +59,9 @@ namespace DensityMatrix_Tools
 
     template <typename TR>
     extern void func_exp_mul_dmk(const std::complex<double> kphase, const std::vector<std::complex<double>> &DMK_mat_trans, TR* target_DMR_mat);
+
+    template <>
+    void func_exp_mul_dmk<float>(const std::complex<double> kphase, const std::vector<std::complex<double>> &DMK_mat_trans, float* target_DMR_mat);
 
     template <typename TR>
     extern void func_xyz_to_updown(const std::complex<double> tmp[4], const int icol, const int step_trace[4], TR* target_DMR_mat);

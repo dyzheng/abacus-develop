@@ -1,8 +1,7 @@
-/**
- * @file k_vector_utils.h
- * @brief Utility functions for k-vector operations.
- * @author rhx (created on 25-6-3)
- */
+//
+// Created by rhx on 25-6-3.
+//
+
 #ifndef K_VECTOR_UTILS_H
 #define K_VECTOR_UTILS_H
 
@@ -13,20 +12,8 @@ class K_Vectors;
 
 namespace KVectorUtils
 {
-/**
- * @brief Convert k-vectors from direct to Cartesian coordinates.
- *
- * @param kv K_Vectors object [in/out]
- * @param reciprocal_vec reciprocal lattice vectors [in]
- */
 void kvec_d2c(K_Vectors& kv, const ModuleBase::Matrix3& reciprocal_vec);
 
-/**
- * @brief Convert k-vectors from Cartesian to direct coordinates.
- *
- * @param kv K_Vectors object [in/out]
- * @param latvec lattice vectors [in]
- */
 void kvec_c2d(K_Vectors& kv, const ModuleBase::Matrix3& latvec);
 
 /**

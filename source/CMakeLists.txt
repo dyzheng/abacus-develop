@@ -27,7 +27,6 @@
 # complete link closure below.
 add_library(abacus_compile_requirements INTERFACE)
 add_library(abacus::compile_requirements ALIAS abacus_compile_requirements)
-include(CompilerConfiguration)
 
 set(_abacus_feature_definitions
   __FFTW3
@@ -51,9 +50,6 @@ set(_abacus_feature_definitions
   $<$<BOOL:${USE_CUDA}>:__CUDA>
   $<$<BOOL:${USE_CUDA}>:__UT_USE_CUDA>
   $<$<BOOL:${ENABLE_NCCL_PARALLEL_DEVICE}>:__NCCL_PARALLEL_DEVICE>
-  $<$<BOOL:${ENABLE_CUSOLVERMP}>:__CUSOLVERMP>
-  $<$<BOOL:${ENABLE_CUBLASMP}>:__CUBLASMP>
-  $<$<BOOL:${_use_cal}>:__USE_CAL>
   $<$<BOOL:${USE_ROCM}>:__ROCM>
   $<$<BOOL:${USE_ROCM}>:__UT_USE_ROCM>
   $<$<BOOL:${USE_ROCM}>:__HIP_PLATFORM_HCC__>
@@ -525,6 +521,7 @@ add_subdirectory(source_basis/module_nao)
 add_subdirectory(source_md)
 add_subdirectory(source_basis/module_pw)
 add_subdirectory(source_esolver)
+add_subdirectory(source_lcao/module_gint)
 add_subdirectory(source_io)
 add_subdirectory(source_relax)
 add_subdirectory(source_lcao/module_ri)

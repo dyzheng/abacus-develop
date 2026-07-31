@@ -72,11 +72,9 @@ namespace ModuleESolver
     }
 
     template <typename T>
-    void ESolver_KS_LIP<T>::before_all_runners(BaseCell& basecell, const Input_para& inp)
+    void ESolver_KS_LIP<T>::before_all_runners(UnitCell& ucell, const Input_para& inp)
     {
-        basecell.require_kind(BaseCell::Kind::unit_cell, __FUNCTION__);
-        UnitCell& ucell = static_cast<UnitCell&>(basecell);
-        ESolver_KS_PW<T>::before_all_runners(basecell, inp);
+        ESolver_KS_PW<T>::before_all_runners(ucell, inp);
         auto* p_psi_init = static_cast<psi::PSIPrepare<T>*>(this->stp.p_psi_init);
         delete this->psi_local;
         this->psi_local = new psi::Psi<T>(this->stp.psi_cpu->get_nk(),
@@ -135,7 +133,7 @@ namespace ModuleESolver
         hsolver::DiagoIterAssist<T>::PW_DIAG_NMAX = PARAM.inp.pw_diag_nmax;
         bool skip_charge = PARAM.inp.calculation == "nscf" ? true : false;
 
-        hsolver::HSolverLIP<T> hsolver_lip_obj(this->pw_wfc, PARAM.globalv.use_uspp);
+        hsolver::HSolverLIP<T> hsolver_lip_obj(this->pw_wfc);
         hsolver_lip_obj.solve(static_cast<hamilt::Hamilt<T>*>(this->p_hamilt), *this->stp.template get_psi_t<T, base_device::DEVICE_CPU>(), this->pelec, 
           *this->psi_local, skip_charge,ucell.tpiba,ucell.nat);
 
@@ -222,11 +220,9 @@ namespace ModuleESolver
     }
 
     template <typename T>
-    void ESolver_KS_LIP<T>::after_all_runners(BaseCell& basecell)
+    void ESolver_KS_LIP<T>::after_all_runners(UnitCell& ucell)
     {
-        basecell.require_kind(BaseCell::Kind::unit_cell, __FUNCTION__);
-        UnitCell& ucell = static_cast<UnitCell&>(basecell);
-        ESolver_KS_PW<T>::after_all_runners(basecell);
+        ESolver_KS_PW<T>::after_all_runners(ucell);
 
 #ifdef __LCAO
         if (PARAM.inp.out_mat_xc)

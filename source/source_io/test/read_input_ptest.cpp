@@ -208,10 +208,6 @@ TEST_F(InputParaTest, ParaRead)
     EXPECT_EQ(param.inp.out_mat_hs[1], 8);
     EXPECT_EQ(param.inp.out_mat_hs2[0], 0);
     EXPECT_EQ(param.inp.out_mat_hs2[1], 8);
-    EXPECT_EQ(param.inp.out_hsk[0], 0);
-    EXPECT_EQ(param.inp.out_hsk[1], 8);
-    EXPECT_EQ(param.inp.out_hsr[0], 0);
-    EXPECT_EQ(param.inp.out_hsr[1], 8);
     EXPECT_FALSE(param.inp.out_mat_xc);
     EXPECT_EQ(param.inp.out_mat_xc2[0], 0);
     EXPECT_EQ(param.inp.out_mat_xc2[1], 8);
@@ -439,6 +435,8 @@ TEST_F(InputParaTest, ParaRead)
     EXPECT_DOUBLE_EQ(param.inp.alpha_trial, 0.02);
     EXPECT_DOUBLE_EQ(param.inp.sccut, 4.0);
     EXPECT_EQ(param.inp.sc_scf_thr, 1e-3);
+    EXPECT_EQ(param.inp.sc_scf_thr_mode, "threshold");
+    EXPECT_EQ(param.inp.sc_dir_phase1_steps, 5);
     EXPECT_EQ(param.inp.sc_drop_thr, 1e-3);
     EXPECT_EQ(param.inp.lr_nstates, 1);
     EXPECT_EQ(param.inp.nocc, param.inp.nbands);

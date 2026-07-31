@@ -1,13 +1,9 @@
-/**
- * @file parallel_kpoints.cpp
- * @brief Implementation of Parallel_Kpoints class.
- */
 #include "parallel_kpoints.h"
 
 #include "source_base/parallel_common.h"
 #include "source_base/parallel_global.h"
 
-/// @note the kpoints here are reduced after symmetry applied.
+// the kpoints here are reduced after symmetry applied.
 void Parallel_Kpoints::kinfo(int& nkstot_in,
                              const int& kpar_in,
                              const int& my_pool_in,

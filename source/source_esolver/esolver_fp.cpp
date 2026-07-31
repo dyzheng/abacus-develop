@@ -1,6 +1,6 @@
 #include "esolver_fp.h"
 
-#include "source_cell/cal_ux.h"
+#include "source_estate/cal_ux.h"
 #include "source_estate/module_charge/symmetry_rho.h"
 #include "source_cell/read_pseudo.h"
 #include "source_estate/param_update.h"
@@ -35,11 +35,8 @@ ESolver_FP::~ESolver_FP()
 	delete this->pelec;
 }
 
-void ESolver_FP::before_all_runners(BaseCell& basecell, const Input_para& inp)
+void ESolver_FP::before_all_runners(UnitCell& ucell, const Input_para& inp)
 {
-    basecell.require_kind(BaseCell::Kind::unit_cell, __FUNCTION__);
-    UnitCell& ucell = static_cast<UnitCell&>(basecell);
-
     ModuleBase::TITLE("ESolver_FP", "before_all_runners");
 
     //! 1) read pseudopotentials
@@ -204,7 +201,7 @@ void ESolver_FP::before_scf(UnitCell& ucell, const int istep)
     }
 
     //! set direction of magnetism, used in non-collinear case 
-    unitcell::cal_ux(ucell, PARAM.inp.nspin);
+    elecstate::cal_ux(ucell, PARAM.inp.nspin);
 
     //! output the initial charge density
     ModuleIO::write_chg_init(ucell, this->Pgrid, this->chr, this->pelec->eferm, istep,
@@ -257,11 +254,8 @@ void ESolver_FP::iter_finish(UnitCell& ucell, const int istep, int& iter, bool& 
     }
 }
 
-void ESolver_FP::after_all_runners(BaseCell& basecell)
+void ESolver_FP::after_all_runners(UnitCell& ucell)
 {
-    basecell.require_kind(BaseCell::Kind::unit_cell, __FUNCTION__);
-    UnitCell& ucell = static_cast<UnitCell&>(basecell);
-
     // print out the final total energy
     GlobalV::ofs_running << "\n --------------------------------------------" << std::endl;
     GlobalV::ofs_running << std::setprecision(16);

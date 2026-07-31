@@ -3,13 +3,13 @@
 #include "source_base/global_variable.h"
 #include "source_base/memory_recorder.h"
 #include "source_estate/module_charge/symmetry_rho.h"
-#include "source_hsolver/diago_iter_assist.h"
-#include "source_hsolver/diago_params.h"
-#include "source_io/module_parameter/parameter.h"
 #include "source_pw/module_stodft/sto_dos.h"
 #include "source_pw/module_stodft/sto_elecond.h"
 #include "source_pw/module_stodft/sto_forces.h"
 #include "source_pw/module_stodft/sto_stress_pw.h"
+#include "source_hsolver/diago_iter_assist.h"
+#include "source_hsolver/diago_params.h"
+#include "source_io/module_parameter/parameter.h"
 
 #include <algorithm>
 #include <fstream>
@@ -28,17 +28,14 @@ ESolver_SDFT_PW<T, Device>::ESolver_SDFT_PW()
 template <typename T, typename Device>
 ESolver_SDFT_PW<T, Device>::~ESolver_SDFT_PW()
 {
-    //****************************************************
-    // do not add any codes in this deconstructor funcion
-    //****************************************************
+	//****************************************************
+	// do not add any codes in this deconstructor funcion
+	//****************************************************
 }
 
 template <typename T, typename Device>
-void ESolver_SDFT_PW<T, Device>::before_all_runners(BaseCell& basecell, const Input_para& inp)
+void ESolver_SDFT_PW<T, Device>::before_all_runners(UnitCell& ucell, const Input_para& inp)
 {
-    basecell.require_kind(BaseCell::Kind::unit_cell, __FUNCTION__);
-    UnitCell& ucell = static_cast<UnitCell&>(basecell);
-
     // 1) initialize parameters from int Input class
     this->nche_sto = inp.nche_sto;
     this->method_sto = inp.method_sto;
@@ -71,20 +68,21 @@ void ESolver_SDFT_PW<T, Device>::before_all_runners(BaseCell& basecell, const In
 
     // 4) allocate spaces for \sqrt(f(H))|chi> and |\tilde{chi}>
     size_t size = stowf.chi0->size();
-    this->stowf.shchi = new psi::Psi<T, Device>(this->kv.get_nks(),
-                                                this->stowf.nchip_max,
-                                                this->pw_wfc->npwk_max,
-                                                this->kv.ngk,
-                                                true);
+    this->stowf.shchi
+        = new psi::Psi<T, Device>(this->kv.get_nks(), 
+                                  this->stowf.nchip_max, 
+                                  this->pw_wfc->npwk_max, 
+                                  this->kv.ngk,
+                                  true);
     ModuleBase::Memory::record("SDFT::shchi", size * sizeof(T));
 
     if (inp.nbands > 0)
     {
-        this->stowf.chiortho = new psi::Psi<T, Device>(this->kv.get_nks(),
-                                                       this->stowf.nchip_max,
-                                                       this->pw_wfc->npwk_max,
-                                                       this->kv.ngk,
-                                                       true);
+        this->stowf.chiortho
+            = new psi::Psi<T, Device>(this->kv.get_nks(), 
+                                      this->stowf.nchip_max, 
+                                      this->pw_wfc->npwk_max, 
+                                      this->kv.ngk, true);
         ModuleBase::Memory::record("SDFT::chiortho", size * sizeof(T));
     }
 
@@ -103,7 +101,7 @@ void ESolver_SDFT_PW<T, Device>::before_scf(UnitCell& ucell, const int istep)
                                                          this->pw_wfc,
                                                          &this->kv,
                                                          &this->ppcell,
-                                                         &ucell,
+                                                         &ucell, 
                                                          PARAM.globalv.npol,
                                                          &this->stoche.emin_sto,
                                                          &this->stoche.emax_sto);
@@ -159,21 +157,13 @@ void ESolver_SDFT_PW<T, Device>::hamilt2rho_single(UnitCell& ucell, int istep, i
                                                            this->p_hamilt_sto,
                                                            PARAM.inp.calculation,
                                                            PARAM.inp.basis_type,
-                                                           PARAM.inp.ks_solver,
-                                                           PARAM.globalv.use_uspp,
+                                                            PARAM.inp.ks_solver,
+                                                            PARAM.globalv.use_uspp,
                                                            PARAM.inp.nspin,
                                                            hsolver::DiagoIterAssist<T, Device>::SCF_ITER,
                                                            hsolver::DiagoIterAssist<T, Device>::PW_DIAG_NMAX,
                                                            hsolver::DiagoIterAssist<T, Device>::PW_DIAG_THR,
-                                                           hsolver::DiagoIterAssist<T, Device>::need_subspace,
-                                                           PARAM.inp.nbands,
-                                                           PARAM.inp.diago_smooth_ethr,
-                                                           PARAM.inp.pw_diag_ndim,
-                                                           PARAM.inp.diag_subspace,
-                                                           PARAM.inp.nb2d,
-                                                           PARAM.globalv.ks_run,
-                                                           PARAM.globalv.all_ks_run,
-                                                           PARAM.inp.bndpar);
+                                                           hsolver::DiagoIterAssist<T, Device>::need_subspace);
 
     hsolver_pw_sdft_obj.solve(ucell,
                               static_cast<hamilt::Hamilt<T, Device>*>(this->p_hamilt),
@@ -216,11 +206,8 @@ double ESolver_SDFT_PW<T, Device>::cal_energy()
 }
 
 template <typename T, typename Device>
-void ESolver_SDFT_PW<T, Device>::cal_force(BaseCell& basecell, ModuleBase::matrix& force)
+void ESolver_SDFT_PW<T, Device>::cal_force(UnitCell& ucell, ModuleBase::matrix& force)
 {
-    basecell.require_kind(BaseCell::Kind::unit_cell, __FUNCTION__);
-    UnitCell& ucell = static_cast<UnitCell&>(basecell);
-
     Sto_Forces<double, Device> ff(ucell.nat);
 
     ff.cal_stoforce(force,
@@ -238,11 +225,8 @@ void ESolver_SDFT_PW<T, Device>::cal_force(BaseCell& basecell, ModuleBase::matri
 }
 
 template <typename T, typename Device>
-void ESolver_SDFT_PW<T, Device>::cal_stress(BaseCell& basecell, ModuleBase::matrix& stress)
+void ESolver_SDFT_PW<T, Device>::cal_stress(UnitCell& ucell, ModuleBase::matrix& stress)
 {
-    basecell.require_kind(BaseCell::Kind::unit_cell, __FUNCTION__);
-    UnitCell& ucell = static_cast<UnitCell&>(basecell);
-
     Sto_Stress_PW<double, Device> ss;
     ss.cal_stress(stress,
                   *this->pelec,
@@ -260,11 +244,8 @@ void ESolver_SDFT_PW<T, Device>::cal_stress(BaseCell& basecell, ModuleBase::matr
 }
 
 template <typename T, typename Device>
-void ESolver_SDFT_PW<T, Device>::after_all_runners(BaseCell& basecell)
+void ESolver_SDFT_PW<T, Device>::after_all_runners(UnitCell& ucell)
 {
-    basecell.require_kind(BaseCell::Kind::unit_cell, __FUNCTION__);
-    UnitCell& ucell = static_cast<UnitCell&>(basecell);
-
     // 1) write down etot and eigenvalues (for MDFT) information
     ESolver_FP::after_all_runners(ucell);
 
@@ -277,7 +258,7 @@ void ESolver_SDFT_PW<T, Device>::after_all_runners(BaseCell& basecell)
     // 3) write down DOS
     if (PARAM.inp.out_dos)
     {
-        if (!std::is_same<T, std::complex<double>>::value || !std::is_same<Device, base_device::DEVICE_CPU>::value)
+        if(!std::is_same<T, std::complex<double>>::value || !std::is_same<Device, base_device::DEVICE_CPU>::value)
         {
             ModuleBase::WARNING_QUIT("ESolver_SDFT_PW", "DOS does not support complex float or GPU yet.");
         }
@@ -303,16 +284,15 @@ void ESolver_SDFT_PW<T, Device>::after_all_runners(BaseCell& basecell)
     // 4) sKG cost memory, and it should be placed at the end of the program
     if (PARAM.inp.cal_cond)
     {
-        Sto_EleCond<Real, Device> sto_elecond(
-            &ucell,
-            &this->kv,
-            this->pelec,
-            this->pw_wfc,
-            this->stp.template get_psi_t<T, Device>(),
-            &this->ppcell,
-            static_cast<hamilt::Hamilt<std::complex<double>, Device>*>(this->p_hamilt),
-            this->stoche,
-            &stowf);
+        Sto_EleCond<Real, Device> sto_elecond(&ucell,
+                                              &this->kv,
+                                              this->pelec,
+                                              this->pw_wfc,
+                                              this->stp.template get_psi_t<T, Device>(),
+                                              &this->ppcell,
+                                              static_cast<hamilt::Hamilt<std::complex<double>, Device>*>(this->p_hamilt),
+                                              this->stoche,
+                                              &stowf);
         sto_elecond.decide_nche(PARAM.inp.cond_dt, 1e-8, this->nche_sto, PARAM.inp.emin_sto, PARAM.inp.emax_sto);
         sto_elecond.sKG(PARAM.inp.cond_smear,
                         PARAM.inp.cond_fwhm,
@@ -323,6 +303,7 @@ void ESolver_SDFT_PW<T, Device>::after_all_runners(BaseCell& basecell)
                         PARAM.inp.npart_sto);
     }
 }
+
 
 // template class ESolver_SDFT_PW<std::complex<float>, base_device::DEVICE_CPU>;
 template class ESolver_SDFT_PW<std::complex<double>, base_device::DEVICE_CPU>;

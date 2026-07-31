@@ -1,7 +1,3 @@
-/**
- * @file pseudo.cpp
- * @brief Implementation of pseudo class.
- */
 #include "pseudo.h"
 #include "source_base/tool_title.h"
 #include "source_base/output.h"

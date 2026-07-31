@@ -1,7 +1,3 @@
-/**
- * @file update_cell.cpp
- * @brief Implementation of cell update functions.
- */
 #include "update_cell.h"
 #include "bcast_cell.h"
 #include "source_base/global_function.h"

@@ -1,7 +1,3 @@
-/**
- * @file atom_spec.cpp
- * @brief Implementation of Atom class.
- */
 #include "atom_spec.h"
 #include "source_base/output.h"
 #include <cstdlib>

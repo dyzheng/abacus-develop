@@ -3,6 +3,9 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
+// mohan add 2025-04-12
+#include "source_estate/module_charge/charge.h"
+
 /************************************************
  *  unit test of magnetism.cpp
  ***********************************************/
@@ -20,6 +23,12 @@
 #define private public
 #include "source_cell/magnetism.h"
 #undef private
+Charge::Charge()
+{
+}
+Charge::~Charge()
+{
+}
 
 
 class MagnetismTest : public ::testing::Test
@@ -57,21 +66,22 @@ TEST_F(MagnetismTest, ComputeMagnetizationS2)
     const int nspin = 2;
     const bool two_fermi = false;
     const double nelec = 10.0;
-    const int nrxx = 100;
-    const int nxyz = 1000;
 
-    double** rho = new double*[nspin];
+    Charge* chr = new Charge;
+    chr->nrxx = 100;
+    chr->nxyz = 1000;
+    chr->rho = new double*[nspin];
     for (int i=0; i< nspin; i++)
     {
-        rho[i] = new double[nrxx];
+        chr->rho[i] = new double[chr->nrxx];
     }
-    for (int ir=0; ir< nrxx; ir++)
+    for (int ir=0; ir< chr->nrxx; ir++)
     {
-        rho[0][ir] = 1.00;
-        rho[1][ir] = 1.01;
+        chr->rho[0][ir] = 1.00;
+        chr->rho[1][ir] = 1.01;
     }
     double* nelec_spin = new double[2];
-    magnetism->compute_mag(500.0, nrxx, nxyz, rho,
+    magnetism->compute_mag(500.0,chr->nrxx, chr->nxyz, chr->rho,
                            nspin, two_fermi, nelec, nelec_spin);
     EXPECT_DOUBLE_EQ(-0.5, magnetism->tot_mag);
     EXPECT_DOUBLE_EQ(0.5, magnetism->abs_mag);
@@ -80,31 +90,33 @@ TEST_F(MagnetismTest, ComputeMagnetizationS2)
     delete[] nelec_spin;
     for (int i=0; i< nspin; i++)
     {
-        delete[] rho[i];
+        delete[] chr->rho[i];
     }
-    delete[] rho;
+    delete[] chr->rho;
+    delete chr;
 }
 
 TEST_F(MagnetismTest, ComputeMagnetizationS4)
 {
     const int nspin = 4;
-    const int nrxx = 100;
-    const int nxyz = 1000;
 
-    double** rho = new double*[nspin];
+    Charge* chr = new Charge;
+    chr->rho = new double*[nspin];
+    chr->nrxx = 100;
+    chr->nxyz = 1000;
     for (int i=0; i< nspin; i++)
     {
-        rho[i] = new double[nrxx];
+        chr->rho[i] = new double[chr->nrxx];
     }
-    for (int ir=0; ir< nrxx; ir++)
+    for (int ir=0; ir< chr->nrxx; ir++)
     {
-        rho[0][ir] = 1.00;
-        rho[1][ir] = std::sqrt(2.0);
-        rho[2][ir] = 1.00;
-        rho[3][ir] = 1.00;
+        chr->rho[0][ir] = 1.00;
+        chr->rho[1][ir] = std::sqrt(2.0);
+        chr->rho[2][ir] = 1.00;
+        chr->rho[3][ir] = 1.00;
     }
     double* nelec_spin = new double[4];
-    magnetism->compute_mag(500.0, nrxx, nxyz, rho,
+    magnetism->compute_mag(500.0,chr->nrxx, chr->nxyz, chr->rho,
                            nspin, false, 0.0, nelec_spin);
     EXPECT_DOUBLE_EQ(100.0, magnetism->abs_mag);
     EXPECT_DOUBLE_EQ(50.0*std::sqrt(2.0), magnetism->tot_mag_nc[0]);
@@ -113,9 +125,10 @@ TEST_F(MagnetismTest, ComputeMagnetizationS4)
     delete[] nelec_spin;
     for (int i=0; i< nspin; i++)
     {
-        delete[] rho[i];
+        delete[] chr->rho[i];
     }
-    delete[] rho;
+    delete[] chr->rho;
+    delete chr;
 }
 
 #ifdef __MPI
