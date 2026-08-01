@@ -224,6 +224,10 @@ void hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::cal_pre_HR()
     }
     this->paraV = this->hR->get_paraV();
     ModuleBase::timer::start("DeltaSpin", "cal_pre_HR");
+    for (auto& hr : this->pre_hr)
+    {
+        delete hr;
+    }
     this->pre_hr.clear();
     this->pre_hr.resize(this->ucell->nat, nullptr);
 
