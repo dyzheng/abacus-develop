@@ -11,6 +11,7 @@
 #include "source_lcao/setup_exx.h" // for exx, mohan add 20251008
 #include "source_lcao/module_rdmft/rdmft.h" // rdmft
 #include "source_lcao/setup_dm.h" // mohan add 2025-10-30
+#include "deltap_scf.h"
 
 #include <memory>
 
@@ -21,6 +22,15 @@ namespace LR
 template <typename T, typename TR>
 class ESolver_LR;
 }
+
+// Forward declarations for DeltaP SCF objects (owned via unique_ptr; complete
+// types are only needed in the .cpp where they are constructed/destroyed).
+namespace deltap
+{
+class DeltaP;
+}
+class cal_r_overlap_R;
+class unkOverlap_lcao;
 
 //-----------------------------------
 // ESolver for LCAO
@@ -104,24 +114,15 @@ class ESolver_KS_LCAO : public ESolver_KS
     GintPrecisionController gint_precision_controller_;
 
     // DeltaP SCF constraint members (only used for TK=complex<double>, multi-k)
-    void* dp_scf_ = nullptr;            // deltap::DeltaP* (opaque to avoid template issues)
-    void* berry_ovl_scf_ = nullptr;     // unkOverlap_lcao*
-    void* r_overlap_scf_ = nullptr;     // cal_r_overlap_R*
-    std::vector<double> deltap_target_;
-    std::vector<int> deltap_constrain_;       ///< DeltaP: 1=constrained, 0=free per atom
-    // Constraint matrix mode: C (m×n) with targets t, overrides constraint_mode when set
-    std::vector<std::vector<double>> deltap_constraint_matrix_;
-    std::vector<double> deltap_constraint_target_;
-    std::vector<double> deltap_constraint_lambda_;  // constraint-space λ (m-dim)
+    std::unique_ptr<deltap::DeltaP> dp_scf_;
+    std::unique_ptr<unkOverlap_lcao> berry_ovl_scf_;
+    std::unique_ptr<cal_r_overlap_R> r_overlap_scf_;
+    std::unique_ptr<deltap_scf::DeltapScfSolver> deltap_scf_solver_;  ///< SCF constraint state machine
     bool deltap_scf_initialized_ = false;
-    bool deltap_lambda_set_ = false;  ///< true after Phase-2 λ update
-    bool deltap_inner_loop_done_ = false;  ///< true after inner loop converged once
 
     // DeltaP helper methods (refactored for maintainability)
     void deltap_init(UnitCell& ucell);
-    double deltap_compute_gamma(UnitCell& ucell, const int iter);
-    void deltap_inner_loop(UnitCell& ucell, const int iter, bool& skip_solve);
-    void deltap_update_lambda(UnitCell& ucell, const int iter);
+    deltap_scf::DeltapScfSolver::Backend deltap_make_backend(UnitCell& ucell);
 
 
   public:

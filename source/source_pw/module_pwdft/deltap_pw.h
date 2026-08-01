@@ -15,68 +15,58 @@ class UnitCell;
 
 namespace pw_deltap {
 
-void set_deltap_pw_lambda(const std::vector<double>& lambda,
-                          const std::vector<int>& constrain);
-void set_deltap_pw_targets(const std::vector<double>& targets);
-
-const std::vector<double>& get_deltap_pw_lambda();
-const std::vector<int>& get_deltap_pw_constrain();
-const std::vector<double>& get_deltap_pw_targets();
-double get_deltap_pw_escon();
-
-void set_deltap_pw_active(bool active);
-bool is_deltap_pw_active();
-
 /**
- * @brief Store the PW Hamiltonian pointer for inner loop use.
+ * @brief Initialize DeltaP PW from INPUT + STRU into the shared
+ * DeltapScfSolver SCF state machine (owned by this module).
  *
- * Must be called during before_scf where the template type is known.
- * Follows the DeltaSpin pattern (SpinConstrain stores hamilt as void*).
- */
-void set_deltap_pw_hamilt(void* hamilt);
-
-/**
- * @brief Run the inner lambda loop for DeltaP in PW basis.
- */
-bool run_deltap_lambda_loop(const int iter,
-                            const double drho,
-                            const Input_para& inp);
-
-/**
- * @brief Compute total Berry phase gamma along gdir from PW wavefunctions.
- *
- * Uses G-space overlaps <u_{m,k}|u_{n,k+dk}> along k-strings in the
- * specified direction.  Returns the unwrapped Berry phase in radians,
- * summed over occupied bands and all k-strings.
+ * Called once from ESolver_KS_PW::before_all_runners.  The backend captures
+ * the stable psi / kv / wfcpw / rhopw objects (psi is allocated by
+ * Setup_Psi_pw::before_runner before this call), so subsequent per-SCF-step
+ * updates run through deltap_iter_finish without re-passing the basis.
  *
  * @param ucell   Unit cell.
- * @param psi_in  Wavefunctions (host-side, complex<double>).
+ * @param inp     Input parameters.
+ * @param psi_cpu Host-side wavefunctions (complex<double>).
  * @param kv      K-point vectors.
  * @param wfcpw   PW basis for wavefunctions.
- * @param rhopw   PW basis for charge density (for the G-phase link).
- * @param gdir    Direction index (1=x, 2=y, 3=z).
- * @param nbands  Number of occupied bands to include.
- * @return        Total Berry phase gamma in radians, or 0.0 if no k-strings.
+ * @param rhopw   PW basis for charge density.
  */
-double compute_total_gamma_pw(
-    const UnitCell& ucell,
-    const psi::Psi<std::complex<double>>* psi_in,
-    const K_Vectors& kv,
-    const ModulePW::PW_Basis_K* wfcpw,
-    const ModulePW::PW_Basis* rhopw,
-    int gdir,
-    int nbands);
+void deltap_init(const UnitCell& ucell,
+                 const Input_para& inp,
+                 const psi::Psi<std::complex<double>>* psi_cpu,
+                 const K_Vectors* kv,
+                 const ModulePW::PW_Basis_K* wfcpw,
+                 const ModulePW::PW_Basis* rhopw);
+
+/// Current per-atom lambda (Ry), read by on-site force / stress / H operator.
+const std::vector<double>& get_deltap_pw_lambda();
+
+/// Per-atom constrain flags, read by on-site force / stress / H operator.
+const std::vector<int>& get_deltap_pw_constrain();
+
+/// Constraint energy correction −Σ λ·γ (Ry), applied to f_en.dp_escon.
+double get_deltap_pw_escon();
 
 /**
- * @brief Per-iteration logic for DeltaP PW: compute gamma and update lambda.
+ * @brief Reset per-SCF-cycle DeltaP state (lambda-set flag, branch tracking).
  *
- * This is called from ESolver_KS_PW::iter_finish() after each SCF iteration.
- * When charge density is converged enough (drho < deltap_inner_thr), it:
- *   1. Computes total Berry phase gamma from current wavefunctions
- *   2. Updates per-atom lambda via gradient descent (gamma - target)
- *   3. Stores updated lambda so the OnsiteProj picks it up next iteration
+ * Called once per SCF cycle (before_scf) so that lambda is allowed to update
+ * again for the changed geometry and cross-iteration 2pi branch tracking
+ * restarts from an empty history.
+ */
+void reset_deltap_pw_scf_cycle();
+
+/**
+ * @brief Per-iteration logic for DeltaP PW (synchronous two-phase mode).
  *
- * Phase A behavior (no multi-k, Gamma-only): falls through without update.
+ * Called from ESolver_KS_PW::iter_finish() after each SCF iteration.  When
+ * the charge density is converged enough (drho < deltap_inner_thr), it:
+ *   1. Computes total Berry phase gamma from the current wavefunctions
+ *   2. Delegates the per-atom gamma measurement, gradient-descent lambda
+ *      update and escon to the shared DeltapScfSolver state machine
+ *   3. Reports the [DeltaP-PW] diagnostic line
+ *
+ * The PW inner loop (deltap_inner_nmax > 0) is rejected with WARNING_QUIT.
  *
  * @param ucell     Unit cell.
  * @param drho      Current charge density deviation.
@@ -94,47 +84,6 @@ void deltap_iter_finish(
     const ModulePW::PW_Basis_K* wfcpw,
     const ModulePW::PW_Basis* rhopw,
     const Input_para& inp);
-
-void compute_per_atom_gamma_from_becp(
-    const UnitCell& ucell,
-    int nocc,
-    double gamma_total,
-    std::vector<double>& gamma_per_atom);
-
-/**
- * @brief Compute per-atom gamma via k-string Wilson loop eigenvalue decomposition.
- *
- * For each k-string along gdir:
- *   1. Build overlap matrices M_j = <u_n(k_j)|u_m(k_{j+1})> (unkdotp_G)
- *      with G-phase for the boundary link (unkdotp_G0).
- *   2. Compute Wilson loop product M_total = Π_j M_j.
- *   3. Diagonalize M_total via zgeev → eigenvalues e^{iθ_n}, eigenvectors V.
- *   4. Project becp at k₀ onto V: proj[α,n] = Σ_m V_{mn}* × becp[α,m,k₀].
- *   5. Weights: w[I,n] = Σ_{α∈I} |proj[α,n]|².
- *   6. gamma[I] += w[I,n] × θ_n / Σ_J w[J,n].
- *
- * For multi-string meshes (e.g. 3x3x3), eigenvalues across strings are
- * matched via Hungarian algorithm to resolve 2π branch ambiguity.
- * For single-string meshes (1x1xN), direct diagonalization is sufficient.
- *
- * @param ucell      Unit cell
- * @param nocc       Number of occupied bands
- * @param psi_cpu    Wavefunctions (host-side)
- * @param kv         K-point vectors
- * @param wfcpw      PW basis for wavefunctions
- * @param rhopw      PW basis for charge density (G-phase FFT)
- * @param gdir       Direction (1=x, 2=y, 3=z)
- * @param gamma_per_atom Output: per-atom gamma [nat]
- */
-void compute_per_atom_gamma_kstring(
-    const UnitCell& ucell,
-    int nocc,
-    const psi::Psi<std::complex<double>>* psi_cpu,
-    const K_Vectors& kv,
-    const ModulePW::PW_Basis_K* wfcpw,
-    const ModulePW::PW_Basis* rhopw,
-    int gdir,
-    std::vector<double>& gamma_per_atom);
 
 } // namespace pw_deltap
 

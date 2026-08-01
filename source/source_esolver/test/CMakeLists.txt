@@ -8,3 +8,9 @@ AddTest(
   LIBS parameter ${math_libs} base device 
   SOURCES esolver_dp_test.cpp ../esolver_dp.cpp ../../source_io/module_output/cif_io.cpp ../../source_io/module_output/output_log.cpp
 )
+
+AddTest(
+  TARGET MODULE_ESOLVER_deltap_common_test
+  LIBS parameter ${math_libs} base device
+  SOURCES deltap_common_test.cpp
+)

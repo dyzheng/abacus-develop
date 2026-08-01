@@ -96,30 +96,14 @@ void ESolver_KS_PW<T, Device>::before_all_runners(UnitCell& ucell, const Input_p
 
     this->stp.before_runner(ucell, this->kv, this->sf, *this->pw_wfc, this->ppcell, PARAM.inp);
 
-    // Initialize DeltaP PW: read per-atom lambda/constrain from STRU
+    // Initialize DeltaP PW: snapshot INPUT + STRU into the shared
+    // DeltapScfSolver state machine (owned by pw_deltap).  The backend
+    // closes over psi/kv/wfcpw/rhopw, which are stable for the whole run.
     if (PARAM.inp.deltap_switch)
     {
-        std::vector<double> dp_target = ucell.get_dp_target();
-        std::vector<int> dp_constrain = ucell.get_dp_constrain();
-        // Targets are per-atom gamma targets (rad). Initial lambda is a
-        // separate parameter (Ry). These MUST NOT be conflated.
-        pw_deltap::set_deltap_pw_targets(dp_target);
-
-        // Initial lambda: independent of targets.
-        std::vector<double> dp_lambda(ucell.nat, PARAM.inp.deltap_lambda_init);
-        pw_deltap::set_deltap_pw_lambda(dp_lambda, dp_constrain);
-        bool has_strutarget = false;
-        for (size_t i = 0; i < dp_target.size(); ++i)
-            if (std::abs(dp_target[i]) > 1e-12) { has_strutarget = true; break; }
-        pw_deltap::set_deltap_pw_active(true);
-        std::cout << " [DeltaP-PW] Initialized with " << dp_target.size()
-                  << " atoms";
-        if (has_strutarget)
-            std::cout << " (STRU targets)";
-        else
-            std::cout << " (no targets)";
-        std::cout << " lambda_init=" << PARAM.inp.deltap_lambda_init << " Ry";
-        std::cout << std::endl;
+        pw_deltap::deltap_init(ucell, PARAM.inp,
+                               this->stp.psi_cpu, &this->kv,
+                               this->pw_wfc, this->pw_rho);
     }
 
     ModuleBase::GlobalFunc::DONE(GlobalV::ofs_running, "INIT BASIS");
@@ -185,8 +169,8 @@ void ESolver_KS_PW<T, Device>::before_scf(UnitCell& ucell, const int istep)
     //! Allocate HamiltPW
     this->allocate_hamilt(ucell);
 
-    // Store hamilt pointer for DeltaP inner loop (follows SpinConstrain pattern)
-    pw_deltap::set_deltap_pw_hamilt(static_cast<void*>(this->p_hamilt));
+    // Per-SCF-cycle reset: allow one DeltaP lambda update per ionic step.
+    pw_deltap::reset_deltap_pw_scf_cycle();
 
     //! Setup potentials (local, non-local, sc, +U, DFT-1/2)
     // note: init DFT+U is done here for pw basis for every scf iteration, however, 
@@ -240,8 +224,9 @@ void ESolver_KS_PW<T, Device>::hamilt2rho_single(UnitCell& ucell, const int iste
     // run the inner lambda loop to contrain atomic moments with the DeltaSpin method
     bool skip_solve = pw::run_deltaspin_lambda_loop(iter - 1, this->drho, PARAM.inp);
 
-    // DeltaP lambda loop (Phase A: constant-lambda, no inner loop)
-    pw_deltap::run_deltap_lambda_loop(iter, this->drho, PARAM.inp);
+    // DeltaP (Phase A): no inner lambda loop in PW — lambda is updated
+    // synchronously in iter_finish (deltap_iter_finish) after charge
+    // convergence, so the normal HSolver below always runs.
 
     if (!skip_solve)
     {

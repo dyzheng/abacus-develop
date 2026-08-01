@@ -12,6 +12,7 @@ list(APPEND objects
     esolver_of_tddft.cpp
     esolver_of_interface.cpp
     esolver_of_tool.cpp
+    deltap_scf.cpp
     pw_others.cpp
 )
 if(ENABLE_LCAO)
@@ -42,4 +43,3 @@ if(BUILD_TESTING)
     add_subdirectory(test)
   endif()
 endif()
-
