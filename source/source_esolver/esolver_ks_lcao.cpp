@@ -951,7 +951,7 @@ typename deltap_scf::DeltapScfSolver::Backend ESolver_KS_LCAO<TK, TR>::deltap_ma
             this->psi[0], this->pelec, *this->dmat.dm, this->chr,
             PARAM.inp.nspin, true); // skip_charge = true (frozen density)
     };
-    b.sync_lambda = [this](std::vector<double>& lam) {
+    b.sync_lambda = [this, dp_op](std::vector<double>& lam) {
 #ifdef __MPI
         if (this->pv.comm() != MPI_COMM_NULL)
         {
@@ -961,6 +961,10 @@ typename deltap_scf::DeltapScfSolver::Backend ESolver_KS_LCAO<TK, TR>::deltap_ma
                 MPI_Bcast(lam.data(), static_cast<int>(lam.size()), MPI_DOUBLE, 0, this->pv.comm());
         }
 #endif
+        // Write the (rank-0) λ back into the operator so dp_op λ and the
+        // resulting escon are identical on every rank (mirrors the PW
+        // backend's s_lambda write-back after Bcast).
+        dp_op->set_lambda(lam);
     };
     b.on_phase2 = [dp, this]() {
         dp->start_cooldown(1);

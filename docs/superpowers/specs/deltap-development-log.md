@@ -720,3 +720,37 @@ R3 vs R1 基线 A/B；LCAO 同步（h2o_lcao）R3 vs R2 A/B；LCAO 内循环（h
 2. T2（PW init 惰性化）随 relax/多离子步支持一起做。
 3. T7（force 路径）为最大专项：nlm 布局统一 + 长度守卫 + H_HK/∂τ/∂R 力项 + run_fd.sh 验收。
 4. T4–T6、T9–T13 为清理项，可随日常迭代顺手合入。
+
+---
+
+## 2026-08-01: MPI 一致性迭代（T1 LCAO λ 写回 + T3 PW γ 同步）
+
+### What was done
+执行评审 TODO 第一轮：T1（LCAO `sync_lambda` Bcast 后写回 `dp_op` λ）与 T3
+（PW `compute_gamma` 后按 rank0 Bcast γ），合成一次 MPI 一致性小迭代。源码改动
+2 文件，详见 `2026-08-01-deltap-mpi-consistency-t1-t3.md`。
+
+### 验收结果
+- 单测 16/16；PW 1-rank 与 R5 基线逐字节一致（T3 对 NPROC=1 no-op）。
+- PW 2-rank：per-rank 诊断证明两 rank escon/γ 完全一致；rank0 输出与 1-rank 基线
+  浮点噪声内一致；最终无诊断复跑与带诊断复跑逐字节一致（确定性）。
+- LCAO 4-rank（deltap_bn_test 方阵网格）：per-rank 诊断证明四 rank λ 完全一致
+  `(3.262e-06, -3.501e-06)`；P2 iter=11 drho=6.92e-06 与 R5 记录一致；P1 轨迹比
+  旧日志更平滑（消除旧 rank 间 λ 不一致导致的 iter=2 扰动）。
+- h2o_lcao 4-rank 崩溃排查：stash 掉改动后旧二进制同样在进程 1 静默 exit=1 →
+  **既有问题**（非本次引入），与 LCAO 2-rank 方阵限制（`cbb37b7ae`）同族。
+
+### TODO 状态更新
+- **T1 ✅ 完成**（LCAO sync_lambda 写回）；**T3 ✅ 完成**（PW γ rank0 Bcast）。
+- T2（PW init 惰性化）、T7（force 路径专项）待做；T4–T6、T9–T13 为清理项。
+
+### Files modified this round
+- `source/source_esolver/esolver_ks_lcao.cpp`（T1）
+- `source/source_pw/module_pwdft/deltap_pw.cpp`（T3）
+- 新增 `docs/superpowers/specs/2026-08-01-deltap-mpi-consistency-t1-t3.md`；本 dev-log 追加本节
+
+### Next steps
+1. T2（PW init 惰性化 + 每离子步 reset）随 relax/多离子步支持推进。
+2. T7（force 路径）最大专项：nlm 布局统一 + 长度守卫 + H_HK/∂τ/∂R 力项 + run_fd.sh 验收。
+3. 观察项：PW γ 测量 nproc 敏感性（~0.02%）如影响数值基线再评估。
+4. 清理项 T4–T6、T9–T13 随日常迭代合入。

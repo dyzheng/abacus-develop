@@ -224,6 +224,14 @@ deltap_scf::DeltapScfSolver::Backend make_backend(const UnitCell& ucell,
         if (nocc < 1) nocc = 1;
         std::vector<double> gamma(ucell.nat, 0.0);
         compute_per_atom_gamma_kstring(ucell, nocc, psi_cpu, *kv, wfcpw, rhopw, gdir, gamma);
+#ifdef __MPI
+        // Keep the per-atom γ measurement identical on every rank (rank 0
+        // wins): gamma_report / escon then match everywhere, applying the
+        // same policy as sync_lambda and the historical gamma sync
+        // (750ee179d).
+        if (GlobalV::NPROC > 1)
+            Parallel_Common::bcast_double(gamma.data(), static_cast<int>(gamma.size()));
+#endif
         return gamma;
     };
     return b;
