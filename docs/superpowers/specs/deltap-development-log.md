@@ -656,3 +656,67 @@ R3 vs R1 基线 A/B；LCAO 同步（h2o_lcao）R3 vs R2 A/B；LCAO 内循环（h
 2. 补跑 gdir=1（deltap_compare）新二进制基线（total_0.0 已在 R5 完成）。
 3. PW 接 target/约束矩阵文件 + total 模式统一（F13/F14）。
 4. P01–P18 用例（6beb70bc3）纳入 CI 脚本。
+
+---
+
+## 2026-08-01: 最新两 commit 评审 + 后续 TODO 汇总
+
+### What was done
+评审 `b825fed52`（R1-R4 重构主体）与 `139380f64`（R5 测试+修崩），输出完整评审意见与
+分级 TODO 清单（P0 修 bug / P1 功能补齐 / P2 测试验证 / P3 增强），见
+`2026-08-01-deltap-commit-review-and-todo.md`。源码未动。
+
+### 评审结论
+- 两 commit 均可合入：A/B 逐字节保真证据充分（每轮 diff + test_C_I 能量锚点），
+  既有 bug 与回归划分清晰，文档符合规范。
+- 遗留观察项（非阻塞）：total 模式无旧基线可 A/B（仅靠逐行比对）；PW γ 跨 rank
+  一致性未核对。
+
+### TODO 汇总（详见评审文档 §2）
+- **P0**：① `cal_force_stress` nlm 越界读 → relax → FD 力验收（C-02）；
+  ② C-01~C-20 未关闭项逐条核对（C-01 dp_escon rank0、C-12/13 relax λ 重置等）
+- **P1**：③ PW 接 target/约束矩阵文件；④ PW total 模式统一；⑤ PW γ 跨 rank
+  一致性核对；⑥ LCAO 2-rank 方阵网格限制（C-06）
+- **P2**：⑦ P01–P18 纳入 CI；⑧ gdir=1 / total 新基线；⑨ B16 Hungarian 确定性
+  运行时诊断；⑩ HPC 跑 P02/P09 + F3 备忘录定稿
+- **P3**：⑪ `compute_S_dk_link` 接线或删除；⑫ BTO W90 全量验证
+
+### Files modified this round
+- 新增 `docs/superpowers/specs/2026-08-01-deltap-commit-review-and-todo.md`；更新本文档。
+
+---
+
+## 2026-08-01: 提交评审（b825fed52 + 139380f64）与 TODO 分级
+
+### What was done
+对 R1–R4 重构 commit（`b825fed52`）与 R5 commit（`139380f64`）做完整评审：
+逐文件 diff + 与重构前基线（`6beb70bc3`/`aeb9a0f9c`）行为比对 + MPI/边界路径推演。
+完整评审意见见 `2026-08-01-deltap-commit-review-and-todo.md`。
+
+### 评审结论
+- 总体：方向正确、实现质量良好，**无 P0**；净删 ~850 行、单测 16/16、A/B 冒烟一致。
+- 主要发现（均非回归，多为既有行为或遗留）：
+  1. LCAO `sync_lambda` Bcast 后未写回 operator（与 PW R4 修复不一致）→ 非 rank0 λ/escon 可能不一致。
+  2. PW `deltap_init` 每离子步在 `before_all_runners` 重复执行 → 状态重置、λ 归 `lambda_init`，
+     与 LCAO（惰性 init + reset）语义不一致。
+  3. PW γ 测量跨 rank 一致性未核对（R4 遗留）。
+  4. force 路径双释放（既有，R5 已记录）为 P1 专项。
+  5. `DeltapState::lambda_eff` 死字段；target 文件 EOF 不校验；PW 无 on_phase2（均 P2/P3）。
+
+### TODO 汇总（详见评审文档 §3）
+- P0：无。
+- P1（4 项）：T1 LCAO sync_lambda 写回；T2 PW init 惰性化；T3 PW γ 跨 rank 核对；
+  T7 force 路径双释放修复（C-02 专项）。
+- P2（4 项）：T4 lambda_eff 死字段；T5 PW on_phase2 统一；T6 target EOF 校验；T8 PW 文件/约束/total 接线。
+- P3（5 项）：T9 注释修正；T10/T11 空 vector 防御；T12 注释规则；T13 用例断言/CI。
+
+### Files modified this round
+- 新增 `docs/superpowers/specs/2026-08-01-deltap-commit-review-and-todo.md`
+- 本 dev-log 追加本节
+
+### Next steps
+1. T1（LCAO sync_lambda 写回）+ T3（PW γ 跨 rank 核对）可合成一次 MPI 一致性小迭代，
+   2-rank/4-rank 实跑验收。
+2. T2（PW init 惰性化）随 relax/多离子步支持一起做。
+3. T7（force 路径）为最大专项：nlm 布局统一 + 长度守卫 + H_HK/∂τ/∂R 力项 + run_fd.sh 验收。
+4. T4–T6、T9–T13 为清理项，可随日常迭代顺手合入。
