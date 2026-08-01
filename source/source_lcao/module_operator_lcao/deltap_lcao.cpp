@@ -26,7 +26,12 @@ hamilt::DeltaPOperator<TK, TR>::DeltaPOperator(
     this->cal_type = calculation_type::lcao_dp_lambda;
     this->ucell = &ucell_in;
     this->gridD = gridD_in;
-    this->paraV = this->hR->get_paraV();
+    // Branch A: SCF path (hR != null) — cache the parallel orbital layout for
+    // cal_pre_HR()/contributeHR().
+    // Branch B: force/stress path (hR == null, see FORCE_STRESS.cpp) — paraV is
+    // not needed here; cal_force_stress() takes it from the density matrix.
+    // Guarding the dereference fixes a null-pointer crash in relax+cal_force.
+    this->paraV = this->hR ? this->hR->get_paraV() : nullptr;
     this->lambda_.assign(this->ucell->nat, PARAM.inp.deltap_lambda_init);
     this->lambda_save_.assign(this->ucell->nat, PARAM.inp.deltap_lambda_init);
     this->pre_hr.resize(this->ucell->nat, nullptr);

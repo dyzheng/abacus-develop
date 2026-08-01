@@ -33,6 +33,14 @@
 | ID | Bug | Status |
 |----|-----|--------|
 | C-01~C-20 | 07-29 评审新发现（dp_escon rank0、力不自洽、PW λ 混淆、gdir≠3 错配、MPI 越界、PW 过冲、分支晶格口径等） | **Open — 见 `2026-07-29-deltap-risk-assessment-review.md` §3/§4** |
+| C-21 | LCAO `deltap_init` 三个 raw `new` 无 delete（每次运行泄漏 DeltaP/unkOverlap_lcao/cal_r_overlap_R） | **Fixed (R1 07-31：改 unique_ptr + 前向声明)** |
+| C-22 | `deltap_constraint_lambda_` 回退路径维度错（应为 m 却 assign nat，约束矩阵加载失败时触发） | **Fixed (R2 08-01：状态机 `lambda_cstr` 按矩阵模式 m 维初始化，连带修复)** |
+| C-23 | target/约束矩阵每 MPI rank 各自读文件，无 rank0 读 + Bcast 收敛路径 | **Fixed (R4 08-01：`DeltapScfSolver::init` rank0 解析 + `Parallel_Common` Bcast；尺寸不匹配改 WARNING_QUIT)** |
+| C-24 | PW 死代码：`run_deltap_lambda_loop` no-op、`s_hamilt`/`set_deltap_pw_hamilt`、`inner_nmax>0` 死分支、`compute_per_atom_gamma_from_becp` | **Fixed (R1 07-31：全部删除；SCF 周期重置改名 `reset_deltap_pw_scf_cycle` 保留)** |
+| C-25 | `deltap_solver.h` 全仓库 0 引用；`deltap_common.h` 4 函数仅 1 个被用 | **Fixed (R1 07-31：删文件 + 删 3 个未用函数)** |
+| C-26 | real 实例每 SCF 迭代重复 WARNING；`iter_finish` DeltaP 块 ~140 行职责混杂 | **Partial（R2 08-01：块已缩至 22 行，状态机接管；WARNING 收口留 R4）** |
+| C-27 | PW 无 target 时 `targets[iat]` 对空 vector 越界读（UB，实际按 0 约束 γ→0） | **Fixed (R3 08-01：`deltap_init` 显式把空 target 填 0 向量，行为不变)** |
+| C-28 | PW 无 MPI λ 同步 + 打印无 rank 守卫（S-09：多 rank 时 λ/escon 不一致、重复输出） | **Fixed (R4 08-01：backend `sync_lambda` Bcast + `s_lambda` 全 rank 刷新；init/report 打印 rank0 守卫)** |
 | B16 | Branch unwrapping inconsistent across λ | Fixed (P0 Hungarian matching)（注：match 文件 MPI 写竞争 C-10 削弱其跨 run 可靠性） |
 
 ## Closed Bugs
@@ -63,8 +71,14 @@
 | `deltap_overlap.cpp` | SMO overlap S^{-1/2} computation | 2026-07-09 |
 | `deltap.h` | DeltaP class, FletcherReevesCG, branch state | 2026-07-13 |
 | `deltap_lcao.cpp` | DeltaPOperator (HR + HK) | 2026-07-09 |
-| `esolver_ks_lcao.cpp` | Inner loop + iter_finish | 2026-07-13 |
+| `esolver_ks_lcao.cpp` | Inner loop + iter_finish（R2 已瘦身为接线层：init + backend 绑定） | 2026-08-01 |
 | `bfgs.h` | FletcherReevesCG optimizer | 2026-07-13 |
+| `deltap_common.h` | 纯函数库（R2 起 6 个函数全部被 DeltapScfSolver 使用） | 2026-08-01 |
+| `deltap_solver.h` | deprecated 死文件，全仓库 0 引用，计划删除 | 2026-07-31 |
+| `deltap_pw.cpp` | PW 数值 + 状态机实例（R3 起：7 全局 → 2 算子状态 + DeltapScfSolver 实例 + PW backend） | 2026-08-01 |
+| `esolver_ks_pw.cpp` | PW esolver 接线（R3 起：init 20 行 → `deltap_init` 6 行） | 2026-08-01 |
+| `deltap_scf.h/.cpp`（新增） | DeltapScfSolver 状态机（basis-independent 控制流，LCAO + PW 均已接入；含 unwrap_branch_2pi / gamma_report） | 2026-08-01 |
+| `source_esolver/test/deltap_common_test.cpp`（新增） | deltap_common 纯函数单测（10 用例） | 2026-08-01 |
 
 ---
 
@@ -78,6 +92,10 @@
 | 2026-07-13 | `2026-07-13-deltap-ppt-content-v2.json` | 领导层 PPT (13页) |
 | 2026-07-13 | `2026-07-13-deltap-presentation-script.md` | 配套讲稿 (含知识点+领导提问) |
 | 2026-07-13 | `2026-07-13-deltap-test-data.md` | 真实测试数据汇总 (7 表) |
+| 2026-07-31 | `2026-07-31-deltap-esolver-refactor-design.md` | esolver 侧重构设计：死代码/重复实现/双状态机清理，DeltapScfSolver 方案，4 轮迁移 |
+| 2026-08-01 | `2026-08-01-deltap-esolver-refactor-r2.md` | R2 实施：DeltapScfSolver 状态机上线，同步路径 A/B 逐字节全等，内循环冒烟通过 |
+| 2026-08-01 | `2026-08-01-deltap-esolver-refactor-r3.md` | R3 实施：PW 接入同一状态机（7 全局 → 状态机实例），PW A/B 逐字节全等 + LCAO/内循环回归 |
+| 2026-08-01 | `2026-08-01-deltap-esolver-refactor-r4.md` | R4 实施：MPI rank0+Bcast（C-23）、PW λ 同步/rank 守卫（S-09/C-28）、打印/WARNING 收口、deltap_common 单测 10 例 |
 | 2026-07-12 | `2026-07-12-deltap-risk-points-and-solutions.md` | 18 项风险点 + 解决方案 |
 | 2026-07-12 | `2026-07-12-deltap-root-cause-analysis.md` | B14+B15 found+fixed |
 | 2026-07-12 | `2026-07-12-deltap-algorithm-technical-review.md` | 完整算法推导 + 21 项风险 |
@@ -89,6 +107,7 @@
 
 > 2026-07-29 起以 `2026-07-29-deltap-risk-assessment-review.md` §9 的 P0/P1/P2 清单为准。以下旧条目保留备查。
 
+0. **R0 esolver 重构（R1/R2/R3/R4 全部完成）** — 按 `2026-07-31-deltap-esolver-refactor-design.md` 4 轮迁移：~~R1 删死代码~~ → ~~R2 LCAO 抽 `DeltapScfSolver`~~ → ~~R3 PW 接入同一状态机~~ → ~~R4 MPI rank0+Bcast（C-23）、PW λ 同步（C-28）、打印/WARNING 收口、deltap_common 单测~~；设计文档状态已改"已实施"
 1. ~~**Fix Z01**~~ — 07-20 快速 O_kpair 路径已上线（本文档此前状态滞后，07-29 核实）
 2. **B16 diagnostics** — add runtime diagnostic output to verify Hungarian algorithm eliminates non-determinism
 3. **Run regression** — SCF smoke test (λ=0 baseline, λ=0.05 constraint, 3-run determinism, inner loop)
@@ -338,3 +357,302 @@ At diag_minus iter 44, γ jumped from (3.90, 3.40) → (-4.59, 15.12) → (-0.81
 3. F3（frozen-λ 能量记账）核实后备忘录定稿
 4. PW 通道小成本冒烟（验证 γ_total 提取端到端）
 5. groupA–D 文档假设/偏差清单逐条复核关闭
+
+---
+
+## 2026-07-31: esolver 侧重构设计评审（只审不改）
+
+### What was done
+完整审查 DeltaP 的 esolver 相关文件（LCAO/PW 两路径 + 公共头 + operator），输出重构设计方案 `2026-07-31-deltap-esolver-refactor-design.md`。**本轮未改任何运行时代码**。
+
+审查结论（详见设计文档 §1）：
+- 死代码：`deltap_solver.h` 0 引用；`deltap_common.h` 4 函数仅 1 个被用；PW `run_deltap_lambda_loop` no-op、`s_hamilt`/`set_deltap_pw_hamilt` 整组死代码、`inner_nmax>0` 后死分支（WARNING_QUIT 使其不可达）、`compute_per_atom_gamma_from_becp` 无调用者；LCAO `deltap_init` 三个 raw `new` 无 delete。
+- 重复实现：残差（4+ 处）、λ_eff=Cᵀλ（3+ 处）、梯度下降+mixing（LCAO/PW 各一）、2π 分支跟踪（LCAO/PW 各一）、escon（两处）。
+- 双状态机：LCAO 类成员 + flags vs PW 文件级全局单例，P1→P2→P3 门控细节不一致（drho>0 vs drho<=0 边界），离子步重置时机不一致。
+- 结构：`iter_finish`（esolver_ks_lcao.cpp:695-835）~140 行混 6 种职责；`if constexpr` 的 else 分支对 real 实例每迭代重复 WARNING。
+- 潜伏 bug：`deltap_constraint_lambda_` 回退维度 nat→m（C-22）；约束矩阵尺寸不匹配仅 cerr；target/矩阵每 rank 各读文件（C-23）。
+
+设计方案核心：抽 `deltap_scf::DeltapScfSolver` 状态机（basis-independent 控制流 + Backend 回调注入基组操作），`deltap_common.h` 收拢为纯函数唯一实现，PW 全局单例改实例，ESolver 只留 ≤10 行接线。迁移分 4 轮（R1 删死代码 → R2 LCAO 抽状态机 → R3 PW 接入 → R4 MPI 收敛 + 修 bug），每轮独立可编译可回归，stdout 逐字符保真（测试解析依赖）。
+
+### Files modified this round
+- 新增 `docs/superpowers/specs/2026-07-31-deltap-esolver-refactor-design.md`（审查 + 目标架构 + 4 轮迁移 + 风险验收）
+- 更新 `docs/superpowers/specs/deltap-development-log.md`（File Map / Spec Index / Active Bugs C-21~C-26 / Next Steps）
+
+### Key decisions
+- 数值核心 `module_deltap`（Wilson loop/gauge/branch/HK correction）不进入本次重构范围，降低回归风险
+- `DeltapScfSolver` 以回调注入基组差异（set_lambda/set_hk_correction/compute_gamma/solve_frozen/sync_rho_from_dm/reset_charge_mixing），控制流一份，LCAO/PW 共用
+- `select_branch_set`（多带权重版）保留在 module_deltap，只把"跨 SCF 步最近分支"统一为 `unwrap_2pi`
+- 输出格式是测试解析锚点，重构全程逐字符保真迁移
+
+### Bug/fix list update
+- 新增 Active Bugs：C-21（LCAO raw new 泄漏）、C-22（constraint_lambda 回退维度错）、C-23（target/矩阵每 rank 各自读文件）、C-24（PW 死代码组）、C-25（deltap_solver.h/deltap_common.h 死代码）、C-26（iter_finish 巨型块 + 重复 WARNING）
+
+### Next steps
+1. R1：删死代码 + common 唯一化（零行为变化，P01 冒烟 + stdout diff 验收）
+2. R2：LCAO 抽取 `DeltapScfSolver`（esolver_ks_lcao.cpp 净删 ≥350 行目标）
+3. R3：PW 接入同一状态机（deltap_pw.cpp 净删 ≥150 行目标）
+4. R4：MPI rank0+Bcast 读文件、修 C-22、real 实例 WARNING 收口
+
+---
+
+## 2026-07-31: 重构 R1 实施完成（删死代码 + 修泄漏，零行为变化）
+
+### What was done
+按设计文档 Round 1 实施 esolver 侧 DeltaP 清理，7 个文件 **+53/−388**：
+
+1. 删 `source/source_esolver/deltap_solver.h`（全仓库 0 引用）。
+2. `deltap_common.h` 155→19 行：删未用函数 `update_lambda`/`to_effective_lambda`/`compute_max_residual`，仅保留 `compute_dp_escon`。
+3. PW `deltap_pw.cpp/.h` −169 行：删 `run_deltap_lambda_loop`（no-op）、`s_active`/`set_deltap_pw_active`/`is_deltap_pw_active`（只写不读）、`s_hamilt`/`set_deltap_pw_hamilt`、`inner_nmax>0` 后不可达 inner-loop 死分支、`compute_per_atom_gamma_from_becp`（无调用者）。
+4. **行为保留**：`set_deltap_pw_hamilt` 内含的"每 SCF 周期重置"重命名为 `reset_deltap_pw_scf_cycle()` 并在原调用点保留；`inner_nmax>0` 的 `WARNING_QUIT` 拒绝语义保留。
+5. LCAO 修 C-21 泄漏：`void* dp_scf_/berry_ovl_scf_/r_overlap_scf_` + raw `new` → `std::unique_ptr` + 头文件前向声明，所有 `static_cast` 改 `.get()`。
+
+### Test setup
+本机 Release + MPI1 进程；LCAO 冒烟（H₂O 30 Bohr，ecut50/thr1e-6，deltap 开，λ=0）与 PW 冒烟（ecut30，berry_phase=1，total 模式）各跑新旧两版二进制采集 A/B 日志。
+
+### Results
+- 编译：esolver / module_pwdft / abacus_basic_para 全 PASS（仅既有 if constexpr 警告）。
+- LCAO 冒烟 48 s 收敛，PW 冒烟 40 s 收敛，exit=0。
+- A/B diff：DeltaP 行（`[DeltaP P1]`/`[rawG]`/`[E-field]`/`[DeltaPOp]`/`[DeltaP-PW]`）逐字节 **IDENTICAL**；全日志仅日期/计时列差异（非确定项）。
+
+### Files modified this round
+- `source/source_esolver/deltap_solver.h`（删除）
+- `source/source_esolver/deltap_common.h`（精简 155→19）
+- `source/source_pw/module_pwdft/deltap_pw.{h,cpp}`（删死代码）
+- `source/source_esolver/esolver_ks_pw.cpp`（删 2 个调用 + 改名 reset）
+- `source/source_esolver/esolver_ks_lcao.{h,cpp}`（unique_ptr 化）
+- 新增 `docs/superpowers/specs/2026-07-31-deltap-esolver-refactor-r1.md`
+
+### Bug/fix list update
+- Fixed：C-21（泄漏）、C-24（PW 死代码组）、C-25（deltap_solver.h + common 未用函数）
+- Open 保留：C-22（constraint_lambda 维度）、C-23（MPI 读文件）、C-26（iter_finish 巨型块，R2 处理）
+
+### Next steps
+1. R2：新增 `deltap_scf.{h,cpp}`（DeltapScfSolver 状态机），挂 CMakeLists/Makefile.Objects；迁入 `deltap_init`/`deltap_compute_gamma`/`deltap_inner_loop`/`deltap_update_lambda`；iter_finish 收缩
+2. R3：PW 接入同一状态机
+3. R4：MPI rank0+Bcast、修 C-22、WARNING 收口
+
+---
+
+## 2026-08-01: 重构 R2 实施完成（DeltapScfSolver 状态机上线）
+
+### What was done
+把 LCAO esolver 的 DeltaP SCF 控制流抽到新组件 `source/source_esolver/deltap_scf.{h,cpp}`：
+
+1. **`DeltapScfSolver` 状态机**（~470 行）：持有 `DeltapParams`（INPUT 快照 + target/C/t）与
+   `DeltapState`（λ_eff/λ_cstr/γ/flags/escon），实现 `init` / `reset_ionic_step` /
+   `inner_loop`（BFGS 冻结密度）/ `iter_finish`（γ 测量 → P2 梯度下降 → escon/HK → 报告）。
+  基组差异经 `Backend` 回调注入：set_lambda / get_lambda / apply_hk_correction /
+  compute_gamma / solve_frozen / sync_lambda / on_phase2 / get_optimizer /
+  compute_gamma_raw / lattice_period。
+2. **`deltap_common.h` 重建为纯函数库**：`compute_residual` / `max_norm` / `gd_update` /
+   `gd_update_total` / `to_effective_lambda` / `compute_dp_escon`，全部有调用者。
+3. **ESolver 瘦身**：8 成员 + 3 flags → 1 个 `unique_ptr<DeltapScfSolver>`；4 个 helper →
+   `deltap_init`（基建 + 参数快照 + backend 绑定）+ `deltap_make_backend`（10 个一行回调）；
+   `iter_finish` DeltaP 块 ~140 行 → 22 行接线；`hamilt2rho_single` 改
+   `skip_solve = deltap_scf_solver_->inner_loop(drho)`。
+4. 挂载：`source/source_esolver/CMakeLists.txt` 加 `deltap_scf.cpp`（Makefile.Objects 目录 glob 自动覆盖）。
+
+### Test setup
+本机 Release + MPI1；同步路径（h2o_lcao，nscf=0，λ=0）R2 vs R1 二进制 A/B diff；
+内循环路径（h2o_inner，nscf=4 + target.dat）R2 功能冒烟。
+
+### Results
+- 编译 PASS（含 `if constexpr` 保护 complex-only 回调，double 实例正常实例化）。
+- 同步路径：DeltaP 行（[DeltaP P1]/[rawG]/[E-field]/[DeltaPOp]）**IDENTICAL**；
+  全日志仅日期/计时列差异。
+- 内循环：`inner loop start: nscf=4` → `inner loop done: final l0=-1.30e-2 ...`，SCF 收敛。
+- `iter_finish` 块 140→22 行；`esolver_ks_lcao.cpp` 净删 ~430 行。
+
+### Key decisions
+- 复刻悬空 else 打印语义（has_any_target=false 不打印；true 且非 rank0 打印 "No targets"），
+  保 A/B 全等，R4 清理。
+- BFGS 对象仍归 `DeltaP` 持有，状态机经 `get_optimizer` 回调驱动；`solve_frozen` 每 inner
+  迭代新建 HSolverLCAO（无状态依赖，等价）。
+- `lambda_cstr` 初始化按矩阵模式 m 维（连带修 C-22）；内循环 per-atom 残差空 target 越界
+  UB 修复（非 UB 路径不变）。
+
+### Files modified this round
+- 新增 `source/source_esolver/deltap_scf.{h,cpp}`、`source/source_esolver/CMakeLists.txt`（+1 行）
+- `source/source_esolver/deltap_common.h`（纯函数库重建）
+- `source/source_esolver/esolver_ks_lcao.{h,cpp}`（成员收拢 + 状态机接线）
+- 新增 `docs/superpowers/specs/2026-08-01-deltap-esolver-refactor-r2.md`
+
+### Bug/fix list update
+- Fixed：C-22（lambda_cstr 维度）；C-26 Partial（iter_finish 已收缩，WARNING 收口留 R4）
+- Open 保留：C-23（MPI 读文件）
+
+### Next steps
+1. R3：PW 接入 `DeltapScfSolver`（删全局单例 `s_lambda_set` 等，backend = k-string Wilson loop，`deltap_common` 增 `unwrap_2pi`）
+2. R4：MPI rank0+Bcast（C-23）、悬空 else 打印清理、real 实例 WARNING 收口
+3. `deltap_common` 单测（source/source_esolver/test/）
+
+---
+
+## 2026-08-01: 重构 R3 实施完成（PW 接入同一 DeltapScfSolver 状态机）
+
+### What was done
+把 PW 侧 DeltaP 的 SCF 控制流从文件级全局单例迁移到 R2 的 `DeltapScfSolver` 状态机：
+
+1. **状态机泛化两点**（对 LCAO 零影响，A/B 已证）：
+   - `DeltapParams::unwrap_branch_2pi` + `DeltapState::gamma_prev`：PW 的跨 SCF 最近分支
+     2π unwrap 移入状态机（`deltap_common::unwrap_2pi` 纯函数），`reset_ionic_step()` 一并清空。
+   - `DeltapState::gamma_report`：分支选择后的 γ 用于 max_res/escon/report；LCAO 的
+     branch selection 在 `compute_gamma` 内已完成 → gamma_report == gamma_I。
+2. **`deltap_pw.cpp` 重写**：7 个文件级状态（`s_lambda_set`/`s_gamma_total`/`s_dp_escon`/
+   `s_gamma_prev`/`s_targets`/`s_lambda`/`s_constrain`）→ 2 个算子状态（`s_lambda`/`s_constrain`，
+   forces/stress/op_pw_proj 消费）+ 匿名 namespace 唯一 `DeltapScfSolver` 实例。
+   `make_backend`：set_lambda 写回 `s_lambda`、compute_gamma = `compute_per_atom_gamma_kstring`
+   （折叠 gdir 的 1D per-atom γ）；`compute_total_gamma_pw`/`compute_per_atom_gamma_kstring`
+   移入匿名 namespace（对外 0 引用）。
+3. **`esolver_ks_pw.cpp`**：init 块 20 行 → `pw_deltap::deltap_init(ucell, inp, psi_cpu, kv, wfcpw, rhopw)` 6 行；
+   `deltap_iter_finish`/`reset_deltap_pw_scf_cycle`/`get_deltap_pw_escon` 调用点原样保留。
+   `deltap_pw.h` 公开面收敛：删 `set_deltap_pw_lambda/targets`/`get_deltap_pw_targets`，加 `deltap_init`。
+
+### Test setup
+本机 Release + MPI1；PW 冒烟（h2o_pw：ecut30、berry_phase=1、gdir=3、total 模式 INPUT、无 STRU target）
+R3 vs R1 基线 A/B；LCAO 同步（h2o_lcao）R3 vs R2 A/B；LCAO 内循环（h2o_inner，nscf=4）功能冒烟。
+
+### Results
+- 编译 PASS（仅既有 `if constexpr` 警告）。
+- PW A/B：`[DeltaP-PW]` 两行 + CG1–CG13 能量/EDiff/DRHO 逐字节 **IDENTICAL**；
+  仅墙钟列差异；耗时 38.60s → 35.75s（删重复第二次 γ 测量）。
+- LCAO 同步：1909 行 DeltaP/[rawG]/[E-field] **IDENTICAL**。
+- LCAO 内循环：`inner loop done: final l0=-1.3039e-02 ...`（与 R2 一致），GE39 DRHO=6.4e-07 收敛。
+- 运行日志：`/tmp/r3_pw.log`、`/tmp/r3_lcao.log`、`/tmp/r3_inner.log`。
+
+### Key decisions
+- PW 无 target = 约束 γ→0：历史 `targets[iat]` 空 vector 越界读（UB，实际按 0）；R3 显式填 0 向量（修 C-27，行为不变）。
+- `[DeltaP-PW]` 报告逐字节保真：掩码 max_res/λ_avg/γ/atom 由 `report_pw` 按历史语义计算；
+  状态机内 max_res 对 PW 不打印（target 空 → 0）。
+- `inner_nmax>0` WARNING_QUIT 消息逐字保留，触发点仍在 `deltap_iter_finish`（switch&&corr 门控后），
+  比历史略早（不再先算 γ）。
+- PW 保持 per-atom λ 更新（`p.total_mode=false`）；INPUT total 模式被忽略的历史不一致保留，
+  标注留后续统一（R4+ 可选）。
+- PW 仍无 MPI λ Bcast/rank 守卫（S-09），R4 处理；状态机对 PW 不启用 sync_lambda/on_phase2/HK。
+
+### Files modified this round
+- `source/source_esolver/deltap_common.h`（+`unwrap_2pi`，含 constants.h）
+- `source/source_esolver/deltap_scf.{h,cpp}`（+`unwrap_branch_2pi`/`gamma_report`/`gamma_prev`；iter_finish 顺序微调）
+- `source/source_pw/module_pwdft/deltap_pw.{h,cpp}`（全局单例 → 状态机实例 + backend；公开面收敛）
+- `source/source_esolver/esolver_ks_pw.cpp`（init 接线 20→6 行）
+- 新增 `docs/superpowers/specs/2026-08-01-deltap-esolver-refactor-r3.md`
+
+### Bug/fix list update
+- Fixed：C-27（PW 空 target 越界 UB）；`s_gamma_total` 死状态删除；NaN-γ_total 路径不再烧 `lambda_set`（清理）
+- Open 保留：C-23（MPI rank0+Bcast 读文件）；S-09（PW 无 λ Bcast/rank 守卫）；LCAO 悬空 else 打印；real WARNING 收口
+
+### Next steps
+1. R4：MPI rank0+Bcast（C-23）、PW λ Bcast/rank 守卫（S-09）、悬空 else 清理、real WARNING 收口、
+   `set_deltap_pw_*` 残余接口收口（setter 已删，getter 保留给算子消费者）
+2. 可选：PW 接 `deltap_target_file`/`deltap_constraint_matrix`；PW total 模式统一；`deltap_common` 单测
+3. 总设计文档（`2026-07-31-deltap-esolver-refactor-design.md`）状态改为"已实施"
+
+---
+
+## 2026-08-01: 重构 R4 实施完成（MPI 收敛 + 收口 + 单测）
+
+### What was done
+1. **C-23：`DeltapScfSolver::init` rank0 读 + Bcast**。target 文件与约束矩阵文件改为
+   rank0 解析后经 `Parallel_Common::bcast_*`（MPI_COMM_WORLD）广播：target 广播 loaded/total/向量；
+   矩阵广播 file_open/loaded/m/n + C/t 数据，各 rank 重建同一 `params_`。文件缺失仍静默保留 STRU 目标。
+2. **约束矩阵尺寸不匹配 → `WARNING_QUIT`**（rank0，文案保留；历史为 cerr 后静默丢弃约束）。
+3. **S-09/C-28：PW λ Bcast + rank 守卫**。backend 增 `sync_lambda`（`NPROC>1` 时 Bcast rank0 值，
+   随后 `s_lambda = lam` 刷新全 rank 算子存储 → escon 一致）；`deltap_init` 消息与 `report_pw` 打印
+   加 `MY_RANK==0` 守卫（消除多 rank 重复输出）。
+4. **LCAO 打印/WARNING 收口**：悬空 else 清理（STRU target 打印改 `has_any_target && MY_RANK==0` 一条）；
+   real 实例 WARNING 从 `iter_finish` 每迭代重复 → `before_all_runners` 一次性（rank0）。
+5. **`deltap_common` 单测**：新增 `source/source_esolver/test/deltap_common_test.cpp`（10 用例），
+   挂 `MODULE_ESOLVER_deltap_common_test`（LIBS parameter/math_libs/base/device），全部 PASSED。
+
+### Test setup
+本机 Release + MPI1；三条冒烟（h2o_pw / h2o_lcao / h2o_inner）R4 二进制 vs 既有基线；
+单测 `MODULE_ESOLVER_deltap_common_test`。
+
+### Results
+- 编译 PASS（仅既有 `if constexpr` 警告）。
+- PW A/B：`[DeltaP-PW]` 两行 + CG1–13 能量/EDiff/DRHO 一致（仅墙钟列不同）。
+- LCAO 同步：DeltaP/[rawG]/[E-field] IDENTICAL；内循环：`final l0=-1.3039e-02` 一致，GE39 收敛。
+- 单测：10/10 PASSED。
+- 日志：`/tmp/r4_pw.log`、`/tmp/r4_lcao.log`、`/tmp/r4_inner.log`。
+
+### Key decisions
+- 文件 Bcast 用 `Parallel_Common`（MPI_COMM_WORLD），与 LCAO λ Bcast 同通信域；
+  无 MPI 构建走纯 rank0 路径（单进程）。
+- PW `sync_lambda` 在 Bcast 后写回 `s_lambda`，使 `get_lambda`/escon 全 rank 一致
+  （LCAO 的 sync_lambda 只改局部副本，属既有模式，未动）。
+- γ 测量（Wilson loop）跨 rank 一致性未在本轮核对（单进程环境），文档标注留后续。
+
+### Files modified this round
+- `source/source_esolver/deltap_scf.cpp`（init rank0+Bcast；矩阵尺寸错 WARNING_QUIT）
+- `source/source_pw/module_pwdft/deltap_pw.cpp`（sync_lambda + rank 守卫）
+- `source/source_esolver/esolver_ks_lcao.cpp`（悬空 else 清理；real WARNING 收口到 before_all_runners）
+- 新增 `source/source_esolver/test/deltap_common_test.cpp` + `test/CMakeLists.txt`（+1 AddTest）
+- 新增 `docs/superpowers/specs/2026-08-01-deltap-esolver-refactor-r4.md`
+- `2026-07-31-deltap-esolver-refactor-design.md` 状态 → 已实施
+
+### Bug/fix list update
+- Fixed：C-23（rank0+Bcast）、C-28（PW λ 同步/rank 守卫，即 S-09）、约束矩阵尺寸错→WARNING_QUIT、
+  悬空 else 打印、real WARNING 每迭代重复
+- Open 保留：PW γ 测量跨 rank 一致性核对（新）；PW 接 target/约束矩阵文件、PW total 模式统一（可选增强）
+
+### Next steps
+1. 4 轮重构全部完成；设计文档已标"已实施"。总验收核对：esolver_ks_lcao DeltaP 净删 ~430 行、
+   deltap_pw 净删 ~150 行、deltap_solver.h 消失、deltap_common 全函数被调用且有 10 例单测 — 满足。
+2. 可选：2-rank MPI 冒烟（C-23/S-09 实跑验证）；PW 文件 target/矩阵接线；PW total 模式统一。
+
+---
+
+## 2026-08-01: 重构 R5 补算例 + 补文档 + 全量测试验证
+
+### What was done
+1. **复验既有算例**（新二进制）：test_C_I / test_C_total / test_stru_target / center /
+   deltap_pw_h2o / deltap_bn_test（MPI 4-rank）全部跑通；test_C_I 在约束矩阵模式下
+   GE14–16 能量/DRHO 与旧日志逐字节一致（重构未改变 SCF 物理）。
+2. **新增算例（入库，验证通过）**：
+   - `tests/deltap_bn_sampling/test_mask/`：STRU `dp_constrain 0/1` 混合掩码
+     → P3 起 λ=(2.58e-03, 0.0e+00)，N 原子 λ 恒 0（掩码端到端生效）。
+   - `tests/deltap_bn_sampling/test_gdir2/`：`deltap_gdir 2` → γ 收敛到 target
+     （|γ-t|≤2.8e-4），GE50 DRHO=3.4e-08。
+   - `tests/deltap_relax/`：relax 多离子步复现器（force 路径既有 double-free）。
+3. **修复既有空指针 bug**：`DeltaPOperator` 构造函数对 `hR=nullptr` 无守卫
+   （`FORCE_STRESS.cpp` 力计算路径必崩）→ 加 `hR ? hR->get_paraV() : nullptr`。
+4. **MPI 实跑**：LCAO 4-rank（方阵）通过（C-23 rank0+Bcast）；PW 2-rank 通过
+   （C-28 rank 守卫：`[DeltaP-PW]` 仅打印一次，λ Bcast 后各 rank escon 一致）。
+5. **单测回归**：`deltap_common` 10/10、`esolver_dp` 6/6。
+6. 文档：新增 R5 dated 文档（含完整功能矩阵 21 项）。
+
+### Test setup
+本机 Release + MPI；`build/abacus_basic_para`（含 R5 空指针守卫）。
+运行目录 `/tmp/deltap_r5/`；BN 用例 ecutwfc=100、KPT 2×2×2、scf_thr 1e-8、scf_nmax 50。
+
+### Results
+- 通过：test_C_I（GE16 收敛）、test_C_total（GE16）、test_stru_target（内循环跑通）、
+  center（P1→P3 完整）、test_mask、test_gdir2、deltap_bn_test（MPI4）、
+  deltap_pw_h2o（1/2-rank，FINAL_ETOT -442.02440453 eV）、单测 16/16。
+- total 模式（total_0.0）补跑通过：λ 更新数学与 6beb70bc3 逐行一致（非回归）；
+  旧 total_0.0.log 基线早于 total 提交 `8e73e0f82`（目标均分语义变更），无法 A/B。
+- 失败（既有 bug，非回归）：deltap_relax 在 force 路径 double-free；
+  LCAO 2-rank 被既有方阵网格限制拦截（改用 4-rank）。
+- 旧日志 A/B 结论：仓库旧 `.log` 与当前 INPUT 参数不一致（旧 run 用 step=0.5/
+  mixing=0.5/inner_nmax=20）+ `deltap_branch.dat` 状态漂移 → 不可逐字节对比；
+  以物理判据 + 能量锚点验收（test_C_I GE14–16 逐字节一致作为最强证据）。
+
+### Files modified this round
+- `source/source_lcao/module_operator_lcao/deltap_lcao.cpp`（+空指针守卫，7 行）
+- 新增 `tests/deltap_bn_sampling/test_mask/{INPUT,KPT,STRU,target.dat,README.md}`
+- 新增 `tests/deltap_bn_sampling/test_gdir2/{INPUT,KPT,STRU,target.dat,README.md}`
+- 新增 `tests/deltap_relax/{INPUT,KPT,STRU,README.md}`
+- 新增 `docs/superpowers/specs/2026-08-01-deltap-esolver-refactor-r5-test-coverage.md`
+- 刷新各用例目录 `.log` 基线（gitignore，不入库）
+
+### Bug/fix list update
+- Fixed（R5）：DeltaPOperator 构造空指针守卫（force/relax 路径首个必崩点）。
+- Open：relax force 路径 double-free（`cal_force_stress` OMP 区，混合基组 nlm 越界读，
+  重构前 `85b2af322` 引入）；LCAO 2-rank 方阵网格限制（`cbb37b7ae` 引入）；
+  PW 未接 target/约束矩阵文件；PW total 模式假 total（均历史已知）。
+
+### Next steps
+1. 修 `cal_force_stress` 越界读 → 复跑 deltap_relax → run_fd.sh FD 验收（C-02）。
+2. 补跑 gdir=1（deltap_compare）新二进制基线（total_0.0 已在 R5 完成）。
+3. PW 接 target/约束矩阵文件 + total 模式统一（F13/F14）。
+4. P01–P18 用例（6beb70bc3）纳入 CI 脚本。

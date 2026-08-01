@@ -1,0 +1,28 @@
+INPUT_PARAMETERS
+suffix          deltap_relax
+calculation     relax
+relax_nmax      3
+basis_type      lcao
+ecutwfc         50
+gamma_only      0
+nspin           1
+scf_thr         1.0e-6
+scf_nmax        80
+smearing_method gauss
+smearing_sigma  0.002
+mixing_type     broyden
+mixing_beta     0.4
+ks_solver       genelpa
+symmetry        -1
+
+deltap_switch   1
+deltap_corr     1
+deltap_inner_nmax 0
+deltap_lambda_init 0.0
+deltap_lambda_step 0.01
+deltap_lambda_mixing 0.1
+deltap_inner_thr 1.0e-3
+deltap_gdir     3
+
+pseudo_dir   /root/pporb/apns-pseudopotentials-v1
+orbital_dir  /root/pporb/apns-orbitals-efficiency-v1
