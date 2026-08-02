@@ -95,6 +95,10 @@ class DeltapScfSolver
 
   private:
     bool use_constraint_matrix() const { return !params_.C.empty(); }
+    /// Apply λ to the operator and (if present) broadcast it across ranks so
+    /// every rank's operator / escon uses rank 0's value.  Single sync point
+    /// for both the synchronous update and the inner-loop trials.
+    void apply_lambda(const std::vector<double>& lambda);
     void update_lambda_gd(int iter, double drho);
     void report(int iter, const std::vector<double>& lambda) const;
 

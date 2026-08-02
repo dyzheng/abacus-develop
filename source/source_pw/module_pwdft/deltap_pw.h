@@ -19,7 +19,8 @@ namespace pw_deltap {
  * @brief Initialize DeltaP PW from INPUT + STRU into the shared
  * DeltapScfSolver SCF state machine (owned by this module).
  *
- * Called once from ESolver_KS_PW::before_all_runners.  The backend captures
+ * Called once from ESolver_KS_PW::before_all_runners (driver_run.cpp, outside
+ * the ionic-step loop; per-run setup, not per ionic step).  The backend captures
  * the stable psi / kv / wfcpw / rhopw objects (psi is allocated by
  * Setup_Psi_pw::before_runner before this call), so subsequent per-SCF-step
  * updates run through deltap_iter_finish without re-passing the basis.

@@ -287,6 +287,9 @@ void ESolver_KS_PW<T, Device>::iter_finish(UnitCell& ucell, const int istep, int
     pw_deltap::deltap_iter_finish(ucell, this->drho,
         this->stp.psi_cpu, this->kv, this->pw_wfc, this->pw_rho, PARAM.inp);
     // Apply DeltaP constraint energy correction to f_en
+    // dp_escon is identical on every rank: γ is rank-0-synced inside the PW
+    // backend's compute_gamma (T3 Bcast) and λ by sync_lambda, so the
+    // rank-local assignment is consistent.
     if (PARAM.inp.deltap_switch && PARAM.inp.deltap_corr)
         this->pelec->f_en.dp_escon = pw_deltap::get_deltap_pw_escon();
 

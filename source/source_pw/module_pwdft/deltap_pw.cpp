@@ -210,6 +210,8 @@ deltap_scf::DeltapScfSolver::Backend make_backend(const UnitCell& ucell,
     // Keep the operator lambda consistent across MPI ranks after each update
     // (S-09): rank 0's value wins, then every rank's storage is refreshed.
     b.sync_lambda = [](std::vector<double>& lam) {
+        if (lam.empty())
+            return;
 #ifdef __MPI
         if (GlobalV::NPROC > 1)
             Parallel_Common::bcast_double(lam.data(), static_cast<int>(lam.size()));
@@ -228,9 +230,27 @@ deltap_scf::DeltapScfSolver::Backend make_backend(const UnitCell& ucell,
         // Keep the per-atom γ measurement identical on every rank (rank 0
         // wins): gamma_report / escon then match everywhere, applying the
         // same policy as sync_lambda and the historical gamma sync
-        // (750ee179d).
+        // (750ee179d).  With the KPAR=1 guard in deltap_init, POOL_WORLD ==
+        // MPI_COMM_WORLD, so the world Bcast below is exactly the pool-wide
+        // sync and every rank measures the same (full k-string) data.
         if (GlobalV::NPROC > 1)
+        {
+            // Regression guard (D5): keep a pre-Bcast copy and verify all
+            // ranks measured the same γ; a mismatch means the distributed-G
+            // overlap / becp path became rank-dependent, which would
+            // silently corrupt gamma_report / escon after the Bcast.
+            const std::vector<double> local = gamma;
             Parallel_Common::bcast_double(gamma.data(), static_cast<int>(gamma.size()));
+            double local_dev = 0.0;
+            for (int iat = 0; iat < ucell.nat; ++iat)
+                local_dev = std::max(local_dev, std::abs(local[iat] - gamma[iat]));
+            double global_dev = 0.0;
+            MPI_Allreduce(&local_dev, &global_dev, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+            if (global_dev > 1.0e-8 && GlobalV::MY_RANK == 0)
+                ModuleBase::WARNING("pw_deltap::compute_gamma",
+                    "per-atom gamma diverges across MPI ranks before sync "
+                    "(distributed-G overlap path is rank-dependent).");
+        }
 #endif
         return gamma;
     };
@@ -294,6 +314,18 @@ void deltap_init(const UnitCell& ucell, const Input_para& inp,
                  const K_Vectors* kv, const ModulePW::PW_Basis_K* wfcpw,
                  const ModulePW::PW_Basis* rhopw)
 {
+#ifdef __MPI
+    // D1: the per-atom γ Wilson loop (compute_per_atom_gamma_kstring) spans
+    // the full k-string across ALL k-points, which exists only inside a
+    // single pool.  DeltaP-PW therefore requires KPAR=1 (npool=1): with
+    // KPAR>1 each pool owns a k-point subset and the measurement would read
+    // out-of-pool wavefunctions.  With KPAR=1 the pool is the whole world,
+    // so the world Bcast in make_backend's compute_gamma is the pool sync.
+    if (GlobalV::KPAR > 1)
+        ModuleBase::WARNING_QUIT("pw_deltap::deltap_init",
+            "DeltaP-PW requires KPAR=1 (npool=1): the Wilson-loop k-string "
+            "spans all k-points, which only exists in a single pool.");
+#endif
     // Targets / constrain come from STRU; the initial lambda is a separate
     // parameter (Ry) and MUST NOT be conflated with the gamma targets (rad).
     const std::vector<double> dp_target = ucell.get_dp_target();

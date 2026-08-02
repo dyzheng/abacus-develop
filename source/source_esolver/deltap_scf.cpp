@@ -207,7 +207,7 @@ bool DeltapScfSolver::inner_loop(double drho)
         // Apply trial lambda (convert to effective per-atom lambda).
         const std::vector<double> lam_eff
             = deltap_common::to_effective_lambda(lam_trial, params_.C, params_.nat);
-        backend_.set_lambda(lam_eff);
+        apply_lambda(lam_eff);
         if (backend_.apply_hk_correction)
             backend_.apply_hk_correction(lam_eff);
 
@@ -232,7 +232,7 @@ bool DeltapScfSolver::inner_loop(double drho)
         = deltap_common::to_effective_lambda(lambda_inner, params_.C, params_.nat);
     if (use_constraint_matrix())
         state_.lambda_cstr = lambda_inner;
-    backend_.set_lambda(lam_final);
+    apply_lambda(lam_final);
     if (backend_.apply_hk_correction)
         backend_.apply_hk_correction(lam_final);
     state_.inner_loop_done = true;
@@ -245,6 +245,24 @@ bool DeltapScfSolver::inner_loop(double drho)
         std::cout << std::endl;
     }
     return true; // inner loop already solved; skip the regular HSolver step.
+}
+
+// ---------------------------------------------------------------------------
+// apply_lambda: single sync point for every λ update (synchronous P2 update
+// and inner-loop trials).  set_lambda applies the local value immediately;
+// sync_lambda then broadcasts rank 0's λ and the backend writes it back into
+// the operator, so all ranks keep the same operator λ / escon (D2).
+// ---------------------------------------------------------------------------
+void DeltapScfSolver::apply_lambda(const std::vector<double>& lambda)
+{
+    backend_.set_lambda(lambda);
+    if (backend_.sync_lambda)
+    {
+        // sync_lambda may broadcast in place; hand it a mutable copy so the
+        // caller's const vector is never modified.
+        std::vector<double> lam = lambda;
+        backend_.sync_lambda(lam);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -343,9 +361,7 @@ void DeltapScfSolver::update_lambda_gd(int iter, double drho)
             deltap_common::gd_update(lambda, residual, params_.constrain, step, mixing);
     }
 
-    backend_.set_lambda(lambda);
-    if (backend_.sync_lambda)
-        backend_.sync_lambda(lambda);
+    apply_lambda(lambda);
     if (backend_.on_phase2)
         backend_.on_phase2();
 

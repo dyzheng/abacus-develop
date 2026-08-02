@@ -719,6 +719,9 @@ void ESolver_KS_LCAO<TK, TR>::iter_finish(UnitCell& ucell, const int istep, int&
                 deltap_scf_solver_->reset_ionic_step();
             }
             deltap_scf_solver_->iter_finish(iter, this->drho);
+            // dp_escon is identical on every rank: γ is rank-0-synced by
+            // module_deltap (compute_gamma_scf Bcast) and λ by sync_lambda
+            // write-back (T1), so the rank-local assignment is consistent.
             this->pelec->f_en.dp_escon = deltap_scf_solver_->state().dp_escon;
         }
     }
@@ -952,6 +955,8 @@ typename deltap_scf::DeltapScfSolver::Backend ESolver_KS_LCAO<TK, TR>::deltap_ma
             PARAM.inp.nspin, true); // skip_charge = true (frozen density)
     };
     b.sync_lambda = [this, dp_op](std::vector<double>& lam) {
+        if (lam.empty())
+            return;
 #ifdef __MPI
         if (this->pv.comm() != MPI_COMM_NULL)
         {

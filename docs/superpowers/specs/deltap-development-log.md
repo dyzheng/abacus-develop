@@ -754,3 +754,151 @@ R3 vs R1 基线 A/B；LCAO 同步（h2o_lcao）R3 vs R2 A/B；LCAO 内循环（h
 2. T7（force 路径）最大专项：nlm 布局统一 + 长度守卫 + H_HK/∂τ/∂R 力项 + run_fd.sh 验收。
 3. 观察项：PW γ 测量 nproc 敏感性（~0.02%）如影响数值基线再评估。
 4. 清理项 T4–T6、T9–T13 随日常迭代合入。
+
+---
+
+## 2026-08-02: T1+T3 迭代（d983206a1）严格评审 + TODO 修订
+
+### What was done
+对 T1+T3 MPI 一致性迭代做批判性评审，输出 `2026-08-02-deltap-mpi-consistency-review.md`。
+源码未动。
+
+### 评审结论（五条批评）
+1. **T3 验收同义反复**：Bcast 后各 rank γ 必然一致，缺 pre-fix 不一致证据；
+   `unkdotp_G` 本有 POOL_WORLD Allreduce，T3 可能修的是不存在的 bug。
+2. **KPAR>1 未分析（真风险）**：`bcast_double` 硬编码 MPI_COMM_WORLD root=0；
+   pool 分 k 时 pool0 的 γ 完整性未验证，若无完整 γ 则 T3 传播错值；无守卫。
+3. **T1 因果归因弱**：旧日志 iter=2 扰动跨重构，变量不唯一；缺 pre-fix LAMDBG。
+4. **nproc 敏感性被回避**：并行基线=rank0 值后不复现串行基线，CI 策略未定。
+5. **h2o_lcao 4-rank 崩溃分类不充分**：无 backtrace 即归入 `cbb37b7ae` 同族。
+正面：stash 对照规范、单测 16/16、1-rank 逐字节保真、文档合规。
+
+### TODO 修订（D 系列，替代 T2/T7 二选一）
+| # | 事项 | 优先级 |
+|---|------|--------|
+| D1 | KPAR>1 守卫或 γ 完整性分析 | P0（最优先） |
+| D2 | h2o_lcao 4-rank 崩溃 backtrace 分类 | P0 |
+| D3 | T1/T3 补 pre-fix 证据或改措辞为"防御性加固" | P1 |
+| D4 | nproc 基线策略定稿（CI 固定 nproc；escon 差异定性） | P1 |
+| D5 | T7 force 专项三步：(a) nlm 修复→relax 不崩；(b) FD 验收；(c) H_HK/∂τ/∂R 力项（C-02 收尾） | P0（欠账后启动） |
+| D6 | T2 PW 惰性 init 并入 D5(a)（无 T7 无消费方） | — |
+
+### Files modified this round
+- 新增 `docs/superpowers/specs/2026-08-02-deltap-mpi-consistency-review.md`；本文档追加本节。
+
+---
+
+## 2026-08-02: MPI 一致性 commit（d983206a1）评审 + D1–D6 修订
+
+### What was done
+评审 `d983206a1`（T1 LCAO λ 写回 + T3 PW γ 同步）：逐行 diff + 调用链推演 +
+与上轮验证记录交叉核对。完整评审意见见
+`2026-08-02-deltap-mpi-consistency-review.md`。源码未动。
+
+### 评审结论
+- 总体：可保留，无回归（PW 1-rank 逐字节一致、单测 16/16、跨 rank 一致经实跑证明）。
+- 正面：T1 写回幂等语义正确；rank0-wins 事实源契约两端统一；验证方法学扎实
+  （临时诊断→证明→移除、确定性复跑、stash 对照归因）；文档规范。
+- 五条批评：
+  1. C1 PW γ Bcast 用 MPI_COMM_WORLD、LCAO 用 POOL，通信域不统一；`unkdotp`
+     的 KPAR=1 注释与 2-rank(KPAR=2) 实跑矛盾，约束未固化。
+  2. C2 `sync_lambda` 只覆盖同步模式；内循环 `inner_loop` 的 `set_lambda`
+     （deltap_scf.cpp:210,235）不走同步，多 rank 内循环从未验证。
+  3. C3 LCAO 侧只验 λ 未验 escon/γ_report（依赖 module_deltap 内部 Bcast，
+     缺实跑断言）。
+  4. C4 2-rank PW 数值基线未固化（γ 差 0.02%、escon 差 7e-6 Ry），nproc 敏感
+     性未立项追根因。
+  5. C5 临时诊断已删，无持久化跨 rank 一致性校验，MPI 冒烟未入 CI。
+
+### D1–D6 修订 TODO
+| ID | 级别 | 事项 | 状态 |
+|---|---|---|---|
+| D1 | P1 | 统一 PW/LCAO 同步通信域（POOL）+ 显式化 KPAR/psi 布局约束（修正 `unkdotp` 陈旧注释） | 待做 |
+| D2 | P1 | 内循环路径 λ 同步下沉（`inner_loop` 的 `set_lambda` 后接 `sync_lambda`） | 待做 |
+| D3 | P2 | LCAO 4-rank 补 escon/γ_report per-rank 断言（闭环 T1 验收） | 待做 |
+| D4 | P2 | 固化 2-rank PW 参考值 + nproc 敏感性根因专项 | 待做 |
+| D5 | P2 | 跨 rank 一致性校验沉淀为可复用诊断 + MPI 冒烟入 CI | 待做 |
+| D6 | P3 | `f_en.dp_escon` rank 守卫/注释 + 空 λ vector 防御统一 | 待做 |
+
+### Files modified this round
+- 新增 `docs/superpowers/specs/2026-08-02-deltap-mpi-consistency-review.md`；本 dev-log 追加本节
+
+### Next steps
+1. D1+D2+D3 合成一次 MPI 迭代：通信域统一 + 内循环同步 + LCAO escon/γ 断言。
+2. D4/D5 随测试轮推进（2-rank 参考值、一致性诊断、CI 冒烟）。
+3. D6 清理项随日常迭代合入。
+
+---
+
+## 2026-08-02: D1–D6 修订实施（按 2026-08-02 评审 TODO）
+
+### What was done
+按 `2026-08-02-deltap-mpi-consistency-review.md` 的 D1–D6 全部落地：
+- D1 PW KPAR=1 守卫（`GlobalV::KPAR>1` → WARNING_QUIT）+ 通信域注释统一
+  （KPAR=1 时 POOL_WORLD==MPI_COMM_WORLD）+ `unk_overlap_pw.cpp`/`deltap_pw.h`
+  注释修正（顺带闭合 T9）。
+- D2 `DeltapScfSolver::apply_lambda` 统一同步出口，覆盖内循环 trial/final λ。
+- D3 LCAO 4-rank escon/γ per-rank 断言（临时诊断实跑后移除）。
+- D4 固化 2-rank PW 参考值 + nproc 敏感性定性（浮点噪声，非缺陷）。
+- D5 PW Bcast 前一致性回归守卫 + `tests/deltap_mpi_smoke/run.sh` 冒烟。
+- D6 两处 `sync_lambda` 空 λ 防御 + 两处 `f_en.dp_escon` 契约注释。
+详见 `2026-08-02-deltap-d1-d6-revision.md`。
+
+### 验收结果
+- 单测 16/16；PW 1-rank 与 R5 基线逐字节一致；PW 2-rank 0 divergence 告警、
+  与上轮输出逐字节一致；LCAO 4-rank P2 iter=11 锚点不变、40 个 escon 值每
+  个恰出现 4 次（4 rank 每迭代全一致）。
+- KPAR 负向测试：`kpar 2` → WARNING_QUIT（exit=1）。
+- MPI 冒烟脚本端到端 PASS（PW 2-rank + LCAO 4-rank）。
+
+### TODO 状态更新
+- D1 ✅ / D2 ✅ / D3 ✅ / D4 ✅（定性 + 参考值）/ D5 ✅（守卫 + 脚本，CI 接线
+  待 runner 环境）/ D6 ✅。
+- 后续：T2（PW init 惰性化）、T7（force 路径专项）、D4 根因（可选）、冒烟入 CI。
+
+### Files modified this round
+- `source/source_pw/module_pwdft/deltap_pw.{cpp,h}`、`source/source_esolver/deltap_scf.{cpp,h}`、
+  `source/source_esolver/esolver_ks_lcao.cpp`、`source/source_esolver/esolver_ks_pw.cpp`、
+  `source/source_io/module_unk/unk_overlap_pw.cpp`
+- 新增 `tests/deltap_mpi_smoke/run.sh`
+- 新增 `docs/superpowers/specs/2026-08-02-deltap-d1-d6-revision.md`；本 dev-log 追加本节
+
+### Next steps
+1. 提交本轮改动；`center/INPUT` 与杂散 `STRU.cif` 不提交。
+2. 冒烟脚本接 CI（需 MPI+赝势 runner）。
+3. T2（PW init 惰性化，随 relax 支持）、T7（force 路径）继续推进。
+
+---
+
+## 2026-08-02: D1–D6 提交前评审反馈处理
+
+### What was done
+按提交前评审修正 2 个阻塞项 + 闭合 1 个覆盖缺口：
+- 阻塞项 1：`deltap_pw.h` 注释恢复 "Called once"（核实 `before_all_runners`
+  在 `driver_run.cpp:67`、离子步循环外，每 run 一次；此前按 T9 改为 per
+  ionic step 属错误推断）。
+- 阻塞项 2：`tests/deltap_mpi_smoke/run.sh` 的 `set -e` 缺陷——`run_case`
+  失败时提前终止脚本，改调用处 `|| true` 累计失败；负向测试验证两个用例与
+  FAILED 摘要均执行。
+- 缺口 3：D2 内循环路径补 4-rank 实跑（`test_stru_target`，inner_nmax=3，
+  临时副本运行），`inner loop done` 出现、无 divergence 告警；该用例已入
+  冒烟脚本（三用例全 PASS，repo 无污染）。
+- 小观察记录：D5 守卫每次 γ 测量多一次 world Allreduce，被守护路径实测
+  不发散——可接受现状，降级 debug-only 列为 TODO。
+
+### 验收
+- 冒烟脚本三用例 PASS：PW 2-rank、BN 4-rank、内循环 4-rank；负向（错 marker）
+  FAIL 摘要与 exit=1 正确。
+- 单测 16/16、PW 1-rank A/B 逐字节一致（此前已验证，注释/脚本改动不影响）。
+
+### Files modified this round
+- `source/source_pw/module_pwdft/deltap_pw.h`（注释纠正）
+- `tests/deltap_mpi_smoke/run.sh`（set -e 修复 + 内循环用例）
+- `docs/superpowers/specs/2026-08-02-deltap-d1-d6-revision.md`（评审反馈处理记录）
+- 本 dev-log 追加本节
+
+### Next steps
+1. 提交：7 源码文件 + 两份 2026-08-02 文档 + `tests/deltap_mpi_smoke/` +
+   dev-log；排除 `center/INPUT` 与杂散 `STRU.cif`。
+2. D5 守卫降级 debug-only（可选）；冒烟脚本接 CI（需 MPI+赝势 runner）。
+3. T2（PW init 惰性化）、T7（force 路径）继续推进。

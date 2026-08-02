@@ -42,7 +42,9 @@ std::complex<double> unkOverlap_pw::unkdotp_G(const ModulePW::PW_Basis_K* wfcpw,
     }
 
 #ifdef __MPI
-    // note: the mpi uses MPI_COMMON_WORLD,so you must make the GlobalV::KPAR = 1.
+    // The overlap sums over G-vectors distributed inside the pool, so the
+    // reduction must run on the pool communicator.  With KPAR=1 the pool is
+    // the whole world (DeltaP-PW enforces this in pw_deltap::deltap_init).
     double in_date_real = result.real();
     double in_date_imag = result.imag();
     double out_date_real = 0.0;
