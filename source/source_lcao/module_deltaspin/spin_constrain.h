@@ -473,7 +473,9 @@ public:
                               int nsc_min_in,
                               double alpha_trial_in,
                               double sccut_in,
-                              double sc_drop_thr_in);
+                              double sc_drop_thr_in,
+                              const std::string& sc_acceleration_mode_in,
+                              double sc_acceleration_rms_thr_in);
     /// get sc_thr
     double get_sc_thr() const;
     /// get nsc
@@ -552,6 +554,8 @@ public:
     double alpha_trial_; ///< Initial trial step size (Ry/uB^2), adaptively adjusted during loop
     double restrict_current_; ///< Maximum allowed lambda change per step (Ry/uB), prevents overshooting
     bool direction_only_ = false; ///< If true, only optimize spin direction (project out parallel lambda component)
+    std::string sc_acceleration_mode_ = "off"; ///< Acceleration mode: "off", "first_order", "subspace"
+    double sc_acceleration_rms_thr_ = -1.0;    ///< RMS threshold (uB) to activate acceleration, <0 disables
 
   public:
     /// @brief Set DeltaSpin operator pointer for magnetic moment calculation (LCAO)

@@ -50,7 +50,8 @@ void spinconstrain::SpinConstrain<TK>::init_sc(double sc_thr_in,
     // - alpha_trial: initial trial step size (eV/uB^2), converted to Ry/uB^2
     // - sccut: maximum lambda change per step (eV/uB), converted to Ry/uB
     // - sc_drop_thr: fraction of initial RMS for adaptive threshold
-    this->set_input_parameters(sc_thr_in, nsc_in, nsc_min_in, alpha_trial_in, sccut_in, sc_drop_thr_in);
+    this->set_input_parameters(sc_thr_in, nsc_in, nsc_min_in, alpha_trial_in, sccut_in, sc_drop_thr_in,
+                               "off", -1.0);
 
     // Step 2: Get atom/orbital/lnchi counts from UnitCell for indexing
     // atomCounts: {element_type_index -> number_of_atoms_of_this_type}
