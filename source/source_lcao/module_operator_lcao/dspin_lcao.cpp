@@ -43,12 +43,6 @@ hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::~DeltaSpin()
     }
     this->pre_hr.clear();
     this->pre_hr.shrink_to_fit();
-    for (auto& b : this->B_I_data)
-    {
-        b.clear();
-    }
-    this->B_I_data.clear();
-    this->B_I_data.resize(this->ucell->nat);
 }
 
 // simple functions to calculate the coefficients from lambda
