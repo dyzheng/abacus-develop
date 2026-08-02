@@ -556,6 +556,12 @@ public:
     bool direction_only_ = false; ///< If true, only optimize spin direction (project out parallel lambda component)
     std::string sc_acceleration_mode_ = "off"; ///< Acceleration mode: "off", "first_order", "subspace"
     double sc_acceleration_rms_thr_ = -1.0;    ///< RMS threshold (uB) to activate acceleration, <0 disables
+    double last_drho_ = -1.0; ///< Last observed SCF charge density error
+    std::string basis_type_;   ///< Cached basis type for LCAO/PW branching
+    std::string ks_solver_;    ///< Cached KS solver name
+    int nbands_ = 0;           ///< Cached number of bands
+    bool local_diag_run_ = false; ///< Flag: has trace vs DMR diagnostic been run?
+    int subspace_exec_precision_ = 0; ///< Execution precision: 0=fp64, 1=fp32
 
   public:
     /// @brief Set DeltaSpin operator pointer for magnetic moment calculation (LCAO)
@@ -565,6 +571,24 @@ public:
     void set_mag_converged(bool is_Mi_converged_in){this->is_Mi_converged = is_Mi_converged_in;}
     /// @brief Get magnetic moment convergence flag
     bool mag_converged() const {return this->is_Mi_converged;}
+    /// @brief Set the last observed SCF charge density error (drho)
+    void set_drho(double drho_in) { this->last_drho_ = drho_in; }
+    /// @brief Get the last observed SCF charge density error
+    double get_drho() const { return this->last_drho_; }
+    /// @brief Set lambda directly
+    void set_lambda(const std::vector<ModuleBase::Vector3<double>>& v) { lambda_ = v; }
+    /// @brief Set direction_only mode for BFGS optimizer
+    void set_direction_only(bool v) { direction_only_ = v; }
+    /// @brief Get Mi (current magnetic moments)
+    const std::vector<ModuleBase::Vector3<double>>& get_Mi() const { return Mi_; }
+    /// @brief Get cached basis type
+    const std::string& get_basis_type() const { return basis_type_; }
+    /// @brief Get cached KS solver name
+    const std::string& get_ks_solver() const { return ks_solver_; }
+    /// @brief Get cached number of bands
+    int get_nbands() const { return nbands_; }
+    /// @brief Set the precision for subspace operations
+    void set_subspace_exec_precision(int prec) { subspace_exec_precision_ = prec; }
     void set_npol(int npol);
     int get_npol() const;
     int get_nw() const; ///< Total number of orbitals across all constrained atoms
