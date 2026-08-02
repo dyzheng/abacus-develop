@@ -155,6 +155,7 @@ void ESolver_KS_LCAO<TK, TR>::others(BaseCell& basecell, const int istep)
                    PARAM.inp.alpha_trial,
                    PARAM.inp.sccut,
                    PARAM.inp.sc_drop_thr,
+                   "off", -1.0,
                    ucell,
                    PARAM.inp.sc_direction_only,
                    &(this->pv),

@@ -157,13 +157,15 @@ public:
      * @param pelec_in Pointer to electronic state (for charge, weights, ekb)
      * @param pw_wfc_in PW basis for wavefunction storage (PW only)
      */
-  void init_sc(double sc_thr_in,
-               int nsc_in,
-               int nsc_min_in,
-               double alpha_trial_in,
-               double sccut_in,
-               double sc_drop_thr_in,
-               const UnitCell& ucell,
+   void init_sc(double sc_thr_in,
+                int nsc_in,
+                int nsc_min_in,
+                double alpha_trial_in,
+                double sccut_in,
+                double sc_drop_thr_in,
+                const std::string& sc_acceleration_mode_in,
+                double sc_acceleration_rms_thr_in,
+                const UnitCell& ucell,
                bool direction_only_in,
                Parallel_Orbitals* ParaV_in,
                int nspin_in,

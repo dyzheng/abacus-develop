@@ -99,6 +99,7 @@ void pw::setup_pot(const int istep,
                    PARAM.inp.alpha_trial,
                    PARAM.inp.sccut,
                    PARAM.inp.sc_drop_thr,
+                   "off", -1.0,
                    ucell,
                    PARAM.inp.sc_direction_only,
                    nullptr, // parallel orbitals
