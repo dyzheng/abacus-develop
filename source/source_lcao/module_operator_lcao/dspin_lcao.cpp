@@ -39,14 +39,16 @@ hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::~DeltaSpin()
 {
     for (auto& hr : this->pre_hr)
     {
-        if (hr != nullptr)
-        {
-            delete hr;
-            hr = nullptr;
-        }
+        delete hr;
     }
     this->pre_hr.clear();
     this->pre_hr.shrink_to_fit();
+    for (auto& b : this->B_I_data)
+    {
+        b.clear();
+    }
+    this->B_I_data.clear();
+    this->B_I_data.resize(this->ucell->nat);
 }
 
 // simple functions to calculate the coefficients from lambda
@@ -224,8 +226,18 @@ void hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::cal_pre_HR()
     }
     this->paraV = this->hR->get_paraV();
     ModuleBase::timer::start("DeltaSpin", "cal_pre_HR");
+    for (auto& hr : this->pre_hr)
+    {
+        delete hr;
+    }
     this->pre_hr.clear();
     this->pre_hr.resize(this->ucell->nat, nullptr);
+    for (auto& b : this->B_I_data)
+    {
+        b.clear();
+    }
+    this->B_I_data.clear();
+    this->B_I_data.resize(this->ucell->nat);
 
     const int npol = this->ucell->get_npol();
     size_t memory_cost = 0;
@@ -597,7 +609,7 @@ void hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::cal_PI_sub(
                     const std::complex<double> c_val = phase * psi_k[iw_local + jb_local * lda];
                     for (int lm = 0; lm < r; lm++)
                     {
-                        D_I[lm + jb_global * r] += nlm_vec[lm] * c_val;
+                        D_I[lm * nbands_global + jb_global] += nlm_vec[lm] * c_val;
                     }
                 }
             }
@@ -616,14 +628,11 @@ void hamilt::DeltaSpin<hamilt::OperatorLCAO<TK, TR>>::cal_PI_sub(
         PI_sub[iat].resize(nbands_global * nbands_global, {0.0, 0.0});
         const std::complex<double> one = {1.0, 0.0};
         const std::complex<double> zero_c = {0.0, 0.0};
-        // D_I is stored column-major: D_I[lm + jb_global * r]
-        // zgemm: P = D^H * D, where D is r × nbands (column-major)
-        // A^H: conjugate transpose of A (nbands × r)
-        // B: D_I (r × nbands)
-        // Result: nbands × nbands
-        zgemm_("C", "N", &nbands_global, &nbands_global, &r,
-               &one, D_I.data(), &r,
-               D_I.data(), &r,
+        // D_I is stored column-major as nbands_global × r: D_I[lm * nbands_global + jb_global]
+        // zgemm("N","C"): P = D * D^H where D is nbands_global × r
+        zgemm_("N", "C", &nbands_global, &nbands_global, &r,
+               &one, D_I.data(), &nbands_global,
+               D_I.data(), &nbands_global,
                &zero_c, PI_sub[iat].data(), &nbands_global);
     }
 }
