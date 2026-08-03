@@ -1208,3 +1208,45 @@ compute_hk_correction、deltap_common）+ 约束力/应力公式推导，输出
   预算 A2=1.85e-3 / C=3.70e-3）；
 - D-D 高精度验收（run_fd.sh 支持 ECUTWFC/ECUTRHO/SCF_THR 覆盖）；
 - F1 备忘录 λ_step ×L 决策；A2/C 后清理调试打印 + MPI/ASAN。
+
+### 2026-08-03（续7）：A2 实现验证 + 组②激活约束 FD 判决轮
+- **A2 实现**（`deltap_force_stress.hpp`）：p_hat 累积转正（cal_force_IJR
+  值块×DM 对角收缩），逐原子对角力 `F_Jβ −= λ_J⟨P̂_J⟩(L⁻¹)_{αβ}/lat0`
+  reduce_all 前加入；应力无对应项（固定分数坐标 ∂τ/∂ε=0，F8）。
+- **A2 验证（PASS，4 ppm）**：h2o1 base（λ*≠0）A2 前后 SCF 逐位不变，
+  z 力差 == 公式（含均值扣除）；x/y 逐位一致。
+- **组② FD（target=γ*(base)，ecutwfc=100/ecutrho=400/scf_thr=1e-8，
+  全 3×3 矩阵）**：残差 0.02–0.32 eV/Å（判据 0.0129）。完整归因 =
+  **O·dλ/dR（λ 响应项）**：ΔE_deltap=E_HK+E_H_HR+escon ∝ λ(R)，
+  λ(R)=0.001(γ(R)−t) 随几何重导出，±δ 间 λ 变 ~1.5e-5；E' 对 λ 极敏感
+  （dE'/dλ ≈ 405 eV/Ry 含 ψ 响应）。**dspin 定理前提（λ 于约束驻点，
+  γ≡t）未被同步单步 GD 满足** → 残差是"代理差距×协议 dλ/dR"，非干净
+  O5 定量，不能判决 A1+A2+B。
+- **纯 DFT 对照（PASS）**：H1-x/O1-z FD vs 解析力残差 3e-4 eV/Å——
+  标准 LCAO 力与 E 曲面一致，残差无标准力成分。
+- **组① 参考（冻结 λ*，O1-z）**：残差 +0.615 eV/Å = C + ψ 响应
+  （O1 自身 C≈+0.12，余为跨原子+响应）——与"组① 不严格闭合"理论一致。
+- **内循环（deltap_inner_nmax>0）可用性**：bn 测试 SCF 呈极限环
+  （drho 6e-4–1e-3 振荡）、位移点分支翻转、1-rank vs 4-rank 结果不同
+  （E' 差 0.85 eV）——内循环判决 FD 前必须先修稳定性。
+- **判决**：A1+A2+B 无直接错误证据（各分量已单独验证）；组② 现协议
+  无法作 relax 判决；下一步修内循环稳定性 → 内循环组② 判决 FD。
+- 详见 `2026-08-03-deltap-force-stress-t7c-a2-group2-fd.md`。
+
+### Files modified（本轮）
+- `source/source_lcao/module_operator_lcao/deltap_force_stress.hpp`：
+  A2 实现（未提交，待清理 hhrdbg 后提交）
+- `2026-08-03-deltap-force-stress-t7c-a2-group2-fd.md`：新增本轮文档
+- `deltap-development-log.md`：本段
+- `tests/deltap_fd_force/h2o1/target.dat`：临时改为 γ*(base)（工作区，
+  提交时还原或说明）
+
+### Next steps（更新）
+- **修内循环 SCF 稳定性**（bn 极限环）：λ 更新与密度混合解耦/λ 阻尼，
+  使 deltap_inner_nmax>0 在 ±δ 位移点可复现收敛（新阻塞，优先级最高）；
+- 内循环组② 判决 FD（bn 或 h2o1+非平凡 target）：残差≈0（定理）则 C
+  降级为可选增强；显著则为 O5 定量 → 决定补 C 或回算符形式；
+- 组① 残差重测（C+响应预算）；清理调试打印；MPI/ASAN 回归；提交。
+- **回归面**：MPI 冒烟 3/3 PASS；单测 math/gauge/common PASS；
+  **smoothness 4/8 FAIL（B-6 相位约定改动致单测参考约定过期，预先存在，
+  非 A2 引入，P1 TODO 待更新测试参考）**。

@@ -33,12 +33,10 @@ void DeltaPOperator<TK, TR>::cal_force_stress(const bool cal_force,
 
     if (cal_force) force.zero_out();
 
-#if 0 // DEBUG_HHR_ENERGY (disabled for commit; flip to 1 for A2/C) (temporary): Tr(ρ·H_HR) = Σ_I λ_I·τ_α(I)·⟨P̂_I⟩
-    // ⟨P̂_I⟩ is accumulated in cal_force_IJR (value-block nlm·nlm·dm); used to
-    // test the A2↔C compensation: ∂Tr(ρH_HR)/∂Δ should ≈ −∂escon/∂Δ under a
-    // uniform translation (correct criterion ①).
+    // ⟨P̂_I⟩ is accumulated in cal_force_IJR (value-block nlm·nlm·dm); it is
+    // the per-atom expectation of the constrained projector and feeds the A2
+    // ∂τ/∂R Hellmann-Feynman term below (per-atom diagonal force).
     std::vector<double> p_hat(this->ucell->nat, 0.0);
-#endif
 
     #pragma omp parallel
     {
@@ -182,13 +180,8 @@ void DeltaPOperator<TK, TR>::cal_force_stress(const bool cal_force,
                     {
                         double force1[3] = {0, 0, 0};
                         double force2[3] = {0, 0, 0};
-#if 0 // DEBUG_HHR_ENERGY (disabled for commit; flip to 1 for A2/C)
                         cal_force_IJR(iat1, iat2, paraV, nlm_iat0[ad1], nlm_iat0[ad2],
                                        dmR_pointer, lam_eff, force1, force2, &p_hat[iat0]);
-#else
-                        cal_force_IJR(iat1, iat2, paraV, nlm_iat0[ad1], nlm_iat0[ad2],
-                                       dmR_pointer, lam_eff, force1, force2);
-#endif
 
                         for (int ipol = 0; ipol < 3; ipol++)
                         {
@@ -238,6 +231,32 @@ void DeltaPOperator<TK, TR>::cal_force_stress(const bool cal_force,
         std::cout << std::endl;
     }
 #endif
+
+    // A2: ∂τ_α/∂R Hellmann-Feynman term (per-atom diagonal; no neighbor loop).
+    // H_HR = Σ λ_I·τ_α(I)·P̂_I with τ_α in Direct (fractional) coordinates.
+    // τ_frac = (latvec·lat0)⁻¹·R_Bohr ⇒ ∂τ_frac,α/∂R_β = (latvec⁻¹)_{αβ}/lat0
+    // (latvec in lat0 units, lat0 = Bohr per lat0-unit, R in Bohr).  Only the
+    // constrained atom's own position enters (I=J): F_Jβ = −λ_J·⟨P̂_J⟩·(L⁻¹)_{αβ}/lat0.
+    // No stress counterpart: fixed-fractional-coordinate strain keeps ∂τ/∂ε = 0
+    // (dev-guide F8).  Added before reduce_all so MPI ranks sum it like A1.
+    if (cal_force)
+    {
+        const ModuleBase::Matrix3 latvec_inv = this->ucell->latvec.Inverse();
+        const double inv_lat0 = 1.0 / this->ucell->lat0;
+        const double linv[3][3] = {{latvec_inv.e11, latvec_inv.e12, latvec_inv.e13},
+                                   {latvec_inv.e21, latvec_inv.e22, latvec_inv.e23},
+                                   {latvec_inv.e31, latvec_inv.e32, latvec_inv.e33}};
+        for (int iat = 0; iat < this->ucell->nat; iat++)
+        {
+            if (static_cast<size_t>(iat) >= this->lambda_.size() || this->lambda_[iat] == 0.0)
+                continue;
+            const double lam = this->lambda_[iat];
+            for (int beta = 0; beta < 3; ++beta)
+            {
+                force(iat, beta) -= lam * p_hat[iat] * linv[alpha_idx][beta] * inv_lat0;
+            }
+        }
+    }
 
     if (cal_force)
     {
