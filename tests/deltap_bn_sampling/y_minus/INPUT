@@ -3,6 +3,7 @@ suffix    bn
 calculation    scf
 basis_type    lcao
 ecutwfc    100
+ecutrho    400
 gamma_only    0
 
 nspin    1

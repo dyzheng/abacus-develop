@@ -1176,3 +1176,35 @@ compute_hk_correction、deltap_common）+ 约束力/应力公式推导，输出
 - 补 D2：4-rank inner_nmax>0 冒烟，实测内循环 λ ×L 重收敛；
 - A2/C 成对实现 + 成对验证（冻结 λ FD，新预算 A2=1.85e-3/C=3.70e-3）；
 - D-D 高精度轮；清理调试打印；MPI/ASAN 回归。
+
+### 2026-08-03（续6）：锚点重建轮（B-6 后生产设置）+ D2 内循环 λ×L 核实
+- **执行**：commit `53f94042d`（相位修复 + B-6 + 调试打印 #if 0 包裹）；
+  全部 λ≠0 锚点用例 INPUT 显式加 ecutrho 400（relax 还 ecutwfc 50→100），
+  重建 bn_sampling 9-label + deltap_bn_test + deltap_relax +
+  test_stru_target（4-rank 内循环）。
+- **锚点内容**：E'（FINAL_ETOT_IS）+ 逐 iter λ/γ 轨迹（工件
+  deltap_lambda_gamma.dat，*.dat 被 .gitignore 排除不提交）+ 分支选择
+  deltap_branch.dat；results.csv 已更新（9-label 新值）。
+- **轨迹要点**：λ 冻结于 iter≈11；γ 分支翻转 18–41 次/50 iter（5/9 末态
+  |γ−t|≈2.6–5.8）——B-6 后同步模式约束驱动弱 L 倍，γ 目标常不可达
+  （预期，非回归 bug；λ_step ×L 重标定归 F1 备忘录）。
+- **D2 核实（center+inner_nmax=5）**：BFGS 内循环 λ 按 L=3.615 重收敛
+  （N 原子 3.66×，1.2% 吻合；τ=0 的 B 原子不受影响）——算符不变性在
+  收敛 λ 模式确认；同步模式 λ 不重收敛（B-6 轮）。test_stru_target 的
+  λ 符号对 SCF 噪声敏感（±5e-3 皆可），不作 λ 量级判据。
+- **relax 锚点**：3 离子步未收敛（grad 0.67 eV/Å），λ 逐步增长
+  （−5.5e-3→−1.66e-2），E_HK 随 λ 增大；无崩溃（B-1 回归面 OK）。
+- 详见 `2026-08-03-deltap-b6-anchor-rebuild.md`。
+
+### Files modified（本轮）
+- bn_sampling 9-label / deltap_bn_test / test_stru_target / deltap_relax
+  INPUT：显式 ecutrho 400（relax 另 ecutwfc 100）
+- `tests/deltap_bn_sampling/results.csv`：9-label 新锚点
+- `2026-08-03-deltap-b6-anchor-rebuild.md`：新增锚点轮文档
+- `deltap-development-log.md`：本段
+
+### Next steps（更新）
+- A2/C 成对实现 + 成对验证（hhrdbg 翻回 #if 1；冻结 λ FD，
+  预算 A2=1.85e-3 / C=3.70e-3）；
+- D-D 高精度验收（run_fd.sh 支持 ECUTWFC/ECUTRHO/SCF_THR 覆盖）；
+- F1 备忘录 λ_step ×L 决策；A2/C 后清理调试打印 + MPI/ASAN。

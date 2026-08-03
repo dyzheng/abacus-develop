@@ -3,7 +3,8 @@ suffix          deltap_relax
 calculation     relax
 relax_nmax      3
 basis_type      lcao
-ecutwfc         50
+ecutwfc         100
+ecutrho         400
 gamma_only      0
 nspin           1
 scf_thr         1.0e-6
