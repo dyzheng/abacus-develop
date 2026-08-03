@@ -902,3 +902,277 @@ R3 vs R1 基线 A/B；LCAO 同步（h2o_lcao）R3 vs R2 A/B；LCAO 内循环（h
    dev-log；排除 `center/INPUT` 与杂散 `STRU.cif`。
 2. D5 守卫降级 debug-only（可选）；冒烟脚本接 CI（需 MPI+赝势 runner）。
 3. T2（PW init 惰性化）、T7（force 路径）继续推进。
+
+---
+
+## 2026-08-02: Force/Stress 开发指导文档（公式推导 + 代码审查）
+
+### What was done
+源码只读审查（deltap_lcao、deltap_force_stress、FORCE_STRESS、forces_onsite、
+compute_hk_correction、deltap_common）+ 约束力/应力公式推导，输出
+`2026-08-02-deltap-force-stress-dev-guide.md`。未改运行时代码。
+
+### 核心结论
+1. **实现矩阵**：LCAO 有 A1（SMO Pulay）力 + S1 应力（未验证、必崩）；
+   A2（∂τ/∂R HF 项）、B（H_HK 力/应力）、C（escon λdγ/dR 记账）均未实现；
+   PW 只有 onsite Pulay 力、无应力。
+2. **公式分解**：F = F_KS − ρ·∂H_HR/∂R − ρ·∂H_HK/∂R + λ·dγ/dR；B/C 响应项
+   仅在 H_c=λδγ/δρ 时相消（H_HK 近似满足，H_HR 不满足）→ FD 为最终裁判。
+3. **B-1 根因推断**：`cal_force_stress` nlm_target 按 (nwl+1)² 分配但提取循环
+   按全部 nw（多 ζ 逐一计数）→ 越界写，即 relax 崩溃/double-free 根因
+   （静态分析，待 T7-a ASAN 实证）。`cal_pre_HR` 同模式多 ζ 覆盖语义丢轨道（O3）。
+4. **T7 三步计划**：a) 修 B-1 + 核 C-12/13 → b) FD 验证（微分对象=E_tot+escon，
+   残差即 A2 独立测量）→ c) 补 A2 + 定量 B/C → 关闭 C-02。
+
+### Files modified this round
+- 新增 `docs/superpowers/specs/2026-08-02-deltap-force-stress-dev-guide.md`；本文档追加本节。
+
+### 2026-08-02（v2 修订）: dspin 比对修正
+- 依据 DeltaSpin 源码比对（spin_constrain/cal_mw/dspin_force_stress）修订
+  force/stress 指导文档为 v2：
+  1. §2.3 重写：dspin Pulay-only 精确性三条件（观测量=算符 expectation/能量相消/
+     约束激活）→ DeltaP ①②不满足、③可满足；
+  2. A2（∂τ/∂R）提为最高优先：Born 电荷型主导力（电场焓 −E·P 类比）；
+  3. FD 改双组协议：组① frozen λ（残差≈λ·dγ/dR+A2）+ 组②每位移点 λ 重收敛
+     （relax 可用性判决）；
+  4. 新增 §7 公式集（F1-F10）、§8 check-list、§9 TODO（T7-a→b→c→d）；
+  5. 附带：建议仿 dspin magnetic-force 打印 ∂E'/∂γ=λ 诊断；dspin 自身 FD 文档
+     本仓库未查到，"与 dspin 同构"不构成 FD 豁免。
+
+---
+
+## 2026-08-02: T7-a 实证 — B-1 nlm 越界 / B-5 跨步 UAF / B-3 λ 轨迹
+
+### What was done
+按 force-stress 指导文档 §9-T7-a 执行首轮实证修复；详见
+`2026-08-02-deltap-force-stress-t7a.md`。三条独立缺陷一次修完。
+
+### 关键结论
+1. **B-1**：`snap()` ket 平铺索引 == 原子全局 `iw`（L→N→m 同构，m 为
+   0,1,−1,2,−2… 序）；旧提取循环把每个 L 的非首 iw 写入块外，最后一个 L 越界
+   （单 ζ 也崩，channel=3 必然 `index+3·length ≥ 4·length`）。修复 = 提取端
+   对齐消费端 l²+m 协议，保持 first-ζ 通道集。
+2. **O3 裁定**：`deltap_overlap.cpp:91` "Select first zeta of each l, same as
+   DeltaSpin" + `nproj_per_atom_=(nwl+1)²` ⇒ γ/SMO/H_HR 全链都是 first-ζ 投影基，
+   多 ζ 的 N>0 轨道不进约束投影是**设计语义**，从 bug 列表移除（记 LIMITATION）。
+3. **B-5（新）**：`before_scf` 每离子步重建 p_hamilt，backend 捕获的 dp_op 悬垂
+   ⇒ step2 `get_lambda()` UAF（bad_alloc/bad_array_new_length，gdb 实证）。
+   修复：lambda 动态解析 + `state_.lambda_eff` 持久化（`apply_lambda`）+ 重建后播种。
+4. **B-3 关闭**：λ 跨步连续（−5.5e-3 → −1.10e-2 → −1.65e-2，每步一次 GD），
+   无重复/无丢失。
+5. **顺带**：`cal_stress_IJR` 9→6 元越界写修复；消费端补 npol=2 DM 行尾步进。
+
+### 验证
+- relax 3 步 exit=0；ASAN relax 3 步 + cell-relax 1 步 **0 错误**；
+- 单测 16/16；MPI 冒烟三用例 PASS；test_C_I 锚点能量逐字节一致。
+
+### Files modified
+- `deltap_force_stress.hpp`（B-1/stress/npol）
+- `esolver_ks_lcao.cpp`（B-5/B-3）
+- `deltap_scf.cpp`（lambda_eff 持久化）
+- 新增 `2026-08-02-deltap-force-stress-t7a.md`；本文档追加本节。
+
+### Next steps
+- T7-b：FD 双组协议（frozen-λ + λ 重收敛；判据 5e-4 Ry/Bohr）；run_fd.sh 补 escon。
+- T7-c：实现 A2（∂τ/∂R HF 项）+ λ 诊断打印 + 应力 FD。
+- T7-d：P17 relax vs efield 对照。
+- 记录：O3 first-ζ 为设计语义；A1 符号待 FD 实证（未验证状态维持）。
+
+---
+
+## 2026-08-03: T7-b 收尾 + T7-c B-7（H_HK 解析力）实现与排查
+
+### What was done
+按 `2026-08-02-deltap-force-stress-dev-guide.md` 继续 force/stress 开发。
+详见 `2026-08-02-deltap-force-stress-t7b.md`（收尾）与
+`2026-08-03-deltap-force-stress-t7c-b7.md`（B-7 实现与排查）。
+
+### T7-b 收尾
+1. 组② 完整 3×3 位移矩阵跑通（`run_fd.sh h2o1 0.005 1 2`）：5/9 FAIL，
+   失败模式与组① 一致（x/z 大残差、y 对称零力 PASS），`script_exit=1`；
+2. `tests/deltap_fd_force/README.md` 重写为双组协议文档；
+3. 已补 escon 记账验证、`deltap_lambda_init_file`、h2o1 算例（T7-b 交付项）。
+
+### T7-c B-7：H_HK 解析力（进行中，核心发现）
+1. **公式**：E_HK = Re[(i/2)Σ_j Σ_n f_n W_n (C_L† S_dk C_R)_{nn}]，冻结 C 的
+   HF 力 = −Re[(i/2)Σ f(W·∂T + ∂W·T)]；∂S_dk/∂R（含 bra 侧相位导数
+   −2πi dk/lat0）、∂S_k/∂R（first-ζ 投影集导数块）均用 snap(cal_deri=1)；
+2. **实现**：`DeltaP::compute_hk_force`（串行守卫 nproc==1+nrow==ncol）+
+   静态存储（`s_stored_hk_force`）+ FORCE_STRESS fcs 汇总块并入（使
+   TOTAL-FORCE 打印含 F_HK）；
+3. **E_HK 交叉验证通过**：base λ* 下 E_HK=+2.5838e-3 Ry；组① O1-z ±δ
+   FD 得 ∂E_HK/∂R ≈ +2.86 eV/Å，与 T7-b 隔离推断 B≈2.64 吻合；
+4. **接入排错两处**：① F_HK 不进打印（getForceStress 内部打印）→ 静态存储
+   + FORCE_STRESS 并入；② store 时机太晚（static 空）→ compute+store 移
+   到 getForceStress 之前；
+5. **未决（排查中）**：z 方向 uniform −2.24e-3 Ry/Bohr 偏移（x/y 精确吻合
+   f_hk，z 不吻合；∑F_z 不守恒）——需对比 with/disabled 运行的
+   force_deltap 与标准力分量定位。
+
+### Files modified
+- `deltap.h`/`deltap_wannier.cpp`（compute_hk_force 实现，含临时 hkdbg 打印）
+- `deltap_lcao.h/.cpp`（s_stored_hk_force/e_hk 静态）
+- `esolver_ks_lcao.cpp`（cal_force 接入 + [DeltaP HK-force] 诊断）
+- `FORCE_STRESS.cpp`（fcs 并入 f_hk；临时 fsdbg 打印与 `if (false)` 待清理）
+- `tests/deltap_fd_force/README.md`（T7-b 双组协议文档）
+- 新增 `2026-08-03-deltap-force-stress-t7c-b7.md`；`t7b.md` 补 §3.5
+
+### Next steps
+- 定位并修复 z uniform 偏移（见 t7c-b7 文档 §3.3/§6）；
+- 清理临时调试代码；组① O1-z FD 复验（期望残差降 B 项量级）；
+- A2（∂τ/∂R）+ τ 单位决策（B-6 BLOCKER）；应力 S1；MPI 串行-only 记录。
+
+### 2026-08-03（续）：z-shift 根因定位 —— ABACUS 净力修正 vs f_hk 不守恒
+- **定位**：`FORCE_STRESS.cpp` 力汇总末尾 `fcs(iat,i) -= sum/nat`（gate/
+  efield 关闭时）对总力做均匀修正；Σ_z f_hk = +6.728e-3 → sum/nat =
+  +2.2427e-3 恰为观察到的 uniform z 偏移；x/y Σ=0 故精确吻合。
+- **证据链**：启用/禁用两版 f_hk 与 force_deltap 逐位一致、同二进制两次
+  运行逐位一致、禁用 compute_hk_force 后回基线、ASAN 0 错误。
+- **真问题**：f_hk z 分量不满足平移不变性（Σ_J F_Jz ≠ 0）。候选：
+  (a) S_dk 相位项 ∂phase/∂R_bra 缺补偿；(b) E_HK 定义本身非平移不变。
+  需整体平移数值实验区分。详见 `2026-08-03-deltap-force-stress-t7c-b7.md`
+  §3.3/§6。
+
+### 2026-08-03（续2）：判据实验①② + 相位链 g==0 缺陷修复（T7-c B-7 闭环）
+- **判据①（整体平移 z，gdir=3）**：∂E_HK/∂Δ_z = −0.115 Ry/Bohr vs
+  −∂escon/∂Δ_z = +0.0074 Ry/Bohr —— 差 15.5× 且异号 → **解读 (b)（C 项
+  补偿）证伪 → (a)（实现漏项）成立**。E_HK uniform 敏感性被精确量化 =
+  π·dk/lat0·Re(Σ f W T)（两处实验均精确吻合）。
+- **判据②（gdir=1，KPT 2×1×1，平移 x）**：∂E_HK/∂Δ_x = −0.100 Ry/Bohr，
+  ΣF_HK,x ≈ +0.103 —— 机制沿 dk 方向跟随，无 z 专属 bug。
+- **缺陷定位**：`compute_hk_force` 的 `if (g == 0.0) continue;` 把 g=0
+  配对（自配对、s 通道等）的相位导数整体跳过（逐对 tacc/phaseacc/实际 U
+  累积打印证实：phaseacc 总和 = −2πi·dk/lat0·T，实际 ΣU 缺失一大块）。
+- **修复**：相位项与轨道导数解耦、无条件累积。修复后 ΣF_HK,z = +0.1147
+  ≈ −∂E_HK/∂Δ（FD 0.1150）✓；O1-z FD 残差 5.33 → 3.35 eV/Å（SCF 侧逐位
+  不变，残差变化全来自 F_HK）。
+- **残差分解**：3.35 = 均值扣除摊平项（0.99，ΣF_HK,z=+2.96 ÷ 3）+ 缺项
+  A2/C（≈2.37 eV/Å，O1-z）。
+- **设计决策点**（待用户确认）：D-A E_HK loop 约定（+dk 位置型 vs signed
+  闭合环 E_HK≡0）；D-B FD 对比协议用未扣除力；D-C 实现 A2（∂τ/∂R）与 C
+  （λ·dγ/dR）；D-D 高精度验收（ecutwfc=100/ecutrho≥400）。
+- 详见 `2026-08-03-deltap-force-stress-t7c-b7-continued.md`。
+
+### Files modified（本轮）
+- `deltap_wannier.cpp`：g==0 相位项修复（`compute_hk_force`）+ 临时
+  hkchk/hkpair 打印（hkpair 已 `#if 0`）
+- 新增 `2026-08-03-deltap-force-stress-t7c-b7-continued.md`
+
+### Next steps
+- 用户确认 D-A/D-B 后：run_fd.sh 对比协议改未扣除力；实现 A2（∂τ/∂R，
+  含 B-6 τ 单位决策）与 C（λ·dγ/dR）；
+- 清理临时调试打印；高精度重跑组① O1-z；MPI/ASAN 回归。
+
+### 2026-08-03（续3）：相位 τ 单位修复（B-6 确认）+ 判据①复跑（用户评审复核）
+- **用户评审**：《评审：T7-c continued 实现思路》—— 15.5× 失配 = 晶胞
+  尺寸 15.87（2.4% 内吻合）= B-6 τ 单位 bug 在 `compute_S_dk` 相位里的
+  体现（`tau0=get_tau()` 为 lat0 单位 ≈Å 数值，与分数步长 dkv 混用，
+  相位放大 L 倍）；解读 (b) 应平反；§7-4 "trace 结构性属性"与 D-A
+  （signed-dk）撤回；先做相位单位验证，再谈 A2/C。
+- **实施**（`deltap_wannier.cpp`）：`compute_S_dk` / `compute_hk_force`
+  相位 τ 改用 Direct 分数坐标 `taud`；相位导数因子改
+  `−2πi·(latvec⁻¹·dkv)_α/lat0`（正交晶胞 = −2πi·dkv_α/(L_α·lat0)，与
+  处方一致）；g==0 修复保留。与 ABACUS 参考 `unk_overlap_lcao.cpp:529`
+  （`kRn = 2π(kvec_c·R − dk·tau1)`）数值等价 ✓。
+- **判据①复跑（gdir=3）**：E_HK 由 +2.58e-3 → −8.63e-2 Ry（S_dk 虚数
+  主导，Im(T)→−0.999）；ΣF_HK,z = +0.1147 → **−1.4e-4 ≈ 0**（冻结 C 下
+  E_HK 平移不变）；∂E_HK/∂Δ_z（FD，弛豫）= −5.75e-3，∂escon/∂Δ_z =
+  −7.4e-3 —— 同号、比值 0.78，"E' 原点不变"补偿未复现。
+- **15.87× 预言不成立的机理**：单位修复改变 S_dk 相位本身（O 自相位
+  ≈+1 → −i），Re(T_00) 塌缩 +0.743 → −0.022；相位导数 ∝ dkv_eff·Re(T)
+  收缩 ~530×（含 Re(T) 额外 33×）并翻转符号。"15.5×≈15.87"是 O 恰在
+  τ_lat0≈8 处的几何巧合。
+- **撤回**：解读 (b) 证伪结论、§7-4 trace 结构性属性、D-A（signed-dk）。
+  **保留**：g==0 修复（仍自洽）、D-B、D-D、残差分解方法论。
+- **残差预算作废重排**：§6.3 "0.99 摊平 + 2.37 缺项"前提（ΣF_HK,z=
+  +2.958）已不存在；O1-z 单原子在 ecutwfc=50 下 FD 仍 ~4.3 eV/Å，
+  噪声+弛豫+缺项混合，不作验收依据。
+- 详见 `2026-08-03-deltap-force-stress-t7c-b7-continued.md` §10。
+
+### Files modified（本轮）
+- `deltap_wannier.cpp`：`compute_S_dk` / `compute_hk_force` 相位 τ 单位
+  修复（taud + latvec⁻¹ 导数因子）+ 注释更新
+- `2026-08-03-deltap-force-stress-t7c-b7-continued.md`：追加 §10 复核 +
+  撤回标记
+
+### Next steps（更新）
+- ecutwfc=100 + ecutrho≥400 + scf_thr 1e-8 重跑判据①与 O1-z（D-D），
+  重建 A2/C 残差预算（摊平项已消失）；
+- 实现 C（λ·dγ/dR，escon FD −7.4e-3 同号响应 → E' 原点敏感性主要候选）
+  与 A2（∂τ/∂R）；
+- 回归面重建：test_C_I 类锚点（H_c/SCF/E_HK 随相位修复全面变化）；
+- 审查 compute_S_dk_link（未使用）与参考实现位置修正项是否需要补；
+- 清理调试打印；MPI/ASAN 回归。
+
+### 2026-08-03（续4）：相位修复轮评审处理 + 正确版判据①（冻结 λ 总 E' FD）
+- **用户评审**：修复正确、ΣF_HK,z≈0 是核心结果；两处结论性错误需回改：
+  (1) "15.87× 预言不成立"→ 应表述为"数值巧合叠加在真实单位 bug 上"
+  （dkv_eff 恰按 L=15.87 收缩已确认；530× = 15.87×（单位）× 33×
+  （Re(T) 塌缩），与预言机制完全一致）；(2) "E' 补偿未复现"比较对象错
+  （弛豫 FD 混入 H_HR 的 ψ 响应），正确检验 = 冻结 λ 总 E' 均匀平移 FD，
+  分离 ∂(TrρH_HR)/∂Δ（A2）与 ∂escon/∂Δ（C）；"C 是主要候选"是错误
+  比较的推论，优先级改为先做正确版判据①，A2/C 成对定量。
+- **实施**：(a) §10.2/§10.3 结论措辞回改；(b) `compute_S_dk` 相位处加
+  B-6 族防护注释（τ 必须 Direct 坐标，勿混入 lat0 单位 H_HR τ）；
+  (c) `deltap_force_stress.hpp` 加临时 `[hhrdbg] E_H_HR =
+  Σ_I λ_I·τ_α(I)·⟨P̂_I⟩` 打印（cal_force_IJR 值块累积，与 SCF 的
+  H_HR=λτP̂ 定义一致）。
+- **冻结 λ 判据①结果**（组①，λ=base 收敛值，step 0.0，gdir=3）：
+  ∂E'/∂Δ = **−3.254e-2 Ry/Bohr** = ∂E_H_HR/∂Δ（−2.926e-2，A2 内容）
+  + ∂escon/∂Δ（−3.70e-3，C 内容），1.5% 内恒等；∂E0/∂Δ + ∂E_HK/∂Δ ≈
+  +2.9e-4 ≈ 0；冻结 λ 下 E_HK FD = +1.22e-4 ≈ 解析 −ΣF_HK,z=+1.36e-4
+  （10% 闭合）—— 上轮组②的 −5.75e-3 确认是 λ 漂移污染。
+- **A2/C 预算**：A2 均匀力 = +2.93e-2（lat0 τ）→ B-6 分数 τ 后 +1.84e-3；
+  C 均匀力 = +3.70e-3（冻结 λ，组② +7.4e-3 是 λ 漂移虚高约 2×）。
+  **H_HR 与 escon 同号相加，"−E·P 对偶补偿"未在数据中复现**（用户预言
+  与实测不符，如实记录）；E' 均匀分量由均值扣除消去，relax 不受影响，
+  真正要验证的是逐原子 A2/C（留 ecutwfc=100 高精度轮）。
+- 详见 `2026-08-03-deltap-force-stress-t7c-b7-continued.md` §10.8。
+
+### Files modified（本轮）
+- `deltap_wannier.cpp`：B-6 族防护注释（compute_S_dk / compute_hk_force
+  相位处）
+- `deltap_force_stress.hpp` + `deltap_lcao.h`：临时 hhrdbg E_H_HR/⟨P̂⟩
+  打印（cal_force_IJR 增加可选 p_hat 参数）
+- `2026-08-03-deltap-force-stress-t7c-b7-continued.md`：§10.2/§10.3 回改
+  + §10.7 优先级重排 + §10.8 冻结 λ 正确版判据①
+
+### Next steps（更新）
+- A2（∂τ/∂R）与 C（λ·dγ/dR）成对实现/成对验证（§10.8 已定量均匀预算；
+  逐原子预算留 ecutwfc=100 + ecutrho≥400 + scf_thr 1e-8 高精度轮，
+  先重建 test_C_I 锚点再做 D-D 验收）；
+- 清理调试打印（hkdbg/hkchk/fsdbg/hhrdbg）；MPI/ASAN 回归。
+
+### 2026-08-03（续5）：B-6 修复轮（H_HR τ 单位 → 分数坐标）+ A/B 验证
+- **用户评审**：A2/C 都不要先做，插入 B-6（H_HR τ → 分数坐标），顺序
+  B-6 → 锚点 → A2/C → D-D；连带项（E-field 等效、bn_sampling 标定）为
+  B-6 包一部分；§10.8"补偿未复现"改写为 O5 代理差距定量化。
+- **实施**：三处 λτ 改 `taud`（deltap_force_stress.hpp:63/:226 +
+  deltap_lcao.cpp:125，均加 B-6 防护注释）；PW 无 τ 不受影响。
+- **A/B 验证**（h2o base L=15.8753、BN center L=3.615，1-rank）：
+  E_H_HR **精确缩小 L 倍**（−0.4471→−0.0281，15.90×，0.15% 吻合）；
+  E' 位移 = TrρH_HR 位移（99.8% 闭合）；**同步模式 λ 单步冻结 → λ 不重
+  收敛**（update_lambda_gd 只做一次 GD），escon/γ 不变，E_HK 0.2% 漂移。
+- **机制澄清**：λ 只依赖 λ=0 的 γ（B-6 前后相同）；内循环 BFGS 模式
+  预期 λ ×L 重收敛（算符不变），未验证 = D2 缺口实测内容。
+- **E-field 重推导**：F1 公式 E=−πλ/(2a)（λ Ry、a Bohr）**只在分数 τ
+  下成立**；旧代码等效场强 L 倍（h2o 2L/π≈10.1×）；公式与工作值不变，
+  π/2 因子仍归 F1 备忘录。
+- **锚点影响**：test_C_I（λ≡0）不受影响；λ≠0 用例 E' 位移 ≈ TrρH_HR
+  位移（BN center +2.7e-3 Ry、h2o +0.418 Ry），γ 轨迹可能分支翻转。
+- 详见 `2026-08-03-deltap-b6-tau-unit-fix.md`；§10.8 均匀预算已回改为
+  A2=+1.85e-3 / C=+3.70e-3（B-6 后冻结 λ）。
+
+### Files modified（本轮）
+- `deltap_lcao.cpp`、`deltap_force_stress.hpp`：B-6 τ → taud + 注释
+- `2026-08-03-deltap-force-stress-t7c-b7-continued.md`：§10.8 回改
+  （O5 定量 + B-6 后预算）
+- `2026-08-03-deltap-b6-tau-unit-fix.md`：新增 B-6 轮文档
+- `deltap-development-log.md`：本段
+
+### Next steps（更新）
+- 重建 λ≠0 锚点：bn_sampling 9-label results.csv、deltap_bn_test、
+  relax（ecutwfc=100；test_C_I 跳过）；
+- 补 D2：4-rank inner_nmax>0 冒烟，实测内循环 λ ×L 重收敛；
+- A2/C 成对实现 + 成对验证（冻结 λ FD，新预算 A2=1.85e-3/C=3.70e-3）；
+- D-D 高精度轮；清理调试打印；MPI/ASAN 回归。

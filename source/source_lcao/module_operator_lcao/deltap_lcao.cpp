@@ -4,11 +4,16 @@
 #include "source_base/tool_title.h"
 #include "source_base/parallel_reduce.h"
 #include "source_io/module_parameter/parameter.h"
+#include <fstream>
 #include <type_traits>
 
 // Static storage for force/stress computation
 template <typename TK, typename TR>
 std::vector<double> hamilt::DeltaPOperator<TK, TR>::s_stored_lambda;
+template <typename TK, typename TR>
+std::vector<double> hamilt::DeltaPOperator<TK, TR>::s_stored_hk_force;
+template <typename TK, typename TR>
+double hamilt::DeltaPOperator<TK, TR>::s_stored_e_hk = 0.0;
 
 template <typename TK, typename TR>
 hamilt::DeltaPOperator<TK, TR>::DeltaPOperator(
@@ -32,8 +37,36 @@ hamilt::DeltaPOperator<TK, TR>::DeltaPOperator(
     // not needed here; cal_force_stress() takes it from the density matrix.
     // Guarding the dereference fixes a null-pointer crash in relax+cal_force.
     this->paraV = this->hR ? this->hR->get_paraV() : nullptr;
-    this->lambda_.assign(this->ucell->nat, PARAM.inp.deltap_lambda_init);
-    this->lambda_save_.assign(this->ucell->nat, PARAM.inp.deltap_lambda_init);
+    // Per-atom λ init: if deltap_lambda_init_file is set, read one value per
+    // atom (used by the FD protocol to freeze the base-run converged λ for
+    // every displaced geometry; group-1 of T7-b).  Otherwise fall back to the
+    // scalar deltap_lambda_init for all atoms.
+    if (!PARAM.inp.deltap_lambda_init_file.empty())
+    {
+        std::ifstream ifs(PARAM.inp.deltap_lambda_init_file);
+        if (!ifs)
+        {
+            ModuleBase::WARNING_QUIT("DeltaPOperator",
+                "cannot open deltap_lambda_init_file: "
+                + PARAM.inp.deltap_lambda_init_file);
+        }
+        this->lambda_.resize(this->ucell->nat);
+        this->lambda_save_.resize(this->ucell->nat);
+        for (int iat = 0; iat < this->ucell->nat; ++iat)
+        {
+            if (!(ifs >> this->lambda_[iat]))
+            {
+                ModuleBase::WARNING_QUIT("DeltaPOperator",
+                    "deltap_lambda_init_file has fewer values than nat");
+            }
+        }
+        this->lambda_save_ = this->lambda_;
+    }
+    else
+    {
+        this->lambda_.assign(this->ucell->nat, PARAM.inp.deltap_lambda_init);
+        this->lambda_save_.assign(this->ucell->nat, PARAM.inp.deltap_lambda_init);
+    }
     this->pre_hr.resize(this->ucell->nat, nullptr);
 }
 
@@ -89,7 +122,11 @@ void hamilt::DeltaPOperator<TK, TR>::contributeHR()
 
         int I0, T0;
         this->ucell->iat2iait(iat, &I0, &T0);
-        double tau_alpha = this->ucell->atoms[T0].tau[I0][alpha_idx];
+        // B-6 (fixed): H_HR = Σ λ·τ_α·P̂ with τ_α the Direct (fractional)
+        // coordinate taud — must match the force side (deltap_force_stress)
+        // and the E-field equivalent E=−πλ/(2a).  lat0-unit tau amplified
+        // the operator by L = a/lat0 (~15.87 here).
+        double tau_alpha = this->ucell->atoms[T0].taud[I0][alpha_idx];
 
         double dlambda = this->lambda_[iat] - this->lambda_save_[iat];
         double coeff = dlambda * tau_alpha;

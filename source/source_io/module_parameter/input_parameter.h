@@ -628,6 +628,7 @@ struct Input_para
     double deltap_conv_thr = 1.0e-3;  ///< |gamma-target| convergence threshold for inner loop
     std::string deltap_target_file = "";  ///< file with per-atom target Berry phase gamma^I
     double deltap_lambda_init = 0.0;      ///< initial lambda for all atoms (testing)
+    std::string deltap_lambda_init_file = "";  ///< file with per-atom initial lambda (nat values)
     double deltap_lambda_mixing = 1.0;     ///< damping factor for λ: λ_new = β·λ_opt + (1-β)·λ_old (1=full step, 0=frozen, 0.5=half-damped)
     std::string deltap_constraint_mode = "per_atom";  ///< "per_atom": per-atom constraint; "total": constrain sum Σγ_I
     std::string deltap_constraint_matrix = "";  ///< path to constraint matrix file (overrides constraint_mode when set)

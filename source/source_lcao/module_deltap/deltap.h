@@ -95,6 +95,22 @@ public:
                                const std::vector<double>& lambda,
                                std::unordered_map<int, std::vector<std::complex<double>>>& hk_correction);
 
+    /// Analytic force of the H_HK (Berry-connection) correction (T7-c, B-7).
+    /// F_Jα = -∂E_HK/∂R_Jα with the converged wavefunctions frozen
+    /// (Hellmann-Feynman: the constrained SCF energy E' is variational in C).
+    /// E_HK = Σ_j Re[Tr(H_sym(k_j) · DM_{k_j})] with
+    /// H_sym(k_j) = sym[(i/2) S_dk(k_j,k_{j+1}) C(k_{j+1}) W_eff C†(k_j)].
+    /// Serial-only for now (nproc == 1 and nrow == ncol), consistent with the
+    /// serial-only status of compute_hk_correction.  force_out is nat*3 in
+    /// Ry/Bohr; e_hk_out is E_HK in Ry.  Returns false (with a warning) when
+    /// the required conditions are not met.
+    bool compute_hk_force(const UnitCell& ucell,
+                          const psi::Psi<std::complex<double>>* psi,
+                          const elecstate::ElecState* pelec,
+                          const std::vector<double>& lambda,
+                          std::vector<double>& force_out,
+                          double& e_hk_out);
+
     /// Initialize Fletcher-Reeves CG inner-loop optimizer for constrained polarization.
     void init_inner_loop();
 

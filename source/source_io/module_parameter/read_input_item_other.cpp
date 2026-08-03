@@ -1253,6 +1253,18 @@ Manual override is allowed: if sc_acceleration_mode is explicitly set, it takes 
         this->add_item(item);
     }
     {
+        Input_Item item("deltap_lambda_init_file");
+        item.annotation = "file with per-atom initial lambda";
+        item.category = "DeltaP";
+        item.type = "String";
+        item.description = "File with per-atom initial Lagrange multiplier (one value per line, nat lines; overrides deltap_lambda_init)";
+        item.default_value = "";
+        item.unit = "";
+        item.availability = "deltap_corr is true";
+        read_sync_string(input.deltap_lambda_init_file);
+        this->add_item(item);
+    }
+    {
         Input_Item item("deltap_lambda_mixing");
         item.annotation = "damping factor for lambda update";
         item.category = "DeltaP";

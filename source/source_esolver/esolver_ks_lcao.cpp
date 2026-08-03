@@ -169,6 +169,24 @@ void ESolver_KS_LCAO<TK, TR>::before_scf(UnitCell& ucell, const int istep)
             two_center_bundle_, orb_, this->dmat.dm, &this->dftu, this->deepks, istep, exx_nao);
     }
 
+    // Branch A: DeltaP multi-ionic-step state (B-3/B-5).
+    // The p_hamilt rebuild above creates a fresh DeltaPOperator whose
+    // lambda_ was reset to deltap_lambda_init.  The SCF state machine owns
+    // the converged λ across steps (apply_lambda persists it into
+    // state_.lambda_eff); seed the new operator so contributeHR() re-adds
+    // the full current λ to the rebuilt hR and get_lambda() returns the
+    // previous step's value instead of zero.
+    if (deltap_scf_initialized_ && PARAM.inp.deltap_switch && PARAM.inp.deltap_corr)
+    {
+        auto* new_hamilt = dynamic_cast<hamilt::HamiltLCAO<TK, TR>*>(this->p_hamilt);
+        auto* new_dp_op = new_hamilt ? new_hamilt->get_dp_operator() : nullptr;
+        const auto& lam = deltap_scf_solver_->state().lambda_eff;
+        if (new_dp_op != nullptr && !lam.empty())
+        {
+            new_dp_op->set_lambda(lam);
+        }
+    }
+
     // 9) for each ionic step, the overlap <phi|alpha> must be rebuilt
     // since it depends on ionic positions
     this->deepks.build_overlap(ucell, orb_, pv, gd, *(two_center_bundle_.overlap_orb_alpha), PARAM.inp);
@@ -258,6 +276,52 @@ void ESolver_KS_LCAO<TK, TR>::cal_force(UnitCell& ucell, ModuleBase::matrix& for
             auto* dp_op = hamilt_lcao->get_dp_operator();
             if (dp_op != nullptr)
                 hamilt::DeltaPOperator<TK, TR>::store_lambda_for_force(dp_op->get_lambda());
+        }
+    }
+
+    // DeltaP H_HK (Berry-connection) analytic force — T7-c B-7.
+    // The H_HR projector force is added inside FORCE_STRESS; the k-space
+    // H_HK term has no real-space dR expression there, so it is computed
+    // here from the converged wavefunctions with C frozen (the constrained
+    // SCF energy is variational in C, so the Hellmann-Feynman theorem
+    // applies).  The contribution is stored statically and added inside
+    // FORCE_STRESS so the printed TOTAL-FORCE includes it.  Serial-only
+    // (see deltap::DeltaP::compute_hk_force); must run before getForceStress.
+    if (PARAM.inp.deltap_switch && PARAM.inp.deltap_corr && PARAM.inp.cal_force)
+    {
+        if constexpr (std::is_same<TK, std::complex<double>>::value)
+        {
+            // Clear any stale H_HK force from a previous ionic step before
+            // recomputing, so a failed/disabled computation cannot leak it.
+            hamilt::DeltaPOperator<TK, TR>::store_hk_force_for_force({}, 0.0);
+            auto* hamilt_lcao = dynamic_cast<hamilt::HamiltLCAO<TK, TR>*>(this->p_hamilt);
+            if (hamilt_lcao != nullptr)
+            {
+                auto* dp_op = hamilt_lcao->get_dp_operator();
+                if (dp_op != nullptr && !dp_op->get_lambda().empty() && this->dp_scf_)
+                {
+                    std::vector<double> f_hk;
+                    double e_hk = 0.0;
+                    if (this->dp_scf_->compute_hk_force(ucell, this->psi, this->pelec,
+                                                        dp_op->get_lambda(), f_hk, e_hk))
+                    {
+                        hamilt::DeltaPOperator<TK, TR>::store_hk_force_for_force(f_hk, e_hk);
+                        double fmax = 0.0;
+                        for (size_t i = 0; i < f_hk.size(); ++i)
+                        {
+                            fmax = std::max(fmax, std::abs(f_hk[i]));
+                        }
+                        std::cout << " [DeltaP HK-force] E_HK=" << std::setprecision(10)
+                                  << e_hk << " Ry  F_HK_max=" << std::setprecision(6)
+                                  << fmax << " Ry/Bohr";
+                        for (size_t i = 0; i < f_hk.size(); ++i)
+                        {
+                            std::cout << " " << std::setprecision(5) << f_hk[i];
+                        }
+                        std::cout << std::endl;
+                    }
+                }
+            }
         }
     }
 
@@ -918,9 +982,24 @@ typename deltap_scf::DeltapScfSolver::Backend ESolver_KS_LCAO<TK, TR>::deltap_ma
     auto* dp = dp_scf_.get();
     const int alpha = PARAM.inp.deltap_gdir - 1;
 
+    // Resolve the DeltaP operator from the *current* p_hamilt on every call.
+    // p_hamilt (and its operator) is rebuilt at each ionic step
+    // (before_scf), so a pointer captured here would dangle after step 1
+    // (B-5 use-after-free, observed as bad_alloc in relax step 2).
+    auto get_dp_op = [this]() -> hamilt::DeltaPOperator<TK, TR>* {
+        auto* hamilt_lcao = dynamic_cast<hamilt::HamiltLCAO<TK, TR>*>(this->p_hamilt);
+        return hamilt_lcao ? hamilt_lcao->get_dp_operator() : nullptr;
+    };
+
     deltap_scf::DeltapScfSolver::Backend b;
-    b.set_lambda = [dp_op](const std::vector<double>& lam) { dp_op->set_lambda(lam); };
-    b.get_lambda = [dp_op]() { return dp_op->get_lambda(); };
+    b.set_lambda = [get_dp_op](const std::vector<double>& lam) {
+        auto* op = get_dp_op();
+        if (op != nullptr) op->set_lambda(lam);
+    };
+    b.get_lambda = [get_dp_op]() {
+        auto* op = get_dp_op();
+        return op != nullptr ? op->get_lambda() : std::vector<double>();
+    };
     // DeltaP gamma / HK-correction calls are complex<double>-only (multi-k);
     // the branches are discarded for the real instantiation.
     if constexpr (std::is_same<TK, std::complex<double>>::value)
@@ -942,10 +1021,11 @@ typename deltap_scf::DeltapScfSolver::Backend ESolver_KS_LCAO<TK, TR>::deltap_ma
                 out[i] = r[i][alpha];
             return out;
         };
-        b.apply_hk_correction = [this, dp, dp_op, &ucell](const std::vector<double>& lam) {
+        b.apply_hk_correction = [this, dp, get_dp_op, &ucell](const std::vector<double>& lam) {
             std::unordered_map<int, std::vector<std::complex<double>>> hk_corr;
             dp->compute_hk_correction(ucell, this->psi, lam, hk_corr);
-            dp_op->set_hk_correction(hk_corr);
+            auto* op = get_dp_op();
+            if (op != nullptr) op->set_hk_correction(hk_corr);
         };
     }
     b.solve_frozen = [this]() {
@@ -954,7 +1034,7 @@ typename deltap_scf::DeltapScfSolver::Backend ESolver_KS_LCAO<TK, TR>::deltap_ma
             this->psi[0], this->pelec, *this->dmat.dm, this->chr,
             PARAM.inp.nspin, true); // skip_charge = true (frozen density)
     };
-    b.sync_lambda = [this, dp_op](std::vector<double>& lam) {
+    b.sync_lambda = [this, get_dp_op](std::vector<double>& lam) {
         if (lam.empty())
             return;
 #ifdef __MPI
@@ -966,10 +1046,11 @@ typename deltap_scf::DeltapScfSolver::Backend ESolver_KS_LCAO<TK, TR>::deltap_ma
                 MPI_Bcast(lam.data(), static_cast<int>(lam.size()), MPI_DOUBLE, 0, this->pv.comm());
         }
 #endif
-        // Write the (rank-0) λ back into the operator so dp_op λ and the
+        // Write the (rank-0) λ back into the operator so the operator λ and the
         // resulting escon are identical on every rank (mirrors the PW
         // backend's s_lambda write-back after Bcast).
-        dp_op->set_lambda(lam);
+        auto* op = get_dp_op();
+        if (op != nullptr) op->set_lambda(lam);
     };
     b.on_phase2 = [dp, this]() {
         dp->start_cooldown(1);

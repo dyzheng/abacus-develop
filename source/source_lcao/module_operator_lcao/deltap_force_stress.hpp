@@ -2,6 +2,9 @@
 #include "deltap_lcao.h"
 #include "source_base/parallel_reduce.h"
 #include "source_base/timer.h"
+#include <iostream>
+#include <iomanip>
+#include <type_traits>
 
 namespace hamilt
 {
@@ -30,6 +33,13 @@ void DeltaPOperator<TK, TR>::cal_force_stress(const bool cal_force,
 
     if (cal_force) force.zero_out();
 
+#if 0 // DEBUG_HHR_ENERGY (disabled for commit; flip to 1 for A2/C) (temporary): Tr(ρ·H_HR) = Σ_I λ_I·τ_α(I)·⟨P̂_I⟩
+    // ⟨P̂_I⟩ is accumulated in cal_force_IJR (value-block nlm·nlm·dm); used to
+    // test the A2↔C compensation: ∂Tr(ρH_HR)/∂Δ should ≈ −∂escon/∂Δ under a
+    // uniform translation (correct criterion ①).
+    std::vector<double> p_hat(this->ucell->nat, 0.0);
+#endif
+
     #pragma omp parallel
     {
         std::vector<double> stress_local(6, 0);
@@ -49,8 +59,12 @@ void DeltaPOperator<TK, TR>::cal_force_stress(const bool cal_force,
             // The HR operator is H_HR = Σ λ_I·τ_α(I)·P̂_I.  The force
             // contribution from the projector derivative is therefore
             // λ_I·τ_α(I) times the derivative of ⟨P̂_I⟩.  (The ∂τ/∂R
-            // Hellmann-Feynman term is not yet implemented.)
-            double tau_alpha = this->ucell->atoms[T0].tau[I0][alpha_idx];
+            // Hellmann-Feynman term A2 is not yet implemented.)
+            // B-6 (fixed): τ_α must be the Direct (fractional) coordinate
+            // taud, NOT the lat0-unit get_tau()/tau — the spec (§2.1) and
+            // the E-field equivalent E=−πλ/(2a) both assume fractional τ;
+            // lat0 τ amplified H_HR by L = a/lat0 (~15.87 here).
+            double tau_alpha = this->ucell->atoms[T0].taud[I0][alpha_idx];
             double lam_eff = lam * tau_alpha;
 
             // Find adjacent atoms
@@ -104,30 +118,39 @@ void DeltaPOperator<TK, TR>::cal_force_stress(const bool cal_force,
                     this->intor_->snap(T1, L1, N1, M1, T0, dtau * this->ucell->lat0,
                                         1 /*cal_deri*/, nlm);
 
-                    // Extract nlm data for all target L0 values (with derivatives)
+                    // Extract the constrained-projector channels of the ket
+                    // atom T0: one radial function per (l,m), i.e. the first
+                    // orbital (N=0, m=0) of each l block in the iw ordering.
+                    // Higher-zeta orbitals (N>0) are excluded by design — the
+                    // SMO/γ projector basis (deltap_overlap.cpp) uses exactly
+                    // this first-zeta set, and the SCF path (cal_pre_HR)
+                    // builds H_HR from the same channels.  The force must
+                    // differentiate that same Hamiltonian.
+                    //
+                    // Layout: channels of (l,m) are stored at index l*l+m in
+                    // four contiguous blocks (value, d/dx, d/dy, d/dz), so
+                    // channel c occupies [c*length, (c+1)*length) with
+                    // length = (nwl+1)^2.  This is the layout consumed by
+                    // cal_force_IJR / cal_stress_IJR.
                     std::vector<double> nlm_target(length * 4);
-                    int target_L = 0, index = 0;
+                    int prev_L = -1;
                     for (int iw = 0; iw < this->ucell->atoms[T0].nw; iw++)
                     {
                         const int L0 = this->ucell->atoms[T0].iw2l[iw];
-                        if (L0 == target_L)
+                        // Branch A: first orbital of a new l block — this is
+                        // the (N=0, m=0) projector; copy all m of this l.
+                        // Branch B: higher-zeta or higher-m orbitals of the
+                        // same l — skipped, they are not in the projector set.
+                        if (L0 == prev_L)
                         {
-                            for (int m = 0; m < 2 * L0 + 1; m++)
-                            {
-                                for (int channel = 0; channel < 4; channel++)
-                                    nlm_target[index + channel * length] = nlm[channel][iw + m];
-                                index++;
-                            }
+                            continue;
                         }
-                        else
+                        prev_L = L0;
+                        for (int m = 0; m < 2 * L0 + 1; m++)
                         {
-                            target_L = L0;
-                            index = target_L * target_L;
-                            for (int m = 0; m < 2 * L0 + 1; m++)
+                            for (int channel = 0; channel < 4; channel++)
                             {
-                                for (int channel = 0; channel < 4; channel++)
-                                    nlm_target[index + channel * length] = nlm[channel][iw + m];
-                                index++;
+                                nlm_target[L0 * L0 + m + channel * length] = nlm[channel][iw + m];
                             }
                         }
                     }
@@ -159,8 +182,13 @@ void DeltaPOperator<TK, TR>::cal_force_stress(const bool cal_force,
                     {
                         double force1[3] = {0, 0, 0};
                         double force2[3] = {0, 0, 0};
+#if 0 // DEBUG_HHR_ENERGY (disabled for commit; flip to 1 for A2/C)
+                        cal_force_IJR(iat1, iat2, paraV, nlm_iat0[ad1], nlm_iat0[ad2],
+                                       dmR_pointer, lam_eff, force1, force2, &p_hat[iat0]);
+#else
                         cal_force_IJR(iat1, iat2, paraV, nlm_iat0[ad1], nlm_iat0[ad2],
                                        dmR_pointer, lam_eff, force1, force2);
+#endif
 
                         for (int ipol = 0; ipol < 3; ipol++)
                         {
@@ -188,6 +216,28 @@ void DeltaPOperator<TK, TR>::cal_force_stress(const bool cal_force,
                     stress_tmp[i] += stress_local[i];
         }
     }
+
+#if 0 // DEBUG_HHR_ENERGY (disabled for commit; flip to 1 for A2/C)
+    {
+        const int alpha_idx = this->gdir_ - 1;
+        double e_hhr = 0.0;
+        for (int iat = 0; iat < this->ucell->nat; iat++)
+        {
+            if (static_cast<size_t>(iat) >= this->lambda_.size()) continue;
+            int I0, T0;
+            this->ucell->iat2iait(iat, &I0, &T0);
+            const double lam = this->lambda_[iat];
+            // B-6 (fixed): fractional (Direct) τ, consistent with H_HR above.
+            const double tau_alpha = this->ucell->atoms[T0].taud[I0][alpha_idx];
+            e_hhr += lam * tau_alpha * p_hat[iat];
+        }
+        std::cout << " [hhrdbg] E_H_HR=" << std::setprecision(12) << e_hhr
+                  << " Ry   P_hat=";
+        for (int iat = 0; iat < this->ucell->nat; iat++)
+            std::cout << std::setprecision(6) << p_hat[iat] << " ";
+        std::cout << std::endl;
+    }
+#endif
 
     if (cal_force)
     {
@@ -221,7 +271,8 @@ void DeltaPOperator<TK, TR>::cal_force_IJR(const int& iat1,
                                             const hamilt::BaseMatrix<double>* dmR_pointer,
                                             double lambda,
                                             double* force1,
-                                            double* force2)
+                                            double* force2,
+                                            double* p_hat)
 {
     const int npol = this->ucell->get_npol();
     const int nspin = (npol == 2) ? 4 : 2;  // DM spin channels
@@ -253,6 +304,9 @@ void DeltaPOperator<TK, TR>::cal_force_IJR(const int& iat1,
                 if (it2 == nlm2_all.end()) { dm_pointer += npol; continue; }
                 const std::vector<double>& nlm2 = it2->second;
 
+                // nlm layout: (l,m) channels at l*l+m in four contiguous
+                // derivative blocks of `length` entries each (see the
+                // extraction in cal_force_stress).  nlm1 and nlm2 share it.
                 const int nlm_size = nlm1.size();
                 const int length = nlm_size / 4;
                 const int lmax = sqrt(length);
@@ -263,8 +317,20 @@ void DeltaPOperator<TK, TR>::cal_force_IJR(const int& iat1,
                     for (int m = 0; m < 2 * l + 1; m++)
                     {
                         index = l * l + m;
+                        // Defensive guard: a mismatched pair of nlm vectors
+                        // must not read past the shorter one.
+                        if (index >= length)
+                        {
+                            break;
+                        }
                         // Force = -lambda * (d<nlm1|/dR * nlm2 + nlm1 * d<nlm2|/dR) * DM
                         // nlm layout: [value(0..length-1) | deri_x(length..2*len-1) | deri_y(2*len..3*len-1) | deri_z(3*len..4*len-1)]
+                        if (p_hat != nullptr)
+                        {
+                            // ⟨P̂_I⟩ (value block) for the constrained atom
+                            // (DEBUG_HHR_ENERGY).
+                            *p_hat += nlm1[index] * nlm2[index] * dm_pointer[step_trace[is]];
+                        }
                         double dbb = nlm1[index + length] * nlm2[index] * dm_pointer[step_trace[is]];
                         tmp[0] = lambda * dbb;
                         dbb = nlm1[index + length * 2] * nlm2[index] * dm_pointer[step_trace[is]];
@@ -278,6 +344,7 @@ void DeltaPOperator<TK, TR>::cal_force_IJR(const int& iat1,
                 }
                 dm_pointer += npol;
             }
+            dm_pointer += (npol - 1) * col_indexes.size();
         }
     }
 }
@@ -334,6 +401,9 @@ void DeltaPOperator<TK, TR>::cal_stress_IJR(const int& iat1,
                 if (it2 == nlm2_all.end()) { dm_pointer += npol; continue; }
                 const std::vector<double>& nlm2 = it2->second;
 
+                // nlm layout: (l,m) channels at l*l+m in four contiguous
+                // derivative blocks of `length` entries each (same as
+                // cal_force_IJR / cal_force_stress extraction).
                 const int nlm_size = nlm1.size();
                 const int length = nlm_size / 4;
                 const int lmax = sqrt(length);
@@ -344,6 +414,11 @@ void DeltaPOperator<TK, TR>::cal_stress_IJR(const int& iat1,
                     for (int m = 0; m < 2 * l + 1; m++)
                     {
                         index = l * l + m;
+                        // Defensive guard: never index past the channel block.
+                        if (index >= length)
+                        {
+                            break;
+                        }
                         double dbb = lambda * nlm1[index + length] * nlm2[index] * dm_pointer[step_trace[is]];
                         tmp[0] = dbb;
                         dbb = lambda * nlm1[index + length * 2] * nlm2[index] * dm_pointer[step_trace[is]];
@@ -351,18 +426,22 @@ void DeltaPOperator<TK, TR>::cal_stress_IJR(const int& iat1,
                         dbb = lambda * nlm1[index + length * 3] * nlm2[index] * dm_pointer[step_trace[is]];
                         tmp[2] = dbb;
 
-                        // Stress: σ_αβ = Σ_k F_α[k] * R_cart_β
-                        for (int ipol = 0; ipol < 3; ipol++)
-                        {
-                            double F_alpha = tmp[ipol];
-                            stress[ipol * 3 + 0] += F_alpha * R_cart.x;
-                            stress[ipol * 3 + 1] += F_alpha * R_cart.y;
-                            stress[ipol * 3 + 2] += F_alpha * R_cart.z;
-                        }
+                        // Stress: σ_αβ = Σ_k F_α[k] * R_cart_β  (pair-force ×
+                        // Cartesian lattice-vector form, /Ω applied in the
+                        // caller).  The tensor is symmetric, so only the six
+                        // independent entries are accumulated into the
+                        // 6-element storage [xx, xy, xz, yy, yz, zz].
+                        stress[0] += tmp[0] * R_cart.x; // xx
+                        stress[1] += tmp[0] * R_cart.y; // xy
+                        stress[2] += tmp[0] * R_cart.z; // xz
+                        stress[3] += tmp[1] * R_cart.y; // yy
+                        stress[4] += tmp[1] * R_cart.z; // yz
+                        stress[5] += tmp[2] * R_cart.z; // zz
                     }
                 }
                 dm_pointer += npol;
             }
+            dm_pointer += (npol - 1) * col_indexes.size();
         }
     }
 }

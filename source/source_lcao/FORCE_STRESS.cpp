@@ -450,6 +450,16 @@ void Force_Stress_LCAO<T>::getForceStress(UnitCell& ucell,
 
             const hamilt::HContainer<double>* dmr = dmat.dm->get_DMR_pointer(1);
             tmp_dp.cal_force_stress(isforce, isstress, dmr, force_deltap, stress_deltap);
+#if 0 // DEBUG_FS_PRINTS (disabled for commit; flip to 1 for A2/C)
+            if (isforce)
+            {
+                std::cout << " [fsdbg-deltap] ";
+                for (int iat = 0; iat < nat; ++iat)
+                    for (int i = 0; i < 3; ++i)
+                        std::cout << std::setprecision(8) << force_deltap(iat, i) << " ";
+                std::cout << std::endl;
+            }
+#endif // DEBUG_FS_PRINTS
         }
     }
 
@@ -525,6 +535,23 @@ void Force_Stress_LCAO<T>::getForceStress(UnitCell& ucell,
                 if (PARAM.inp.deltap_switch && PARAM.inp.deltap_corr)
                 {
                     fcs(iat, i) += force_deltap(iat, i);
+                    // H_HK (Berry-connection) analytic force, computed in
+                    // ESolver_KS_LCAO::cal_force and stored statically
+                    // (T7-c B-7).  Empty unless a multi-k DeltaP run computed it.
+                    const auto& f_hk = hamilt::DeltaPOperator<std::complex<double>, double>::get_stored_hk_force();
+#if 0 // DEBUG_FS_PRINTS
+                    if (i == 0 && iat == 0)
+                    {
+                        std::cout << " [fsdbg] f_hk=";
+                        for (size_t k = 0; k < f_hk.size(); ++k)
+                            std::cout << std::setprecision(6) << f_hk[k] << " ";
+                        std::cout << std::endl;
+                    }
+#endif // DEBUG_FS_PRINTS
+                    if (f_hk.size() == static_cast<size_t>(nat * 3))
+                    {
+                        fcs(iat, i) += f_hk[iat * 3 + i];
+                    }
                 }
 #ifdef __EXX
                 // Force contribution from exx
@@ -681,6 +708,13 @@ void Force_Stress_LCAO<T>::getForceStress(UnitCell& ucell,
         GlobalV::ofs_running << std::setiosflags(std::ios::left);
 
         // this->printforce_total(ry, istestf, fcs);
+#if 0 // DEBUG_FS_PRINTS
+        std::cout << " [fsdbg-preprint] fcs=";
+        for (int iat = 0; iat < nat; ++iat)
+            for (int i = 0; i < 3; ++i)
+                std::cout << std::setprecision(8) << fcs(iat, i) << " ";
+        std::cout << std::endl;
+#endif // DEBUG_FS_PRINTS
         ModuleIO::print_force(GlobalV::ofs_running, ucell, "TOTAL-FORCE (eV/Angstrom)", fcs, false);
         if (istestf)
         {

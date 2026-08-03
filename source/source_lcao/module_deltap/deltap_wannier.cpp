@@ -77,6 +77,15 @@ void DeltaP::compute_S_dk(const UnitCell& ucell)
         int T0 = 0, I0 = 0;
         ucell.iat2iait(iat, &I0, &T0);
         const int nw0 = ucell.atoms[T0].nw;
+        // GUARD (B-6 family): the S_dk phase needs the bra position in
+        // Direct (fractional) coordinates — dk is a fractional reciprocal
+        // step, so dk·τ_bra is dimensionless only when τ_bra is fractional.
+        // get_tau() returns the lat0-unit Cartesian position (numerically
+        // ~Å), which over-sizes the phase by ~L (the cell size in lat0
+        // units).  Do NOT replace taud0 with get_tau() here; H_HR's τ_α
+        // (deltap_force_stress.hpp) is intentionally still lat0-unit (B-6
+        // body, open) and must NOT be mixed into this phase either.
+        const ModuleBase::Vector3<double> taud0 = ucell.atoms[T0].taud[I0];
 
         // enumerate neighbouring atoms (including the home cell, ad == 0)
         AdjacentAtomInfo adjs;
@@ -107,7 +116,7 @@ void DeltaP::compute_S_dk(const UnitCell& ucell)
             // <psi_k|psi_{k+b}> to approximately <u_k|u_{k+b}>
             double arg = ModuleBase::TWO_PI * (
                 dkv[0] * R.x + dkv[1] * R.y + dkv[2] * R.z
-                - dkv[0] * tau0.x - dkv[1] * tau0.y - dkv[2] * tau0.z);
+                - dkv[0] * taud0.x - dkv[1] * taud0.y - dkv[2] * taud0.z);
             const std::complex<double> phase(std::cos(arg), std::sin(arg));
 
             // snap wants vR = R2 - R1 = (ket centre) - (bra neighbour), in Bohr
@@ -1815,6 +1824,468 @@ void DeltaP::compute_hk_correction(const UnitCell& ucell,
 
         hk_correction[ik_L] = H_sym;
     }
+}
+
+bool DeltaP::compute_hk_force(const UnitCell& ucell,
+                              const psi::Psi<std::complex<double>>* psi,
+                              const elecstate::ElecState* pelec,
+                              const std::vector<double>& lambda,
+                              std::vector<double>& force_out,
+                              double& e_hk_out)
+{
+    ModuleBase::TITLE("DeltaP", "compute_hk_force");
+    ModuleBase::timer::start("DeltaP", "compute_hk_force");
+
+    force_out.assign(nat_ * 3, 0.0);
+    e_hk_out = 0.0;
+
+    if (nppstr_ < 2 || kstring_data_.empty())
+    {
+        ModuleBase::timer::end("DeltaP", "compute_hk_force");
+        return false;
+    }
+
+    const int nks = psi->get_nk();
+    const int nbands = psi->get_nbands();
+    const int nrow = paraV_->get_row_size();
+    const int ncol = paraV_->get_col_size();
+
+#ifdef __MPI
+    {
+        MPI_Comm comm = paraV_->comm();
+        if (comm != MPI_COMM_NULL)
+        {
+            int nproc = 1;
+            MPI_Comm_size(comm, &nproc);
+            if (nproc > 1)
+            {
+                // The H_HK force needs the full-row S_dk / S_k matrices and the
+                // full wavefunction coefficients.  The H_HK correction path is
+                // itself serial-only (nrow == ncol local-block approximation,
+                // see compute_hk_correction); under MPI we skip the force so
+                // that no partially-correct term is mixed into the per-rank
+                // force totals.
+                ModuleBase::WARNING("DeltaP::compute_hk_force",
+                    "H_HK analytic force is serial-only (nproc>1): skipped. "
+                    "Relax with deltap_corr under MPI lacks the H_HK force (see LIMITATION).");
+                ModuleBase::timer::end("DeltaP", "compute_hk_force");
+                return false;
+            }
+        }
+    }
+#endif
+    if (nrow != ncol)
+    {
+        ModuleBase::WARNING("DeltaP::compute_hk_force",
+            "H_HK analytic force requires nrow == ncol (square grid).");
+        ModuleBase::timer::end("DeltaP", "compute_hk_force");
+        return false;
+    }
+
+    // ---- ensure k-string data for the INPUT gdir (mirror compute_hk_correction) ----
+    if (kstring_gdir_ != gdir_ || kstring_string_ != 0)
+    {
+        setup_kstring(*kv_);
+        kstring_data_.assign(nppstr_, KSpaceData());
+        for (int j = 0; j < nppstr_; ++j)
+        {
+            int ik = k_index_[0][j];
+            if (ik >= nks) continue;
+            kstring_data_[j].kvec_d = kv_->kvec_d[ik];
+            psi->fix_k(ik);
+            compute_S_k(j);
+            compute_D_I(j, psi->get_pointer(), nbands, nrow);
+        }
+        kstring_gdir_ = gdir_;
+        kstring_string_ = 0;
+    }
+
+    // ---- S_dk (serial full-row) ----
+    if (S_dk_.empty())
+    {
+        compute_S_dk(ucell);
+    }
+
+    // Number of occupied bands (same convention as compute_hk_correction)
+    double occ_bands = static_cast<double>(PARAM.inp.nelec / ModuleBase::DEGSPIN);
+    if ((occ_bands - std::floor(occ_bands)) > 0.0)
+        occ_bands = std::floor(occ_bands) + 1.0;
+    const int nocc = static_cast<int>(occ_bands);
+    const int nocc_use = std::min(nocc, nbands);
+    if (nocc_use <= 0)
+    {
+        ModuleBase::timer::end("DeltaP", "compute_hk_force");
+        return false;
+    }
+
+    const std::complex<double> half_i(0.0, 0.5);
+    const int nat = nat_;
+    const int npol = ucell.get_npol();
+    const double dk_step = 1.0 / (nppstr_ - 1);
+    double dkv[3] = {0.0, 0.0, 0.0};
+    dkv[gdir_ - 1] = dk_step;
+    const int* iat2iwt = paraV_->iat2iwt_;
+
+    // Phase gradient factor for the bra-position term.  The S_dk phase is
+    // 2π(dk·R − dk·τ_frac) with τ_frac = latvec⁻¹·τ (Direct coordinates) and
+    // τ stored in lat0 units, so dτ_frac/dR_Bohr = latvec⁻¹/lat0.  The
+    // per-axis derivative factor is therefore −2πi·(latvec⁻¹·dk)_α/lat0
+    // (for an orthogonal cell this reduces to −2πi·dk_α/(L_α·lat0)).
+    const ModuleBase::Matrix3 latvec_inv = ucell.latvec.Inverse();
+    double dkv_grad[3] = {0.0, 0.0, 0.0};
+    dkv_grad[0] = dkv[0] * latvec_inv.e11 + dkv[1] * latvec_inv.e21 + dkv[2] * latvec_inv.e31;
+    dkv_grad[1] = dkv[0] * latvec_inv.e12 + dkv[1] * latvec_inv.e22 + dkv[2] * latvec_inv.e32;
+    dkv_grad[2] = dkv[0] * latvec_inv.e13 + dkv[1] * latvec_inv.e23 + dkv[2] * latvec_inv.e33;
+
+    // acc[iat][alpha*nocc+p] accumulates f_p*(W_p*U + dW_p*T_pp) over links;
+    // the final force is F_Jα = -Re[(i/2) Σ_p acc].
+    std::vector<std::vector<std::complex<double>>> acc(
+        nat, std::vector<std::complex<double>>(3 * nocc_use, {0.0, 0.0}));
+    std::complex<double> e_hk(0.0, 0.0);
+
+    for (int j = 0; j < nppstr_ - 1; ++j)
+    {
+#if 0 // DEBUG_HK_FORCE (temporary, disabled for commit; flip to 1 for A2/C)
+        std::cout << "  [hkdbg] nks=" << nks << " nbands=" << nbands << " nocc_use=" << nocc_use
+                  << " nppstr=" << nppstr_ << " kidx0=";
+        for (int kk = 0; kk < nppstr_; ++kk)
+            std::cout << k_index_[0][kk] << " ";
+        std::cout << std::endl;
+#endif
+        const int ik_L = k_index_[0][j];
+        const int ik_R = k_index_[0][j + 1];
+        if (ik_L >= nks || ik_R >= nks) continue;
+
+        psi->fix_k(ik_L);
+        const std::complex<double>* c_L = psi->get_pointer();
+        psi->fix_k(ik_R);
+        const std::complex<double>* c_R = psi->get_pointer();
+
+        // W_p = Σ_I λ_I Σ_lm |D_I[lm][p]|²  (link j uses the k_L data)
+        std::vector<double> W(nocc_use, 0.0);
+        for (int iat = 0; iat < nat; ++iat)
+        {
+            const int r = nproj_per_atom_[iat];
+            if (kstring_data_[j].D_I.size() <= static_cast<size_t>(iat)) continue;
+            for (int n = 0; n < nocc_use; ++n)
+            {
+                double w = 0.0;
+                for (int lm = 0; lm < r; ++lm)
+                {
+                    if (kstring_data_[j].D_I[iat].size() > static_cast<size_t>(lm)
+                        && kstring_data_[j].D_I[iat][lm].size() > static_cast<size_t>(n))
+                    {
+                        w += std::norm(kstring_data_[j].D_I[iat][lm][n]);
+                    }
+                }
+                W[n] += lambda[iat] * w;
+            }
+        }
+
+        // SC = S_dk * C_R  (nrow x nocc_use); T_pp = (C_L† S_dk C_R)_{pp}
+        std::vector<std::complex<double>> SC(nrow * nocc_use, {0.0, 0.0});
+        for (int p = 0; p < nocc_use; ++p)
+        {
+            for (int a = 0; a < nrow; ++a)
+            {
+                std::complex<double> sum(0.0, 0.0);
+                for (int b = 0; b < ncol; ++b)
+                {
+                    sum += S_dk_[a + b * nrow] * c_R[b + p * nrow];
+                }
+                SC[a + p * nrow] = sum;
+            }
+        }
+        std::vector<std::complex<double>> T_diag(nocc_use, {0.0, 0.0});
+        for (int p = 0; p < nocc_use; ++p)
+        {
+            for (int a = 0; a < nrow; ++a)
+            {
+                T_diag[p] += std::conj(c_L[a + p * nrow]) * SC[a + p * nrow];
+            }
+        }
+
+        // ---- Per-atom derivative kernels for this link ----
+        // U[iat][alpha*nocc+p] = (C_L† ∂S_dk/∂R_Jα C_R)_{pp}  (complex)
+        // dW[iat][alpha*nocc+p] = ∂W_p/∂R_Jα  (real, W is real)
+        std::vector<std::vector<std::complex<double>>> U(
+            nat, std::vector<std::complex<double>>(3 * nocc_use, {0.0, 0.0}));
+        std::vector<std::vector<double>> dW(nat, std::vector<double>(3 * nocc_use, 0.0));
+
+        for (int iat = 0; iat < nat; ++iat)
+        {
+            const ModuleBase::Vector3<double> tau0 = ucell.get_tau(iat);
+            int T0 = 0, I0 = 0;
+            ucell.iat2iait(iat, &I0, &T0);
+            const int nw0 = ucell.atoms[T0].nw;
+            const int max_l_plus_1 = ucell.atoms[T0].nwl + 1;
+            const int nproj0 = max_l_plus_1 * max_l_plus_1;
+            // Direct (fractional) bra position for the S_dk phase — see
+            // compute_S_dk for the τ-unit rationale (B-6).  Keep taud here;
+            // do not substitute get_tau() (lat0-unit) into this phase.
+            const ModuleBase::Vector3<double> taud0 = ucell.atoms[T0].taud[I0];
+
+            AdjacentAtomInfo adjs;
+            gd_->Find_atom(ucell, tau0, T0, I0, &adjs);
+
+            for (int ad = 0; ad < adjs.adj_num + 1; ++ad)
+            {
+                const int T1 = adjs.ntype[ad];
+                const int I1 = adjs.natom[ad];
+                const int iat1 = ucell.itia2iat(T1, I1);
+                const ModuleBase::Vector3<int> R = adjs.box[ad];
+                const ModuleBase::Vector3<double>& tau1 = adjs.adjacent_tau[ad];
+                const double dist = ucell.cal_dtau(iat, iat1, R).norm() * ucell.lat0;
+
+                // Pair is used by the S_dk path (compute_S_dk cutoff) and/or the
+                // S_k path (compute_real_overlaps cutoff: rm_).
+                const bool sdk_pair = dist <= orb_cutoff_[T0] + orb_cutoff_[T1];
+                const bool sk_pair = dist < orb_cutoff_[T1] + rm_;
+                if (!sdk_pair && !sk_pair) continue;
+
+                const ModuleBase::Vector3<double> dtau = tau0 - tau1;
+                const Atom* atom1 = &ucell.atoms[T1];
+                const int nw1 = atom1->nw;
+
+                // S_dk phase (compute_S_dk convention: 2π(dk·R − dk·τ_bra))
+                double arg = ModuleBase::TWO_PI * (dkv[0] * R.x + dkv[1] * R.y + dkv[2] * R.z
+                                                   - dkv[0] * taud0.x - dkv[1] * taud0.y - dkv[2] * taud0.z);
+                const std::complex<double> phase_sdk(std::cos(arg), std::sin(arg));
+                // S_k phase (compute_S_k convention: 2π k·R)
+                double argk = ModuleBase::TWO_PI * (kstring_data_[j].kvec_d.x * R.x
+                                                    + kstring_data_[j].kvec_d.y * R.y
+                                                    + kstring_data_[j].kvec_d.z * R.z);
+                const std::complex<double> phase_sk(std::cos(argk), std::sin(argk));
+
+                // ---------- ∂S_dk/∂R kernel (full orbital set, overlap_intor_) ----------
+                if (sdk_pair)
+                {
+                    // DEBUG: per-pair accumulators to verify U phase consistency with S_dk/T
+                    std::vector<std::complex<double>> tacc(nocc_use, {0.0, 0.0});
+                    std::vector<std::complex<double>> phaseacc(nocc_use, {0.0, 0.0});
+                    for (int iw1 = 0; iw1 < nw1; ++iw1)
+                    {
+                        const int L1 = atom1->iw2l[iw1];
+                        const int N1 = atom1->iw2n[iw1];
+                        const int m1 = atom1->iw2m[iw1];
+                        const int M1 = (m1 % 2 == 0) ? -m1 / 2 : (m1 + 1) / 2;
+                        std::vector<std::vector<double>> nlm;
+                        overlap_intor_->snap(T1, L1, N1, M1, T0, dtau * ucell.lat0, 1, nlm);
+                        if (nlm.empty() || nlm[0].empty()) continue;
+                        for (int iw0 = 0; iw0 < nw0; ++iw0)
+                        {
+                            const double ov = nlm[0][iw0];
+                            if (std::abs(ov) < 1e-15) continue;
+                            for (int s = 0; s < npol; ++s)
+                            {
+                                const int gmu = iat2iwt[iat] + npol * iw0 + s;
+                                const int gnu = iat2iwt[iat1] + npol * iw1 + s;
+                                for (int p = 0; p < nocc_use; ++p)
+                                {
+                                    const std::complex<double> cb = std::conj(c_L[gmu + p * nrow]);
+                                    const std::complex<double> ck = c_R[gnu + p * nrow];
+                                    for (int a = 0; a < 3; ++a)
+                                    {
+                                        const double g = nlm[1 + a][iw0];
+                                        // Orbital part: ∂ov/∂R_bra = +g, ∂ov/∂R_ket = -g.
+                                        // Summed over all atoms these cancel pair-by-pair.
+                                        if (g != 0.0)
+                                        {
+                                            U[iat][a * nocc_use + p] += cb * (phase_sdk * g) * ck;
+                                            U[iat1][a * nocc_use + p] -= cb * (phase_sdk * g) * ck;
+                                        }
+                                        // Phase part: ∂phase/∂R_bra,α = -2πi·dkv_grad[α]/lat0
+                                        // where dkv_grad = latvec⁻¹·dk (fractional-τ derivative).
+                                        // The S_dk phase (2π(dk·R - dk·τ_bra)) depends on the
+                                        // bra position for EVERY pair (including self-pairs and
+                                        // s-channels where the orbital derivative g vanishes),
+                                        // so this term must be accumulated unconditionally.
+                                        U[iat][a * nocc_use + p] -= cb
+                                            * (std::complex<double>(0.0, ModuleBase::TWO_PI * dkv_grad[a] / ucell.lat0)
+                                               * phase_sdk * ov)
+                                            * ck;
+                                    }
+                                    // DEBUG accumulators (band p, axis z)
+                                    tacc[p] += phase_sdk * ov * cb * ck;
+                                    phaseacc[p] += -std::complex<double>(0.0, ModuleBase::TWO_PI * dkv_grad[2] / ucell.lat0)
+                                                   * phase_sdk * ov * cb * ck;
+                                }
+                            }
+                        }
+                    }
+#if 0 // DEBUG_HK_FORCE_CONSISTENCY (temporary, disabled)
+                {
+                    std::cout << "  [hkpair] iat=" << iat << " iat1=" << iat1 << " R=" << R.x << "," << R.y << "," << R.z
+                              << " tacc0=" << tacc[0] << " T0=" << T_diag[0]
+                              << " phaseacc0=" << phaseacc[0] << " sumU0(atom)=" << U[iat][2*nocc_use+0] << std::endl;
+                }
+#endif
+                }
+
+                // ---------- ∂S_k/∂R kernel for W (first-zeta projector set, intor_) ----------
+                if (sk_pair)
+                {
+                    for (int iw1 = 0; iw1 < nw1; ++iw1)
+                    {
+                        const int L1 = atom1->iw2l[iw1];
+                        const int N1 = atom1->iw2n[iw1];
+                        const int m1 = atom1->iw2m[iw1];
+                        const int M1 = (m1 % 2 == 0) ? -m1 / 2 : (m1 + 1) / 2;
+                        std::vector<std::vector<double>> nlm;
+                        intor_->snap(T1, L1, N1, M1, T0, dtau * ucell.lat0, 1, nlm);
+                        if (nlm.empty() || nlm[0].empty()) continue;
+
+                        // Extract the first-zeta (l,m) channels with the four
+                        // derivative blocks, same channel layout as
+                        // compute_real_overlaps / deltap_force_stress.hpp.
+                        std::vector<double> nlm_target(4 * nproj0, 0.0);
+                        int target_L = 0;
+                        for (int iw = 0; iw < ucell.atoms[T0].nw; ++iw)
+                        {
+                            const int L0 = ucell.atoms[T0].iw2l[iw];
+                            if (L0 != target_L) continue;
+                            for (int m = 0; m < 2 * L0 + 1; ++m)
+                            {
+                                const int idx = L0 * L0 + m;
+                                nlm_target[idx] = nlm[0][iw + m];
+                                nlm_target[nproj0 + idx] = nlm[1][iw + m];
+                                nlm_target[2 * nproj0 + idx] = nlm[2][iw + m];
+                                nlm_target[3 * nproj0 + idx] = nlm[3][iw + m];
+                            }
+                            target_L++;
+                        }
+
+                        for (int s = 0; s < npol; ++s)
+                        {
+                            const int gmu = iat2iwt[iat1] + npol * iw1 + s;
+                            for (int lm = 0; lm < nproj0; ++lm)
+                            {
+                                if (kstring_data_[j].D_I[iat].size() <= static_cast<size_t>(lm)) continue;
+                                const auto& DI = kstring_data_[j].D_I[iat][lm];
+                                for (int p = 0; p < nocc_use; ++p)
+                                {
+                                    const std::complex<double> Dp = DI[p];
+                                    if (std::abs(Dp) < 1e-15) continue;
+                                    const std::complex<double> Cmu = c_L[gmu + p * nrow];
+                                    for (int a = 0; a < 3; ++a)
+                                    {
+                                        const double grad = nlm_target[(1 + a) * nproj0 + lm];
+                                        if (grad == 0.0) continue;
+                                        // ∂S_k/∂R_bra = phase·grad, ∂S_k/∂R_ket = −phase·grad;
+                                        // ∂D/∂R = conj(∂S_k/∂R)·C, so the W derivative is
+                                        // 2 Re[D* · conj(∂S_k/∂R) · C].
+                                        const double re_term = (std::conj(Dp) * std::conj(phase_sk * grad) * Cmu).real();
+                                        dW[iat][a * nocc_use + p] += 2.0 * lambda[iat] * re_term;
+                                        dW[iat1][a * nocc_use + p] -= 2.0 * lambda[iat] * re_term;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ---- accumulate this link into the per-atom force kernel ----
+        for (int iat = 0; iat < nat; ++iat)
+        {
+            for (int a = 0; a < 3; ++a)
+            {
+                for (int p = 0; p < nocc_use; ++p)
+                {
+                    const double fp = pelec->wg(ik_L, p);
+                    if (fp == 0.0) continue;
+                    acc[iat][a * nocc_use + p] += fp
+                        * (W[p] * U[iat][a * nocc_use + p]
+                           + dW[iat][a * nocc_use + p] * T_diag[p]);
+                }
+            }
+        }
+        for (int p = 0; p < nocc_use; ++p)
+        {
+            e_hk += pelec->wg(ik_L, p) * W[p] * T_diag[p];
+        }
+#if 0 // DEBUG_HK_FORCE (temporary, disabled for commit; flip to 1 for A2/C)
+        {
+            double u_norm = 0.0, dw_norm = 0.0;
+            for (int iat = 0; iat < nat; ++iat)
+            {
+                for (int p = 0; p < nocc_use; ++p)
+                {
+                    u_norm += std::abs(U[iat][2 * nocc_use + p]);
+                    dw_norm += std::abs(dW[iat][2 * nocc_use + p]);
+                }
+            }
+            std::cout << "  [hkdbg] link " << j << " ik_L=" << ik_L
+                      << " W=" << W[0] << "," << W[1] << "," << W[2]
+                      << " T=" << T_diag[0].real() << "," << T_diag[1].real() << "," << T_diag[2].real()
+                      << " ImT=" << T_diag[0].imag() << "," << T_diag[1].imag() << "," << T_diag[2].imag()
+                      << " |Uz|=" << u_norm << " |dWz|=" << dw_norm << std::endl;
+            for (int iat = 0; iat < nat; ++iat)
+            {
+                std::cout << "    [hkdbg] atom " << iat << " Uz=";
+                for (int p = 0; p < nocc_use; ++p)
+                    std::cout << U[iat][2 * nocc_use + p] << " ";
+                std::cout << " dWz=";
+                for (int p = 0; p < nocc_use; ++p)
+                    std::cout << dW[iat][2 * nocc_use + p] << " ";
+                std::cout << " accIm=";
+                for (int p = 0; p < nocc_use; ++p)
+                    std::cout << acc[iat][2 * nocc_use + p].imag() << " ";
+                std::cout << std::endl;
+            }
+        }
+#endif
+#if 0 // DEBUG_HK_FORCE_CONSISTENCY (temporary, disabled for commit; flip to 1 for A2/C)
+        {
+            // Per-band consistency check: sum of U over atoms vs the analytic
+            // phase part -2*pi*i*dkv_grad/lat0 * T_pp, and the energy kernel.
+            std::complex<double> sumU(0.0, 0.0);
+            for (int iat = 0; iat < nat; ++iat)
+                sumU += U[iat][2 * nocc_use + 0];
+            const std::complex<double> expect_phase
+                = -std::complex<double>(0.0, ModuleBase::TWO_PI * dkv_grad[2] / ucell.lat0) * T_diag[0];
+            std::complex<double> e_link(0.0, 0.0);
+            double re_fwt = 0.0;
+            for (int p = 0; p < nocc_use; ++p)
+            {
+                const double fp = pelec->wg(ik_L, p);
+                e_link += fp * W[p] * T_diag[p];
+                re_fwt += fp * W[p] * T_diag[p].real();
+            }
+            std::cout << "  [hkchk] link " << j << " dkvz=" << dkv[2] << " lat0=" << ucell.lat0
+                      << " wg=";
+            for (int p = 0; p < nocc_use; ++p)
+                std::cout << pelec->wg(ik_L, p) << " ";
+            std::cout << " W=";
+            for (int p = 0; p < nocc_use; ++p)
+                std::cout << W[p] << " ";
+            std::cout << " T=";
+            for (int p = 0; p < nocc_use; ++p)
+                std::cout << T_diag[p] << " ";
+            std::cout << "\n  [hkchk] sumUz=" << sumU << " expectPhaseUz=" << expect_phase
+                      << " e_link=" << e_link << " Re(fWT)=" << re_fwt << std::endl;
+        }
+#endif
+    }
+
+    // F_Jα = -Re[(i/2) Σ_p acc] = (1/2) Σ_p Im(acc);  E_HK = Re[(i/2) e_hk]
+    for (int iat = 0; iat < nat; ++iat)
+    {
+        for (int a = 0; a < 3; ++a)
+        {
+            double f = 0.0;
+            for (int p = 0; p < nocc_use; ++p)
+            {
+                f += acc[iat][a * nocc_use + p].imag();
+            }
+            force_out[iat * 3 + a] = 0.5 * f;
+        }
+    }
+    e_hk_out = -0.5 * e_hk.imag();
+
+    ModuleBase::timer::end("DeltaP", "compute_hk_force");
+    return true;
 }
 
 // Read previously saved per-atom Wilson-loop products W^I so that arg()

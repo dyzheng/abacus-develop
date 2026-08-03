@@ -255,6 +255,11 @@ bool DeltapScfSolver::inner_loop(double drho)
 // ---------------------------------------------------------------------------
 void DeltapScfSolver::apply_lambda(const std::vector<double>& lambda)
 {
+    // Persist the effective per-atom λ in the state machine.  The LCAO
+    // backend re-creates its operator at every ionic step (before_scf
+    // rebuilds p_hamilt); the persisted value seeds the fresh operator so
+    // the λ trajectory is not lost between steps (B-3).
+    state_.lambda_eff = lambda;
     backend_.set_lambda(lambda);
     if (backend_.sync_lambda)
     {
@@ -402,12 +407,13 @@ void DeltapScfSolver::report(int iter, const std::vector<double>& lambda) const
         for (int iat = 0; iat < params_.nat; ++iat)
             total_g += state_.gamma_report[iat];
         std::cout << total_g << ") Σγ=" << total_g;
-        // Show the single shared λ.
+        // Show the single shared λ (6 sig figs: FD group-1 needs to freeze
+        // the exact base-run λ).
         std::cout << " λ=";
         if (std::abs(lambda[0]) < 1e-10)
             std::cout << std::scientific << std::setprecision(1) << lambda[0];
         else
-            std::cout << std::scientific << std::setprecision(2) << lambda[0];
+            std::cout << std::scientific << std::setprecision(6) << lambda[0];
     }
     else
     {
@@ -425,12 +431,13 @@ void DeltapScfSolver::report(int iter, const std::vector<double>& lambda) const
             if (std::abs(lambda[iat]) < 1e-10)
                 std::cout << std::scientific << std::setprecision(1) << lambda[iat];
             else
-                std::cout << std::scientific << std::setprecision(2) << lambda[iat];
+                std::cout << std::scientific << std::setprecision(6) << lambda[iat];
         }
         std::cout << ")";
     }
     std::cout << " |γ-t|=" << std::scientific << std::setprecision(3) << state_.max_res
-              << "\n";
+              << " escon=" << std::fixed << std::setprecision(6) << state_.dp_escon
+              << " Ry\n";
 
     // Effective electric field: E_eff = -λ_avg × π / (2·a_alpha) (a.u.).
     // λ is in Ry; converting Ry → Hartree gives an extra factor of 1/2.
