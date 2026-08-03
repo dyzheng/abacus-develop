@@ -1250,3 +1250,63 @@ compute_hk_correction、deltap_common）+ 约束力/应力公式推导，输出
 - **回归面**：MPI 冒烟 3/3 PASS；单测 math/gauge/common PASS；
   **smoothness 4/8 FAIL（B-6 相位约定改动致单测参考约定过期，预先存在，
   非 A2 引入，P1 TODO 待更新测试参考）**。
+
+---
+
+## 2026-08-03: 力求解知识更新总结文档
+
+### What was done
+沉淀 T7 专项全部认知，输出 `2026-08-03-deltap-force-knowledge-update.md`：
+力求解严格分解（A1/A2/B/C/R 六项，前三项已实现验证）、九大算法难点
+（D-1 观测量/算符二元性、D-2 τ 单位、D-3 H_HK 构造、D-4 dspin 定理前提、
+D-5 分支离散、D-6 均值扣除、D-7 FD 噪声预算、D-8 内循环极限环、D-9 响应项）、
+验证状态总表、修正后公式集 F1-F10、认知更新 7 条、剩余路线。
+### 核心结论索引
+- relax 正确性只需 A1+A2+B（dspin 定理，约束激活时 C+R≡0）；判决需驻点 λ 协议。
+- E' 原点敏感性 = 代理差距定量（H_HR 比真 γ 大 ~8×，O5）。
+- FD 判据级验收必须 ecutwfc=100/ecutrho≥400/scf_thr=1e-8。
+
+### 2026-08-03（v2 重写）: 知识文档可读性修订
+- 应反馈重写 `2026-08-03-deltap-force-knowledge-update.md` 为 v2 详解版：
+  补全部名词解释（γ/Wilson loop/SMO/λ/escon/H_HR/H_HK/原点敏感性/平移不变性/
+  均值扣除/驻点/组①②/egg-box/A1-R 代号/锚点）；
+  状态改 ✅/❌/⏳ 三档醒目表（第 0 部分一图看懂）；
+  九大难点每条按"问题/影响/对策/状态"四要素重写。无代码改动。
+
+---
+
+## 2026-08-03: 组② 驻点协议判决 FD —— O5 代理差距定量（结构性 FAIL）
+
+### What was done
+执行知识文档路线第 1 项（脚本级驻点 λ 组② 判决 FD，最小判决矩阵 h2o1 O1-z）：
+- 验证 λ 注入路径：`deltap_lambda_init_file` + `deltap_lambda_step 0.0` 可冻结 λ（PASS，无代码改动）；
+- 实测 E'(λ) 响应：∂E'/∂λ_O1 ≈ 222–224 eV/Ry（λ∈[−0.01,+0.01] 线性非零）；
+  base 全分量弦斜率 404–518 eV/Ry；
+- 实测 γ(λ) 响应：[rawG] 原始 γ 单调（∂γ_O1/∂λ_O1≈+0.30 base、+0.6–0.95 disp_plus），
+  P3 报告 γ（target-aware 分支选择）为阶梯非单调（移位步长 >1e-3 容差）；
+- 组② 驻点 FD：base/minus/plus 三几何均 |γ_report−t|<1e-3 后
+  F_FD(O1-z)=−85.56 eV/Å（分支 A，λ_st(plus)=+0.002）或 −419.8（分支 B，λ_st=+0.01）
+  vs F_ana=−0.7473 → **残差 84.8–419 eV/Å，判据 0.0129，FAIL 6600–32000 倍**；
+- λ-leakage 闭合：残差 84.8164 = ∂E'/∂λ_O1(224.4 eV/Ry) × Δλ_st/2δ(0.3780 Ry/Å)，
+  **5 位有效数字闭合**。
+### 核心结论索引
+- **dspin 定理 DeltaP 版前提被证伪**：λ 在约束驻点时 ∂E'/∂λ ≈ 222–224 eV/Ry ≠ 0
+  （escon 观测量 γ_Wilson ≠ H_c 算符期望 ⟨Ô⟩_proxy），λ-leakage 完全主导组② 残差；
+- **任何"约束激活（γ≡t）"的 relax 力都不一致**（84.8–419 eV/Å），补 C 不解决
+  （约束路径 C+R≡0），出路是 O5（算符/记账形式）；
+- 附带：|γ_report−t|<1e-3 停止判据不适定（分支阶梯 → 多解，E' 差 1.77 eV），
+  对 γ_raw 判据结论不变（仍 FAIL）。
+### 修改文件
+- 新增 `2026-08-03-deltap-force-stationary-group2-fd.md`（本轮 dated 文档，177 行）。
+- `deltap-development-log.md` 追加本段。
+- 无源码改动（纯实验轮）；排除 `STRU.cif`。
+### 回归面
+- HEAD=4c446b950 不变；MPI 冒烟 3/3、单测 PASS、smoothness 4/8 FAIL（B-6 参考过期，
+  P1 TODO 维持）。
+### Next steps（更新）
+- 路线第 1 项状态：**已执行，结构性 FAIL，O5 触发**（不是"残差≈0 则 A1+A2+B 精确"）。
+- O5 决策（用户）：(a) 算符重构使 ⟨Ô⟩→γ（加强 H_HK/改 H_HR）；(b) 记账重构 escon 用
+  ⟨Ô⟩（约束变为 ⟨Ô⟩=t）。下一步低配实验：临时开 hhrdbg 打印逐原子 ⟨P̂⟩/E_H_HR/λ、
+  E_HK/λ vs γ_report，分解差距来源（H_HR vs H_HK）。
+- D-D 正式验收暂停（约束激活场景力结构性不一致，验收无意义）；smoothness 参考更新
+  等 O5 决策后与锚点重建一并处理。
