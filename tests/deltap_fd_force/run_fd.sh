@@ -35,6 +35,10 @@ CRIT_EV_A=$(python3 -c "print(5e-4 * 13.605693 / 0.5291772109)")
 BOHR_TO_A=0.5291772109
 FAILED=0
 
+# Serial LCAO runs hang in the FFTW OMP thread pool (recip2real barrier
+# spin) on this environment; force single-threaded FFTW for all runs.
+export OMP_NUM_THREADS=1
+
 echo "===== DeltaP FD Force Validation (two-group) ====="
 echo "  System:  ${SYSTEM}   Delta: ${DELTA_BOHR} Bohr = ${DELTA_A} Å"
 echo "  Nproc:   ${NPROC}   Group: ${GROUP}"

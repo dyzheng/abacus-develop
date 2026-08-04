@@ -62,3 +62,37 @@ bash run_fd.sh h2o1 0.005 1 2        # group 2 only (λ re-converged)
 - `deltap_lambda_init_file`: per-atom λ initial values (one per line, `nat`
   lines), overrides scalar `deltap_lambda_init`. Used by group 1 to freeze λ.
 - Output dirs (`base/`, `disp_*`) and `lambda_star.dat` are gitignored.
+- `OMP_NUM_THREADS=1` is exported by `run_fd.sh` (and required for all serial
+  screening runs): without it, serial LCAO runs hang in the FFTW OMP thread
+  pool (`recip2real` barrier spin) on the current environment.
+
+## Tier-1 systems (correctness verdict systems)
+
+Asymmetric small molecules for decisive FD / branch experiments, built
+2026-08-03. Rationale: symmetric H2O (h2o1) has degenerate H1/H2 Berry-phase
+branches that swap under ±δ displacements, polluting λ*(R) trajectories;
+Tier-1 systems remove the symmetry degeneracy.
+
+| System | Dir | Geometry | Why |
+|--------|-----|----------|-----|
+| HF | `hf/` | z-aligned, bond 0.9168 Å, centered in 15.873 Å box | asymmetric diatomic, no branch degeneracy, light (cheap FD at ecutwfc=100) |
+| CO | `co/` | z-aligned, bond 1.128 Å, same box | asymmetric diatomic, heavier π-space (2nd candidate) |
+| H2O asym | `h2o_asym/` | h2o1 with H2 shifted (+0.03 x, +0.05 z Å) | breaks C2v, keeps 3-atom coverage, fallback |
+
+All three: same box/KPT (Gamma 1×1×2, gdir=3 k-string) as h2o1; target.dat
+all-zero (overridden per experiment); no INPUT checked in — `run_fd.sh`
+generates INPUT (override `ECUTWFC/ECUTRHO/SCF_THR` env for production
+settings: 100 / 400 / 1e-8).
+
+### Screening protocol (before a system is accepted as Tier-1)
+1. **γ(λ) smoothness**: 3 frozen-λ points (0, ±5e-3 Ry via
+   `deltap_lambda_init_file` + `deltap_lambda_step 0.0`); per-atom γ_report
+   must be monotonic in λ with no 2π-quantum jumps.
+2. **Branch stability**: displace each atom ±δ (0.005 Bohr) along z at frozen
+   λ; compare `deltap_branch.dat` / γ continuity — zero branch flips allowed.
+3. **Sync convergence**: base run (λ step 0.01, no inner loop) must converge
+   within scf_nmax=100 without oscillation.
+
+A system passing all three replaces h2o1 as the verdict system for the
+stationary-λ group-2 FD (branch-decomposition plan,
+`docs/superpowers/specs/2026-08-03-deltap-branch-decomposition-plan.md`).

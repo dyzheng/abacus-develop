@@ -103,7 +103,15 @@ void DeltaP::compute_real_overlaps(const UnitCell& ucell, const Grid_Driver& gd)
                         target_L++;
                     }
                 }
-                nlm_iat0[ad].insert({all_indexes[iw1l], nlm_target});
+                // Key the nlm map by the GLOBAL orbital index of the neighbor
+                // atom's basis function: compute_S_k consumes these keys via
+                // paraV_->global2local_row(key) and the D_I contraction reads
+                // psi rows at the corresponding local row.  get_indexes_row/
+                // get_indexes_col(iat) return atom-RELATIVE indices; storing
+                // them directly would collide across atoms in serial (e.g.
+                // F_rel0 and H_rel0 both at slot 0) and make the per-rank S_k
+                // partial sums rank-dependent under MPI (S_k/D_I MPI bug).
+                nlm_iat0[ad].insert({paraV_->iat2iwt_[iat1] + all_indexes[iw1l], nlm_target});
             }
         }
 

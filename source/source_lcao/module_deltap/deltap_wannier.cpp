@@ -317,7 +317,10 @@ void DeltaP::compute_wannier_polarization(
     }
 
     const int nks = psi->get_nk();
-    const int nbands = psi->get_nbands();
+    // Global band count (A' scheme): D_I is indexed by global band, and
+    // nocc_use must be rank-invariant.  psi->get_nbands() is the LOCAL
+    // column count under MPI and would make D_I/nocc_use rank-dependent.
+    const int nbands = paraV_->get_wfc_global_nbands();
     const int nrow_local = paraV_->get_row_size();
 
     // Get occupied bands
@@ -867,8 +870,12 @@ void DeltaP::compute_wannier_polarization(
                 for (int m = 0; m < n_dim; ++m)
                 {
                     if (matched[m]) continue;
-                    double diff = std::abs(std::arg(evals[m]) - std::fmod(gamma_unwrapped[n], 2.0*M_PI));
-                    diff = std::min(diff, 2.0*M_PI - diff);
+                    // Circular phase distance in [-pi, pi]: the naive
+                    // min(|a-g|, 2pi-|a-g|) goes NEGATIVE when |a-g| > 2pi,
+                    // and the greedy match then prefers the wrong band (the
+                    // negative "distance" wins).  remainder() wraps correctly.
+                    double diff = std::abs(std::remainder(
+                        std::arg(evals[m]) - std::fmod(gamma_unwrapped[n], 2.0 * M_PI), 2.0 * M_PI));
                     if (diff < best_diff) { best_diff = diff; best_m = m; }
                 }
                 if (best_m >= 0)
@@ -1656,7 +1663,7 @@ void DeltaP::compute_hk_correction(const UnitCell& ucell,
     if (nppstr_ < 2 || kstring_data_.empty()) return;
 
     const int nks = psi->get_nk();
-    const int nbands = psi->get_nbands();
+    const int nbands = paraV_->get_wfc_global_nbands();
     const int nrow = paraV_->get_row_size();
     const int ncol = paraV_->get_col_size();
 
@@ -1846,7 +1853,7 @@ bool DeltaP::compute_hk_force(const UnitCell& ucell,
     }
 
     const int nks = psi->get_nk();
-    const int nbands = psi->get_nbands();
+    const int nbands = paraV_->get_wfc_global_nbands();
     const int nrow = paraV_->get_row_size();
     const int ncol = paraV_->get_col_size();
 
@@ -2529,7 +2536,7 @@ void DeltaP::compute_resta_z(const UnitCell& ucell,
     G_cart[alpha_idx] = 2.0 * ModuleBase::PI / R_bohr;
 
     const int nks = psi->get_nk();
-    const int nbands = psi->get_nbands();
+    const int nbands = paraV_->get_wfc_global_nbands();
     const int nlocal = paraV_->get_global_row_size();
     const int nrow = paraV_->get_row_size();
     const int ncol = paraV_->get_col_size();

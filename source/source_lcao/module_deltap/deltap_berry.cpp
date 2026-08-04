@@ -74,6 +74,17 @@ void DeltaP::compute_D_I(int ik, const std::complex<double>* psi_k, int nbands, 
     ModuleBase::timer::start("DeltaP", "compute_D_I");
 
     const int nat = nat_;
+    // nbands is the GLOBAL band count (callers pass paraV_->get_wfc_global_nbands()).
+    // D_I is indexed by GLOBAL band so that the per-rank partial sums can be
+    // combined with a single uniform-count Allreduce (A' scheme):
+    //   - rows:   each rank sums over its local orbitals (mu_local);
+    //   - bands:  psi's columns are 2D-block-cyclically distributed, so local
+    //             column n maps to global band g = local2global_col(n).  Bands
+    //             not owned by this rank stay zero (filled by other col-ranks).
+    // psi_k is the local nrow x ncol_bands block, column-major with LLD nrow_local.
+    // In serial, local2global_col is the identity, so this reduces to the
+    // original single-rank formula (zero behavior change).
+    const int ncol_local = paraV_->ncol_bands;
     kstring_data_[ik].D_I.resize(nat);
 
     for (int iat = 0; iat < nat; iat++)
@@ -82,7 +93,7 @@ void DeltaP::compute_D_I(int ik, const std::complex<double>* psi_k, int nbands, 
         kstring_data_[ik].D_I[iat].resize(r);
         for (int lm = 0; lm < r; lm++)
         {
-            kstring_data_[ik].D_I[iat][lm].resize(nbands, {0.0, 0.0});
+            kstring_data_[ik].D_I[iat][lm].assign(nbands, {0.0, 0.0});
         }
 
         for (int lm = 0; lm < r; lm++)
@@ -94,9 +105,11 @@ void DeltaP::compute_D_I(int ik, const std::complex<double>* psi_k, int nbands, 
                 if (std::abs(s_val) < 1e-15) continue;
 
                 const std::complex<double> s_conj = std::conj(s_val);
-                for (int n = 0; n < nbands; n++)
+                for (int n = 0; n < ncol_local; n++)
                 {
-                    kstring_data_[ik].D_I[iat][lm][n] += s_conj * psi_k[mu_local + n * nrow_local];
+                    const int g = paraV_->local2global_col(n);
+                    if (g < 0 || g >= nbands) continue;
+                    kstring_data_[ik].D_I[iat][lm][g] += s_conj * psi_k[mu_local + n * nrow_local];
                 }
             }
         }

@@ -58,7 +58,9 @@ void DeltaP::compute_atomic_polarization(const UnitCell& ucell,
 
     // Step 3: Allocate kstring_data_ and populate kvec_d + S/dS + D_I for all k on string
     const int nks = psi->get_nk();
-    const int nbands = psi->get_nbands();
+    // D_I / A_nk / gauge arrays are indexed by GLOBAL band (A' scheme); under
+    // MPI psi->get_nbands() is the LOCAL column count and must not be used.
+    const int nbands = paraV_->get_wfc_global_nbands();
     const int nrow_local = paraV_->get_row_size();
 
     kstring_data_.resize(nppstr_);

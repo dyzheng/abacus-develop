@@ -4,6 +4,9 @@
 # Runs the three validated KPAR=1 paths with the current build:
 #   - PW  2-rank : tests/deltap_pw_h2o  (H2O, k-string along gdir=3)
 #   - LCAO 4-rank: tests/deltap_bn_test (BN, 2x2x2 k-mesh, 2x2 square grid)
+#   - LCAO 4-rank: tests/deltap_mpi_smoke/deltap_co_lcao (CO, odd NBANDS=15: regression guard
+#     for the D_I Allreduce truncation / band-mixing bug; NBANDS=15 is not
+#     divisible by the 2-column process grid)
 #   - LCAO inner-loop 4-rank: tests/deltap_bn_sampling/test_stru_target
 #     (deltap_inner_nmax=3; runs in a temp copy so its tracked
 #     deltap_branch*.dat outputs are not overwritten in the repo)
@@ -67,6 +70,7 @@ run_case()
 # set -e would abort the script and skip the remaining case and the summary.
 run_case deltap_pw_h2o "$NPROC_PW" "[DeltaP-PW] Initialized" || true
 run_case deltap_bn_test "$NPROC_LCAO" "[DeltaP P2]" || true
+run_case deltap_mpi_smoke/deltap_co_lcao "$NPROC_LCAO" "[DeltaP P2]" 1 || true
 run_case deltap_bn_sampling/test_stru_target "$NPROC_LCAO" "inner loop done" 1 || true
 
 if [ "$fail" -ne 0 ]; then

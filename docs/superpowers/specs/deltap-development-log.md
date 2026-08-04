@@ -28,6 +28,29 @@
 
 ---
 
+## 流程教训（2026-08-04 复盘锐评，来自提交记录的事实）
+
+> 背景：力代码 07-09 提交，首次 FD 验证 08-02 才做（隔 3 周），当天暴露
+> B-6（τ 单位 16 倍）与 B-7（H_HK 力缺失）。以下为流程约束，后续开发必须遵守：
+
+1. **最便宜的判决性实验最先跑**。1 小时的单分子 FD 优先于 1 周的测试基建。
+   反例：FD 脚本 07-29 建好（e629523a6/5d7b9867b），08-02 才首跑。
+2. **物理未验证的子系统不做保真重构**。反例：R1-R5 对 τ 单位错 16 倍的对象做
+   逐字节保真，锚点在 B-6 修复后全部返工（1b2625fdd 重建）。验证物理 → 再重构。
+3. **"跑通/不崩/逐字节一致"不算验证**。每个 PASS 必须注明独立参照物
+   （FD / 实验值 / 解析解）。六周内唯一与独立参照物对比的验证
+   （H2O 偶极 1.838 vs 1.855 D）恰好是最有说服力的结果。
+4. **验收用例必须包含"恰好会失败"的设计**：奇数 NBANDS、非对称分子、
+   非整除进程网格。反例：MPI 四轮修复（07-28 五连补丁 → 590ff7861 → T1/T3 →
+   D1-D6 → D_I 混带）每轮都用恰好不暴露问题的用例验收（BN NBANDS 整除、
+   Σγ 巧合守恒），四轮都漏。
+5. **"声明不支持"不是修复的替代品**。07-29 文档写下"relax/MD 无效"后，
+   修复优先级反而被压低两周。写 limitation 的同时必须挂 TODO 和 owner。
+6. **单体系/单方向证据不作数**。力的全部 FD 证据曾长期只有 h2o1 的 O1-z；
+   x/y 的 PASS 多为对称性零力。最少三体系：1 非对称分子 + 1 对称分子 + 1 固体。
+
+---
+
 ## Active Bugs
 
 | ID | Bug | Status |
@@ -1310,3 +1333,188 @@ D-5 分支离散、D-6 均值扣除、D-7 FD 噪声预算、D-8 内循环极限�
   E_HK/λ vs γ_report，分解差距来源（H_HR vs H_HK）。
 - D-D 正式验收暂停（约束激活场景力结构性不一致，验收无意义）；smoothness 参考更新
   等 O5 决策后与锚点重建一并处理。
+
+---
+
+## 2026-08-03: Tier-1 判据体系算例构建（hf / co / h2o_asym）
+
+### What was done
+按"正确性归非对称小分子"的决策，在 `tests/deltap_fd_force/` 新建三个 Tier-1
+算例骨架（仅构建，未运行）：
+- `hf/`：HF 沿 z 轴（键长 0.9168 Å，15.873 Å 盒中心）——非对称双原子，无分支简并；
+- `co/`：CO 沿 z 轴（键长 1.128 Å）——第二候选（π 空间更重）；
+- `h2o_asym/`：h2o1 的 H2 预畸变（+0.03 x, +0.05 z Å）破 C2v——3 原子覆盖的备选。
+三者与 h2o1 同盒同 KPT（Gamma 1×1×2，gdir=3）；不入库 INPUT（run_fd.sh 生成，
+生产设置走 ECUTWFC=100/ECUTRHO=400/SCF_THR=1e-8 环境变量覆盖）。
+`tests/deltap_fd_force/README.md` 追加 Tier-1 一节（体系表 + 三项筛选协议：
+γ(λ) 平滑性 / ±δ 分支零翻转 / 同步模式收敛）。
+
+### Files modified this round
+- 新增 `tests/deltap_fd_force/{hf,co,h2o_asym}/{STRU,KPT,target.dat}`
+- `tests/deltap_fd_force/README.md` 追加 Tier-1 节
+
+### Next steps
+1. 运行三项筛选协议，选定判决体系（预期 hf 首选）
+2. 用选定体系跑分支分解方案 B（连续性-only 重跑）终局确认
+
+---
+
+## 2026-08-04: Tier-1 筛选执行状态 + MPI D_I 混带 bug 定位（中断恢复快照）
+
+### What was done
+- 执行 Tier-1 三体系（hf/co/h2o_asym）筛选 3（同步收敛 base）——串行全部 PASS
+  （hf 37 iter / co / h2o_asym，均 scf_nmax 内收敛，λ*≈−γ(base)）。
+- 定位 **MPI 阻塞级 bug**：co/h2o_asym 4-rank 崩溃于 D_I Allreduce（MPI_ERR_TRUNCATE）。
+  根因：MPI 下 `psi->get_nbands()` 返回本地带数（ncol_bands，nb=1 交错分布），
+  D_I 尺寸 rank 相关（NBANDS=15 → 8/7）；shim/gdb/插桩三重证据闭合。
+- 定位 **MPI 数值错误**：D_I Allreduce 交错混带，逐原子 γ 被污染但 Σγ 守恒——
+  hf 4-rank γ=(−5.107,−6.831) vs 串行 (−5.909,−6.031)，Σγ −11.938 vs −11.940；
+  hf MPI base 还因混带 γ 使 SCF 跑到 iter=100 未收敛。
+- 定位 **串行 FFTW-OMP 卡死**（环境）：atomic_rho→recip2real 全线程屏障自旋，
+  `OMP_NUM_THREADS=1` 绕过。
+- **数据损失**：两次系统崩溃清空 /tmp/dp_screen（串行 base 三体系数据 +
+  9 个冻结 λ 扫描运行 + shim/gdb 分析产物全丢）；仓库侧 hf MPI base（对照用）幸存。
+- 状态快照落 `2026-08-04-deltap-tier1-screening-status.md`（含 P0–P3 TODO）。
+
+### 修改文件
+- 新增 `docs/superpowers/specs/2026-08-04-deltap-tier1-screening-status.md`
+- `deltap-development-log.md` 追加本段
+- 无源码改动（临时插桩已回退，工作树干净）
+
+### 下一步（摘要）
+1. **P0**：修 D_I MPI 路径（全局带数 + 列复制/行通信子归约），回归 = hf 4-rank γ 与串行逐原子一致；
+   MPI smoke 补 NBANDS 非均匀整除用例。
+2. **P1**：重跑筛选 1/2/3（串行，OMP_NUM_THREADS=1，工作区用仓库侧 gitignored 目录）。
+3. **P2**：hf MPI-vs-串行 γ 对照正式化为回归锚点。
+4. **P3**：run_fd.sh/README 注明 OMP_NUM_THREADS=1；结果正式落 dated 文档。
+
+---
+
+## 2026-08-04: 总览文档更新（取代 07-13 版）
+
+### What was done
+新建 `2026-08-04-deltap-progress-and-plan.md` 作为最新总览入口：
+状态仪表盘（✅/❌/⏳ 三档）、功能可用性矩阵（标注 LCAO 多 rank 在 D_I 修复前
+不可信）、07-13 后进展时间线、关键技术结论（dspin 定理/三件套归因/FD 处方/
+均值扣除陷阱/B-6）、P0-P3 TODO（P0=D_I 方案 A' 修复 + 同族审计）、文档索引。
+无代码改动。
+
+---
+
+## 2026-08-04: 力测试结果可画图数据包
+
+### What was done
+汇总 T7 专项全部力测试数据为 `2026-08-04-deltap-force-test-results-plotting.md`：
+总结论表（8 项测试 PASS/FAIL 标注）+ 12 个 CSV 数据集（D1-D12，含测试体系
+结构描述、两档精度标注、判据 0.01286 eV/Å）+ 8 张建议图的图型与图注 +
+数据使用注意事项（精度档位/均值扣除/协议伪差 vs 结构性 FAIL 的区分）。
+核心图：D9 生产场景对比（log）、D7 E'(λ) 线性非零（∂E'/∂λ≈222-224 eV/Ry）、
+D8 驻点判决（84.8-419 eV/Å，λ-leakage 5 位闭合）。无代码改动。
+
+### 2026-08-04（v2）: 可画图数据包按读者分层重写
+- `2026-08-04-deltap-force-test-results-plotting.md` v2：第 1 部分面向材料应用
+  用户（图 U1 场景力误差/U2 H2O 偶极 vs 实验 1.838 vs 1.855 D/U3 BN 零刚度
+  物理发现/U4 可用性矩阵 + 3 条 FAQ：能量可用力不可用、旧 λ 重标定、KPAR=1 限制）；
+  原 12 数据集移入第 2 部分开发者附录（D1-D11 + 图清单 + 注意事项）。
+
+---
+
+## 2026-08-04: 六周开发复盘锐评 → 流程教训入库
+
+### What was done
+基于提交记录（~85 commit，06-26→08-04）做优先级倒挂复盘，六条流程教训
+写入 dev log 顶部"流程教训"区（技术结论区之后）：判决性实验最先跑 /
+物理未验证不保真重构 / PASS 必须注明独立参照物 / 验收用例要"恰好会失败" /
+limitation 声明必须挂 TODO / 单体系证据不作数。无代码改动。
+
+---
+
+## 2026-08-04: 力问题解决方案与 TODO 重规划
+
+### What was done
+输出 `2026-08-04-deltap-force-resolution-plan.md`（唯一权威路线，取代分散计划）：
+- 理论收拢：F_path = F_Pulay + (Γ_op−t)·(∂γ/∂R)/(∂γ/∂λ)；Γ_op=γ 时修正项
+  恒零（dspin 条件正确表述）；84.8 eV/Å 残差与该式兼容。
+- 三路线：A（escon 改 ⟨Ô⟩ 记账，1-2 天，预言残差 ~0.05 eV/Å）；
+  B（解析 ∂γ/∂R，~1 周，严格解，副产品 C/Born 电荷）；C（弱约束产品化，兜底）。
+- TODO 三阶段：Phase 0 可信面（D_I MPI / 分支判别+连续性 / smoothness /
+  内循环极限环）→ Phase 1 Route A 原型 + 决策点 → Phase 2 实施验收。
+- 可证伪的残差路线图：84.8 →(分支) 0.4 →(A) 0.05 →(B) <0.0129。
+- 不做清单：单独补 C / 分支修复前驻点判决 / D_I 修复前用 LCAO 多 rank 数据 /
+  路线定案前 D-D 验收。
+
+---
+
+## 2026-08-04: Route A+ 设计审阅稿
+
+### What was done
+输出 `2026-08-04-deltap-route-a-plus-design.md`（待审阅，未实施）：
+三组件同改（escon=−ΣλΓ / SCF 约束变量改 Γ / 外循环 secant 校准 t_Γ 使 γ→t_γ）；
+完整公式（Γ 逐原子定义、E'≡E_KS 恒等式、Pulay 代表恢复、λ-leakage 变 O(λ)）；
+代码清单（module_deltap Γ 计算、deltap_scf 模式开关、外循环挂钩）；
+测试计划 T0–T7 带可证伪预言（驻点残差 84.8 → ≤0.02 eV/Å）；
+附带收益：分支阶梯与 SCF 解耦（分支连续性降级为外循环读数需求）。
+
+---
+
+## 2026-08-04: Route A+ 联动重推导（8 项）
+
+### What was done
+输出 `2026-08-04-deltap-route-a-plus-derivations.md`（待审阅）：
+D1 E_eff 重推导（算符斜坡定义 E_eff=λ/(2a)，**π 消失**——旧公式的 π/2 悬案
+疑似错配共轭对象所致；焓斜率口径作交叉验证）；D2 力公式全集（残差改写为
+λ·dΓ/dR，驻点预言 ≤0.02 eV/Å）；D3 应力同构推导（S1 地位确认，H_HK 应力
+仍缺）；D4 PES 口径修复（E'=E_KS(ψ*) 干净约束能量面）；D5 极化率链两口径
+α 公式 + P10 改 E₀(μ) 曲线重合判据；D6 P17 改极化匹配协议；D7 secant 外循环
+公式（含保护/兜底）；D8 不变项确认（F2/total/BFGS/力实现/FD 对象）。
+验证锚点 V1-V4 + T0-T7。无代码改动。
+
+---
+
+## 2026-08-04: 执行 TODO 指导文档（当前唯一权威执行清单）
+
+### What was done
+输出 `2026-08-04-deltap-execution-todo.md`：Stage 0 收尾（commit D_I/S_k 修复、
+co f0 归因、锚点重建#2）→ Stage 1 Route A+ 串行实现（Γ 计算/状态机切换/外循环，
+带文件锚点）→ Stage 2 串行判决 T1-T5（T3 驻点残差 ≤0.02 eV/Å 为判决点）
+→ Stage 3 hk_correction MPI 修复（插在 T3 后，串行逐字节为硬约束）
+→ Stage 4 锚点#3 + Tier-1 全矩阵 + D-D → Stage 5 文档清理。
+含依赖图、阻塞规则、不做清单。无代码改动。
+
+---
+
+## 2026-08-04: D_I/S_k A' 修复验证 + co/hf MPI 逐原子 γ 对照 + 相位配对 sort bug 修复
+
+### What was done
+- **D_I/S_k A' 修复**（此前未提交的工作区改动）验证通过：
+  `deltap_berry.cpp` D_I 改全局带槽位（local2global_col 映射，Allreduce 计数统一）、
+  `deltap_overlap.cpp` nlm 键改全局轨道索引（iat2iwt 偏移）、5 处
+  `psi->get_nbands()` → `paraV_->get_wfc_global_nbands()`。
+  回归：单测 16/16（10 deltap_common + 6 esolver_dp）；MPI smoke 4/4
+  （PW 2-rank、BN 4-rank、**co 4-rank 奇数 NBANDS=15**、inner-loop 4-rank）。
+- **co smoke 路径修复**：`tests/deltap_mpi_smoke/run.sh` 中 co 用例路径
+  `deltap_co_lcao` → `deltap_mpi_smoke/deltap_co_lcao`（原路径不存在导致 4 例全 FAIL）。
+- **Stage 0.2 对照（λ=0，ecutwfc=100/ecutrho=400/scf_thr=1e-8）**：
+  - hf：串行 γ=(-9.173,-2.767) == 4-rank 逐原子一致（六位）。
+  - co：修复前串行 (-6.711,-9.209) vs 4-rank (-6.731,-9.189)，Δ=±0.020 rad 且
+    Σγ 守恒（-15.920）——"总和守恒+逐原子漂移"模式复发，量级比 D_I 混带小 40 倍。
+- **定位并修复残余 bug：相位配对贪心 sort 的负距离缺陷**（deltap_wannier.cpp
+  "Reorder evals to match gamma_unwrapped"）：
+  `min(|a-g|, 2π-|a-g|)` 在 |a-g|>2π 时给出**负**距离，贪心匹配优先选错带。
+  co 的 gamma 跟踪在近简并带（-3.2573 两带差 1e-12）处 Hungarian 平局，
+  串行/MPI 以 ~1e-13 输入噪声落入不同槽位 → sort 把权重配到错误的 γ 上
+  （两运行 perm 相同但 γ 槽位交换）→ 逐原子 γ 差 0.02 rad。
+  修复：`diff = |remainder(arg(eval) − fmod(γ,2π), 2π)|`（正确圆周距离）。
+  **注意**：该 bug 在串行也存在（串行配对同样错），co 串行 γ 从
+  (-6.711,-9.209) 修正为 (-6.702,-9.219) → 锚点需重建（Stage 0.3 已计划）。
+- **修复后 Stage 0.2 对照**：co 串行 (-6.702,-9.219) == 4-rank 完全一致；
+  hf 仍一致 (-9.173,-2.767)。逐轮 γ 轨迹也逐字节一致。
+
+### Files modified this round
+- `source/source_lcao/module_deltap/deltap_wannier.cpp`（sort 相位距离修复）
+- `tests/deltap_mpi_smoke/run.sh`（co 路径 + 用例）
+- 提交内容含此前 D_I/S_k A' 修复与 Tier-1 骨架/文档
+
+### Next steps
+1. Stage 0.3：锚点重建 #2（S_k 修复 + sort 修复驱动，12 用例 rc=0）。
+2. Stage 1：Route A+ 串行实现（Γ 计算 / 状态机切换 / 外循环 secant）。
