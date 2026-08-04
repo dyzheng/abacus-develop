@@ -1518,3 +1518,34 @@ co f0 归因、锚点重建#2）→ Stage 1 Route A+ 串行实现（Γ 计算/�
 ### Next steps
 1. Stage 0.3：锚点重建 #2（S_k 修复 + sort 修复驱动，12 用例 rc=0）。
 2. Stage 1：Route A+ 串行实现（Γ 计算 / 状态机切换 / 外循环 secant）。
+
+---
+
+## 2026-08-04: Stage 0.3 锚点重建 #2 完成（S_k 键修复 + 相位 sort 修复驱动）
+
+### What was done
+- 12 用例全部 rc=0：bn_sampling 9-label（1-rank）+ deltap_bn_test（4-rank）+
+  test_stru_target（4-rank, inner loop 3 步）+ deltap_relax（1-rank, 3 离子步）。
+- 归档 `/tmp/deltap_anchor2/`：run.log + deltap_lambda_gamma.dat +
+  deltap_branch.dat（12 用例）。`deltap_lambda_gamma.dat` 为 B-6 轮临时补丁
+  产物（当前二进制不写），本轮从 run.log `[DeltaP P*]` 行重新提取轨迹替换。
+- `tests/deltap_bn_sampling/results.csv` 重新生成（9-label 新锚点）。
+- **关键差异（vs B-6 时代锚点）**：修复后 9-label 末态 |γ−t| 全部 <0.13 rad
+  （B-6 时代 5/9 为 2.6–5.8 rad），λ 衰减到 ~1e-6（B-6 时代 ±2.2–2.7e-3），
+  E_tot label 间差 <1e-3 eV（B-6 时代 ~0.21 eV）。约束自洽恢复——相位配对
+  sort 负距离 bug 使近简并带权重配错带、残差方向错，修复后 λ→0、γ→target。
+- bn_test 4-rank γ=(4.016,3.515)/λ=(8.4e-7,7.2e-6)；test_stru_target
+  内循环末 λ=(1.50e-2,1.31e-2)、|γ−t|=6.7e-3；relax 3 离子步 E 单调降
+  −483.57→−485.40→−487.31 eV，λ 增长到 −2.38e-2，γ 恒 ~(−7.95,−2.38)。
+
+### Files modified this round
+- `tests/deltap_bn_sampling/results.csv`（9-label 新锚点）
+- `docs/superpowers/specs/2026-08-04-deltap-anchor2-s-k-rebuild.md`（本轮 dated 文档）
+- 仓库内 9-label `deltap_lambda_gamma.dat` 陈旧轨迹已用新鲜提取替换（gitignored）
+
+### Next steps
+1. Stage 1.1a/b：`deltap.h` 加 `gamma_op_` + `compute_operator_observable()`；
+   `compute_gamma_scf` 顺带累加 Γ_I^HR。
+2. Stage 1.1c/d：`compute_hk_correction` 按原子拆 Γ_I^HK；T0 对照
+   （per-k vs 实空间 p_hat <1e-10，不一致即停）。
+3. Stage 1.2/1.3：observable 状态机切换 + 外循环 secant。
