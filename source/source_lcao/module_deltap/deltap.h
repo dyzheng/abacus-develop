@@ -92,6 +92,7 @@ public:
     /// Serial only for now (nrow == ncol).
     void compute_hk_correction(const UnitCell& ucell,
                                const psi::Psi<std::complex<double>>* psi,
+                               const elecstate::ElecState* pelec,
                                const std::vector<double>& lambda,
                                std::unordered_map<int, std::vector<std::complex<double>>>& hk_correction);
 
@@ -110,6 +111,32 @@ public:
                           const std::vector<double>& lambda,
                           std::vector<double>& force_out,
                           double& e_hk_out);
+
+    /// Route A+ operator observable: per-atom Γ_I = Γ_I^HR + Γ_I^HK.
+    /// Γ_I^HR = τ_α(I)·⟨P̂_I⟩ is accumulated inside compute_gamma_scf for the
+    /// INPUT constraint direction (gdir); Γ_I^HK is accumulated per atom by
+    /// compute_hk_correction / compute_hk_force at the current wavefunctions
+    /// (it depends only on ψ, not on λ).  Returns the combined Γ_I [nat]
+    /// (HR-only when the HK path never ran, e.g. HK disabled).
+    /// Returns the combined Γ_I = Γ_I^HR + Γ_I^HK as a fresh vector
+    /// (HR-only when the HK path never ran, e.g. HK disabled).
+    std::vector<double> compute_operator_observable() const
+    {
+        std::vector<double> g = gamma_op_;
+        if (g.size() == gamma_op_hk_.size())
+            for (size_t i = 0; i < g.size(); ++i)
+                g[i] += gamma_op_hk_[i];
+        return g;
+    }
+    /// Access the HK part of the operator observable separately (diagnostics).
+    const std::vector<double>& gamma_op_hk() const { return gamma_op_hk_; }
+
+    /// Recompute the per-atom HK part Γ_I^HK from the current wavefunctions
+    /// (λ-independent; light-weight — no H_sym rebuild).  Fills gamma_op_hk_.
+    /// Serial-only semantics like compute_hk_correction (nrow == ncol guard).
+    void compute_gamma_op_hk(const UnitCell& ucell,
+                             const psi::Psi<std::complex<double>>* psi,
+                             const elecstate::ElecState* pelec);
 
     /// Initialize Fletcher-Reeves CG inner-loop optimizer for constrained polarization.
     void init_inner_loop();
@@ -316,6 +343,13 @@ private:
 
     // D_I_all_[ik][iat][lm][n] = SMO projection at k-point ik (B13)
     std::vector<std::vector<std::vector<std::vector<std::complex<double> > > > > D_I_all_;
+
+    // Route A+ operator observable (per-atom, INPUT gdir):
+    // gamma_op_  = Γ_I^HR = τ_α(I)·⟨P̂_I⟩  (filled by compute_gamma_scf)
+    // gamma_op_hk_ = Γ_I^HK = −0.5·Im[Σ_j Σ_p f_p·w_{I,p}·T_pp] (filled by
+    //               compute_hk_correction / compute_hk_force at current ψ)
+    std::vector<double> gamma_op_;
+    std::vector<double> gamma_op_hk_;
 };
 
 } // namespace deltap

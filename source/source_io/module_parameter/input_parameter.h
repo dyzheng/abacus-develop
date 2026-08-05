@@ -632,6 +632,9 @@ struct Input_para
     double deltap_lambda_mixing = 1.0;     ///< damping factor for λ: λ_new = β·λ_opt + (1-β)·λ_old (1=full step, 0=frozen, 0.5=half-damped)
     std::string deltap_constraint_mode = "per_atom";  ///< "per_atom": per-atom constraint; "total": constrain sum Σγ_I
     std::string deltap_constraint_matrix = "";  ///< path to constraint matrix file (overrides constraint_mode when set)
+    std::string deltap_observable = "operator"; ///< SCF constraint variable: "operator" = Γ (Route A+), "gamma" = Wilson-loop γ
+    std::string deltap_secant = "on";           ///< outer-loop t_Γ secant: "on"/"off" (off = freeze t_Γ, e.g. T3 disp± legs)
+    std::string deltap_proxy_target_file = "";  ///< file with per-atom t_Γ values (overrides t_Γ=t_γ first-round init)
 
     // ==============   #Parameters (18.Quasiatomic Orbital analysis) =========
     ///<==========================================================

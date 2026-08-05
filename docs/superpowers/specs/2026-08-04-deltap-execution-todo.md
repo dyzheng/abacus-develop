@@ -27,30 +27,32 @@
 
 | # | 任务 | 文件锚点 | 验收 |
 |---|------|----------|------|
-| 1.1a | `DeltaP` 新增成员 `std::vector<double> gamma_op_`（nat）+ `compute_operator_observable()` | `deltap.h`（members 区）| 编译过 |
-| 1.1b | Γ_I^HR = τ_α(I)·Σ_k w_k Σ_n f_n w_In(k)——在 `compute_gamma_scf` 的 w_In 累加点顺带累加 | `deltap_wannier.cpp:1056` 附近（w_norm 累用处）、`w_In_first_string_`（:368） | T0 见下 |
-| 1.1c | Γ_I^HK：`compute_hk_correction` 的 E_HK 累加在 Σ_I λ_I 求和前按原子拆出（w_eff[n] = Σ_I λ_I w_In 处，:1755-1774） | `deltap_wannier.cpp:1755` 起 | E_HK = Σ_I λ_I·Γ_I^HK 数值自洽 |
-| 1.1d | **T0（可证伪）**：Γ_I^HR 的 per-k 形式 vs 实空间 Tr[DMR·pre_hr]（hhrdbg p_hat 机制翻回）| 两口径差 <1e-10 | **不一致 → 停**：以实空间口径为准实现，记录差异原因 |
+| 1.1a | ~~`DeltaP` 新增成员 `std::vector<double> gamma_op_`（nat）+ `compute_operator_observable()`~~ **✅** | `deltap.h`（members 区）| 编译过 ✅ |
+| 1.1b | ~~Γ_I^HR 在 `compute_gamma_scf` 顺带累加~~ **✅**（物理 k 点 `j < nppstr_-1`，排除包裹副本） | `deltap_wannier.cpp` | T0 见下 ✅ |
+| 1.1c | ~~Γ_I^HK 按原子拆出~~ **✅**（w_IJ[p][iat] + T_diag，`compute_hk_correction`/`compute_hk_force`/`compute_gamma_op_hk`） | `deltap_wannier.cpp` | E_HK=ΣλΓ 自洽 ✅ |
+| 1.1d | ~~**T0**~~ **✅**：per-k ⟨P̂⟩ == 实空间 hhrdbg，12 位全同（7.199716499951 2.140887285468 2.140887285237） | h2o1/base 1-rank | **PASS**（见 stage1 dated 文档 §3.1） |
 
 ### 1.2 状态机切换（deltap_scf）
 
 | # | 任务 | 文件锚点 | 验收 |
 |---|------|----------|------|
-| 1.2a | INPUT 新增 `deltap_observable`（`operator` 默认 / `gamma` 旧路径） | `input_parameter.h:625` 附近 + `read_input_item_other.cpp` | 读入打印正确 |
-| 1.2b | `DeltapState` 加 `gamma_op`（nat）；backend `compute_gamma` 回调返回后同步填 | `deltap_scf.h:49`、`deltap_scf.cpp:294` 附近 | — |
-| 1.2c | 残差口径切换：`compute_residual` 的输入在 operator 模式用 `gamma_op`（:306/:309/:178/:219 共 4 处） | `deltap_scf.cpp` | gamma 模式逐字节不回归 |
-| 1.2d | escon 切换：operator 模式 `compute_dp_escon(lambda, gamma_op)`（:315） | `deltap_common.h:157` 不改签名 | 单测补 operator 用例 |
-| 1.2e | target 语义：用户给 t_γ（不变），内部 t_Γ 初值 = t_γ（κ=1 首轮） | `DeltapParams::target` 读入处 | 打印标注 |
+| 1.2a | ~~INPUT 新增 `deltap_observable`~~ **✅**（读入回显 + 非法值 WARNING_QUIT 验证过） | `input_parameter.h` + `read_input_item_other.cpp` | 读入打印正确 ✅ |
+| 1.2b | ~~`DeltapState` 加 `gamma_op` + backend `compute_gamma_op` 回调~~ **✅** | `deltap_scf.h`、`esolver_ks_lcao.cpp` | — |
+| 1.2c | ~~残差口径切换~~ **✅**（iter_finish/update_lambda_gd/inner_loop 用 `scf_observable`；gamma 模式逐字节不回归 ✅） | `deltap_scf.cpp` | gamma 零回归 ✅ |
+| 1.2d | ~~escon 切换~~ **✅**（operator 模式 `compute_dp_escon(lambda, gamma_op)`；单测补 `ComputeDpEsconOperatorObservable` 11/11） | `deltap_common_test.cpp` | ✅ |
+| 1.2e | ~~target 语义~~ **✅**（t_Γ 初值=t_γ；init 打印标注） | `deltap_scf.cpp` init | 打印标注 ✅ |
 
 ### 1.3 外循环 secant（最小实现）
 
 | # | 任务 | 锚点 | 验收 |
 |---|------|------|------|
-| 1.3a | `DeltapState` 加 `t_proxy`、`gamma_meas_prev`、`t_proxy_prev` | `deltap_scf.h` | — |
-| 1.3b | `reset_ionic_step` 挂钩 secant 更新（公式见推导文档 §7：κ clamp [0.3,3]，单步限幅 0.5 rad，发散 WARNING 不中断） | `deltap_scf.cpp` `reset_ionic_step` | 单点/relax 各触发一次正确 |
-| 1.3c | 打印：`[DeltaP P3]` 加 Γ 列 + escon_new；`[E-field]` 换 E_eff=λ/(2a)（标 operator-ramp，符号待 V1 钉死） | `deltap_scf.cpp:425-456` | 输出格式文档同步 |
+| 1.3a | ~~`DeltapState` 加 `t_proxy`、`gamma_meas_prev`、`t_proxy_prev`~~ **✅**（+ secant 发散计数） | `deltap_scf.h` | — |
+| 1.3b | ~~secant 挂钩~~ **✅**（relax=`reset_ionic_step`；单点=`iter_finish` conv 判定 + 每 SCF 一次守卫；κ clamp [0.3,3]/限幅 0.5 rad/发散 WARNING 已实现） | `deltap_scf.cpp` | 单点触发一次 ✅（relax 由 gamma 回归覆盖） |
+| 1.3c | ~~打印~~ **✅**：P3 加 Γ 列；E-field `E_eff=λ/(2a)` operator-ramp（V1 钉符号） | `deltap_scf.cpp` report | 输出格式见 dated 文档 §3.4 ✅ |
 
-**Stage 1 出口检查**：gamma 模式全锚点逐字节一致（零回归证据）；operator 模式编译+冒烟跑通。
+**Stage 1 出口检查**：~~gamma 模式全锚点逐字节一致~~ **✅**（relax 0 diff；bn_test P 行逐字节；
+center 差异=分支文件加载状态，确定性验证）；~~operator 模式编译+冒烟跑通~~ **✅**
+（h2o1/base rc=0，Γ 列/operator-ramp/secant 触发，见 `2026-08-04-deltap-stage1-route-a-plus.md`）。
 
 ---
 
@@ -63,11 +65,72 @@
 |---|------|-----------|--------------|
 | T1 | E' 恒等式（E' vs E_KS(ψ*)） | 差 <1e-8 eV | 差大 → escon 接线错，回 1.2d |
 | T2 | ∂E'/∂λ 重测（base λ 扫描） | 224 eV/Ry → ≲1 eV/Ry（O(λ)） | 仍是 O(1) → Γ 与 H_c 不一致，回 1.1 |
+
+**Stage 2 进展（2026-08-05 凌晨，T2 判定 + 1.1 修复回环）**：
+
+- **T2 首轮实测 FAIL**：λ∈[−0.01,+0.01] 扫描 E'(λ) 斜率 −13.3 eV/Ry（O(1)，非 O(λ)）。
+  按偏离动作"仍是 O(1) → Γ 与 H_c 不一致，回 1.1"定位：
+  **Γ_I^HK 的记账用了 E_HK-split 对角约定（−0.5·Im[Σ f_p w_IJ T_pp]），
+  而 H_c 里实际施加的 H_HK 算符期望是 Tr[ρ·H_sym] = 全 T·Π Gram 迹**；
+  非正交 LCAO 基下 Π=C_L†C_L ≠ I，对角约定把耦合高估 ~18%
+  （实测 E_HK_conv=0.0574 Ry vs E_HK_actual=0.0470 Ry @ λ=+0.01）。
+- **修复（1.1 回环）**：`deltap_wannier.cpp` 的 `compute_hk_correction` 与
+  `compute_gamma_op_hk` 的 Γ_I^HK 改为按原子拆分的实际算符期望
+  Γ_I^HK = −0.5·Im[Σ_j Σ_p f_p·Σ_{p'} w_{I,p'}·T_{pp'}·Π_{p'p}]（T·Π 全迹）。
+  escon = −ΣλΓ 现在等于 −⟨H_c⟩（精确），E' = E_Harris − ⟨H_c⟩ ≡ E_KS(ψ*) 恒等式恢复。
+- **T2 复测 PASS（硬信号）**：同批 λ 扫描斜率 **−0.013 eV/Ry**（比首轮小 1000×，
+  比判据 ≲1 小 ~80×）；±0.001 两点 E' 逐位对称（8 位一致），E'(±0.01) 呈 ~λ² 抛物
+  （+1.55/+1.30 meV），且 E' ≥ E_KS(ρ₀) 变分下界恢复（首轮 −0.01 侧违反）。
+- **T1 判定 PASS（构造性恒等式）**：T0（Γ^HR 12 位）+ T2 探针（Γ^HK=实际期望）
+  使 escon ≡ −⟨H_c⟩ 精确成立 → E' ≡ E_KS(ψ*) 代数恒等（<1e-8 机器精度，无近似）。
+  单测 11/11 + 6/6 回归通过。详见 `2026-08-04-deltap-t2-escon-hk-trace-fix.md`。
+
+**T3 前检查（Q1/Q3）**：
+- Q3 冻结协议已接线：`deltap_proxy_target_file`（init 加载冻结 t_Γ*，MPI bcast）
+  + `deltap_secant off`（secant 短路，t_Γ 不再漂移）→ disp± 只重收敛 λ 使
+  |Γ−t_Γ*|<1e-3。见 `deltap_scf.cpp` init/`secant_update_proxy`。
+- Q1 λ* 数据（T2 扫描提取）：dΓ/dλ ≈ −4.2 Ry/Ry（ΣΓ: 10.697@−0.01 → 10.614@+0.01），
+  dγ/dλ ≈ −0.3 rad/Ry（γ: −5.521→−5.515→−5.521）。Γ→0 需 λ*≈2.5 Ry（大），
+  γ 对 t_Γ 的映射斜率 ≈ 0.07 rad/单位 → T4 首轮 κ=1 会偏小，需实测 Δγ/Δt_Γ 更新 κ
+  （Q2 的翻号重启逻辑已在 secant 实现）。
 | **T3** | **驻点组② 复判**（三几何驻点 FD；约束变量=Γ，驻点判据 \|Γ−t_Γ\|<1e-3） | **残差 84.8 → ≤0.02 eV/Å** | **≫0.02 → 停**，残差分解（λ-leak 重算）找未识别项 |
-| T4 | 外循环收敛（t_γ=0.9γ_natural） | ≤5 步 \|γ−t_γ\|<1e-2 | 发散 → κ 限幅/映射单调性检查 |
+
+**Stage 2 进展（2026-08-05，T3 判决 PASS —— 判决点通过，Route A+ 成立）**：
+
+- **前置（按用户评审）**：F_HK 力侧先做全迹对齐（`compute_hk_force` 的
+  E_HK/F_HK/U 从对角 T_pp 扩到 T_full·Π 全迹，Π=C_L†C_L 冻结 C 下为常数，
+  导数链不动），E_HK 0.05732 → 0.0471550682 Ry（−17.75%，与 Gram 修正 ~18% 吻合）；
+  双闭合通过：均匀平移 E_HK-FD −9.0e-5 ↔ −ΣF_HK −9e-5 Ry/Bohr ✓、escon 总量
+  +0.432 ↔ +0.4252 eV/Å（1.6%）✓。单原子 E_HK 单独 FD 4.7× 失配 = C-响应项
+  （∂E_HK/∂C·∂C/∂R ∝ λ，B-7 的 4% 是 B-6 前 τ 单位 bug 掩盖的假象，非本轮回归）。
+- **新修复（T3 接线断点）**：`inner_loop` BFGS 残差用了 `params_.t`（per-atom
+  模式为空 → r=Γ−0 把 Γ 驱动到 0 而非 t_Γ*）→ 改 operator 模式用 `scf_target`
+  （=t_proxy=冻结 t_Γ*）。修复后 base 收敛 λ=(0,0,0)、Γ=t_Γ* 到 4.5e-4。
+- **T3 实测 PASS**：t_Γ*=(6.698,1.977,1.977) 冻结，三几何内循环 BFGS 重收敛
+  λ（\|Γ−t_Γ*\|∞ ≤1.035e-3）；F_FD(O1z)=−0.76102 ↔ F_ana=−0.7472648965 eV/Å →
+  **残差 −0.0138 eV/Å ≤ 0.02 判据（84.8 → 0.0138，6100×）**。
+  λ-leakage：F_FD,KS=−92.92 + F_FD,escon=+92.16 相消（T2 平直性 dE'/dλ≈0
+  保证相消——Route A+ 核心收益实证）；disp± 平直性复测 ≤5.4e-5 eV ✓；
+  λ*(R) 无分支阶梯 ✓。回归 11/11、6/6、3/3 PASS（smoothness 4/8 FAIL 预先存在）。
+  全部数据见 `2026-08-05-deltap-fhk-fulltrace-t3.md`。
+- **诚实标注（评审追加，§3.7）**：严格判据线上未过——残差 0.0138 > 严格闭合判据
+  0.0129 eV/Å（超 7%）；闭合计算 `leak=−λ*·(dΓ/dλ)·Δλ*/(2δ)=+0.0127~0.0129 eV/Å`
+  （λ*_avg=−1.09e-3、dΓ/dλ≈−4.15、2δ=0.01 Bohr）→ **残差 ~100% 归因为 O(λ)
+  驻点泄漏，无未识别项**（7% 缺口 = λ* 精度 + Σ斜率代单分量）。生产验收判据
+  表述：**"在 \|λ*\|≤λ₀ 工作窗内残差 ≤X"**（残差 ∝\|λ*\|，λ→0 残差→0 线性）。
+| T4a | 外循环机制验证（t_γ=0.98γ_natural，固定几何 scf） | secant ≤5 步 \|γ−t_γ\|<1e-2（预言 2–4 步）；κ 实测更新；翻号逻辑 | 发散 → κ 限幅/映射单调性检查 |
+| T4b | 窗口测绘（0.95→0.9 逐步） | 每步记录 (t_Γ, λ*, γ, E')；终点冻结 λ FD → 画"力残差 vs \|λ*\|"曲线 | 残差不随 \|λ*\| 线性 → 响应项重估 |
 | T5 | 组① 冻结 λ FD | 0.615 → ~0.05 eV/Å（λ·dΓ/dR） | 显著更大 → 响应项重估 |
 
-**T3 是判决点**：通过 → Route A+ 成立，进 Stage 3；不通过 → 停，带着残差分解回来评审（不要盲目转 Route B）。
+**T4 前置修正（评审修正 2，2026-08-05）**：t_Γ 单步限幅 0.5 → 1.0 rad；
+κ 实测后改用割线预测步长（实测 κ≈14 > 原 clamp 上限 3，否则"≤5 步"
+结构性不可能）；新增 scf 模式固定几何外循环驱动（secant 更新 t_Γ 后
+\|γ−t_γ\| 未达 tol 则继续 SCF 而非终止）。评审修正 1：先 T4a（0.98）后
+T4b（0.95→0.9），不直接上 0.9（Δλ≈1.9 Ry 暴力微扰区）。
+
+**T3 是判决点**：~~通过 → Route A+ 成立，进 Stage 3~~ **✅ 已通过（2026-08-05，
+残差 84.8 → −0.0138 eV/Å）**。下一步：先 T4（外循环，唯一剩的 Stage 2 项，依赖
+T3 结论——现在有结论了），T4 通过后统一提交 Stage 1+2 再进 Stage 3。
 
 ---
 

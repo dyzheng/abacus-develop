@@ -80,6 +80,19 @@ TEST(DeltapCommonTest, ComputeDpEscon)
     EXPECT_DOUBLE_EQ(deltap_common::compute_dp_escon({1.0, 2.0}, {3.0, -1.0}), -1.0);
 }
 
+// Route A+ operator mode: escon = −Σ_I λ_I·Γ_I (same function, Γ input
+// vector instead of γ).  The proxy target t_Γ is not part of escon — it only
+// enters the λ update residual.
+TEST(DeltapCommonTest, ComputeDpEsconOperatorObservable)
+{
+    const std::vector<double> lambda = {0.5, -0.25, 1.0};
+    const std::vector<double> gamma_op = {2.0, 4.0, -3.0};
+    // escon = −(0.5·2.0 + (−0.25)·4.0 + 1.0·(−3.0)) = −(−3.0) = 3.0
+    EXPECT_DOUBLE_EQ(deltap_common::compute_dp_escon(lambda, gamma_op), 3.0);
+    // Per-atom Γ zero → escon zero regardless of λ.
+    EXPECT_DOUBLE_EQ(deltap_common::compute_dp_escon(lambda, {0.0, 0.0, 0.0}), 0.0);
+}
+
 TEST(DeltapCommonTest, Unwrap2Pi)
 {
     const double pi = ModuleBase::PI;

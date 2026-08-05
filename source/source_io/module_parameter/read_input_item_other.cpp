@@ -1336,5 +1336,56 @@ Manual override is allowed: if sc_acceleration_mode is explicitly set, it takes 
         read_sync_string(input.deltap_constraint_matrix);
         this->add_item(item);
     }
+    {
+        Input_Item item("deltap_observable");
+        item.annotation = "SCF constraint variable: operator or gamma";
+        item.category = "DeltaP";
+        item.type = "String";
+        item.description = "operator (default, Route A+): constrain the per-atom operator observable Gamma_I = Gamma_I^HR + Gamma_I^HK via a proxy target t_Gamma. gamma: legacy Wilson-loop Berry phase constraint (gamma_I vs t_I).";
+        item.default_value = "operator";
+        item.unit = "";
+        item.availability = "deltap_corr is true";
+        read_sync_string(input.deltap_observable);
+        item.check_value = [](const Input_Item& item, const Parameter& para) {
+            if (para.input.deltap_observable != "operator"
+                && para.input.deltap_observable != "gamma")
+            {
+                ModuleBase::WARNING_QUIT("ReadInput",
+                    "deltap_observable must be 'operator' or 'gamma'");
+            }
+        };
+        this->add_item(item);
+    }
+    {
+        Input_Item item("deltap_secant");
+        item.annotation = "outer-loop t_Gamma secant: on or off";
+        item.category = "DeltaP";
+        item.type = "String";
+        item.description = "on (default): update the proxy target t_Gamma via the outer-loop secant so the measured gamma converges to t_gamma. off: freeze t_Gamma (used for T3 disp+- legs, which only re-converge lambda against a frozen t_Gamma).";
+        item.default_value = "on";
+        item.unit = "";
+        item.availability = "deltap_corr is true";
+        read_sync_string(input.deltap_secant);
+        item.check_value = [](const Input_Item& item, const Parameter& para) {
+            if (para.input.deltap_secant != "on" && para.input.deltap_secant != "off")
+            {
+                ModuleBase::WARNING_QUIT("ReadInput",
+                    "deltap_secant must be 'on' or 'off'");
+            }
+        };
+        this->add_item(item);
+    }
+    {
+        Input_Item item("deltap_proxy_target_file");
+        item.annotation = "file with per-atom proxy targets t_Gamma";
+        item.category = "DeltaP";
+        item.type = "String";
+        item.description = "File with per-atom proxy target t_Gamma (one value per line, nat lines). Overrides the t_Gamma = t_gamma first-round init; used to freeze the secant-calibrated t_Gamma across geometries (T3).";
+        item.default_value = "";
+        item.unit = "";
+        item.availability = "deltap_corr is true";
+        read_sync_string(input.deltap_proxy_target_file);
+        this->add_item(item);
+    }
 }
 } // namespace ModuleIO

@@ -343,6 +343,7 @@ void deltap_init(const UnitCell& ucell, const Input_para& inp,
     p.conv_thr = inp.deltap_conv_thr;
     p.nscf = 0;                 // PW inner loop rejected in deltap_iter_finish
     p.total_mode = false;       // PW historically updates per-atom (INPUT total mode ignored)
+    p.observable_mode = "gamma"; // PW has no Γ (operator) implementation; keep legacy γ constraint
     p.verbose = false;          // PW prints its own [DeltaP-PW] line
     p.unwrap_branch_2pi = true; // cross-SCF 2π branch tracking
     p.target = dp_target;

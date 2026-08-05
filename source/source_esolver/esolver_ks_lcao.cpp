@@ -782,7 +782,12 @@ void ESolver_KS_LCAO<TK, TR>::iter_finish(UnitCell& ucell, const int istep, int&
             {
                 deltap_scf_solver_->reset_ionic_step();
             }
-            deltap_scf_solver_->iter_finish(iter, this->drho);
+            // The SCF convergence flag is only set later by
+            // ESolver_KS::iter_finish (after charge mixing), so evaluate the
+            // same drho < scf_thr criterion here for the DeltaP single-point
+            // outer-loop secant hook (secant_at_convergence).
+            const bool deltap_scf_converged = (this->drho < PARAM.inp.scf_thr);
+            deltap_scf_solver_->iter_finish(iter, this->drho, deltap_scf_converged);
             // dp_escon is identical on every rank: γ is rank-0-synced by
             // module_deltap (compute_gamma_scf Bcast) and λ by sync_lambda
             // write-back (T1), so the rank-local assignment is consistent.
@@ -932,6 +937,13 @@ void ESolver_KS_LCAO<TK, TR>::deltap_init(UnitCell& ucell)
     p.total_mode = (PARAM.inp.deltap_constraint_mode == "total");
     p.target_file = PARAM.inp.deltap_target_file;
     p.constraint_matrix_file = PARAM.inp.deltap_constraint_matrix;
+    p.observable_mode = PARAM.inp.deltap_observable;
+    // Route A+ outer-loop secant: single-point runs update t_Γ once at SCF
+    // convergence (iter_finish); relax runs update at each new ionic step
+    // (reset_ionic_step).
+    p.secant_at_convergence = (PARAM.inp.calculation == "scf");
+    p.secant_enabled = (PARAM.inp.deltap_secant == "on");
+    p.proxy_target_file = PARAM.inp.deltap_proxy_target_file;
     p.constrain = ucell.get_dp_constrain();
 
     // STRU-based per-atom targets (DeltaSpin-style keywords).  Used only when
@@ -1021,9 +1033,17 @@ typename deltap_scf::DeltapScfSolver::Backend ESolver_KS_LCAO<TK, TR>::deltap_ma
                 out[i] = r[i][alpha];
             return out;
         };
+        // Route A+ operator observable: Γ_I = Γ_I^HR + Γ_I^HK measured at the
+        // current wavefunctions.  HR comes from compute_gamma_scf (INPUT gdir,
+        // τ_α(I)·⟨P̂_I⟩); HK from compute_gamma_op_hk (λ-independent).
+        b.compute_gamma_op = [this, dp, &ucell]() {
+            dp->compute_gamma_scf(ucell, this->psi, this->pelec);
+            dp->compute_gamma_op_hk(ucell, this->psi, this->pelec);
+            return dp->compute_operator_observable();
+        };
         b.apply_hk_correction = [this, dp, get_dp_op, &ucell](const std::vector<double>& lam) {
             std::unordered_map<int, std::vector<std::complex<double>>> hk_corr;
-            dp->compute_hk_correction(ucell, this->psi, lam, hk_corr);
+            dp->compute_hk_correction(ucell, this->psi, this->pelec, lam, hk_corr);
             auto* op = get_dp_op();
             if (op != nullptr) op->set_hk_correction(hk_corr);
         };

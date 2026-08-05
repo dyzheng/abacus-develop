@@ -15,6 +15,28 @@
 
 namespace deltap_scf
 {
+namespace
+{
+/// Route A+ observable selection: operator mode returns Γ (state_.gamma_op),
+/// gamma mode returns the branch-selected γ (state_.gamma_report).
+const std::vector<double>& scf_observable(const deltap_scf::DeltapState& state,
+                                          const deltap_scf::DeltapParams& params)
+{
+    if (params.observable_mode == "operator" && !state.gamma_op.empty())
+        return state.gamma_op;
+    return state.gamma_report;
+}
+/// Route A+ target selection: operator mode uses the proxy t_Γ (state_.t_proxy),
+/// gamma mode uses the user's t_γ (params_.target).
+const std::vector<double>& scf_target(const deltap_scf::DeltapState& state,
+                                      const deltap_scf::DeltapParams& params)
+{
+    if (params.observable_mode == "operator" && !state.t_proxy.empty())
+        return state.t_proxy;
+    return params.target;
+}
+} // namespace
+
 
 // ---------------------------------------------------------------------------
 // init: snapshot params, load target / constraint-matrix files, seed state.
@@ -144,11 +166,63 @@ void DeltapScfSolver::init(const DeltapParams& p, Backend b)
                                                           : params_.nat,
                                   0.0);
     }
+    // Route A+ proxy target: t_Γ starts at the user's t_γ (κ=1 first round);
+    // the outer-loop secant (reset_ionic_step / post-convergence single point)
+    // updates t_Γ so that the measured γ converges to t_γ.
+    state_.t_proxy = params_.target;
+    // Q3 (T3 protocol): an explicit proxy-target file freezes the calibrated
+    // t_Γ* across geometries — the disp± legs then only re-converge λ against
+    // the frozen t_Γ (no secant drift, no t_Γ(R) pollution in the FD).
+    if (params_.observable_mode == "operator" && !params_.proxy_target_file.empty())
+    {
+        std::vector<double> proxy(params_.nat, 0.0);
+        bool loaded = false;
+        if (GlobalV::MY_RANK == 0)
+        {
+            std::ifstream ifs(params_.proxy_target_file);
+            if (ifs.is_open())
+            {
+                loaded = true;
+                for (int iat = 0; iat < params_.nat; ++iat)
+                    ifs >> proxy[iat];
+            }
+        }
+#ifdef __MPI
+        Parallel_Common::bcast_bool(loaded);
+        Parallel_Common::bcast_double(proxy.data(), params_.nat);
+#endif
+        if (loaded)
+        {
+            state_.t_proxy = proxy;
+            if (params_.verbose && GlobalV::MY_RANK == 0)
+                std::cout << " [DeltaP] operator mode: t_Γ loaded from "
+                          << params_.proxy_target_file << " (frozen)"
+                          << std::endl;
+        }
+        else if (GlobalV::MY_RANK == 0)
+        {
+            ModuleBase::WARNING_QUIT("DeltapScfSolver::init",
+                "DeltaP: cannot open proxy target file "
+                + params_.proxy_target_file);
+        }
+    }
+    else if (params_.observable_mode == "operator" && params_.verbose
+             && GlobalV::MY_RANK == 0)
+    {
+        std::cout << " [DeltaP] operator mode: t_Γ initialized to t_γ (κ=1 first round)"
+                  << std::endl;
+    }
+    state_.secant_at_conv_done = false;
     state_.initialized = true;
 }
 
 void DeltapScfSolver::reset_ionic_step()
 {
+    // Route A+ outer-loop secant (relax): the previous ionic step's final γ
+    // (state_.gamma_report) is still in state here; update the proxy target
+    // t_Γ before clearing the per-step history below.  No-op in gamma mode
+    // or without a previous measurement (first ionic step).
+    secant_update_proxy();
     // New ionic step restarts the SCF loop: allow λ to be re-updated and the
     // inner loop to re-run for the changed geometry.  Cross-iteration 2π
     // branch tracking restarts from an empty history.
@@ -156,6 +230,7 @@ void DeltapScfSolver::reset_ionic_step()
     state_.inner_loop_done = false;
     state_.gamma_prev.clear();
     state_.gamma_report.clear();
+    state_.secant_at_conv_done = false;
 }
 
 // ---------------------------------------------------------------------------
@@ -173,10 +248,22 @@ bool DeltapScfSolver::inner_loop(double drho)
     if (state_.inner_loop_done)
         return false;
 
-    // Measure current gamma and residual.
+    // Measure current gamma (and Γ in operator mode) and residual.
     state_.gamma_I = backend_.compute_gamma();
-    std::vector<double> residual = deltap_common::compute_residual(
-        params_.C, params_.t, state_.gamma_I);
+    if (params_.observable_mode == "operator" && backend_.compute_gamma_op)
+        state_.gamma_op = backend_.compute_gamma_op();
+    const std::vector<double>& obs0 = (params_.observable_mode == "operator"
+                                       && !state_.gamma_op.empty())
+                                          ? state_.gamma_op
+                                          : state_.gamma_I;
+    // Route A+ operator mode: the inner-loop residual must target the proxy
+    // t_Γ (scf_target), NOT params_.t (constraint-matrix targets, empty in
+    // per-atom mode) — the pre-fix form r = Γ − 0 drove Γ→0 instead of
+    // Γ→t_Γ* (T3 wiring, 2026-08-05).
+    const std::vector<double>& tgt0 = scf_target(state_, params_);
+    std::vector<double> residual = use_constraint_matrix()
+        ? deltap_common::compute_residual(params_.C, params_.t, obs0)
+        : deltap_common::compute_residual({}, tgt0, obs0);
 
     const int n_inner = use_constraint_matrix()
                             ? static_cast<int>(params_.C.size())
@@ -214,9 +301,16 @@ bool DeltapScfSolver::inner_loop(double drho)
         // Re-solve with trial lambda (charge density frozen).
         backend_.solve_frozen();
 
-        // Measure residual at the trial point.
+        // Measure residual at the trial point (Γ in operator mode).
         const std::vector<double> gamma_trial = backend_.compute_gamma();
-        residual = deltap_common::compute_residual(params_.C, params_.t, gamma_trial);
+        const std::vector<double> obs_trial
+            = (params_.observable_mode == "operator" && backend_.compute_gamma_op)
+                  ? backend_.compute_gamma_op()
+                  : gamma_trial;
+        const std::vector<double>& tgt_trial = scf_target(state_, params_);
+        residual = use_constraint_matrix()
+            ? deltap_common::compute_residual(params_.C, params_.t, obs_trial)
+            : deltap_common::compute_residual({}, tgt_trial, obs_trial);
 
         const double alpha_opt = bfgs.accept_trial(residual);
         lambda_inner = lam_trial;
@@ -273,7 +367,7 @@ void DeltapScfSolver::apply_lambda(const std::vector<double>& lambda)
 // ---------------------------------------------------------------------------
 // iter_finish: per-SCF-iteration constraint update (synchronous mode).
 // ---------------------------------------------------------------------------
-void DeltapScfSolver::iter_finish(int iter, double drho)
+void DeltapScfSolver::iter_finish(int iter, double drho, bool conv_esolver)
 {
     if (!state_.initialized || !backend_.compute_gamma)
         return;
@@ -282,6 +376,11 @@ void DeltapScfSolver::iter_finish(int iter, double drho)
     //    this measurement, matching the historical PW protocol where the
     //    update residual is built from the pre-update gamma.
     state_.gamma_I = backend_.compute_gamma();
+    // Route A+ operator observable: measure Γ at the same wavefunctions.
+    // Must happen before update_lambda_gd so the λ update residual can use Γ
+    // in operator mode.
+    if (params_.observable_mode == "operator" && backend_.compute_gamma_op)
+        state_.gamma_op = backend_.compute_gamma_op();
 
     // 2) Synchronous lambda update (two-phase mode, nscf == 0).
     if (params_.nscf == 0)
@@ -300,13 +399,17 @@ void DeltapScfSolver::iter_finish(int iter, double drho)
     state_.gamma_report = std::move(gamma_report);
 
     // 4) Residual / constraint-energy correction with the operator's λ.
-    const std::vector<double>& gr = state_.gamma_report;
+    //    Route A+: in operator mode the constraint variable is Γ and the
+    //    target is the proxy t_Γ (initialized to t_γ); gamma mode keeps the
+    //    legacy γ vs t_γ residual (zero regression).
+    const std::vector<double>& gr = scf_observable(state_, params_);
+    const std::vector<double>& tgt = scf_target(state_, params_);
     if (use_constraint_matrix())
         state_.max_res = deltap_common::max_norm(
             deltap_common::compute_residual(params_.C, params_.t, gr));
-    else if (!params_.target.empty())
+    else if (!tgt.empty())
         state_.max_res = deltap_common::max_norm(
-            deltap_common::compute_residual({}, params_.target, gr));
+            deltap_common::compute_residual({}, tgt, gr));
     else
         state_.max_res = 0.0;
 
@@ -319,6 +422,131 @@ void DeltapScfSolver::iter_finish(int iter, double drho)
     // 5) Diagnostics (rank 0 only).
     if (params_.verbose && GlobalV::MY_RANK == 0)
         report(iter, lambda);
+
+    // Route A+ outer-loop secant (single-point): one t_Γ update after SCF
+    // convergence.  Relax runs do this in reset_ionic_step instead, so the
+    // update is never applied twice to the same measurement.
+    if (conv_esolver && params_.secant_at_convergence && !state_.secant_at_conv_done)
+    {
+        secant_update_proxy();
+        state_.secant_at_conv_done = true;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// secant_update_proxy: Route A+ outer-loop calibration of the proxy target
+// t_Γ so that the measured γ converges to the user's t_γ (D7, derivations §7).
+//   t_Γ^(k+1) = t_Γ^(k) + κ^(k)·(t_γ − γ^(k))
+//   κ^(0) = 1;  κ^(k≥1) = Δt_Γ/Δγ from the last two (t_Γ, γ) pairs,
+//   clamped to [0.3, 3];  |Δt_Γ| per step clamped to 0.5 rad;  two
+//   consecutive |γ−t_γ| increases halve κ, and a still-worse step keeps the
+//   current t_Γ with a WARNING (relax never aborts).
+// ---------------------------------------------------------------------------
+void DeltapScfSolver::secant_update_proxy()
+{
+    // Operator mode only (gamma mode constrains γ directly, no proxy).
+    if (params_.observable_mode != "operator")
+        return;
+    // Q3: secant disabled → t_Γ stays frozen (T3 disp± legs).
+    if (!params_.secant_enabled)
+        return;
+    // Requires an actual Γ measurement path (PW has none) and a measurement
+    // from the just-completed SCF (none on the first SCF of a run).
+    if (!backend_.compute_gamma_op)
+        return;
+    if (state_.gamma_report.empty() || state_.t_proxy.empty())
+        return;
+    if (params_.target.empty())
+        return; // no physical t_γ to converge toward
+
+    const std::vector<double>& t_gamma = params_.target;
+    const std::vector<double>& gamma_meas = state_.gamma_report;
+    const int nat = params_.nat;
+
+    // κ: secant slope from the previous (t_Γ, γ) pair; first round κ=1.
+    std::vector<double> kappa(nat, 1.0);
+    if (state_.gamma_meas_prev.size() == static_cast<size_t>(nat)
+        && state_.t_proxy_prev.size() == static_cast<size_t>(nat))
+    {
+        for (int iat = 0; iat < nat; ++iat)
+        {
+            const double dg = gamma_meas[iat] - state_.gamma_meas_prev[iat];
+            const double dt = state_.t_proxy[iat] - state_.t_proxy_prev[iat];
+            if (std::abs(dg) > 1e-12)
+            {
+                kappa[iat] = dt / dg;
+                // Q2 (D7): κ = Δt_Γ/Δγ carries the SIGN of the measured
+                // γ↔t_Γ response (γ ≈ −Γ + c gives κ < 0).  Clamp the
+                // magnitude to [0.3, 3] but preserve the sign — a wrong sign
+                // shows up as |γ−t_γ| increasing, and the next secant step
+                // then flips κ automatically via the measured slope.
+                const double abs_k = std::abs(kappa[iat]);
+                if (abs_k < 0.3) kappa[iat] = (kappa[iat] >= 0.0) ? 0.3 : -0.3;
+                else if (abs_k > 3.0) kappa[iat] = (kappa[iat] >= 0.0) ? 3.0 : -3.0;
+            }
+        }
+    }
+
+    // Divergence guard: two consecutive |γ−t_γ| increases halve κ; a third
+    // consecutive increase keeps t_Γ (WARNING, relax continues unconstrained).
+    double err = 0.0;
+    for (int iat = 0; iat < nat; ++iat)
+        err = std::max(err, std::abs(gamma_meas[iat] - t_gamma[iat]));
+    if (state_.secant_prev_err > 0.0 && err > state_.secant_prev_err)
+    {
+        state_.secant_bad_steps++;
+        if (state_.secant_bad_steps == 2)
+        {
+            for (int iat = 0; iat < nat; ++iat)
+                kappa[iat] *= 0.5;
+        }
+        else if (state_.secant_bad_steps >= 3)
+        {
+            if (GlobalV::MY_RANK == 0)
+                std::cout << " [DeltaP] WARNING: outer-loop secant diverging "
+                          << "(|γ−t_γ|∞=" << err << " > prev="
+                          << state_.secant_prev_err << " for "
+                          << state_.secant_bad_steps
+                          << " steps); keeping t_Γ for this step" << std::endl;
+            state_.secant_prev_err = err;
+            return;
+        }
+    }
+    else
+    {
+        state_.secant_bad_steps = 0;
+    }
+
+    // Store history, then apply the clamped update.
+    state_.t_proxy_prev = state_.t_proxy;
+    state_.gamma_meas_prev = gamma_meas;
+    for (int iat = 0; iat < nat; ++iat)
+    {
+        double dt = kappa[iat] * (t_gamma[iat] - gamma_meas[iat]);
+        if (dt > 0.5) dt = 0.5;
+        if (dt < -0.5) dt = -0.5;
+        state_.t_proxy[iat] += dt;
+    }
+    state_.secant_prev_err = err;
+
+    if (params_.verbose && GlobalV::MY_RANK == 0)
+    {
+        std::cout << " [DeltaP Secant] |γ−t_γ|∞=" << std::scientific
+                  << std::setprecision(3) << err << " κ=(" << std::fixed
+                  << std::setprecision(2);
+        for (int iat = 0; iat < nat; ++iat)
+        {
+            if (iat > 0) std::cout << ", ";
+            std::cout << kappa[iat];
+        }
+        std::cout << ") t_Γ=(" << std::setprecision(3);
+        for (int iat = 0; iat < nat; ++iat)
+        {
+            if (iat > 0) std::cout << ", ";
+            std::cout << state_.t_proxy[iat];
+        }
+        std::cout << ")" << std::endl;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -345,21 +573,28 @@ void DeltapScfSolver::update_lambda_gd(int iter, double drho)
     if (mixing > 1.0)
         mixing = 1.0;
 
+    // Route A+: the λ-update residual uses the same observable/target as the
+    // convergence residual (Γ vs t_Γ in operator mode; γ vs t_γ in gamma mode).
+    const std::vector<double>& obs = (params_.observable_mode == "operator"
+                                      && !state_.gamma_op.empty())
+                                         ? state_.gamma_op
+                                         : state_.gamma_I;
+    const std::vector<double>& tgt = scf_target(state_, params_);
     if (use_constraint_matrix())
     {
         // Constraint-space update: r[α] = Σ_i C[α][i]·γ_i − t[α], then
         // λ_cstr ← mixing·(λ_cstr + step·r) + (1−mixing)·λ_cstr, and finally
         // λ_eff[i] = Σ_a λ_cstr[a]·C[a][i].
         const std::vector<double> residual = deltap_common::compute_residual(
-            params_.C, params_.t, state_.gamma_I);
+            params_.C, params_.t, obs);
         deltap_common::gd_update(state_.lambda_cstr, residual, {}, step, mixing);
         lambda = deltap_common::to_effective_lambda(
             state_.lambda_cstr, params_.C, params_.nat);
     }
-    else if (!params_.target.empty())
+    else if (!tgt.empty())
     {
         const std::vector<double> residual = deltap_common::compute_residual(
-            {}, params_.target, state_.gamma_I);
+            {}, tgt, obs);
         if (params_.total_mode)
             deltap_common::gd_update_total(lambda, residual, step, mixing);
         else
@@ -435,11 +670,27 @@ void DeltapScfSolver::report(int iter, const std::vector<double>& lambda) const
         }
         std::cout << ")";
     }
+    // Route A+ operator column: measured Γ at the same wavefunctions as γ.
+    if (params_.observable_mode == "operator" && !state_.gamma_op.empty())
+    {
+        std::cout << " Γ=(" << std::fixed << std::setprecision(3);
+        for (int iat = 0; iat < params_.nat; ++iat)
+        {
+            if (iat > 0)
+                std::cout << ", ";
+            std::cout << state_.gamma_op[iat];
+        }
+        std::cout << ")";
+    }
     std::cout << " |γ-t|=" << std::scientific << std::setprecision(3) << state_.max_res
               << " escon=" << std::fixed << std::setprecision(6) << state_.dp_escon
               << " Ry\n";
 
-    // Effective electric field: E_eff = -λ_avg × π / (2·a_alpha) (a.u.).
+    // Effective electric field.  Gamma mode: legacy λ–γ conjugate formula
+    // E_eff = −λ_avg·π/(2·a_alpha) a.u. (retired for operator mode, see
+    // derivations §1.1).  Operator mode (Route A+): the constraint operator
+    // IS a ramp potential, E_eff = λ_avg/(2·a_alpha) a.u. with no π
+    // (derivations §1.2; sign/factor pinned by V1, efield comparison).
     // λ is in Ry; converting Ry → Hartree gives an extra factor of 1/2.
     // Convert: 1 a.u. = 51.422 V/Å.
     if (backend_.lattice_period)
@@ -449,9 +700,12 @@ void DeltapScfSolver::report(int iter, const std::vector<double>& lambda) const
         for (int iat = 0; iat < params_.nat; ++iat)
             lam_avg += lambda[iat];
         lam_avg /= params_.nat;
-        const double e_eff_au = -lam_avg * ModuleBase::PI / (2.0 * a_alpha);
+        const bool op_mode = (params_.observable_mode == "operator");
+        const double e_eff_au = op_mode ? lam_avg / (2.0 * a_alpha)
+                                        : -lam_avg * ModuleBase::PI / (2.0 * a_alpha);
         const double e_eff_v_per_a = e_eff_au * 51.422;
-        std::cout << "   [E-field] E_eff=" << std::scientific << std::setprecision(3)
+        std::cout << "   [E-field" << (op_mode ? " operator-ramp" : "") << "] E_eff="
+                  << std::scientific << std::setprecision(3)
                   << e_eff_v_per_a << " V/Angstrom  (λ_avg=" << lam_avg << " Ry)"
                   << std::endl;
     }

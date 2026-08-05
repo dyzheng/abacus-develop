@@ -210,7 +210,7 @@ void DeltaPOperator<TK, TR>::cal_force_stress(const bool cal_force,
         }
     }
 
-#if 0 // DEBUG_HHR_ENERGY (disabled for commit; flip to 1 for A2/C)
+#if 0 // DEBUG_HHR_ENERGY (T0 closed 2026-08-04; disabled for commit, flip to 1 for reuse)
     {
         const int alpha_idx = this->gdir_ - 1;
         double e_hhr = 0.0;
@@ -227,7 +227,7 @@ void DeltaPOperator<TK, TR>::cal_force_stress(const bool cal_force,
         std::cout << " [hhrdbg] E_H_HR=" << std::setprecision(12) << e_hhr
                   << " Ry   P_hat=";
         for (int iat = 0; iat < this->ucell->nat; iat++)
-            std::cout << std::setprecision(6) << p_hat[iat] << " ";
+            std::cout << std::setprecision(12) << p_hat[iat] << " ";
         std::cout << std::endl;
     }
 #endif
@@ -308,6 +308,22 @@ void DeltaPOperator<TK, TR>::cal_force_IJR(const int& iat1,
     }
 
     double tmp[3] = {0.0};
+#if 0 // DEBUG_T0_DMTRACE (temporary, disabled for commit; flip to 1)
+    {
+        // Per-spin-channel DM trace over this pair block (diagnostic for T0:
+        // which channel holds the spin-summed density for nspin=1).
+        const double* dp_tr = dmR_pointer->get_pointer();
+        int ntr = row_indexes.size() * col_indexes.size();
+        for (int is = 0; is < nspin; ++is)
+        {
+            double tr = 0.0;
+            for (int k = 0; k < ntr; ++k)
+                tr += dp_tr[k * nspin + is];
+            if (std::abs(tr) > 1e-12)
+                std::cout << "   [T0dm] pair " << iat1 << "," << iat2 << " ch" << is << " trace=" << tr << std::endl;
+        }
+    }
+#endif
     for (int is = 1; is < nspin; is++)
     {
         const double* dm_pointer = dmR_pointer->get_pointer();
@@ -405,6 +421,22 @@ void DeltaPOperator<TK, TR>::cal_stress_IJR(const int& iat1,
     R_cart *= this->ucell->lat0;
 
     double tmp[3] = {0.0};
+#if 0 // DEBUG_T0_DMTRACE (temporary, disabled for commit; flip to 1)
+    {
+        // Per-spin-channel DM trace over this pair block (diagnostic for T0:
+        // which channel holds the spin-summed density for nspin=1).
+        const double* dp_tr = dmR_pointer->get_pointer();
+        int ntr = row_indexes.size() * col_indexes.size();
+        for (int is = 0; is < nspin; ++is)
+        {
+            double tr = 0.0;
+            for (int k = 0; k < ntr; ++k)
+                tr += dp_tr[k * nspin + is];
+            if (std::abs(tr) > 1e-12)
+                std::cout << "   [T0dm] pair " << iat1 << "," << iat2 << " ch" << is << " trace=" << tr << std::endl;
+        }
+    }
+#endif
     for (int is = 1; is < nspin; is++)
     {
         const double* dm_pointer = dmR_pointer->get_pointer();

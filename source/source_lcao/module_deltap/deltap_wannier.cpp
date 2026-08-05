@@ -364,6 +364,9 @@ void DeltaP::compute_wannier_polarization(
         std::vector<double> smo_w_accum(nat_, 0.0);
         std::vector<double> gamma_raw_accum(nat_, 0.0);
         std::vector<double> r_elec_accum(nat_, 0.0);
+        // Route A+ operator observable: ⟨P̂_I⟩ = Σ_k w_k Σ_n f_n Σ_{lm∈I} |D_{I,lm,n}(k)|²
+        // (raw SMO projection per k-point, no S^{-1/2}; wg already folds in w_k·f_n).
+        std::vector<double> p_hat_accum(nat_, 0.0);
         int n_strings_processed = 0;
         std::vector<std::vector<double>> w_In_first_string_;  // current alpha's first-string weights
         std::vector<std::complex<double>> zeta_list;
@@ -456,6 +459,41 @@ void DeltaP::compute_wannier_polarization(
             }
         }
 #endif
+
+        // Route A+ operator observable (Γ_I^HR): accumulate ⟨P̂_I⟩ over ALL
+        // physical k-points of this string (each physical k-point belongs to
+        // exactly one string per gdir).  The PBC-wrapped string stores the
+        // last slot as k_0 + G ≡ k_0 (the Wilson loop adds a G-phase to the
+        // boundary link), so only slots j = 0..nppstr_-2 are distinct physical
+        // k-points — skipping the wrapped copy avoids double counting k_0.
+        // Uses the raw per-k-point SMO projection D_I (not the
+        // S^{-1/2}-rotated tilde_proj), matching the real-space Tr[ρ·P̂_I]
+        // contraction (T0 cross-check).
+        for (int j = 0; j < nppstr_ - 1; ++j)
+        {
+            const int ik_psi = k_index_[istring][j];
+            if (ik_psi >= nks) continue;
+            for (int n = 0; n < nocc_use; ++n)
+            {
+                const double wg_val = pelec->wg(ik_psi, n);
+                if (wg_val == 0.0) continue;
+                for (int iat = 0; iat < nat_; ++iat)
+                {
+                    if (kstring_data_[j].D_I.size() <= static_cast<size_t>(iat)) continue;
+                    const int r = nproj_per_atom_[iat];
+                    double w_In = 0.0;
+                    for (int lm = 0; lm < r; ++lm)
+                    {
+                        if (kstring_data_[j].D_I[iat].size() > static_cast<size_t>(lm)
+                            && kstring_data_[j].D_I[iat][lm].size() > static_cast<size_t>(n))
+                        {
+                            w_In += std::norm(kstring_data_[j].D_I[iat][lm][n]);
+                        }
+                    }
+                    p_hat_accum[iat] += wg_val * w_In;
+                }
+            }
+        }
 
         // Mark which gdir and string kstring_data_ belongs to.
         // compute_hk_correction uses this to detect stale data.
@@ -1587,6 +1625,53 @@ void DeltaP::compute_wannier_polarization(
         results_.r_elec_center[iat][alpha_idx] = (n_strings_processed > 0) ? r_elec_accum[iat] / n_strings_processed : 0.0;
     }
 
+    // Route A+ operator observable: keep only the INPUT constraint direction.
+    // Γ_I^HR = τ_α(I)·⟨P̂_I⟩ with τ in Direct (fractional) coordinates
+    // (B-6 convention, consistent with the H_HR operator and hhrdbg block).
+    if (alpha == gdir_orig - 1)
+    {
+        if (static_cast<int>(gamma_op_.size()) != nat_)
+            gamma_op_.assign(nat_, 0.0);
+        for (int iat = 0; iat < nat_; ++iat)
+        {
+            int I0 = 0, T0 = 0;
+            ucell.iat2iait(iat, &I0, &T0);
+            gamma_op_[iat] = ucell.atoms[T0].taud[I0][alpha] * p_hat_accum[iat];
+        }
+#if 0 // DEBUG_T0_OPERATOR (T0 closed 2026-08-04: per-k == real-space, 12 digits)
+        std::cout << " [T0] P_hat_perk=";
+        for (int iat = 0; iat < nat_; ++iat)
+            std::cout << " " << std::setprecision(12) << p_hat_accum[iat];
+        std::cout << "  Gamma_op=";
+        for (int iat = 0; iat < nat_; ++iat)
+            std::cout << " " << std::setprecision(12) << gamma_op_[iat];
+        std::cout << std::endl;
+        // Per-k / per-band breakdown for atom 0 (T0 root-cause).
+        for (int j = 0; j < nppstr_; ++j)
+        {
+            const int ik_psi = k_index_[0][j];
+            if (ik_psi >= nks) continue;
+            for (int n = 0; n < nocc_use; ++n)
+            {
+                double w = 0.0;
+                if (kstring_data_[j].D_I.size() > 0)
+                {
+                    const int r = nproj_per_atom_[0];
+                    for (int lm = 0; lm < r; ++lm)
+                        if (kstring_data_[j].D_I[0].size() > static_cast<size_t>(lm)
+                            && kstring_data_[j].D_I[0][lm].size() > static_cast<size_t>(n))
+                            w += std::norm(kstring_data_[j].D_I[0][lm][n]);
+                }
+                std::cout << " [T0bd] alpha=" << alpha + 1 << " ik=" << ik_psi
+                          << " kvec=" << kstring_data_[j].kvec_d.x << ","
+                          << kstring_data_[j].kvec_d.y << "," << kstring_data_[j].kvec_d.z
+                          << " n=" << n << " wg=" << pelec->wg(ik_psi, n)
+                          << " |D0n|^2=" << w << std::endl;
+            }
+        }
+#endif
+    }
+
     } // alpha loop
 
     gdir_ = gdir_orig;  // restore original direction for downstream use
@@ -1654,11 +1739,17 @@ void DeltaP::compute_gamma_scf(const UnitCell& ucell,
 
 void DeltaP::compute_hk_correction(const UnitCell& ucell,
                                    const psi::Psi<std::complex<double>>* psi,
+                                   const elecstate::ElecState* pelec,
                                    const std::vector<double>& lambda,
                                    std::unordered_map<int, std::vector<std::complex<double>>>& hk_correction)
 {
     ModuleBase::TITLE("DeltaP", "compute_hk_correction");
     hk_correction.clear();
+
+    // Route A+ operator observable: Γ_I^HK depends only on the current
+    // wavefunctions (not on λ); recompute it from scratch on every call.
+    // Early returns below leave it zeroed (e.g. HK disabled).
+    gamma_op_hk_.assign(nat_, 0.0);
 
     if (nppstr_ < 2 || kstring_data_.empty()) return;
 
@@ -1742,6 +1833,11 @@ void DeltaP::compute_hk_correction(const UnitCell& ucell,
     // The Hamiltonian is distributed, so each rank's correction is applied
     // to its own block — no MPI communication needed here.
 
+    // Per-atom Γ_I^HK accumulator (complex; finalized after the link loop).
+    // Under MPI with nrow==ncol the T·Π trace covers only the local rows
+    // (same local-block approximation as the H_sym correction itself).
+    std::vector<std::complex<double>> e_hk_I(nat_, {0.0, 0.0});
+
     // For each link on the first k-string
     for (int j = 0; j < nppstr_ - 1; ++j)
     {
@@ -1756,28 +1852,35 @@ void DeltaP::compute_hk_correction(const UnitCell& ucell,
         psi->fix_k(ik_R);
         const std::complex<double>* c_R = psi->get_pointer();
 
-        // Compute effective weights: w_eff[n] = sum_I lambda[I] * sum_{lm} |D_I[iat][lm][n]|^2
-        std::vector<double> w_eff(nocc_use, 0.0);
+        // Per-atom SMO weights w_In[I][n] = Σ_{lm∈I} |D_I[iat][lm][n]|² kept
+        // separate from the λ-weighted w_eff so that Γ_I^HK can be split per
+        // atom (Route A+): E_HK = Σ_I λ_I·Γ_I^HK with
+        // Γ_I^HK = −0.5·Im[Σ_j Σ_p f_p·w_{I,p}^{(j)}·T_pp^{(j)}].
+        std::vector<std::vector<double>> w_IJ(nocc_use, std::vector<double>(nat_, 0.0));
         for (int iat = 0; iat < nat_; ++iat)
         {
             int r = nproj_per_atom_[iat];
+            if (kstring_data_[j].D_I.size() <= static_cast<size_t>(iat)) continue;
             for (int n = 0; n < nocc_use; ++n)
             {
                 double w_In = 0.0;
-                if (kstring_data_[j].D_I.size() > static_cast<size_t>(iat))
+                for (int lm = 0; lm < r; ++lm)
                 {
-                    for (int lm = 0; lm < r; ++lm)
+                    if (kstring_data_[j].D_I[iat].size() > static_cast<size_t>(lm) &&
+                        kstring_data_[j].D_I[iat][lm].size() > static_cast<size_t>(n))
                     {
-                        if (kstring_data_[j].D_I[iat].size() > static_cast<size_t>(lm) &&
-                            kstring_data_[j].D_I[iat][lm].size() > static_cast<size_t>(n))
-                        {
-                            w_In += std::norm(kstring_data_[j].D_I[iat][lm][n]);
-                        }
+                        w_In += std::norm(kstring_data_[j].D_I[iat][lm][n]);
                     }
                 }
-                w_eff[n] += lambda[iat] * w_In;
+                w_IJ[n][iat] = w_In;
             }
         }
+
+        // Compute effective weights: w_eff[n] = Σ_I lambda[I] * w_IJ[n][I]
+        std::vector<double> w_eff(nocc_use, 0.0);
+        for (int n = 0; n < nocc_use; ++n)
+            for (int iat = 0; iat < nat_; ++iat)
+                w_eff[n] += lambda[iat] * w_IJ[n][iat];
 
         // Step 1: SC = S_dk * C_R -> (nrow x nocc_use)
         std::vector<std::complex<double>> SC(nrow * nocc_use, {0.0, 0.0});
@@ -1829,7 +1932,223 @@ void DeltaP::compute_hk_correction(const UnitCell& ucell,
             }
         }
 
+        // Route A+ operator observable: Γ_I^HK per atom = per-atom split of
+        // the ACTUAL applied-operator expectation Tr[ρ·H_sym] (T2 verdict
+        // 2026-08-04).  H_sym is linear in λ (w_eff[n] = Σ_I λ_I·w_IJ[n][I]),
+        // so per atom:
+        //   Γ_I^HK = −0.5·Σ_p wg(ik_L,p)·Im[Σ_{p'} w_IJ[p'][I]·T_{pp'}·Π_{p'p}]
+        // with T_{pp'} = (C_L†·S_dk·C_R)_{pp'} and Π_{p'p} = (C_L†·C_L)_{p'p}.
+        // The pre-T2 diagonal convention (T_pp only) assumed Π = I and
+        // overstated the coupling by ~18% in the non-orthogonal LCAO basis
+        // (E'(λ) slope −13.3 eV/Ry instead of ≲1; fixed by the full trace).
+        std::vector<std::complex<double>> T_full(nocc_use * nocc_use, {0.0, 0.0});
+        std::vector<std::complex<double>> Pi(nocc_use * nocc_use, {0.0, 0.0});
+        for (int p = 0; p < nocc_use; ++p)
+        {
+            for (int pp = 0; pp < nocc_use; ++pp)
+            {
+                for (int a = 0; a < nrow; ++a)
+                {
+                    T_full[p * nocc_use + pp] += std::conj(c_L[a + p * nrow]) * SC[a + pp * nrow];
+                    Pi[p * nocc_use + pp] += std::conj(c_L[a + pp * nrow]) * c_L[a + p * nrow];
+                }
+            }
+        }
+        for (int p = 0; p < nocc_use; ++p)
+        {
+            const double fp = pelec->wg(ik_L, p);
+            if (fp == 0.0) continue;
+            for (int iat = 0; iat < nat_; ++iat)
+            {
+                std::complex<double> acc(0.0, 0.0);
+                for (int pp = 0; pp < nocc_use; ++pp)
+                {
+                    acc += w_IJ[pp][iat] * T_full[p * nocc_use + pp] * Pi[pp * nocc_use + p];
+                }
+                e_hk_I[iat] += fp * acc;
+            }
+        }
+
         hk_correction[ik_L] = H_sym;
+    }
+
+    // Γ_I^HK = −0.5·Im[Σ_j Σ_p f_p·Σ_{p'} w_{I,p'}^{(j)}·T_{pp'}^{(j)}·Π_{p'p}^{(j)}]
+    // (per-atom split of the ACTUAL applied-operator expectation; differs
+    // from compute_hk_force's E_HK diagonal convention in the non-orthogonal
+    // basis — see the T2 dated document).
+    for (int iat = 0; iat < nat_; ++iat)
+    {
+        gamma_op_hk_[iat] = -0.5 * e_hk_I[iat].imag();
+    }
+#if 0 // DEBUG_T0_OPERATOR (T0 closed 2026-08-04: per-k == real-space, 12 digits)
+    std::cout << " [T0] Gamma_op_hk=";
+    for (int iat = 0; iat < nat_; ++iat)
+        std::cout << " " << std::setprecision(12) << gamma_op_hk_[iat];
+    std::cout << std::endl;
+#endif
+}
+
+void DeltaP::compute_gamma_op_hk(const UnitCell& ucell,
+                                 const psi::Psi<std::complex<double>>* psi,
+                                 const elecstate::ElecState* pelec)
+{
+    // Route A+ operator observable: per-atom Γ_I^HK at the CURRENT
+    // wavefunctions (λ-independent), as the per-atom split of the ACTUAL
+    // applied-operator expectation (full T·Π trace, same as the escon/SCF
+    // observable in compute_hk_correction — T2 verdict 2026-08-04).
+    // Same serial-only semantics as compute_hk_correction (nrow == ncol).
+    gamma_op_hk_.assign(nat_, 0.0);
+
+    if (nppstr_ < 2 || kstring_data_.empty()) return;
+
+    const int nks = psi->get_nk();
+    const int nbands = paraV_->get_wfc_global_nbands();
+    const int nrow = paraV_->get_row_size();
+    const int ncol = paraV_->get_col_size();
+    if (nrow != ncol) return;
+
+    // Rebuild S_k/D_I if they belong to a different direction or string
+    // (same guard as compute_hk_correction).
+    if (kstring_gdir_ != gdir_ || kstring_string_ != 0)
+    {
+        setup_kstring(*kv_);
+        kstring_data_.assign(nppstr_, KSpaceData());
+        for (int j = 0; j < nppstr_; ++j)
+        {
+            int ik = k_index_[0][j];
+            if (ik >= nks) continue;
+            kstring_data_[j].kvec_d = kv_->kvec_d[ik];
+            psi->fix_k(ik);
+            compute_S_k(j);
+            compute_D_I(j, psi->get_pointer(), nbands, nrow);
+        }
+        kstring_gdir_ = gdir_;
+        kstring_string_ = 0;
+#ifdef __MPI
+        for (int j = 0; j < nppstr_; ++j)
+        {
+            for (int iat = 0; iat < nat_; ++iat)
+            {
+                int r = nproj_per_atom_[iat];
+                for (int lm = 0; lm < r; ++lm)
+                {
+                    if (kstring_data_[j].D_I.size() <= static_cast<size_t>(iat)) continue;
+                    if (kstring_data_[j].D_I[iat].size() <= static_cast<size_t>(lm)) continue;
+                    int sz = kstring_data_[j].D_I[iat][lm].size();
+                    if (sz > 0)
+                    {
+                        MPI_Comm comm = paraV_->comm();
+                        if (comm != MPI_COMM_NULL)
+                            MPI_Allreduce(MPI_IN_PLACE, kstring_data_[j].D_I[iat][lm].data(),
+                                          2 * sz, MPI_DOUBLE, MPI_SUM, comm);
+                    }
+                }
+            }
+        }
+#endif
+    }
+
+    if (S_dk_.empty())
+    {
+        compute_S_dk(ucell);
+    }
+
+    double occ_bands_d = static_cast<double>(PARAM.inp.nelec / ModuleBase::DEGSPIN);
+    if ((occ_bands_d - std::floor(occ_bands_d)) > 0.0)
+        occ_bands_d = std::floor(occ_bands_d) + 1.0;
+    const int nocc = static_cast<int>(occ_bands_d);
+    const int nocc_use = std::min(nocc, nbands);
+    if (nocc_use <= 0) return;
+
+    std::vector<std::complex<double>> e_hk_I(nat_, {0.0, 0.0});
+    for (int j = 0; j < nppstr_ - 1; ++j)
+    {
+        const int ik_L = k_index_[0][j];
+        const int ik_R = k_index_[0][j + 1];
+        if (ik_L >= nks || ik_R >= nks) continue;
+
+        psi->fix_k(ik_L);
+        const std::complex<double>* c_L = psi->get_pointer();
+        psi->fix_k(ik_R);
+        const std::complex<double>* c_R = psi->get_pointer();
+
+        // Per-atom weights w_In[I][n] (same link-j / k_L convention as
+        // compute_hk_correction and compute_hk_force).
+        std::vector<std::vector<double>> w_IJ(nocc_use, std::vector<double>(nat_, 0.0));
+        for (int iat = 0; iat < nat_; ++iat)
+        {
+            const int r = nproj_per_atom_[iat];
+            if (kstring_data_[j].D_I.size() <= static_cast<size_t>(iat)) continue;
+            for (int n = 0; n < nocc_use; ++n)
+            {
+                double w_In = 0.0;
+                for (int lm = 0; lm < r; ++lm)
+                {
+                    if (kstring_data_[j].D_I[iat].size() > static_cast<size_t>(lm)
+                        && kstring_data_[j].D_I[iat][lm].size() > static_cast<size_t>(n))
+                    {
+                        w_In += std::norm(kstring_data_[j].D_I[iat][lm][n]);
+                    }
+                }
+                w_IJ[n][iat] = w_In;
+            }
+        }
+
+        // SC = S_dk * C_R
+        std::vector<std::complex<double>> SC(nrow * nocc_use, {0.0, 0.0});
+        for (int p = 0; p < nocc_use; ++p)
+        {
+            for (int a = 0; a < nrow; ++a)
+            {
+                std::complex<double> sum(0.0, 0.0);
+                for (int b = 0; b < ncol; ++b)
+                {
+                    sum += S_dk_[a + b * nrow] * c_R[b + p * nrow];
+                }
+                SC[a + p * nrow] = sum;
+            }
+        }
+        // Route A+ operator observable: Γ_I^HK per atom = per-atom split of
+        // the ACTUAL applied-operator expectation Tr[ρ·H_sym] (T2 verdict
+        // 2026-08-04).  H_sym is linear in λ (w_eff[n] = Σ_I λ_I·w_IJ[n][I]),
+        // so per atom:
+        //   Γ_I^HK = −0.5·Σ_p wg(ik_L,p)·Im[Σ_{p'} w_IJ[p'][I]·T_{pp'}·Π_{p'p}]
+        // with T_{pp'} = (C_L†·S_dk·C_R)_{pp'} and Π_{p'p} = (C_L†·C_L)_{p'p}.
+        // The pre-T2 diagonal convention (T_pp only) assumed Π = I and
+        // overstated the coupling by ~18% in the non-orthogonal LCAO basis
+        // (E'(λ) slope −13.3 eV/Ry instead of ≲1; fixed by the full trace).
+        std::vector<std::complex<double>> T_full(nocc_use * nocc_use, {0.0, 0.0});
+        std::vector<std::complex<double>> Pi(nocc_use * nocc_use, {0.0, 0.0});
+        for (int p = 0; p < nocc_use; ++p)
+        {
+            for (int pp = 0; pp < nocc_use; ++pp)
+            {
+                for (int a = 0; a < nrow; ++a)
+                {
+                    T_full[p * nocc_use + pp] += std::conj(c_L[a + p * nrow]) * SC[a + pp * nrow];
+                    Pi[p * nocc_use + pp] += std::conj(c_L[a + pp * nrow]) * c_L[a + p * nrow];
+                }
+            }
+        }
+        for (int p = 0; p < nocc_use; ++p)
+        {
+            const double fp = pelec->wg(ik_L, p);
+            if (fp == 0.0) continue;
+            for (int iat = 0; iat < nat_; ++iat)
+            {
+                std::complex<double> acc(0.0, 0.0);
+                for (int pp = 0; pp < nocc_use; ++pp)
+                {
+                    acc += w_IJ[pp][iat] * T_full[p * nocc_use + pp] * Pi[pp * nocc_use + p];
+                }
+                e_hk_I[iat] += fp * acc;
+            }
+        }
+    }
+
+    for (int iat = 0; iat < nat_; ++iat)
+    {
+        gamma_op_hk_[iat] = -0.5 * e_hk_I[iat].imag();
     }
 }
 
@@ -1944,11 +2263,16 @@ bool DeltaP::compute_hk_force(const UnitCell& ucell,
     dkv_grad[1] = dkv[0] * latvec_inv.e12 + dkv[1] * latvec_inv.e22 + dkv[2] * latvec_inv.e32;
     dkv_grad[2] = dkv[0] * latvec_inv.e13 + dkv[1] * latvec_inv.e23 + dkv[2] * latvec_inv.e33;
 
-    // acc[iat][alpha*nocc+p] accumulates f_p*(W_p*U + dW_p*T_pp) over links;
-    // the final force is F_Jα = -Re[(i/2) Σ_p acc].
+    // acc[iat][alpha*nocc+p] accumulates the full-trace kernel
+    // f_p·Σ_{p'}(dW[p']·T_{pp'} + W[p']·U[p][p'])·Π_{p'p} over links;
+    // the final force is F_Jα = -Re[(i/2) Σ_p acc] = (1/2) Σ_p Im(acc).
     std::vector<std::vector<std::complex<double>>> acc(
         nat, std::vector<std::complex<double>>(3 * nocc_use, {0.0, 0.0}));
     std::complex<double> e_hk(0.0, 0.0);
+    // Route A+ operator observable: per-atom Γ_I^HK accumulator
+    // (E_HK = Σ_I λ_I·Γ_I^HK; split before the λ sum; full-trace convention
+    // matching compute_hk_correction — T2 verdict 2026-08-04).
+    std::vector<std::complex<double>> e_hk_I(nat_, {0.0, 0.0});
 
     for (int j = 0; j < nppstr_ - 1; ++j)
     {
@@ -1968,7 +2292,9 @@ bool DeltaP::compute_hk_force(const UnitCell& ucell,
         psi->fix_k(ik_R);
         const std::complex<double>* c_R = psi->get_pointer();
 
-        // W_p = Σ_I λ_I Σ_lm |D_I[lm][p]|²  (link j uses the k_L data)
+        // W_p = Σ_I λ_I Σ_lm |D_I[lm][p]|²  (link j uses the k_L data);
+        // w_IJ[n][iat] keeps the per-atom split for Γ_I^HK.
+        std::vector<std::vector<double>> w_IJ(nocc_use, std::vector<double>(nat, 0.0));
         std::vector<double> W(nocc_use, 0.0);
         for (int iat = 0; iat < nat; ++iat)
         {
@@ -1985,11 +2311,12 @@ bool DeltaP::compute_hk_force(const UnitCell& ucell,
                         w += std::norm(kstring_data_[j].D_I[iat][lm][n]);
                     }
                 }
+                w_IJ[n][iat] = w;
                 W[n] += lambda[iat] * w;
             }
         }
 
-        // SC = S_dk * C_R  (nrow x nocc_use); T_pp = (C_L† S_dk C_R)_{pp}
+        // SC = S_dk * C_R (nrow x nocc_use)
         std::vector<std::complex<double>> SC(nrow * nocc_use, {0.0, 0.0});
         for (int p = 0; p < nocc_use; ++p)
         {
@@ -2003,20 +2330,32 @@ bool DeltaP::compute_hk_force(const UnitCell& ucell,
                 SC[a + p * nrow] = sum;
             }
         }
-        std::vector<std::complex<double>> T_diag(nocc_use, {0.0, 0.0});
+        // Full-trace (T2 verdict 2026-08-04): the applied H_HK expectation is
+        // −0.5·Im[Σ_p f_p Σ_{p'} W[p']·T_{pp'}·Π_{p'p}] with the FULL link
+        // matrix T_{pp'} = (C_L† S_dk C_R)_{pp'} and the occupied Gram matrix
+        // Π_{p'p} = (C_L† C_L)_{p'p} of the LEFT coefficients (frozen-C
+        // constant — the R-derivative chain is unchanged).  The pre-T2
+        // diagonal form (T_pp, Π = I) overstated the coupling by ~18% in the
+        // non-orthogonal LCAO basis.
+        std::vector<std::complex<double>> T_full(nocc_use * nocc_use, {0.0, 0.0});
+        std::vector<std::complex<double>> Pi(nocc_use * nocc_use, {0.0, 0.0});
         for (int p = 0; p < nocc_use; ++p)
         {
-            for (int a = 0; a < nrow; ++a)
+            for (int pp = 0; pp < nocc_use; ++pp)
             {
-                T_diag[p] += std::conj(c_L[a + p * nrow]) * SC[a + p * nrow];
+                for (int a = 0; a < nrow; ++a)
+                {
+                    T_full[p * nocc_use + pp] += std::conj(c_L[a + p * nrow]) * SC[a + pp * nrow];
+                    Pi[p * nocc_use + pp] += std::conj(c_L[a + pp * nrow]) * c_L[a + p * nrow];
+                }
             }
         }
 
         // ---- Per-atom derivative kernels for this link ----
-        // U[iat][alpha*nocc+p] = (C_L† ∂S_dk/∂R_Jα C_R)_{pp}  (complex)
+        // U[iat][(alpha*nocc+p)*nocc+pp] = (C_L† ∂S_dk/∂R_Jα C_R)_{p,pp}
         // dW[iat][alpha*nocc+p] = ∂W_p/∂R_Jα  (real, W is real)
         std::vector<std::vector<std::complex<double>>> U(
-            nat, std::vector<std::complex<double>>(3 * nocc_use, {0.0, 0.0}));
+            nat, std::vector<std::complex<double>>(3 * nocc_use * nocc_use, {0.0, 0.0}));
         std::vector<std::vector<double>> dW(nat, std::vector<double>(3 * nocc_use, 0.0));
 
         for (int iat = 0; iat < nat; ++iat)
@@ -2087,44 +2426,54 @@ bool DeltaP::compute_hk_force(const UnitCell& ucell,
                             {
                                 const int gmu = iat2iwt[iat] + npol * iw0 + s;
                                 const int gnu = iat2iwt[iat1] + npol * iw1 + s;
+                                // Full-trace (T2 verdict 2026-08-04): U is the
+                                // FULL (nocc×nocc) link-derivative matrix
+                                // U[p][pp] = (C_L† ∂S_dk/∂R C_R)_{p,pp}; the
+                                // diagonal-only form assumed Π = I.
                                 for (int p = 0; p < nocc_use; ++p)
                                 {
-                                    const std::complex<double> cb = std::conj(c_L[gmu + p * nrow]);
-                                    const std::complex<double> ck = c_R[gnu + p * nrow];
-                                    for (int a = 0; a < 3; ++a)
+                                    for (int pp = 0; pp < nocc_use; ++pp)
                                     {
-                                        const double g = nlm[1 + a][iw0];
-                                        // Orbital part: ∂ov/∂R_bra = +g, ∂ov/∂R_ket = -g.
-                                        // Summed over all atoms these cancel pair-by-pair.
-                                        if (g != 0.0)
+                                        const std::complex<double> cb = std::conj(c_L[gmu + p * nrow]);
+                                        const std::complex<double> ck = c_R[gnu + pp * nrow];
+                                        for (int a = 0; a < 3; ++a)
                                         {
-                                            U[iat][a * nocc_use + p] += cb * (phase_sdk * g) * ck;
-                                            U[iat1][a * nocc_use + p] -= cb * (phase_sdk * g) * ck;
+                                            const double g = nlm[1 + a][iw0];
+                                            // Orbital part: ∂ov/∂R_bra = +g, ∂ov/∂R_ket = -g.
+                                            // Summed over all atoms these cancel pair-by-pair.
+                                            if (g != 0.0)
+                                            {
+                                                U[iat][(a * nocc_use + p) * nocc_use + pp] += cb * (phase_sdk * g) * ck;
+                                                U[iat1][(a * nocc_use + p) * nocc_use + pp] -= cb * (phase_sdk * g) * ck;
+                                            }
+                                            // Phase part: ∂phase/∂R_bra,α = -2πi·dkv_grad[α]/lat0
+                                            // where dkv_grad = latvec⁻¹·dk (fractional-τ derivative).
+                                            // The S_dk phase (2π(dk·R - dk·τ_bra)) depends on the
+                                            // bra position for EVERY pair (including self-pairs and
+                                            // s-channels where the orbital derivative g vanishes),
+                                            // so this term must be accumulated unconditionally.
+                                            U[iat][(a * nocc_use + p) * nocc_use + pp] -= cb
+                                                * (std::complex<double>(0.0, ModuleBase::TWO_PI * dkv_grad[a] / ucell.lat0)
+                                                   * phase_sdk * ov)
+                                                * ck;
                                         }
-                                        // Phase part: ∂phase/∂R_bra,α = -2πi·dkv_grad[α]/lat0
-                                        // where dkv_grad = latvec⁻¹·dk (fractional-τ derivative).
-                                        // The S_dk phase (2π(dk·R - dk·τ_bra)) depends on the
-                                        // bra position for EVERY pair (including self-pairs and
-                                        // s-channels where the orbital derivative g vanishes),
-                                        // so this term must be accumulated unconditionally.
-                                        U[iat][a * nocc_use + p] -= cb
-                                            * (std::complex<double>(0.0, ModuleBase::TWO_PI * dkv_grad[a] / ucell.lat0)
-                                               * phase_sdk * ov)
-                                            * ck;
+                                        // DEBUG accumulators (diagonal band p, axis z)
+                                        if (pp == p)
+                                        {
+                                            tacc[p] += phase_sdk * ov * cb * ck;
+                                            phaseacc[p] += -std::complex<double>(0.0, ModuleBase::TWO_PI * dkv_grad[2] / ucell.lat0)
+                                                           * phase_sdk * ov * cb * ck;
+                                        }
                                     }
-                                    // DEBUG accumulators (band p, axis z)
-                                    tacc[p] += phase_sdk * ov * cb * ck;
-                                    phaseacc[p] += -std::complex<double>(0.0, ModuleBase::TWO_PI * dkv_grad[2] / ucell.lat0)
-                                                   * phase_sdk * ov * cb * ck;
                                 }
                             }
                         }
                     }
 #if 0 // DEBUG_HK_FORCE_CONSISTENCY (temporary, disabled)
                 {
-                    std::cout << "  [hkpair] iat=" << iat << " iat1=" << iat1 << " R=" << R.x << "," << R.y << "," << R.z
-                              << " tacc0=" << tacc[0] << " T0=" << T_diag[0]
-                              << " phaseacc0=" << phaseacc[0] << " sumU0(atom)=" << U[iat][2*nocc_use+0] << std::endl;
+                std::cout << "  [hkpair] iat=" << iat << " iat1=" << iat1 << " R=" << R.x << "," << R.y << "," << R.z
+                          << " tacc0=" << tacc[0] << " T0=" << T_full[0]
+                          << " phaseacc0=" << phaseacc[0] << " sumU0(atom)=" << U[iat][(2*nocc_use+0)*nocc_use+0] << std::endl;
                 }
 #endif
                 }
@@ -2194,6 +2543,9 @@ bool DeltaP::compute_hk_force(const UnitCell& ucell,
         }
 
         // ---- accumulate this link into the per-atom force kernel ----
+        // Full-trace frozen-C derivative of
+        // E_HK = −0.5·Im[Σ_p f_p Σ_{p'} W[p']·T_{pp'}·Π_{p'p}]:
+        //   acc[iat][a*nocc+p] = f_p·Σ_{p'}(dW[p']·T_{pp'} + W[p']·U[p][p'])·Π_{p'p}
         for (int iat = 0; iat < nat; ++iat)
         {
             for (int a = 0; a < 3; ++a)
@@ -2202,15 +2554,31 @@ bool DeltaP::compute_hk_force(const UnitCell& ucell,
                 {
                     const double fp = pelec->wg(ik_L, p);
                     if (fp == 0.0) continue;
-                    acc[iat][a * nocc_use + p] += fp
-                        * (W[p] * U[iat][a * nocc_use + p]
-                           + dW[iat][a * nocc_use + p] * T_diag[p]);
+                    std::complex<double> kern(0.0, 0.0);
+                    for (int pp = 0; pp < nocc_use; ++pp)
+                    {
+                        kern += (dW[iat][a * nocc_use + pp] * T_full[p * nocc_use + pp]
+                                 + W[pp] * U[iat][(a * nocc_use + p) * nocc_use + pp])
+                                * Pi[pp * nocc_use + p];
+                    }
+                    acc[iat][a * nocc_use + p] += fp * kern;
                 }
             }
         }
+        // Full-trace E_HK and per-atom Γ_I^HK (split before the λ sum).
         for (int p = 0; p < nocc_use; ++p)
         {
-            e_hk += pelec->wg(ik_L, p) * W[p] * T_diag[p];
+            const double fp = pelec->wg(ik_L, p);
+            if (fp == 0.0) continue;
+            for (int pp = 0; pp < nocc_use; ++pp)
+            {
+                const std::complex<double> tpi = T_full[p * nocc_use + pp] * Pi[pp * nocc_use + p];
+                e_hk += fp * W[pp] * tpi;
+                for (int iat = 0; iat < nat; ++iat)
+                {
+                    e_hk_I[iat] += fp * w_IJ[pp][iat] * tpi;
+                }
+            }
         }
 #if 0 // DEBUG_HK_FORCE (temporary, disabled for commit; flip to 1 for A2/C)
         {
@@ -2219,20 +2587,20 @@ bool DeltaP::compute_hk_force(const UnitCell& ucell,
             {
                 for (int p = 0; p < nocc_use; ++p)
                 {
-                    u_norm += std::abs(U[iat][2 * nocc_use + p]);
+                    u_norm += std::abs(U[iat][(2 * nocc_use + p) * nocc_use + p]);
                     dw_norm += std::abs(dW[iat][2 * nocc_use + p]);
                 }
             }
             std::cout << "  [hkdbg] link " << j << " ik_L=" << ik_L
                       << " W=" << W[0] << "," << W[1] << "," << W[2]
-                      << " T=" << T_diag[0].real() << "," << T_diag[1].real() << "," << T_diag[2].real()
-                      << " ImT=" << T_diag[0].imag() << "," << T_diag[1].imag() << "," << T_diag[2].imag()
+                      << " T=" << T_full[0].real() << "," << T_full[1 * nocc_use + 1].real() << "," << T_full[2 * nocc_use + 2].real()
+                      << " ImT=" << T_full[0].imag() << "," << T_full[1 * nocc_use + 1].imag() << "," << T_full[2 * nocc_use + 2].imag()
                       << " |Uz|=" << u_norm << " |dWz|=" << dw_norm << std::endl;
             for (int iat = 0; iat < nat; ++iat)
             {
                 std::cout << "    [hkdbg] atom " << iat << " Uz=";
                 for (int p = 0; p < nocc_use; ++p)
-                    std::cout << U[iat][2 * nocc_use + p] << " ";
+                    std::cout << U[iat][(2 * nocc_use + p) * nocc_use + p] << " ";
                 std::cout << " dWz=";
                 for (int p = 0; p < nocc_use; ++p)
                     std::cout << dW[iat][2 * nocc_use + p] << " ";
@@ -2249,16 +2617,16 @@ bool DeltaP::compute_hk_force(const UnitCell& ucell,
             // phase part -2*pi*i*dkv_grad/lat0 * T_pp, and the energy kernel.
             std::complex<double> sumU(0.0, 0.0);
             for (int iat = 0; iat < nat; ++iat)
-                sumU += U[iat][2 * nocc_use + 0];
+                sumU += U[iat][(2 * nocc_use + 0) * nocc_use + 0];
             const std::complex<double> expect_phase
-                = -std::complex<double>(0.0, ModuleBase::TWO_PI * dkv_grad[2] / ucell.lat0) * T_diag[0];
+                = -std::complex<double>(0.0, ModuleBase::TWO_PI * dkv_grad[2] / ucell.lat0) * T_full[0];
             std::complex<double> e_link(0.0, 0.0);
             double re_fwt = 0.0;
             for (int p = 0; p < nocc_use; ++p)
             {
                 const double fp = pelec->wg(ik_L, p);
-                e_link += fp * W[p] * T_diag[p];
-                re_fwt += fp * W[p] * T_diag[p].real();
+                e_link += fp * W[p] * T_full[p * nocc_use + p];
+                re_fwt += fp * W[p] * T_full[p * nocc_use + p].real();
             }
             std::cout << "  [hkchk] link " << j << " dkvz=" << dkv[2] << " lat0=" << ucell.lat0
                       << " wg=";
@@ -2269,7 +2637,7 @@ bool DeltaP::compute_hk_force(const UnitCell& ucell,
                 std::cout << W[p] << " ";
             std::cout << " T=";
             for (int p = 0; p < nocc_use; ++p)
-                std::cout << T_diag[p] << " ";
+                std::cout << T_full[p * nocc_use + p] << " ";
             std::cout << "\n  [hkchk] sumUz=" << sumU << " expectPhaseUz=" << expect_phase
                       << " e_link=" << e_link << " Re(fWT)=" << re_fwt << std::endl;
         }
@@ -2290,6 +2658,10 @@ bool DeltaP::compute_hk_force(const UnitCell& ucell,
         }
     }
     e_hk_out = -0.5 * e_hk.imag();
+    for (int iat = 0; iat < nat; ++iat)
+    {
+        gamma_op_hk_[iat] = -0.5 * e_hk_I[iat].imag();
+    }
 
     ModuleBase::timer::end("DeltaP", "compute_hk_force");
     return true;

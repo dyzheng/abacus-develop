@@ -43,6 +43,16 @@ struct DeltapParams
     std::vector<int> constrain;          ///< per-atom constrain flags [nat]
     std::vector<std::vector<double>> C;  ///< constraint matrix (m×nat, empty = off)
     std::vector<double> t;               ///< constraint targets [m]
+    std::string observable_mode = "operator";  ///< SCF constraint variable:
+    ///< "operator" = Γ (Route A+, default), "gamma" = legacy Wilson-loop γ.
+    bool secant_at_convergence = false; ///< single-point runs: one t_Γ secant
+    ///< update in iter_finish after SCF convergence (relax uses
+    ///< reset_ionic_step instead).
+    bool secant_enabled = true;     ///< master switch for the t_Γ outer-loop
+    ///< secant ("deltap_secant"; off = freeze t_Γ, e.g. T3 disp± legs).
+    std::string proxy_target_file = ""; ///< file with per-atom t_Γ values
+    ///< (overrides the t_Γ=t_γ first-round init; used to freeze the
+    ///< calibrated t_Γ* across geometries for T3).
 };
 
 /// Mutable SCF state, fully owned by DeltapScfSolver.
@@ -56,6 +66,19 @@ struct DeltapState
     std::vector<double> gamma_I;     ///< latest per-atom γ (folded to gdir) [nat]
     std::vector<double> gamma_report;///< branch-selected γ for escon/report [nat]
     std::vector<double> gamma_prev;  ///< previous branch-selected γ (2π unwrap)
+    /// Latest per-atom Γ (Route A+ operator observable) [nat], measured at
+    /// the same wavefunctions as gamma_I (operator mode only).
+    std::vector<double> gamma_op;
+    /// Proxy target t_Γ [nat] for operator mode: initialized to the user's
+    /// t_γ (κ=1 first round) and updated by the outer-loop secant
+    /// (reset_ionic_step / post-convergence single point).
+    std::vector<double> t_proxy;
+    /// Secant history: previous measured γ and previous t_Γ (outer loop).
+    std::vector<double> gamma_meas_prev;
+    std::vector<double> t_proxy_prev;
+    double secant_prev_err = -1.0; ///< previous |γ−t_γ|∞ for divergence guard
+    int secant_bad_steps = 0;      ///< consecutive |γ−t_γ| increases
+    bool secant_at_conv_done = false; ///< single-point secant fired this SCF
     double max_res = 0.0;
     double dp_escon = 0.0;
 };
@@ -70,6 +93,7 @@ class DeltapScfSolver
         std::function<std::vector<double>()> get_lambda;                      ///< current operator λ
         std::function<void(const std::vector<double>&)> apply_hk_correction;  ///< recompute + set HK (LCAO)
         std::function<std::vector<double>()> compute_gamma;                   ///< folded per-atom γ [nat]
+        std::function<std::vector<double>()> compute_gamma_op;                ///< per-atom Γ (operator observable) [nat]
         std::function<void()> solve_frozen;                                   ///< HSolver(skip_charge=true)
         std::function<void(std::vector<double>&)> sync_lambda;                ///< MPI Bcast (optional)
         std::function<void()> on_phase2;                                      ///< cooldown + mix_reset (optional)
@@ -88,7 +112,7 @@ class DeltapScfSolver
 
     /// Per-SCF-iteration constraint update: measure γ, update λ (synchronous
     /// mode), recompute escon / HK correction, report diagnostics.
-    void iter_finish(int iter, double drho);
+    void iter_finish(int iter, double drho, bool conv_esolver = false);
 
     const DeltapState& state() const { return state_; }
     const DeltapParams& params() const { return params_; }
@@ -100,6 +124,9 @@ class DeltapScfSolver
     /// for both the synchronous update and the inner-loop trials.
     void apply_lambda(const std::vector<double>& lambda);
     void update_lambda_gd(int iter, double drho);
+    /// Route A+ outer-loop secant: update the proxy target t_Γ so that the
+    /// measured γ converges to the user's t_γ (derivations §7, D7).
+    void secant_update_proxy();
     void report(int iter, const std::vector<double>& lambda) const;
 
     DeltapParams params_;
