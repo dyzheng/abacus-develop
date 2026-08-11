@@ -1357,6 +1357,25 @@ Manual override is allowed: if sc_acceleration_mode is explicitly set, it takes 
         this->add_item(item);
     }
     {
+        Input_Item item("deltap_drive");
+        item.annotation = "Route A+ lambda-driving signal: proxy or gamma";
+        item.category = "DeltaP";
+        item.type = "String";
+        item.description = "Route A+ operator-mode lambda-driving signal. proxy (default): the lambda residual drives Gamma against the t_Gamma proxy target (calibrated by the outer-loop secant). gamma: the lambda residual drives the reported branch-continuous gamma directly against t_gamma — the t_Gamma/secant translation layer is retired (T-4'). The escon accounting escon = -lambda*Gamma and the force identity E' = E_KS(psi*) are properties of the accounting, not of the driving signal, so gamma-drive preserves the O(lambda) leakage structure. Legacy gamma mode (deltap_observable=gamma) is locked to gamma.";
+        item.default_value = "proxy";
+        item.unit = "";
+        item.availability = "deltap_corr is true";
+        read_sync_string(input.deltap_drive);
+        item.check_value = [](const Input_Item& item, const Parameter& para) {
+            if (para.input.deltap_drive != "proxy" && para.input.deltap_drive != "gamma")
+            {
+                ModuleBase::WARNING_QUIT("ReadInput",
+                    "deltap_drive must be 'proxy' or 'gamma'");
+            }
+        };
+        this->add_item(item);
+    }
+    {
         Input_Item item("deltap_secant");
         item.annotation = "outer-loop t_Gamma secant: on or off";
         item.category = "DeltaP";
@@ -1429,6 +1448,18 @@ Manual override is allowed: if sc_acceleration_mode is explicitly set, it takes 
                     "deltap_branch_anchor must be 'continuity' or 'target'");
             }
         };
+        this->add_item(item);
+    }
+    {
+        Input_Item item("deltap_branch_write");
+        item.annotation = "persist deltap_branch.dat: true or false";
+        item.category = "DeltaP";
+        item.type = "Bool";
+        item.description = "true (default): save the converged branch state to deltap_branch.dat at SCF convergence so the next run anchors to it. false: keep the existing deltap_branch.dat reference untouched (T-9' guard) — required for multi-geometry / finite-difference runs, where every geometry must anchor to the SAME calibrated reference. Silent overwrites of this state file broke A/B comparability twice (07-30, T4a).";
+        item.default_value = "true";
+        item.unit = "";
+        item.availability = "deltap_corr is true";
+        read_sync_bool(input.deltap_branch_write);
         this->add_item(item);
     }
 }

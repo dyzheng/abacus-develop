@@ -958,6 +958,11 @@ void ESolver_KS_LCAO<TK, TR>::deltap_init(UnitCell& ucell)
     p.target_file = PARAM.inp.deltap_target_file;
     p.constraint_matrix_file = PARAM.inp.deltap_constraint_matrix;
     p.observable_mode = PARAM.inp.deltap_observable;
+    // Legacy gamma mode is LOCKED to gamma-drive (its λ residual is built on
+    // the target-aware γ report — the load-bearing wall; the Route A+ drive
+    // switch is operator-mode-only, zero regression).
+    p.drive = (PARAM.inp.deltap_observable == "operator") ? PARAM.inp.deltap_drive
+                                                          : "gamma";
     // Route A+ outer-loop secant: single-point runs update t_Γ once at SCF
     // convergence (iter_finish); relax runs update at each new ionic step
     // (reset_ionic_step).
@@ -1002,6 +1007,10 @@ void ESolver_KS_LCAO<TK, TR>::deltap_init(UnitCell& ucell)
         = (PARAM.inp.deltap_observable == "operator") ? PARAM.inp.deltap_branch_anchor
                                                       : "target";
     dp->set_branch_anchor(branch_anchor);
+    // T-9' branch-state write guard: multi-geometry / FD runs keep the
+    // calibrated deltap_branch.dat reference (silent overwrite broke A/B
+    // comparability twice: 07-30, T4a).
+    dp->set_branch_write(PARAM.inp.deltap_branch_write);
     // Phase 0.3-lite frozen continuity anchor: seeded at init by the
     // dp->load_branch() call above (load_branch mirrors into ref_gamma_), so
     // the lambda=0 first measurement anchors to the natural gamma reference

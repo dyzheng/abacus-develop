@@ -45,6 +45,15 @@ struct DeltapParams
     std::vector<double> t;               ///< constraint targets [m]
     std::string observable_mode = "operator";  ///< SCF constraint variable:
     ///< "operator" = Γ (Route A+, default), "gamma" = legacy Wilson-loop γ.
+    /// Route A+ λ-driving signal (operator mode only): "proxy" (default) =
+    /// the λ residual drives Γ against the t_Γ proxy target (calibrated by
+    /// the outer-loop secant); "gamma" = the λ residual drives the reported
+    /// γ directly against the user's t_γ — the t_Γ/secant translation layer
+    /// is retired.  The escon accounting (escon = −λ·Γ) and the force
+    /// consistency E' = E_KS(ψ*) are properties of the ACCOUNTING, not of
+    /// the driving signal, so γ-drive preserves the O(λ) leakage structure
+    /// (2026-08-11 review, T-4').  Legacy gamma mode is locked to "gamma".
+    std::string drive = "proxy";
     bool secant_at_convergence = false; ///< single-point runs: one t_Γ secant
     ///< update in iter_finish after SCF convergence (relax uses
     ///< reset_ionic_step instead).

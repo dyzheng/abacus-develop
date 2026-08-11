@@ -633,10 +633,12 @@ struct Input_para
     std::string deltap_constraint_mode = "per_atom";  ///< "per_atom": per-atom constraint; "total": constrain sum Σγ_I
     std::string deltap_constraint_matrix = "";  ///< path to constraint matrix file (overrides constraint_mode when set)
     std::string deltap_observable = "operator"; ///< SCF constraint variable: "operator" = Γ (Route A+), "gamma" = Wilson-loop γ
+    std::string deltap_drive = "proxy";          ///< Route A+ λ-driving signal (operator mode): "proxy" = Γ vs t_Γ (secant), "gamma" = reported γ vs t_γ (direct)
     std::string deltap_secant = "on";           ///< outer-loop t_Γ secant: "on"/"off" (off = freeze t_Γ, e.g. T3 disp± legs)
     int deltap_outer_nmax = 0;                  ///< fixed-geometry outer-loop secant steps (scf; 0 = legacy single-fire)
     double deltap_outer_thr = 1e-2;             ///< outer-loop |γ−t_γ|∞ convergence threshold (rad)
     std::string deltap_branch_anchor = "continuity"; ///< γ branch anchor: "continuity" (operator, default) | "target" (gamma locked)
+    bool deltap_branch_write = true;          ///< persist deltap_branch.dat at SCF convergence (false = keep the calibrated reference, e.g. FD/multi-geometry runs)
     std::string deltap_proxy_target_file = "";  ///< file with per-atom t_Γ values (overrides t_Γ=t_γ first-round init)
 
     // ==============   #Parameters (18.Quasiatomic Orbital analysis) =========

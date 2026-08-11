@@ -17,21 +17,27 @@ namespace deltap_scf
 {
 namespace
 {
-/// Route A+ observable selection: operator mode returns Γ (state_.gamma_op),
-/// gamma mode returns the branch-selected γ (state_.gamma_report).
+/// Route A+ observable selection: operator mode in proxy-drive returns Γ
+/// (state_.gamma_op); operator mode in gamma-drive and legacy gamma mode
+/// return the branch-selected γ (state_.gamma_report).  The λ-driving signal
+/// (deltap_drive) selects WHICH observable drives λ; the escon accounting
+/// always uses Γ in operator mode (see iter_finish).
 const std::vector<double>& scf_observable(const deltap_scf::DeltapState& state,
                                           const deltap_scf::DeltapParams& params)
 {
-    if (params.observable_mode == "operator" && !state.gamma_op.empty())
+    if (params.observable_mode == "operator" && params.drive != "gamma"
+        && !state.gamma_op.empty())
         return state.gamma_op;
     return state.gamma_report;
 }
-/// Route A+ target selection: operator mode uses the proxy t_Γ (state_.t_proxy),
-/// gamma mode uses the user's t_γ (params_.target).
+/// Route A+ target selection: operator mode in proxy-drive uses the proxy
+/// t_Γ (state_.t_proxy); operator mode in gamma-drive and legacy gamma mode
+/// use the user's t_γ (params_.target).
 const std::vector<double>& scf_target(const deltap_scf::DeltapState& state,
                                       const deltap_scf::DeltapParams& params)
 {
-    if (params.observable_mode == "operator" && !state.t_proxy.empty())
+    if (params.observable_mode == "operator" && params.drive != "gamma"
+        && !state.t_proxy.empty())
         return state.t_proxy;
     return params.target;
 }
@@ -173,12 +179,17 @@ void DeltapScfSolver::init(const DeltapParams& p, Backend b)
     // starts from that measured natural point (Q2: t_Γ=t_γ is a κ=1 guess,
     // not a measurement — starting there would pin Γ to γ-scale values,
     // λ*≈O(1) Ry violent-perturbation territory for the first SCF).
-    state_.t_proxy = (params_.outer_nmax > 0) ? std::vector<double>()
-                                              : params_.target;
+    // Gamma-drive (deltap_drive=gamma) retires the t_Γ proxy layer entirely:
+    // the λ residual drives γ against the user's t_γ directly, so no proxy
+    // target is initialized or loaded (scf_target ignores t_proxy).
+    state_.t_proxy = (params_.drive == "gamma" || params_.outer_nmax > 0)
+                         ? std::vector<double>()
+                         : params_.target;
     // Q3 (T3 protocol): an explicit proxy-target file freezes the calibrated
     // t_Γ* across geometries — the disp± legs then only re-converge λ against
     // the frozen t_Γ (no secant drift, no t_Γ(R) pollution in the FD).
-    if (params_.observable_mode == "operator" && !params_.proxy_target_file.empty())
+    if (params_.observable_mode == "operator" && params_.drive != "gamma"
+        && !params_.proxy_target_file.empty())
     {
         std::vector<double> proxy(params_.nat, 0.0);
         bool loaded = false;
@@ -214,7 +225,12 @@ void DeltapScfSolver::init(const DeltapParams& p, Backend b)
     else if (params_.observable_mode == "operator" && params_.verbose
              && GlobalV::MY_RANK == 0)
     {
-        if (params_.outer_nmax > 0)
+        if (params_.drive == "gamma")
+            std::cout << " [DeltaP] operator mode: γ-drive (deltap_drive=gamma) — λ "
+                      << "driven by the γ residual against t_γ directly; t_Γ/secant "
+                      << "translation layer retired (force identity unchanged)"
+                      << std::endl;
+        else if (params_.outer_nmax > 0)
             std::cout << " [DeltaP] operator mode: fixed-geometry outer loop (nmax="
                       << params_.outer_nmax << ", thr=" << params_.outer_thr
                       << "); first SCF is a free λ=0 run, t_Γ starts at the "
@@ -252,9 +268,12 @@ bool DeltapScfSolver::inner_loop(double drho)
 {
     if (!state_.initialized || params_.nscf == 0)
         return false;
-    // Fixed-geometry outer-loop first pass: the first SCF is a free λ=0 run
-    // (the secant starts from the measured natural point, not from a guess).
-    if (params_.outer_nmax > 0 && !state_.first_pass_done)
+    // Fixed-geometry outer-loop first pass (proxy-drive only): the first SCF
+    // is a free λ=0 run (the secant starts from the measured natural point,
+    // not from a guess).  Gamma-drive retires the outer loop — the inner loop
+    // drives γ→t_γ directly and must not be blocked by the first-pass gate.
+    if (params_.drive != "gamma" && params_.outer_nmax > 0
+        && !state_.first_pass_done)
         return false;
     // Gate: activate only when the density is converged (Phase 1 done).
     if (drho > params_.inner_thr)
@@ -267,10 +286,14 @@ bool DeltapScfSolver::inner_loop(double drho)
     state_.gamma_I = backend_.compute_gamma();
     if (params_.observable_mode == "operator" && backend_.compute_gamma_op)
         state_.gamma_op = backend_.compute_gamma_op();
-    const std::vector<double>& obs0 = (params_.observable_mode == "operator"
-                                       && !state_.gamma_op.empty())
-                                          ? state_.gamma_op
-                                          : state_.gamma_I;
+    // Route A+ γ-drive: the λ-driving observable is the reported γ (γ residual
+    // against t_γ directly); proxy-drive uses Γ.  Legacy gamma mode keeps
+    // state_.gamma_I (zero regression).
+    const std::vector<double>& obs0
+        = (params_.observable_mode == "operator" && params_.drive != "gamma"
+           && !state_.gamma_op.empty())
+              ? state_.gamma_op
+              : state_.gamma_I;
     // Route A+ operator mode: the inner-loop residual must target the proxy
     // t_Γ (scf_target), NOT params_.t (constraint-matrix targets, empty in
     // per-atom mode) — the pre-fix form r = Γ − 0 drove Γ→0 instead of
@@ -316,10 +339,12 @@ bool DeltapScfSolver::inner_loop(double drho)
         // Re-solve with trial lambda (charge density frozen).
         backend_.solve_frozen();
 
-        // Measure residual at the trial point (Γ in operator mode).
+        // Measure residual at the trial point (Γ in operator proxy-drive;
+        // the reported γ in gamma-drive / legacy gamma mode).
         const std::vector<double> gamma_trial = backend_.compute_gamma();
         const std::vector<double> obs_trial
-            = (params_.observable_mode == "operator" && backend_.compute_gamma_op)
+            = (params_.observable_mode == "operator" && params_.drive != "gamma"
+               && backend_.compute_gamma_op)
                   ? backend_.compute_gamma_op()
                   : gamma_trial;
         const std::vector<double>& tgt_trial = scf_target(state_, params_);
@@ -414,9 +439,13 @@ void DeltapScfSolver::iter_finish(int iter, double drho, bool conv_esolver)
     state_.gamma_report = std::move(gamma_report);
 
     // 4) Residual / constraint-energy correction with the operator's λ.
-    //    Route A+: in operator mode the constraint variable is Γ and the
-    //    target is the proxy t_Γ (initialized to t_γ); gamma mode keeps the
-    //    legacy γ vs t_γ residual (zero regression).
+    //    Route A+: the λ-driving observable is Γ vs the proxy t_Γ in
+    //    proxy-drive and the reported γ vs t_γ in gamma-drive; legacy gamma
+    //    mode keeps the γ vs t_γ residual (zero regression).  The escon
+    //    accounting ALWAYS uses Γ in operator mode regardless of the driving
+    //    signal — escon = −λ·Γ is the Route A+ identity that carries the
+    //    force consistency E' = E_KS(ψ*), and it is a property of the
+    //    accounting, not of what drives λ (2026-08-11 review, T-4').
     const std::vector<double>& gr = scf_observable(state_, params_);
     const std::vector<double>& tgt = scf_target(state_, params_);
     if (use_constraint_matrix())
@@ -430,7 +459,11 @@ void DeltapScfSolver::iter_finish(int iter, double drho, bool conv_esolver)
 
     const std::vector<double> lambda
         = backend_.get_lambda ? backend_.get_lambda() : state_.lambda_eff;
-    state_.dp_escon = deltap_common::compute_dp_escon(lambda, gr);
+    const std::vector<double>& escon_obs
+        = (params_.observable_mode == "operator" && !state_.gamma_op.empty())
+              ? state_.gamma_op
+              : state_.gamma_report;
+    state_.dp_escon = deltap_common::compute_dp_escon(lambda, escon_obs);
     if (backend_.apply_hk_correction)
         backend_.apply_hk_correction(lambda);
 
@@ -438,10 +471,13 @@ void DeltapScfSolver::iter_finish(int iter, double drho, bool conv_esolver)
     if (params_.verbose && GlobalV::MY_RANK == 0)
         report(iter, lambda);
 
-    // Route A+ outer-loop secant (single-point): one t_Γ update after SCF
-    // convergence.  Relax runs do this in reset_ionic_step instead, so the
-    // update is never applied twice to the same measurement.
-    if (conv_esolver && params_.secant_at_convergence && !state_.secant_at_conv_done)
+    // Route A+ outer-loop secant (single-point, proxy-drive only): one t_Γ
+    // update after SCF convergence.  Relax runs do this in reset_ionic_step
+    // instead, so the update is never applied twice to the same measurement.
+    // Gamma-drive retires the secant/t_Γ layer entirely (the γ residual
+    // drives λ directly; the outer loop would have nothing to update).
+    if (params_.drive != "gamma" && conv_esolver
+        && params_.secant_at_convergence && !state_.secant_at_conv_done)
     {
         // Fixed-geometry outer-loop first pass: the first convergence is the
         // free λ=0 natural run.  Seed the secant history at the measured
@@ -506,6 +542,10 @@ bool DeltapScfSolver::consume_outer_redrive()
 // ---------------------------------------------------------------------------
 void DeltapScfSolver::secant_update_proxy()
 {
+    // Gamma-drive (deltap_drive=gamma) retires the t_Γ/secant translation
+    // layer entirely — the γ residual drives λ directly (T-4').
+    if (params_.drive == "gamma")
+        return;
     // Operator mode only (gamma mode constrains γ directly, no proxy).
     if (params_.observable_mode != "operator")
         return;
@@ -631,8 +671,11 @@ void DeltapScfSolver::update_lambda_gd(int iter, double drho)
     // the crude atomic-guess charge density (drho~0.5) produces wrong λ.
     // Phase 2: once drho drops below the threshold, take a single
     // gradient-descent λ update, then freeze λ for all remaining iterations.
-    // Fixed-geometry outer-loop first pass: keep λ=0 (free natural run).
-    if (params_.outer_nmax > 0 && !state_.first_pass_done)
+    // Fixed-geometry outer-loop first pass (proxy-drive only): keep λ=0 (free
+    // natural run).  Gamma-drive retires the outer loop — the synchronous λ
+    // update drives γ→t_γ directly.
+    if (params_.drive != "gamma" && params_.outer_nmax > 0
+        && !state_.first_pass_done)
         return;
     if (state_.lambda_set || !(drho > 0.0 && drho < params_.inner_thr))
         return;
@@ -648,11 +691,14 @@ void DeltapScfSolver::update_lambda_gd(int iter, double drho)
         mixing = 1.0;
 
     // Route A+: the λ-update residual uses the same observable/target as the
-    // convergence residual (Γ vs t_Γ in operator mode; γ vs t_γ in gamma mode).
-    const std::vector<double>& obs = (params_.observable_mode == "operator"
-                                      && !state_.gamma_op.empty())
-                                         ? state_.gamma_op
-                                         : state_.gamma_I;
+    // convergence residual — Γ vs t_Γ in operator proxy-drive, the reported γ
+    // vs t_γ in operator gamma-drive, γ vs t_γ in legacy gamma mode (which
+    // keeps state_.gamma_I — the historical signal — for zero regression).
+    const std::vector<double>& obs
+        = (params_.observable_mode == "operator" && params_.drive != "gamma"
+           && !state_.gamma_op.empty())
+              ? state_.gamma_op
+              : state_.gamma_I;
     const std::vector<double>& tgt = scf_target(state_, params_);
     if (use_constraint_matrix())
     {

@@ -26,6 +26,17 @@
 
 10. **unkOverlap_lcao bottleneck**: `berryphase_overlap` takes ~30s per k-pair. Not in modified code. Blocks SCF integration test.
 
+11. **非正交基算符记账必须走全迹**：H_HK 期望在非正交基下是 T·Π 全迹而非对角
+    T_pp 迹（h2o1 差 18%）；T2 修正后 E'(λ) 斜率 224 → −13.3 → −0.013 eV/Ry
+    （三数量级压平、±0.001 八位对称、λ² 抛物、变分下界恢复）。
+12. **target-aware 分支选择的 γ 报告是靶点跟随的**，不能作为任何收敛判据或 FD
+    可观测量；operator 模式下 γ 只做外循环读数，且必须连续性锚定（branch.dat
+    缺失时 Stage-B 回退 target-aware = 自证循环，T4a/T3' 两案同款）。
+13. **力一致性是记账性质，残差大小是 λ*(R) 路径性质**：escon=−λΓ 恒等式与驱动
+    信号无关（一行定理成立），但 FD 残差 ∝ λ*² 且 λ* 依赖驱动信号——弱耦合
+    驱动（γ：dγ/dλ≈−0.3）强制 λ* 大 → 泄漏大；强耦合驱动（Γ：dΓ/dλ≈−4.2）
+    保持 λ*~1e-3。驻点 FD 选驱动可观测量的标准 = 耦合强度，不是"直测直钉"。
+
 ---
 
 ## 流程教训（2026-08-04 复盘锐评，来自提交记录的事实）
@@ -1862,3 +1873,54 @@ H_c=H_HR+H_HK 定义、Γ 逐原子定义（含 Π 全迹）、E'≡E_KS(ψ*) �
 2. T4a' 重设计（评审 3 方案）：小靶点线性窗验证 / per-atom 内循环解耦 /
    外循环直接 γ 残差驱动。
 3. 每轮 T4a 重跑后从 ref2 恢复 branch.dat（save_branch 覆盖锚）。
+
+## 2026-08-11: T-4' γ 直驱实现 + T3' 复判（FAIL，结构性）+ T-9' branch 守卫
+
+### What was done
+- **deltap_drive 开关（T-4'）**：INPUT `deltap_drive=proxy|gamma`（operator 模式）。
+  gamma 直驱 = λ 残差直接驱动报告 γ→t_γ，secant/t_Γ 翻译层退役
+  （`secant_update_proxy` 短路、first-pass 门控排除、proxy_target_file 跳过）；
+  **escon 记账永远 −λ·Γ**（与驱动信号无关，一行定理落点）。legacy gamma 模式
+  锁定 gamma（与 branch_anchor 锁定同模式，零回归）。
+- **T-9' branch.dat 写入守卫**：INPUT `deltap_branch_write`（默认 true 保持跨
+  运行行为；FD/多几何设 false 防参考静默覆盖——07-30 A/B、T4a 参考被毁两案）。
+- **T3' 复判（γ 驱动驻点 FD）**：三几何跑完，残差 −0.502 eV/Å = 判据 25× /
+  严格闭合 39× / T3 代理版 36× 差 → **FAIL（结构性）**。
+- 回归：单测 11/11 + 3/3 + 4/4 PASS（smoothness 4 FAIL 既有）；MPI smoke 4/4。
+- 文档：`2026-08-11-deltap-gamma-drive-t3prime.md`。
+
+### T3' FAIL 根因（三层，定量）
+1. **γ↔λ 弱耦合（评审 Q1 数据自证）**：dγ/dλ≈−0.3 vs dΓ/dλ≈−4.2 → γ 驱动 FD
+   腿需 λ* ~14× 于代理驱动 → O(λ)² 泄漏 ~200×（leak∝λ*²·dΓdλ/δ：
+   代理版 0.0127 eV/Å@λ*=1.1e-3 vs γ 驱动 ~1.3 eV/Å@λ*=0.011）。
+   "T3' 更干净"的前提（λ* 小）被弱耦合破坏——力一致性是记账性质，但残差
+   大小是 λ*(R) 路径性质。
+2. **冻结-自洽响应符号分裂**：+δ 腿内循环在冻结密度下 |γ−t|→6e-4（λ=−0.021），
+   密度再平衡后自洽残差回 4.9e-3（λ 推反了）。冻结 λ 验证：dγ0/dλ0=+0.5@λ0=−0.01
+   vs −0.38@λ0=−0.021——γ(λ) 非单调，与 Γ 的线性 −4.2 对比鲜明。
+3. **装置教训**：首轮缺 branch.dat → 连续性锚无参考 → Stage-B 回退 target-aware
+   → 报告 γ 钉在靶点（自证循环，T4a 同款）→ 伪残差驱动 λ=6.4e-3。补参考后
+   base 干净（|γ−t_γ*|→9e-16、λ*=0、E' 与 T3 base 逐位一致）。
+   规则：**用 γ 报告做任何判据前必须确认连续性锚已激活**。
+
+### 历史印证
+08-03 组② 驻点实验（旧记账 γ 驱动）残差 84.8 eV/Å（λ-leakage 5 位闭合）；
+Route A+ 换 Γ 代理记账才到 0.0138。T3' = 08-03 换新记账重跑——新记账修 escon
+恒等式，没修 γ↔λ 弱耦合本身，失败继承。驻点 FD 唯一合法协议 = Γ 代理驱动
+（T3 PASS 成立）。
+
+### File list（本轮新增/修改）
+- `source/source_esolver/deltap_scf.{h,cpp}`：drive 门控（observable/target/
+  init/inner_loop/update_lambda_gd/escon/secant 全路径）
+- `source/source_esolver/esolver_ks_lcao.cpp`：drive plumbing + gamma 锁定 +
+  branch_write plumbing
+- `source/source_io/module_parameter/input_parameter.h`、
+  `read_input_item_other.cpp`：`deltap_drive`、`deltap_branch_write` INPUT
+- `source/source_lcao/module_deltap/deltap.{h,cpp}`：`set_branch_write` +
+  `save_branch()` 守卫
+- 文档：`2026-08-11-deltap-gamma-drive-t3prime.md`
+
+### Next steps
+1. **commit 本轮**（T-4' 实现 + T3' 判决文档 + T-9' 守卫）。
+2. T3' 不入生产协议；T-7'（per-atom Jacobian / 自洽 λ 重触发）获新前置证据。
+3. T-5' 窗口测绘改用 proxy 驱动；T-6' Ô_w 提前（评审已裁，H γ 可达性同源）。

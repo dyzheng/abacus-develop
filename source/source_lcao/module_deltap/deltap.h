@@ -206,6 +206,13 @@ public:
     ///   (target-aware selection unchanged, zero regression).
     void set_branch_anchor(const std::string& mode) { branch_anchor_ = mode; }
     const std::string& get_branch_anchor() const { return branch_anchor_; }
+    /// Branch-state write guard (T-9', 2026-08-11): when false, save_branch()
+    /// does NOT overwrite deltap_branch.dat.  State-file silent overwrites
+    /// broke A/B comparability twice (07-30, T4a reference destruction); FD /
+    /// multi-geometry runs must disable it so every geometry anchors to the
+    /// SAME calibrated reference.
+    void set_branch_write(bool v) { branch_write_ = v; }
+    bool branch_write_enabled() const { return branch_write_; }
     /// Set linear constraint matrix C (m×n) and target vector t: C·γ = t.
     void set_constraint_matrix(const std::vector<std::vector<double>>& C,
                                const std::vector<double>& t)
@@ -391,6 +398,8 @@ private:
     std::vector<double> target_gamma_;
     /// Branch-anchor mode: "continuity" (operator, default) or "target" (gamma).
     std::string branch_anchor_ = "continuity";
+    /// Branch-state write guard (deltap_branch_write, default true).
+    bool branch_write_ = true;
     /// Constraint matrix C (m×n) and target t for C·γ = t.
     std::vector<std::vector<double>> constraint_matrix_;
     std::vector<double> constraint_target_;

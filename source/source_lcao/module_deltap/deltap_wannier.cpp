@@ -2857,6 +2857,10 @@ void DeltaP::freeze_branch_ref()
 // Persist per-atom Wilson-loop products W^I for the next SCF/run.
 void DeltaP::save_branch() const
 {
+    // T-9' write guard: multi-geometry / FD runs disable branch.dat writes so
+    // every geometry anchors to the same calibrated reference (silent state
+    // overwrites broke A/B comparability twice: 07-30, T4a).
+    if (!branch_write_) return;
     if (!has_prev_ || static_cast<int>(W_prev_.size()) != nat_) return;
 #ifdef __MPI
     if (GlobalV::MY_RANK != 0) return;
