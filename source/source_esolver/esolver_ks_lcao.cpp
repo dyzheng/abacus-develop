@@ -788,6 +788,16 @@ void ESolver_KS_LCAO<TK, TR>::iter_finish(UnitCell& ucell, const int istep, int&
             // outer-loop secant hook (secant_at_convergence).
             const bool deltap_scf_converged = (this->drho < PARAM.inp.scf_thr);
             deltap_scf_solver_->iter_finish(iter, this->drho, deltap_scf_converged);
+            // Phase 0.3-lite: at SCF convergence, freeze the continuity anchor
+            // to the converged gamma reading so the next outer-loop SCF run
+            // anchors its branch selection to it (not to the per-iteration
+            // drifting W_prev_, which locks early iterations onto a wrong
+            // branch).  No-op for gamma mode / non-converged iterations.
+            if (deltap_scf_converged
+                && PARAM.inp.deltap_observable == "operator")
+            {
+                dp_scf_->freeze_branch_ref();
+            }
             // dp_escon is identical on every rank: γ is rank-0-synced by
             // module_deltap (compute_gamma_scf Bcast) and λ by sync_lambda
             // write-back (T1), so the rank-local assignment is consistent.
@@ -824,6 +834,16 @@ void ESolver_KS_LCAO<TK, TR>::iter_finish(UnitCell& ucell, const int istep, int&
     // charge mixing is performed, potential is updated, 
     // HF and kS energies are computed, meta-GGA, Jason and restart
     ESolver_KS::iter_finish(ucell, istep, iter, conv_esolver);
+    // Route A+ fixed-geometry outer loop (scf + deltap_outer_nmax > 0): the
+    // secant updated t_Γ at the previous convergence but |γ−t_γ| is still
+    // above tolerance — continue the SCF loop with the new proxy target
+    // instead of terminating the run.  The H_c change re-disturbs drho, so
+    // the next DeltaP secant fires at the next convergence crossing.
+    if (PARAM.inp.deltap_switch && PARAM.inp.deltap_corr
+        && deltap_scf_solver_->consume_outer_redrive())
+    {
+        conv_esolver = false;
+    }
     const bool precision_switched = this->gint_precision_controller_.update_after_iteration(this->drho, this->scf_thr);
     this->gint_info_->set_exec_precision(this->gint_precision_controller_.current_precision());
     if (precision_switched)
@@ -944,6 +964,8 @@ void ESolver_KS_LCAO<TK, TR>::deltap_init(UnitCell& ucell)
     p.secant_at_convergence = (PARAM.inp.calculation == "scf");
     p.secant_enabled = (PARAM.inp.deltap_secant == "on");
     p.proxy_target_file = PARAM.inp.deltap_proxy_target_file;
+    p.outer_nmax = PARAM.inp.deltap_outer_nmax;
+    p.outer_thr = PARAM.inp.deltap_outer_thr;
     p.constrain = ucell.get_dp_constrain();
 
     // STRU-based per-atom targets (DeltaSpin-style keywords).  Used only when
@@ -971,6 +993,21 @@ void ESolver_KS_LCAO<TK, TR>::deltap_init(UnitCell& ucell)
     // Sync targets / constraint matrix into the DeltaP numerical object for
     // target-aware branch selection.
     dp->set_target_gamma(deltap_scf_solver_->params().target);
+    // Phase 0.3-lite branch anchor: Route A+ operator mode reads γ on a
+    // branch-continuous anchor (previous measurement / branch.dat, INPUT
+    // deltap_branch_anchor); legacy gamma mode is LOCKED to the target-aware
+    // selection (its λ residual is built on γ_report — the load-bearing wall
+    // must not change, zero regression).
+    const std::string branch_anchor
+        = (PARAM.inp.deltap_observable == "operator") ? PARAM.inp.deltap_branch_anchor
+                                                      : "target";
+    dp->set_branch_anchor(branch_anchor);
+    // Phase 0.3-lite frozen continuity anchor: seeded at init by the
+    // dp->load_branch() call above (load_branch mirrors into ref_gamma_), so
+    // the lambda=0 first measurement anchors to the natural gamma reference
+    // of a previous converged run instead of following t_gamma (T4a branch
+    // hopping, 2026-08-05).  Legacy gamma mode (target anchor) never reads
+    // ref_gamma_ — zero regression.
     if (!deltap_scf_solver_->params().C.empty())
         dp->set_constraint_matrix(deltap_scf_solver_->params().C, deltap_scf_solver_->params().t);
 

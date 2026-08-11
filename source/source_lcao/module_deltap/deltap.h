@@ -179,10 +179,33 @@ public:
     /// Load branch state from file (public for esolver access).
     void load_branch();
 
+    /// Seed the frozen continuity anchor (ref_gamma_) from branch.dat — the
+    /// last converged gamma of a previous run.  Route A+ operator mode only;
+    /// called once by the esolver at init so the lambda=0 first measurement
+    /// reports the natural gamma instead of following t_gamma (T4a branch
+    /// hopping, 2026-08-05).
+    void load_branch_ref();
+    /// Freeze the continuity state to the most recent gamma reading.  Called
+    /// by the esolver at SCF convergence; the next outer-loop SCF run then
+    /// anchors its branch selection to this converged value (Stage A) and
+    /// reports on this converged branch (Stage B, frozen shift).
+    void freeze_branch_ref();
+
     /// Set per-atom target Berry phase (for target-aware branch selection).
     void set_target_gamma(const std::vector<double>& target) { target_gamma_ = target; }
     /// Get per-atom target Berry phase.
     const std::vector<double>& get_target_gamma() const { return target_gamma_; }
+    /// Branch-anchor mode for the global target-aware branch selection:
+    ///   "continuity" — Route A+ operator mode (Phase 0.3-lite): the reported
+    ///   gamma is anchored to the FROZEN last-converged measurement
+    ///   (ref_gamma_, seeded from branch.dat and updated only at SCF
+    ///   convergence — NOT the per-iteration drifting W_prev_), so it is a
+    ///   branch-continuous reading of the physical response; the target only
+    ///   initializes the branch when no reference exists.
+    ///   "target" — legacy gamma mode (locked): always anchor to the target
+    ///   (target-aware selection unchanged, zero regression).
+    void set_branch_anchor(const std::string& mode) { branch_anchor_ = mode; }
+    const std::string& get_branch_anchor() const { return branch_anchor_; }
     /// Set linear constraint matrix C (m×n) and target vector t: C·γ = t.
     void set_constraint_matrix(const std::vector<std::vector<double>>& C,
                                const std::vector<double>& t)
@@ -275,6 +298,35 @@ private:
     std::vector<ModuleBase::Vector3<double>> W_prev_;
     bool has_prev_ = false;
 
+    // Phase 0.3-lite frozen continuity anchor (Route A+ operator mode).
+    // Per-atom per-direction gamma reference for the global branch selection:
+    // seeded from branch.dat at run start (load_branch_ref) and updated ONLY
+    // at SCF convergence (freeze_branch_ref).  FIXED within an SCF run —
+    // unlike W_prev_ (drifting per computation) — so early unconverged
+    // iterations cannot re-anchor the branch onto a wrong branch (T4a
+    // finding 2026-08-06).  NaN = no reference (fall back to the
+    // target-aware selection).
+    std::vector<ModuleBase::Vector3<double>> ref_gamma_;
+    bool has_ref_gamma_ = false;
+
+    // Phase 0.3-lite frozen-branch readout (Route A+ operator mode): the
+    // per-atom per-direction branch shift (reported - avg_raw) recorded at
+    // the last SCF convergence.  In continuity mode Stage B reports
+    // avg_raw + branch_shift_ (FROZEN across the next SCF run) instead of the
+    // nearest lattice point to the anchor: the nearest-point form pins the
+    // reading to the anchor (the lattice has points within ~0.005 of it), so
+    // the physical response (d(gamma)/d(t_Gamma) ~ 0.1) is swallowed and the
+    // outer loop cannot drive gamma (T4a finding 2026-08-09).  The frozen
+    // shift keeps the reading on the last converged branch while following
+    // the physical raw exactly.  NaN = no frozen branch yet (fall back to
+    // the anchor-nearest selection for the first run).
+    std::vector<ModuleBase::Vector3<double>> branch_shift_;
+    bool has_branch_shift_ = false;
+    // Per-computation Stage-B shift (best_val - avg_raw), refreshed in
+    // compute_wannier_polarization; freeze_branch_ref copies it into
+    // branch_shift_.
+    std::vector<ModuleBase::Vector3<double>> last_shift_;
+
     // Eigenvalue matching freeze: save/load Hungarian match results
     // across independent runs for deterministic lambda sweep.
     // saved_matches_[alpha][istring][j][n] = matched prev-index for band n.
@@ -337,6 +389,8 @@ private:
 
     /// Per-atom target Berry phase gamma^I (for target-aware branch selection).
     std::vector<double> target_gamma_;
+    /// Branch-anchor mode: "continuity" (operator, default) or "target" (gamma).
+    std::string branch_anchor_ = "continuity";
     /// Constraint matrix C (m×n) and target t for C·γ = t.
     std::vector<std::vector<double>> constraint_matrix_;
     std::vector<double> constraint_target_;

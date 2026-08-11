@@ -166,10 +166,15 @@ void DeltapScfSolver::init(const DeltapParams& p, Backend b)
                                                           : params_.nat,
                                   0.0);
     }
-    // Route A+ proxy target: t_Γ starts at the user's t_γ (κ=1 first round);
-    // the outer-loop secant (reset_ionic_step / post-convergence single point)
-    // updates t_Γ so that the measured γ converges to t_γ.
-    state_.t_proxy = params_.target;
+    // Route A+ proxy target: legacy single-fire mode starts t_Γ at the user's
+    // t_γ (κ=1 first round, documented).  With the fixed-geometry outer loop
+    // enabled (outer_nmax > 0) t_Γ starts EMPTY instead: the first SCF is a
+    // free λ=0 run that measures the natural (Γ_nat, γ_nat), and the secant
+    // starts from that measured natural point (Q2: t_Γ=t_γ is a κ=1 guess,
+    // not a measurement — starting there would pin Γ to γ-scale values,
+    // λ*≈O(1) Ry violent-perturbation territory for the first SCF).
+    state_.t_proxy = (params_.outer_nmax > 0) ? std::vector<double>()
+                                              : params_.target;
     // Q3 (T3 protocol): an explicit proxy-target file freezes the calibrated
     // t_Γ* across geometries — the disp± legs then only re-converge λ against
     // the frozen t_Γ (no secant drift, no t_Γ(R) pollution in the FD).
@@ -209,8 +214,14 @@ void DeltapScfSolver::init(const DeltapParams& p, Backend b)
     else if (params_.observable_mode == "operator" && params_.verbose
              && GlobalV::MY_RANK == 0)
     {
-        std::cout << " [DeltaP] operator mode: t_Γ initialized to t_γ (κ=1 first round)"
-                  << std::endl;
+        if (params_.outer_nmax > 0)
+            std::cout << " [DeltaP] operator mode: fixed-geometry outer loop (nmax="
+                      << params_.outer_nmax << ", thr=" << params_.outer_thr
+                      << "); first SCF is a free λ=0 run, t_Γ starts at the "
+                      << "measured natural Γ" << std::endl;
+        else
+            std::cout << " [DeltaP] operator mode: t_Γ initialized to t_γ (κ=1 first round)"
+                      << std::endl;
     }
     state_.secant_at_conv_done = false;
     state_.initialized = true;
@@ -240,6 +251,10 @@ void DeltapScfSolver::reset_ionic_step()
 bool DeltapScfSolver::inner_loop(double drho)
 {
     if (!state_.initialized || params_.nscf == 0)
+        return false;
+    // Fixed-geometry outer-loop first pass: the first SCF is a free λ=0 run
+    // (the secant starts from the measured natural point, not from a guess).
+    if (params_.outer_nmax > 0 && !state_.first_pass_done)
         return false;
     // Gate: activate only when the density is converged (Phase 1 done).
     if (drho > params_.inner_thr)
@@ -428,9 +443,51 @@ void DeltapScfSolver::iter_finish(int iter, double drho, bool conv_esolver)
     // update is never applied twice to the same measurement.
     if (conv_esolver && params_.secant_at_convergence && !state_.secant_at_conv_done)
     {
+        // Fixed-geometry outer-loop first pass: the first convergence is the
+        // free λ=0 natural run.  Seed the secant history at the measured
+        // natural point (t_Γ=Γ_nat) so the first update is the κ=1 guess
+        // FROM NATURAL (Q2: t_Γ=t_γ is a guess, not a measurement).
+        if (params_.outer_nmax > 0 && !state_.first_pass_done)
+        {
+            state_.first_pass_done = true;
+            state_.t_proxy = state_.gamma_op;
+            state_.t_proxy_prev = state_.t_proxy;
+            state_.gamma_meas_prev = gamma_report;
+            state_.secant_prev_err = -1.0;
+            state_.secant_bad_steps = 0;
+        }
         secant_update_proxy();
         state_.secant_at_conv_done = true;
+        state_.outer_steps++;
+        // Fixed-geometry outer loop: if |γ−t_γ|∞ is still above tolerance and
+        // the step budget remains, request the SCF loop to continue with the
+        // new t_Γ (the H_c change re-disturbs drho, so the next secant fires
+        // at the next convergence crossing).  Re-arm the inner λ BFGS so it
+        // re-runs for the new proxy target.
+        if (params_.outer_nmax > 0 && state_.outer_steps < params_.outer_nmax
+            && state_.outer_err > params_.outer_thr)
+        {
+            state_.outer_redrive = true;
+            state_.inner_loop_done = false;
+        }
     }
+    // Re-arm the single-point secant on re-drive iterations: once the density
+    // is disturbed by the new t_Γ (drho rises above scf_thr), the next SCF
+    // convergence re-fires the secant for the new measurement.
+    else if (params_.outer_nmax > 0 && state_.secant_at_conv_done && !conv_esolver)
+    {
+        state_.secant_at_conv_done = false;
+    }
+}
+
+// consume_outer_redrive: called by the ESolver right after iter_finish; if
+// the fixed-geometry outer loop requested another SCF pass with the updated
+// t_Γ, override conv_esolver so the run continues instead of terminating.
+bool DeltapScfSolver::consume_outer_redrive()
+{
+    const bool redrive = state_.outer_redrive;
+    state_.outer_redrive = false;
+    return redrive;
 }
 
 // ---------------------------------------------------------------------------
@@ -438,9 +495,14 @@ void DeltapScfSolver::iter_finish(int iter, double drho, bool conv_esolver)
 // t_Γ so that the measured γ converges to the user's t_γ (D7, derivations §7).
 //   t_Γ^(k+1) = t_Γ^(k) + κ^(k)·(t_γ − γ^(k))
 //   κ^(0) = 1;  κ^(k≥1) = Δt_Γ/Δγ from the last two (t_Γ, γ) pairs,
-//   clamped to [0.3, 3];  |Δt_Γ| per step clamped to 0.5 rad;  two
-//   consecutive |γ−t_γ| increases halve κ, and a still-worse step keeps the
-//   current t_Γ with a WARNING (relax never aborts).
+//   clamped to [0.3, 20] (sign preserved);  |Δt_Γ| per step clamped to
+//   1.0 rad;  two consecutive |γ−t_γ| increases halve κ, and a still-worse
+//   step keeps the current t_Γ with a WARNING (relax never aborts).
+//   T4 fixes (2026-08-05 review): with the measured γ↔t_Γ slope ≈0.07
+//   (κ≈14), the old [0.3, 3] clamp made the "≤5 步" outer-loop prediction
+//   structurally impossible — after the first measured pair κ is the secant
+//   prediction step; the 1.0 rad step limit and the divergence guard remain
+//   as the safety net.
 // ---------------------------------------------------------------------------
 void DeltapScfSolver::secant_update_proxy()
 {
@@ -482,7 +544,7 @@ void DeltapScfSolver::secant_update_proxy()
                 // then flips κ automatically via the measured slope.
                 const double abs_k = std::abs(kappa[iat]);
                 if (abs_k < 0.3) kappa[iat] = (kappa[iat] >= 0.0) ? 0.3 : -0.3;
-                else if (abs_k > 3.0) kappa[iat] = (kappa[iat] >= 0.0) ? 3.0 : -3.0;
+                else if (abs_k > 20.0) kappa[iat] = (kappa[iat] >= 0.0) ? 20.0 : -20.0;
             }
         }
     }
@@ -492,6 +554,9 @@ void DeltapScfSolver::secant_update_proxy()
     double err = 0.0;
     for (int iat = 0; iat < nat; ++iat)
         err = std::max(err, std::abs(gamma_meas[iat] - t_gamma[iat]));
+    // Fixed-geometry outer-loop convergence: last |γ−t_γ|∞ (consumed by the
+    // re-drive decision in iter_finish).
+    state_.outer_err = err;
     if (state_.secant_prev_err > 0.0 && err > state_.secant_prev_err)
     {
         state_.secant_bad_steps++;
@@ -523,8 +588,8 @@ void DeltapScfSolver::secant_update_proxy()
     for (int iat = 0; iat < nat; ++iat)
     {
         double dt = kappa[iat] * (t_gamma[iat] - gamma_meas[iat]);
-        if (dt > 0.5) dt = 0.5;
-        if (dt < -0.5) dt = -0.5;
+        if (dt > 1.0) dt = 1.0;
+        if (dt < -1.0) dt = -1.0;
         state_.t_proxy[iat] += dt;
     }
     state_.secant_prev_err = err;
@@ -538,6 +603,12 @@ void DeltapScfSolver::secant_update_proxy()
         {
             if (iat > 0) std::cout << ", ";
             std::cout << kappa[iat];
+        }
+        std::cout << ") γ=(" << std::setprecision(3);
+        for (int iat = 0; iat < nat; ++iat)
+        {
+            if (iat > 0) std::cout << ", ";
+            std::cout << gamma_meas[iat];
         }
         std::cout << ") t_Γ=(" << std::setprecision(3);
         for (int iat = 0; iat < nat; ++iat)
@@ -560,6 +631,9 @@ void DeltapScfSolver::update_lambda_gd(int iter, double drho)
     // the crude atomic-guess charge density (drho~0.5) produces wrong λ.
     // Phase 2: once drho drops below the threshold, take a single
     // gradient-descent λ update, then freeze λ for all remaining iterations.
+    // Fixed-geometry outer-loop first pass: keep λ=0 (free natural run).
+    if (params_.outer_nmax > 0 && !state_.first_pass_done)
+        return;
     if (state_.lambda_set || !(drho > 0.0 && drho < params_.inner_thr))
         return;
     state_.lambda_set = true;

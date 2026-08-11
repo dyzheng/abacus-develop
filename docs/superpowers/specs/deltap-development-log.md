@@ -1727,3 +1727,138 @@ co f0 归因、锚点重建#2）→ Stage 1 Route A+ 串行实现（Γ 计算/�
 1. T4a（评审修正后）：secant 限幅 1.0 + κ 割线预测 + 固定几何外循环驱动 → 跑 0.98 靶点。
 2. T4b：窗口测绘 + 力残差 vs |λ*| 曲线。
 3. smoothness 参考值更新。
+
+---
+
+## 2026-08-05（深夜）：T4a 执行——外循环被"分支锚定"阻塞（判决性发现）
+
+### 做了什么
+- **T4a 前置代码**（评审修正 2，未提交）：secant 单步限幅 0.5→1.0 rad；κ 实测后
+  割线预测（clamp [0.3,3]→[0.3,20]，实测 κ≈14 必须放行，否则"≤5 步"结构性
+  不可能）；新增固定几何外循环驱动：`deltap_outer_nmax`/`deltap_outer_thr`
+  INPUT（scf 模式首轮 λ=0 自由测量自然 (Γ_nat,γ_nat)，secant 从自然点起步；
+  |γ−t_γ| 未达标则 `outer_redrive` 请求 SCF 循环继续而非终止，重武装内循环
+  λ BFGS）。编译干净，单测 11/11、6/6 PASS。
+- **T4a 运行**（h2o1，t_γ=0.98×γ_natural，2-k 点，串行）：**协议无效**。
+  λ=0 自由跑已报告 γ≈(−5.415,−3.529,−3.529)=t_γ 分支，|γ−t_γ|=5.09e-3<1e-2，
+  外循环 1 步"收敛"且 λ 全程为 0——测量伪迹，非物理响应。
+- **对照实验**：同 build 同 INPUT，仅 target 换回自然值 → γ 收敛 (−5.521,−3.601,
+  −3.601)（与 T2/T3/冒烟一致）。两运行波函数相同（λ=0），报告 γ 差 0.105≈靶点差
+  0.110（1:1 跟随）→ **per-atom γ 报告值被靶点分支锚定**（global target-aware
+  branch selection 每次重锚到离 t_γ 最近的分支，量子 ~0.07–0.105 rad @ 2-k 网格）。
+  原始 Wilson 总量不变（6.169556）。
+
+### 根因与结论
+- **分支锚定伪迹吞没了 0.98 靶点**（Δγ=0.11 ≈ 分支量子 0.105，低于可观测分辨率）；
+  0.9 靶点在量子之上但 λ*≈1.9 Ry 暴力区（评审已排除）。**设计文档 Phase 0.3
+  （分支连续性）从"T4 之后收尾"升格为"外循环可验证性的硬前置"**——读数连续性
+  是 Route A+ 外循环的前提，不是后处理。
+
+### 建议修复（Phase 0.3-lite，待评审）
+1. 分支参考与 t_γ 解耦：报告 γ 锚定到上次测量值（跨步连续，W_prev_ 机制已有），
+   t_γ 仅在无参考分支时初始化分支。
+2. 自然参考分支：外循环前 λ=0 自由跑/加载 branch.dat 钉住自然分支；
+   γ(t_Γ)=自然 γ+物理响应（斜率 ~0.07），0.98 靶点需 0.11 rad 物理移动（预言 2–4 步）。
+3. 回归安全性：t_γ=自然 的运行（T2/T3/gamma 锚点）两锚一致 → 改动应为 no-op，
+   需 natural-target 对照 + gamma 零回归验证。
+
+### Files modified this round
+- 代码（未提交）：`deltap_scf.h/.cpp`（outer_nmax/outer_thr/outer_redrive/
+  first_pass_done/κ 割线/限幅）、`esolver_ks_lcao.cpp`（conv_esolver 重驱动）、
+  `input_parameter.h`、`read_input_item_other.cpp`
+- 文档：`2026-08-05-deltap-t4a-branch-anchor.md`（T4a 发现全记录）
+
+### Next steps（待评审）
+1. 批准/修改 Phase 0.3-lite 方案 → 实现 → 回归（natural-target 对照 + gamma 零回归）。
+2. 重跑 T4a（0.98）→ T4b（0.95→0.9 窗口测绘，力残差 vs |λ*| 曲线）。
+3. smoothness 单测参考值更新。
+
+---
+
+## 2026-08-05: Route A+ 版算法完整推导合并文档
+
+### What was done
+输出 `2026-08-05-deltap-algorithm-derivation-route-a-plus.md`——当前开发版本
+（escon=−λΓ + Gram 全迹 + 完整力求解）的唯一完整算法文档：γ 定义与测量链、
+H_c=H_HR+H_HK 定义、Γ 逐原子定义（含 Π 全迹）、E'≡E_KS(ψ*) 恒等式、
+力公式全集（A1/A2/B + O(λ) 残余）、应力同构、三级 λ 调节、E_eff=λ/(2a) 新公式、
+测量纪律（target-aware 不可作判据/连续性锚/未扣除力/高精度处方）、
+验证状态表与 LIMITATION 5 条、历史版本数值换算。
+07-12 主文档自此标记为"历史骨架"。无代码改动。
+
+---
+
+## 2026-08-07: Route A++ 文档评审与执行方案三层调整
+
+### What was done
+评审 `DeltaP-RouteA++混合规范严格推导与改进设计.md`，输出
+`2026-08-07-deltap-route-a-plus-plus-review-and-plan.md`：
+- 采纳：§1.4 定理（H_HR 是 θ_n→τ_α 代理，误差 ∝ λ·spread_I——A+ 适用域
+  可计算判据）、H_HK 应力推导、PW 记账统一、⟨η⟩ 审计；
+- 修正：η→1/λ*≥5× 降调为实测记录（Cauchy–Schwarz 仅给弱下界）；
+  Tr[ρ·Ô_θ]=0 齐次性需数值验证（新增 V-H0）；
+  **新增风险：θ_n 进哈密顿量使分支跳变改变势本身**（D2 设计约束：初始化
+  锚定连续值 + 跳变冻结，新增 V-H8 SCF 稳定性测试）；
+- 执行三层：基线 Route A+（T4b 并入 V-H3）/ L1 本周（PW 记账、⟨η⟩、spread）
+  / L2（应力）/ L3 研究轨道（Ô_w 先行，编译开关可回退）；
+- 锚点第 4 次重建推迟到 L3 全绿后一次；执行纪律 D1-D7 + 测试点 V-H0~V-H8。
+
+### 2026-08-07（补）: 执行 TODO 落地为 T-1~T-10
+- `2026-08-04-deltap-execution-todo.md` 顶部插入"当前 TODO（2026-08-07 调整后）"
+  权威节：T-1 Phase 0.3-lite 分支锚定门控（先做）→ T-2 T4a' → T-3 commit →
+  T-4 PW Γ 记账 → T-5 ⟨η⟩ 输出 → T-6 spread_I 输出 → T-7 V-H2/V-H5+A+ 适用域
+  文档 → T-8 hk MPI → T-9 应力+V-H7 → T-10 Ô_w（开关隔离+D2 约束）。
+
+---
+
+## 2026-08-09: Phase 0.3-lite 冻结位移实现 + T4a' 重跑（外循环机制判决失败，根因钉死）
+
+### What was done
+- **Phase 0.3-lite 补完（frozen branch shift）**：continuity 模式 Stage B 读数从
+  "最近格点→锚"改为 `avg_raw + frozen_shift`（`branch_shift_` 在 SCF 收敛时由
+  `freeze_branch_ref()` 冻结自 `last_shift_`）——修复"最近格点把读数钉在锚
+  ~0.005 内、吞掉物理响应"的缺陷。三 Stage-B 路径（约束/总量/逐原子）均记录
+  `last_shift_`；首轮无 shift 时 fallback 到 ref_gamma_ 锚；Stage A 继续用冻结
+  ref_gamma_（不随计算漂移）。gamma 模式锁定 target 锚（零回归门控不变）。
+- **T4a' 重跑两轮（单任务 MPI，均到 nmax=8 自然结束）**：
+  - 实验 A（内循环 max_step=0.005 原值）：λ=0 自由首测报告自然 γ ✓；frozen
+    读数跟随 raw ✓（bdist 1e-3–1e-2）；物理斜率恢复 κ_O=12.3（dγ/dt_Γ=0.081）
+    ✓；但外循环发散（|γ−t|∞ 0.110→0.225，WARNING×3）。
+  - 实验 B（max_step=0.1 加速实验）：内循环失控（Γ_O 到 8.6、λ 到 Ry 量级、
+    两个 H 报告分裂），**改动已回退**。
+- 文档：`2026-08-09-deltap-t4a-frozen-shift.md`（完整数据表 + 三层根因分析）。
+
+### Root cause（T4a' 外循环发散，三层钉死）
+1. 内循环 BFGS `max_step=0.005 Ry` 限制 λ 预算 = 0.1 Ry/外循环步，0.98 靶点需
+   Δλ≈0.2–1.0 Ry → Γ 追不上 t_Γ（|Γ−t_Γ| 卡 0.8–0.9）→ secant 在非松弛点
+   测量，κ 翻号振荡（+12.3→−20→+10）。
+2. 加速实验：单 α 线搜索无法同时驱动反号分量（O 需 λ 负、H 需 λ 正）；
+   H 的 Γ_H(λ_H) 非单调（U 形，λ<−0.1 悬崖）。
+3. **H 原子 Γ-proxy 退化（物理层，关键发现）**：dΓ_H/dλ_H≈0（U 形底）但
+   dγ_H/dλ_H≈+0.27 强——Γ 旋钮对 H 的 γ 几乎无控制力，secant 的 t_Γ_H 代理
+   结构性失效。Route A+ 外驱动合法工作区 |Δγ|≲0.03–0.05/原子（线性窗），
+   0.98 靶点（Δγ≈0.11）超出。
+
+### 验证状态
+- 单测：math 3/3、gauge 4/4 PASS（smoothness 4 FAIL 既有，与本改动无关）。
+- 参考 ref2（target=自然）：31 迭代收敛 γ=(−5.521,−3.601,−3.601)、λ=0，
+  外循环 |γ−t_γ|∞=2.12e-3 < 1e-2 正常终止——冻结位移路径零回归。
+- T-1 验收：③ λ=0 自由首测自然 γ ✓；gamma 零回归门控保持（未跑 BN 对照，
+  基线存档无效，见交接记录）；② natural-target no-op 由 ref2 覆盖 ✓。
+
+### File list（本轮新增/修改）
+- `source/source_lcao/module_deltap/deltap.h`：branch_shift_/last_shift_/
+  has_branch_shift_ 成员 + load_branch_ref/freeze_branch_ref/set_branch_anchor
+- `source/source_lcao/module_deltap/deltap_wannier.cpp`：Stage A/B continuity
+  门控、Stage B 冻结位移读数 + last_shift_ 记录、freeze_branch_ref 冻结 shift、
+  SAdbg/SBdbg 取证打印
+- `source/source_esolver/deltap_scf.{h,cpp}`、`esolver_ks_lcao.cpp`、
+  `input_parameter.h`、`read_input_item_other.cpp`：T4a 外循环驱动
+  （outer_nmax/thr、λ=0 自由首测、secant 从自然起点、κ 上限 20、限幅 1.0）
+- 文档：`2026-08-09-deltap-t4a-frozen-shift.md`
+
+### Next steps
+1. **T-3 commit**：Phase 0.3-lite + T4a 前置代码 + 本轮文档（max_step=0.1 已回退）。
+2. T4a' 重设计（评审 3 方案）：小靶点线性窗验证 / per-atom 内循环解耦 /
+   外循环直接 γ 残差驱动。
+3. 每轮 T4a 重跑后从 ref2 恢复 branch.dat（save_branch 覆盖锚）。

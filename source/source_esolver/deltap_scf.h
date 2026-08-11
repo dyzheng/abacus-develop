@@ -53,6 +53,11 @@ struct DeltapParams
     std::string proxy_target_file = ""; ///< file with per-atom t_Γ values
     ///< (overrides the t_Γ=t_γ first-round init; used to freeze the
     ///< calibrated t_Γ* across geometries for T3).
+    int outer_nmax = 0;             ///< Route A+ fixed-geometry outer-loop steps
+    ///< (scf + deltap_outer_nmax > 0: re-drive SCF after each t_Γ secant update
+    ///< until |γ−t_γ|∞ ≤ outer_thr or the step budget is exhausted; 0 = legacy
+    ///< single-fire secant at convergence).
+    double outer_thr = 1.0e-2;      ///< outer-loop |γ−t_γ|∞ convergence (rad)
 };
 
 /// Mutable SCF state, fully owned by DeltapScfSolver.
@@ -79,6 +84,11 @@ struct DeltapState
     double secant_prev_err = -1.0; ///< previous |γ−t_γ|∞ for divergence guard
     int secant_bad_steps = 0;      ///< consecutive |γ−t_γ| increases
     bool secant_at_conv_done = false; ///< single-point secant fired this SCF
+    /// Fixed-geometry outer loop (scf + outer_nmax > 0) state.
+    bool first_pass_done = false;  ///< first (free λ=0) SCF measured natural Γ/γ
+    int outer_steps = 0;           ///< outer secant updates applied
+    double outer_err = -1.0;       ///< last |γ−t_γ|∞ (outer-loop convergence)
+    bool outer_redrive = false;    ///< request the SCF loop to continue (new t_Γ)
     double max_res = 0.0;
     double dp_escon = 0.0;
 };
@@ -105,6 +115,9 @@ class DeltapScfSolver
 
     void init(const DeltapParams& p, Backend b);
     void reset_ionic_step();
+    /// Consume the fixed-geometry outer-loop re-drive request (called by the
+    /// ESolver after iter_finish to keep the SCF loop running with the new t_Γ).
+    bool consume_outer_redrive();
 
     /// Run the frozen-density inner loop (nscf > 0). Returns true if the
     /// regular HSolver step must be skipped (the inner loop already solved).

@@ -303,7 +303,16 @@ void DeltaP::compute_wannier_polarization(
 
     std::cout << "\n * * * * * *\n << Start DeltaP Wannier polarization\n";
 
-    // Load branch state from previous SCF/run for cross-SCF phase smoothness
+    // Load branch state from previous SCF/run for cross-SCF phase smoothness.
+    // SCF mode skips the file I/O (legacy): the frozen continuity anchor
+    // (ref_gamma_) is seeded ONCE by the esolver at init (deltap_init ->
+    // load_branch, which mirrors into ref_gamma_) and updated only at SCF
+    // convergence (freeze_branch_ref).  Re-loading here per computation would
+    // re-read the branch.dat that save_branch() overwrote at the end of the
+    // PREVIOUS computation, re-introducing the per-iteration anchor drift
+    // that locks early unconverged iterations onto a wrong branch (T4a
+    // finding 2026-08-06).  Legacy gamma mode keeps the old skip (zero
+    // regression).
     if (!scf_mode_)
         load_branch();
     load_match();
@@ -347,6 +356,11 @@ void DeltaP::compute_wannier_polarization(
         W_prev_.assign(nat_, ModuleBase::Vector3<double>(std::numeric_limits<double>::quiet_NaN(),
                                                           std::numeric_limits<double>::quiet_NaN(),
                                                           std::numeric_limits<double>::quiet_NaN()));
+    // Per-computation Stage-B shift record (frozen branch shift, Phase
+    // 0.3-lite): zero every computation so atoms/skipped directions keep a
+    // zero shift (report = raw); freeze_branch_ref() copies the converged
+    // computation's shifts into branch_shift_ for the next outer-loop run.
+    last_shift_.assign(nat_, ModuleBase::Vector3<double>(0.0, 0.0, 0.0));
 
     // ---- Compute polarization for all three directions ----
     for (int alpha = 0; alpha < 3; ++alpha)
@@ -377,11 +391,23 @@ void DeltaP::compute_wannier_polarization(
         // otherwise use NaN to skip branch selection on first iteration.
         // This ensures the first iteration records raw gamma without being
         // pulled toward 0 by the branch selection logic.
+        // Phase 0.3-lite: in continuity mode the per-string Stage-A reference
+        // is the FROZEN anchor (ref_gamma_) too — NOT the per-computation
+        // drifting W_prev_.  A drifting Stage-A reference re-biases the
+        // per-string shift path each iteration (string-0's raw-0 phase gets
+        // shifted toward the previous report), and once the report lands on a
+        // wrong lattice point the coupling locks it there even though the raw
+        // gamma converges to the natural value (T4a finding 2026-08-06).
+        // Legacy gamma mode keeps the W_prev_ behavior (zero regression).
+        const bool have_stage_a_ref
+            = (branch_anchor_ == "continuity") ? has_ref_gamma_ : has_prev_;
+        const std::vector<ModuleBase::Vector3<double>>& stage_a_ref
+            = (branch_anchor_ == "continuity" && has_ref_gamma_) ? ref_gamma_ : W_prev_;
         std::vector<double> prev_gamma(nat_, std::numeric_limits<double>::quiet_NaN());
         for (int iat = 0; iat < nat_; ++iat)
-            if (has_prev_ && static_cast<int>(W_prev_.size()) > iat
-                && !std::isnan(W_prev_[iat][alpha]))
-                prev_gamma[iat] = W_prev_[iat][alpha];
+            if (have_stage_a_ref && static_cast<int>(stage_a_ref.size()) > iat
+                && !std::isnan(stage_a_ref[iat][alpha]))
+                prev_gamma[iat] = stage_a_ref[iat][alpha];
         gamma_principal_.assign(nat_, 0.0);
         gamma_selected_.assign(nat_, 0.0);
 
@@ -1209,7 +1235,17 @@ void DeltaP::compute_wannier_polarization(
                 {
                     double g = gamma_I_per_atom[iat];
                     double prev = prev_gamma[iat];
-                    if (std::abs(g - prev) < M_PI) { prev_gamma[iat] = g; continue; }
+                    if (std::abs(g - prev) < M_PI)
+                    {
+                        // DEBUG (Phase 0.3-lite forensics): per-string Stage-A
+                        // no-shift path for the gdir direction.
+                        if (alpha == gdir_orig - 1 && n_strings_processed == 1)
+                            std::cout << " [SAdbg] iat=" << iat << " alpha=" << alpha
+                                      << " noshift g=" << std::setprecision(9) << g
+                                      << " prev=" << prev << std::endl;
+                        prev_gamma[iat] = g;
+                        continue;
+                    }
 
                     // Search single-band shifts using per-band normalized amplitudes
                     double best_val = g;
@@ -1231,11 +1267,19 @@ void DeltaP::compute_wannier_polarization(
                     prev_gamma[iat] = best_val;
 
                     if (n_strings_processed == 1)
+                    {
                         std::cout << "   DeltaP branch-set: atom " << iat
                                   << " rescaled=" << std::scientific << std::setprecision(6) << g
                                   << " selected=" << best_val
                                   << " prev=" << prev
                                   << " delta=" << best_val - g << std::endl;
+                        // DEBUG (Phase 0.3-lite forensics): Stage-A shift
+                        // path for the gdir direction.
+                        if (alpha == gdir_orig - 1)
+                            std::cout << " [SAdbg] iat=" << iat << " alpha=" << alpha
+                                      << " shifted g=" << g << " -> " << best_val
+                                      << " prev=" << prev << std::endl;
+                    }
                 }
             }
             else
@@ -1446,6 +1490,9 @@ void DeltaP::compute_wannier_polarization(
                 double delta = best_val - raw_gamma[iat];
                 gamma_accum[iat] += delta * n_strings_processed;
                 gamma_best[iat] = best_val;
+                // Frozen branch shift (Phase 0.3-lite): record the applied
+                // shift per atom/direction for freeze_branch_ref().
+                last_shift_[iat][alpha] = delta;
 
                 // Update contribution
                 for (int a = 0; a < m; ++a)
@@ -1531,6 +1578,9 @@ void DeltaP::compute_wannier_polarization(
                 double delta = best_val - avg_raw;
                 gamma_accum[iat] += delta * n_strings_processed;
                 running_sum += best_val;
+                // Frozen branch shift (Phase 0.3-lite): record the applied
+                // shift per atom/direction for freeze_branch_ref().
+                last_shift_[iat][alpha] = delta;
             }
         }
         else
@@ -1539,6 +1589,36 @@ void DeltaP::compute_wannier_polarization(
             {
                 double avg_raw = gamma_accum[iat] / n_strings_processed;
                 double target = target_gamma_[iat];
+                // Phase 0.3-lite (Route A+ operator mode) continuity readout:
+                // once a frozen branch shift exists (last SCF convergence),
+                // the Stage-B target is avg_raw + branch_shift_ — i.e. the
+                // search keeps the reported γ on the SAME lattice point family
+                // while the reading follows the physical raw exactly.  The
+                // nearest-lattice-point-to-anchor form pins the reading to
+                // the anchor (the lattice has points within ~0.005 of it), so
+                // the physical response (dγ/dt_Γ ~ 0.1) is swallowed and the
+                // outer loop cannot drive γ (T4a finding 2026-08-09).  Before
+                // the first freeze, fall back to the FROZEN last-converged
+                // anchor (ref_gamma_, seeded from branch.dat and updated only
+                // at SCF convergence — NOT the per-iteration drifting
+                // W_prev_): t_γ then only initializes the branch when no
+                // reference exists (first call / no branch.dat).  Legacy
+                // gamma mode ("target") keeps the target-aware behavior
+                // unchanged (zero regression).
+                if (branch_anchor_ == "continuity"
+                    && has_branch_shift_
+                    && static_cast<size_t>(iat) < branch_shift_.size()
+                    && !std::isnan(branch_shift_[iat][alpha]))
+                {
+                    target = avg_raw + branch_shift_[iat][alpha];
+                }
+                else if (branch_anchor_ == "continuity"
+                    && has_ref_gamma_
+                    && static_cast<size_t>(iat) < ref_gamma_.size()
+                    && !std::isnan(ref_gamma_[iat][alpha]))
+                {
+                    target = ref_gamma_[iat][alpha];
+                }
 
             double w_total = 0.0;
             // Check per-band normalization validity
@@ -1606,6 +1686,30 @@ void DeltaP::compute_wannier_polarization(
             // gamma_accum = raw_sum + zeta_corrections; we need to add the branch shift
             double delta = best_val - avg_raw;
             gamma_accum[iat] += delta * n_strings_processed;
+            // Frozen branch shift (Phase 0.3-lite): record the applied shift
+            // per atom/direction for freeze_branch_ref().
+            last_shift_[iat][alpha] = delta;
+            // DEBUG (Phase 0.3-lite anchor forensics, 2026-08-06): Stage-B
+            // search inputs/outputs for the gdir direction so the branch
+            // selection can be audited against the raw value.  The shift
+            // source is labeled (frozen=avg_raw+branch_shift_, anchor=ref_).
+            if (branch_anchor_ == "continuity" && alpha == gdir_orig - 1)
+            {
+                const bool frozen = (has_branch_shift_
+                                     && static_cast<size_t>(iat) < branch_shift_.size()
+                                     && !std::isnan(branch_shift_[iat][alpha]));
+                std::cout << " [SBdbg] iat=" << iat
+                          << " alpha=" << alpha
+                          << " mode=" << (frozen ? "frozen" : "anchor")
+                          << " avg_raw=" << std::setprecision(9) << avg_raw
+                          << " anchor=" << std::setprecision(9) << target
+                          << " best=" << std::setprecision(9) << best_val
+                          << " shift=" << std::setprecision(9) << delta
+                          << " bdist=" << std::setprecision(6) << best_dist;
+                for (size_t q = 0; q < shift_amp.size(); ++q)
+                    std::cout << " s" << q << "=" << std::setprecision(6) << shift_amp[q];
+                std::cout << std::endl;
+            }
         }
     }
     }
@@ -2693,7 +2797,61 @@ void DeltaP::load_branch()
         W_prev_[iat] = ModuleBase::Vector3<double>(gx, gy, gz);
     }
     has_prev_ = true;
+    // Mirror the loaded branch into the frozen continuity anchor (Phase
+    // 0.3-lite): a single-shot (non-SCF) run anchors the global branch
+    // selection to the persisted reference as well.
+    ref_gamma_ = W_prev_;
+    has_ref_gamma_ = true;
     std::cout << " DeltaP: loaded branch state from " << fname << std::endl;
+}
+
+// Seed the frozen continuity anchor (ref_gamma_) from branch.dat.  Unlike
+// load_branch(), this does NOT touch W_prev_ (the legacy per-SCF branch
+// state), so operator-mode SCF runs keep the old probe -> W_prev_ lifecycle
+// while the Stage-B anchor stays frozen (T4a wrong-branch lock-in fix).
+void DeltaP::load_branch_ref()
+{
+    const std::string fname = "deltap_branch.dat";
+    std::ifstream ifs(fname);
+    if (!ifs.is_open()) return;
+
+    int nat_file = 0;
+    ifs >> nat_file;
+    if (nat_file != nat_)
+    {
+        std::cerr << "DeltaP: branch file nat=" << nat_file
+                  << " != current nat=" << nat_ << ", ignoring (branch ref)"
+                  << std::endl;
+        return;
+    }
+
+    ref_gamma_.resize(nat_);
+    for (int iat = 0; iat < nat_; ++iat)
+    {
+        double gx = 0.0, gy = 0.0, gz = 0.0;
+        ifs >> gx >> gy >> gz;
+        ref_gamma_[iat] = ModuleBase::Vector3<double>(gx, gy, gz);
+    }
+    has_ref_gamma_ = true;
+    std::cout << " DeltaP: loaded frozen branch reference from " << fname << std::endl;
+}
+
+// Freeze the continuity anchor to the most recent gamma reading.  W_prev_
+// holds the last computation's gamma_I (updated per alpha in
+// compute_wannier_polarization); the esolver calls this at SCF convergence so
+// the next outer-loop SCF run anchors to this CONVERGED value instead of the
+// per-iteration drifting W_prev_ (T4a wrong-branch lock-in, 2026-08-06).
+// Also freezes the applied Stage-B branch shift (last_shift_) into
+// branch_shift_: the next SCF run then reports avg_raw + branch_shift_
+// (continuity readout that follows the physical raw, 2026-08-09) instead of
+// the nearest lattice point to the anchor, which pinned the reading to the
+// anchor and swallowed the physical response.
+void DeltaP::freeze_branch_ref()
+{
+    ref_gamma_ = W_prev_;
+    has_ref_gamma_ = true;
+    branch_shift_ = last_shift_;
+    has_branch_shift_ = true;
 }
 
 // Persist per-atom Wilson-loop products W^I for the next SCF/run.

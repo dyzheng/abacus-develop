@@ -1387,5 +1387,49 @@ Manual override is allowed: if sc_acceleration_mode is explicitly set, it takes 
         read_sync_string(input.deltap_proxy_target_file);
         this->add_item(item);
     }
+    {
+        Input_Item item("deltap_outer_nmax");
+        item.annotation = "fixed-geometry outer-loop secant steps (scf)";
+        item.category = "DeltaP";
+        item.type = "Integer";
+        item.description = "Max fixed-geometry outer-loop secant steps for single-point (scf) runs. 0 (default): legacy single-fire secant at SCF convergence. >0: the first SCF is a free lambda=0 run measuring the natural (Gamma,gamma); after each secant t_Gamma update the SCF loop re-runs until |gamma-t_gamma| <= deltap_outer_thr or the step budget is exhausted.";
+        item.default_value = "0";
+        item.unit = "";
+        item.availability = "deltap_corr is true";
+        read_sync_int(input.deltap_outer_nmax);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("deltap_outer_thr");
+        item.annotation = "outer-loop |gamma-t_gamma| convergence (rad)";
+        item.category = "DeltaP";
+        item.type = "Double";
+        item.description = "Fixed-geometry outer-loop convergence threshold on |gamma-t_gamma|_inf (rad). Default 1e-2.";
+        item.default_value = "1e-2";
+        item.unit = "";
+        item.availability = "deltap_corr is true";
+        read_sync_double(input.deltap_outer_thr);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("deltap_branch_anchor");
+        item.annotation = "gamma branch anchor: continuity or target";
+        item.category = "DeltaP";
+        item.type = "String";
+        item.description = "Branch anchor for the reported per-atom gamma. continuity (default, Route A+ operator mode): gamma is anchored to the previous measurement (branch.dat / W_prev_) so it is branch-continuous; the target only initializes the branch when no reference exists. target: the target-aware selection (legacy gamma mode; locked to target when deltap_observable is gamma, zero regression).";
+        item.default_value = "continuity";
+        item.unit = "";
+        item.availability = "deltap_corr is true";
+        read_sync_string(input.deltap_branch_anchor);
+        item.check_value = [](const Input_Item& item, const Parameter& para) {
+            if (para.input.deltap_branch_anchor != "continuity"
+                && para.input.deltap_branch_anchor != "target")
+            {
+                ModuleBase::WARNING_QUIT("ReadInput",
+                    "deltap_branch_anchor must be 'continuity' or 'target'");
+            }
+        };
+        this->add_item(item);
+    }
 }
 } // namespace ModuleIO
