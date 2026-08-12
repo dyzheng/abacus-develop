@@ -54,6 +54,11 @@ struct DeltapParams
     /// the driving signal, so γ-drive preserves the O(λ) leakage structure
     /// (2026-08-11 review, T-4').  Legacy gamma mode is locked to "gamma".
     std::string drive = "proxy";
+    /// Route A+ constraint operator (operator mode only): "proxy" = the
+    /// τ_α·P̂ geometric proxy (H_HR, historical Route A+); "ow" = the exact
+    /// weight-channel operator Ô_w = θ_n·P̂ (band-resolved Wilson phase θ_n,
+    /// EFC L3.1, T-6').  Legacy gamma mode is locked to "proxy".
+    std::string operator_mode = "proxy";
     bool secant_at_convergence = false; ///< single-point runs: one t_Γ secant
     ///< update in iter_finish after SCF convergence (relax uses
     ///< reset_ionic_step instead).

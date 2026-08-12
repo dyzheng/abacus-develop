@@ -122,6 +122,17 @@ public:
     /// (HR-only when the HK path never ran, e.g. HK disabled).
     std::vector<double> compute_operator_observable() const
     {
+        // T-6' (Ô_w): in "ow" mode the weight-channel part of the operator
+        // observable is Γ_I^w (per-atom split of Tr[ρ·H_ow], full Gram
+        // trace) instead of the τ_α·⟨P̂_I⟩ proxy accumulated in
+        // compute_gamma_scf.  The HK part is added identically in both modes.
+        if (operator_mode_ == "ow" && gamma_op_w_.size() == gamma_op_hk_.size())
+        {
+            std::vector<double> g = gamma_op_w_;
+            for (size_t i = 0; i < g.size(); ++i)
+                g[i] += gamma_op_hk_[i];
+            return g;
+        }
         std::vector<double> g = gamma_op_;
         if (g.size() == gamma_op_hk_.size())
             for (size_t i = 0; i < g.size(); ++i)
@@ -206,6 +217,13 @@ public:
     ///   (target-aware selection unchanged, zero regression).
     void set_branch_anchor(const std::string& mode) { branch_anchor_ = mode; }
     const std::string& get_branch_anchor() const { return branch_anchor_; }
+    /// Route A+ constraint operator mode (T-6', EFC L3.1):
+    ///   "proxy" — the historical τ_α·P̂ geometric proxy (H_HR).
+    ///   "ow"    — the exact weight-channel operator Ô_w = θ_n·P̂
+    ///             (band-resolved Wilson phase; H_HR replaced by H_ow).
+    /// Locked to "proxy" for legacy gamma mode (zero regression).
+    void set_operator_mode(const std::string& mode) { operator_mode_ = mode; }
+    const std::string& operator_mode() const { return operator_mode_; }
     /// Branch-state write guard (T-9', 2026-08-11): when false, save_branch()
     /// does NOT overwrite deltap_branch.dat.  State-file silent overwrites
     /// broke A/B comparability twice (07-30, T4a reference destruction); FD /
@@ -235,6 +253,32 @@ private:
                            const ModuleBase::Vector3<double>& kvec_c_L,
                            const ModuleBase::Vector3<double>& kvec_c_R);
     void compute_D_I(int ik, const std::complex<double>* psi_k, int nbands, int nrow_local);
+    /// (T-6', R2/R3, 2026-08-12) fill kstring_data_ for one k-string
+    /// (S_k + D_I + MPI Allreduce), updating kstring_gdir_/kstring_string_.
+    /// Centralizes the per-string rebuild used by compute_hk_correction /
+    /// compute_gamma_op_hk / compute_hk_force for the k-local H_ow pass.
+    void fill_kstring(int istring, const psi::Psi<std::complex<double>>* psi,
+                      int nbands, int nrow);
+    /// (T-6', R4, 2026-08-12) first-measurement branch anchor: when the
+    /// continuity reference (ref_gamma_, input gdir) exists and no per-k
+    /// previous θ is available, choose the per-band 2π sheet of θ_n that
+    /// brings the implied per-atom γ (= Σ_n w̃_In·θ_n, per-band-normalized
+    /// SMO weights) closest to ref_gamma_ (coordinate-descent over bands,
+    /// candidates {−1,0,+1}·2π).  Returns the anchored θ.
+    std::vector<double> anchor_ow_theta_to_ref(
+        const std::vector<double>& theta,
+        const std::vector<std::vector<double>>& w_In,
+        int gdir_val) const;
+    /// (T-6', R1, 2026-08-12) Ô_w geometric force (ow mode): F_ow = −∂E_ow/∂R
+    /// with E_ow = Σ_I λ_I·Γ_I^w (the per-atom split of Tr[ρ·H_ow], full
+    /// Gram trace) at frozen C and θ — the H_HR A1/A2 terms are gated off in
+    /// ow mode, so this is the ow analogue of the projector force.  Adds to
+    /// force_out (nat*3, Ry/Bohr).  Returns false when ow data is missing.
+    bool compute_ow_force(const UnitCell& ucell,
+                          const psi::Psi<std::complex<double>>* psi,
+                          const elecstate::ElecState* pelec,
+                          const std::vector<double>& lambda,
+                          std::vector<double>& force_out);
     void compute_berry_connection(int ik, const std::complex<double>* psi_k,
                                    int nbands, int nrow_local, const double* wg);
     void integrate_polarization(const UnitCell& ucell, int nbands);
@@ -400,6 +444,8 @@ private:
     std::string branch_anchor_ = "continuity";
     /// Branch-state write guard (deltap_branch_write, default true).
     bool branch_write_ = true;
+    /// Route A+ constraint operator mode (see set_operator_mode).
+    std::string operator_mode_ = "proxy";
     /// Constraint matrix C (m×n) and target t for C·γ = t.
     std::vector<std::vector<double>> constraint_matrix_;
     std::vector<double> constraint_target_;
@@ -413,6 +459,29 @@ private:
     //               compute_hk_correction / compute_hk_force at current ψ)
     std::vector<double> gamma_op_;
     std::vector<double> gamma_op_hk_;
+    // T-6' (Ô_w): band-resolved Wilson phase θ_n for the INPUT gdir, captured
+    // by compute_gamma_scf at the current wavefunctions.  R2/R3 (2026-08-12):
+    // Ô_w is a k-local operator, so θ_n(k) is stored PER k-point — each
+    // physical k belongs to exactly one gdir string, and ow_theta_k_[ik] is
+    // that string's loop phase (empty for uncovered k).  It enters the H_ow
+    // operator and the Γ_I^w observable with the same per-band ordering as
+    // the γ weight channel (n = global band index along the string; the
+    // wrapped PBC slot is not stored).  The D2 freeze keeps the PREVIOUS θ_n
+    // when a branch jump (|Δθ_n| > π/2) is detected, so the Hamiltonian
+    // cannot be kicked by a 2π branch discontinuity (V-H8); a recovery
+    // counter accepts the new value after ow_theta_freeze_max_ consecutive
+    // frozen steps so a legitimate evolution past the jump is not frozen
+    // forever (R4).
+    std::vector<std::vector<double>> ow_theta_k_;
+    int ow_theta_gdir_ = -1;      ///< gdir of the captured θ (INPUT gdir)
+    bool ow_theta_valid_ = false;
+    std::vector<std::vector<double>> ow_theta_prev_k_;  ///< previous θ per k (continuity, R4)
+    std::vector<int> ow_theta_freeze_count_;            ///< consecutive frozen steps per k (R4)
+    int ow_theta_freeze_max_ = 50;                      ///< accept after N frozen steps (R4)
+    /// Γ_I^w (Ô_w weight-channel operator observable, per atom, INPUT gdir):
+    /// the per-atom split of Tr[ρ·H_ow] with the full Gram trace (T2
+    /// convention), filled by compute_gamma_op_hk / compute_hk_correction.
+    std::vector<double> gamma_op_w_;
 };
 
 } // namespace deltap

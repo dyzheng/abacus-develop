@@ -1376,6 +1376,25 @@ Manual override is allowed: if sc_acceleration_mode is explicitly set, it takes 
         this->add_item(item);
     }
     {
+        Input_Item item("deltap_operator_mode");
+        item.annotation = "Route A+ constraint operator: proxy or ow";
+        item.category = "DeltaP";
+        item.type = "String";
+        item.description = "Route A+ operator-mode constraint operator (T-6', EFC L3.1). proxy (default): the on-site projector is weighted by the geometric proxy tau_alpha(I) (H_HR = lambda*tau*P_hat, the historical Route A+ operator). ow: the exact weight-channel operator O_w = theta_n * P_hat with band-resolved Wilson phase theta_n (the SMO projector P_hat weighted per band); H_HR is replaced by H_ow = sum_n theta_n * (P_lambda*C) * C^dagger at every k of the constraint string. The O_w operator is the functional derivative of the gamma weight channel, so the lambda-to-gamma coupling (dgamma/dlambda) is no longer diluted by the tau proxy (V-H3' acceptance: dgamma/dlambda >= 3 rad/Ry, gamma-hold FD residual < 0.02 eV/A). Legacy gamma mode (deltap_observable=gamma) ignores this switch (zero regression).";
+        item.default_value = "proxy";
+        item.unit = "";
+        item.availability = "deltap_corr is true";
+        read_sync_string(input.deltap_operator_mode);
+        item.check_value = [](const Input_Item& item, const Parameter& para) {
+            if (para.input.deltap_operator_mode != "proxy" && para.input.deltap_operator_mode != "ow")
+            {
+                ModuleBase::WARNING_QUIT("ReadInput",
+                    "deltap_operator_mode must be 'proxy' or 'ow'");
+            }
+        };
+        this->add_item(item);
+    }
+    {
         Input_Item item("deltap_secant");
         item.annotation = "outer-loop t_Gamma secant: on or off";
         item.category = "DeltaP";

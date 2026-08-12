@@ -958,6 +958,13 @@ void ESolver_KS_LCAO<TK, TR>::deltap_init(UnitCell& ucell)
     p.target_file = PARAM.inp.deltap_target_file;
     p.constraint_matrix_file = PARAM.inp.deltap_constraint_matrix;
     p.observable_mode = PARAM.inp.deltap_observable;
+    // T-6' (EFC L3.1): the constraint operator in operator mode is either
+    // the τ_α·P̂ geometric proxy (historical Route A+) or the exact Ô_w =
+    // θ_n·P̂ weight-channel operator.  Legacy gamma mode is locked to proxy
+    // (its Hamiltonian path predates Route A+; zero regression).
+    p.operator_mode = (PARAM.inp.deltap_observable == "operator")
+                          ? PARAM.inp.deltap_operator_mode
+                          : "proxy";
     // Legacy gamma mode is LOCKED to gamma-drive (its λ residual is built on
     // the target-aware γ report — the load-bearing wall; the Route A+ drive
     // switch is operator-mode-only, zero regression).
@@ -1007,6 +1014,13 @@ void ESolver_KS_LCAO<TK, TR>::deltap_init(UnitCell& ucell)
         = (PARAM.inp.deltap_observable == "operator") ? PARAM.inp.deltap_branch_anchor
                                                       : "target";
     dp->set_branch_anchor(branch_anchor);
+    // T-6' (EFC L3.1): the constraint operator in operator mode is either
+    // the τ_α·P̂ geometric proxy (historical Route A+) or the exact Ô_w =
+    // θ_n·P̂ weight-channel operator.  Legacy gamma mode is locked to proxy
+    // (its Hamiltonian path predates Route A+; zero regression).
+    dp->set_operator_mode((PARAM.inp.deltap_observable == "operator")
+                              ? PARAM.inp.deltap_operator_mode
+                              : "proxy");
     // T-9' branch-state write guard: multi-geometry / FD runs keep the
     // calibrated deltap_branch.dat reference (silent overwrite broke A/B
     // comparability twice: 07-30, T4a).

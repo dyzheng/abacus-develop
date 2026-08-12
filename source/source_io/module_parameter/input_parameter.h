@@ -633,6 +633,7 @@ struct Input_para
     std::string deltap_constraint_mode = "per_atom";  ///< "per_atom": per-atom constraint; "total": constrain sum Σγ_I
     std::string deltap_constraint_matrix = "";  ///< path to constraint matrix file (overrides constraint_mode when set)
     std::string deltap_observable = "operator"; ///< SCF constraint variable: "operator" = Γ (Route A+), "gamma" = Wilson-loop γ
+    std::string deltap_operator_mode = "proxy"; ///< Route A+ constraint operator (operator mode): "proxy" = τ_α·P̂ (H_HR proxy), "ow" = θ_n·P̂ (Ô_w band-resolved, EFC L3.1)
     std::string deltap_drive = "proxy";          ///< Route A+ λ-driving signal (operator mode): "proxy" = Γ vs t_Γ (secant), "gamma" = reported γ vs t_γ (direct)
     std::string deltap_secant = "on";           ///< outer-loop t_Γ secant: "on"/"off" (off = freeze t_Γ, e.g. T3 disp± legs)
     int deltap_outer_nmax = 0;                  ///< fixed-geometry outer-loop secant steps (scf; 0 = legacy single-fire)

@@ -19,6 +19,32 @@ void DeltaPOperator<TK, TR>::cal_force_stress(const bool cal_force,
     ModuleBase::TITLE("DeltaPOperator", "cal_force_stress");
     ModuleBase::timer::start("DeltaPOperator", "cal_force_stress");
 
+    // T-6' (Ô_w): the real-space τ_α·P̂ projector force is the analytic force
+    // of H_HR, which is NOT applied in the exact weight-channel operator mode
+    // (deltap_operator_mode = "ow"; the k-space H_ow = Σ_n θ_n·P̂_λ|ψ_n⟩⟨ψ_n|
+    // replaces it).  Its force must therefore not be added here either — the
+    // Ô_w geometric force F_ow = −∂E_ow/∂R (frozen C/θ, full Gram trace) is
+    // computed by deltap::DeltaP::compute_ow_force, invoked from
+    // DeltaP::compute_hk_force (the "ow" branch, R1 2026-08-12) and added to
+    // the stored H_HK force by the esolver.  Legacy gamma mode and the
+    // historical "proxy" operator mode are unchanged (zero regression).
+    if (PARAM.inp.deltap_operator_mode == "ow"
+        && PARAM.inp.deltap_observable == "operator")
+    {
+        // R6 (2026-08-12): the Ô_w stress path is not defined (H_ow is a
+        // k-space operator without a real-space ∂/∂ε expression yet); a
+        // silent zero stress would corrupt variable-cell runs.
+        if (cal_stress)
+        {
+            ModuleBase::WARNING_QUIT("DeltaPOperator::cal_force_stress",
+                "deltap_operator_mode=ow + cal_stress is not implemented "
+                "(H_ow stress path undefined; R6). Use cal_stress=0 in ow mode.");
+        }
+        if (cal_force) force.zero_out();
+        ModuleBase::timer::end("DeltaPOperator", "cal_force_stress");
+        return;
+    }
+
     // LIMITATION: This force/stress only covers the real-space projector
     // (H_HR) contribution.  The k-space Berry-connection part (H_HK) does
     // not have an analytic force contribution.  Relax/MD with deltap_corr

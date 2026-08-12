@@ -108,6 +108,26 @@ void hamilt::DeltaPOperator<TK, TR>::contributeHR()
         return;
     }
 
+    // T-6' (Ô_w): in the exact weight-channel operator mode
+    // (deltap_operator_mode = "ow"), the τ_α·P̂ geometric proxy H_HR is
+    // REPLACED by the per-k H_ow = Σ_n θ_n·(P̂_λ·C)·C† built in
+    // DeltaP::compute_hk_correction (contributeHk).  Adding the real-space
+    // H_HR here as well would double-count the on-site projector term.
+    // Legacy gamma mode and the historical "proxy" operator mode are
+    // unchanged (zero regression).
+    if (PARAM.inp.deltap_operator_mode == "ow"
+        && PARAM.inp.deltap_observable == "operator")
+    {
+        // Keep the λ bookkeeping consistent (the H_ow path is the sole
+        // operator contribution), then hand the k-space part to contributeHk.
+        this->dp_hr_done = true;
+        for (int iat = 0; iat < this->ucell->nat; iat++)
+        {
+            this->lambda_save_[iat] = this->lambda_[iat];
+        }
+        return;
+    }
+
     if (!this->initialized)
     {
         this->cal_pre_HR();

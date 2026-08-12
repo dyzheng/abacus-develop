@@ -1924,3 +1924,78 @@ Route A+ 换 Γ 代理记账才到 0.0138。T3' = 08-03 换新记账重跑——
 1. **commit 本轮**（T-4' 实现 + T3' 判决文档 + T-9' 守卫）。
 2. T3' 不入生产协议；T-7'（per-atom Jacobian / 自洽 λ 重触发）获新前置证据。
 3. T-5' 窗口测绘改用 proxy 驱动；T-6' Ô_w 提前（评审已裁，H γ 可达性同源）。
+
+---
+
+## 2026-08-12: 公式重推导 + 代码评审 + 风险提示（T-6' 工作区）
+
+### What was done
+重推导当前算法完整公式链（测量/H_c 两模式/Γ 记账恒等式/驱动/力/应力/E_eff），
+评审 HEAD + 未提交 T-6'（Ô_w）实现，输出
+`2026-08-12-deltap-formula-review-risks.md`。核心发现：
+- **R1（阻塞）**：ow 模式 F_ow 完全缺失，且 force_stress.hpp 注释谎称存在
+  "compute_hk_force 'ow' branch"（实际没有）——ow 模式 H 含 H_ow 但 Pulay 力缺席；
+- **R2/R3（高）**：H_ow/θ 只覆盖 string-0——多 string 网格（BN 2×2×2）仅 2/8 k
+  点拿到算符；Ô_w 是 k 局域算符，应移出 link 循环按 nks 逐 k 构建
+  （顺带解除方阵限制）；
+- **R4（中）**：D2 跳变冻结无恢复路径（prev 不更新则永久冻结）、与 gamma
+  驱动存在失配窗口、首轮裸 θ 未定锚；
+- **R5（中）**：ow 模式 T2 类 E'(λ) 平直性验证未做（地基，~10 min）；
+- R6（ow+应力静默缺失，建议 WARNING_QUIT）/ R8（e_w_I 取实部建议加断言）。
+处置顺序：R5 → R1 → R2/R3 → R4 → V-H8/V-H3'。R1+R2 修复前 ow 数据不作证据。
+
+### 2026-08-12（补）: T-6' 修复 TODO 落地（T-11~T-18）
+- 执行 TODO 文档新增 T-6' 修复节：T-11 ow 模式 E'(λ) 平直性（R5）→ T-12
+  F_ow 实现（R1 阻塞，含 force_stress.hpp 虚假注释修正）→ T-13 H_ow/θ k 局域化
+  （R2/R3，顺带解除方阵限制）→ T-14 D2 冻结恢复+首轮定锚（R4）→ T-15/T-16
+  （应力 WARNING_QUIT、虚部断言，并入 T-12 commit）→ T-17 V-H8 → T-18 V-H3'
+  Ô_w 判决（dγ/dλ≥3 rad/Ry + γ-hold FD < 0.02 eV/Å，判决点）。
+
+### 2026-08-12（补 2）: T-6' 实现轮收尾——R5 平直性首测 PASS 信号 + V-H8 极限环定位
+
+#### What was done
+- 落地 R1–R6/R8（见 `2026-08-12-deltap-ow-t6mode.md` §4.3）：F_ow 实现接线、
+  H_ow/θ 全 string k 局域化、D2 冻结恢复 + 首轮锚定、ow+应力 WARNING_QUIT、
+  Im(Γ^w) rank-0 软告警；提交前补 `compute_ow_force` MPI 防御守卫。
+- **R5 首测（ow λ 扫描 ±0.01，冻结 λ）**：±0.001 收敛窗斜率
+  [−0.001,0]=−0.361、[0,+0.001]=+0.395 eV/Ry，对称 λ² 抛物，
+  线性系数 a≈+0.017 eV/Ry（T2 参照 −0.013 同量级，判据 ≲1 的 ~1/60）→
+  **ow 记账恒等式在收敛窗成立（R5 PASS 信号）**。诚实标注：±0.003/±0.01
+  四点在 50 iter 内 SCF 未收敛，只作稳定性判据不作记账判据。
+- **V-H8（ow λ=+0.01 长跑 150 iter）**：未收敛（极限环，Γ/escon 稳定但
+  drho 不降），**D2 跳变冻结零触发** → 不稳定性是状态依赖 H_ow 自身
+  （非 2π 分支跳变）；同参数 proxy 27 iter 收敛 → ow 特有实锤。
+- **λ=0 零回归**：ow vs proxy E 逐位同（−481.6973727147502 eV）、γ 自然值
+  同、escon=0 同；Γ 不同为预期（不同算符自然值）。
+- 回归：编译 ✅；`ctest -R deltap` 3/4 ✅（smoothness 4/8 = R9 预先存在）。
+
+#### Key conclusions
+1. **ow 记账恒等式**在收敛窗内成立（Γ^w 全 Gram 迹 + Γ^HK 记账与施加的
+   H_ow/H_HK 一致）——"非正交基记账走全迹"在 Ô_w 上第二次独立复现。
+2. **V-H8 判定**：H_ow 极限环不是分支跳变问题（R4 已排除），是状态依赖
+   哈密顿量刚度问题——T-6' 下一主线 = H_ow SCF 稳定化（内循环冻 θ /
+   混合 / θ 限幅），否则 V-H3' 在 λ*~2e-3 之外无法执行。
+3. ow 的 Γ 自然值 (−19.1,−4.6,−4.6) 与 proxy (4.4,1.4,1.4) 不同是算符语义
+   差异，λ=0 时 H_c=0 不受影响（E/γ/escon 全同）。
+
+#### File list
+- `source/source_lcao/module_deltap/deltap.h`、`deltap_wannier.cpp`：
+  Ô_w θ 捕获（per-k）/fill_kstring/H_ow 构建/Γ^w/anchoring/D2 冻结恢复/
+  compute_ow_force/R8 告警/MPI 防御守卫
+- `source/source_lcao/module_operator_lcao/deltap_force_stress.hpp`：
+  ow 门控（cal_stress→QUIT、力清零）+ 虚假注释修正
+- `source/source_lcao/module_operator_lcao/deltap_lcao.cpp`：ow 模式
+  contributeHR 门控（H_HR 不重复计入）
+- `source/source_esolver/esolver_ks_lcao.cpp`、`deltap_scf.h`：
+  operator_mode plumbing
+- `source/source_io/module_parameter/input_parameter.h`、
+  `read_input_item_other.cpp`：`deltap_operator_mode` INPUT
+- 文档：`2026-08-12-deltap-formula-review-risks.md`（评审）、
+  `2026-08-12-deltap-ow-t6mode.md`（本轮）
+
+#### Next steps
+1. **commit 本轮**（R1–R6/R8 + R5 首测 + V-H8 定位 + 评审文档入树）。
+2. **H_ow SCF 稳定化**（V-H8 主线，T-6' 继续）：内循环冻 θ / 混合 / θ 限幅
+   → λ=±0.01 收敛 → 重跑 R5 全窗做满"斜率 vs |λ|"。
+3. **V-H3' 判决**（γ-hold FD < 0.02 eV/Å @ 0.98 靶点，须先过 2）。
+4. R1 F_ow 闭合计算（单原子 E_ow FD ↔ 解析 F_ow，进 T-7' 前）。

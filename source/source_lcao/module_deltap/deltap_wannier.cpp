@@ -1175,6 +1175,94 @@ void DeltaP::compute_wannier_polarization(
             w_In_first_string_ = w_In_matrix;  // save for global branch search (current alpha)
         }
 
+        // T-6' (Ô_w): capture the band-resolved Wilson phase θ_n(k) of the
+        // INPUT gdir for the H_ow operator.  gamma_unwrapped is the
+        // unwrapped per-band loop phase tracked by the Hungarian matching;
+        // the per-band pairing with the SMO weights is the same ordering
+        // used by the γ weight channel.  R2/R3 (2026-08-12): Ô_w is a
+        // k-local operator, so every physical k of this string stores the
+        // string's θ_n (each k belongs to exactly one string per gdir; the
+        // wrapped PBC slot duplicates k_0 and is skipped).
+        if (alpha == gdir_orig - 1)
+        {
+            const int ik0 = k_index_[istring][0];
+            std::vector<double> theta = gamma_unwrapped;
+            const bool have_prev = (static_cast<size_t>(ik0) < ow_theta_prev_k_.size()
+                                    && ow_theta_prev_k_[ik0].size() == theta.size());
+            if (have_prev)
+            {
+                // D2 jump freeze (V-H8): a 2π branch discontinuity in θ_n
+                // would kick the Hamiltonian discontinuously (λ·θ_n·P̂
+                // changes by λ·2π·P̂).  When |Δθ_n| > π/2 relative to the
+                // previous measurement of this string, keep the previous θ_n
+                // and flag the jump instead of applying it — the operator
+                // stays on the continuous branch.
+                bool jump = false;
+                for (size_t n = 0; n < theta.size(); ++n)
+                {
+                    const double d = std::abs(theta[n] - ow_theta_prev_k_[ik0][n]);
+                    if (d > 0.5 * ModuleBase::PI)
+                    {
+                        jump = true;
+                        break;
+                    }
+                }
+                if (jump)
+                {
+                    // R4 recovery (2026-08-12): a legitimate evolution past
+                    // the branch point must eventually be accepted; after
+                    // ow_theta_freeze_max_ consecutive frozen steps the new θ
+                    // is adopted and the counter resets (otherwise the
+                    // operator would be frozen on the stale branch forever).
+                    if (static_cast<size_t>(ik0) >= ow_theta_freeze_count_.size())
+                        ow_theta_freeze_count_.resize(ik0 + 1, 0);
+                    const int cnt = ow_theta_freeze_count_[ik0] + 1;
+                    ow_theta_freeze_count_[ik0] = cnt;
+                    if (cnt >= ow_theta_freeze_max_)
+                    {
+                        std::cout << "   [DeltaP Ô_w] D2 branch jump: θ_n "
+                                  << "re-accepted after " << cnt << " frozen steps "
+                                  << "(R4 recovery)" << std::endl;
+                        ow_theta_freeze_count_[ik0] = 0;
+                    }
+                    else
+                    {
+                        std::cout << "   [DeltaP Ô_w] D2 branch jump: θ_n frozen at "
+                                  << "previous values (|Δθ|>π/2, V-H8; frozen "
+                                  << cnt << "/" << ow_theta_freeze_max_ << ")"
+                                  << std::endl;
+                        theta = ow_theta_prev_k_[ik0];
+                    }
+                }
+                else if (static_cast<size_t>(ik0) < ow_theta_freeze_count_.size())
+                {
+                    ow_theta_freeze_count_[ik0] = 0;
+                }
+            }
+            else
+            {
+                // First measurement for this k (new run / re-anchored ref):
+                // R4 — anchor to the frozen continuity reference when it
+                // exists, so the operator starts on the same branch as the
+                // previous converged run instead of a raw (branch-ambiguous)
+                // sheet (D2 initialization anchor).
+                theta = anchor_ow_theta_to_ref(theta, w_In_matrix, gdir_);
+            }
+            if (ow_theta_k_.size() < static_cast<size_t>(nks))
+                ow_theta_k_.resize(nks);
+            if (ow_theta_prev_k_.size() < static_cast<size_t>(nks))
+                ow_theta_prev_k_.resize(nks);
+            for (int j = 0; j < nppstr_ - 1; ++j)
+            {
+                const int ik = k_index_[istring][j];
+                if (ik < 0 || ik >= nks) continue;
+                ow_theta_k_[ik] = theta;
+                ow_theta_prev_k_[ik] = theta;
+            }
+            ow_theta_gdir_ = gdir_;
+            ow_theta_valid_ = true;
+        }
+
         // Per-atom polarization: zeta rescaling (preserves relative distribution
         // from SMO weights, which empirically matches Wannier90 better than
         // normalized weights). The branch-set selection is applied as a
@@ -1841,6 +1929,138 @@ void DeltaP::compute_gamma_scf(const UnitCell& ucell,
 #endif
 }
 
+// (T-6', R4, 2026-08-12) First-measurement Ô_w branch anchor.  The raw θ_n
+// from the first Wilson-loop measurement of a run carries a per-band 2π
+// ambiguity.  When the frozen continuity anchor (ref_gamma_, seeded from
+// branch.dat and updated at SCF convergence) exists, choose the per-band 2π
+// sheet of θ_n that brings the implied per-atom γ (= Σ_n w̃_In·θ_n with the
+// per-band-normalized SMO weights, the same convention as the γ observable)
+// closest to ref_gamma_ — coordinate descent over bands with candidates
+// {−2π, 0, +2π}.  This anchors the H_ow operator to the same branch as the
+// previous converged run (D2 initialization anchor).  Without a reference the
+// raw sheet is kept (first-ever run defines the anchor).
+std::vector<double> DeltaP::anchor_ow_theta_to_ref(
+    const std::vector<double>& theta,
+    const std::vector<std::vector<double>>& w_In,
+    int gdir_val) const
+{
+    std::vector<double> out = theta;
+    if (!has_ref_gamma_ || static_cast<int>(ref_gamma_.size()) != nat_)
+        return out;
+    const int alpha = gdir_val - 1;
+    if (alpha < 0 || alpha >= 3) return out;
+    bool ref_ok = true;
+    for (int iat = 0; iat < nat_; ++iat)
+        if (std::isnan(ref_gamma_[iat][alpha])) { ref_ok = false; break; }
+    if (!ref_ok) return out;
+
+    const int N = static_cast<int>(theta.size());
+    std::vector<double> w_tot(N, 0.0);
+    for (int n = 0; n < N; ++n)
+        for (int iat = 0; iat < nat_; ++iat)
+            if (n < static_cast<int>(w_In.size())
+                && iat < static_cast<int>(w_In[n].size()))
+                w_tot[n] += w_In[n][iat];
+    auto implied_gamma = [&](const std::vector<double>& th) {
+        std::vector<double> g(nat_, 0.0);
+        for (int iat = 0; iat < nat_; ++iat)
+        {
+            double gI = 0.0;
+            for (int n = 0; n < N; ++n)
+            {
+                if (n >= static_cast<int>(w_In.size())
+                    || iat >= static_cast<int>(w_In[n].size()))
+                    continue;
+                if (w_tot[n] > 1e-30)
+                    gI += (w_In[n][iat] / w_tot[n]) * th[n];
+            }
+            g[iat] = gI;
+        }
+        return g;
+    };
+    auto dist2 = [&](const std::vector<double>& g) {
+        double d = 0.0;
+        for (int iat = 0; iat < nat_; ++iat)
+            d += (g[iat] - ref_gamma_[iat][alpha]) * (g[iat] - ref_gamma_[iat][alpha]);
+        return d;
+    };
+    bool improved = true;
+    int guard = 0;
+    while (improved && guard++ < 64)
+    {
+        improved = false;
+        for (int n = 0; n < N; ++n)
+        {
+            const double base_d = dist2(implied_gamma(out));
+            double best_shift = 0.0;
+            double best_d = base_d;
+            for (int s = -1; s <= 1; s += 2)
+            {
+                std::vector<double> cand = out;
+                cand[n] += s * ModuleBase::TWO_PI;
+                const double d = dist2(implied_gamma(cand));
+                if (d < best_d - 1e-20) { best_d = d; best_shift = s * ModuleBase::TWO_PI; }
+            }
+            if (best_shift != 0.0) { out[n] += best_shift; improved = true; }
+        }
+    }
+    const double rms = std::sqrt(dist2(implied_gamma(out)) / std::max(1, nat_));
+    std::cout << "   [DeltaP Ô_w] first-measurement θ anchored to continuity ref"
+              << " (RMS γ deviation " << std::setprecision(4) << rms << " rad)"
+              << std::endl;
+    return out;
+}
+
+// (T-6', R2/R3, 2026-08-12) Fill kstring_data_ for one k-string (S_k + D_I)
+// at the given wavefunctions and mark kstring_gdir_/kstring_string_.  This
+// centralizes the per-string rebuild used by compute_hk_correction /
+// compute_gamma_op_hk / compute_hk_force for the k-local H_ow pass (the
+// k-local operator needs S_k/D_I at every physical k, not just string 0).
+void DeltaP::fill_kstring(int istring, const psi::Psi<std::complex<double>>* psi,
+                          int nbands, int nrow)
+{
+    const int nks = psi->get_nk();
+    for (int j = 0; j < nppstr_; ++j)
+    {
+        kstring_data_[j].S_k.clear();
+        kstring_data_[j].dS_k.clear();
+        kstring_data_[j].D_I.clear();
+    }
+    for (int j = 0; j < nppstr_; ++j)
+    {
+        const int ik = k_index_[istring][j];
+        if (ik >= nks) continue;
+        kstring_data_[j].kvec_d = kv_->kvec_d[ik];
+        psi->fix_k(ik);
+        compute_S_k(j);
+        compute_D_I(j, psi->get_pointer(), nbands, nrow);
+    }
+#ifdef __MPI
+    for (int j = 0; j < nppstr_; ++j)
+    {
+        for (int iat = 0; iat < nat_; ++iat)
+        {
+            const int r = nproj_per_atom_[iat];
+            for (int lm = 0; lm < r; ++lm)
+            {
+                if (kstring_data_[j].D_I.size() <= static_cast<size_t>(iat)) continue;
+                if (kstring_data_[j].D_I[iat].size() <= static_cast<size_t>(lm)) continue;
+                const int sz = kstring_data_[j].D_I[iat][lm].size();
+                if (sz > 0)
+                {
+                    MPI_Comm comm = paraV_->comm();
+                    if (comm != MPI_COMM_NULL)
+                        MPI_Allreduce(MPI_IN_PLACE, kstring_data_[j].D_I[iat][lm].data(),
+                                      2 * sz, MPI_DOUBLE, MPI_SUM, comm);
+                }
+            }
+        }
+    }
+#endif
+    kstring_gdir_ = gdir_;
+    kstring_string_ = istring;
+}
+
 void DeltaP::compute_hk_correction(const UnitCell& ucell,
                                    const psi::Psi<std::complex<double>>* psi,
                                    const elecstate::ElecState* pelec,
@@ -1854,8 +2074,23 @@ void DeltaP::compute_hk_correction(const UnitCell& ucell,
     // wavefunctions (not on λ); recompute it from scratch on every call.
     // Early returns below leave it zeroed (e.g. HK disabled).
     gamma_op_hk_.assign(nat_, 0.0);
+    // T-6' (Ô_w): the weight-channel operator observable Γ_I^w is zeroed here
+    // like Γ_I^HK; it is filled by the link loop below in "ow" mode.
+    gamma_op_w_.assign(nat_, 0.0);
 
     if (nppstr_ < 2 || kstring_data_.empty()) return;
+    // T-6' (Ô_w): this call builds the k-local H_ow (band-resolved θ_n(k)·P̂,
+    // R2/R3) at every physical k of the INPUT gdir in addition to the H_HK
+    // Berry-connection term when the constraint operator mode is "ow".  It
+    // requires the per-k band-resolved Wilson phase captured by the preceding
+    // compute_gamma_scf (same wavefunctions); without it, H_ow is skipped
+    // with a warning and only H_HK is applied.
+    const bool ow_mode = (operator_mode_ == "ow");
+    if (ow_mode && (!ow_theta_valid_ || ow_theta_gdir_ != gdir_) && GlobalV::MY_RANK == 0)
+    {
+        std::cout << " [DeltaP Ô_w] WARNING: θ_n unavailable (compute_gamma_scf "
+                  << "did not run); H_ow skipped, H_HK only" << std::endl;
+    }
 
     const int nks = psi->get_nk();
     const int nbands = paraV_->get_wfc_global_nbands();
@@ -1881,39 +2116,7 @@ void DeltaP::compute_hk_correction(const UnitCell& ucell,
     {
         setup_kstring(*kv_);
         kstring_data_.assign(nppstr_, KSpaceData());
-        for (int j = 0; j < nppstr_; ++j)
-        {
-            int ik = k_index_[0][j];
-            if (ik >= nks) continue;
-            kstring_data_[j].kvec_d = kv_->kvec_d[ik];
-            psi->fix_k(ik);
-            compute_S_k(j);
-            compute_D_I(j, psi->get_pointer(), nbands, nrow);
-        }
-        kstring_gdir_ = gdir_;
-        kstring_string_ = 0;
-#ifdef __MPI
-        for (int j = 0; j < nppstr_; ++j)
-        {
-            for (int iat = 0; iat < nat_; ++iat)
-            {
-                int r = nproj_per_atom_[iat];
-                for (int lm = 0; lm < r; ++lm)
-                {
-                    if (kstring_data_[j].D_I.size() <= static_cast<size_t>(iat)) continue;
-                    if (kstring_data_[j].D_I[iat].size() <= static_cast<size_t>(lm)) continue;
-                    int sz = kstring_data_[j].D_I[iat][lm].size();
-                    if (sz > 0)
-                    {
-                        MPI_Comm comm = paraV_->comm();
-                        if (comm != MPI_COMM_NULL)
-                            MPI_Allreduce(MPI_IN_PLACE, kstring_data_[j].D_I[iat][lm].data(),
-                                          2 * sz, MPI_DOUBLE, MPI_SUM, comm);
-                    }
-                }
-            }
-        }
-#endif
+        fill_kstring(0, psi, nbands, nrow);
     }
 
     // Ensure S_dk_ is computed
@@ -1941,6 +2144,9 @@ void DeltaP::compute_hk_correction(const UnitCell& ucell,
     // Under MPI with nrow==ncol the T·Π trace covers only the local rows
     // (same local-block approximation as the H_sym correction itself).
     std::vector<std::complex<double>> e_hk_I(nat_, {0.0, 0.0});
+    // T-6' (Ô_w): per-atom Γ_I^w accumulator (weight-channel operator
+    // observable, full Gram trace; only filled in "ow" mode).
+    std::vector<std::complex<double>> e_w_I(nat_, {0.0, 0.0});
 
     // For each link on the first k-string
     for (int j = 0; j < nppstr_ - 1; ++j)
@@ -2073,7 +2279,124 @@ void DeltaP::compute_hk_correction(const UnitCell& ucell,
             }
         }
 
+        // (H_HK link loop continues; the k-local H_ow operator is built in
+        // the per-string pass below — R2/R3, 2026-08-12)
+
         hk_correction[ik_L] = H_sym;
+    }
+
+    // T-6' (Ô_w), R2/R3 (2026-08-12): H_ow is a k-local operator (Route A++
+    // §2.1: applied to ψ_n(k) at each k), so it is built here for EVERY
+    // physical k of the INPUT gdir (each k belongs to exactly one string),
+    // NOT only on string-0's links like the H_HK Berry term.
+    //   H_ow(k) = sym( Σ_n θ_n(k)·A_C(k)[n]·C_k† )   (nrow × nrow)
+    //   A_C(k)[μ][n] = Σ_I λ_I·Σ_{lm∈I} S_k[I][lm][μ]·D_I[I][lm][n]
+    // (the SMO-weighted projector A = Σ_I λ_I·P̂_I applied to ψ_n(k));
+    // θ_n(k) is the Wilson-loop phase of the string containing k.  The
+    // per-atom expectation split Γ_I^w uses the full Gram trace (T2
+    // convention): Γ_I^w += wg(m)·θ_n·Σ_{lm∈I} D*[lm,m]·D[lm,n]·Π[n,m].
+    // No per-band weight normalization is applied: Ô_w = θ_n·P̂_I is the
+    // exact weight-channel operator of Route A++ §1.3 (the S^{-1/2} Löwdin
+    // rotation of the projector is deferred; V-H3' quantifies its residual).
+    if (ow_mode && ow_theta_valid_ && ow_theta_gdir_ == gdir_)
+    {
+        for (int istring = 0; istring < total_string_; ++istring)
+        {
+            if (kstring_gdir_ != gdir_ || kstring_string_ != istring)
+                fill_kstring(istring, psi, nbands, nrow);
+            for (int j = 0; j < nppstr_ - 1; ++j)
+            {
+                const int ik = k_index_[istring][j];
+                if (ik < 0 || ik >= nks) continue;
+                if (ow_theta_k_.size() <= static_cast<size_t>(ik)
+                    || ow_theta_k_[ik].size() < static_cast<size_t>(nocc_use))
+                    continue;
+                psi->fix_k(ik);
+                const std::complex<double>* c_k = psi->get_pointer();
+
+                // A_C = P̂_λ·C_k  (nrow × nocc_use)
+                std::vector<std::complex<double>> A_C(nrow * nocc_use, {0.0, 0.0});
+                for (int mu = 0; mu < nrow; ++mu)
+                {
+                    for (int n = 0; n < nocc_use; ++n)
+                    {
+                        std::complex<double> sum(0.0, 0.0);
+                        for (int iat = 0; iat < nat_; ++iat)
+                        {
+                            const int r = nproj_per_atom_[iat];
+                            if (kstring_data_[j].D_I.size() <= static_cast<size_t>(iat)) continue;
+                            const double lam = lambda[iat];
+                            if (lam == 0.0) continue;
+                            if (kstring_data_[j].S_k.size() <= static_cast<size_t>(iat)) continue;
+                            for (int lm = 0; lm < r; ++lm)
+                            {
+                                if (kstring_data_[j].S_k[iat].size() <= static_cast<size_t>(lm)) continue;
+                                if (static_cast<size_t>(mu) >= kstring_data_[j].S_k[iat][lm].size()) continue;
+                                if (kstring_data_[j].D_I[iat].size() <= static_cast<size_t>(lm)) continue;
+                                if (kstring_data_[j].D_I[iat][lm].size() <= static_cast<size_t>(n)) continue;
+                                sum += lam * kstring_data_[j].S_k[iat][lm][mu]
+                                     * kstring_data_[j].D_I[iat][lm][n];
+                            }
+                        }
+                        A_C[mu + n * nrow] = sum;
+                    }
+                }
+                // M_ow = A_C · diag(θ) · C_k†  (nrow × nrow)
+                std::vector<std::complex<double>> M_ow(nrow * nrow, {0.0, 0.0});
+                for (int beta = 0; beta < nrow; ++beta)
+                {
+                    for (int alpha = 0; alpha < nrow; ++alpha)
+                    {
+                        std::complex<double> sum(0.0, 0.0);
+                        for (int n = 0; n < nocc_use; ++n)
+                            sum += ow_theta_k_[ik][n] * A_C[alpha + n * nrow]
+                                 * std::conj(c_k[beta + n * nrow]);
+                        M_ow[alpha + beta * nrow] = sum;
+                    }
+                }
+                // hk_correction[ik] += sym(M_ow)
+                std::vector<std::complex<double>>& H_ow = hk_correction[ik];
+                if (H_ow.empty())
+                    H_ow.assign(nrow * nrow, {0.0, 0.0});
+                for (int beta = 0; beta < nrow; ++beta)
+                    for (int alpha = 0; alpha < nrow; ++alpha)
+                        H_ow[alpha + beta * nrow]
+                            += 0.5 * (M_ow[alpha + beta * nrow]
+                                      + std::conj(M_ow[beta + alpha * nrow]));
+
+                // Γ_I^w per-atom split (full Gram trace; Π[n*N+m] = (C_k†·C_k)[m,n]).
+                std::vector<std::complex<double>> Pi(nocc_use * nocc_use, {0.0, 0.0});
+                for (int n = 0; n < nocc_use; ++n)
+                    for (int m = 0; m < nocc_use; ++m)
+                        for (int a = 0; a < nrow; ++a)
+                            Pi[n * nocc_use + m] += std::conj(c_k[a + m * nrow]) * c_k[a + n * nrow];
+                for (int m = 0; m < nocc_use; ++m)
+                {
+                    const double fm = pelec->wg(ik, m);
+                    if (fm == 0.0) continue;
+                    for (int n = 0; n < nocc_use; ++n)
+                    {
+                        const double thn = ow_theta_k_[ik][n];
+                        if (thn == 0.0) continue;
+                        for (int iat = 0; iat < nat_; ++iat)
+                        {
+                            const int r = nproj_per_atom_[iat];
+                            std::complex<double> t_I(0.0, 0.0);
+                            for (int lm = 0; lm < r; ++lm)
+                            {
+                                if (kstring_data_[j].D_I.size() <= static_cast<size_t>(iat)) continue;
+                                if (kstring_data_[j].D_I[iat].size() <= static_cast<size_t>(lm)) continue;
+                                if (kstring_data_[j].D_I[iat][lm].size() <= static_cast<size_t>(m)) continue;
+                                if (kstring_data_[j].D_I[iat][lm].size() <= static_cast<size_t>(n)) continue;
+                                t_I += std::conj(kstring_data_[j].D_I[iat][lm][m])
+                                     * kstring_data_[j].D_I[iat][lm][n];
+                            }
+                            e_w_I[iat] += fm * thn * t_I * Pi[n * nocc_use + m];
+                        }
+                    }
+                }
+            }
+        }
     }
 
     // Γ_I^HK = −0.5·Im[Σ_j Σ_p f_p·Σ_{p'} w_{I,p'}^{(j)}·T_{pp'}^{(j)}·Π_{p'p}^{(j)}]
@@ -2083,6 +2406,25 @@ void DeltaP::compute_hk_correction(const UnitCell& ucell,
     for (int iat = 0; iat < nat_; ++iat)
     {
         gamma_op_hk_[iat] = -0.5 * e_hk_I[iat].imag();
+    }
+    // T-6' (Ô_w): finalize Γ_I^w (real per-atom split of Tr[ρ·H_ow]).
+    if (ow_mode)
+    {
+        for (int iat = 0; iat < nat_; ++iat)
+        {
+            // R8 (2026-08-12): H_ow is sym, so the λ-weighted total is real;
+            // a large per-atom imaginary residue flags an indexing mismatch
+            // that .real() would silently swallow (soft warning: per-atom Im
+            // is legitimately nonzero for multi-k complex wavefunctions).
+            const double re = e_w_I[iat].real();
+            const double im = e_w_I[iat].imag();
+            if (GlobalV::MY_RANK == 0 && std::abs(im) > 1e-8 * std::max(1.0, std::abs(re)))
+                std::cout << " [DeltaP Ô_w] WARNING: Im(Γ_I^w)=" << std::scientific
+                          << std::setprecision(3) << im << " at iat=" << iat
+                          << " (rel to Re " << re << "; R8 indexing check)"
+                          << std::endl;
+            gamma_op_w_[iat] = re;
+        }
     }
 #if 0 // DEBUG_T0_OPERATOR (T0 closed 2026-08-04: per-k == real-space, 12 digits)
     std::cout << " [T0] Gamma_op_hk=";
@@ -2102,8 +2444,13 @@ void DeltaP::compute_gamma_op_hk(const UnitCell& ucell,
     // observable in compute_hk_correction — T2 verdict 2026-08-04).
     // Same serial-only semantics as compute_hk_correction (nrow == ncol).
     gamma_op_hk_.assign(nat_, 0.0);
+    // T-6' (Ô_w): Γ_I^w (weight-channel operator observable) is λ-independent
+    // per atom, so it is filled here too (compute_gamma_op runs before
+    // apply_hk_correction in iter_finish).
+    gamma_op_w_.assign(nat_, 0.0);
 
     if (nppstr_ < 2 || kstring_data_.empty()) return;
+    const bool ow_mode = (operator_mode_ == "ow");
 
     const int nks = psi->get_nk();
     const int nbands = paraV_->get_wfc_global_nbands();
@@ -2111,45 +2458,14 @@ void DeltaP::compute_gamma_op_hk(const UnitCell& ucell,
     const int ncol = paraV_->get_col_size();
     if (nrow != ncol) return;
 
-    // Rebuild S_k/D_I if they belong to a different direction or string
-    // (same guard as compute_hk_correction).
+    // Rebuild S_k/D_I if they belong to a different direction or string.
+    // compute_gamma_scf leaves kstring_data_ from the last alpha (gdir=3)
+    // and the last string; we need the INPUT gdir and string 0.
     if (kstring_gdir_ != gdir_ || kstring_string_ != 0)
     {
         setup_kstring(*kv_);
         kstring_data_.assign(nppstr_, KSpaceData());
-        for (int j = 0; j < nppstr_; ++j)
-        {
-            int ik = k_index_[0][j];
-            if (ik >= nks) continue;
-            kstring_data_[j].kvec_d = kv_->kvec_d[ik];
-            psi->fix_k(ik);
-            compute_S_k(j);
-            compute_D_I(j, psi->get_pointer(), nbands, nrow);
-        }
-        kstring_gdir_ = gdir_;
-        kstring_string_ = 0;
-#ifdef __MPI
-        for (int j = 0; j < nppstr_; ++j)
-        {
-            for (int iat = 0; iat < nat_; ++iat)
-            {
-                int r = nproj_per_atom_[iat];
-                for (int lm = 0; lm < r; ++lm)
-                {
-                    if (kstring_data_[j].D_I.size() <= static_cast<size_t>(iat)) continue;
-                    if (kstring_data_[j].D_I[iat].size() <= static_cast<size_t>(lm)) continue;
-                    int sz = kstring_data_[j].D_I[iat][lm].size();
-                    if (sz > 0)
-                    {
-                        MPI_Comm comm = paraV_->comm();
-                        if (comm != MPI_COMM_NULL)
-                            MPI_Allreduce(MPI_IN_PLACE, kstring_data_[j].D_I[iat][lm].data(),
-                                          2 * sz, MPI_DOUBLE, MPI_SUM, comm);
-                    }
-                }
-            }
-        }
-#endif
+        fill_kstring(0, psi, nbands, nrow);
     }
 
     if (S_dk_.empty())
@@ -2165,6 +2481,8 @@ void DeltaP::compute_gamma_op_hk(const UnitCell& ucell,
     if (nocc_use <= 0) return;
 
     std::vector<std::complex<double>> e_hk_I(nat_, {0.0, 0.0});
+    // T-6' (Ô_w): per-atom Γ_I^w accumulator (only filled in "ow" mode).
+    std::vector<std::complex<double>> e_w_I(nat_, {0.0, 0.0});
     for (int j = 0; j < nppstr_ - 1; ++j)
     {
         const int ik_L = k_index_[0][j];
@@ -2250,10 +2568,342 @@ void DeltaP::compute_gamma_op_hk(const UnitCell& ucell,
         }
     }
 
+    // T-6' (Ô_w), R2/R3 (2026-08-12): Γ_I^w is the per-atom split of
+    // Tr[ρ·H_ow] and H_ow is k-local, so it must cover EVERY physical k of
+    // the INPUT gdir (one string each), not only string-0's links.  Same
+    // full-Gram-trace convention as compute_hk_correction's H_ow block (no
+    // per-band weight normalization — Ô_w = θ_n·P̂_I, Route A++ §1.3).
+    if (ow_mode && ow_theta_valid_ && ow_theta_gdir_ == gdir_)
+    {
+        for (int istring = 0; istring < total_string_; ++istring)
+        {
+            if (kstring_gdir_ != gdir_ || kstring_string_ != istring)
+                fill_kstring(istring, psi, nbands, nrow);
+            for (int j = 0; j < nppstr_ - 1; ++j)
+            {
+                const int ik = k_index_[istring][j];
+                if (ik < 0 || ik >= nks) continue;
+                if (ow_theta_k_.size() <= static_cast<size_t>(ik)
+                    || ow_theta_k_[ik].size() < static_cast<size_t>(nocc_use))
+                    continue;
+                psi->fix_k(ik);
+                const std::complex<double>* c_k = psi->get_pointer();
+
+                // Π[n*N+m] = (C_k†·C_k)[m,n] (frozen-C Gram matrix).
+                std::vector<std::complex<double>> Pi(nocc_use * nocc_use, {0.0, 0.0});
+                for (int n = 0; n < nocc_use; ++n)
+                    for (int m = 0; m < nocc_use; ++m)
+                        for (int a = 0; a < nrow; ++a)
+                            Pi[n * nocc_use + m] += std::conj(c_k[a + m * nrow]) * c_k[a + n * nrow];
+                for (int m = 0; m < nocc_use; ++m)
+                {
+                    const double fm = pelec->wg(ik, m);
+                    if (fm == 0.0) continue;
+                    for (int n = 0; n < nocc_use; ++n)
+                    {
+                        const double thn = ow_theta_k_[ik][n];
+                        if (thn == 0.0) continue;
+                        for (int iat = 0; iat < nat_; ++iat)
+                        {
+                            const int r = nproj_per_atom_[iat];
+                            std::complex<double> t_I(0.0, 0.0);
+                            for (int lm = 0; lm < r; ++lm)
+                            {
+                                if (kstring_data_[j].D_I.size() <= static_cast<size_t>(iat)) continue;
+                                if (kstring_data_[j].D_I[iat].size() <= static_cast<size_t>(lm)) continue;
+                                if (kstring_data_[j].D_I[iat][lm].size() <= static_cast<size_t>(m)) continue;
+                                if (kstring_data_[j].D_I[iat][lm].size() <= static_cast<size_t>(n)) continue;
+                                t_I += std::conj(kstring_data_[j].D_I[iat][lm][m])
+                                     * kstring_data_[j].D_I[iat][lm][n];
+                            }
+                            e_w_I[iat] += fm * thn * t_I * Pi[n * nocc_use + m];
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     for (int iat = 0; iat < nat_; ++iat)
     {
         gamma_op_hk_[iat] = -0.5 * e_hk_I[iat].imag();
     }
+    // T-6' (Ô_w): finalize Γ_I^w (real per-atom split of Tr[ρ·H_ow]).
+    if (ow_mode)
+    {
+        for (int iat = 0; iat < nat_; ++iat)
+        {
+            // R8 (2026-08-12): soft per-atom imaginary-residue warning (see
+            // compute_hk_correction for the rationale).
+            const double re = e_w_I[iat].real();
+            const double im = e_w_I[iat].imag();
+            if (GlobalV::MY_RANK == 0 && std::abs(im) > 1e-8 * std::max(1.0, std::abs(re)))
+                std::cout << " [DeltaP Ô_w] WARNING: Im(Γ_I^w)=" << std::scientific
+                          << std::setprecision(3) << im << " at iat=" << iat
+                          << " (rel to Re " << re << "; R8 indexing check)"
+                          << std::endl;
+            gamma_op_w_[iat] = re;
+        }
+    }
+}
+
+// (T-6', R1, 2026-08-12) Ô_w geometric force (ow mode).  H_HR and its A1/A2
+// forces are gated off in ow mode; the k-local H_ow = sym(Σ_n θ_n·P̂_λ|ψ_n⟩⟨ψ_n|)
+// replaces them.  Its force is the frozen-C/θ derivative of
+//   E_ow = Σ_I λ_I·Γ_I^w,  Γ_I^w = Σ_k Σ_m f_m·Re[Σ_n θ_n·M^I_mn·Π_nm]
+// with M^I_mn = Σ_{lm∈I} D*_I,lm,m·D_I,lm,n (per-atom split of Tr[ρ·H_ow],
+// full Gram trace — the applied-operator expectation, T2 convention).  With C
+// frozen, Π = C†C is constant and only the SMO projector overlaps D = S_k†·C
+// carry the R-dependence, so the force kernel is the same two-center ∂S_k/∂R
+// family as the A1/dW kernels:
+//   ∂Γ_I^w/∂R_J,a = Σ_lm Re[ Σ_m conj(∂D_m/∂R_J,a)·X_lm[m]
+//                            + Σ_n conj(C_n)·θ_n·Z_lm[n] ]
+//   X_lm[m] = Σ_n θ_n·D_n·Π_nm,  Z_lm[n] = Σ_m f_m·D_m·Π_mn
+//   F_ow[I][a] = −λ_I·∂Γ_I^w/∂R_I,a  (bra: +∂S_k/∂R),  F_ow[μ][a] = −∂Γ/∂R_μ (ket: −)
+// Returns false (force untouched) when the ow data (per-k θ) is unavailable.
+bool DeltaP::compute_ow_force(const UnitCell& ucell,
+                              const psi::Psi<std::complex<double>>* psi,
+                              const elecstate::ElecState* pelec,
+                              const std::vector<double>& lambda,
+                              std::vector<double>& force_out)
+{
+    if (operator_mode_ != "ow" || !ow_theta_valid_ || ow_theta_gdir_ != gdir_)
+        return false;
+
+    const int nks = psi->get_nk();
+    const int nbands = paraV_->get_wfc_global_nbands();
+    const int nrow = paraV_->get_row_size();
+    const int ncol = paraV_->get_col_size();
+    if (nrow != ncol) return false;
+#ifdef __MPI
+    // Defense-in-depth (2026-08-12): compute_hk_force already skips the
+    // whole H_HK/ow force path under nproc>1 (serial-only, full-row S_k and
+    // full C_k required); keep compute_ow_force self-contained so a future
+    // caller cannot silently compute a wrong local-block force (Π = C†C and
+    // force_out are not Allreduced here).
+    if (GlobalV::NPROC > 1) return false;
+#endif
+
+    double occ_bands = static_cast<double>(PARAM.inp.nelec / ModuleBase::DEGSPIN);
+    if ((occ_bands - std::floor(occ_bands)) > 0.0)
+        occ_bands = std::floor(occ_bands) + 1.0;
+    const int nocc = static_cast<int>(occ_bands);
+    const int nocc_use = std::min(nocc, nbands);
+    if (nocc_use <= 0) return false;
+
+    const int nat = nat_;
+    const int npol = ucell.get_npol();
+    const int* iat2iwt = paraV_->iat2iwt_;
+    std::vector<double> f_ow(nat * 3, 0.0);
+    double e_ow = 0.0;
+    bool any = false;
+
+    for (int istring = 0; istring < total_string_; ++istring)
+    {
+        if (kstring_gdir_ != gdir_ || kstring_string_ != istring)
+            fill_kstring(istring, psi, nbands, nrow);
+        for (int j = 0; j < nppstr_ - 1; ++j)
+        {
+            const int ik = k_index_[istring][j];
+            if (ik < 0 || ik >= nks) continue;
+            if (ow_theta_k_.size() <= static_cast<size_t>(ik)
+                || ow_theta_k_[ik].size() < static_cast<size_t>(nocc_use))
+                continue;
+            const std::vector<double>& theta = ow_theta_k_[ik];
+            psi->fix_k(ik);
+            const std::complex<double>* c_k = psi->get_pointer();
+            any = true;
+
+            // Frozen-C Gram matrix Π[n][m] = (C_k†·C_k)[m][n].
+            std::vector<std::complex<double>> Pi(nocc_use * nocc_use, {0.0, 0.0});
+            for (int n = 0; n < nocc_use; ++n)
+                for (int m = 0; m < nocc_use; ++m)
+                    for (int a = 0; a < nrow; ++a)
+                        Pi[n * nocc_use + m] += std::conj(c_k[a + m * nrow]) * c_k[a + n * nrow];
+
+            // Per-projector-channel weight vectors:
+            //   X[iat][lm][m] = Σ_n θ_n·D_n·Π_nm
+            //   Z[iat][lm][n] = Σ_m f_m·D_m·Π_mn
+            std::vector<std::vector<std::vector<std::complex<double>>>> X(nat);
+            std::vector<std::vector<std::vector<std::complex<double>>>> Z(nat);
+            for (int iat = 0; iat < nat; ++iat)
+            {
+                const int r = nproj_per_atom_[iat];
+                if (kstring_data_[j].D_I.size() <= static_cast<size_t>(iat)) continue;
+                X[iat].resize(r);
+                Z[iat].resize(r);
+                for (int lm = 0; lm < r; ++lm)
+                {
+                    if (kstring_data_[j].D_I[iat].size() <= static_cast<size_t>(lm)) continue;
+                    const auto& DI = kstring_data_[j].D_I[iat][lm];
+                    if (DI.size() < static_cast<size_t>(nocc_use)) continue;
+                    X[iat][lm].assign(nocc_use, {0.0, 0.0});
+                    Z[iat][lm].assign(nocc_use, {0.0, 0.0});
+                    for (int m = 0; m < nocc_use; ++m)
+                    {
+                        std::complex<double> xm(0.0, 0.0);
+                        for (int n = 0; n < nocc_use; ++n)
+                            xm += theta[n] * DI[n] * Pi[n * nocc_use + m];
+                        X[iat][lm][m] = xm;
+                    }
+                    for (int n = 0; n < nocc_use; ++n)
+                    {
+                        std::complex<double> zn(0.0, 0.0);
+                        for (int m = 0; m < nocc_use; ++m)
+                        {
+                            const double fm = pelec->wg(ik, m);
+                            if (fm == 0.0) continue;
+                            zn += fm * DI[m] * Pi[m * nocc_use + n];
+                        }
+                        Z[iat][lm][n] = zn;
+                    }
+                }
+            }
+
+            for (int iat = 0; iat < nat; ++iat)
+            {
+                if (static_cast<size_t>(iat) >= lambda.size() || lambda[iat] == 0.0) continue;
+                if (X[iat].empty()) continue;
+                const double lam = lambda[iat];
+                const ModuleBase::Vector3<double> tau0 = ucell.get_tau(iat);
+                int T0 = 0, I0 = 0;
+                ucell.iat2iait(iat, &I0, &T0);
+                const int nw0 = ucell.atoms[T0].nw;
+                const int max_l_plus_1 = ucell.atoms[T0].nwl + 1;
+                const int nproj0 = max_l_plus_1 * max_l_plus_1;
+
+                AdjacentAtomInfo adjs;
+                gd_->Find_atom(ucell, tau0, T0, I0, &adjs);
+                for (int ad = 0; ad < adjs.adj_num + 1; ++ad)
+                {
+                    const int T1 = adjs.ntype[ad];
+                    const int I1 = adjs.natom[ad];
+                    const int iat1 = ucell.itia2iat(T1, I1);
+                    const ModuleBase::Vector3<int> R = adjs.box[ad];
+                    const ModuleBase::Vector3<double>& tau1 = adjs.adjacent_tau[ad];
+                    const double dist = ucell.cal_dtau(iat, iat1, R).norm() * ucell.lat0;
+                    // S_k pair cutoff (same as the dW kernel / compute_real_overlaps).
+                    if (dist >= orb_cutoff_[T1] + rm_) continue;
+                    if (iat1 == iat && R.x == 0 && R.y == 0 && R.z == 0) continue;
+
+                    const ModuleBase::Vector3<double> dtau = tau0 - tau1;
+                    const Atom* atom1 = &ucell.atoms[T1];
+                    const int nw1 = atom1->nw;
+                    // S_k phase (compute_S_k convention: 2π k·R).
+                    const double argk = ModuleBase::TWO_PI * (kstring_data_[j].kvec_d.x * R.x
+                                                              + kstring_data_[j].kvec_d.y * R.y
+                                                              + kstring_data_[j].kvec_d.z * R.z);
+                    const std::complex<double> phase_sk(std::cos(argk), std::sin(argk));
+
+                    for (int iw1 = 0; iw1 < nw1; ++iw1)
+                    {
+                        const int L1 = atom1->iw2l[iw1];
+                        const int N1 = atom1->iw2n[iw1];
+                        const int m1 = atom1->iw2m[iw1];
+                        const int M1 = (m1 % 2 == 0) ? -m1 / 2 : (m1 + 1) / 2;
+                        std::vector<std::vector<double>> nlm;
+                        intor_->snap(T1, L1, N1, M1, T0, dtau * ucell.lat0, 1, nlm);
+                        if (nlm.empty() || nlm[0].empty()) continue;
+
+                        // First-zeta (l,m) projector channels (same layout as
+                        // compute_real_overlaps / deltap_force_stress.hpp).
+                        std::vector<double> nlm_target(4 * nproj0, 0.0);
+                        int target_L = 0;
+                        for (int iw = 0; iw < nw0; ++iw)
+                        {
+                            const int L0 = ucell.atoms[T0].iw2l[iw];
+                            if (L0 != target_L) continue;
+                            for (int m = 0; m < 2 * L0 + 1; ++m)
+                            {
+                                const int idx = L0 * L0 + m;
+                                nlm_target[idx] = nlm[0][iw + m];
+                                nlm_target[nproj0 + idx] = nlm[1][iw + m];
+                                nlm_target[2 * nproj0 + idx] = nlm[2][iw + m];
+                                nlm_target[3 * nproj0 + idx] = nlm[3][iw + m];
+                            }
+                            target_L++;
+                        }
+
+                        for (int s = 0; s < npol; ++s)
+                        {
+                            const int gmu = iat2iwt[iat1] + npol * iw1 + s;
+                            for (int lm = 0; lm < nproj0; ++lm)
+                            {
+                                if (static_cast<size_t>(lm) >= X[iat].size()) continue;
+                                if (X[iat][lm].empty()) continue;
+                                // inner = Σ_m conj(C[μ,m])·X[m] + Σ_n conj(C[μ,n])·θ_n·Z[n]
+                                std::complex<double> inner(0.0, 0.0);
+                                for (int m = 0; m < nocc_use; ++m)
+                                    inner += std::conj(c_k[gmu + m * nrow]) * X[iat][lm][m];
+                                for (int n = 0; n < nocc_use; ++n)
+                                    inner += std::conj(c_k[gmu + n * nrow]) * theta[n] * Z[iat][lm][n];
+                                if (std::abs(inner) < 1e-30) continue;
+                                for (int a = 0; a < 3; ++a)
+                                {
+                                    const double grad = nlm_target[(1 + a) * nproj0 + lm];
+                                    if (grad == 0.0) continue;
+                                    // ∂S_k/∂R_bra = +phase·grad, ∂S_k/∂R_ket = −phase·grad;
+                                    // F = −∂E_ow/∂R: bra gets −λ·Re[dS·inner], ket +λ·Re[dS·inner].
+                                    const double contrib = (phase_sk * grad * inner).real();
+                                    f_ow[iat * 3 + a] -= lam * contrib;
+                                    f_ow[iat1 * 3 + a] += lam * contrib;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // E_ow per-atom split (diagnostic): the same full-Gram-trace
+            // contraction as compute_gamma_op_hk's Γ_I^w.
+            for (int m = 0; m < nocc_use; ++m)
+            {
+                const double fm = pelec->wg(ik, m);
+                if (fm == 0.0) continue;
+                for (int n = 0; n < nocc_use; ++n)
+                {
+                    const double thn = theta[n];
+                    if (thn == 0.0) continue;
+                    for (int iat = 0; iat < nat; ++iat)
+                    {
+                        const int r = nproj_per_atom_[iat];
+                        if (kstring_data_[j].D_I.size() <= static_cast<size_t>(iat)) continue;
+                        std::complex<double> t_I(0.0, 0.0);
+                        for (int lm = 0; lm < r; ++lm)
+                        {
+                            if (kstring_data_[j].D_I[iat].size() <= static_cast<size_t>(lm)) continue;
+                            if (kstring_data_[j].D_I[iat][lm].size() <= static_cast<size_t>(m)) continue;
+                            if (kstring_data_[j].D_I[iat][lm].size() <= static_cast<size_t>(n)) continue;
+                            t_I += std::conj(kstring_data_[j].D_I[iat][lm][m])
+                                 * kstring_data_[j].D_I[iat][lm][n];
+                        }
+                        e_ow += lambda[iat] * fm * thn * (t_I * Pi[n * nocc_use + m]).real();
+                    }
+                }
+            }
+        }
+    }
+
+    if (!any) return false;
+    for (int iat = 0; iat < nat; ++iat)
+        for (int a = 0; a < 3; ++a)
+            force_out[iat * 3 + a] += f_ow[iat * 3 + a];
+#ifdef __MPI
+    if (GlobalV::MY_RANK == 0)
+#endif
+    {
+        std::cout << " [DeltaP ow-force] E_ow=" << std::setprecision(10) << e_ow
+                  << " Ry  F_ow_max=" << std::setprecision(6);
+        double fmax = 0.0;
+        for (size_t i = 0; i < f_ow.size(); ++i)
+            fmax = std::max(fmax, std::abs(f_ow[i]));
+        std::cout << fmax << " Ry/Bohr";
+        for (int iat = 0; iat < nat; ++iat)
+            for (int a = 0; a < 3; ++a)
+                std::cout << " " << std::setprecision(5) << f_ow[iat * 3 + a];
+        std::cout << std::endl;
+    }
+    return true;
 }
 
 bool DeltaP::compute_hk_force(const UnitCell& ucell,
@@ -2766,6 +3416,15 @@ bool DeltaP::compute_hk_force(const UnitCell& ucell,
     {
         gamma_op_hk_[iat] = -0.5 * e_hk_I[iat].imag();
     }
+    // T-6' (R1, 2026-08-12): in the exact weight-channel operator mode the
+    // H_HR projector (and its A1/A2 forces) is replaced by the k-local H_ow;
+    // its geometric force is added here (frozen C/θ, same two-center ∂S_k/∂R
+    // kernel family as A1/dW).  The force_stress.hpp ow gate zeroes the H_HR
+    // contribution so the printed total includes B (H_HK) + F_ow.
+    if (operator_mode_ == "ow")
+    {
+        compute_ow_force(ucell, psi, pelec, lambda, force_out);
+    }
 
     ModuleBase::timer::end("DeltaP", "compute_hk_force");
     return true;
@@ -2852,6 +3511,13 @@ void DeltaP::freeze_branch_ref()
     has_ref_gamma_ = true;
     branch_shift_ = last_shift_;
     has_branch_shift_ = true;
+    // T-6' (R4, 2026-08-12): re-anchor the Ô_w θ reference with the
+    // continuity anchor — the next SCF run's first measurement re-establishes
+    // the per-k θ from the frozen ref_gamma_ (anchor_ow_theta_to_ref) instead
+    // of continuing from a possibly stale sheet, and the D2 freeze counter
+    // restarts.  The current θ (ow_theta_k_) stays until re-measured.
+    ow_theta_prev_k_.clear();
+    ow_theta_freeze_count_.clear();
 }
 
 // Persist per-atom Wilson-loop products W^I for the next SCF/run.
