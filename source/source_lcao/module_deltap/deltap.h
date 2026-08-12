@@ -224,6 +224,14 @@ public:
     /// Locked to "proxy" for legacy gamma mode (zero regression).
     void set_operator_mode(const std::string& mode) { operator_mode_ = mode; }
     const std::string& operator_mode() const { return operator_mode_; }
+    /// (T-17, V-H8, 2026-08-12) Mark the frozen Ô_w operator kernel stale:
+    /// the next compute_gamma_op (operator-mode Γ measurement) rebuilds the
+    /// kernel from the current wavefunctions and re-freezes it.  Called by
+    /// the esolver at P2 λ-update edges (on_phase2) and internally at D2
+    /// freeze_branch_ref, so the SCF between edges always
+    /// sees the SAME applied H_ow (S1 — see ow_kernel_valid_ for the full
+    /// rationale).  No-op for non-ow modes.
+    void mark_ow_kernel_stale() { ow_kernel_stale_ = true; }
     /// Branch-state write guard (T-9', 2026-08-11): when false, save_branch()
     /// does NOT overwrite deltap_branch.dat.  State-file silent overwrites
     /// broke A/B comparability twice (07-30, T4a reference destruction); FD /
@@ -269,6 +277,16 @@ private:
         const std::vector<double>& theta,
         const std::vector<std::vector<double>>& w_In,
         int gdir_val) const;
+    /// (T-17, V-H8, 2026-08-12) Build the frozen Ô_w operator kernel from
+    /// the CURRENT wavefunctions (S1): per-k per-atom λ-independent
+    /// K_I[μ][n] = Σ_{lm∈I} S_k[I][lm][μ]·D_I[I][lm][n], the frozen C_k
+    /// snapshot, the band-space T_I[m][n] = Σ_lm D*_I[lm][m]·D_I[lm][n], and
+    /// the applied-operator Γ_I^w with the snapshot θ (full Gram trace, T2
+    /// convention).  Sets ow_kernel_valid_ (false when no k carried a usable
+    /// θ — caller then falls back to the live path).  See ow_kernel_valid_.
+    void compute_ow_kernel(const psi::Psi<std::complex<double>>* psi,
+                           const elecstate::ElecState* pelec,
+                           int nbands, int nocc_use, int nrow);
     /// (T-6', R1, 2026-08-12) Ô_w geometric force (ow mode): F_ow = −∂E_ow/∂R
     /// with E_ow = Σ_I λ_I·Γ_I^w (the per-atom split of Tr[ρ·H_ow], full
     /// Gram trace) at frozen C and θ — the H_HR A1/A2 terms are gated off in
@@ -482,6 +500,34 @@ private:
     /// the per-atom split of Tr[ρ·H_ow] with the full Gram trace (T2
     /// convention), filled by compute_gamma_op_hk / compute_hk_correction.
     std::vector<double> gamma_op_w_;
+
+    // T-17 (V-H8, S1, 2026-08-12): frozen Ô_w operator kernel.
+    // S0 (2026-08-12) pinned the period-2 limit cycle to the STATE-DEPENDENT
+    // live operator: compute_hk_correction rebuilt H_ow = sym(Σ_n θ_n·A_C·C†)
+    // from the just-solved C every iteration, and the SCF map oscillated
+    // between two near-degenerate self-consistent solutions (Γ_O1 −20.304 ↔
+    // −20.359 @ λ=+0.01; β only picks the basin).  S1 freezes the operator
+    // at the last "edge" (first measurement, P2 λ update via on_phase2, D2
+    // freeze_branch_ref) and reuses it between edges, so
+    // the SCF sees a FIXED H_ow(λ) (the λ-dependence is exact and cheap:
+    // A_C(λ) = Σ_I λ_I·K_I from the frozen per-atom kernel).  The γ report
+    // (compute_gamma_scf) stays LIVE in both λ-driving modes; only the
+    // operator construction is frozen.  The applied-operator Γ_I^w is
+    // cached here (ow_gamma_w_frozen_) so the accounting (escon = −λ·Γ^w)
+    // always refers to the operator that was actually applied (HG-2).
+    bool ow_kernel_valid_ = false;   ///< frozen kernel exists for the current state
+    bool ow_kernel_stale_ = true;    ///< an edge occurred: rebuild at next use
+    /// [ik][iat][μ*nocc_use+n] = Σ_{lm∈I} S_k[I][lm][μ]·D_I[I][lm][n] (no λ)
+    std::vector<std::vector<std::vector<std::complex<double>>>> ow_K_I_k_;
+    /// [ik][μ*nocc_use+n] = frozen C_k[μ + n*nrow] snapshot
+    std::vector<std::vector<std::complex<double>>> ow_C_k_;
+    /// [ik][iat][m*nocc_use+n] = Σ_lm conj(D_I[I][lm][m])·D_I[I][lm][n]
+    std::vector<std::vector<std::vector<std::complex<double>>>> ow_T_I_k_;
+    /// [ik][n] = θ_n snapshot at freeze time (live ow_theta_k_ keeps drifting)
+    std::vector<std::vector<double>> ow_theta_frozen_k_;
+    /// [nat] = applied-operator Γ_I^w computed at the last freeze (full Gram
+    /// trace with the snapshot θ and C).  The λ enters only via escon.
+    std::vector<double> ow_gamma_w_frozen_;
 };
 
 } // namespace deltap

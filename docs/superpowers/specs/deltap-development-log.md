@@ -1999,3 +1999,80 @@ Route A+ 换 Γ 代理记账才到 0.0138。T3' = 08-03 换新记账重跑——
    → λ=±0.01 收敛 → 重跑 R5 全窗做满"斜率 vs |λ|"。
 3. **V-H3' 判决**（γ-hold FD < 0.02 eV/Å @ 0.98 靶点，须先过 2）。
 4. R1 F_ow 闭合计算（单原子 E_ow FD ↔ 解析 F_ow，进 T-7' 前）。
+
+---
+
+## 2026-08-12（晚）：T-17 V-H8 SCF 稳定化（S1 冻结核）— h2o1 极限环消除
+
+> 轮文档：`2026-08-12-deltap-ow-scf-stab-t17.md`。S0 诊断（前轮）：周期 2 极限环
+> = 活算符（每 iter_finish 用活 C 重建 H_ow）在双近邻自洽解间往返（Γ_O1
+> −20.304↔−20.359 @ λ=+0.01；β 只选盆）。
+
+### 修改（T-17，S1）
+
+- **`deltap_wannier.cpp`/`deltap.h`**：ow 算符核拆分 + 冻结。
+  - 新 `compute_ow_kernel()`：渡边处从当前 ψ 构建冻结核（per-atom
+    K_I[μ][n]=Σ_lm S_k·D_I 无 λ、C 快照、T_I[m][n]=Σ_lm D*·D、θ 快照），
+    并缓存已施加算符 Γ^w（`ow_gamma_w_frozen_`，全 Gram 迹）；
+  - `compute_hk_correction` ow 块：kernel 有效 → 冻结路径（A_C(λ)=Σλ_I·K_I
+    精确缩放，无 fill_kstring/ψ 访问）；kernel 无效 → 原 live 路径（防御）；
+  - `compute_gamma_op_hk` ow 块：渡边（stale||invalid）→ 重建核；否则返回
+    缓存 Γ^w（记账 = 已施加算符，HG-2）；γ 报告两种 drive 均 live；
+  - 渡边触发：首次测量、P2 `on_phase2`（esolver `mark_ow_kernel_stale`）、
+    `freeze_branch_ref`；**D2 恢复不再重建核**（冻结 λ 扫描下算符应固定；
+    否则近简并体系每 ~50 冻结步被踢 0.004→0.08）。
+
+### 结果（h2o1，R5 全窗全部收敛）
+
+| λ (Ry) | E' (eV) | Γ_O1 | iter |
+|---|---|---|---|
+| −0.01 | −481.6753785535242 | −18.534 | 39 ✓ |
+| −0.003 | −481.6951438739899 | −18.926 | 36 ✓ |
+| −0.001 | −481.6971248710081 | −19.036 | 36 ✓ |
+| 0 | −481.6973727147502（逐位同旧） | −19.111 | 26 ✓ |
+| +0.001 | −481.6971250754233 | −19.175 | 34 ✓ |
+| +0.003 | −481.6951654681053 | −19.307 | 36 ✓ |
+| +0.01 | −481.6752569479165 | −19.772 | 41 ✓ |
+
+- R5 斜率：±0.001 两弦 +0.2478/−0.2476 eV/Ry → 线性系数 **a=0.000 eV/Ry**
+  （旧 a=0.017；判据 ≲1，对照 T2 −0.013），λ² 曲率 b≈247.6 eV/Ry²；
+- **极限环消除**：41 iter 收敛、Γ 单解逐位稳定、无 150 iter 翻跳；β=0.1 vs
+  0.4 收敛到冻结解（ΔE=0.19 meV，旧盆选择 3.2 meV）；
+- 零回归：ow λ=0 与 proxy λ=+0.01 均逐位一致；ctest 3/4（smoothness R9 预
+  先存在）。
+
+### BN 定位（T-17 两体系验收的诚实标注）
+
+- BN ow λ=+0.003：S1 后 P1 达 drho<1e-3、P2 渡边正常、D2 踢消除，但 P3 密度
+  在 ~0.003–0.013 小幅振荡不达 1e-8；
+- **BN proxy（pre-S1 等价路径，S1 零介入）同型不收敛**（~0.003–0.007）→
+  BN 不收敛 = 活 H_HK + 近简并能带（E_gap≈0.02 eV）的既有刚性，非 Ô_w/S1
+  回归（gamma 模式无 H_c 16 iter 收敛，定位在 H_c）。残余问题归 S2 矩阵阻尼。
+
+### Key conclusions
+1. **S1 冻结核 = 消除 H_ow C 依赖极限环的充分条件**：渡边之间 SCF 见固定
+   H_ow(λ)，λ 依赖经 per-atom 核精确缩放（内循环 BFGS 可复用）；
+2. **记账一致性 HG-2 由构造满足**：Γ^w 报告 = 已施加算符（Γ^w_applied ≡
+   Γ^w_measured），escon = −λ·Γ 逐点精确；
+3. **γ 报告保持 live**：S1 只冻结算符构造，不触碰 drive 机制（λ 更新信号）；
+4. 实测偏差（相对 S1 手记 point 5）：扫描 INPUT 全部 γ-drive，冻结不 gate
+   drive（否则 T-17 验收对象不受任何影响）；γ-drive 下冻结已由 h2o1 全窗证实。
+5. 通用教训：**"状态文件/算子冻结的恢复阈值若在固定约束协议下触发，会周期性
+   踢回系统"**——D2 恢复只更新读数、不重建冻结算符（近简并体系实测证据）。
+
+### File list
+- `source/source_lcao/module_deltap/deltap.h`：`mark_ow_kernel_stale`、
+  `compute_ow_kernel` 声明 + 冻结核成员（ow_K_I_k_/ow_C_k_/ow_T_I_k_/
+  ow_theta_frozen_k_/ow_gamma_w_frozen_/valid/stale）
+- `source/source_lcao/module_deltap/deltap_wannier.cpp`：`compute_ow_kernel`
+  实现；`compute_hk_correction`/`compute_gamma_op_hk` ow 块冻结路径；
+  `freeze_branch_ref` 标 stale
+- `source/source_esolver/esolver_ks_lcao.cpp`：`on_phase2` 标 stale（P2 渡边）
+- 文档：`2026-08-12-deltap-ow-scf-stab-t17.md`（本轮）
+
+### Next steps
+1. **commit 本轮**（T-17 S1 + R5 全窗 + BN 定位 + 轮文档）。
+2. **T-18（V-H3' Ô_w 判决）**：h2o1 ow 全窗收敛已解锁——dγ/dλ 实测（预言
+   ≥3 rad/Ry，对照 proxy 0.3）+ γ 直驱驻点 FD @ 0.98 靶点，残差 <0.02 eV/Å。
+3. **BN**：S2 矩阵阻尼 / H_HK 冻结（近简并体系，ow/proxy 共同受益，独立立项）。
+4. 内循环（nscf>0）+ ow 的 BFGS 残差读数冻结问题记录在案（当前无用例）。

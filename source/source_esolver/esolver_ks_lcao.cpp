@@ -1135,6 +1135,12 @@ typename deltap_scf::DeltapScfSolver::Backend ESolver_KS_LCAO<TK, TR>::deltap_ma
     b.on_phase2 = [dp, this]() {
         dp->start_cooldown(1);
         this->p_chgmix->mix_reset();
+        // T-17 (V-H8, S1): the P2 λ update is an "edge" for the frozen Ô_w
+        // operator kernel — the next Γ measurement re-captures θ and rebuilds
+        // H_ow from the settled density (the kernel λ-scales exactly, but the
+        // θ/ψ snapshot must refresh after the density has changed; without
+        // this the operator would stay frozen on the P1 state forever).
+        dp->mark_ow_kernel_stale();
     };
     b.get_optimizer = [dp]() -> ModuleOptimizer::FletcherReevesCG& { return dp->bfgs(); };
     b.lattice_period = [&ucell]() {
