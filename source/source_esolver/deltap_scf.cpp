@@ -286,6 +286,38 @@ bool DeltapScfSolver::inner_loop(double drho)
     state_.gamma_I = backend_.compute_gamma();
     if (params_.observable_mode == "operator" && backend_.compute_gamma_op)
         state_.gamma_op = backend_.compute_gamma_op();
+    // T-7'' (2026-08-13): at the inner-loop entry (the λ=0 natural point)
+    // freeze the Stage-B branch shift.  With has_branch_shift_ the report
+    // follows the raw (report = raw + frozen shift) instead of being pinned
+    // to the nearest anchor lattice point, which swallowed the raw response
+    // and made the γ-drive inner-loop residual a constant (T-7' finding).
+    // The frozen shift is the entry measurement's applied shift (≈ 0 at the
+    // natural reference), so the exit report lands on t_γ exactly when the
+    // inner loop drives the report to t_γ — the raw↔shift accounting is
+    // explicit: raw ≡ report − frozen_shift.
+    // Gate on operator-mode γ-drive only: legacy gamma mode keeps the
+    // target-aware branch selection untouched (zero-regression contract,
+    // T-6' review) — the freeze changes the Stage-B report semantics and
+    // must not fire there.
+    if (params_.observable_mode == "operator" && params_.drive == "gamma"
+        && backend_.freeze_branch_shift)
+    {
+        backend_.freeze_branch_shift();
+        if (params_.verbose && GlobalV::MY_RANK == 0)
+        {
+            const std::vector<double> raw0 = backend_.compute_gamma_raw
+                ? backend_.compute_gamma_raw()
+                : std::vector<double>();
+            std::cout << " [DeltaP T-7''] inner-loop entry: branch shift frozen,"
+                      << " raw0=(";
+            for (double v : raw0)
+                std::cout << std::setprecision(6) << v << " ";
+            std::cout << ") report0=(";
+            for (double v : state_.gamma_I)
+                std::cout << std::setprecision(6) << v << " ";
+            std::cout << ")" << std::endl;
+        }
+    }
     // Route A+ γ-drive: the λ-driving observable is the reported γ (γ residual
     // against t_γ directly); proxy-drive uses Γ.  Legacy gamma mode keeps
     // state_.gamma_I (zero regression).

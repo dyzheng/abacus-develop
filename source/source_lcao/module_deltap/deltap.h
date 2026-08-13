@@ -201,6 +201,15 @@ public:
     /// anchors its branch selection to this converged value (Stage A) and
     /// reports on this converged branch (Stage B, frozen shift).
     void freeze_branch_ref();
+    /// Freeze ONLY the Stage-B branch shift (branch_shift_ = last_shift_),
+    /// without re-anchoring ref_gamma_ or the Ô_w θ state.  T-7''
+    /// (2026-08-13): the γ-drive inner loop runs mid-SCF (drho < inner_thr),
+    /// before the SCF-convergence freeze_branch_ref() fires; with the shift
+    /// unfrozen the Stage-B report is pinned to the anchor and swallows the
+    /// raw response, so the inner-loop residual degenerates to a constant.
+    /// Freezing the shift at the inner-loop entry (the λ=0 natural point)
+    /// makes the report follow the raw exactly for the rest of the SCF.
+    void freeze_branch_shift();
 
     /// Set per-atom target Berry phase (for target-aware branch selection).
     void set_target_gamma(const std::vector<double>& target) { target_gamma_ = target; }

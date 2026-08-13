@@ -126,6 +126,7 @@ class DeltapScfSolver
         std::function<ModuleOptimizer::FletcherReevesCG&()> get_optimizer;    ///< inner-loop optimizer (optional)
         // Optional verbose diagnostics
         std::function<std::vector<double>()> compute_gamma_raw;               ///< pre-branch raw γ [nat]
+        std::function<void()> freeze_branch_shift;  ///< T-7'': freeze Stage-B shift (report follows raw)
         std::function<double()> lattice_period;                               ///< a_alpha in Bohr
     };
 

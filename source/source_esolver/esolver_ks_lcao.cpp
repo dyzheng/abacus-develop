@@ -1094,6 +1094,11 @@ typename deltap_scf::DeltapScfSolver::Backend ESolver_KS_LCAO<TK, TR>::deltap_ma
                 out[i] = r[i][alpha];
             return out;
         };
+        // T-7'' (2026-08-13): freeze the Stage-B branch shift at inner-loop
+        // entry so the reported γ follows the raw response instead of being
+        // pinned to the anchor (which swallowed the raw and made the
+        // γ-drive inner-loop residual a constant).  Gamma-drive only.
+        b.freeze_branch_shift = [dp]() { dp->freeze_branch_shift(); };
         // Route A+ operator observable: Γ_I = Γ_I^HR + Γ_I^HK measured at the
         // current wavefunctions.  HR comes from compute_gamma_scf (INPUT gdir,
         // τ_α(I)·⟨P̂_I⟩); HK from compute_gamma_op_hk (λ-independent).

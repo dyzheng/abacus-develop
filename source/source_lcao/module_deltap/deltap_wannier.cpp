@@ -3689,6 +3689,21 @@ void DeltaP::freeze_branch_ref()
     ow_kernel_stale_ = true;
 }
 
+// T-7'' (2026-08-13): freeze only the Stage-B branch shift.  Called by the
+// γ-drive inner loop at its entry (the λ=0 natural point), where
+// last_shift_ is the shift applied by the entry measurement (≈ 0 at the
+// natural reference).  With has_branch_shift_ the Stage-B target becomes
+// avg_raw + branch_shift_, so the report follows the raw smoothly instead of
+// being pinned to the nearest anchor lattice point — the inner-loop residual
+// then responds to λ and can be driven to the target.  Unlike
+// freeze_branch_ref() this does NOT touch ref_gamma_ or the Ô_w θ state:
+// the reference and the D2 freeze must stay valid mid-SCF.
+void DeltaP::freeze_branch_shift()
+{
+    branch_shift_ = last_shift_;
+    has_branch_shift_ = true;
+}
+
 // Persist per-atom Wilson-loop products W^I for the next SCF/run.
 void DeltaP::save_branch() const
 {

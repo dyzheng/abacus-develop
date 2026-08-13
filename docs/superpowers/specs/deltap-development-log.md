@@ -36,12 +36,24 @@
     信号无关（一行定理成立），但 FD 残差 ∝ λ*² 且 λ* 依赖驱动信号——弱耦合
     驱动（γ：dγ/dλ≈−0.3）强制 λ* 大 → 泄漏大；强耦合驱动（Γ：dΓ/dλ≈−4.2）
     保持 λ*~1e-3。驻点 FD 选驱动可观测量的标准 = 耦合强度，不是"直测直钉"。
-14. **连续性锚定的 γ 报告同样不可作内循环收敛判据（T-7'，2026-08-13）**：
-    连续锚修复了外循环的靶点跟随（条目 12），却让内循环读数被钉死在
-    ref_gamma_（branch.dat 自然值）±格点间距——raw 相位对 λ 有响应
-    （Δraw~±0.02 rad），branch shift 逐 trial 吸收掉，报告 γ 不动，残差
-    退化为常数。任何驱动方案（γ 直驱）的**内循环可观测量必须解锚**
-    （用 raw γ 或冻结 branch-shift 读数），否则优化器层换什么格式都白搭。
+14. **锚定三形态 + 冻结纪律（T-7'/T-7''，2026-08-13）**——"分支移位只在
+    建立物理参考的时刻评估一次；任何响应测量期间（内循环 trial、FD 位移、
+    secant 步）shift 必须冻结"：
+    | 锚定方式 | 失败形态 | 出处 |
+    |---|---|---|
+    | target-aware | 读数钉在靶点上 → 假收敛 | T4a |
+    | 连续性锚（跨测量重评估） | 读数钉在前值上 → 吞掉 <半量子的物理响应 | T-7'（内循环 trial） |
+    | 冻结 shift | 正确：raw 平滑移动、report 跟随 | T-1 / T-7'' 入口冻结 |
+    T-4a 与 T-7' 是同一规则的两处违反；T-7'' 验证入口冻结后 report=raw
+    精确跟随（shift0=0，检查点 1/2 全过）。
+15. **γ-drive 冻密度内循环不可行——响应为负且符号跨几何不稳定（T-7''，
+    2026-08-13）**：解锚后内循环残差 = 真实靶点差，但冻密度 dγ_O/dλ_O
+    = −1.28 rad/Ry（负，两臂 trial-0 孤立测量一致），且非对角耦合≈对角
+    （λ_O1 驱动同时推开 H 的 γ）——scalar-CG 翻号、对角 Jacobian 2-循环
+    极限环，结构性不可收敛。SCF 级响应本几何 −0.62、T-18 几何 +0.059：
+    符号不稳定。T-6' 开放问题（测量通道 vs 算符控制权限）裁定为**算符
+    控制权限问题**；γ-hold 若要成立须改自洽驱动（iter_finish 每密度
+    重驱动），生产路径维持 proxy 驱动。
 
 ---
 
@@ -2336,3 +2348,43 @@ E'≡E_KS 恒等式、力残差 0.0138）→ 诚实代价清单（翻译层、�
    ow a2 两臂验证内循环收敛。T-18 0.98 判决仍受 |λ*|_max≈0.4–1.6e-3 Ry
    工作窗限制。
 3. T-8'（L1 三件）可穿插。
+
+## 2026-08-13——T-7'' ow γ-drive 内循环解锚：机制 PASS，收敛 FAIL（冻密度响应为负 + 强交叉耦合）
+
+### Round summary
+按评审重设验收（0.005 rad 靶点 + 检查点 1/2）实现 T-7''：内循环入口冻结
+Stage-B branch shift（`freeze_branch_shift()`，不动 ref_gamma_/θ），报告从
+锚钉切换为 raw 精确跟随。解锚机制验证通过；两臂内循环均不收敛，根因为
+物理层——冻密度 γ(λ) 响应为负且交叉耦合强。
+
+### Key results
+- **检查点 1（raw↔shift 记账）✅**：入口 shift0 = report0 − raw0 = 0；
+  全部 trial mode=frozen、best=raw（shift=0）；残差 = 真实靶点差
+  （rms 初值 2.9024e-3 = 0.005/√3 精确）；退出报告 = raw + frozen_shift
+  一致无跳变。
+- **检查点 2（θ/Π 冻结）✅**：两臂 0 次 D2 jump；trial 只调 compute_gamma，
+  不扰 compute_gamma_op。
+- **收敛 ❌**：cg 翻号 rms 1.8–5.4e-3 振荡；jacobi 2-循环极限环
+  3.7↔6.4e-3。SCF 级：cg |γ−t|=2.69e-3（半达成，E=−481.72649）、
+  jacobi 5.93e-3（未达成，E=−481.69087）；ow_nat 自然 E=−481.69777。
+- **决定性测量**：trial 0（仅 O1 λ≠0）两臂一致 dγ_O/dλ_O(frozen) =
+  −1.28 rad/Ry（负）；非对角耦合≈对角（trial 0 后 H1 残差 −0.0018≈O1）。
+  SCF 级本几何 −0.62 vs T-18 几何 +0.059——符号跨几何不稳定。
+- **裁定**：T-6' 开放问题 → 算符控制权限问题（非测量通道）。γ-hold 冻
+  密度内循环不可行；下一步 a（自洽驱动，iter_finish 每密度重驱动）或
+  b（生产维持 proxy 驱动 + LIMITATION）。
+
+### File list
+- `source/source_lcao/module_deltap/deltap.h`、`deltap_wannier.cpp`
+  （`freeze_branch_shift()`：仅冻 branch_shift_，~10 行）
+- `source/source_esolver/deltap_scf.h`（Backend 钩子）、`deltap_scf.cpp`
+  （内循环入口冻结 + shift0 记账打印，门控 operator+gamma）、
+  `esolver_ks_lcao.cpp`（钩子接线）
+- `docs/superpowers/specs/2026-08-13-deltap-t7pp-deanchor.md`（本轮轮文档）
+- dev log Key Conclusions 条目 14 升级为"锚定三形态表 + 冻结纪律"，新增条目 15
+
+### Next steps
+1. commit T-7''（解锚 + 轮文档 + dev log）。
+2. γ-hold 自洽驱动（iter_finish λ 更新，用 SCF 级残差）立项评估；验收
+   T-18 同款 γ-hold FD < 0.02 eV/Å @ 小靶点。
+3. 生产路径维持 proxy 驱动；LIMITATION 补 γ-drive 不可达域（T-7'/T-7''）。
