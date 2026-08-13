@@ -308,6 +308,12 @@ bool DeltapScfSolver::inner_loop(double drho)
                             : params_.nat;
     auto& bfgs = backend_.get_optimizer();
     bfgs.init(n_inner, 0.5, params_.conv_thr, 2, 0.01, 0.005);
+    // T-7' per-component secant (deltap_inner_scheme jacobi): each atom gets
+    // its own secant step so opposite-sign residual components don't mix
+    // (single-α sign flips broke ow γ-drive a2 and proxy 0.98-target).
+    // Constraint-matrix mode keeps scalar CG — its components are coupled.
+    bfgs.set_componentwise(params_.inner_scheme == "jacobi"
+                           && !use_constraint_matrix());
 
     // Initial λ: constraint-space (matrix mode) or operator λ (per-atom mode).
     std::vector<double> lambda_inner

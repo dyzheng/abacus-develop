@@ -34,6 +34,8 @@ struct DeltapParams
     double lambda_init = 0.0;       ///< initial λ
     double conv_thr = 1.0e-6;       ///< inner-loop convergence threshold
     int nscf = 0;                   ///< inner-loop steps (0 = synchronous two-phase)
+    std::string inner_scheme = "cg"; ///< inner-loop λ update: "cg" (scalar-α FR-CG,
+    ///< legacy) | "jacobi" (per-component secant, diagonal Jacobian, T-7')
     bool total_mode = false;        ///< deltap_constraint_mode == "total"
     bool verbose = true;            ///< print [DeltaP] diagnostics
     bool unwrap_branch_2pi = false; ///< PW-style cross-SCF 2π branch tracking

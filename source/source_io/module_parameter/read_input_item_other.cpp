@@ -1470,6 +1470,26 @@ Manual override is allowed: if sc_acceleration_mode is explicitly set, it takes 
         this->add_item(item);
     }
     {
+        Input_Item item("deltap_inner_scheme");
+        item.annotation = "inner-loop lambda update: cg or jacobi";
+        item.category = "DeltaP";
+        item.type = "String";
+        item.description = "Inner-loop lambda update scheme. cg (default): scalar-alpha Fletcher-Reeves conjugate gradient — the historical single line-search, one alpha for all atoms. jacobi (T-7', 2026-08-13): per-component secant (diagonal Jacobian) — each atom gets its own secant step alpha_opt[i] = alpha_trial[i]·(-r_i·dr_i)/dr_i^2, so opposite-sign per-atom residual components no longer contaminate each other's step (single-alpha sign flips broke the ow gamma-drive inner loop, T3' a2; and the proxy 0.98-target secant, T-2). Both drive modes (proxy/gamma) benefit. Constraint-matrix mode stays on the scalar-CG path (coupled components).";
+        item.default_value = "cg";
+        item.unit = "";
+        item.availability = "deltap_corr is true";
+        read_sync_string(input.deltap_inner_scheme);
+        item.check_value = [](const Input_Item& item, const Parameter& para) {
+            if (para.input.deltap_inner_scheme != "cg"
+                && para.input.deltap_inner_scheme != "jacobi")
+            {
+                ModuleBase::WARNING_QUIT("ReadInput",
+                    "deltap_inner_scheme must be 'cg' or 'jacobi'");
+            }
+        };
+        this->add_item(item);
+    }
+    {
         Input_Item item("deltap_branch_write");
         item.annotation = "persist deltap_branch.dat: true or false";
         item.category = "DeltaP";

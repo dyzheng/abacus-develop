@@ -641,6 +641,7 @@ struct Input_para
     std::string deltap_branch_anchor = "continuity"; ///< γ branch anchor: "continuity" (operator, default) | "target" (gamma locked)
     bool deltap_branch_write = true;          ///< persist deltap_branch.dat at SCF convergence (false = keep the calibrated reference, e.g. FD/multi-geometry runs)
     std::string deltap_proxy_target_file = "";  ///< file with per-atom t_Γ values (overrides t_Γ=t_γ first-round init)
+    std::string deltap_inner_scheme = "cg";     ///< inner-loop λ update: "cg" = scalar-α Fletcher-Reeves (legacy), "jacobi" = per-component secant (T-7', diagonal Jacobian)
 
     // ==============   #Parameters (18.Quasiatomic Orbital analysis) =========
     ///<==========================================================

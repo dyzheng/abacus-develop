@@ -954,6 +954,7 @@ void ESolver_KS_LCAO<TK, TR>::deltap_init(UnitCell& ucell)
     p.lambda_init = PARAM.inp.deltap_lambda_init;
     p.conv_thr = PARAM.inp.deltap_conv_thr;
     p.nscf = PARAM.inp.deltap_inner_nmax;
+    p.inner_scheme = PARAM.inp.deltap_inner_scheme;
     p.total_mode = (PARAM.inp.deltap_constraint_mode == "total");
     p.target_file = PARAM.inp.deltap_target_file;
     p.constraint_matrix_file = PARAM.inp.deltap_constraint_matrix;

@@ -117,7 +117,38 @@ class FletcherReevesCG
         residual_.assign(n_dim, 0.0);
         residual_old_.assign(n_dim, 0.0);
         lambda_.assign(n_dim, 0.0);
+        // T-7' componentwise mode: per-component trial steps.
+        if (componentwise_)
+        {
+            alpha_trial_vec_.assign(n_dim, alpha_init);
+            current_trial_alpha_vec_.assign(n_dim, alpha_init);
+        }
     }
+
+    /**
+     * @brief Enable the per-component secant (diagonal-Jacobian) mode.
+     *
+     * T-7' (2026-08-13): the scalar-α line search mixes opposite-sign
+     * per-atom residual components (O wants λ up, H wants λ down), so the
+     * single α_opt = α_trial·Σ(−r_i·Δr_i)/ΣΔr_i² can flip sign or collapse
+     * (T-2 root cause ②, T3' a2: α −0.249→+0.197→−0.139).  In componentwise
+     * mode each component i gets its own secant step
+     *   α_opt[i] = α_trial[i]·(−r_i·Δr_i)/(Δr_i² + ε)
+     * with a per-component max-step clamp — the diagonal-Jacobian
+     * approximation J_ii = Δr_i/Δλ_i, no cross-component mixing.  Both
+     * drive modes (proxy Γ / gamma γ) benefit.  Call after init().
+     */
+    void set_componentwise(bool v)
+    {
+        componentwise_ = v;
+        if (componentwise_ && n_dim_ > 0)
+        {
+            alpha_trial_vec_.assign(n_dim_, alpha_trial_);
+            current_trial_alpha_vec_.assign(n_dim_, alpha_trial_);
+        }
+    }
+
+    bool componentwise() const { return componentwise_; }
 
     /**
      * @brief Start a new outer SCF iteration.
@@ -174,6 +205,39 @@ class FletcherReevesCG
         if (rms_val < conv_thr_)
         {
             converged = true;
+            return;
+        }
+
+        // ---- Search direction ----
+        // T-7' componentwise mode: per-component steepest descent
+        // s[i] = −r[i]; each component carries its own step α_trial_vec_[i].
+        if (componentwise_)
+        {
+            for (int i = 0; i < n_dim_; ++i)
+                search_[i] = -residual_[i];
+            residual_old_ = residual_;
+            search_old_ = search_;
+            dnu_last_ = dnu_;
+            for (int i = 0; i < n_dim_; ++i)
+            {
+                // Per-component step restriction: |α[i]·s[i]| ≤ max_step.
+                if (max_step_ > 0.0 && std::abs(search_[i]) > 1e-30
+                    && std::abs(alpha_trial_vec_[i] * search_[i]) > max_step_)
+                {
+                    alpha_trial_vec_[i]
+                        = (alpha_trial_vec_[i] > 0 ? 1.0 : -1.0) * max_step_
+                          / std::abs(search_[i]);
+                }
+                dnu_[i] += alpha_trial_vec_[i] * search_[i];
+            }
+            for (int i = 0; i < n_dim_; ++i)
+                lambda_out[i] = initial_lambda_[i] + dnu_[i];
+            current_trial_alpha_vec_ = alpha_trial_vec_;
+            current_search_ = search_;
+            current_trial_alpha_ = 0.0;
+            for (int i = 0; i < n_dim_; ++i)
+                current_trial_alpha_ = std::max(current_trial_alpha_,
+                                                std::abs(alpha_trial_vec_[i]));
             return;
         }
 
@@ -235,6 +299,42 @@ class FletcherReevesCG
             double dr = residual_trial[i] - residual_[i];  // r_trial - r_cur
             sum_k += (-residual_[i]) * dr;  // (target - r_cur) · Δr = -r_cur · Δr
             sum_k2 += dr * dr;
+        }
+
+        // T-7' componentwise mode: per-component secant (diagonal Jacobian).
+        // α_opt[i] = α_trial[i]·(−r_i·Δr_i)/Δr_i² — each component's step is
+        // estimated from its own response only, so opposite-sign residual
+        // components no longer contaminate each other's step size or sign.
+        if (componentwise_)
+        {
+            double alpha_opt_max = 0.0;
+            for (int i = 0; i < n_dim_; ++i)
+            {
+                double dr = residual_trial[i] - residual_[i];
+                double denom = dr * dr;
+                double alpha_opt = current_trial_alpha_vec_[i];
+                if (denom > 1e-30)
+                {
+                    // (−r_cur)·Δr / Δr² gives the per-component secant step.
+                    alpha_opt = current_trial_alpha_vec_[i]
+                                * (-residual_[i] * dr) / denom;
+                }
+                // Per-component restriction: |α_opt[i]·s[i]| ≤ max_step.
+                if (max_step_ > 0.0 && std::abs(current_search_[i]) > 1e-30
+                    && std::abs(alpha_opt * current_search_[i]) > max_step_)
+                {
+                    alpha_opt = (alpha_opt > 0 ? 1.0 : -1.0) * max_step_
+                                / std::abs(current_search_[i]);
+                }
+                dnu_[i] += (alpha_opt - current_trial_alpha_vec_[i])
+                           * current_search_[i];
+                // Per-component adaptive step (same γ rule as scalar mode).
+                double g = 1.0 * std::abs(alpha_opt) / current_trial_alpha_vec_[i];
+                g = std::max(0.5, std::min(2.0, g));
+                alpha_trial_vec_[i] *= std::pow(g, 0.7);
+                alpha_opt_max = std::max(alpha_opt_max, std::abs(alpha_opt));
+            }
+            return alpha_opt_max;
         }
 
         double alpha_opt = current_trial_alpha_;
@@ -347,6 +447,9 @@ class FletcherReevesCG
     int step_count_ = 0;
     double latest_rms_ = 0.0;
     double current_trial_alpha_ = 0.0;
+    bool componentwise_ = false;                    ///< T-7' per-component secant
+    std::vector<double> alpha_trial_vec_;           ///< per-component trial α
+    std::vector<double> current_trial_alpha_vec_;   ///< per-component α of trial
 
     // State vectors
     std::vector<double> initial_lambda_;   // λ₀ — reference point

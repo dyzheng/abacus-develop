@@ -189,3 +189,110 @@ TEST(FletcherReevesCGTest, SlowConvergence)
     run_bfgs(n, 2.0, 1e-6, 2, 0.01, 10.0, 30, initial, f_slow_linear, final);
     EXPECT_NEAR(final[0], 10.0, 1e-4);
 }
+
+/**
+ * T-7' tests: per-component secant (diagonal Jacobian) mode.
+ *
+ * The motivating failure (T-2 root cause ②, T3' a2): a scalar α
+ * α_opt = α_trial·Σ(−r_i·Δr_i)/ΣΔr_i² mixes opposite-sign per-atom residual
+ * components, so O (wants λ up) and H (wants λ down) contaminate each other's
+ * step — α flips sign and the RMS plateaus.  Componentwise mode gives each
+ * component its own secant step α_opt[i] = α_trial[i]·(−r_i·Δr_i)/Δr_i².
+ */
+
+/**
+ * Diagonal system with opposite-sign responses and opposite-sign targets:
+ *   r₁ = 2·λ₁ − 1   (solution λ₁ = 0.5)
+ *   r₂ = −3·λ₂ + 1  (solution λ₂ = 1/3)
+ * The single-α secant mixes the two slopes (d r₁/dλ₁=+2, d r₂/dλ₂=−3).
+ */
+static void f_opposite_sign(const std::vector<double>& lam, std::vector<double>& r)
+{
+    r[0] = 2.0 * lam[0] - 1.0;
+    r[1] = -3.0 * lam[1] + 1.0;
+}
+
+TEST(FletcherReevesCGTest, ComponentwiseOppositeSignConverges)
+{
+    const int n = 2;
+    std::vector<double> initial = {0.0, 0.0};
+    FletcherReevesCG cg;
+    cg.init(n, 0.5, 1e-8, 2, 0.01, 5.0);
+    cg.set_componentwise(true);
+    EXPECT_TRUE(cg.componentwise());
+    std::vector<double> lambda = initial, lam_trial(n), residual(n), residual_trial(n);
+    cg.start_outer(lambda);
+    bool converged = false;
+    for (int step = 0; step < 200 && !converged; ++step)
+    {
+        f_opposite_sign(lambda, residual);
+        cg.step(residual, step, lam_trial, converged);
+        if (converged)
+            break;
+        f_opposite_sign(lam_trial, residual_trial);
+        cg.accept_trial(residual_trial);
+        cg.get_lambda(lambda);
+        double rms = 0.0;
+        for (int i = 0; i < n; ++i)
+            rms += residual[i] * residual[i];
+        rms = std::sqrt(rms / n);
+        if (rms < 1e-8)
+            break;
+    }
+    EXPECT_NEAR(lambda[0], 0.5, 1e-4);
+    EXPECT_NEAR(lambda[1], 1.0 / 3.0, 1e-4);
+}
+
+/**
+ * Same system, scalar-CG reference.  Contract: componentwise converges within
+ * the budget; when the scalar path also converges it must not be faster.
+ * (On the sign-opposite system the scalar-α secant mixes the two slopes and
+ * typically cannot converge — that is the T-2/T3' a2 failure mode this mode
+ * fixes; the assertion is kept one-sided so a future scalar-path improvement
+ * does not break the test.)
+ */
+TEST(FletcherReevesCGTest, ComponentwiseBeatsScalarOnOppositeSign)
+{
+    const int n = 2;
+    const int max_steps = 60;
+    std::vector<double> final_cw(n), final_sc(n);
+    int steps_cw = max_steps, steps_sc = max_steps;
+
+    auto run_scheme = [&](bool cw, std::vector<double>& final_lam, int& steps_out) {
+        std::vector<double> initial = {0.0, 0.0};
+        FletcherReevesCG cg;
+        cg.init(n, 0.5, 1e-8, 2, 0.01, 5.0);
+        cg.set_componentwise(cw);
+        std::vector<double> lambda = initial, lam_trial(n), residual(n), rt(n);
+        cg.start_outer(lambda);
+        bool converged = false;
+        int steps = 0;
+        for (; steps < max_steps && !converged; ++steps)
+        {
+            f_opposite_sign(lambda, residual);
+            cg.step(residual, steps, lam_trial, converged);
+            if (converged)
+                break;
+            f_opposite_sign(lam_trial, rt);
+            cg.accept_trial(rt);
+            cg.get_lambda(lambda);
+        }
+        steps_out = steps;
+        final_lam = lambda;
+        return converged;
+    };
+
+    bool cw_ok = run_scheme(true, final_cw, steps_cw);
+    bool sc_ok = run_scheme(false, final_sc, steps_sc);
+    // Componentwise must converge within budget (and to the right point).
+    EXPECT_TRUE(cw_ok);
+    EXPECT_NEAR(final_cw[0], 0.5, 1e-3);
+    EXPECT_NEAR(final_cw[1], 1.0 / 3.0, 1e-3);
+    // When both converge, componentwise must not be slower than scalar CG.
+    if (cw_ok && sc_ok)
+    {
+        EXPECT_LE(steps_cw, steps_sc) << "cw=" << steps_cw << " sc=" << steps_sc;
+    }
+    std::cout << "[info] opposite-sign: cw_ok=" << cw_ok << " steps=" << steps_cw
+              << " sc_ok=" << sc_ok << " steps=" << steps_sc << std::endl;
+}
