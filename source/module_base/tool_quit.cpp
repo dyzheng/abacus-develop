@@ -55,6 +55,16 @@ void QUIT(int ret)
     std::cout<<" See output information in : "<<PARAM.globalv.global_out_dir<<std::endl;
 #endif
 
+#ifdef __MPI
+    // finalize MPI before exit to avoid hanging in multiprocessing environment
+    int mpi_initialized = 0;
+    MPI_Initialized(&mpi_initialized);
+    if (mpi_initialized)
+    {
+        MPI_Finalize();
+    }
+#endif
+
     exit(ret);
 }
 
