@@ -237,8 +237,19 @@ deltap_corr    0
 
 - **P1/P2/P3**：Phase 阶段（仅两阶段模式）
 - **λ=(...)**：每原子约束力（Ry/rad）
-- **E_eff**：等效电场。`E_eff = -λ_avg × π / a_alpha × 51.42 V/Å`
+- **E_eff**：等效电场。gamma 模式 `E_eff = -λ_avg × π / a_alpha × 51.42 V/Å`
+  （历史共轭式）；operator 模式（Route A+）用 **公式 (b) `E_eff = +λ_avg ×
+  π / a_alpha × 51.42 V/Å`**（D2 锯齿场交叉裁决，2026-08-13）。打印行尾带
+  响应校准注记：`[formula (b) πλ/(2a); D2 response-calibrated ×~1.6 (proxy)
+  / ×~3.1 (ow O)]`——h2o1 实测真实响应是公式 (b) 的 ~1.6×（proxy）/~3.1×
+  （ow），对拍 efield 计算时请乘该校准（详见
+  `docs/superpowers/specs/2026-08-13-deltap-d1-d2-kappa-field.md`）。
 - **\|γ-t\|**：最大靶标偏差（rad）
+
+> **⚠️ 极化率/偶极换算注意（LCAO 基组）**：γ→μ 换算（F2：μ = 24.28 D/rad × G，
+> G=unwrap(Σγ)/2）已对实验偶极验证（0.9%），但**由 λ/电场响应推极化率 α 时，
+> 紧缩 LCAO 基会低估 ~3.3×**（h2o1 2s2p1d/2s1p 实测 α=3.02 vs 实验 9.8 Bohr³，
+> D2 轮）。任何 α 判据须用同基组参考值或能量 FD 自洽值，勿直接套实验 α。
 
 约束矩阵模式额外显示 `C·γ=(...)` 和约束空间 λ。
 

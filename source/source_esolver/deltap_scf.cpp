@@ -806,11 +806,14 @@ void DeltapScfSolver::report(int iter, const std::vector<double>& lambda) const
               << " escon=" << std::fixed << std::setprecision(6) << state_.dp_escon
               << " Ry\n";
 
-    // Effective electric field.  Gamma mode: legacy λ–γ conjugate formula
-    // E_eff = −λ_avg·π/(2·a_alpha) a.u. (retired for operator mode, see
-    // derivations §1.1).  Operator mode (Route A+): the constraint operator
-    // IS a ramp potential, E_eff = λ_avg/(2·a_alpha) a.u. with no π
-    // (derivations §1.2; sign/factor pinned by V1, efield comparison).
+    // Effective electric field.  Gamma mode (legacy): λ–γ conjugate formula
+    // E_eff = −λ_avg·π/(2·a_alpha) a.u. (derivations §1.1) — kept verbatim
+    // for legacy zero-regression (diagnostic only).
+    // Operator mode (Route A+): D2 sawtooth-field cross-check (2026-08-13,
+    // docs/superpowers/specs/2026-08-13-deltap-d1-d2-kappa-field.md)
+    // adjudicated E_eff = π·λ_avg/L (formula b) over the old ramp formula
+    // λ_avg/(2a): measured lever arm 0.177 a.u./Ha (proxy, ΣG) vs (b) 0.105
+    // and (a) 0.033 — (b) under-reports ~1.7×, (a) under-reports 5–10×.
     // λ is in Ry; converting Ry → Hartree gives an extra factor of 1/2.
     // Convert: 1 a.u. = 51.422 V/Å.
     if (backend_.lattice_period)
@@ -821,12 +824,16 @@ void DeltapScfSolver::report(int iter, const std::vector<double>& lambda) const
             lam_avg += lambda[iat];
         lam_avg /= params_.nat;
         const bool op_mode = (params_.observable_mode == "operator");
-        const double e_eff_au = op_mode ? lam_avg / (2.0 * a_alpha)
+        // Branch A: operator mode uses the D2-adjudicated πλ/L conversion.
+        // Branch B: gamma (legacy) mode keeps the historical conjugate formula.
+        const double e_eff_au = op_mode ? lam_avg * ModuleBase::PI / (2.0 * a_alpha)
                                         : -lam_avg * ModuleBase::PI / (2.0 * a_alpha);
         const double e_eff_v_per_a = e_eff_au * 51.422;
         std::cout << "   [E-field" << (op_mode ? " operator-ramp" : "") << "] E_eff="
                   << std::scientific << std::setprecision(3)
                   << e_eff_v_per_a << " V/Angstrom  (λ_avg=" << lam_avg << " Ry)"
+                  << " [formula (b) πλ/(2a); D2 response-calibrated ×~1.6 (proxy) / ×~3.1 (ow O),"
+                  << " see 2026-08-13-deltap-d1-d2-kappa-field.md]"
                   << std::endl;
     }
 }

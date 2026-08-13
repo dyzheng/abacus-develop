@@ -2172,3 +2172,113 @@ T-17（S1 冻结核）commit 后立即进入 T-18 判决点。本轮**零代码�
    T-5' 数据支持）。
 2. T-8'（L1 三件：PW Γ 记账 / ⟨η⟩ / spread_I）可穿插。
 3. Stage 3 hk MPI、L2 应力生产面顺序不变。
+
+---
+
+## 2026-08-13——D1+D2：κ 拟合病态判定 + 锯齿场交叉验证（物理刚度假说执行完毕）
+
+### Round summary
+纯测量轮（9 次串行 SCF ~25 min，零代码改动）：D1 冻结 λ 五点（−0.05/−0.02/0/
++0.02/+0.05，proxy）+ D2 锯齿场四点（±0.001/±0.002 a.u.，λ=0 冻结、dip_cor=1）。
+结论：**D1 的 E'(G) κ 拟合病态（判据作废）；D2 直接测量 dG/dE=0.316 rad/a.u.
+（低预言 3.3×，超 2× 判据）→ 物理刚度坐实且更强（α_LCAO=3.02 Bohr³、
+κ_phys=60.4 Ry/rad²）；E_eff 公式 (b) πλ/L 胜出（低估 1.6–3.1×），
+代码 (a) 低估 5–10×。**
+
+### Key results
+- D1：E'(λ) 曲率 b≈15–30 eV/Ry² 被 escon/Γ 通道主导（γ 通道 ~2%），E'(G) 非单值
+  抛物线 → κ 拟合判据不可执行；dΣγ/dλ=+0.056 rad/Ry（线性良好）→ dG/dλ=+0.028
+  rad/Ry（proxy）。
+- D2：dΣγ/dE=+0.632 rad/a.u.（5 点 LSQ 残差 σ=9.3e-5 rad，线性干净）→
+  dG/dE=+0.316；逐原子 O−1.58/H+1.11 rad/a.u.（反号电荷重排）；
+  E'(E) 线性项 μ₀=1.94 D（实验 1.85 D，5% 吻合——偶极记账自洽）；
+  E'(E) 二次项正曲率（+3.6 meV @|E|=0.001）——约束态污染，α 只能从 γ(E) 取。
+- E_eff 裁决：实测 0.177 a.u./Ha（proxy ΣG）/ 0.329（ow O）；(a) 0.0333 出局，
+  (b) 0.1047 胜出。代码 `E_eff` 打印待换 (b)。
+- 对 T-18 的重新解读：ow 0.26 rad/Ry 相对 D2 物理上限 1/κ≈0.017 rad/Ry 已放大
+  ~15×——弱耦合=体系物理（基组极化率），无算符提升空间；EFC 价值重锚"路径泄漏
+  消除"（假说 §4.1 路线 2）。
+
+### Analysis
+物理刚度假说在数值体系层面成立且更强：真实场也只能以 0.32 rad/a.u. 移动 G，
+推 0.1 rad 需 E≈15 V/Å（暴力）。假说与实验 α 的差距（3.0 vs 9.8）是 LCAO 紧缩
+基局限，非算符失配。γ-hold 工作窗按泄漏预算反解（评审修正）：|λ*|_max≈0.4–1.6e-3
+  Ry → |ΔG|_max≈1e-5–5e-5 rad——生产只允许靶点≈自然值（T-5' ±0.013 rad 仅是
+  SCF 可达域）。
+
+### File list
+- `docs/superpowers/specs/2026-08-13-deltap-d1-d2-kappa-field.md`（本轮轮文档）
+- `docs/superpowers/specs/2026-08-12-deltap-physical-stiffness-hypothesis.md`
+  （§6 执行结果 + §2/§4 数字修正）
+- `docs/superpowers/specs/2026-08-04-deltap-execution-todo.md`（状态更新）
+
+### Next steps
+1. ✅ 代码 `E_eff` 打印已换 (b)（`deltap_scf.cpp` report()，operator 模式
+   `π·λ_avg/(2·a_alpha)`，gamma legacy 原样）——lamm002 重跑 E_eff
+   −1.714e-2 → −5.386e-2 V/Å，FINAL_ETOT_IS 逐位一致（纯打印零回归），未提交；
+2. ✅ LIMITATION §8：已按泄漏预算重写工作窗（|λ*|_max≈0.4–1.6e-3 Ry、|ΔG|_max≈
+   1e-5–5e-5 rad；可达域 ±0.013 rad 仅 SCF 口径）+ E_eff 换算写死（print 已带
+   响应校准注释）；
+3. T-9'（branch 写守卫）随下个 commit 落地；然后 T-7'（per-atom Jacobian）；
+4. D3 不再单独跑（D2 残差 σ=9.3e-5 rad ≪ 1e-3 已覆盖噪声判据）。
+
+---
+
+## 2026-08-13: 新旧方案通俗对比文档
+
+### What was done
+输出 `2026-08-13-deltap-scheme-comparison-plain.md`：面向材料背景读者的
+通俗解说——共同测量链（Wilson 环）→ 旧方案（约束 γ、记账 −λγ，账算不符
+导致能量斜/力错 84.8/靶点跟随假收敛）→ 新方案 Route A+（约束 Γ、记账 −λΓ、
+E'≡E_KS 恒等式、力残差 0.0138）→ 诚实代价清单（翻译层、弱耦合窗口=物理
+刚度 κ≈60、H 死通道、E_eff 换公式）→ 后续方向（Ô_w 已否、EFC 换锚泄漏消除）。
+含关键数字速查表。无代码改动。
+
+---
+
+## 2026-08-13（补）——评审修正轮：口径对照表 + E_eff 校准注释 + 泄漏预算工作窗
+
+### Round summary
+响应评审四项要求（D1/D2 提交前）：Q1 口径对照表、Q2 E_eff 响应校准、
+工作窗改按泄漏预算反解、P 系列基组重定标警示。零物理改动（E_eff 打印注释
+一行，已重跑逐位零回归）。
+
+### Key results
+- **Q1 口径对照表**（写入 `2026-08-12-deltap-ow-vh3-t18.md` §1.5 与主算法文档
+  §8 LIMITATION #1）：五个响应口径（ow-R5-大尺度 0.26 / ow-a2-自洽 0.06 /
+  ow-D2反推 0.052 / proxy-D1-自洽 0.028 / 物理上限 1/κ≈0.017，rad/Ry）。
+  "T-18 与 proxy 同量级" 仅成立在 R5-大尺度 vs 旧 proxy 混合口径；按自洽总 G
+  口径 ow(0.052)=1.9× proxy(0.028)，proxy 已贴 1/κ 上限 1.6×——"无算符提升
+  空间"结论明确建立在自洽总 G 口径上。密度弛豫屏蔽 80–95%（ow 冻结 0.8–1.4
+  vs 自洽 0.06–0.26）。
+- **Q2 E_eff 打印**：operator 模式行尾加 `[formula (b) πλ/(2a); D2
+  response-calibrated ×~1.6 (proxy) / ×~3.1 (ow O), see ...]`；用户手册 §8
+  输出说明同步。lamm002 重跑 E_eff −5.386e-2 V/Å（同前）+ 注释，FINAL_ETOT_IS
+  逐位一致（−481.6909131438185）。
+- **工作窗（泄漏预算反解，取代拍脑袋的 0.005 rad）**：T3 锚 0.0138 eV/Å @
+  λ*=1.09e-3 → 斜率 12.7 eV/Å/Ry；T3' 0.502 @ 1.05e-2 → 斜率 ~48。按 0.02
+  eV/Å 预算：**|λ*|_max ≈ 0.4–1.6e-3 Ry → |ΔG|_max ≈ 1e-5–5e-5 rad
+  （0.01–0.1 mrad）**；评审 dλ*/dR 模型更严（~2e-6 rad）。ΔG=0.005 rad →
+  λ*=0.18 Ry → leak≈2.3（T3 线性）–8.6（T3' 线性）eV/Å ≫ 0.02。**生产 γ-hold 只允许靶点≈自然值**；
+  T-5' 的 ±0.013 rad 仅是 SCF 可达域。EFC（E_phys=E_tot+λ(G−t)）是大 λ 场景
+  恢复力精度的唯一路径。
+- **P 系列**：`2026-07-30-pseries-test-cases-design.md` §3.3 加 LCAO 极化率
+  基组重定标警示（α_LCAO=3.02 vs 实验 9.8，3.3×；P01/P05 判据须用同基组参考）。
+
+### File list
+- `docs/superpowers/specs/2026-08-12-deltap-ow-vh3-t18.md`（§1.5 口径表 + §1/§5 重标）
+- `docs/superpowers/specs/2026-08-05-deltap-algorithm-derivation-route-a-plus.md`
+  （§8 LIMITATION #1：双口径窗口 + 口径表）
+- `source/source_esolver/deltap_scf.cpp`（E_eff 打印注释，~15 行）
+- `docs/deltap_user_manual.md`（§8 E_eff 公式/校准 + LCAO α 警示）
+- `docs/superpowers/specs/2026-07-30-pseries-test-cases-design.md`（§3.3 警示）
+- `docs/superpowers/specs/2026-08-13-deltap-d1-d2-kappa-field.md`（§5.4 窗口修正）
+- `docs/superpowers/specs/2026-08-12-deltap-physical-stiffness-hypothesis.md`
+  （§4.1/§6 窗口与 E_eff 状态）
+
+### Next steps
+1. 本轮（D1/D2 + E_eff + 评审修正）统一提交，commit 消息含"物理刚度假说执行
+   完毕：α_LCAO=3.02、κ=60.4 Ry/rad²、E_eff 换 (b)"。
+2. T-9'（branch 写守卫）随下个 commit；然后 T-7'（per-atom Jacobian，
+   顺带实测 γ-hold 的 dλ*/dR 验证泄漏模型）。
+3. EFC（路径泄漏消除）若立项：以本窗为基线做"大 λ 恢复力精度"判决实验。
