@@ -101,10 +101,11 @@ public:
     /// (Hellmann-Feynman: the constrained SCF energy E' is variational in C).
     /// E_HK = Σ_j Re[Tr(H_sym(k_j) · DM_{k_j})] with
     /// H_sym(k_j) = sym[(i/2) S_dk(k_j,k_{j+1}) C(k_{j+1}) W_eff C†(k_j)].
-    /// Serial-only for now (nproc == 1 and nrow == ncol), consistent with the
-    /// serial-only status of compute_hk_correction.  force_out is nat*3 in
-    /// Ry/Bohr; e_hk_out is E_HK in Ry.  Returns false (with a warning) when
-    /// the required conditions are not met.
+    /// Serial path keeps the original loop code byte-identical; nproc > 1
+    /// uses the distributed path (pzgemm + A' row/band Allreduce, same
+    /// family as compute_hk_correction, valid for non-square local blocks).
+    /// force_out is nat*3 in Ry/Bohr; e_hk_out is E_HK in Ry.  Returns false
+    /// (with a warning) when the required conditions are not met.
     bool compute_hk_force(const UnitCell& ucell,
                           const psi::Psi<std::complex<double>>* psi,
                           const elecstate::ElecState* pelec,

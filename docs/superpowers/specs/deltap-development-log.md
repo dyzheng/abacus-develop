@@ -78,6 +78,21 @@
     逐字节保留（硬约束），MPI 分支走 GEMM。默认参数陷阱：`deltap_observable`
     默认 operator——"legacy gamma 模式"测试可能实际走 Γ 路径，验收设计必须
     先核对默认值。
+19. **跨进程列的带对必须行组 gather，A' 本地带归约在 dim1>1 下不完整；
+    Allgatherv 搬 complex 计数要 ×2（2026-08-13，Q2/3.2）**：带空间矩阵
+    （T/Π/U）的"本地行×本地带部分和 + 全 comm Allreduce"只在每个带对都落在
+    某个 rank 的本地带集内时才完整——进程列把带集切成不相交块后，跨列带对
+    无人填充（F-6 的 A' 诊断即此；h2o 系 14 带 / 2 列网格下旧代码只差 ~1e-3
+    小项，F_HK 留 ~1e-5 痕迹）。正确做法：行组（同 coord[0]）内 Allgatherv
+    全带列 → 本地行×全带对循环 → 一行组贡献一次（coord[1]!=0 清空）→ 单次
+    Allreduce。**配套陷阱**：gather 用 MPI_DOUBLE 搬运 complex<double>，
+    发送/接收计数必须是 `2·nrow·ncol_b`——按复数元素数填会每 rank 只发一半，
+    缓冲区列间交叠+后半零（h2o_asym Γ^HK 6.671→5.180，22% 偏差；h2o1 恰好
+    占据带全在进程列 0 的干净区而不触发）。F_HK 力 MPI（compute_hk_force）
+    与守卫收窄（非方本地块 nproc==1 外合法）同轮落地；h2o1/h2o_asym 4-rank
+    与 2-rank 的 Γ/γ/λ/F_HK vs 串行逐位一致，co（NBANDS=15）4-rank F_HK 与
+    串行一致，mpi_smoke 4/4。F-6 文档"h2o1/h2o_asym=529 轨道/265×264"系笔误
+    ——实为 23 轨道，2×2 网格下本地块 12×12/12×11/11×12/11×11。
 
 ---
 
@@ -2618,3 +2633,50 @@ exit_group 实证）。附带发现 `deltap_observable` 默认 operator——hf/
 2. 3.2（operator 4-rank Γ/γ 跨 rank 一致性专项）→ 3.3（非方本地块 + F_HK
    力 MPI 后 co/h2o_asym 4-rank 收敛复测）。
 3. F-7（L1 三件）→ F-8（应力，含压电 Maxwell 判据）。
+
+## 2026-08-13——Q1/Q2 + TODO 3.2/3.3：F_HK 力 MPI + 非方本地块解锁 + F-6 带对计数修复
+
+### Round summary
+评审裁定执行：Q1（nrow≠ncol 守卫收窄到 nproc==1，非方本地块 MPI 合法）+
+Q2（compute_hk_force 的 F_HK 力 MPI 化，场模式生产化前置）。过程中抓到并修掉
+一个 F-6 遗留的隐藏 bug：`gather_band_columns` 的 `MPI_Allgatherv` 用
+MPI_DOUBLE 搬运 complex 时计数没 ×2，每 rank 只发一半数据。3.2（跨 rank
+Γ/γ 一致性）与 3.3（co/h2o_asym 4-rank 收敛复测）随同验收 PASS。
+
+### Key results
+- **Q1 守卫收窄**：`compute_hk_correction` / `compute_gamma_op_hk` /
+  `compute_hk_force` 的 `nrow != ncol` 检查只对 `nproc==1` 生效；h2o_asym
+  4-rank（12×11 非方本地块）rc=0 解锁。
+- **Q2 F_HK 力 MPI**：SC 走 pzgemm；T/Pi/U 走行组 gather + 全带对循环 +
+  单次 Allreduce（coord[1]!=0 清空）；dW 走 A' 全 rank 归约；归约后与串行
+  相同力度 kernel 累加。串行块逐字节保留。
+- **隐藏 bug（F-6 带对计数的实际形式）**：Allgatherv 计数应为
+  `2·nrow·ncol_b`（complex = 2 double）。症状：h2o_asym 4-rank Γ^HK 6.671→
+  5.180（~22%，奇数占据带整列归零）；h2o1 恰好不受影响（占据带全在进程列 0
+  干净区）。修复后 h2o_asym F_HK 与串行逐分量一致。
+- **串行 A/B 硬约束 PASS**：h2o1 5271 行中仅墙钟 + 单条 profile 计时 4 行差。
+- **3.2 PASS**：h2o_asym 4-rank / 2-rank（1×2 网格）vs 串行——λ、
+  Γ=(6.660,1.987,1.857)、escon=−0.051842、E_HK=0.0237007424、F_HK 9 分量
+  逐位一致；h2o1 4-rank 大分量逐位、湮没分量 ~1e-12 FP。
+- **3.3 PASS**：co（NBANDS=15 奇数）4-rank 收敛，λ=(4.644466,6.623731)e-3、
+  escon=−0.065207、E_HK=0.0289416363、F_HK 与串行一致。
+- **deltap_mpi_smoke 4/4 PASS**：PW 2-rank / BN 4-rank / CO 4-rank /
+  BN inner-loop 4-rank。
+
+### 裁定
+Q1+Q2+3.2+3.3 PASS。F_HK 力从"L2 遗留"升级为场模式多 rank 可用。遗留：
+Ô_w（H_ow/Γ^w）MPI 门控跳过（L3.1 立项时做）。
+
+### File list
+- `source/source_lcao/module_deltap/deltap_wannier.cpp`（gather_band_columns
+  辅助 + ×2 计数；三函数行组 gather 全带对 T/Pi/U；守卫收窄）
+- `source/source_lcao/module_deltap/deltap.h`（compute_hk_force 注释）
+- `docs/superpowers/specs/2026-08-13-deltap-q1-q2-hk-force-mpi.md`（本轮）
+- `docs/superpowers/specs/2026-08-04-deltap-execution-todo.md`（3.2/3.3 → ✅）
+- dev log 本条 + 关键结论区 #19
+
+### Next steps
+1. commit（消息含"F_HK 力 MPI + 非方本地块解锁 + F-6 带对计数修复"）。
+2. F-7（L1 三件：PW Γ 记账 / ⟨η⟩ / spread_I）→ F-8（应力，含应力-极化
+   Maxwell 判据 ∂σ/∂λ ↔ ∂P/∂ε）。
+3. Ô_w MPI（H_ow 本地块 + Γ^w 行组 gather）待 L3.1 立项。

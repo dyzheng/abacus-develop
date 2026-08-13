@@ -217,8 +217,16 @@ F_exact(path) = F_std + A1 + A2 + B − λ(∂Γ/∂λ)·dλ*/dR
      LCAO 数值**。E_eff 打印为公式 (b)（πλ/2a），响应校准约 ×1.6（proxy）
      /×3.1（ow O），打印行已带注释，用户换算须读注释。
 3. H_HK 应力未实现；PW 应力未实现；PW 仍为 gamma 旧记账。
-4. `compute_hk_correction`/`compute_hk_force` 的 MPI 带映射未修
-   （串行-only，方阵网格守卫；Stage 3 计划项）。
+4. ~~`compute_hk_correction`/`compute_hk_force` 的 MPI 带映射未修~~
+   **已落地（3.1 + 3.2/3.3，2026-08-13）**：`compute_hk_correction`、
+   `compute_gamma_op_hk`、`compute_hk_force` 均支持 MPI（H_sym 走 pzgemm，
+   Γ^HK 与 F_HK 的 T/Pi/U 走行组 gather + 全带对 Allreduce；非方本地块
+   nproc>1 合法，守卫只保留串行防御）。h2o1/h2o_asym 4-rank 与 2-rank 的
+   Γ/γ/λ/F_HK vs 串行逐位一致，co（NBANDS=15）4-rank 一致，mpi_smoke 4/4。
+   **剩余 MPI 限制**：Ô_w（H_ow 本地块 + Γ^w）仍串行（WARNING 门控跳过，
+   L3.1 立项时做）；`deltap_lambda_step`/secant 外循环的 λ 末位 FP 漂移
+   （pzgemm 求和顺序经 λ 反馈放大，~1e-6 量级，低于一切判据；长轨迹可能
+   继续累积）——如遇长轨迹漂移，按每步重置 λ 处理。
 5. KPAR=1 硬限制（k-string 跨全 k 列表，守卫 WARNING_QUIT）。
 6. 单原子单项 FD（如 E_HK 单独）含 C-响应项 ∝λ，不与解析单项力闭合——
    判据只认总 E' FD（T3 轮已定性）。

@@ -46,6 +46,69 @@ extern "C" {
 
 namespace deltap {
 
+#ifdef __MPI
+// DeltaP band-pair completeness (TODO 3.2/3.3, 2026-08-13).  The A' scheme
+// fills a band-space matrix entry (g1, g2) with the local-rows × local-bands
+// partial and completes it by an Allreduce.  That is complete only when every
+// band pair is local to some rank — with dim1 > 1 process columns the local
+// band sets are disjoint, so pairs spanning two process columns would never
+// be filled.  This helper gathers the FULL band set for this rank's own rows
+// (ranks sharing coord[0] hold the same orbital rows but disjoint band-column
+// blocks), so the caller can form its rows' partial for ALL band pairs.  The
+// caller then completes the row sum with a single Allreduce, contributing
+// once per row group (ranks with coord[1] != 0 zero their partials).
+static void gather_band_columns(const Parallel_Orbitals* paraV,
+                                const std::complex<double>* local,
+                                std::vector<std::complex<double>>& full,
+                                std::vector<int>& gpos)
+{
+    full.clear();
+    gpos.clear();
+    MPI_Comm comm = paraV->comm();
+    if (comm == MPI_COMM_NULL) return;
+    const int dim1 = paraV->dim1;
+    const int nb = paraV->nb;
+    const int nrow = paraV->get_row_size();
+    const int ncol_b = paraV->ncol_bands;
+
+    MPI_Comm row_comm;
+    MPI_Comm_split(comm, paraV->coord[0], paraV->coord[1], &row_comm);
+    std::vector<int> counts(dim1, 0), displs(dim1, 0);
+    MPI_Allgather(&ncol_b, 1, MPI_INT, counts.data(), 1, MPI_INT, row_comm);
+    for (int q = 1; q < dim1; ++q)
+    {
+        displs[q] = displs[q - 1] + counts[q - 1];
+    }
+    const int nbands_g = displs[dim1 - 1] + counts[dim1 - 1];
+    full.assign(static_cast<size_t>(nrow) * nbands_g, {0.0, 0.0});
+    std::vector<int> cnt2(dim1, 0), dsp2(dim1, 0);
+    for (int q = 0; q < dim1; ++q)
+    {
+        // complex<double> = 2 MPI_DOUBLE per element: Allgatherv counts are
+        // in units of the send type (MPI_DOUBLE), so the per-rank block is
+        // 2·nrow·ncol_b doubles (TODO 3.2/3.3, 2026-08-13 — half-count bug
+        // found by the h2o_asym Γ^HK mismatch).
+        cnt2[q] = 2 * nrow * counts[q];
+        dsp2[q] = 2 * nrow * displs[q];
+    }
+    MPI_Allgatherv(local, nrow * ncol_b, MPI_DOUBLE,
+                   reinterpret_cast<double*>(full.data()),
+                   cnt2.data(), dsp2.data(), MPI_DOUBLE, row_comm);
+    MPI_Comm_free(&row_comm);
+
+    // gpos[g] = position in the gathered buffer of global band g
+    // (local2global_col(j) = (j/nb·dim1 + q)·nb + j%nb, q = (g/nb)%dim1).
+    const int nbands_global = paraV->get_wfc_global_nbands();
+    gpos.assign(nbands_global, -1);
+    for (int g = 0; g < nbands_global; ++g)
+    {
+        const int q = (g / nb) % dim1;
+        const int j = (g / nb / dim1) * nb + (g % nb);
+        gpos[g] = displs[q] + j;
+    }
+}
+#endif
+
 // Build the displacement overlap matrix S(dk)_{mu,nu} = sum_R e^{2*pi*i*dk.R}
 // <phi_mu(0) | phi_nu(R)> in the same 2D-block-cyclic distribution as paraV_.
 // dk is the spacing between two adjacent k-points on the Wilson string:
@@ -2097,23 +2160,6 @@ void DeltaP::compute_hk_correction(const UnitCell& ucell,
     const int nrow = paraV_->get_row_size();
     const int ncol = paraV_->get_col_size();
 
-    // The HK correction matrix is written into hsk->get_hk() which holds
-    // the (nrow × ncol) local block of the Hamiltonian.  The nrow == ncol
-    // guard stays in force at 3.1 (F-6): the H_HK correction and the Γ^HK
-    // observable now have correct MPI paths for ANY 2D block-cyclic
-    // distribution, but the H_HK force (compute_hk_force) is still skipped
-    // under MPI and the Ô_w operator is deferred (TODO 3.2/3.3) — so
-    // non-square local blocks (e.g. h2o_asym) remain blocked instead of
-    // running with a silently incomplete force.
-    if (nrow != ncol)
-    {
-        ModuleBase::WARNING_QUIT("DeltaP::compute_hk_correction",
-            "The LCAO parallel grid has nrow != ncol.  "
-            "DeltaP 3.1 still requires square local blocks (nrow == ncol); "
-            "non-square local blocks need TODO 3.2/3.3 (H_HK force MPI / "
-            "Ô_w).  Try a rank count that divides the basis evenly.");
-    }
-
 #ifdef __MPI
     int nproc = 1;
     {
@@ -2131,6 +2177,22 @@ void DeltaP::compute_hk_correction(const UnitCell& ucell,
     // Allreduce over the orbital/band partial sums (A' scheme, same family
     // as compute_D_I).
     const bool mpi_path = (nproc > 1);
+
+    // TODO 3.2/3.3 (2026-08-13): the nrow == ncol guard is now scoped to the
+    // serial path only.  The MPI path is distribution-agnostic: H_sym is the
+    // (nrow × ncol) local block of the exact Hermitian correction (pzgemm
+    // block sizes are numroc-derived, so nrow != ncol is natural), the Γ^HK
+    // observable uses the A' row/band partial-sum Allreduce, and
+    // contributeHk adds the local block element-wise into hsk->get_hk().
+    // Non-square local blocks (odd nwfc, e.g. h2o1/h2o_asym 529 on a 2×2
+    // grid) are therefore valid under MPI; the serial path still assumes a
+    // full local matrix (nrow == ncol == nlocal) by construction, so the
+    // check below is defensive only.
+    if (nproc == 1 && nrow != ncol)
+    {
+        ModuleBase::WARNING_QUIT("DeltaP::compute_hk_correction",
+            "Serial LCAO assumes nrow == ncol (full local matrix).");
+    }
 
     // Rebuild S_k/D_I if they belong to a different direction or string.
     // compute_gamma_scf leaves kstring_data_ from the last alpha (gdir=3)
@@ -2272,25 +2334,35 @@ void DeltaP::compute_hk_correction(const UnitCell& ucell,
             hk_correction[ik_L] = std::move(H_sym);
 
             // Γ_I^HK per atom: T = C_L†·SC and Π = C_L†·C_L are band-space
-            // (nocc_use×nocc_use) matrices whose orbital sums span all ranks;
-            // each rank contributes its local rows × local bands partial,
-            // then one uniform-count Allreduce completes them (A' scheme,
-            // same family as compute_D_I), making Γ^HK rank-independent.
+            // (nocc_use×nocc_use) matrices whose orbital sums span all ranks.
+            // Band-pair completeness (TODO 3.2/3.3, 2026-08-13): with dim1 > 1
+            // the plain A' local-band loop never fills pairs spanning two
+            // process columns — the full band set for this rank's rows is
+            // gathered within the process-row group first (one contribution
+            // per row group: ranks with coord[1] != 0 zero their partials),
+            // then a single Allreduce completes the row sums.  Pi uses the
+            // serial storage convention Pi[i][j] = Π_{j,i} so the full-trace
+            // kernel below (Pi[pp][p] = Π_{p,pp}) is bit-compatible with the
+            // serial path.
             std::vector<std::complex<double>> T_part(nocc_use * nocc_use, {0.0, 0.0});
             std::vector<std::complex<double>> Pi_part(nocc_use * nocc_use, {0.0, 0.0});
-            for (int n1 = 0; n1 < ncol_b; ++n1)
+            std::vector<std::complex<double>> cL_all, SC_all;
+            std::vector<int> gpos;
+            gather_band_columns(paraV_, c_L, cL_all, gpos);
+            gather_band_columns(paraV_, SC.data(), SC_all, gpos);
+            for (int g1 = 0; g1 < nocc_use; ++g1)
             {
-                const int g1 = paraV_->local2global_col(n1);
-                if (g1 < 0 || g1 >= nocc_use) continue;
-                for (int n2 = 0; n2 < ncol_b; ++n2)
+                const int p1 = gpos[g1];
+                if (p1 < 0) continue;
+                for (int g2 = 0; g2 < nocc_use; ++g2)
                 {
-                    const int g2 = paraV_->local2global_col(n2);
-                    if (g2 < 0 || g2 >= nocc_use) continue;
+                    const int p2 = gpos[g2];
+                    if (p2 < 0) continue;
                     std::complex<double> tsum(0.0, 0.0), psum(0.0, 0.0);
                     for (int a = 0; a < nrow; ++a)
                     {
-                        tsum += std::conj(c_L[a + n1 * nrow]) * SC[a + n2 * nrow];
-                        psum += std::conj(c_L[a + n1 * nrow]) * c_L[a + n2 * nrow];
+                        tsum += std::conj(cL_all[a + p1 * nrow]) * SC_all[a + p2 * nrow];
+                        psum += std::conj(cL_all[a + p2 * nrow]) * cL_all[a + p1 * nrow];
                     }
                     T_part[g1 * nocc_use + g2] += tsum;
                     Pi_part[g1 * nocc_use + g2] += psum;
@@ -2300,6 +2372,11 @@ void DeltaP::compute_hk_correction(const UnitCell& ucell,
                 MPI_Comm comm = paraV_->comm();
                 if (comm != MPI_COMM_NULL)
                 {
+                    if (paraV_->coord[1] != 0)
+                    {
+                        T_part.assign(T_part.size(), {0.0, 0.0});
+                        Pi_part.assign(Pi_part.size(), {0.0, 0.0});
+                    }
                     MPI_Allreduce(MPI_IN_PLACE, T_part.data(), 2 * nocc_use * nocc_use,
                                   MPI_DOUBLE, MPI_SUM, comm);
                     MPI_Allreduce(MPI_IN_PLACE, Pi_part.data(), 2 * nocc_use * nocc_use,
@@ -2745,7 +2822,6 @@ void DeltaP::compute_gamma_op_hk(const UnitCell& ucell,
     const int nbands = paraV_->get_wfc_global_nbands();
     const int nrow = paraV_->get_row_size();
     const int ncol = paraV_->get_col_size();
-    if (nrow != ncol) return;
 #ifdef __MPI
     int nproc = 1;
     {
@@ -2763,6 +2839,13 @@ void DeltaP::compute_gamma_op_hk(const UnitCell& ucell,
     // compute_D_I), making Γ^HK rank-independent; the serial path keeps the
     // original loops byte-identical (hard serial A/B constraint).
     const bool mpi_path = (nproc > 1);
+    // TODO 3.2/3.3 (2026-08-13): non-square local blocks are valid on the
+    // MPI path (the A' row/band partial-sum Allreduce is
+    // distribution-agnostic — for a fixed band pair the owning process
+    // column's ranks together cover every orbital row); the serial path
+    // keeps the full-local-matrix assumption (nrow == ncol == nlocal), so
+    // the check below is defensive only.
+    if (nproc == 1 && nrow != ncol) return;
 
     // Rebuild S_k/D_I if they belong to a different direction or string.
     // compute_gamma_scf leaves kstring_data_ from the last alpha (gdir=3)
@@ -2827,9 +2910,12 @@ void DeltaP::compute_gamma_op_hk(const UnitCell& ucell,
         {
             // F-6 MPI path: SC = S_dk·C_R is a genuine distributed GEMM
             // (pzgemm, 'T'-with-pre-conjugation convention); the band-space
-            // T·Π traces are completed by a uniform-count Allreduce over the
-            // local rows × local bands partials (A' scheme), so Γ^HK is
-            // rank-independent.
+            // T·Π traces are completed by the row-group gather + Allreduce
+            // (band-pair completeness, TODO 3.2/3.3, 2026-08-13): with
+            // dim1 > 1 the plain A' local-band loop never fills pairs
+            // spanning two process columns.  Pi uses the serial storage
+            // convention Pi[i][j] = Π_{j,i} (bit-compatible with the serial
+            // path below), so Γ^HK is rank-independent and matches serial.
             const int nlocal = paraV_->desc[2];
             const int nbands_g = paraV_->desc_wfc[3];
             const int ncol_b = paraV_->ncol_bands;
@@ -2845,19 +2931,23 @@ void DeltaP::compute_gamma_op_hk(const UnitCell& ucell,
 
             std::vector<std::complex<double>> T_part(nocc_use * nocc_use, {0.0, 0.0});
             std::vector<std::complex<double>> Pi_part(nocc_use * nocc_use, {0.0, 0.0});
-            for (int n1 = 0; n1 < ncol_b; ++n1)
+            std::vector<std::complex<double>> cL_all, SC_all;
+            std::vector<int> gpos;
+            gather_band_columns(paraV_, c_L, cL_all, gpos);
+            gather_band_columns(paraV_, SC.data(), SC_all, gpos);
+            for (int g1 = 0; g1 < nocc_use; ++g1)
             {
-                const int g1 = paraV_->local2global_col(n1);
-                if (g1 < 0 || g1 >= nocc_use) continue;
-                for (int n2 = 0; n2 < ncol_b; ++n2)
+                const int p1 = gpos[g1];
+                if (p1 < 0) continue;
+                for (int g2 = 0; g2 < nocc_use; ++g2)
                 {
-                    const int g2 = paraV_->local2global_col(n2);
-                    if (g2 < 0 || g2 >= nocc_use) continue;
+                    const int p2 = gpos[g2];
+                    if (p2 < 0) continue;
                     std::complex<double> tsum(0.0, 0.0), psum(0.0, 0.0);
                     for (int a = 0; a < nrow; ++a)
                     {
-                        tsum += std::conj(c_L[a + n1 * nrow]) * SC[a + n2 * nrow];
-                        psum += std::conj(c_L[a + n1 * nrow]) * c_L[a + n2 * nrow];
+                        tsum += std::conj(cL_all[a + p1 * nrow]) * SC_all[a + p2 * nrow];
+                        psum += std::conj(cL_all[a + p2 * nrow]) * cL_all[a + p1 * nrow];
                     }
                     T_part[g1 * nocc_use + g2] += tsum;
                     Pi_part[g1 * nocc_use + g2] += psum;
@@ -2867,6 +2957,11 @@ void DeltaP::compute_gamma_op_hk(const UnitCell& ucell,
                 MPI_Comm comm = paraV_->comm();
                 if (comm != MPI_COMM_NULL)
                 {
+                    if (paraV_->coord[1] != 0)
+                    {
+                        T_part.assign(T_part.size(), {0.0, 0.0});
+                        Pi_part.assign(Pi_part.size(), {0.0, 0.0});
+                    }
                     MPI_Allreduce(MPI_IN_PLACE, T_part.data(), 2 * nocc_use * nocc_use,
                                   MPI_DOUBLE, MPI_SUM, comm);
                     MPI_Allreduce(MPI_IN_PLACE, Pi_part.data(), 2 * nocc_use * nocc_use,
@@ -3338,33 +3433,27 @@ bool DeltaP::compute_hk_force(const UnitCell& ucell,
     const int ncol = paraV_->get_col_size();
 
 #ifdef __MPI
+    int nproc = 1;
     {
         MPI_Comm comm = paraV_->comm();
         if (comm != MPI_COMM_NULL)
-        {
-            int nproc = 1;
             MPI_Comm_size(comm, &nproc);
-            if (nproc > 1)
-            {
-                // The H_HK force needs the full-row S_dk / S_k matrices and the
-                // full wavefunction coefficients.  The H_HK correction path is
-                // itself serial-only (nrow == ncol local-block approximation,
-                // see compute_hk_correction); under MPI we skip the force so
-                // that no partially-correct term is mixed into the per-rank
-                // force totals.
-                ModuleBase::WARNING("DeltaP::compute_hk_force",
-                    "H_HK analytic force is serial-only (nproc>1): skipped. "
-                    "Relax with deltap_corr under MPI lacks the H_HK force (see LIMITATION).");
-                ModuleBase::timer::end("DeltaP", "compute_hk_force");
-                return false;
-            }
-        }
     }
+#else
+    const int nproc = 1;
 #endif
-    if (nrow != ncol)
+    // TODO 3.2/3.3 (2026-08-13): the H_HK analytic force is now MPI-enabled.
+    // nproc > 1 uses the distributed path: SC/T/Pi/U/dW are computed from
+    // the local blocks with pzgemm + the A' row/band partial-sum Allreduce
+    // (same family as compute_hk_correction); nproc == 1 keeps the original
+    // loop code byte-identical (hard serial A/B constraint).  The serial
+    // path assumes a full local matrix (nrow == ncol == nlocal), so the
+    // check below is defensive only.
+    const bool mpi_path = (nproc > 1);
+    if (nproc == 1 && nrow != ncol)
     {
         ModuleBase::WARNING("DeltaP::compute_hk_force",
-            "H_HK analytic force requires nrow == ncol (square grid).");
+            "Serial LCAO assumes nrow == ncol (full local matrix).");
         ModuleBase::timer::end("DeltaP", "compute_hk_force");
         return false;
     }
@@ -3477,6 +3566,345 @@ bool DeltaP::compute_hk_force(const UnitCell& ucell,
             }
         }
 
+#ifdef __MPI
+        if (mpi_path)
+        {
+            // TODO 3.2/3.3 (2026-08-13): distributed H_HK force link body.
+            // SC = S_dk·C_R is a genuine distributed GEMM (desc × desc_wfc);
+            // T/Pi/U/dW are band-space quantities completed by the A'
+            // uniform-count Allreduce over local rows × local bands, so the
+            // per-atom force kernel below is rank-independent.
+            const int nlocal = paraV_->desc[2];
+            const int nbands_g = paraV_->desc_wfc[3];
+            const int ncol_b = paraV_->ncol_bands;
+            const std::complex<double> one_c(1.0, 0.0), zero_c(0.0, 0.0);
+            const int one_i = 1;
+            const char N_ch = 'N';
+
+            // SC = S_dk · C_R  (nlocal×nlocal desc × nlocal×nbands desc_wfc)
+            std::vector<std::complex<double>> SC(nrow * ncol_b, {0.0, 0.0});
+            ScalapackConnector::gemm(N_ch, N_ch, nlocal, nbands_g, nlocal,
+                                     one_c, S_dk_.data(), one_i, one_i, paraV_->desc,
+                                     c_R, one_i, one_i, paraV_->desc_wfc,
+                                     zero_c, SC.data(), one_i, one_i, paraV_->desc_wfc);
+
+            // T_full / Pi: full-band partials over local rows × ALL band
+            // pairs.  With dim1 > 1 the plain A' local-band loop never fills
+            // pairs spanning two process columns (TODO 3.2/3.3 band-pair
+            // completeness fix) — the full band set for this rank's rows is
+            // gathered within the process-row group first, so every pair is
+            // covered and the row sum below is completed by a single
+            // Allreduce (one contribution per row group).
+            std::vector<std::complex<double>> T_full(nocc_use * nocc_use, {0.0, 0.0});
+            std::vector<std::complex<double>> Pi(nocc_use * nocc_use, {0.0, 0.0});
+            std::vector<std::complex<double>> cL_all, SC_all;
+            std::vector<int> gpos;
+            gather_band_columns(paraV_, c_L, cL_all, gpos);
+            gather_band_columns(paraV_, SC.data(), SC_all, gpos);
+            for (int g1 = 0; g1 < nocc_use; ++g1)
+            {
+                const int p1 = gpos[g1];
+                if (p1 < 0) continue;
+                for (int g2 = 0; g2 < nocc_use; ++g2)
+                {
+                    const int p2 = gpos[g2];
+                    if (p2 < 0) continue;
+                    std::complex<double> tsum(0.0, 0.0), psum(0.0, 0.0);
+                    for (int a = 0; a < nrow; ++a)
+                    {
+                        tsum += std::conj(cL_all[a + p1 * nrow]) * SC_all[a + p2 * nrow];
+                        psum += std::conj(cL_all[a + p2 * nrow]) * cL_all[a + p1 * nrow];
+                    }
+                    T_full[g1 * nocc_use + g2] += tsum;
+                    Pi[g1 * nocc_use + g2] += psum;
+                }
+            }
+
+            // U_Jα = (C_L† ∂S_dk/∂R_Jα C_R): under MPI the serial path's
+            // direct (row, col) accumulation is impossible — C_R exists only
+            // for local ROWS while the derivative block spans local rows ×
+            // local COLS — so the chain is: build the (nrow×ncol) local
+            // block D_Jα of ∂S_dk/∂R_Jα (same two-center kernels as serial),
+            // V_Jα = D_Jα·C_R by pzgemm, then the local-row partial of
+            // C_L†·V_Jα completed by the A' Allreduce below.  dW_Jα =
+            // ∂W/∂R_Jα is a local-row partial sum of the projector-
+            // derivative kernel (A' as well).
+            std::vector<std::complex<double>> U_part(
+                static_cast<size_t>(nat) * 3 * nocc_use * nocc_use, {0.0, 0.0});
+            std::vector<double> dW_part(static_cast<size_t>(nat) * 3 * nocc_use, 0.0);
+            // Dloc[(J*3 + a)*nrow*ncol + lr + lc*nrow] = local block element
+            // of ∂S_dk/∂R_Jα at (global row gmu, global col gnu).
+            std::vector<std::complex<double>> Dloc(
+                static_cast<size_t>(nat) * 3 * nrow * ncol, {0.0, 0.0});
+
+            for (int iat = 0; iat < nat; ++iat)
+            {
+                const ModuleBase::Vector3<double> tau0 = ucell.get_tau(iat);
+                int T0 = 0, I0 = 0;
+                ucell.iat2iait(iat, &I0, &T0);
+                const int nw0 = ucell.atoms[T0].nw;
+                const int max_l_plus_1 = ucell.atoms[T0].nwl + 1;
+                const int nproj0 = max_l_plus_1 * max_l_plus_1;
+                // Direct (fractional) bra position for the S_dk phase — see
+                // compute_S_dk for the τ-unit rationale (B-6).
+                const ModuleBase::Vector3<double> taud0 = ucell.atoms[T0].taud[I0];
+
+                AdjacentAtomInfo adjs;
+                gd_->Find_atom(ucell, tau0, T0, I0, &adjs);
+
+                for (int ad = 0; ad < adjs.adj_num + 1; ++ad)
+                {
+                    const int T1 = adjs.ntype[ad];
+                    const int I1 = adjs.natom[ad];
+                    const int iat1 = ucell.itia2iat(T1, I1);
+                    const ModuleBase::Vector3<int> R = adjs.box[ad];
+                    const ModuleBase::Vector3<double>& tau1 = adjs.adjacent_tau[ad];
+                    const double dist = ucell.cal_dtau(iat, iat1, R).norm() * ucell.lat0;
+
+                    const bool sdk_pair = dist <= orb_cutoff_[T0] + orb_cutoff_[T1];
+                    const bool sk_pair = dist < orb_cutoff_[T1] + rm_;
+                    if (!sdk_pair && !sk_pair) continue;
+
+                    const ModuleBase::Vector3<double> dtau = tau0 - tau1;
+                    const Atom* atom1 = &ucell.atoms[T1];
+                    const int nw1 = atom1->nw;
+
+                    // S_dk phase (compute_S_dk convention: 2π(dk·R − dk·τ_bra))
+                    double arg = ModuleBase::TWO_PI * (dkv[0] * R.x + dkv[1] * R.y + dkv[2] * R.z
+                                                       - dkv[0] * taud0.x - dkv[1] * taud0.y - dkv[2] * taud0.z);
+                    const std::complex<double> phase_sdk(std::cos(arg), std::sin(arg));
+                    // S_k phase (compute_S_k convention: 2π k·R)
+                    double argk = ModuleBase::TWO_PI * (kstring_data_[j].kvec_d.x * R.x
+                                                        + kstring_data_[j].kvec_d.y * R.y
+                                                        + kstring_data_[j].kvec_d.z * R.z);
+                    const std::complex<double> phase_sk(std::cos(argk), std::sin(argk));
+
+                    // ---------- ∂S_dk/∂R kernel (full orbital set) ----------
+                    if (sdk_pair)
+                    {
+                        for (int iw1 = 0; iw1 < nw1; ++iw1)
+                        {
+                            const int L1 = atom1->iw2l[iw1];
+                            const int N1 = atom1->iw2n[iw1];
+                            const int m1 = atom1->iw2m[iw1];
+                            const int M1 = (m1 % 2 == 0) ? -m1 / 2 : (m1 + 1) / 2;
+                            std::vector<std::vector<double>> nlm;
+                            overlap_intor_->snap(T1, L1, N1, M1, T0, dtau * ucell.lat0, 1, nlm);
+                            if (nlm.empty() || nlm[0].empty()) continue;
+                            for (int iw0 = 0; iw0 < nw0; ++iw0)
+                            {
+                                const double ov = nlm[0][iw0];
+                                if (std::abs(ov) < 1e-15) continue;
+                                for (int s = 0; s < npol; ++s)
+                                {
+                                    const int gmu = iat2iwt[iat] + npol * iw0 + s;
+                                    const int gnu = iat2iwt[iat1] + npol * iw1 + s;
+                                    const int lr = paraV_->global2local_row(gmu);
+                                    const int lc = paraV_->global2local_col(gnu);
+                                    if (lr < 0 || lc < 0) continue;
+                                    for (int a = 0; a < 3; ++a)
+                                    {
+                                        const double g = nlm[1 + a][iw0];
+                                        // Orbital part: ∂ov/∂R_bra = +g,
+                                        // ∂ov/∂R_ket = -g.
+                                        if (g != 0.0)
+                                        {
+                                            Dloc[(static_cast<size_t>(iat) * 3 + a) * nrow * ncol
+                                                 + lr + lc * nrow] += phase_sdk * g;
+                                            Dloc[(static_cast<size_t>(iat1) * 3 + a) * nrow * ncol
+                                                 + lr + lc * nrow] -= phase_sdk * g;
+                                        }
+                                        // Phase part: ∂phase/∂R_bra,α =
+                                        // -2πi·dkv_grad[α]/lat0 (bra only,
+                                        // unconditional).
+                                        Dloc[(static_cast<size_t>(iat) * 3 + a) * nrow * ncol
+                                             + lr + lc * nrow] -=
+                                            std::complex<double>(0.0, ModuleBase::TWO_PI * dkv_grad[a] / ucell.lat0)
+                                            * phase_sdk * ov;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // ---------- ∂S_k/∂R kernel for W (first-zeta set) ----------
+                    if (sk_pair)
+                    {
+                        for (int iw1 = 0; iw1 < nw1; ++iw1)
+                        {
+                            const int L1 = atom1->iw2l[iw1];
+                            const int N1 = atom1->iw2n[iw1];
+                            const int m1 = atom1->iw2m[iw1];
+                            const int M1 = (m1 % 2 == 0) ? -m1 / 2 : (m1 + 1) / 2;
+                            std::vector<std::vector<double>> nlm;
+                            intor_->snap(T1, L1, N1, M1, T0, dtau * ucell.lat0, 1, nlm);
+                            if (nlm.empty() || nlm[0].empty()) continue;
+
+                            std::vector<double> nlm_target(4 * nproj0, 0.0);
+                            int target_L = 0;
+                            for (int iw = 0; iw < ucell.atoms[T0].nw; ++iw)
+                            {
+                                const int L0 = ucell.atoms[T0].iw2l[iw];
+                                if (L0 != target_L) continue;
+                                for (int m = 0; m < 2 * L0 + 1; ++m)
+                                {
+                                    const int idx = L0 * L0 + m;
+                                    nlm_target[idx] = nlm[0][iw + m];
+                                    nlm_target[nproj0 + idx] = nlm[1][iw + m];
+                                    nlm_target[2 * nproj0 + idx] = nlm[2][iw + m];
+                                    nlm_target[3 * nproj0 + idx] = nlm[3][iw + m];
+                                }
+                                target_L++;
+                            }
+
+                            for (int s = 0; s < npol; ++s)
+                            {
+                                const int gmu = iat2iwt[iat1] + npol * iw1 + s;
+                                const int lr = paraV_->global2local_row(gmu);
+                                if (lr < 0) continue;
+                                for (int lm = 0; lm < nproj0; ++lm)
+                                {
+                                    if (kstring_data_[j].D_I[iat].size() <= static_cast<size_t>(lm)) continue;
+                                    const auto& DI = kstring_data_[j].D_I[iat][lm];
+                                    // Loop over LOCAL band columns: c_L columns
+                                    // are local bands (desc_wfc layout); the
+                                    // global band p = local2global_col(n1) is
+                                    // used for the D_I / dW_part indexing.
+                                    for (int n1 = 0; n1 < ncol_b; ++n1)
+                                    {
+                                        const int p = paraV_->local2global_col(n1);
+                                        if (p < 0 || p >= nocc_use) continue;
+                                        const std::complex<double> Dp = DI[p];
+                                        if (std::abs(Dp) < 1e-15) continue;
+                                        const std::complex<double> Cmu = c_L[lr + n1 * nrow];
+                                        for (int a = 0; a < 3; ++a)
+                                        {
+                                            const double grad = nlm_target[(1 + a) * nproj0 + lm];
+                                            if (grad == 0.0) continue;
+                                            // ∂S_k/∂R_bra = phase·grad,
+                                            // ∂S_k/∂R_ket = −phase·grad.
+                                            const double re_term = (std::conj(Dp) * std::conj(phase_sk * grad) * Cmu).real();
+                                            dW_part[(static_cast<size_t>(iat) * 3 + a) * nocc_use + p]
+                                                += 2.0 * lambda[iat] * re_term;
+                                            dW_part[(static_cast<size_t>(iat1) * 3 + a) * nocc_use + p]
+                                                -= 2.0 * lambda[iat] * re_term;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // V_Jα = D_Jα·C_R (pzgemm), then the local-row partial of U.
+            for (int J = 0; J < nat; ++J)
+            {
+                for (int a = 0; a < 3; ++a)
+                {
+                    const std::complex<double>* D = Dloc.data()
+                        + (static_cast<size_t>(J) * 3 + a) * nrow * ncol;
+                    std::vector<std::complex<double>> V(nrow * ncol_b, {0.0, 0.0});
+                    ScalapackConnector::gemm(N_ch, N_ch, nlocal, nbands_g, nlocal,
+                                             one_c, D, one_i, one_i, paraV_->desc,
+                                             c_R, one_i, one_i, paraV_->desc_wfc,
+                                             zero_c, V.data(), one_i, one_i, paraV_->desc_wfc);
+                    // Full-band gather (same band-pair completeness fix as
+                    // T/Pi above) before the local-row partial of C_L†·V.
+                    std::vector<std::complex<double>> V_all;
+                    gather_band_columns(paraV_, V.data(), V_all, gpos);
+                    std::complex<double>* UJ = U_part.data()
+                        + (static_cast<size_t>(J) * 3 + a) * nocc_use * nocc_use;
+                    for (int g1 = 0; g1 < nocc_use; ++g1)
+                    {
+                        const int p1 = gpos[g1];
+                        if (p1 < 0) continue;
+                        for (int g2 = 0; g2 < nocc_use; ++g2)
+                        {
+                            const int p2 = gpos[g2];
+                            if (p2 < 0) continue;
+                            std::complex<double> usum(0.0, 0.0);
+                            for (int r = 0; r < nrow; ++r)
+                            {
+                                usum += std::conj(cL_all[r + p1 * nrow]) * V_all[r + p2 * nrow];
+                            }
+                            UJ[g1 * nocc_use + g2] += usum;
+                        }
+                    }
+                }
+            }
+
+            // Row-sum Allreduce: T/Pi/U partials are identical within each
+            // process-row group (same rows, gathered bands), so exactly one
+            // rank per row group contributes (coord[1] == 0); dW is a plain
+            // A' partial over this rank's own rows and needs every rank.
+            {
+                MPI_Comm comm = paraV_->comm();
+                if (comm != MPI_COMM_NULL)
+                {
+                    if (paraV_->coord[1] != 0)
+                    {
+                        T_full.assign(T_full.size(), {0.0, 0.0});
+                        Pi.assign(Pi.size(), {0.0, 0.0});
+                        U_part.assign(U_part.size(), {0.0, 0.0});
+                    }
+                    MPI_Allreduce(MPI_IN_PLACE, T_full.data(), 2 * nocc_use * nocc_use,
+                                  MPI_DOUBLE, MPI_SUM, comm);
+                    MPI_Allreduce(MPI_IN_PLACE, Pi.data(), 2 * nocc_use * nocc_use,
+                                  MPI_DOUBLE, MPI_SUM, comm);
+                    MPI_Allreduce(MPI_IN_PLACE, U_part.data(),
+                                  2 * static_cast<int>(U_part.size()), MPI_DOUBLE, MPI_SUM, comm);
+                    MPI_Allreduce(MPI_IN_PLACE, dW_part.data(),
+                                  static_cast<int>(dW_part.size()), MPI_DOUBLE, MPI_SUM, comm);
+                }
+            }
+
+            // ---- accumulate this link into the per-atom force kernel ----
+            // Full-trace frozen-C derivative (same kernel as the serial
+            // path, now with rank-independent band-space quantities):
+            //   acc[iat][a*nocc+p] = f_p·Σ_{p'}(dW[p']·T_{pp'} + W[p']·U[p][p'])·Π_{p'p}
+            for (int iat = 0; iat < nat; ++iat)
+            {
+                for (int a = 0; a < 3; ++a)
+                {
+                    for (int p = 0; p < nocc_use; ++p)
+                    {
+                        const double fp = pelec->wg(ik_L, p);
+                        if (fp == 0.0) continue;
+                        std::complex<double> kern(0.0, 0.0);
+                        for (int pp = 0; pp < nocc_use; ++pp)
+                        {
+                            kern += (dW_part[(static_cast<size_t>(iat) * 3 + a) * nocc_use + pp]
+                                         * T_full[p * nocc_use + pp]
+                                     + W[pp] * U_part[(static_cast<size_t>(iat) * 3 + a) * nocc_use * nocc_use
+                                                      + p * nocc_use + pp])
+                                    * Pi[pp * nocc_use + p];
+                        }
+                        acc[iat][a * nocc_use + p] += fp * kern;
+                    }
+                }
+            }
+            // Full-trace E_HK and per-atom Γ_I^HK (split before the λ sum).
+            for (int p = 0; p < nocc_use; ++p)
+            {
+                const double fp = pelec->wg(ik_L, p);
+                if (fp == 0.0) continue;
+                for (int pp = 0; pp < nocc_use; ++pp)
+                {
+                    const std::complex<double> tpi = T_full[p * nocc_use + pp] * Pi[pp * nocc_use + p];
+                    e_hk += fp * W[pp] * tpi;
+                    for (int iat = 0; iat < nat; ++iat)
+                    {
+                        e_hk_I[iat] += fp * w_IJ[pp][iat] * tpi;
+                    }
+                }
+            }
+
+        }
+        else
+#endif
+        {
+        // Serial path (nproc == 1): byte-identical to the pre-Q2 code.
         // SC = S_dk * C_R (nrow x nocc_use)
         std::vector<std::complex<double>> SC(nrow * nocc_use, {0.0, 0.0});
         for (int p = 0; p < nocc_use; ++p)
@@ -3741,6 +4169,7 @@ bool DeltaP::compute_hk_force(const UnitCell& ucell,
                 }
             }
         }
+
 #if 0 // DEBUG_HK_FORCE (temporary, disabled for commit; flip to 1 for A2/C)
         {
             double u_norm = 0.0, dw_norm = 0.0;
@@ -3803,6 +4232,7 @@ bool DeltaP::compute_hk_force(const UnitCell& ucell,
                       << " e_link=" << e_link << " Re(fWT)=" << re_fwt << std::endl;
         }
 #endif
+        }
     }
 
     // F_Jα = -Re[(i/2) Σ_p acc] = (1/2) Σ_p Im(acc);  E_HK = Re[(i/2) e_hk]
