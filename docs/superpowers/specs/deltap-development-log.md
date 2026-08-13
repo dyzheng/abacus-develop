@@ -68,6 +68,16 @@
     Ô_θ/EFC 的算符期望即 γ，其 R 导数构造上纯极化通道（Maxwell 一致性白来）
     → EFC 是场模式力/应力的唯一第一性解法。应力版同族（压电 Maxwell：
     ∂σ/∂λ vs ∂P/∂ε）是 F-8 验收判据，不是可选项。
+18. **分布式算符修正的本地块必须走 GEMM，观测可走 Allreduce（F-6，2026-08-13）**：
+    LCAO 2D 块循环下，H 的本地块 (nrow×ncol) 的行/列是不同轨道集合
+    （`nrow==ncol` 只保证尺寸巧合，不保证索引语义）——任何"用本地行当列
+    索引"的算符修正（H_sym、H_ow）在 MPI 下都是错的。修正矩阵本地块的正确
+    求法是分布式 GEMM（`H_sym = 0.5·(F·C_L† + C_L·F†)`，pzgemm 'T'+预共轭）；
+    全局标量观测（Γ^HK = Tr[ρ·H_sym] 的 T·Π 迹）则只需"本地行×本地带部分和
+    + 均匀计数 Allreduce"（A' 族）。同一函数的两条路径可以共存：串行分支
+    逐字节保留（硬约束），MPI 分支走 GEMM。默认参数陷阱：`deltap_observable`
+    默认 operator——"legacy gamma 模式"测试可能实际走 Γ 路径，验收设计必须
+    先核对默认值。
 
 ---
 
@@ -2555,3 +2565,56 @@ escon/总能抵消的精确二次结构待查（不影响判决）。
 1. commit（文档轮）。
 2. F-6（hk MPI）→ F-7（L1 三件）→ F-8（应力，含 Maxwell 判据）按序。
 3. 场模式用户文档（能量/响应侧可交付；力侧挂起 + 半经验标注）可与 F-6 并行起草。
+
+## 2026-08-13——F-6（TODO 3.1）：hk_correction MPI 修复 PASS
+
+### Round summary
+TODO 3.1（F-6）：`compute_hk_correction` 的 MPI 语义修复。根因两层——
+① psi 带索引按全局 nocc_use 遍历本地带（部分和/越读）；② H_sym 的
+（α,β）两个下标都用本地行轨道，而 H 本地块 (nrow×ncol) 的列应是本地列轨道
+（nrow==ncol 守卫只保证尺寸巧合相等，不保证索引语义）。2×2 网格下 nwfc
+偶数（hf=18/co=10）跑通但 Γ/E' 错（hf E' 差 2.33 eV）；nwfc 奇数
+（h2o1/h2o_asym=529）非对角 rank 265×264 触发 WARNING_QUIT（gdb catch
+exit_group 实证）。附带发现 `deltap_observable` 默认 operator——hf/co 走
+Γ 路径，3.1 验收必须连带修 `compute_gamma_op_hk`（同族 A' 方案直接适用）。
+
+### Key results
+- **修复方案**：nproc==1 原循环逐字节保留（硬约束）；nproc>1 走 pzgemm
+  分布式 GEMM——`SC = S_dk·C_R`（desc×desc_wfc→desc_wfc）、
+  `F=(i/2)·w_eff[g]·SC`、`H_sym = 0.5·(F·C_L† + C_L·F†)`（'T'+预共轭约定，
+  同 cal_dm_psi，精确 Hermitian 本地块）；Γ^HK 的 T/Π 走本地行×本地带部分和
+  + 均匀计数 Allreduce（A' 族）。
+- **串行 A/B 硬约束 PASS**：h2o1 FINAL_ETOT_IS −481.6964709588435 eV 逐位
+  一致；全部 DeltaP 诊断行/GE 能量列(md5)/TOTAL-FORCE 逐位一致（仅 TIME 变）。
+- **hf/co corr=1 4-rank PASS**：hf E' Δ=2.7e-6 eV、co Δ=2.5e-5 eV（串行
+  参考 −687.094383147832 / −612.0598717620463）；rawG 逐原子 γ 全精度一致；
+  P3 行（γ/λ/Γ/escon 打印精度）一致。co 的 λ[0] 第七位漂移（4.644467 vs
+  4.644466）直接解释 escon Δ。
+- **h2o_asym 4-rank 仍被方阵守卫拦**：rc=1，gdb 确认 WARNING_QUIT
+  （compute_hk_correction nrow≠ncol 守卫）✓。
+- **deltap_mpi_smoke 4/4 PASS**：PW 2-rank / BN 4-rank / CO(NBANDS=15) 4-rank
+  / BN inner-loop 4-rank。
+- **ΔE' 归因（诚实标注）**：pzgemm 块循环求和顺序 vs 串行稠密循环的固有 FP
+  差异（~1e-14/元素），经 30+ 迭代 SCF 反馈与 λ 累积放大——远低于一切判据
+  （fd_force 0.0129 eV/Å、T 系列 1e-3 eV），非可消除偏差。
+- **范围裁定**：h2o1/h2o_asym（529 轨道奇数）4-rank 仍被拦（3.2/3.3 前置：
+  非方本地块 + compute_hk_force MPI）；F_HK 力保持既有 MPI 跳过（LIMITATION）。
+  TODO 3.1 原文验收（hf/co γ+E' + h2o_asym 拦）全部满足。
+
+### 裁定
+3.1 PASS。H_sym 本地块必须走分布式 GEMM（A' 带映射对观测充分、对本地块不
+充分——行/列块语义是硬需求）；Γ^HK 观测走 A' Allreduce。ow 分支 MPI 门控
+跳过（TODO 3.2/3.3）。
+
+### File list
+- `source/source_lcao/module_deltap/deltap_wannier.cpp`（compute_hk_correction
+  + compute_gamma_op_hk 的 MPI 路径；守卫消息更新；ow MPI 门控）
+- `docs/superpowers/specs/2026-08-13-deltap-f6-hk-mpi.md`（本轮轮文档）
+- `docs/superpowers/specs/2026-08-04-deltap-execution-todo.md`（3.1 → ✅）
+- dev log 本条 + 关键结论区 #18
+
+### Next steps
+1. commit（F-6 全部文件，消息按 TODO 纪律）。
+2. 3.2（operator 4-rank Γ/γ 跨 rank 一致性专项）→ 3.3（非方本地块 + F_HK
+   力 MPI 后 co/h2o_asym 4-rank 收敛复测）。
+3. F-7（L1 三件）→ F-8（应力，含压电 Maxwell 判据）。

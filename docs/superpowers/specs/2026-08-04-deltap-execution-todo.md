@@ -264,7 +264,7 @@ T3 结论——现在有结论了），T4 通过后统一提交 Stage 1+2 再进
 
 | # | 任务 | 验收 |
 |---|------|------|
-| 3.1 | **hk_correction MPI 修复**（本地列索引 → 全局带映射，与 D_I A' 同族；`deltap_wannier.cpp:1651` 起，c_L/c_R 的 p·nrow 索引） | **修复前后串行 A/B 逐字节一致**（硬约束）；hf/co corr=1 4-rank 与串行逐原子 γ、E' 一致；h2o_asym 仍被方阵守卫拦（记录） |
+| 3.1 | **hk_correction MPI 修复**（本地列索引 → 全局带映射，与 D_I A' 同族；`deltap_wannier.cpp:1651` 起，c_L/c_R 的 p·nrow 索引） | **修复前后串行 A/B 逐字节一致**（硬约束）；hf/co corr=1 4-rank 与串行逐原子 γ、E' 一致；h2o_asym 仍被方阵守卫拦（记录） | ✅ **PASS（2026-08-13）**：H_sym 走 pzgemm 分布式 GEMM（精确 Hermitian 本地块），Γ^HK 走 A' Allreduce；串行 A/B 逐位一致（−481.6964709588435 eV）；hf E' Δ=2.7e-6 / co Δ=2.5e-5 eV（pzgemm 求和顺序 FP 噪声，λ 累积放大），rawG 逐原子 γ 全精度一致；h2o_asym 4-rank 仍被 nrow≠ncol 守卫 WARNING_QUIT（gdb 实证）；mpi_smoke 4/4 PASS。连带修 compute_gamma_op_hk（observable 默认 operator，hf/co 走 Γ 路径）；ow 分支 MPI 门控。详见 `2026-08-13-deltap-f6-hk-mpi.md` |
 | 3.2 | T7：operator 模式 4-rank Γ/γ 跨 rank 一致 | 逐原子 ±0.01 rad |
 | 3.3 | co/h2o_asym corr=1 4-rank 收敛性复测 | co 4-rank 收敛（此前 100 iter 不收敛归因 H_HK） |
 

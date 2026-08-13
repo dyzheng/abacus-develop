@@ -2097,17 +2097,40 @@ void DeltaP::compute_hk_correction(const UnitCell& ucell,
     const int nrow = paraV_->get_row_size();
     const int ncol = paraV_->get_col_size();
 
-    // The HK correction matrix is built as nrow×nrow and written into
-    // hsk->get_hk() which has nrow×ncol local entries.  This is safe only
-    // when the 2D block-cyclic grid distributes the same number of rows
-    // and columns to each MPI rank, i.e. nrow == ncol.
+    // The HK correction matrix is written into hsk->get_hk() which holds
+    // the (nrow × ncol) local block of the Hamiltonian.  The nrow == ncol
+    // guard stays in force at 3.1 (F-6): the H_HK correction and the Γ^HK
+    // observable now have correct MPI paths for ANY 2D block-cyclic
+    // distribution, but the H_HK force (compute_hk_force) is still skipped
+    // under MPI and the Ô_w operator is deferred (TODO 3.2/3.3) — so
+    // non-square local blocks (e.g. h2o_asym) remain blocked instead of
+    // running with a silently incomplete force.
     if (nrow != ncol)
     {
         ModuleBase::WARNING_QUIT("DeltaP::compute_hk_correction",
             "The LCAO parallel grid has nrow != ncol.  "
-            "DeltaP currently requires a square process grid.  "
-            "Try running with a square number of MPI ranks.");
+            "DeltaP 3.1 still requires square local blocks (nrow == ncol); "
+            "non-square local blocks need TODO 3.2/3.3 (H_HK force MPI / "
+            "Ô_w).  Try a rank count that divides the basis evenly.");
     }
+
+#ifdef __MPI
+    int nproc = 1;
+    {
+        MPI_Comm comm = paraV_->comm();
+        if (comm != MPI_COMM_NULL)
+            MPI_Comm_size(comm, &nproc);
+    }
+#else
+    const int nproc = 1;
+#endif
+    // F-6 (TODO 3.1, 2026-08-13): nproc > 1 uses the distributed-GEMM path
+    // (correct local block of H_sym in any 2D block-cyclic distribution);
+    // nproc == 1 keeps the original loop code byte-identical (hard serial
+    // A/B constraint).  The Γ^HK observable is completed by a uniform-count
+    // Allreduce over the orbital/band partial sums (A' scheme, same family
+    // as compute_D_I).
+    const bool mpi_path = (nproc > 1);
 
     // Rebuild S_k/D_I if they belong to a different direction or string.
     // compute_gamma_scf leaves kstring_data_ from the last alpha (gdir=3)
@@ -2135,14 +2158,10 @@ void DeltaP::compute_hk_correction(const UnitCell& ucell,
 
     const std::complex<double> half_i(0.0, 0.5);
 
-    // Note: In MPI mode, each rank computes its LOCAL block of the
-    // HK correction matrix using its local wavefunctions and local S_dk.
-    // The Hamiltonian is distributed, so each rank's correction is applied
-    // to its own block — no MPI communication needed here.
-
     // Per-atom Γ_I^HK accumulator (complex; finalized after the link loop).
-    // Under MPI with nrow==ncol the T·Π trace covers only the local rows
-    // (same local-block approximation as the H_sym correction itself).
+    // Serial path: T·Π trace over the full orbital sum (all rows local).
+    // MPI path: per-rank row/band partials completed by an Allreduce (A'
+    // scheme) so the per-atom observable is rank-independent.
     std::vector<std::complex<double>> e_hk_I(nat_, {0.0, 0.0});
 
     // For each link on the first k-string
@@ -2188,6 +2207,124 @@ void DeltaP::compute_hk_correction(const UnitCell& ucell,
         for (int n = 0; n < nocc_use; ++n)
             for (int iat = 0; iat < nat_; ++iat)
                 w_eff[n] += lambda[iat] * w_IJ[n][iat];
+
+#ifdef __MPI
+        if (mpi_path)
+        {
+            // F-6 (TODO 3.1, 2026-08-13): distributed H_HK correction.
+            // SC = S_dk·C_R is a genuine distributed GEMM (S_dk lives in the
+            // Hamiltonian 2D block-cyclic layout, C_R in the wfc layout); the
+            // exact local block of the symmetrized operator is
+            //   H_sym = (F·C_L† + C_L·F†)/2,   F = (i/2)·w_eff·SC,
+            // i.e. the (local rows × local cols) block of the full serial
+            // correction (T2 full-trace convention).  pzgemm uses the
+            // codebase 'T'-with-pre-conjugation convention (cal_dm_psi).
+            const int nlocal = paraV_->desc[2];
+            const int nbands_g = paraV_->desc_wfc[3];
+            const int ncol_b = paraV_->ncol_bands;
+            const std::complex<double> one_c(1.0, 0.0), zero_c(0.0, 0.0);
+            const int one_i = 1;
+            const char N_ch = 'N', T_ch = 'T';
+
+            // SC = S_dk · C_R  (nlocal × nbands_g, desc_wfc layout)
+            std::vector<std::complex<double>> SC(nrow * ncol_b, {0.0, 0.0});
+            ScalapackConnector::gemm(N_ch, N_ch, nlocal, nbands_g, nlocal,
+                                     one_c, S_dk_.data(), one_i, one_i, paraV_->desc,
+                                     c_R, one_i, one_i, paraV_->desc_wfc,
+                                     zero_c, SC.data(), one_i, one_i, paraV_->desc_wfc);
+
+            // F = (i/2)·w_eff[g]·SC (g = global band of the local column)
+            std::vector<std::complex<double>> F(nrow * ncol_b, {0.0, 0.0});
+            for (int n = 0; n < ncol_b; ++n)
+            {
+                const int g = paraV_->local2global_col(n);
+                if (g < 0 || g >= nocc_use) continue;
+                const std::complex<double> coeff = half_i * w_eff[g];
+                for (int a = 0; a < nrow; ++a)
+                    F[a + n * nrow] = coeff * SC[a + n * nrow];
+            }
+
+            // Pre-conjugated copies ('T' convention of pzgemm).
+            std::vector<std::complex<double>> CL_conj(nrow * ncol_b);
+            std::vector<std::complex<double>> F_conj(nrow * ncol_b);
+            for (int i = 0; i < nrow * ncol_b; ++i)
+            {
+                CL_conj[i] = std::conj(c_L[i]);
+                F_conj[i] = std::conj(F[i]);
+            }
+
+            // M1 = F·C_L† and M2 = C_L·F† in the desc layout (local block).
+            std::vector<std::complex<double>> M1(nrow * ncol, {0.0, 0.0});
+            std::vector<std::complex<double>> M2(nrow * ncol, {0.0, 0.0});
+            ScalapackConnector::gemm(N_ch, T_ch, nlocal, nlocal, nbands_g,
+                                     one_c, F.data(), one_i, one_i, paraV_->desc_wfc,
+                                     CL_conj.data(), one_i, one_i, paraV_->desc_wfc,
+                                     zero_c, M1.data(), one_i, one_i, paraV_->desc);
+            ScalapackConnector::gemm(N_ch, T_ch, nlocal, nlocal, nbands_g,
+                                     one_c, c_L, one_i, one_i, paraV_->desc_wfc,
+                                     F_conj.data(), one_i, one_i, paraV_->desc_wfc,
+                                     zero_c, M2.data(), one_i, one_i, paraV_->desc);
+
+            // H_sym = 0.5·(M1 + M2): the exact Hermitian local block.
+            std::vector<std::complex<double>> H_sym(nrow * ncol, {0.0, 0.0});
+            for (int i = 0; i < nrow * ncol; ++i)
+                H_sym[i] = 0.5 * (M1[i] + M2[i]);
+            hk_correction[ik_L] = std::move(H_sym);
+
+            // Γ_I^HK per atom: T = C_L†·SC and Π = C_L†·C_L are band-space
+            // (nocc_use×nocc_use) matrices whose orbital sums span all ranks;
+            // each rank contributes its local rows × local bands partial,
+            // then one uniform-count Allreduce completes them (A' scheme,
+            // same family as compute_D_I), making Γ^HK rank-independent.
+            std::vector<std::complex<double>> T_part(nocc_use * nocc_use, {0.0, 0.0});
+            std::vector<std::complex<double>> Pi_part(nocc_use * nocc_use, {0.0, 0.0});
+            for (int n1 = 0; n1 < ncol_b; ++n1)
+            {
+                const int g1 = paraV_->local2global_col(n1);
+                if (g1 < 0 || g1 >= nocc_use) continue;
+                for (int n2 = 0; n2 < ncol_b; ++n2)
+                {
+                    const int g2 = paraV_->local2global_col(n2);
+                    if (g2 < 0 || g2 >= nocc_use) continue;
+                    std::complex<double> tsum(0.0, 0.0), psum(0.0, 0.0);
+                    for (int a = 0; a < nrow; ++a)
+                    {
+                        tsum += std::conj(c_L[a + n1 * nrow]) * SC[a + n2 * nrow];
+                        psum += std::conj(c_L[a + n1 * nrow]) * c_L[a + n2 * nrow];
+                    }
+                    T_part[g1 * nocc_use + g2] += tsum;
+                    Pi_part[g1 * nocc_use + g2] += psum;
+                }
+            }
+            {
+                MPI_Comm comm = paraV_->comm();
+                if (comm != MPI_COMM_NULL)
+                {
+                    MPI_Allreduce(MPI_IN_PLACE, T_part.data(), 2 * nocc_use * nocc_use,
+                                  MPI_DOUBLE, MPI_SUM, comm);
+                    MPI_Allreduce(MPI_IN_PLACE, Pi_part.data(), 2 * nocc_use * nocc_use,
+                                  MPI_DOUBLE, MPI_SUM, comm);
+                }
+            }
+            for (int p = 0; p < nocc_use; ++p)
+            {
+                const double fp = pelec->wg(ik_L, p);
+                if (fp == 0.0) continue;
+                for (int iat = 0; iat < nat_; ++iat)
+                {
+                    std::complex<double> acc(0.0, 0.0);
+                    for (int pp = 0; pp < nocc_use; ++pp)
+                        acc += w_IJ[pp][iat] * T_part[p * nocc_use + pp] * Pi_part[pp * nocc_use + p];
+                    e_hk_I[iat] += fp * acc;
+                }
+            }
+        }
+        else
+#endif
+        {
+            // Serial path (nproc == 1): byte-identical to the pre-F-6 code
+            // (hard serial A/B constraint) — the full orbital/band space is
+            // local, so the loops below ARE the full H_sym.
 
         // Step 1: SC = S_dk * C_R -> (nrow x nocc_use)
         std::vector<std::complex<double>> SC(nrow * nocc_use, {0.0, 0.0});
@@ -2280,6 +2417,7 @@ void DeltaP::compute_hk_correction(const UnitCell& ucell,
         // the per-string pass below — R2/R3, 2026-08-12)
 
         hk_correction[ik_L] = H_sym;
+        }
     }
 
     // T-6' (Ô_w), R2/R3 (2026-08-12): H_ow is a k-local operator (Route A++
@@ -2295,7 +2433,18 @@ void DeltaP::compute_hk_correction(const UnitCell& ucell,
     // No per-band weight normalization is applied: Ô_w = θ_n·P̂_I is the
     // exact weight-channel operator of Route A++ §1.3 (the S^{-1/2} Löwdin
     // rotation of the projector is deferred; V-H3' quantifies its residual).
-    if (ow_mode && ow_theta_valid_ && ow_theta_gdir_ == gdir_ && ow_kernel_valid_)
+    // F-6 (TODO 3.1): H_ow under MPI is deferred (TODO 3.2/3.3) — the Ô_w
+    // branches build nrow×nrow local blocks with serial-only index semantics
+    // (local rows for both the row and the column of the local H block).  The
+    // square-block guard would only let them run on even-nwfc systems, where
+    // they would silently mis-place the local block; skip with a warning.
+    if (ow_mode && mpi_path && GlobalV::MY_RANK == 0)
+    {
+        std::cout << " [DeltaP] WARNING: operator_mode=ow under MPI is deferred "
+                  << "(TODO 3.2/3.3); only the H_HK correction is applied."
+                  << std::endl;
+    }
+    if (ow_mode && !mpi_path && ow_theta_valid_ && ow_theta_gdir_ == gdir_ && ow_kernel_valid_)
     {
         // T-17 (V-H8, S1): frozen-kernel path — H_ow is rebuilt from the
         // kernel captured at the last edge (frozen K_I, C, θ) scaled by the
@@ -2351,7 +2500,7 @@ void DeltaP::compute_hk_correction(const UnitCell& ucell,
             }
         }
     }
-    else if (ow_mode && ow_theta_valid_ && ow_theta_gdir_ == gdir_)
+    else if (ow_mode && !mpi_path && ow_theta_valid_ && ow_theta_gdir_ == gdir_)
     {
         // Live path (pre-S1 behavior): kernel invalid (defensive fallback,
         // e.g. θ unavailable at the kernel build) — rebuild H_ow from the
@@ -2597,6 +2746,23 @@ void DeltaP::compute_gamma_op_hk(const UnitCell& ucell,
     const int nrow = paraV_->get_row_size();
     const int ncol = paraV_->get_col_size();
     if (nrow != ncol) return;
+#ifdef __MPI
+    int nproc = 1;
+    {
+        MPI_Comm comm = paraV_->comm();
+        if (comm != MPI_COMM_NULL)
+            MPI_Comm_size(comm, &nproc);
+    }
+#else
+    const int nproc = 1;
+#endif
+    // F-6 (TODO 3.1, 2026-08-13): Γ_I^HK is a global observable — the
+    // band-space T·Π trace spans every orbital and band.  Under MPI each
+    // rank contributes its local rows × local bands and a uniform-count
+    // Allreduce completes the trace (A' scheme, same family as
+    // compute_D_I), making Γ^HK rank-independent; the serial path keeps the
+    // original loops byte-identical (hard serial A/B constraint).
+    const bool mpi_path = (nproc > 1);
 
     // Rebuild S_k/D_I if they belong to a different direction or string.
     // compute_gamma_scf leaves kstring_data_ from the last alpha (gdir=3)
@@ -2656,7 +2822,74 @@ void DeltaP::compute_gamma_op_hk(const UnitCell& ucell,
             }
         }
 
-        // SC = S_dk * C_R
+#ifdef __MPI
+        if (mpi_path)
+        {
+            // F-6 MPI path: SC = S_dk·C_R is a genuine distributed GEMM
+            // (pzgemm, 'T'-with-pre-conjugation convention); the band-space
+            // T·Π traces are completed by a uniform-count Allreduce over the
+            // local rows × local bands partials (A' scheme), so Γ^HK is
+            // rank-independent.
+            const int nlocal = paraV_->desc[2];
+            const int nbands_g = paraV_->desc_wfc[3];
+            const int ncol_b = paraV_->ncol_bands;
+            const std::complex<double> one_c(1.0, 0.0), zero_c(0.0, 0.0);
+            const int one_i = 1;
+            const char N_ch = 'N';
+
+            std::vector<std::complex<double>> SC(nrow * ncol_b, {0.0, 0.0});
+            ScalapackConnector::gemm(N_ch, N_ch, nlocal, nbands_g, nlocal,
+                                     one_c, S_dk_.data(), one_i, one_i, paraV_->desc,
+                                     c_R, one_i, one_i, paraV_->desc_wfc,
+                                     zero_c, SC.data(), one_i, one_i, paraV_->desc_wfc);
+
+            std::vector<std::complex<double>> T_part(nocc_use * nocc_use, {0.0, 0.0});
+            std::vector<std::complex<double>> Pi_part(nocc_use * nocc_use, {0.0, 0.0});
+            for (int n1 = 0; n1 < ncol_b; ++n1)
+            {
+                const int g1 = paraV_->local2global_col(n1);
+                if (g1 < 0 || g1 >= nocc_use) continue;
+                for (int n2 = 0; n2 < ncol_b; ++n2)
+                {
+                    const int g2 = paraV_->local2global_col(n2);
+                    if (g2 < 0 || g2 >= nocc_use) continue;
+                    std::complex<double> tsum(0.0, 0.0), psum(0.0, 0.0);
+                    for (int a = 0; a < nrow; ++a)
+                    {
+                        tsum += std::conj(c_L[a + n1 * nrow]) * SC[a + n2 * nrow];
+                        psum += std::conj(c_L[a + n1 * nrow]) * c_L[a + n2 * nrow];
+                    }
+                    T_part[g1 * nocc_use + g2] += tsum;
+                    Pi_part[g1 * nocc_use + g2] += psum;
+                }
+            }
+            {
+                MPI_Comm comm = paraV_->comm();
+                if (comm != MPI_COMM_NULL)
+                {
+                    MPI_Allreduce(MPI_IN_PLACE, T_part.data(), 2 * nocc_use * nocc_use,
+                                  MPI_DOUBLE, MPI_SUM, comm);
+                    MPI_Allreduce(MPI_IN_PLACE, Pi_part.data(), 2 * nocc_use * nocc_use,
+                                  MPI_DOUBLE, MPI_SUM, comm);
+                }
+            }
+            for (int p = 0; p < nocc_use; ++p)
+            {
+                const double fp = pelec->wg(ik_L, p);
+                if (fp == 0.0) continue;
+                for (int iat = 0; iat < nat_; ++iat)
+                {
+                    std::complex<double> acc(0.0, 0.0);
+                    for (int pp = 0; pp < nocc_use; ++pp)
+                        acc += w_IJ[pp][iat] * T_part[p * nocc_use + pp] * Pi_part[pp * nocc_use + p];
+                    e_hk_I[iat] += fp * acc;
+                }
+            }
+        }
+        else
+#endif
+        {
+        // SC = S_dk * C_R (serial path, byte-identical to pre-F-6)
         std::vector<std::complex<double>> SC(nrow * nocc_use, {0.0, 0.0});
         for (int p = 0; p < nocc_use; ++p)
         {
@@ -2706,6 +2939,7 @@ void DeltaP::compute_gamma_op_hk(const UnitCell& ucell,
                 e_hk_I[iat] += fp * acc;
             }
         }
+        }
     }
 
     // T-6' (Ô_w), R2/R3 (2026-08-12): Γ_I^w is the per-atom split of
@@ -2720,8 +2954,17 @@ void DeltaP::compute_gamma_op_hk(const UnitCell& ucell,
     // edges the cached applied-operator value is returned directly so the
     // reported Γ_I^w is exactly the operator that was applied in the solve
     // (HG-2), instead of a fresh measurement at a slightly different ψ.
+    // F-6 (TODO 3.1): the Ô_w Γ^I^w measurement is serial-only (its Π trace
+    // sums local rows only); under MPI it is deferred (TODO 3.2/3.3) and
+    // gamma_op_w_ stays zeroed (H_ow itself is also skipped, see
+    // compute_hk_correction).
+    if (ow_mode && mpi_path && GlobalV::MY_RANK == 0)
+    {
+        std::cout << " [DeltaP] WARNING: operator_mode=ow Γ^w under MPI is deferred "
+                  << "(TODO 3.2/3.3); Γ^w=0 on the observable." << std::endl;
+    }
     bool ow_used_frozen = false;
-    if (ow_mode && ow_theta_valid_ && ow_theta_gdir_ == gdir_)
+    if (ow_mode && !mpi_path && ow_theta_valid_ && ow_theta_gdir_ == gdir_)
     {
         if (ow_kernel_stale_ || !ow_kernel_valid_)
         {
