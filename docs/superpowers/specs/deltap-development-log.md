@@ -2420,3 +2420,39 @@ proxy 模式复跑 T2 平直性判据。F-1 PASS，为 F-2（锯齿场对拍）�
    DeltaP 通道改用 base_clean 分支锚（与 efield 通道同锚），判据曲线偏差
    <1e-3 eV、力偏差 <1–2%。
 3. F-2 通过 → 场模式进用户文档主推；不通过 → 残差分解闭合后评审。
+
+## 2026-08-13——F-2（场模式判决点）对拍：严格判据不通过，残差 100% 闭合（零代码）
+
+### Round summary
+h2o1 双通道 E₀(μ) 对拍：DeltaP 均匀 λ（F-1 批）vs 锯齿场 efield（D2 大场点 +
+本轮 ±0.0003/±0.0005/±0.0007 小场点 + amp=0 基线 + no-dip_cor 力对照，11+3 点
+串行）。§5.3 P10 协议（DeltaP 直接 E'(λ)=E₀(μ)；efield Legendre 变换；matched-μ）。
+
+### Key results
+- **能量 E₀(μ)**：重叠窗 max|dev|=1.55 meV（@|λ|=0.01）；|λ|≤0.007 Ry 内 <1e-3 eV ✓。
+  dev 全部来自 DeltaP 侧 escon/Γ 曲率（b=14.3 eV/Ry²，D1 已知）；efield 侧
+  Legendre 变换后平坦到 ±0.003 meV（μ(E) 与 F(E) 自洽，零污染）。
+- **力（matched-μ）**：0.00%@λ=0 → 2.6%@|λ|=0.001 → 21%@|λ|=0.01。根因 =
+  约束反作用项（∂E₀/∂μ=−λ·杠杆≠0 → F_DP 含 F_PES 之外的项）。
+  **力-隐含杠杆 1.31 a.u./Ry vs μ-杠杆 0.084 a.u./Ry：15.6× 不一致** —— 算符
+  力/极化杠杆不匹配，量化解释了 D2 的 1.6–3.1× 校准为何不能同时用于能量与力。
+- **设置层发现**：dip_cor 开起常数 +3.70 meV（=½·4πμ₀²/Ω 镜像自能，μ₀=0.76316
+  精确吻合）；efield 基线必须是 efield-on amp=0（不能用 base_clean）。力对比用
+  no-dip_cor 系列（与 DeltaP 同静电口径，E=0 锚点 0.003% 一致）。
+- ΣF=0：DeltaP 全 λ 精确零 ✓；efield ~6e-5（已知同族）。
+
+### 裁定
+F-2 严格判据不通过 → 按用户规定"残差分解闭合后回评审"。场模式定位：能量/响应
+用途在 |λ|≤0.007 Ry 窗口内可用（<1e-3 eV）；力侧 relax 不可用（约束反作用项，
+对齐需 EFC——P3 Ô_θ/EFC 立项动机补 F-2 力杠杆 15.6× 实测）。
+
+### File list
+- `docs/superpowers/specs/2026-08-13-deltap-f2-field-comparison.md`（本轮轮文档）
+- `docs/superpowers/specs/2026-08-04-deltap-execution-todo.md`（F-2 → 已执行/判决）
+- dev log 本条
+
+### Next steps
+1. commit F-2（轮文档 + dev log + TODO）。
+2. 评审点：F-2 判决的窗口表述（能量 |λ|≤0.007 可用、力侧 EFC 依赖）是否接受；
+   EFC 优先级是否上调（P3 动机已实测）。
+3. 若评审通过：F-3（ow 处置）→ F-5（LIMITATION 补 F-2 窗口/杠杆表）→ F-4/F-6 按序。
