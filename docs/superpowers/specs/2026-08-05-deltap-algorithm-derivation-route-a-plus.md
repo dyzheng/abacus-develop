@@ -196,8 +196,19 @@ F_exact(path) = F_std + A1 + A2 + B − λ(∂Γ/∂λ)·dλ*/dR
      贡献 ≤0.6%（hk vs proxy 总力差 @\|λ\|=0.01 仅 6.1 meV/Å）——F-2
      "τ·P̂ 打在原始布居"归因已证伪；失配内禀于 **H_HK 离散 Berry 联络力
      通道**（B 项 −λ∂Γ^HK/∂R 杠杆 −30.1 eV/Å/Ry，∂Γ^HK(O1)/∂R_z≈+1.17
-     rad/Bohr）。relax/力生产需要**力级 EFC**（目标：L_F=L_μ，如
-     F_phys=F_DP−λ∂Γ^HK/∂R+E·Z*）；能量侧 EFC 动机不再成立。详见
+     rad/Bohr）。**物理本质（评审点破）**：H_HK 能量的 R 依赖走极化通道
+     （∂γ/∂R=Born 电荷）与基组几何通道（S_dk/SMO 投影位置导数）双通道，
+     真实场力 E·Z* 只允许前者，B 项两者都算——"有力无极化"（T3 与 F-2b
+     双命题并存：T3=内部梯度自洽，F-2b=场物理失配，均成立）。
+     **relax/力生产需要力级 EFC**（唯一第一性解法：Ô_θ 算符期望即 γ，
+     其 R 导数是纯极化通道，Maxwell 一致性白来；目标 L_F=L_μ，验收
+     matched-μ 力偏差 <2%）；能量侧 EFC 动机不再成立。可选的半经验补丁
+     F_phys=F_DP−λ∂Γ^HK/∂R+E·Z*（Z* 取 efield 通道实测）为
+     *empirical correction, not ab-initio*——仅当 ① Z* 在 2–3 个几何验证
+     可迁移（小位移下近似常数）② 文档带此标注时才可用于 relax，否则挂起。
+     **约束模式封口（评审 2026-08-13）**：F-4 不做（冻密度 γ 响应符号反转
+     结构性死亡 + γ-hold 力泄漏 0.5 eV/Å + 场模式无泄漏且有消费者）——
+     γ-hold 生产路径维持 proxy 驱动，可达域/力窗见本条目第 1 项。详见
      `2026-08-13-deltap-f2-field-comparison.md`、
      `2026-08-13-deltap-f2b-hk-field-mode.md`。
    - **α_LCAO 基组效应（D2）**：h2o1 LCAO 实测极化率 3.02 Bohr³ = 实验
