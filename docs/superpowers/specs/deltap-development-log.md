@@ -2388,3 +2388,35 @@ Stage-B branch shift（`freeze_branch_shift()`，不动 ref_gamma_/θ），报�
 2. γ-hold 自洽驱动（iter_finish λ 更新，用 SCF 级残差）立项评估；验收
    T-18 同款 γ-hold FD < 0.02 eV/Å @ 小靶点。
 3. 生产路径维持 proxy 驱动；LIMITATION 补 γ-drive 不可达域（T-7'/T-7''）。
+
+## 2026-08-13——F-1 均匀 λ 冒烟：E'(λ) 平直性复跑（场模式基线，零代码）
+
+### Round summary
+场模式 P0 三件套第一件（纯测量）：h2o1 全原子 λ_I≡λ 均匀
+（`deltap_lambda_init <λ>` 标量冻结），λ ∈ ±0.01/±0.003/±0.001/0 扫描，
+proxy 模式复跑 T2 平直性判据。F-1 PASS，为 F-2（锯齿场对拍）建立能量基线。
+
+### Key results
+- E'(λ) 端点弦斜率 **−0.0127 eV/Ry**（判据 ≲1 的 1/80；T2 修复后 −0.013
+  逐点复现）；分解线性 a=−0.0127 eV/Ry + 曲率 b=+14.3 eV/Ry²（escon 通道
+  主导，D1 的 15–30 同量级）。
+- 变分下界恢复：λ=0 严格极小，E'(±0.01)−E'(0)=+1.55/+1.30 meV（T2 逐位
+  一致）；±0.001 八位对称（−481.6977557 = −481.6977557；13 位差 5.7e-8 eV）。
+- 记账恒等式逐点精确：escon=−ΣλΓ；dΣΓ/dλ=−4.15 Ry/Ry（T2 的 −4.2 ✓）；
+  dΣγ_raw/dλ=+0.053 rad/Ry（D1 proxy 自洽 +0.056 ✓）。
+- E_eff 打印（formula (b)）线性：±2.693e-2 V/Å @ |λ|=0.01 ✓。
+- 锚定约定：无 branch.dat 种子自由跑自然 γ=(−7.958,−2.380,−2.380)，与
+  base_clean（−5.515,−3.601,−3.601）差分支量子约定，E' 12 位一致
+  （7e-13 eV），不影响 F-1 判据。
+
+### File list
+- `docs/superpowers/specs/2026-08-13-deltap-f1-uniform-lambda.md`（本轮轮文档）
+- `docs/superpowers/specs/2026-08-04-deltap-execution-todo.md`（F-1 状态 → ✅）
+- dev log 本条
+
+### Next steps
+1. commit F-1（纯文档，轮文档 + dev log + TODO 状态）。
+2. **F-2（判决点）**：h2o1 DeltaP 均匀 λ vs 锯齿场 efield 双通道 E₀(μ) 对拍；
+   DeltaP 通道改用 base_clean 分支锚（与 efield 通道同锚），判据曲线偏差
+   <1e-3 eV、力偏差 <1–2%。
+3. F-2 通过 → 场模式进用户文档主推；不通过 → 残差分解闭合后评审。
