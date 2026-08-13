@@ -127,9 +127,18 @@
         add_stringvec_bcast(PARAMETER, N, FILL);                                                                       \
     }
 
+// Guard for read_sync_string: a blank value line (e.g. "deltap_target_file  ")
+// leaves str_values empty, and strvalue = str_values[0] is UB on an empty
+// vector — observed as a std::string _M_assign segfault at INPUT parse.
+// Keep the parameter's default value instead of touching it.
 #define read_sync_string(PARAMETER)                                                                                    \
     {                                                                                                                  \
-        item.read_value = [](const Input_Item& item, Parameter& para) { para.PARAMETER = strvalue; };                  \
+        item.read_value = [](const Input_Item& item, Parameter& para) {                                                \
+            if (!item.str_values.empty())                                                                              \
+            {                                                                                                          \
+                para.PARAMETER = strvalue;                                                                             \
+            }                                                                                                          \
+        };                                                                                                             \
         sync_string(PARAMETER);                                                                                        \
     }
 #define read_sync_int(PARAMETER)                                                                                       \

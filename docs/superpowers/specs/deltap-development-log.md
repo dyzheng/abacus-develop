@@ -36,6 +36,12 @@
     信号无关（一行定理成立），但 FD 残差 ∝ λ*² 且 λ* 依赖驱动信号——弱耦合
     驱动（γ：dγ/dλ≈−0.3）强制 λ* 大 → 泄漏大；强耦合驱动（Γ：dΓ/dλ≈−4.2）
     保持 λ*~1e-3。驻点 FD 选驱动可观测量的标准 = 耦合强度，不是"直测直钉"。
+14. **连续性锚定的 γ 报告同样不可作内循环收敛判据（T-7'，2026-08-13）**：
+    连续锚修复了外循环的靶点跟随（条目 12），却让内循环读数被钉死在
+    ref_gamma_（branch.dat 自然值）±格点间距——raw 相位对 λ 有响应
+    （Δraw~±0.02 rad），branch shift 逐 trial 吸收掉，报告 γ 不动，残差
+    退化为常数。任何驱动方案（γ 直驱）的**内循环可观测量必须解锚**
+    （用 raw γ 或冻结 branch-shift 读数），否则优化器层换什么格式都白搭。
 
 ---
 
@@ -2282,3 +2288,51 @@ E'≡E_KS 恒等式、力残差 0.0138）→ 诚实代价清单（翻译层、�
 2. T-9'（branch 写守卫）随下个 commit；然后 T-7'（per-atom Jacobian，
    顺带实测 γ-hold 的 dλ*/dR 验证泄漏模型）。
 3. EFC（路径泄漏消除）若立项：以本窗为基线做"大 λ 恢复力精度"判决实验。
+
+## 2026-08-13——T-7' per-atom Jacobian：单元层 PASS，集成层 FAIL（报告 γ 锚定量化钉死内循环）
+
+### Round summary
+实现 componentwise secant（对角 Jacobian）内循环更新 + INPUT
+`deltap_inner_scheme=cg|jacobi` 开关；ow a2 集成对照（cg/jacobi 两臂）。
+单元层 8/8 PASS；集成层两臂内循环均不收敛——jacobi 消除 α 翻号但驱动
+可观测量（连续性锚定的报告 γ）被钉在自然值附近，残差退化为常数。
+顺带修复：空字符串 INPUT 值（如 `deltap_target_file  `）导致的解析期
+段错误（read_sync_string 空 str_values UB）。
+
+### Key results
+- **单元层**：反号对角系统 r₁=2λ₁−1、r₂=−3λ₂+1，jacobi 1 步收敛 vs
+  scalar-α 60 步不收敛（cw_ok=1 steps=1 vs sc_ok=0 steps=60）。bfgs 8/8。
+- **集成层（ow γ-drive a2，O1 靶=自然+0.02 rad，inner_nmax=20）**：
+  cg 复现 T-18 a2 失败签名（α 翻号 −2.35e-2→+1.17e-2→…，rms 1.13↔1.55e-2
+  平台，|γ−t|=1.80e-2）；jacobi α 稳定 +0.25（max_step 钳位）**不翻号**，
+  但 rms 恒 ~1.13e-2、λ_O1 爬至 +9.7e-3、**|γ−t|=2.14e-2≈靶点全量（零进展）**。
+- **机制（[SBdbg] O1 轨迹）**：内循环 trial 中 raw 相位对 λ 有响应
+  （−7.958…−7.977 振荡，Δraw 达 ±0.019 rad），但报告 γ 被连续性锚
+  （ref_gamma_=branch.dat 自然值）钉死 −7.958±0.001——branch shift 逐
+  trial 吸收 raw 移动（0→4.9e-3→1.26e-2→1.89e-2→…）。残差 r=γ_report−t
+  恒 ≈−0.020±1e-3 → 任何光滑优化器不可收敛。这是 T4a 教训（锚定 γ 报告
+  不可作收敛判据）在内循环的新形态，也是 T3' 评审"γ(λ) 非光滑不可逆"
+  预言在冻密度层的定量确认。
+- **T-7' 判定**：优化器基建 ✅（两套驱动通用）；ow γ-drive 内循环 ❌
+  （可观测量解锚前不可收敛）。按"偏离即停"落档，不扩大使命。
+- **空值 INPUT 守卫**：`read_sync_string` 空 str_values 时保留默认值
+  （原为 UB/段错误）。验证 `deltap_target_file  ` 不再崩。
+
+### File list
+- `source/module_optimizer/bfgs.h`（componentwise 模式：per-component
+  secant/max_step/自适应 γ，~100 行）
+- `source/module_optimizer/test/bfgs_test.cpp`（+2 测试）
+- `source/source_esolver/deltap_scf.{h,cpp}`（DeltapParams::inner_scheme + 接线）
+- `source/source_esolver/esolver_ks_lcao.cpp`（p.inner_scheme 填充）
+- `source/source_io/module_parameter/input_parameter.h`、`read_input_item_other.cpp`
+  （`deltap_inner_scheme` INPUT）
+- `source/source_io/module_parameter/read_input_tool.h`（空值守卫）
+- `docs/superpowers/specs/2026-08-13-deltap-t7p-per-atom-jacobi.md`（本轮轮文档）
+
+### Next steps
+1. commit T-7'（代码 + 守卫 + 轮文档）。
+2. **T-7'' 立项（机制级）**：ow γ-drive 内循环驱动可观测量改 raw γ
+   （compute_gamma_raw 已接线）或冻结 branch-shift 读数；落地后重跑
+   ow a2 两臂验证内循环收敛。T-18 0.98 判决仍受 |λ*|_max≈0.4–1.6e-3 Ry
+   工作窗限制。
+3. T-8'（L1 三件）可穿插。
