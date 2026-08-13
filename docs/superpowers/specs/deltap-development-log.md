@@ -54,6 +54,12 @@
     符号不稳定。T-6' 开放问题（测量通道 vs 算符控制权限）裁定为**算符
     控制权限问题**；γ-hold 若要成立须改自洽驱动（iter_finish 每密度
     重驱动），生产路径维持 proxy 驱动。
+16. **算符力通道与 μ 通道的隐含场不必一致（F-2b，2026-08-13）**：链接算符
+    （H_HK）是合格*极化算符*（μ/能量通道已闭合），但其*力通道*（B 项
+    −λ∂Γ^HK/∂R）不是真实场力——实测力/μ 隐含场杠杆比 **17.7×（hk）/
+    15.7×（proxy）**；**移除 H_HR 后总力变化 ≤0.6%**，力失配是 H_HK 内禀
+    而非 τ·P̂ 代理的"荷错位"（F-2 归因证伪）。正确场算符要求 L_F=L_μ；
+    力级 EFC 修正量 = λ·(L_μ·Z*−L_F)（Z* 取 efield 通道实测）。
 
 ---
 
@@ -2456,3 +2462,52 @@ F-2 严格判据不通过 → 按用户规定"残差分解闭合后回评审"。
 2. 评审点：F-2 判决的窗口表述（能量 |λ|≤0.007 可用、力侧 EFC 依赖）是否接受；
    EFC 优先级是否上调（P3 动机已实测）。
 3. 若评审通过：F-3（ow 处置）→ F-5（LIMITATION 补 F-2 窗口/杠杆表）→ F-4/F-6 按序。
+
+## 2026-08-13——F-2b（HK-only 场模式对拍）：可证伪预言 FAIL，根因从 H_HR 重定位到 H_HK 力通道
+
+### Round summary
+评审"EFC 之前先做 HK-only 场模式"：新 INPUT 值 `deltap_operator_mode hk`
+（H_HR off + A1/A2 力 off + escon=−λΓ^HK，5 文件门控），h2o1 λ 均匀冻结
+扫描 7 点 vs efield no-dip 系列。目标：分离"链接算符力通道"与"H_HR 代理力
+通道"对 F-2 力失配的贡献。串行 7 点全 rc=0。
+
+### Key results
+- **可证伪预言 FAIL**：matched-μ 力偏差 @|λ|=0.01 仍 −26.1/+26.2%（hk），
+  未塌缩到百分之几（同批 proxy −26.2/+26.7；F-2 文档 −35.6/+21.0 为
+  dev/F_DP 口径）。杠杆比 L_F/L_μ = 17.7×（hk）/15.7×（proxy）。
+- **H_HR 对力失配可忽略（F-2 根因证伪）**：hk vs proxy 总力差 ≤0.6%
+  （@+0.01 为 6.1 meV/Å，偏差 200 meV/Å 的 3%）——"τ·P̂ 打在原始布居
+  （7.2/2.14）→ 15.6×"不成立。
+- **失配内禀于 H_HK ∂Γ^HK/∂R 力通道**：B 项力杠杆 −30.1 eV/Å/Ry
+  （∂Γ^HK(O1)/∂R_z≈+1.17 rad/Bohr），F_std 密度响应 +9.4 抵消 ~31%。
+- **E'(λ) 曲率未随 H_HR 移除缩小**：b(hk)=14.66 ≈ b(proxy)=14.26 eV/Ry²
+  （max|res| 34 μeV）；hk 与 proxy E'(λ) 差 ≤34 μeV——能量侧窗口结论不变
+  （|λ|≤0.007 Ry <1e-3 eV）。
+- **γ 响应 hk(0.046) < proxy(0.053) rad/Ry**（批内 Σγ 口径）——τ·P̂ 对 γ 是
+  加性正贡献，移除后略降；与 T-18/D2 冻结口径的差异是协议差（冻结 vs
+  自洽 5–10×，同族已知）。
+- 记账自洽：escon=−λΣΓ^HK 逐点精确、E_HK=λΣΓ、λ=0 与 base_clean 逐位
+  一致、ΣF=0 全点。
+
+### 裁定
+F-2b FAIL（判决性，闭合）：场模式力侧不可交付，需**力级 EFC**（目标
+L_F=L_μ；修正量 λ·(L_μ·Z*−L_F)）；能量侧可交付（窗口不变）。EFC 立项
+保留，目标函数从"荷错位修正"更新为"∂Γ/∂R 力杠杆修正"；能量侧 EFC 动机
+不再成立。开放项：b 与朴素 −½Γ₁ 预测差因子 2（29.3 vs 14.7 eV/Ry²），
+escon/总能抵消的精确二次结构待查（不影响判决）。
+
+### File list
+- `source/source_io/module_parameter/read_input_item_other.cpp`（hk 校验+注解+experimental）
+- `source/source_io/module_parameter/input_parameter.h`（hk 注释）
+- `source/source_lcao/module_operator_lcao/deltap_lcao.cpp`（contributeHR 门控 ow||hk）
+- `source/source_lcao/module_operator_lcao/deltap_force_stress.hpp`（A1/A2 门控 ow||hk + 应力 WARNING_QUIT + 虚假注释修正）
+- `source/source_lcao/module_deltap/deltap.h`（operator 模式返回 Γ^HK 单独）
+- `docs/superpowers/specs/2026-08-13-deltap-f2b-hk-field-mode.md`（本轮轮文档）
+- `docs/superpowers/specs/2026-08-05-deltap-algorithm-derivation-route-a-plus.md`（§8 LIMITATION：场模式双行 + α_LCAO 声明 + E_eff 校准）
+- `docs/superpowers/specs/2026-08-04-deltap-execution-todo.md`（F-2b 判决 + F-3 完成标记）
+- dev log 本条 + 关键结论区 #16
+
+### Next steps
+1. commit（F-2b + F-3 + F-5 一并）。
+2. 力级 EFC 设计（目标函数：L_F=L_μ；输入：hk 批杠杆表 + efield Z* 通道）。
+3. F-4（T-7'' 内循环解锚，约束模式最后机制件）→ F-6/F-7/F-8 按序。

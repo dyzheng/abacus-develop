@@ -113,9 +113,13 @@ void hamilt::DeltaPOperator<TK, TR>::contributeHR()
     // REPLACED by the per-k H_ow = Σ_n θ_n·(P̂_λ·C)·C† built in
     // DeltaP::compute_hk_correction (contributeHk).  Adding the real-space
     // H_HR here as well would double-count the on-site projector term.
-    // Legacy gamma mode and the historical "proxy" operator mode are
-    // unchanged (zero regression).
-    if (PARAM.inp.deltap_operator_mode == "ow"
+    // F-2b (2026-08-13): the "hk" operator mode is the HK-only field mode —
+    // H_HR is OFF (no τ·P̂ proxy at all), the constraint is the discrete
+    // Berry-connection term H_HK only.  Both modes leave the k-space part
+    // to contributeHk.  Legacy gamma mode and the historical "proxy"
+    // operator mode are unchanged (zero regression).
+    if ((PARAM.inp.deltap_operator_mode == "ow"
+         || PARAM.inp.deltap_operator_mode == "hk")
         && PARAM.inp.deltap_observable == "operator")
     {
         // Keep the λ bookkeeping consistent (the H_ow path is the sole

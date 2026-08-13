@@ -1377,19 +1377,21 @@ Manual override is allowed: if sc_acceleration_mode is explicitly set, it takes 
     }
     {
         Input_Item item("deltap_operator_mode");
-        item.annotation = "Route A+ constraint operator: proxy or ow";
+        item.annotation = "Route A+ constraint operator: proxy, hk, or ow";
         item.category = "DeltaP";
         item.type = "String";
-        item.description = "Route A+ operator-mode constraint operator (T-6', EFC L3.1). proxy (default): the on-site projector is weighted by the geometric proxy tau_alpha(I) (H_HR = lambda*tau*P_hat, the historical Route A+ operator). ow: the exact weight-channel operator O_w = theta_n * P_hat with band-resolved Wilson phase theta_n (the SMO projector P_hat weighted per band); H_HR is replaced by H_ow = sum_n theta_n * (P_lambda*C) * C^dagger at every k of the constraint string. The O_w operator is the functional derivative of the gamma weight channel, so the lambda-to-gamma coupling (dgamma/dlambda) is no longer diluted by the tau proxy (V-H3' acceptance: dgamma/dlambda >= 3 rad/Ry, gamma-hold FD residual < 0.02 eV/A). Legacy gamma mode (deltap_observable=gamma) ignores this switch (zero regression).";
+        item.description = "Route A+ operator-mode constraint operator (T-6', EFC L3.1). proxy (default): the on-site projector is weighted by the geometric proxy tau_alpha(I) (H_HR = lambda*tau*P_hat, the historical Route A+ operator). hk (F-2b, 2026-08-13): H_HR is OFF; the constraint is the discrete Berry-connection term H_HK = lambda * sym[(i/2) S_dk C_R C_L^dagger] only (the HK-only field mode; escon = -lambda*Gamma^HK keeps E' = E_KS(psi*) exact). F-2b verdict: energy channel OK (|lambda|<=0.007 Ry window), force channel NOT a true field force (matched-mu deviation ~26% at |lambda|=0.01, lever ratio 17.7x; relax needs force-level EFC). ow: the exact weight-channel operator O_w = theta_n * P_hat with band-resolved Wilson phase theta_n (the SMO projector P_hat weighted per band); H_HR is replaced by H_ow = sum_n theta_n * (P_lambda*C) * C^dagger at every k of the constraint string. The O_w operator is the functional derivative of the gamma weight channel, so the lambda-to-gamma coupling (dgamma/dlambda) is no longer diluted by the tau proxy (V-H3' acceptance: dgamma/dlambda >= 3 rad/Ry, gamma-hold FD residual < 0.02 eV/A). EXPERIMENTAL: hk/ow modes are research switches (stress undefined; cal_stress=0 required); legacy gamma mode (deltap_observable=gamma) ignores this switch (zero regression).";
         item.default_value = "proxy";
         item.unit = "";
         item.availability = "deltap_corr is true";
         read_sync_string(input.deltap_operator_mode);
         item.check_value = [](const Input_Item& item, const Parameter& para) {
-            if (para.input.deltap_operator_mode != "proxy" && para.input.deltap_operator_mode != "ow")
+            if (para.input.deltap_operator_mode != "proxy"
+                && para.input.deltap_operator_mode != "hk"
+                && para.input.deltap_operator_mode != "ow")
             {
                 ModuleBase::WARNING_QUIT("ReadInput",
-                    "deltap_operator_mode must be 'proxy' or 'ow'");
+                    "deltap_operator_mode must be 'proxy', 'hk', or 'ow'");
             }
         };
         this->add_item(item);

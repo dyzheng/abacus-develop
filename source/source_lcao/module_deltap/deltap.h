@@ -133,6 +133,14 @@ public:
                 g[i] += gamma_op_hk_[i];
             return g;
         }
+        // F-2b (2026-08-13): in "hk" mode (HK-only field mode) the applied
+        // operator is H_HK only, so the escon accounting observable is
+        // Γ^HK alone — adding Γ^HR would break escon = −λΓ against the
+        // actually applied H_c and reintroduce the proxy-channel curvature.
+        if (operator_mode_ == "hk")
+        {
+            return gamma_op_hk_;
+        }
         std::vector<double> g = gamma_op_;
         if (g.size() == gamma_op_hk_.size())
             for (size_t i = 0; i < g.size(); ++i)

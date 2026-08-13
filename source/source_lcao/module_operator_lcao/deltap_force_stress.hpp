@@ -26,30 +26,37 @@ void DeltaPOperator<TK, TR>::cal_force_stress(const bool cal_force,
     // Ô_w geometric force F_ow = −∂E_ow/∂R (frozen C/θ, full Gram trace) is
     // computed by deltap::DeltaP::compute_ow_force, invoked from
     // DeltaP::compute_hk_force (the "ow" branch, R1 2026-08-12) and added to
-    // the stored H_HK force by the esolver.  Legacy gamma mode and the
+    // the stored H_HK force by the esolver.  F-2b (2026-08-13): the "hk"
+    // operator mode is the HK-only field mode — H_HR is OFF, so its A1/A2
+    // force must not be added either (the only operator force is B, the
+    // H_HK force stored by compute_hk_force).  Legacy gamma mode and the
     // historical "proxy" operator mode are unchanged (zero regression).
-    if (PARAM.inp.deltap_operator_mode == "ow"
+    if ((PARAM.inp.deltap_operator_mode == "ow"
+         || PARAM.inp.deltap_operator_mode == "hk")
         && PARAM.inp.deltap_observable == "operator")
     {
-        // R6 (2026-08-12): the Ô_w stress path is not defined (H_ow is a
-        // k-space operator without a real-space ∂/∂ε expression yet); a
-        // silent zero stress would corrupt variable-cell runs.
+        // R6 (2026-08-12) / F-2b: the stress path of a k-space-only operator
+        // (H_ow in ow mode; H_HK-only in hk mode) is not defined (no
+        // real-space ∂/∂ε expression yet); a silent zero stress would
+        // corrupt variable-cell runs.
         if (cal_stress)
         {
             ModuleBase::WARNING_QUIT("DeltaPOperator::cal_force_stress",
-                "deltap_operator_mode=ow + cal_stress is not implemented "
-                "(H_ow stress path undefined; R6). Use cal_stress=0 in ow mode.");
+                "deltap_operator_mode=ow/hk + cal_stress is not implemented "
+                "(k-space operator stress path undefined; R6). Use cal_stress=0.");
         }
         if (cal_force) force.zero_out();
         ModuleBase::timer::end("DeltaPOperator", "cal_force_stress");
         return;
     }
 
-    // LIMITATION: This force/stress only covers the real-space projector
-    // (H_HR) contribution.  The k-space Berry-connection part (H_HK) does
-    // not have an analytic force contribution.  Relax/MD with deltap_corr
-    // is therefore experimental.  The ∂τ/∂R Hellmann-Feynman term is also
-    // not yet implemented.
+    // LIMITATION (proxy/legacy path only; ow/hk are gated out above): this
+    // routine covers only the real-space projector (H_HR) contribution.
+    // The k-space Berry-connection force (B term, −λ·∂Γ^HK/∂R) is computed
+    // analytically by deltap::DeltaP::compute_hk_force and added by the
+    // esolver — it is NOT included here (F-2b: H_HK force channel verified
+    // separately).  Relax/MD with deltap_corr is therefore experimental.
+    // The ∂τ/∂R Hellmann-Feynman term is also not yet implemented.
 
     const Parallel_Orbitals* paraV = dmR->get_paraV();
     const int npol = this->ucell->get_npol();
