@@ -2,6 +2,7 @@
 #define H_TDDFT_PW_H
 
 #include "module_io/input_conv.h"
+#include "module_parameter/parameter.h" // PARAM.globalv.global_readin_dir, PARAM.inp.mdp.md_restart
 #include "pot_base.h"
 
 namespace elecstate
@@ -16,6 +17,22 @@ class H_TDDFT_pw : public PotBase
         this->fixed_mode = true;
 
         this->rho_basis_ = rho_basis_in;
+
+        // If it is the first time to create an H_TDDFT_pw instance and this is a restart calculation,
+        // initialize istep using current_step_info
+        if (!is_initialized && PARAM.inp.mdp.md_restart)
+        {
+            int restart_istep = -1;
+            std::string file_dir = PARAM.globalv.global_readin_dir;
+            current_step_info(file_dir, restart_istep);
+
+            if (restart_istep >= 0)
+            {
+                H_TDDFT_pw::istep = restart_istep - 1; // Update istep
+            }
+
+            is_initialized = true; // Mark as initialized, so that istep will not be initialized again
+        }
     }
     ~H_TDDFT_pw(){};
 
@@ -103,6 +120,7 @@ class H_TDDFT_pw : public PotBase
     // Vext will evolve by time, every time cal_fixed_v() is called, istep++
     //------------------------
     static int istep;
+    static bool is_initialized; // static flag variable, used to ensure initialization only once
 
     static double amp;
 
@@ -110,6 +128,9 @@ class H_TDDFT_pw : public PotBase
     static double bvec[3];
 
     const UnitCell* ucell_ = nullptr;
+
+    // Obtain the current MD step information, used for restart calculation
+    void current_step_info(const std::string& file_dir, int& istep);
 
     // potential of electric field in space domain : length gauge and velocity gauge
     void cal_v_space(std::vector<double> &vext_space, int direc);
