@@ -19,3 +19,9 @@ AddTest(
 )
 
 endif()
+
+AddTest(
+  TARGET MODULE_LCAO_deltap_l1_test
+  LIBS ${math_libs} base device parameter
+  SOURCES deltap_l1_test.cpp
+)

@@ -152,6 +152,48 @@ inline std::vector<double> to_effective_lambda(
 }
 
 /**
+ * L1.3: per-atom θ-spread (weighted std-dev of the band-resolved Wilson
+ * phases) — Route A++ §1.4 推论 1, the H_HR proxy error control:
+ *   spread_I ≡ [ Σ_n w̄_In (θ_n − θ̄_I)² / Σ_n w̄_In ]^{1/2}
+ * with w̄_In the per-band-normalized weights (Σ_I w̄_In = 1 per band, the
+ * same normalization the γ weight channel uses) and θ̄_I the w̄-weighted
+ * band-mean.  Uniform θ (all bands equal) gives exactly 0.
+ */
+inline double compute_theta_spread(const std::vector<double>& w_in,
+                                   const std::vector<double>& theta_n)
+{
+    const int n = static_cast<int>(std::min(w_in.size(), theta_n.size()));
+    if (n <= 0) return 0.0;
+    double wsum = 0.0;
+    double mean = 0.0;
+    for (int i = 0; i < n; ++i)
+    {
+        wsum += w_in[i];
+        mean += w_in[i] * theta_n[i];
+    }
+    if (wsum <= 1e-30) return 0.0;
+    mean /= wsum;
+    double var = 0.0;
+    for (int i = 0; i < n; ++i)
+    {
+        const double d = theta_n[i] - mean;
+        var += w_in[i] * d * d;
+    }
+    var /= wsum;
+    return std::sqrt(std::max(0.0, var));
+}
+
+/**
+ * L1.2: SMO projection leakage η = 1 − Σ_I w_In for one (k, band) pair.
+ * Clamped to [0, 1]: a numerically >1 total is projection overlap of
+ * non-orthogonal SMO channels, not negative leakage.
+ */
+inline double compute_smo_leakage(double w_tot_n)
+{
+    return (w_tot_n < 1.0) ? (1.0 - w_tot_n) : 0.0;
+}
+
+/**
  * Compute dp_escon = -Σ λ_i · γ_i  (constraint energy correction, Ry).
  */
 inline double compute_dp_escon(

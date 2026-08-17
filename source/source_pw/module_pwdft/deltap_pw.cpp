@@ -196,13 +196,74 @@ void compute_per_atom_gamma_kstring(
 }
 
 // ---------------------------------------------------------------------------
+// Per-atom on-site projector occupation Γ^PW_I = ⟨P̂_I^onsite⟩ (L1.1, Route A+
+// accounting on the PW path).  H_c,PW = Σ_I λ_I·P̂_I^onsite, so the constraint
+// operator expectation per unit λ is the on-site occupation:
+//   Γ^PW_I = Σ_k Σ_ib wg(k,ib)·Σ_{ih∈I} |⟨α_{I,ih}|ψ_{k,ib}⟩|²
+// (no τ factor: the PW operator carries λ directly on P̂^onsite, unlike the
+// LCAO H_HR whose τ_α(I) lives inside the operator — RouteA++ §5, HG-2).
+// becp layout: becp[ib·npol·nkb + ispin·nkb + ip]; overlap_proj_psi already
+// pool-reduces becp, so every rank sees the same full array (band-parallel
+// safe, same pattern as cal_occupations).
+// ---------------------------------------------------------------------------
+void compute_gamma_op_pw(
+    const UnitCell& ucell,
+    const psi::Psi<std::complex<double>>* psi_cpu,
+    const ModuleBase::matrix& wg,
+    std::vector<double>& gamma_op_per_atom)
+{
+    int nat = ucell.nat;
+    gamma_op_per_atom.assign(nat, 0.0);
+    if (psi_cpu == nullptr) return;
+
+    auto* onsite_p = projectors::OnsiteProjector<double, base_device::DEVICE_CPU>::get_instance();
+    if (onsite_p == nullptr) return;
+    const int tot_nproj = onsite_p->get_tot_nproj();
+    if (tot_nproj == 0) return;
+
+    const int nbands = psi_cpu->get_nbands();
+    const int npol = ucell.get_npol();
+    const int nks = psi_cpu->get_nk();
+    if (nbands < 1 || nks < 1) return;
+
+    for (int ik = 0; ik < nks; ++ik)
+    {
+        psi_cpu->fix_k(ik);
+        onsite_p->tabulate_atomic(ik);
+        onsite_p->overlap_proj_psi(nbands * npol, psi_cpu->get_pointer());
+        const std::complex<double>* becp_p = onsite_p->get_h_becp();
+        if (becp_p == nullptr) continue;
+        int begin_ih = 0;
+        for (int iat = 0; iat < nat; ++iat)
+        {
+            const int nh = onsite_p->get_nh(iat);
+            double occ = 0.0;
+            for (int ib = 0; ib < nbands; ++ib)
+            {
+                const double weight = wg(ik, ib);
+                if (weight == 0.0) continue;
+                for (int ih = 0; ih < nh; ++ih)
+                {
+                    const int index = ib * npol * tot_nproj + begin_ih + ih;
+                    double abs2 = std::norm(becp_p[index]);
+                    if (npol == 2) abs2 += std::norm(becp_p[index + tot_nproj]);
+                    occ += weight * abs2;
+                }
+            }
+            gamma_op_per_atom[iat] += occ;
+            begin_ih += nh;
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // PW backend for the shared DeltapScfSolver: per-atom γ measurement and the
 // operator λ storage that the on-site Hamiltonian / forces read.
 // ---------------------------------------------------------------------------
 deltap_scf::DeltapScfSolver::Backend make_backend(const UnitCell& ucell,
     const psi::Psi<std::complex<double>>* psi_cpu, const K_Vectors* kv,
     const ModulePW::PW_Basis_K* wfcpw, const ModulePW::PW_Basis* rhopw,
-    int gdir)
+    int gdir, const ModuleBase::matrix* wg)
 {
     deltap_scf::DeltapScfSolver::Backend b;
     b.set_lambda = [](const std::vector<double>& lambda) { store_lambda(lambda, s_constrain); };
@@ -254,6 +315,16 @@ deltap_scf::DeltapScfSolver::Backend make_backend(const UnitCell& ucell,
 #endif
         return gamma;
     };
+    // Route A+ operator observable for PW: Γ^PW_I = ⟨P̂_I^onsite⟩ (L1.1).
+    // Measured at the same wavefunctions as compute_gamma (both run in
+    // iter_finish).  The on-site becp is pool-reduced inside overlap_proj_psi,
+    // so the per-atom occupations are rank-identical without an extra Bcast.
+    b.compute_gamma_op = [&ucell, psi_cpu, wg]() {
+        std::vector<double> gamma_op(ucell.nat, 0.0);
+        if (wg != nullptr)
+            compute_gamma_op_pw(ucell, psi_cpu, *wg, gamma_op);
+        return gamma_op;
+    };
     return b;
 }
 
@@ -300,7 +371,22 @@ void report_pw(double drho, double gamma_total)
         if (iat > 0) std::cout << ", ";
         std::cout << st.gamma_report[iat];
     }
-    std::cout << ")" << std::endl;
+    std::cout << ")";
+    // L1.1 diagnostic: per-atom Route A+ operator observable Γ^PW_I =
+    // ⟨P̂_I^onsite⟩ (rank-identical by construction, see compute_gamma_op_pw).
+    // Printed as a trailing field so existing parsers of the historical
+    // γ/atom=() prefix are unaffected.
+    if (!st.gamma_op.empty())
+    {
+        std::cout << "  Γ/atom=(";
+        for (int iat = 0; iat < nat; ++iat)
+        {
+            if (iat > 0) std::cout << ", ";
+            std::cout << st.gamma_op[iat];
+        }
+        std::cout << ")";
+    }
+    std::cout << std::endl;
 }
 
 } // anonymous namespace
@@ -312,7 +398,8 @@ void report_pw(double drho, double gamma_total)
 void deltap_init(const UnitCell& ucell, const Input_para& inp,
                  const psi::Psi<std::complex<double>>* psi_cpu,
                  const K_Vectors* kv, const ModulePW::PW_Basis_K* wfcpw,
-                 const ModulePW::PW_Basis* rhopw)
+                 const ModulePW::PW_Basis* rhopw,
+                 const ModuleBase::matrix* wg)
 {
 #ifdef __MPI
     // D1: the per-atom γ Wilson loop (compute_per_atom_gamma_kstring) spans
@@ -343,7 +430,14 @@ void deltap_init(const UnitCell& ucell, const Input_para& inp,
     p.conv_thr = inp.deltap_conv_thr;
     p.nscf = 0;                 // PW inner loop rejected in deltap_iter_finish
     p.total_mode = false;       // PW historically updates per-atom (INPUT total mode ignored)
-    p.observable_mode = "gamma"; // PW has no Γ (operator) implementation; keep legacy γ constraint
+    // L1.1 (2026-08-14): PW switches to the Route A+ operator accounting —
+    // escon = −λ·Γ with Γ^PW_I = ⟨P̂_I^onsite⟩ (RouteA++ §5 minimal patch).
+    // The λ-driving signal stays the legacy γ residual (drive = "gamma": the
+    // observable used for the residual is the reported γ vs t_γ, unchanged),
+    // so the PW constraint physics is untouched — only the escon bookkeeping
+    // moves to Γ, restoring the E' = E_KS(ψ*) identity on the PW path.
+    p.observable_mode = "operator";
+    p.drive = "gamma";
     p.verbose = false;          // PW prints its own [DeltaP-PW] line
     p.unwrap_branch_2pi = true; // cross-SCF 2π branch tracking
     p.target = dp_target;
@@ -354,7 +448,7 @@ void deltap_init(const UnitCell& ucell, const Input_para& inp,
         p.target.assign(ucell.nat, 0.0);
     p.constrain = dp_constrain;
 
-    g_solver.init(p, make_backend(ucell, psi_cpu, kv, wfcpw, rhopw, inp.deltap_gdir));
+    g_solver.init(p, make_backend(ucell, psi_cpu, kv, wfcpw, rhopw, inp.deltap_gdir, wg));
 
     bool has_strutarget = false;
     for (double t : dp_target)

@@ -103,7 +103,8 @@ void ESolver_KS_PW<T, Device>::before_all_runners(UnitCell& ucell, const Input_p
     {
         pw_deltap::deltap_init(ucell, PARAM.inp,
                                this->stp.psi_cpu, &this->kv,
-                               this->pw_wfc, this->pw_rho);
+                               this->pw_wfc, this->pw_rho,
+                               &this->pelec->wg);
     }
 
     ModuleBase::GlobalFunc::DONE(GlobalV::ofs_running, "INIT BASIS");

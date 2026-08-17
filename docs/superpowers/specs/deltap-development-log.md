@@ -2700,3 +2700,37 @@ L2（方阵网格守卫）、L3（F_HK 力串行-only）标记已解除（656a2a
 pzgemm 解锁 + F_HK 力行组 gather Allreduce）；F2 诊断行改为"复现=回归"；
 能力矩阵 LCAO 多 rank 行刷新。注：3.2/3.3 顺带修掉 Allgatherv complex 计数
 ×2 bug（h2o_asym Γ 22% 偏差根因）。
+
+---
+
+## 2026-08-17: F-7（L1 三件）— PW Γ 记账 + ⟨η⟩ + spread_I
+
+### What was done
+- **L1.1 PW Γ 记账**（RouteA++ §5 最小补丁）：`deltap_pw.cpp` 新增
+  `compute_gamma_op_pw`（Γ^PW_I = ⟨P̂_I^onsite⟩ = Σ_k Σ_ib wg(k,ib)·Σ_{ih∈I}|becp|²，
+  becp 布局 ib·npol·nkb+ispin·nkb+ih，pool-reduce 后 rank 一致）；
+  backend 接 `compute_gamma_op`；`deltap_init` 传 `pelec->wg`；
+  `observable_mode="operator"` + `drive="gamma"`（PW λ 驱动保持 γ 残差不变，
+  只换 escon 记账，与 LCAO γ-drive 同构）。`report_pw` 行尾加 Γ/atom 诊断。
+- **L1.2 ⟨η⟩ 输出**：`deltap_wannier.cpp` p_hat_accum 循环（per-k per-band raw
+  D_I 投影）累加 η_n(k)=max(0,1−Σ_I w_In)，INPUT gdir 单次计数；
+  SCF 收敛时 esolver 打印 `[DeltaP L1] <eta>=... (max ...)`。
+- **L1.3 spread_I 输出**：per-string w_In_matrix（Löwdin tilde）+ gamma_unwrapped
+  加权 std-dev；公式提取为 `deltap_common::compute_theta_spread` /
+  `compute_smo_leakage`（可单测）。新增 `deltap_l1_test.cpp` 单测。
+- 文件：deltap_pw.{h,cpp}、esolver_ks_pw.cpp、deltap_wannier.cpp、deltap.h、
+  deltap_common.h、esolver_ks_lcao.cpp、test/CMakeLists.txt + deltap_l1_test.cpp。
+
+### Results
+- L1.1：escon≡−λΓ 逐点恒等（7/7）；E'(λ) slope −0.187 eV/Ry（ecut=20）、
+  −0.178（ecut=40）；旧 γ 记账 ~109 eV/Ry → 改善 ~600×，≪F-1 判据 1 eV/Ry。
+- L1.2：H2O ⟨η⟩=0.000（<1% ✓，SMO 完备）；CO 1.67%（单带 max 8.4%，机制非恒零）。
+- L1.3：H2O spread_I=(0.112,0.121,0.121)；CO=(0.257,0.197)；单测 4/4
+  （均匀 θ spread=0、加权 std-dev 核对、退化零权重、η clamp）。
+- 回归：MPI smoke 4/4（PW 2-rank + LCAO 4-rank×3）；h2o 重构前后逐位一致。
+
+### Next steps
+- F-8（L2 应力）开工前写 Maxwell 判据协议（应变 FD + matched-μ + ∂σ/∂λ vs
+  ∂P/∂ε 双口径判据）。
+- Stage 4：4.1 锚点重建在 F-7/F-8 之后（PW Γ 锚点用例纳入套件）。
+- 能力边界文档 L5 已更新（PW 记账统一；target 文件/约束矩阵接线未立项）。

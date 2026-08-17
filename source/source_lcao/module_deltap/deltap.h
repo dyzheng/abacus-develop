@@ -11,6 +11,7 @@
 #include "source_psi/psi.h"
 
 #include <complex>
+#include <limits>
 #include <stdexcept>
 #include <unordered_map>
 #include <vector>
@@ -83,6 +84,15 @@ public:
     const AtomicPolarization& get_results() const { return results_; }
 
     /// Lightweight Wilson loop for SCF inner loop (public for esolver access).
+    /// L1.2: last measured completeness ⟨η⟩ (band/k average and max of the
+    /// SMO projection leakage) at the INPUT gdir.  NaN before the first
+    /// measurement.
+    double get_last_eta_avg() const { return last_eta_avg_; }
+    double get_last_eta_max() const { return last_eta_max_; }
+    /// L1.3: per-atom weighted θ-spread at the INPUT gdir (empty before the
+    /// first measurement).
+    const std::vector<double>& get_last_spread_I() const { return last_spread_I_; }
+
     void compute_gamma_scf(const UnitCell& ucell,
                            const psi::Psi<std::complex<double>>* psi,
                            const elecstate::ElecState* pelec);
@@ -546,7 +556,21 @@ private:
     /// [nat] = applied-operator Γ_I^w computed at the last freeze (full Gram
     /// trace with the snapshot θ and C).  The λ enters only via escon.
     std::vector<double> ow_gamma_w_frozen_;
+    // L1.2/L1.3 (2026-08-16): completeness and θ-spread diagnostics (Route A++
+    // applicability gauges, RouteA++ §6 / §1.4).  Filled by
+    // compute_wannier_polarization at the INPUT gdir only (avoiding the
+    // three-direction repeat of the same k/string data) and read by the
+    // esolver at SCF convergence for the [DeltaP L1] diagnostic line.
+    // ⟨η⟩ = band- and k-average of η_n(k) = max(0, 1 − Σ_I w_In(k)), the SMO
+    // projection leakage (η→0 iff the SMO subspace is complete for the
+    // occupied subspace).  spread_I = weighted θ std-dev per atom,
+    // spread_I ≡ [ Σ_n w_In (θ_n − θ̄_I)² / Σ_n w_In ]^{1/2} (H_HR proxy
+    // error control: ∝ λ_I·spread_I, RouteA++ §1.4 推论 1).
+    double last_eta_avg_ = std::numeric_limits<double>::quiet_NaN();
+    double last_eta_max_ = std::numeric_limits<double>::quiet_NaN();
+    std::vector<double> last_spread_I_;
 };
+
 
 } // namespace deltap
 

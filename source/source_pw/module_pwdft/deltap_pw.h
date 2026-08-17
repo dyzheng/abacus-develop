@@ -10,6 +10,7 @@
 #include "source_basis/module_pw/pw_basis.h"
 #include "source_basis/module_pw/pw_basis_k.h"
 #include "source_cell/klist.h"
+#include "source_base/matrix.h"
 
 class UnitCell;
 
@@ -37,7 +38,8 @@ void deltap_init(const UnitCell& ucell,
                  const psi::Psi<std::complex<double>>* psi_cpu,
                  const K_Vectors* kv,
                  const ModulePW::PW_Basis_K* wfcpw,
-                 const ModulePW::PW_Basis* rhopw);
+                 const ModulePW::PW_Basis* rhopw,
+                 const ModuleBase::matrix* wg);
 
 /// Current per-atom lambda (Ry), read by on-site force / stress / H operator.
 const std::vector<double>& get_deltap_pw_lambda();

@@ -18,6 +18,7 @@
 #include "source_io/module_hs/cal_r_overlap_R.h"
 #include "source_hsolver/hsolver_lcao.h"
 #include <iomanip>
+#include <cmath>
 #ifdef __EXX
 #include "../source_lcao/module_ri/exx_opt_orb.h"
 #endif
@@ -797,6 +798,28 @@ void ESolver_KS_LCAO<TK, TR>::iter_finish(UnitCell& ucell, const int istep, int&
                 && PARAM.inp.deltap_observable == "operator")
             {
                 dp_scf_->freeze_branch_ref();
+                // L1.2/L1.3 (2026-08-16): Route A+ applicability gauges —
+                // SMO completeness ⟨η⟩ (band/k average and per-band max) and
+                // per-atom θ-spread (H_HR proxy error control ∝ λ_I·spread_I,
+                // RouteA++ §1.4 推论 1).  Printed once per converged SCF.
+                if (GlobalV::MY_RANK == 0)
+                {
+                    const double eta_avg = dp_scf_->get_last_eta_avg();
+                    if (!std::isnan(eta_avg))
+                    {
+                        const auto& spr = dp_scf_->get_last_spread_I();
+                        std::cout << " [DeltaP L1] <eta>=" << std::fixed
+                                  << std::setprecision(6) << eta_avg
+                                  << " (max " << dp_scf_->get_last_eta_max()
+                                  << ") spread_I/atom=(";
+                        for (size_t i = 0; i < spr.size(); ++i)
+                        {
+                            if (i > 0) std::cout << ", ";
+                            std::cout << spr[i];
+                        }
+                        std::cout << ")" << std::endl;
+                    }
+                }
             }
             // dp_escon is identical on every rank: γ is rank-0-synced by
             // module_deltap (compute_gamma_scf Bcast) and λ by sync_lambda

@@ -1,4 +1,5 @@
 #include "deltap.h"
+#include "source_esolver/deltap_common.h"
 #include "source_base/constants.h"
 #include "source_base/timer.h"
 #include "source_base/tool_title.h"
@@ -444,6 +445,14 @@ void DeltaP::compute_wannier_polarization(
         // Route A+ operator observable: ⟨P̂_I⟩ = Σ_k w_k Σ_n f_n Σ_{lm∈I} |D_{I,lm,n}(k)|²
         // (raw SMO projection per k-point, no S^{-1/2}; wg already folds in w_k·f_n).
         std::vector<double> p_hat_accum(nat_, 0.0);
+        // L1.2: completeness ⟨η⟩ accumulators (band- and k-average over the
+        // INPUT gdir; eta_accum2 for the max bound).
+        double eta_accum = 0.0;
+        double eta_accum2 = 0.0;
+        double eta_max = 0.0;
+        long eta_count = 0;
+        std::vector<double> spread_accum(nat_, 0.0);
+        int spread_count = 0;
         int n_strings_processed = 0;
         std::vector<std::vector<double>> w_In_first_string_;  // current alpha's first-string weights
         std::vector<std::complex<double>> zeta_list;
@@ -566,6 +575,7 @@ void DeltaP::compute_wannier_polarization(
             {
                 const double wg_val = pelec->wg(ik_psi, n);
                 if (wg_val == 0.0) continue;
+                double w_tot_n = 0.0;  // Σ_I w_In(k) for this k, band n (L1.2)
                 for (int iat = 0; iat < nat_; ++iat)
                 {
                     if (kstring_data_[j].D_I.size() <= static_cast<size_t>(iat)) continue;
@@ -580,6 +590,20 @@ void DeltaP::compute_wannier_polarization(
                         }
                     }
                     p_hat_accum[iat] += wg_val * w_In;
+                    w_tot_n += w_In;
+                }
+                // L1.2: SMO projection leakage η_n(k) = max(0, 1 − Σ_I w_In(k))
+                // (clamped at 0: a numerically >1 total is projection overlap
+                // of non-orthogonal SMO channels, not negative leakage).
+                // Accumulated on the INPUT gdir only, so each physical k is
+                // counted once across the three gdir passes.
+                if (alpha == gdir_orig - 1)
+                {
+                    const double eta = deltap_common::compute_smo_leakage(w_tot_n);
+                    eta_accum += eta;
+                    eta_accum2 += eta * eta;
+                    if (eta > eta_max) eta_max = eta;
+                    eta_count++;
                 }
             }
         }
@@ -1196,6 +1220,28 @@ void DeltaP::compute_wannier_polarization(
             smo_weight_sum_per_atom[iat] = w_sum;
             r_elec_per_atom[iat] = (w_sum > 1e-15) ? r_weighted / w_sum : 0.0;
         }
+        // L1.3: per-atom θ-spread (weighted std-dev of the band-resolved
+        // Wilson phases), accumulated on the INPUT gdir only:
+        //   spread_I ≡ [ Σ_n w̄_In (θ_n − θ̄_I)² / Σ_n w̄_In ]^{1/2},
+        //   w̄_In = w_In/Σ_J w_Jn,  θ̄_I = Σ_n w̄_In·θ_n / Σ_n w̄_In
+        // H_HR proxy error control ∝ λ_I·spread_I (RouteA++ §1.4 推论 1);
+        // uniform θ (all bands equal) gives spread_I = 0 exactly.
+        if (alpha == gdir_orig - 1 && n_dim > 0)
+        {
+            std::vector<double> w_tot_n(n_dim, 0.0);
+            for (int n = 0; n < n_dim; ++n)
+                for (int i = 0; i < nat_; ++i)
+                    w_tot_n[n] += w_In_matrix[n][i];
+            for (int iat = 0; iat < nat_; ++iat)
+            {
+                std::vector<double> w_norm(n_dim, 0.0);
+                for (int n = 0; n < n_dim; ++n)
+                    w_norm[n] = (w_tot_n[n] > 1e-30) ? w_In_matrix[n][iat] / w_tot_n[n] : 0.0;
+                spread_accum[iat] += deltap_common::compute_theta_spread(w_norm, gamma_unwrapped);
+            }
+            spread_count++;
+        }
+
         gamma_accum_per_string.push_back(gamma_I_per_atom);
         evals_all.push_back(evals);
         n_strings_processed++;
@@ -1878,6 +1924,23 @@ void DeltaP::compute_wannier_polarization(
         results_.smo_weight_sum[iat] = (n_strings_processed > 0) ? smo_w_accum[iat] / n_strings_processed : 0.0;
         results_.gamma_I_raw[iat][alpha_idx] = (n_strings_processed > 0) ? gamma_raw_accum[iat] / n_strings_processed : 0.0;
         results_.r_elec_center[iat][alpha_idx] = (n_strings_processed > 0) ? r_elec_accum[iat] / n_strings_processed : 0.0;
+    }
+
+    // L1.2/L1.3 finalize (INPUT gdir only): band/k-average ⟨η⟩ and per-atom
+    // spread averaged over the k-strings of the constraint direction.
+    if (alpha == gdir_orig - 1)
+    {
+        if (eta_count > 0)
+        {
+            last_eta_avg_ = eta_accum / eta_count;
+            last_eta_max_ = eta_max;
+        }
+        if (spread_count > 0)
+        {
+            last_spread_I_.assign(nat_, 0.0);
+            for (int iat = 0; iat < nat_; ++iat)
+                last_spread_I_[iat] = spread_accum[iat] / spread_count;
+        }
     }
 
     // Route A+ operator observable: keep only the INPUT constraint direction.
