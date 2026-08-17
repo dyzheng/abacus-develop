@@ -147,6 +147,12 @@ Phase 1: λ = 0, SCF 自然收敛
 | **target.dat 文件** | INPUT 设 `deltap_target_file target.dat` |
 | **约束矩阵文件** | `deltap_constraint_matrix constraint.mat` |
 
+> ⚠️ **无 target 语义分歧（LCAO vs PW）**：LCAO 路径无任何靶标（无
+> `deltap_target_file` 且 STRU 无 `dp_target`）时 = **自由跑**（λ≡0，
+> 4.3 修复后）；**PW 路径无 target 时 = 约束 γ→0**（历史语义保留，
+> `deltap_pw.cpp` 显式文档化）。两后端语义相反——跨基组对比或迁移
+> INPUT/STRU 前务必确认。PW 对齐 LCAO 语义属破坏性变更，挂起另议。
+
 ### 2.8 Route A+（operator 模式）控制
 
 `deltap_observable operator` 时的关键参数（旧 gamma 模式锁定其中部分，见各行说明）：
@@ -297,7 +303,8 @@ deltap_inner_thr        1e-3
 机制：每离子步 λ 在 SCF 内重收敛使 |Γ−t_Γ*|<1e-3，力 = 驻点力（4.2 验证），
 λ 自动落在 1e-5–1e-4 Ry 合法区。4.3 实测与纯 DFT 基线逐点一致（能量差
 ≤1.4e-4 eV、力差 ≤1.2e-3 eV/Å）。**禁止**：无 target 的 relax（4.3 前隐式
-Γ→0 已修；现 LCAO 无 target=自由跑 λ≡0）；远离自然值的 γ 靶点。
+Γ→0 已修；现 LCAO 无 target=自由跑 λ≡0，**PW 无 target=约束 γ→0**，语义分歧见
+§2.7）；远离自然值的 γ 靶点。
 
 ---
 
