@@ -1956,38 +1956,6 @@ void DeltaP::compute_wannier_polarization(
             ucell.iat2iait(iat, &I0, &T0);
             gamma_op_[iat] = ucell.atoms[T0].taud[I0][alpha] * p_hat_accum[iat];
         }
-#if 0 // DEBUG_T0_OPERATOR (T0 closed 2026-08-04: per-k == real-space, 12 digits)
-        std::cout << " [T0] P_hat_perk=";
-        for (int iat = 0; iat < nat_; ++iat)
-            std::cout << " " << std::setprecision(12) << p_hat_accum[iat];
-        std::cout << "  Gamma_op=";
-        for (int iat = 0; iat < nat_; ++iat)
-            std::cout << " " << std::setprecision(12) << gamma_op_[iat];
-        std::cout << std::endl;
-        // Per-k / per-band breakdown for atom 0 (T0 root-cause).
-        for (int j = 0; j < nppstr_; ++j)
-        {
-            const int ik_psi = k_index_[0][j];
-            if (ik_psi >= nks) continue;
-            for (int n = 0; n < nocc_use; ++n)
-            {
-                double w = 0.0;
-                if (kstring_data_[j].D_I.size() > 0)
-                {
-                    const int r = nproj_per_atom_[0];
-                    for (int lm = 0; lm < r; ++lm)
-                        if (kstring_data_[j].D_I[0].size() > static_cast<size_t>(lm)
-                            && kstring_data_[j].D_I[0][lm].size() > static_cast<size_t>(n))
-                            w += std::norm(kstring_data_[j].D_I[0][lm][n]);
-                }
-                std::cout << " [T0bd] alpha=" << alpha + 1 << " ik=" << ik_psi
-                          << " kvec=" << kstring_data_[j].kvec_d.x << ","
-                          << kstring_data_[j].kvec_d.y << "," << kstring_data_[j].kvec_d.z
-                          << " n=" << n << " wg=" << pelec->wg(ik_psi, n)
-                          << " |D0n|^2=" << w << std::endl;
-            }
-        }
-#endif
     }
 
     } // alpha loop
@@ -2727,12 +2695,6 @@ void DeltaP::compute_hk_correction(const UnitCell& ucell,
     // same wavefunctions.  A second finalize here would either zero the
     // frozen accounting (empty local accumulator) or duplicate the live
     // measurement with a stale ψ — both wrong.
-#if 0 // DEBUG_T0_OPERATOR (T0 closed 2026-08-04: per-k == real-space, 12 digits)
-    std::cout << " [T0] Gamma_op_hk=";
-    for (int iat = 0; iat < nat_; ++iat)
-        std::cout << " " << std::setprecision(12) << gamma_op_hk_[iat];
-    std::cout << std::endl;
-#endif
 }
 
 // (T-17, V-H8, S1, 2026-08-12) Build the frozen Ô_w operator kernel from the
@@ -3599,19 +3561,9 @@ bool DeltaP::compute_hk_force(const UnitCell& ucell,
     // σ^HK_{αβ} = −0.5·Im(Σ_j stress_kern)/Ω (sign flip vs the B-7 force
     // convention F = +0.5·Im(Σ acc): σ = +∂E/∂ε, F = −∂E/∂R).
     std::vector<std::complex<double>> stress_kern(9, {0.0, 0.0});
-#if 0 // DEBUG_HK_STRESS_SPLIT (temporary, disabled before commit)
-    std::complex<double> kern_zz_u(0.0, 0.0), kern_zz_dw(0.0, 0.0);
-#endif
 
     for (int j = 0; j < nppstr_ - 1; ++j)
     {
-#if 0 // DEBUG_HK_FORCE (temporary, disabled for commit; flip to 1 for A2/C)
-        std::cout << "  [hkdbg] nks=" << nks << " nbands=" << nbands << " nocc_use=" << nocc_use
-                  << " nppstr=" << nppstr_ << " kidx0=";
-        for (int kk = 0; kk < nppstr_; ++kk)
-            std::cout << k_index_[0][kk] << " ";
-        std::cout << std::endl;
-#endif
         const int ik_L = k_index_[0][j];
         const int ik_R = k_index_[0][j + 1];
         if (ik_L >= nks || ik_R >= nks) continue;
@@ -4035,10 +3987,6 @@ bool DeltaP::compute_hk_force(const UnitCell& ucell,
         std::vector<std::vector<std::complex<double>>> U(
             nat, std::vector<std::complex<double>>(3 * nocc_use * nocc_use, {0.0, 0.0}));
         std::vector<std::vector<double>> dW(nat, std::vector<double>(3 * nocc_use, 0.0));
-#if 0 // DEBUG_HK_STRESS_SPLIT (temporary, disabled before commit)
-        std::vector<std::vector<std::complex<double>>> U_phase(
-            nat, std::vector<std::complex<double>>(3 * nocc_use * nocc_use, {0.0, 0.0}));
-#endif
 
         // F-8 (2026-08-17): H_HK stress kernels for this link, strain
         // derivative of the same E_HK = −0.5·Im[Σ f W T Π].  Strain
@@ -4188,12 +4136,6 @@ bool DeltaP::compute_hk_force(const UnitCell& ucell,
                                                 * (std::complex<double>(0.0, ModuleBase::TWO_PI * dkv_grad[a] / ucell.lat0)
                                                    * phase_sdk * ov)
                                                 * ck;
-#if 0 // DEBUG_HK_STRESS_SPLIT (temporary, disabled before commit)
-                                            U_phase[iat][(a * nocc_use + p) * nocc_use + pp] -= cb
-                                                * (std::complex<double>(0.0, ModuleBase::TWO_PI * dkv_grad[a] / ucell.lat0)
-                                                   * phase_sdk * ov)
-                                                * ck;
-#endif
                                         }
                                         // DEBUG accumulators (diagonal band p, axis z)
                                         if (pp == p)
@@ -4207,13 +4149,6 @@ bool DeltaP::compute_hk_force(const UnitCell& ucell,
                             }
                         }
                     }
-#if 0 // DEBUG_HK_FORCE_CONSISTENCY (temporary, disabled)
-                {
-                std::cout << "  [hkpair] iat=" << iat << " iat1=" << iat1 << " R=" << R.x << "," << R.y << "," << R.z
-                          << " tacc0=" << tacc[0] << " T0=" << T_full[0]
-                          << " phaseacc0=" << phaseacc[0] << " sumU0(atom)=" << U[iat][(2*nocc_use+0)*nocc_use+0] << std::endl;
-                }
-#endif
                 }
 
                 // ---------- ∂S_k/∂R kernel for W (first-zeta projector set, intor_) ----------
@@ -4352,101 +4287,10 @@ bool DeltaP::compute_hk_force(const UnitCell& ucell,
                                     * Pi[pp * nocc_use + p];
                         }
                         stress_kern[a * 3 + b] += fp * kern;
-#if 0 // DEBUG_HK_STRESS_SPLIT (temporary, disabled before commit)
-                        if (a == 2 && b == 2)
-                        {
-                            kern_zz_u += fp * kern_u;
-                            kern_zz_dw += fp * kern_dw;
-                        }
-#endif
                     }
                 }
             }
         }
-#if 0 // DEBUG_HK_STRESS_SPLIT (temporary, disabled before commit)
-        {
-            std::complex<double> e_link(0.0, 0.0);
-            std::string wgs;
-            for (int p = 0; p < nocc_use; ++p)
-            {
-                const double fp = pelec->wg(ik_L, p);
-                wgs += std::to_string(fp) + " ";
-                for (int pp = 0; pp < nocc_use; ++pp)
-                {
-                    e_link += fp * W[pp] * T_full[p * nocc_use + pp] * Pi[pp * nocc_use + p];
-                }
-            }
-            // Force-virial of this link (frozen-C force at SCF C):
-            //   vir = Σ_iat R_iat,z · 0.5·Im(Σ_p acc[iat][z,p])
-            // and its U/dW split (acc = dW·T + W·U over all bands).
-            double vir_f = 0.0, vir_u = 0.0, vir_dw = 0.0;
-            for (int iat = 0; iat < nat; ++iat)
-            {
-                const double rz = ucell.get_tau(iat).z * ucell.lat0;
-                double facc = 0.0, f_u = 0.0, f_dw = 0.0;
-                for (int p = 0; p < nocc_use; ++p)
-                {
-                    const double fp = pelec->wg(ik_L, p);
-                    if (fp == 0.0) continue;
-                    std::complex<double> a_u(0.0, 0.0), a_dw(0.0, 0.0);
-                    for (int pp = 0; pp < nocc_use; ++pp)
-                    {
-                        a_u += W[pp] * U[iat][(2 * nocc_use + p) * nocc_use + pp]
-                               * Pi[pp * nocc_use + p];
-                        a_dw += dW[iat][2 * nocc_use + pp] * T_full[p * nocc_use + pp]
-                                * Pi[pp * nocc_use + p];
-                    }
-                    facc += fp * (a_u + a_dw).imag();
-                    f_u += fp * a_u.imag();
-                    f_dw += fp * a_dw.imag();
-                }
-                vir_f += rz * 0.5 * facc;
-                vir_u += rz * 0.5 * f_u;
-                vir_dw += rz * 0.5 * f_dw;
-            }
-            std::cout << "  [hkstr] link " << j << " ik_L=" << ik_L
-                      << " wg=" << wgs
-                      << " Im(e_hk)=" << e_link.imag()
-                      << " Im(U_zz)=" << kern_zz_u.imag()
-                      << " Im(dW_zz)=" << kern_zz_dw.imag()
-                      << " Im(U+dW)_zz=" << (kern_zz_u + kern_zz_dw).imag()
-                      << " vir_F=" << vir_f << " vir_U=" << vir_u << " vir_dW=" << vir_dw << std::endl;
-            for (int iat = 0; iat < nat; ++iat)
-            {
-                const double rz = ucell.get_tau(iat).z * ucell.lat0;
-                double fu = 0.0, fdw = 0.0;
-                for (int p = 0; p < nocc_use; ++p)
-                {
-                    const double fp = pelec->wg(ik_L, p);
-                    if (fp == 0.0) continue;
-                    std::complex<double> au(0.0, 0.0), adw(0.0, 0.0);
-                    for (int pp = 0; pp < nocc_use; ++pp)
-                    {
-                        au += W[pp] * U[iat][(2 * nocc_use + p) * nocc_use + pp]
-                              * Pi[pp * nocc_use + p];
-                        adw += dW[iat][2 * nocc_use + pp] * T_full[p * nocc_use + pp]
-                               * Pi[pp * nocc_use + p];
-                    }
-                    fu += fp * au.imag();
-                    fdw += fp * adw.imag();
-                }
-                std::complex<double> aph(0.0, 0.0);
-                for (int p = 0; p < nocc_use; ++p)
-                {
-                    const double fp = pelec->wg(ik_L, p);
-                    if (fp == 0.0) continue;
-                    for (int pp = 0; pp < nocc_use; ++pp)
-                    {
-                        aph += W[pp] * U_phase[iat][(2 * nocc_use + p) * nocc_use + pp]
-                               * Pi[pp * nocc_use + p];
-                    }
-                }
-                std::cout << "    [hkstr] atom " << iat << " rz=" << rz
-                          << " F_U=" << 0.5 * fu << " F_dW=" << 0.5 * fdw
-                          << " F_Uph=" << 0.5 * aph.imag() << std::endl;
-            }
-        }
-#endif
         // Full-trace E_HK and per-atom Γ_I^HK (split before the λ sum).
         for (int p = 0; p < nocc_use; ++p)
         {
@@ -4463,68 +4307,6 @@ bool DeltaP::compute_hk_force(const UnitCell& ucell,
             }
         }
 
-#if 0 // DEBUG_HK_FORCE (temporary, disabled for commit; flip to 1 for A2/C)
-        {
-            double u_norm = 0.0, dw_norm = 0.0;
-            for (int iat = 0; iat < nat; ++iat)
-            {
-                for (int p = 0; p < nocc_use; ++p)
-                {
-                    u_norm += std::abs(U[iat][(2 * nocc_use + p) * nocc_use + p]);
-                    dw_norm += std::abs(dW[iat][2 * nocc_use + p]);
-                }
-            }
-            std::cout << "  [hkdbg] link " << j << " ik_L=" << ik_L
-                      << " W=" << W[0] << "," << W[1] << "," << W[2]
-                      << " T=" << T_full[0].real() << "," << T_full[1 * nocc_use + 1].real() << "," << T_full[2 * nocc_use + 2].real()
-                      << " ImT=" << T_full[0].imag() << "," << T_full[1 * nocc_use + 1].imag() << "," << T_full[2 * nocc_use + 2].imag()
-                      << " |Uz|=" << u_norm << " |dWz|=" << dw_norm << std::endl;
-            for (int iat = 0; iat < nat; ++iat)
-            {
-                std::cout << "    [hkdbg] atom " << iat << " Uz=";
-                for (int p = 0; p < nocc_use; ++p)
-                    std::cout << U[iat][(2 * nocc_use + p) * nocc_use + p] << " ";
-                std::cout << " dWz=";
-                for (int p = 0; p < nocc_use; ++p)
-                    std::cout << dW[iat][2 * nocc_use + p] << " ";
-                std::cout << " accIm=";
-                for (int p = 0; p < nocc_use; ++p)
-                    std::cout << acc[iat][2 * nocc_use + p].imag() << " ";
-                std::cout << std::endl;
-            }
-        }
-#endif
-#if 0 // DEBUG_HK_FORCE_CONSISTENCY (temporary, disabled for commit; flip to 1 for A2/C)
-        {
-            // Per-band consistency check: sum of U over atoms vs the analytic
-            // phase part -2*pi*i*dkv_grad/lat0 * T_pp, and the energy kernel.
-            std::complex<double> sumU(0.0, 0.0);
-            for (int iat = 0; iat < nat; ++iat)
-                sumU += U[iat][(2 * nocc_use + 0) * nocc_use + 0];
-            const std::complex<double> expect_phase
-                = -std::complex<double>(0.0, ModuleBase::TWO_PI * dkv_grad[2] / ucell.lat0) * T_full[0];
-            std::complex<double> e_link(0.0, 0.0);
-            double re_fwt = 0.0;
-            for (int p = 0; p < nocc_use; ++p)
-            {
-                const double fp = pelec->wg(ik_L, p);
-                e_link += fp * W[p] * T_full[p * nocc_use + p];
-                re_fwt += fp * W[p] * T_full[p * nocc_use + p].real();
-            }
-            std::cout << "  [hkchk] link " << j << " dkvz=" << dkv[2] << " lat0=" << ucell.lat0
-                      << " wg=";
-            for (int p = 0; p < nocc_use; ++p)
-                std::cout << pelec->wg(ik_L, p) << " ";
-            std::cout << " W=";
-            for (int p = 0; p < nocc_use; ++p)
-                std::cout << W[p] << " ";
-            std::cout << " T=";
-            for (int p = 0; p < nocc_use; ++p)
-                std::cout << T_full[p * nocc_use + p] << " ";
-            std::cout << "\n  [hkchk] sumUz=" << sumU << " expectPhaseUz=" << expect_phase
-                      << " e_link=" << e_link << " Re(fWT)=" << re_fwt << std::endl;
-        }
-#endif
         }
     }
 
@@ -4562,11 +4344,6 @@ bool DeltaP::compute_hk_force(const UnitCell& ucell,
                 (*stress_out)[voigt[a][b]] = 0.5 * stress_kern[a * 3 + b].imag() / ucell.omega;
             }
         }
-#if 0 // DEBUG_HK_STRESS_SPLIT (temporary, disabled before commit)
-        std::cout << "  [hkstr] omega=" << ucell.omega
-                  << " Im(kern_zz)=" << stress_kern[2 * 3 + 2].imag()
-                  << " sigma_zz=" << (*stress_out)[5] << std::endl;
-#endif
     }
     for (int iat = 0; iat < nat; ++iat)
     {
