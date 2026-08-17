@@ -2922,3 +2922,25 @@ F-7/F-7b/锚点套件/FD 协议纪律）、当前状态与 F-8→Stage 4→Stage
   物理刚度测量必须 γ-drive（或先校准 t_Γ*）。
 - Stage 4 全部完成（4.1–4.4）；文件 `2026-08-17-deltap-stage44-v1-v3.md`；
   TODO 4.4 ✅；进入 Stage 5（dev-guide v3/文档/清理）。
+
+## 2026-08-17 (11): Stage 5 文档与清理（dev-guide v3 + INPUT 手册 + #if 0 清理）
+
+- **清理**（`95639fcb0`，249 行纯删除 0 新增）：`FORCE_STRESS.cpp` 3 块
+  fsdbg、`deltap_wannier.cpp` 12 块 T0/hkdbg/hkstr/hkforce 全部 `#if 0`
+  移除（含 kern_zz_u/dw、U_phase，引用全在被删块内）；增量构建 +
+  `ctest -R deltap` 5/5 PASS；bn center 回归逐位一致
+  （E'=−338.7136166249902 eV，锚点 #3 口径）——纯清理无行为变化。
+- **dev-guide v3**（`2026-08-02-deltap-force-stress-dev-guide.md` 重写）：
+  Status 矩阵刷新（v2 的"未实现/必崩"全关闭）；三种记账推导（proxy/hk/ow/
+  PW + 非正交全迹 T·Π 教训）；dspin 恒等式三条件落点（v2"①②不满足"被
+  Route A+ 推翻）；双路径分层并存表述（**T3 PASS=数学自洽 / T3' FAIL=物理
+  不可用**）；FD 协议更新为 stationary4；公式集 F1–F12；Γ-path relax 生产
+  用法（§10）。
+- **INPUT 用户手册**（`docs/deltap_user_manual.md`）：头部双路径说明 +
+  §1.3 Route A+ 快速入门（约束/场模式）+ §2.8 Route A+ 控制表——12 个缺失
+  关键词全部补齐（observable/drive/operator_mode/secant/proxy_target_file/
+  outer_nmax/outer_thr/branch_anchor/branch_write/inner_scheme/
+  lambda_init_file/dk_fd），语义对齐 `deltap_scf.h` DeltapParams 注释；
+  新增 §7.5 Γ-path relax 模板。
+- 文件：`2026-08-17-deltap-stage5-docs-cleanup.md`；TODO Stage 5 ✅；
+  progress-and-plan 总览刷新（Stage 1–4 ✅、力/应力/relax 行更新）。

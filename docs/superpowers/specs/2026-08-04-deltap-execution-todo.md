@@ -280,12 +280,20 @@ T3 结论——现在有结论了），T4 通过后统一提交 Stage 1+2 再进
 | 4.3 | D-D 正式验收 + deltap_relax 端到端（≥3 离子步能量下降、力平滑） | ✅ **PASS（2026-08-17）**：D-D 驻点验收由 4.2 交付；Γ-path relax（t_Γ*=自然 Γ 冻结）4 离子步收敛，与纯 DFT 基线逐点一致（能量差 ≤1.4e-4 eV、力差 ≤1.2e-3 eV/Å），λ 全程 1e-5–1e-4 Ry 合法区；严格逐步单调在纯 DFT 基线即不成立（BFGS 过冲，判据按生产语义裁定）；顺手修复无 target 隐式 Γ→0 语义缺口（LCAO 自由跑，PW 路径保持文档化 γ→0 语义）；详见 `2026-08-17-deltap-stage43-relax-e2e.md` |
 | 4.4 | V1（efield 对照钉 E_eff 符号/因子）、V3（BN 新记账刚度复核） | ✅ **PASS（2026-08-17）**：V1 符号钉死（两通道 Σγ 响应同号，公式 (b) "+" 正确）、因子实测 1.60×（与 D2 ×1.6 互证，μ₀=1.94 D 与实验 5% 互证）；V3 新记账 γ-drive 重采样 E' span 1.72 μRy（旧轮 2.0），κ=13 μRy/rad² 噪声级，BN 零刚度结论不变（锚点 #3 proxy-drive 536 μRy = Γ-约束 λ-work 伪曲率，非 γ-PES）；详见 `2026-08-17-deltap-stage44-v1-v3.md` |
 
-## Stage 5：文档与清理（~0.5 天）
+## Stage 5：文档与清理（~0.5 天）— ✅ **已完成（2026-08-17）**
 
-- dev-guide v3（三种记账推导 + dspin 恒等式 + Route A+ 结构）；
-- E-field 语义更新（推导文档 §1.2 入手册）；`deltap_observable` 关键词文档；
-- 清理：hhrdbg/hkdbg/fsdbg 等 #if 0 块（A2/C 验证已用毕）；
-- dev log + 总览文档（2026-08-04-deltap-progress-and-plan.md）刷新。
+- ✅ dev-guide v3（`2026-08-02-deltap-force-stress-dev-guide.md` 重写）：
+  三种记账推导（proxy/hk/ow/PW + 非正交全迹 T·Π 教训）、dspin 恒等式落点、
+  Route A+ 双路径分层（T3 PASS=数学自洽 / T3' FAIL=物理不可用）、Γ-path
+  relax 生产用法；公式集 F1–F12、check-list 对齐 Stage 4 验收面；
+- ✅ INPUT 用户手册：头部双路径说明 + §1.3 Route A+ 快速入门 + §2.8 Route A+
+  控制表（12 个缺失关键词全补齐）+ §7.5 Γ-path relax 模板；
+- ✅ 清理：`#if 0` 块 249 行纯删除（fsdbg/hkdbg/hkstr/T0，提交
+  `95639fcb0`），bn center 回归逐位一致；`ctest -R deltap` 5/5 PASS；
+- ✅ dev log + 总览文档（progress-and-plan）刷新；
+- E-field 语义：公式 (b) + ×1.6 校准注释已在 `deltap_scf.cpp:873` 打印，
+  主算法文档 §8 已被能力边界文档取代（既有评审记录）。
+- 详见 `2026-08-17-deltap-stage5-docs-cleanup.md`。
 
 ---
 
