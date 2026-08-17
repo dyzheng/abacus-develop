@@ -1037,11 +1037,20 @@ void ESolver_KS_LCAO<TK, TR>::deltap_init(UnitCell& ucell)
         // dangling-else bug; R4 cleanup.)
         if (has_any_target && GlobalV::MY_RANK == 0)
             std::cout << " [DeltaP] Loaded targets from STRU (dp_target/dp_constrain)" << std::endl;
+        // No target anywhere (no file, STRU dp_target all unset/zero):
+        // leave p.target EMPTY so the run is genuinely free.  Without this,
+        // get_dp_target() returns an all-zero {0,0,0} vector, and the λ
+        // update residual gate (!tgt.empty()) treats it as a "constrain
+        // Γ → 0" target — the free run silently drives λ ≠ 0 and
+        // contaminates the relax forces (root cause of the old "F_H1z
+        // 限制" misattribution in 4.1; fixed 2026-08-17, Stage 4.3).
+        if (!has_any_target)
+            p.target.clear();
     }
-    // When no target is specified, leave p.target empty.  This allows
-    // ground-state γ determination without target-aware branch selection,
-    // while the constraint (deltap_corr=1) still applies the Hamiltonian
-    // correction with the current (possibly zero) λ.
+    // When no target is specified, p.target is now truly empty (see above).
+    // This allows ground-state γ determination without target-aware branch
+    // selection, while the constraint (deltap_corr=1) still applies the
+    // Hamiltonian correction with the current (possibly zero) λ.
 
     deltap_scf_solver_->init(p, deltap_make_backend(ucell));
 

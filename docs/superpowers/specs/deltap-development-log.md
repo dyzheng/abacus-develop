@@ -2879,3 +2879,29 @@ F-7/F-7b/锚点套件/FD 协议纪律）、当前状态与 F-8→Stage 4→Stage
   inner_nmax=20 触顶平台，λ 连续三轮不变）；残差仍以 1.95× 裕度通过。
 - 文件：`2026-08-17-deltap-stage42-stationary-fd.md`；TODO 4.2 ✅；
   progress-summary Stage 4 行更新。提交含脚本（s4 产物不入库）。
+
+## 2026-08-17 (9): Stage 4.3 deltap_relax 端到端 + 无 target 语义缺口根因修复
+
+- **D-D 验收**：驻点力正式验收已由 4.2 交付（三体系 21/21 腿，判据
+  0.0128555 eV/Å）；4.3 完成 relax 端到端。
+- **Γ-path relax（t_Γ\*=自然 Γ 冻结，h2o1，relax_nmax=5）**：4 离子步
+  收敛（力 0.747→2.061→0.074→0.025 eV/Å < 阈值 0.0257），与纯 DFT
+  基线逐点一致——每步能量差 ≤1.4e-4 eV、力差 ≤1.2e-3 eV/Å；λ 全程
+  1e-5–1e-4 Ry（合法小 λ 工作区），escon ≤ −7.2e-3 eV。
+- **判据裁定**：严格逐步能量单调在纯 DFT 基线即不成立（BFGS 过冲 +
+  人工短键 0.586 Å O–H 几何，步 1→2 +54 meV）——4.1 "F_H1z 限制"
+  归因修正：非 HK 力项，本征优化器行为；按生产语义（≥3 步、收敛、
+  终值下降、与 DFT 一致）PASS。
+- **根因修复**（`esolver_ks_lcao.cpp`，13+/4−）：无 target 时
+  `p.target = get_dp_target()` 返回全零非空向量 → 隐式 t_Γ=0（Γ→0
+  约束）驱动 λ≠0，污染 relax 力（4.1 无 target 跑 λ→1.7e-2 的真实
+  成因）。修复：无任何 target 时 `p.target.clear()`（与代码注释意图
+  一致）；PW 路径保持文档化的"无 target=约束 γ→0"语义（deltap_pw.cpp
+  显式注释，不改）。
+- **验证/回归**：修复后无 target relax λ≡0、能量/力与纯 DFT 一致到
+  1e-13 eV/1e-6 eV/Å；center 目标驱动用例与锚点 #3 逐位一致
+  （λ=−4.000592e-3/−2.262259e-3、E'=−338.7136166249902）；deltap
+  单测 5/5。影响面：仅 tests/deltap_relax（无 target）——bn_sampling
+  全用 target 文件/λ 冻结，不受影响。
+- 文件：`2026-08-17-deltap-stage43-relax-e2e.md`；TODO 4.3 ✅；
+  4.1 文档归因更正；capability/progress-summary 同步。
