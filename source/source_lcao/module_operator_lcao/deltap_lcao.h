@@ -75,6 +75,22 @@ class DeltaPOperator : public OperatorLCAO<TK, TR>
     static double get_stored_e_hk() { return s_stored_e_hk; }
 
     /**
+     * @brief Static storage of the H_HK (Berry-connection) analytic stress
+     *        contribution (F-8, 2026-08-17), computed by
+     *        deltap::DeltaP::compute_hk_force in ESolver_KS_LCAO::cal_force.
+     *        6 components [xx,xy,xz,yy,yz,zz] in Ry/Bohr^3, already divided
+     *        by the cell volume.  Added to the total stress inside
+     *        FORCE_STRESS so that the printed total stress includes it
+     *        (serial-only; the cal_force_stress gate refuses MPI +
+     *        hk-mode + cal_stress before this is reached).
+     */
+    static void store_hk_stress_for_stress(const std::vector<double>& s_hk)
+    {
+        s_stored_hk_stress = s_hk;
+    }
+    static const std::vector<double>& get_stored_hk_stress() { return s_stored_hk_stress; }
+
+    /**
      * @brief Compute force and stress from the DeltaP constraint Hamiltonian.
      *
      * Follows the same pattern as DeltaSpin::cal_force_stress().
@@ -108,6 +124,7 @@ class DeltaPOperator : public OperatorLCAO<TK, TR>
     std::vector<double> lambda_save_;
     static std::vector<double> s_stored_lambda;  // for force/stress access
     static std::vector<double> s_stored_hk_force;  // H_HK force (Ry/Bohr), nat*3
+    static std::vector<double> s_stored_hk_stress; // H_HK stress (Ry/Bohr^3), 6 components
     static double s_stored_e_hk;                   // E_HK (Ry) for diagnostics
     bool initialized = false;
     bool dp_hr_done = false;

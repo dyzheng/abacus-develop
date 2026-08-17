@@ -35,15 +35,48 @@ void DeltaPOperator<TK, TR>::cal_force_stress(const bool cal_force,
          || PARAM.inp.deltap_operator_mode == "hk")
         && PARAM.inp.deltap_observable == "operator")
     {
-        // R6 (2026-08-12) / F-2b: the stress path of a k-space-only operator
-        // (H_ow in ow mode; H_HK-only in hk mode) is not defined (no
-        // real-space ∂/∂ε expression yet); a silent zero stress would
-        // corrupt variable-cell runs.
+        // R6 (2026-08-12) / F-2b / F-8 (2026-08-17): in the k-space-only
+        // operator modes (H_ow in ow mode; H_HK-only in hk mode) the H_HR
+        // real-space contribution is not applied, so its force/stress must
+        // not be added here — zeroed below.  The H_HK force/stress is
+        // computed by deltap::DeltaP::compute_hk_force in the esolver and
+        // added via the static stores inside FORCE_STRESS.
+        // Stress availability (F-8): hk + serial implemented; hk + MPI and
+        // ow not implemented (the strain kernels are serial-only / the Ô_w
+        // stress path is undefined).  A silent zero stress would corrupt
+        // variable-cell runs, so the unimplemented combinations quit.
         if (cal_stress)
         {
-            ModuleBase::WARNING_QUIT("DeltaPOperator::cal_force_stress",
-                "deltap_operator_mode=ow/hk + cal_stress is not implemented "
-                "(k-space operator stress path undefined; R6). Use cal_stress=0.");
+            if (PARAM.inp.deltap_operator_mode == "ow")
+            {
+                ModuleBase::WARNING_QUIT("DeltaPOperator::cal_force_stress",
+                    "deltap_operator_mode=ow + cal_stress is not implemented "
+                    "(Ô_w stress path undefined; R6/F-8). Use cal_stress=0.");
+            }
+#ifdef __MPI
+            // Branch G: MPI guard for the serial-only H_HK stress (F-8).
+            // compute_hk_force's stress kernels are accumulated per-pair in
+            // the serial path; the distributed Dloc path does not carry the
+            // strain weights yet.
+            int nproc_hk = 1;
+            {
+                const Parallel_Orbitals* paraV_gate = dmR->get_paraV();
+                if (paraV_gate != nullptr && paraV_gate->comm() != MPI_COMM_NULL)
+                {
+                    MPI_Comm_size(paraV_gate->comm(), &nproc_hk);
+                }
+            }
+            if (nproc_hk > 1)
+            {
+                ModuleBase::WARNING_QUIT("DeltaPOperator::cal_force_stress",
+                    "deltap_operator_mode=hk + cal_stress is serial-only "
+                    "(H_HK stress MPI path undefined; F-8). Use 1 rank or cal_stress=0.");
+            }
+#endif
+            // Branch H: serial hk mode — H_HR stress is off (H_HR not
+            // applied); the H_HK stress is added by FORCE_STRESS from the
+            // static store, so this routine contributes nothing to stress.
+            stress.zero_out();
         }
         if (cal_force) force.zero_out();
         ModuleBase::timer::end("DeltaPOperator", "cal_force_stress");

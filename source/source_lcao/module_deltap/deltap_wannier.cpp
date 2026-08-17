@@ -3476,13 +3476,20 @@ bool DeltaP::compute_hk_force(const UnitCell& ucell,
                               const elecstate::ElecState* pelec,
                               const std::vector<double>& lambda,
                               std::vector<double>& force_out,
-                              double& e_hk_out)
+                              double& e_hk_out,
+                              std::vector<double>* stress_out)
 {
     ModuleBase::TITLE("DeltaP", "compute_hk_force");
     ModuleBase::timer::start("DeltaP", "compute_hk_force");
 
     force_out.assign(nat_ * 3, 0.0);
     e_hk_out = 0.0;
+    // F-8 (2026-08-17): H_HK stress output (serial path only).  Zeroed up
+    // front so a refused path (MPI) cannot leak a stale stress.
+    if (stress_out != nullptr)
+    {
+        stress_out->assign(6, 0.0);
+    }
 
     if (nppstr_ < 2 || kstring_data_.empty())
     {
@@ -3586,6 +3593,15 @@ bool DeltaP::compute_hk_force(const UnitCell& ucell,
     // (E_HK = Σ_I λ_I·Γ_I^HK; split before the λ sum; full-trace convention
     // matching compute_hk_correction — T2 verdict 2026-08-04).
     std::vector<std::complex<double>> e_hk_I(nat_, {0.0, 0.0});
+    // F-8 (2026-08-17): H_HK stress kernel accumulator, per link
+    // stress_kern[α*3+β] = Σ_p f_p Σ_pp' (stress_dW·T + W·stress_U)·Π
+    // (serial path only; see the pair-loop kernels below).  Finalized to
+    // σ^HK_{αβ} = −0.5·Im(Σ_j stress_kern)/Ω (sign flip vs the B-7 force
+    // convention F = +0.5·Im(Σ acc): σ = +∂E/∂ε, F = −∂E/∂R).
+    std::vector<std::complex<double>> stress_kern(9, {0.0, 0.0});
+#if 0 // DEBUG_HK_STRESS_SPLIT (temporary, disabled before commit)
+    std::complex<double> kern_zz_u(0.0, 0.0), kern_zz_dw(0.0, 0.0);
+#endif
 
     for (int j = 0; j < nppstr_ - 1; ++j)
     {
@@ -3632,6 +3648,16 @@ bool DeltaP::compute_hk_force(const UnitCell& ucell,
 #ifdef __MPI
         if (mpi_path)
         {
+            // F-8 (2026-08-17): the H_HK stress is serial-only (the strain
+            // derivative is a per-pair lattice-vector weighted kernel that the
+            // distributed Dloc path does not carry); the cal_force_stress gate
+            // refuses MPI + hk-mode + cal_stress before this is reached, so a
+            // stress request here is a programming error — leave it zeroed.
+            if (stress_out != nullptr)
+            {
+                ModuleBase::WARNING("DeltaP::compute_hk_force",
+                    "H_HK stress is serial-only (MPI path); stress left zero.");
+            }
             // TODO 3.2/3.3 (2026-08-13): distributed H_HK force link body.
             // SC = S_dk·C_R is a genuine distributed GEMM (desc × desc_wfc);
             // T/Pi/U/dW are band-space quantities completed by the A'
@@ -4009,6 +4035,29 @@ bool DeltaP::compute_hk_force(const UnitCell& ucell,
         std::vector<std::vector<std::complex<double>>> U(
             nat, std::vector<std::complex<double>>(3 * nocc_use * nocc_use, {0.0, 0.0}));
         std::vector<std::vector<double>> dW(nat, std::vector<double>(3 * nocc_use, 0.0));
+#if 0 // DEBUG_HK_STRESS_SPLIT (temporary, disabled before commit)
+        std::vector<std::vector<std::complex<double>>> U_phase(
+            nat, std::vector<std::complex<double>>(3 * nocc_use * nocc_use, {0.0, 0.0}));
+#endif
+
+        // F-8 (2026-08-17): H_HK stress kernels for this link, strain
+        // derivative of the same E_HK = −0.5·Im[Σ f W T Π].  Strain
+        // convention (RouteA++ §4.1): the cell stretches, fractional
+        // coordinates fixed ⇒ the S_dk/S_k phases are strain-invariant
+        // (∂phase/∂ε = 0 theorem, reduced-k fixed) and every two-center
+        // orbital derivative enters with the full pair separation weight
+        // d_β = (tau0 − tau1)_β·lat0 (the bra−ket Cartesian vector
+        // including the periodic image):
+        //   stress_U[α][β][p][pp] = Σ_pairs ½d_β·(C_L† ∂S_dk/∂R_bra,α C_R)_{p,pp}
+        //   stress_dW[α][β][p']    = Σ_pairs ½d_β·∂W_p'/∂R_bra,α
+        // (bra-only, mirroring the per-atom force kernels; the ½ is the
+        // double-visit factor — each unordered pair is visited twice with
+        // equal-sign contributions (weight and derivative flip together)).
+        // The final σ^HK_{αβ} = +0.5·Im(Σ_j kern)/Ω (σ = −(1/Ω)·dE_HK/dε,
+        // dE_HK/dε = −0.5·Im(Σ kern) ⇒ σ = +0.5·Im(Σ kern)/Ω).
+        std::vector<std::complex<double>> stress_U(
+            9 * nocc_use * nocc_use, {0.0, 0.0});
+        std::vector<double> stress_dW(9 * nocc_use, 0.0);
 
         for (int iat = 0; iat < nat; ++iat)
         {
@@ -4042,6 +4091,15 @@ bool DeltaP::compute_hk_force(const UnitCell& ucell,
                 if (!sdk_pair && !sk_pair) continue;
 
                 const ModuleBase::Vector3<double> dtau = tau0 - tau1;
+                // F-8: pair strain weight in Cartesian (Bohr) — under the
+                // fixed-fractional strain convention (RouteA++ §4.1) the
+                // full bra−ket separation d = tau0 − tau1 stretches by
+                // (1+ε), so ∂d_γ/∂ε_{αβ} = δ_{γα}·d_β and every two-center
+                // orbital derivative enters the stress with the weight d_β
+                // (NOT just the lattice part R·A — the τ-difference scales
+                // with the cell as well).  dtau is already the Cartesian
+                // separation including the periodic image (adjacent_tau).
+                const ModuleBase::Vector3<double> d_bohr = dtau * ucell.lat0;
                 const Atom* atom1 = &ucell.atoms[T1];
                 const int nw1 = atom1->nw;
 
@@ -4097,6 +4155,28 @@ bool DeltaP::compute_hk_force(const UnitCell& ucell,
                                             {
                                                 U[iat][(a * nocc_use + p) * nocc_use + pp] += cb * (phase_sdk * g) * ck;
                                                 U[iat1][(a * nocc_use + p) * nocc_use + pp] -= cb * (phase_sdk * g) * ck;
+                                                // F-8 stress: bra-only × the
+                                                // full pair separation d_β
+                                                // (orbital part; the phase part
+                                                // below is strain-invariant —
+                                                // §4.2(b)).  Gated: force-only
+                                                // runs keep the pre-F-8 hot path.
+                                                if (stress_out != nullptr)
+                                                {
+                                                    // F-8 (2026-08-17): the pair loop visits every
+                                                    // unordered pair TWICE (bra=A and bra=B); the
+                                                    // reversed visit flips BOTH the weight d→−d and
+                                                    // the bra derivative g→−g, so both visits
+                                                    // accumulate the same sign.  The pair-form
+                                                    // Σ_pairs d_β·∂E/∂R_bra,α counts each pair once
+                                                    // ⇒ halve the weight (0.5·d_β).
+                                                    for (int b = 0; b < 3; ++b)
+                                                    {
+                                                        stress_U[(a * 3 + b) * nocc_use * nocc_use
+                                                                 + p * nocc_use + pp]
+                                                            += 0.5 * d_bohr[b] * cb * (phase_sdk * g) * ck;
+                                                    }
+                                                }
                                             }
                                             // Phase part: ∂phase/∂R_bra,α = -2πi·dkv_grad[α]/lat0
                                             // where dkv_grad = latvec⁻¹·dk (fractional-τ derivative).
@@ -4108,6 +4188,12 @@ bool DeltaP::compute_hk_force(const UnitCell& ucell,
                                                 * (std::complex<double>(0.0, ModuleBase::TWO_PI * dkv_grad[a] / ucell.lat0)
                                                    * phase_sdk * ov)
                                                 * ck;
+#if 0 // DEBUG_HK_STRESS_SPLIT (temporary, disabled before commit)
+                                            U_phase[iat][(a * nocc_use + p) * nocc_use + pp] -= cb
+                                                * (std::complex<double>(0.0, ModuleBase::TWO_PI * dkv_grad[a] / ucell.lat0)
+                                                   * phase_sdk * ov)
+                                                * ck;
+#endif
                                         }
                                         // DEBUG accumulators (diagonal band p, axis z)
                                         if (pp == p)
@@ -4185,6 +4271,24 @@ bool DeltaP::compute_hk_force(const UnitCell& ucell,
                                         const double re_term = (std::conj(Dp) * std::conj(phase_sk * grad) * Cmu).real();
                                         dW[iat][a * nocc_use + p] += 2.0 * lambda[iat] * re_term;
                                         dW[iat1][a * nocc_use + p] -= 2.0 * lambda[iat] * re_term;
+                                        // F-8 stress: bra-only × the full
+                                        // pair separation d_β (∂W/∂ε_{αβ} =
+                                        // d_β·∂W/∂R_bra,α; σ = −0.5·Im(Σkern)/Ω
+                                        // mirrors F = +0.5·Im(Σ acc) with the
+                                        // sign flip from σ = +∂E/∂ε vs
+                                        // F = −∂E/∂R).  Gated like the
+                                        // stress_U kernel above.
+                                        if (stress_out != nullptr)
+                                        {
+                                            // F-8 (2026-08-17): same double-visit halving as
+                                            // stress_U (0.5·d_β) — the reversed visit contributes
+                                            // d′·(∂W/∂R_bra) = (−d)·(−∂W/∂R_bra) = +d·∂W/∂R_bra.
+                                            for (int b = 0; b < 3; ++b)
+                                            {
+                                                stress_dW[(a * 3 + b) * nocc_use + p]
+                                                    += 0.5 * d_bohr[b] * (2.0 * lambda[iat] * re_term);
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -4217,6 +4321,132 @@ bool DeltaP::compute_hk_force(const UnitCell& ucell,
                 }
             }
         }
+        // F-8: per-link H_HK stress kernel (mirrors the acc kernel above):
+        //   stress_kern[α*3+β] = Σ_p f_p Σ_pp' (stress_dW[αβ][pp']·T[p][pp']
+        //                       + W[pp']·stress_U[αβ][p][pp'])·Π[pp'][p]
+        // with the strain-derivative kernels accumulated in the pair loops
+        // (bra-only × pair lattice vector; phase part strain-invariant).
+        if (stress_out != nullptr)
+        {
+            for (int a = 0; a < 3; ++a)
+            {
+                for (int b = 0; b < 3; ++b)
+                {
+                    for (int p = 0; p < nocc_use; ++p)
+                    {
+                        const double fp = pelec->wg(ik_L, p);
+                        if (fp == 0.0) continue;
+                        std::complex<double> kern(0.0, 0.0);
+                        std::complex<double> kern_u(0.0, 0.0);
+                        std::complex<double> kern_dw(0.0, 0.0);
+                        for (int pp = 0; pp < nocc_use; ++pp)
+                        {
+                            kern_u += W[pp] * stress_U[(a * 3 + b) * nocc_use * nocc_use
+                                                       + p * nocc_use + pp]
+                                      * Pi[pp * nocc_use + p];
+                            kern_dw += stress_dW[(a * 3 + b) * nocc_use + pp] * T_full[p * nocc_use + pp]
+                                       * Pi[pp * nocc_use + p];
+                            kern += (stress_dW[(a * 3 + b) * nocc_use + pp] * T_full[p * nocc_use + pp]
+                                     + W[pp] * stress_U[(a * 3 + b) * nocc_use * nocc_use
+                                                        + p * nocc_use + pp])
+                                    * Pi[pp * nocc_use + p];
+                        }
+                        stress_kern[a * 3 + b] += fp * kern;
+#if 0 // DEBUG_HK_STRESS_SPLIT (temporary, disabled before commit)
+                        if (a == 2 && b == 2)
+                        {
+                            kern_zz_u += fp * kern_u;
+                            kern_zz_dw += fp * kern_dw;
+                        }
+#endif
+                    }
+                }
+            }
+        }
+#if 0 // DEBUG_HK_STRESS_SPLIT (temporary, disabled before commit)
+        {
+            std::complex<double> e_link(0.0, 0.0);
+            std::string wgs;
+            for (int p = 0; p < nocc_use; ++p)
+            {
+                const double fp = pelec->wg(ik_L, p);
+                wgs += std::to_string(fp) + " ";
+                for (int pp = 0; pp < nocc_use; ++pp)
+                {
+                    e_link += fp * W[pp] * T_full[p * nocc_use + pp] * Pi[pp * nocc_use + p];
+                }
+            }
+            // Force-virial of this link (frozen-C force at SCF C):
+            //   vir = Σ_iat R_iat,z · 0.5·Im(Σ_p acc[iat][z,p])
+            // and its U/dW split (acc = dW·T + W·U over all bands).
+            double vir_f = 0.0, vir_u = 0.0, vir_dw = 0.0;
+            for (int iat = 0; iat < nat; ++iat)
+            {
+                const double rz = ucell.get_tau(iat).z * ucell.lat0;
+                double facc = 0.0, f_u = 0.0, f_dw = 0.0;
+                for (int p = 0; p < nocc_use; ++p)
+                {
+                    const double fp = pelec->wg(ik_L, p);
+                    if (fp == 0.0) continue;
+                    std::complex<double> a_u(0.0, 0.0), a_dw(0.0, 0.0);
+                    for (int pp = 0; pp < nocc_use; ++pp)
+                    {
+                        a_u += W[pp] * U[iat][(2 * nocc_use + p) * nocc_use + pp]
+                               * Pi[pp * nocc_use + p];
+                        a_dw += dW[iat][2 * nocc_use + pp] * T_full[p * nocc_use + pp]
+                                * Pi[pp * nocc_use + p];
+                    }
+                    facc += fp * (a_u + a_dw).imag();
+                    f_u += fp * a_u.imag();
+                    f_dw += fp * a_dw.imag();
+                }
+                vir_f += rz * 0.5 * facc;
+                vir_u += rz * 0.5 * f_u;
+                vir_dw += rz * 0.5 * f_dw;
+            }
+            std::cout << "  [hkstr] link " << j << " ik_L=" << ik_L
+                      << " wg=" << wgs
+                      << " Im(e_hk)=" << e_link.imag()
+                      << " Im(U_zz)=" << kern_zz_u.imag()
+                      << " Im(dW_zz)=" << kern_zz_dw.imag()
+                      << " Im(U+dW)_zz=" << (kern_zz_u + kern_zz_dw).imag()
+                      << " vir_F=" << vir_f << " vir_U=" << vir_u << " vir_dW=" << vir_dw << std::endl;
+            for (int iat = 0; iat < nat; ++iat)
+            {
+                const double rz = ucell.get_tau(iat).z * ucell.lat0;
+                double fu = 0.0, fdw = 0.0;
+                for (int p = 0; p < nocc_use; ++p)
+                {
+                    const double fp = pelec->wg(ik_L, p);
+                    if (fp == 0.0) continue;
+                    std::complex<double> au(0.0, 0.0), adw(0.0, 0.0);
+                    for (int pp = 0; pp < nocc_use; ++pp)
+                    {
+                        au += W[pp] * U[iat][(2 * nocc_use + p) * nocc_use + pp]
+                              * Pi[pp * nocc_use + p];
+                        adw += dW[iat][2 * nocc_use + pp] * T_full[p * nocc_use + pp]
+                               * Pi[pp * nocc_use + p];
+                    }
+                    fu += fp * au.imag();
+                    fdw += fp * adw.imag();
+                }
+                std::complex<double> aph(0.0, 0.0);
+                for (int p = 0; p < nocc_use; ++p)
+                {
+                    const double fp = pelec->wg(ik_L, p);
+                    if (fp == 0.0) continue;
+                    for (int pp = 0; pp < nocc_use; ++pp)
+                    {
+                        aph += W[pp] * U_phase[iat][(2 * nocc_use + p) * nocc_use + pp]
+                               * Pi[pp * nocc_use + p];
+                    }
+                }
+                std::cout << "    [hkstr] atom " << iat << " rz=" << rz
+                          << " F_U=" << 0.5 * fu << " F_dW=" << 0.5 * fdw
+                          << " F_Uph=" << 0.5 * aph.imag() << std::endl;
+            }
+        }
+#endif
         // Full-trace E_HK and per-atom Γ_I^HK (split before the λ sum).
         for (int p = 0; p < nocc_use; ++p)
         {
@@ -4312,6 +4542,32 @@ bool DeltaP::compute_hk_force(const UnitCell& ucell,
         }
     }
     e_hk_out = -0.5 * e_hk.imag();
+    // F-8 (2026-08-17): finalize the H_HK stress (serial path only).
+    // σ^HK_{αβ} = −0.5·Im(Σ_j stress_kern_{αβ})/Ω.  The −0.5·Im mirrors the
+    // B-7 force convention F = +0.5·Im(Σ acc) with the sign flip because
+    // σ = +∂E/∂ε while F = −∂E/∂R (ε is a symmetric strain; the kernels
+    // carry the +d_β×bra derivative weight).  The Voigt order
+    // [xx,xy,xz,yy,yz,zz] matches cal_force_IJR / FORCE_STRESS.  The MPI
+    // path is refused (stress left zero) and gated earlier by
+    // cal_force_stress.
+    if (stress_out != nullptr)
+    {
+        static const int voigt[3][3] = {{0, 1, 2}, {1, 3, 4}, {2, 4, 5}};
+        for (int a = 0; a < 3; ++a)
+        {
+            for (int b = 0; b < 3; ++b)
+            {
+                // σ^HK_{αβ} = +0.5·Im(Σ_j stress_kern_{αβ})/Ω: σ = −(1/Ω)·dE_HK/dε
+                // and dE_HK/dε = −0.5·Im(Σ kern) ⇒ σ = +0.5·Im(Σ kern)/Ω.
+                (*stress_out)[voigt[a][b]] = 0.5 * stress_kern[a * 3 + b].imag() / ucell.omega;
+            }
+        }
+#if 0 // DEBUG_HK_STRESS_SPLIT (temporary, disabled before commit)
+        std::cout << "  [hkstr] omega=" << ucell.omega
+                  << " Im(kern_zz)=" << stress_kern[2 * 3 + 2].imag()
+                  << " sigma_zz=" << (*stress_out)[5] << std::endl;
+#endif
+    }
     for (int iat = 0; iat < nat; ++iat)
     {
         gamma_op_hk_[iat] = -0.5 * e_hk_I[iat].imag();

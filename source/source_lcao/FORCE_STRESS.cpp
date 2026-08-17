@@ -774,6 +774,20 @@ void Force_Stress_LCAO<T>::getForceStress(UnitCell& ucell,
                 if (PARAM.inp.deltap_switch && PARAM.inp.deltap_corr)
                 {
                     scs(i, j) += stress_deltap(i, j);
+                    // H_HK (Berry-connection) analytic stress, computed in
+                    // ESolver_KS_LCAO::cal_force and stored statically
+                    // (F-8, 2026-08-17; serial-only, 6 components in
+                    // Ry/Bohr^3).  Empty unless a multi-k DeltaP run with
+                    // cal_stress computed it (hk mode: H_HR stress is zeroed
+                    // by the cal_force_stress gate, so this is the only
+                    // DeltaP stress contribution).
+                    const auto& s_hk
+                        = hamilt::DeltaPOperator<std::complex<double>, double>::get_stored_hk_stress();
+                    if (s_hk.size() == 6)
+                    {
+                        static const int voigt[3][3] = {{0, 1, 2}, {1, 3, 4}, {2, 4, 5}};
+                        scs(i, j) += s_hk[voigt[i][j]];
+                    }
                 }
 #ifdef __EXX
                 // Stress contribution from exx

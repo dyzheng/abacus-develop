@@ -116,12 +116,20 @@ public:
     /// family as compute_hk_correction, valid for non-square local blocks).
     /// force_out is nat*3 in Ry/Bohr; e_hk_out is E_HK in Ry.  Returns false
     /// (with a warning) when the required conditions are not met.
+    /// F-8 (2026-08-17): optional stress_out = H_HK stress [6 components
+    /// xx,xy,xz,yy,yz,zz] in Ry/Bohr^3 (already divided by the cell volume),
+    /// serial path only — the strain derivative is the virial-weighted force
+    /// kernel (RouteA++ §4: lattice vectors stretch, fractional coords fixed;
+    /// the S_dk phase is strain-invariant, the C response cancels).  The MPI
+    /// path leaves it zeroed (WARNING); the cal_force_stress gate refuses
+    /// MPI + hk-mode + cal_stress before this is reached.
     bool compute_hk_force(const UnitCell& ucell,
                           const psi::Psi<std::complex<double>>* psi,
                           const elecstate::ElecState* pelec,
                           const std::vector<double>& lambda,
                           std::vector<double>& force_out,
-                          double& e_hk_out);
+                          double& e_hk_out,
+                          std::vector<double>* stress_out = nullptr);
 
     /// Route A+ operator observable: per-atom Γ_I = Γ_I^HR + Γ_I^HK.
     /// Γ_I^HR = τ_α(I)·⟨P̂_I⟩ is accumulated inside compute_gamma_scf for the

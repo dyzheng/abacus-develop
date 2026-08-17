@@ -280,21 +280,25 @@ void ESolver_KS_LCAO<TK, TR>::cal_force(UnitCell& ucell, ModuleBase::matrix& for
         }
     }
 
-    // DeltaP H_HK (Berry-connection) analytic force — T7-c B-7.
-    // The H_HR projector force is added inside FORCE_STRESS; the k-space
-    // H_HK term has no real-space dR expression there, so it is computed
-    // here from the converged wavefunctions with C frozen (the constrained
-    // SCF energy is variational in C, so the Hellmann-Feynman theorem
-    // applies).  The contribution is stored statically and added inside
-    // FORCE_STRESS so the printed TOTAL-FORCE includes it.  Serial-only
-    // (see deltap::DeltaP::compute_hk_force); must run before getForceStress.
-    if (PARAM.inp.deltap_switch && PARAM.inp.deltap_corr && PARAM.inp.cal_force)
+    // DeltaP H_HK (Berry-connection) analytic force/stress — T7-c B-7 and
+    // F-8 (2026-08-17).  The H_HR projector force/stress is added inside
+    // FORCE_STRESS; the k-space H_HK term has no real-space dR/dε expression
+    // there, so it is computed here from the converged wavefunctions with C
+    // frozen (the constrained SCF energy is variational in C, so the
+    // Hellmann-Feynman theorem applies).  The contributions are stored
+    // statically and added inside FORCE_STRESS so the printed TOTAL-FORCE /
+    // total stress include them.  Serial-only for the stress (see
+    // deltap::DeltaP::compute_hk_force); must run before getForceStress.
+    if (PARAM.inp.deltap_switch && PARAM.inp.deltap_corr
+        && (PARAM.inp.cal_force || PARAM.inp.cal_stress))
     {
         if constexpr (std::is_same<TK, std::complex<double>>::value)
         {
-            // Clear any stale H_HK force from a previous ionic step before
-            // recomputing, so a failed/disabled computation cannot leak it.
+            // Clear any stale H_HK force/stress from a previous ionic step
+            // before recomputing, so a failed/disabled computation cannot
+            // leak it.
             hamilt::DeltaPOperator<TK, TR>::store_hk_force_for_force({}, 0.0);
+            hamilt::DeltaPOperator<TK, TR>::store_hk_stress_for_stress({});
             auto* hamilt_lcao = dynamic_cast<hamilt::HamiltLCAO<TK, TR>*>(this->p_hamilt);
             if (hamilt_lcao != nullptr)
             {
@@ -302,11 +306,17 @@ void ESolver_KS_LCAO<TK, TR>::cal_force(UnitCell& ucell, ModuleBase::matrix& for
                 if (dp_op != nullptr && !dp_op->get_lambda().empty() && this->dp_scf_)
                 {
                     std::vector<double> f_hk;
+                    std::vector<double> s_hk;
                     double e_hk = 0.0;
                     if (this->dp_scf_->compute_hk_force(ucell, this->psi, this->pelec,
-                                                        dp_op->get_lambda(), f_hk, e_hk))
+                                                        dp_op->get_lambda(), f_hk, e_hk,
+                                                        PARAM.inp.cal_stress ? &s_hk : nullptr))
                     {
                         hamilt::DeltaPOperator<TK, TR>::store_hk_force_for_force(f_hk, e_hk);
+                        if (PARAM.inp.cal_stress)
+                        {
+                            hamilt::DeltaPOperator<TK, TR>::store_hk_stress_for_stress(s_hk);
+                        }
                         double fmax = 0.0;
                         for (size_t i = 0; i < f_hk.size(); ++i)
                         {
@@ -318,6 +328,15 @@ void ESolver_KS_LCAO<TK, TR>::cal_force(UnitCell& ucell, ModuleBase::matrix& for
                         for (size_t i = 0; i < f_hk.size(); ++i)
                         {
                             std::cout << " " << std::setprecision(5) << f_hk[i];
+                        }
+                        if (PARAM.inp.cal_stress && s_hk.size() == 6)
+                        {
+                            std::cout << "  sigma_HK=[";
+                            for (size_t i = 0; i < 6; ++i)
+                            {
+                                std::cout << std::setprecision(10) << s_hk[i] << (i < 5 ? "," : "");
+                            }
+                            std::cout << "] Ry/Bohr^3";
                         }
                         std::cout << std::endl;
                     }

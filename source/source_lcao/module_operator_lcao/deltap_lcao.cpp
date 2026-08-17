@@ -13,6 +13,8 @@ std::vector<double> hamilt::DeltaPOperator<TK, TR>::s_stored_lambda;
 template <typename TK, typename TR>
 std::vector<double> hamilt::DeltaPOperator<TK, TR>::s_stored_hk_force;
 template <typename TK, typename TR>
+std::vector<double> hamilt::DeltaPOperator<TK, TR>::s_stored_hk_stress;
+template <typename TK, typename TR>
 double hamilt::DeltaPOperator<TK, TR>::s_stored_e_hk = 0.0;
 
 template <typename TK, typename TR>
