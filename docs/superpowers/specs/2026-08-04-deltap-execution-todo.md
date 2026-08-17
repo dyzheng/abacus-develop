@@ -275,7 +275,7 @@ T3 结论——现在有结论了），T4 通过后统一提交 Stage 1+2 再进
 
 | # | 任务 | 验收 |
 |---|------|------|
-| 4.1 | operator 模式锚点重建（第三次，预期内） | 12 用例 + Γ 列存档；gamma 模式锚点冻结标注 legacy |
+| 4.1 | operator 模式锚点重建（第三次，预期内） | ✅ **已完成（2026-08-17）**：12 用例串行全部 rc=0（9 标签 + bn_test + test_stru_target + relax），Γ 列入 `deltap_bn_sampling/results.csv`；bn_center 重跑与 P3 行逐位一致（确定性验证）；PW Γ 锚点生产档 `tests/deltap_pw_h2o_anchor/`（λ=0：Γ/atom=(5.236100,1.348236,1.348093)；λ=−0.01：escon=+0.079529=λΣΓ 恒等 ✓）；L9 smoothness 单测 8/8 PASS（正交 D_I 合成数据 + T5 合法逐带规范 + T8 结构性扰动）；详见 `2026-08-17-deltap-anchor3-rebuild.md` |
 | 4.2 | Tier-1 三体系驻点 FD 全矩阵（hf/co/h2o_asym） | 各体系残差 < 判据 0.0129 或文档化偏差 |
 | 4.3 | D-D 正式验收 + deltap_relax 端到端（≥3 离子步能量下降、力平滑） | 通过判据 |
 | 4.4 | V1（efield 对照钉 E_eff 符号/因子）、V3（BN 新记账刚度复核） | 见推导文档 §10 |

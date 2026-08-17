@@ -2841,3 +2841,24 @@ F-7/F-7b/锚点套件/FD 协议纪律）、当前状态与 F-8→Stage 4→Stage
 - **回归**：单测 11/11（math/gauge/l1；smoothness 4/8 为既有 L9 参考过期）、
   MPI smoke 4/4、lam_m005 σ 清理后逐位一致；E'(λ) λ² 抛物零线性项。
 - 文件：`2026-08-17-deltap-f8-stress.md`；INPUT 文档 hk 应力注释同步。
+
+## 2026-08-17 (7): Stage 4.1 锚点重建 #3 + PW Γ 锚点 + L9 smoothness 修复
+
+- **LCAO 锚点 #3**（12 用例，全串行 OMP=1）：9 标签位移系 + bn_test（4-rank）+
+  test_stru_target（4-rank inner loop）+ relax（1-rank）全部 rc=0；λ 收敛、
+  E' 带内平滑；bn_center 重跑与 P3 逐位一致（确定性验证）。operator 模式
+  下 B 原子 τ=0 ⇒ Γ_B 结构性 ≈0.01（约束作用在 Γ 非 γ），|γ−t|≈4 rad 为
+  预期，锚点 #2（gamma 模式）不可比——非回归。结果入
+  `tests/deltap_bn_sampling/results.csv`（新表头 Gamma_B,Gamma_N）。
+- **PW Γ 锚点生产档** `tests/deltap_pw_h2o_anchor/`：λ=0 Γ/atom=
+  (5.236100,1.348236,1.348093) FINAL=−466.94573912497 eV；λ=−0.01 冻结
+  escon=+0.079529=λΣΓ 恒等 ✓。KPT 须写 `Monkhorst-Pack`。
+- **L9 修复（smoothness 8/8）**：根因三层——① 生成器独立随机相位使 Wilson
+  乘积 |prod|≈0（arg 无定义，任何 seed 都过不了 dP∝eps 判据；"seed 188
+  良态"系相邻比≈1 的错误判据）；② T5 用逐元素随机相位冒充规范变换（非
+  波函数规范，破坏带结构）；③ T8 用均匀全局相位旋转冒充结构位移（与
+  C/dS_k 不一致）。修复：D_I 正交归一 2×2 块 + T5 周期逐带规范 +
+  T8 perturb_D_I 结构扰动。重建后单测 5/5（math/gauge/smoothness/l1/common）
+  全 PASS，复现器 seed 1–200 全 PASS（T4 最小裕度 1.67）。
+- 文件：`2026-08-17-deltap-anchor3-rebuild.md`；TODO 4.1 ✅；
+  progress-summary Stage 4 行更新。

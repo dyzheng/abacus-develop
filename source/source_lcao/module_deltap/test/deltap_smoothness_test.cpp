@@ -77,9 +77,31 @@ KStringData generate_synthetic(int nppstr, int nbands, int nproj, int nat,
             for (int a = 0; a < 3; ++a)
                 data.dS_k[ik][iat][a].resize(nproj);
 
+            // D_I: build an orthonormal nproj x nbands block per (ik, iat) so the
+            // per-atom Wilson-loop product stays well conditioned (|det| ~ 1).
+            // The previous construction (independent random phases per element)
+            // produced a near-singular overlap product (|prod| ~ 0), making
+            // arg(prod) undefined noise — no seed could satisfy the smoothness
+            // and linearity assertions.  Rows are exactly orthogonal:
+            //   row0 = amp * (ca e^{ia}, sa e^{ib})
+            //   row1 = amp * (-sa e^{ia}, ca e^{ib})
+            // with ca^2 + sa^2 = 1, so row-normalized U stays unitary.
+            {
+                for (int lm = 0; lm < nproj; ++lm)
+                    data.D_I[ik][iat][lm].resize(nbands);
+                double th = 0.4 + 0.2 * std::sin(2.0 * M_PI * k + 0.1 * noise(rng));
+                double ca = std::cos(th), sa = std::sin(th);
+                double a0 = phase + 0.1 * noise(rng);
+                double b0 = phase + 0.5 + 0.1 * noise(rng);
+                double amp = amplitude * (1.0 - 0.01 * ik) * (iat == 0 ? 1.0 : 0.3);
+                data.D_I[ik][iat][0][0] = std::polar(amp * ca, a0);
+                data.D_I[ik][iat][0][1] = std::polar(amp * sa, b0);
+                data.D_I[ik][iat][1][0] = std::polar(amp * sa, a0 + M_PI);
+                data.D_I[ik][iat][1][1] = std::polar(amp * ca, b0);
+            }
+
             for (int lm = 0; lm < nproj; ++lm)
             {
-                data.D_I[ik][iat][lm].resize(nbands);
                 data.S_k[ik][iat][lm].resize(nproj);
                 for (int a = 0; a < 3; ++a)
                     data.dS_k[ik][iat][a][lm].resize(nproj);
@@ -100,15 +122,6 @@ KStringData generate_synthetic(int nppstr, int nbands, int nproj, int nat,
                     }
                 }
 
-                // D_I = sum_mu conj(S) * C  (but here we set D_I directly for simplicity)
-                for (int n = 0; n < nbands; ++n)
-                {
-                    double d_amp = amplitude * (1.0 - 0.01 * ik) * (iat == n % nat ? 1.0 : 0.2);
-                    double d_phase = phase + 0.3 * n + 0.5 * lm;
-                    if (iat == 0 && lm == 0)
-                        d_amp *= 2.0;  // make atom 0 dominant (anchor)
-                    data.D_I[ik][iat][lm][n] = std::polar(d_amp, d_phase);
-                }
             }
         }
 
@@ -627,19 +640,23 @@ TEST_F(SmoothnessTest, WilsonLoopGaugeInvariant)
     // Verify Wilson loop is invariant under arbitrary phase rotation of D_I
     double P0 = compute_P_wilson_loop(base_data);
 
-    // Apply random phase to each (ik, iat, lm, n) — simulates gauge freedom
+    // Apply a smooth periodic per-band gauge: rotate each band column n by
+    // theta_n(k) = 2*pi*m_n*k with m_n integer, identical phase for all
+    // (iat, lm) at a given (ik, n).  This is the gauge freedom of the
+    // wavefunction.  (Random per-element phases would not be a gauge —
+    // they would scramble the band structure of D_I.)
     KStringData gauged = base_data;
-    std::mt19937 rng(123);
-    std::uniform_real_distribution<double> phase_dist(0, 2 * M_PI);
-
-    for (int ik = 0; ik < gauged.nppstr; ++ik)
-        for (int iat = 0; iat < gauged.nat; ++iat)
-            for (int lm = 0; lm < gauged.nproj; ++lm)
-                for (int n = 0; n < gauged.nbands; ++n)
-                {
-                    double phi = phase_dist(rng);
-                    gauged.D_I[ik][iat][lm][n] *= std::polar(1.0, phi);
-                }
+    for (int n = 0; n < gauged.nbands; ++n)
+    {
+        double m_n = n + 1.0;
+        for (int ik = 0; ik < gauged.nppstr; ++ik)
+        {
+            double theta = 2.0 * M_PI * m_n * ik / (gauged.nppstr - 1);
+            for (int iat = 0; iat < gauged.nat; ++iat)
+                for (int lm = 0; lm < gauged.nproj; ++lm)
+                    gauged.D_I[ik][iat][lm][n] *= std::polar(1.0, theta);
+        }
+    }
 
     double P1 = compute_P_wilson_loop(gauged);
 
@@ -769,21 +786,12 @@ TEST_F(SmoothnessTest, BerryConnectionSmoothWithoutAnchorJump)
 
     double P0 = compute_P_berry_connection(data);
 
-    // Apply small perturbation (1%)
+    // Apply a small structural perturbation (same mechanism as the other
+    // smoothness tests).  A uniform global phase rotation of D_I would not
+    // be a structural displacement — it would be an inconsistent gauge
+    // change (C and dS_k are not rotated) and is not what this test measures.
     KStringData perturbed = data;
-    for (int ik = 0; ik < perturbed.nppstr; ++ik)
-    {
-        for (int iat = 0; iat < perturbed.nat; ++iat)
-        {
-            for (int lm = 0; lm < perturbed.nproj; ++lm)
-            {
-                for (int n = 0; n < perturbed.nbands; ++n)
-                {
-                    perturbed.D_I[ik][iat][lm][n] *= std::polar(1.0, 0.01);
-                }
-            }
-        }
-    }
+    perturb_D_I(perturbed, 1e-2, 42);
 
     double P1 = compute_P_berry_connection(perturbed);
     double dP = P1 - P0;
