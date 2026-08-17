@@ -146,6 +146,12 @@ class DeltapScfSolver
 
     const DeltapState& state() const { return state_; }
     const DeltapParams& params() const { return params_; }
+    /// Overwrite the escon bookkeeping value (PW refresh path, F-7b): the
+    /// constraint-energy correction −λ·Γ is re-evaluated on the current
+    /// wavefunctions at every SCF iter_finish so the total energy uses the
+    /// same ψ as its eigenvalues (the one-shot measurement at the first
+    /// drho<inner_thr iteration left a ~0.1–0.3% stale Γ in FINAL_ETOT).
+    void set_escon(double escon) { state_.dp_escon = escon; }
 
   private:
     bool use_constraint_matrix() const { return !params_.C.empty(); }

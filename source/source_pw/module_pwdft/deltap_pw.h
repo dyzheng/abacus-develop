@@ -51,6 +51,27 @@ const std::vector<int>& get_deltap_pw_constrain();
 double get_deltap_pw_escon();
 
 /**
+ * @brief Refresh the escon bookkeeping (escon = −Σλ·Γ^PW) at the current
+ * wavefunctions.
+ *
+ * Called at the start of every PW SCF iter_finish (before the energy
+ * evaluation) so the iteration's total energy carries an escon measured on
+ * the same ψ as its eigenvalues.  F-7b (2026-08-17): the original one-shot
+ * measurement at the first drho<deltap_inner_thr iteration left a
+ * ~0.1–0.3% stale Γ in FINAL_ETOT (E'(λ) linear term ~0.02 Ry/Ry);
+ * refreshing every iteration removes the protocol artifact entirely
+ * (E'(λ) linear term → 0.00014 Ry/Ry @ inner_thr=1e-6).
+ *
+ * @param ucell   Unit cell (atom/projector layout).
+ * @param psi_cpu Host-side wavefunctions of the current SCF iteration.
+ * @param wg      Occupation weights (previous iteration's fill; identical
+ *                for insulators, negligible drift for metals at convergence).
+ */
+void refresh_pw_escon(const UnitCell& ucell,
+                      const psi::Psi<std::complex<double>>* psi_cpu,
+                      const ModuleBase::matrix& wg);
+
+/**
  * @brief Reset per-SCF-cycle DeltaP state (lambda-set flag, branch tracking).
  *
  * Called once per SCF cycle (before_scf) so that lambda is allowed to update

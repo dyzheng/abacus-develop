@@ -2789,3 +2789,26 @@ FINAL_ETOT 的 escon，而本征值用收敛 ψ。符号随 ecut 反转（+0.16%
   一次性测量伪影，escon 精度判据须 inner_thr≤1e-6）。
 - F-8 协议文档补 §7 评审精化（A/B 侧 H_c 构成一致性、∂E'/∂λ 口径注释）。
 - 可选代码级修复（收敛末迭代刷新 escon）留 Stage 4，本轮不扩使命。
+
+## 2026-08-17 (4): 开发进展总结文档
+
+`2026-08-17-deltap-progress-summary.md`：全项目进展定稿——Route A+ 算法核心
+（记账恒等式/力分解/双路径分野/锚定纪律）、六个关键技术点子标题（弱耦合窗口、
+场模式、MPI 修复链、PW 记账与伪影、内循环/算符轨道否定结论、诊断输出）、
+十二个测试点子标题（T0/T2/T3/T3'/T-5'/D1/D2/T-18/T-7'/F-1/F-2/F-2b/MPI 矩阵/
+F-7/F-7b/锚点套件/FD 协议纪律）、当前状态与 F-8→Stage 4→Stage 5 路线、文档索引。
+
+## 2026-08-17 (5): F-7b 闭环 — Q1 escon 代码修复 + Q2 scan.py 审计 + F-8 协议签核
+
+`2026-08-17-deltap-f7b-escon-refresh.md`：
+- **Q1（修代码，非留文档）**：PW escon 测量时机从"首个 drho<inner_thr 迭代
+  一次性测量"改为"每 SCF iter_finish 在当前 ψ 上刷新"——新增
+  `pw_deltap::refresh_pw_escon`（deltap_pw.h/.cpp，复用 compute_gamma_op_pw +
+  compute_dp_escon）、`DeltapScfSolver::set_escon`（deltap_scf.h）、
+  `esolver_ks_pw.cpp::iter_finish` 开头调用并同步 f_en.dp_escon。
+  验证：ecut=80 + 默认 inner_thr=1e-3 下 E'(λ) 中心差 **−0.0214 → −2.5e-5
+  Ry/Ry**（改善 ~850×）；MPI smoke 4/4。L11 降级为历史注记。
+- **Q2**：scan.py 嵌套 if bug 影响面 = 仅 F-7b 复测（/tmp 全盘 find 唯一
+  scan.py 在 /tmp/deltap_l1_1_pw/）；F-1/F-2/F-2b/F-6 不经该脚本，无重跑。
+- **F-8 协议签核修正已并入**：§5 PASS 行只证明内部自洽 + 记账一致（对
+  17.7× 零信息量）；efield 压电对照升级必测项。

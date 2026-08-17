@@ -1,5 +1,6 @@
 #include "source_pw/module_pwdft/deltap_pw.h"
 #include "source_esolver/deltap_scf.h"
+#include "source_esolver/deltap_common.h"
 #include "source_io/module_parameter/input_parameter.h"
 #include "source_io/module_parameter/parameter.h"
 #include "source_io/module_unk/berryphase.h"
@@ -468,6 +469,26 @@ void deltap_init(const UnitCell& ucell, const Input_para& inp,
 const std::vector<double>& get_deltap_pw_lambda()
 {
     return s_lambda;
+}
+
+void refresh_pw_escon(const UnitCell& ucell,
+                     const psi::Psi<std::complex<double>>* psi_cpu,
+                     const ModuleBase::matrix& wg)
+{
+    // F-7b (2026-08-17): re-evaluate escon = −Σλ·Γ^PW on the current ψ at
+    // every SCF iter_finish.  The historical one-shot measurement (first
+    // drho<deltap_inner_thr iteration, drho≈7e-4) left a ~0.1–0.3% stale Γ
+    // in FINAL_ETOT; the refresh makes the total energy carry an escon from
+    // the same wavefunctions as its eigenvalues (E'(λ) flatness improves
+    // from ~0.02 Ry/Ry to ~0.0001 Ry/Ry).
+    if (s_lambda.empty())
+        return;
+    std::vector<double> gamma_op;
+    compute_gamma_op_pw(ucell, psi_cpu, wg, gamma_op);
+    if (gamma_op.empty())
+        return;
+    const double escon = deltap_common::compute_dp_escon(s_lambda, gamma_op);
+    g_solver.set_escon(escon);
 }
 
 const std::vector<int>& get_deltap_pw_constrain()

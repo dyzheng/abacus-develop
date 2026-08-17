@@ -257,6 +257,18 @@ void ESolver_KS_PW<T, Device>::hamilt2rho_single(UnitCell& ucell, const int iste
 template <typename T, typename Device>
 void ESolver_KS_PW<T, Device>::iter_finish(UnitCell& ucell, const int istep, int& iter, bool& conv_esolver)
 {
+    // DeltaP (F-7b, 2026-08-17): refresh the escon bookkeeping on the current
+    // wavefunctions before the energy evaluation below, so the iteration's
+    // total energy (eband + ... + dp_escon) carries an escon measured on the
+    // same ψ as its eigenvalues.  Without this, the one-shot escon from the
+    // first drho<deltap_inner_thr iteration enters FINAL_ETOT and leaves a
+    // ~0.1–0.3% stale Γ (E'(λ) flatness artifact).
+    if (PARAM.inp.deltap_switch && PARAM.inp.deltap_corr)
+    {
+        pw_deltap::refresh_pw_escon(ucell, this->stp.psi_cpu, this->pelec->wg);
+        this->pelec->f_en.dp_escon = pw_deltap::get_deltap_pw_escon();
+    }
+
     // Related to EXX
     if (GlobalC::exx_info.info_global.cal_exx && !exx_helper->get_op_first_iter())
     {
