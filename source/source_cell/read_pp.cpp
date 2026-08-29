@@ -126,11 +126,10 @@ int Pseudopot_upf::average_p(const double& lambda, Atom_pseudo& pp, const bool l
     }
     if (!pp.has_so && lspinorb_)
     {
-        error++;
-        std::cout << "warning_quit! no soc upf used for lspinorb calculation, error!" << std::endl;
+        std::cout << "Warning: no SOC information in the pseudopotential, the spin-orbit coupling"
+                     " term will be zero in this lspinorb calculation." << std::endl;
         return error;
     }
-    // ModuleBase::WARNING_QUIT("average_p", "no soc upf used for lspinorb calculation, error!");
 
     if (!pp.has_so || (lspinorb_ && std::abs(lambda_ - 1.0) < 1.0e-8))
     {

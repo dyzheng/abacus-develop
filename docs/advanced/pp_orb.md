@@ -90,8 +90,8 @@ Full-relativistic pseudopotentials suitable for SOC calculations can be identifi
 #### Usage Rules
 
 1. **SOC calculations** (`lspinorb=1`):
-   - **Required**: Full-relativistic pseudopotentials with `has_so=true`
-   - **Error if not met**: "no soc upf used for lspinorb calculation"
+   - **Recommended**: Full-relativistic pseudopotentials with `has_so=true` to include SOC
+   - **Allowed**: Scalar-relativistic pseudopotentials, which simply run with a zero SOC term
 
 2. **Non-SOC calculations** (`lspinorb=0`):
    - **Flexible**: Can use either scalar-relativistic (`relativistic="scalar"`) or full-relativistic pseudopotentials

@@ -1008,9 +1008,12 @@ Note: If gamma_only is set to 1, the KPT file will be overwritten. So make sure 
 * True: Consider spin-orbit coupling effect. When enabled:
   * nspin is automatically set to 4 (noncollinear spin representation)
   * Symmetry is automatically disabled (SOC breaks inversion symmetry)
-  * Requires full-relativistic pseudopotentials with has_so=true in the UPF header
+  * Full-relativistic pseudopotentials with has_so=true in the UPF header
+    give the SOC contribution; scalar pseudopotentials are also accepted and
+    simply run with a zero SOC term
 * False: Do not consider spin-orbit coupling effect.
-* Common Error: "no soc upf used for lspinorb calculation" - ensure you are using full-relativistic pseudopotentials)";
+* Note: without lspinorb, full-relativistic pseudopotentials are averaged
+  into scalar ones (has_so is set to false))";
         item.default_value = "False";
         item.unit = "";
         item.availability = "";

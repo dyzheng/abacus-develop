@@ -58,7 +58,7 @@ To perform SOC calculations in ABACUS, follow these steps:
 
 **Numerical atomic orbitals**: The numerical orbital files generated from scalar-relativistic pseudopotentials (available at [abacus.ustc.edu.cn](http://abacus.ustc.edu.cn/pseudo/list.htm)) can be used with full-relativistic pseudopotentials, as orbitals are spin-independent.
 
-**Common error**: If you see "no soc upf used for lspinorb calculation", ensure you are using full-relativistic pseudopotentials with `has_so=true`.
+**Note on pseudopotentials**: `lspinorb=1` accepts both full-relativistic (`has_so=true`) and scalar-relativistic pseudopotentials. Full-relativistic pseudopotentials contribute the SOC term; scalar-relativistic ones simply run with a zero SOC term (a warning is printed).
 
 For detailed information, examples, and troubleshooting, see [Spin-polarization and SOC](../advanced/scf/spin.md#soc-effects).
 

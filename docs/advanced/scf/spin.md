@@ -367,8 +367,9 @@ Example from a full-relativistic UPF file:
 ### Pseudopotential Usage Rules
 
 1. **For SOC calculations** (`lspinorb=1`):
-   - **MUST** use full-relativistic pseudopotentials with `has_so=true`
-   - Code will terminate with error: "no soc upf used for lspinorb calculation" if scalar-relativistic PP is used
+   - Full-relativistic pseudopotentials with `has_so=true` provide the SOC contribution
+   - Scalar-relativistic pseudopotentials are also accepted: the calculation runs
+     with a zero SOC term (a warning is printed)
 
 2. **For non-SOC calculations** (`lspinorb=0`):
    - Can use either scalar-relativistic or full-relativistic pseudopotentials
@@ -405,10 +406,11 @@ When using SOC or non-collinear calculations, ABACUS automatically adjusts sever
 
 ## Common Errors and Solutions
 
-### Error: "no soc upf used for lspinorb calculation"
-**Cause**: Using scalar-relativistic pseudopotentials with `lspinorb=1`
-
-**Solution**: Download and use full-relativistic pseudopotentials with `has_so=true`. Check the UPF file header to verify `relativistic="full"` and `has_so="T"`.
+### Note: scalar-relativistic pseudopotentials with `lspinorb=1`
+Scalar-relativistic pseudopotentials are accepted with `lspinorb=1`; the spin-orbit
+term is zero in that case. Use full-relativistic pseudopotentials with `has_so=true`
+to include the SOC contribution. Check the UPF file header to verify
+`relativistic="full"` and `has_so="T"`.
 
 ### Error: "nspin=4(soc or noncollinear-spin) does not support gamma only calculation"
 **Cause**: Trying to use `gamma_only=true` with `lspinorb=1` or `noncolin=1`
