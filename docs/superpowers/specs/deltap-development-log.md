@@ -3351,3 +3351,37 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - 文件：`module_constraint/test/constraint_observe_test.cpp`（+1 测试）、
   `docs/superpowers/specs/2026-08-31-v2a-grid-convergence.md`、
   phase-1 计划（Task 10 勾回）、phase-2 计划（Task 2.1 勾选）。
+
+## 2026-08-31 (10): 二期 Task 2.2 M3b——LCAO 约束矩阵 W^α_μν（Gint 核）
+
+- 交付：`constraint_inject_lcao.h/.cpp`（新）+ `test/constraint_inject_lcao_test.cpp`（新）。
+  `build(cw, gint_info)` 每约束经**生产** `ModuleGint::cal_gint_vl`（权重场扮演
+  局域势）预积分 W^α_μν=∫φ_μ w_α φ_ν dr 到与 LCAO 哈密顿同型的
+  `HContainer<double>`（每几何一次，对 μ 线性）；`add_weighted` 每 SCF 迭代
+  H += Σ_α μ_α W^α（μ=0 跳过，按值 no-op）。零新积分框架——纯复用
+  module_gint vlocal 核；gamma/k 共用实空间核（k 点由 esolver H(R)→H(k)
+  变换处理，与 Veff 完全同构）。
+- 测试（TDD：先写测试→跑通→反向破坏验证）：4/4 PASS。
+  - `MatrixElementVsDirectGrid`：2-H 二聚体玩具（每原子 1 归一化高斯 s 轨道，
+    40³ 网格、rcut=5 Bohr），解析权重 w1=0.5(1+x/L)、w2=1−w1；Gint 核 vs
+    同网格直接求积（测试内从插值表独立重建 Hermite 求值）逐矩阵元相对差
+    实测 **3.4e-15**（判据 1e-10）。
+  - `PartitionSumRuleEqualsOverlap`：Σ_α W^α == S 实测 **2.0e-15**（机器精度，
+    单位分解矩阵元级审计；W1[0,0]+W2[0,0]=0.7075+0.2925=1.0000=S[0,0] 自检）。
+  - `AddWeightedMatchesLinearCombination` / `ZeroMuIsNoOp`：位相等。
+  - 反向验证：移除 build() 内核调用 → 恰两个核相关测试 FAIL，恢复 4/4 PASS。
+- 测试侧脚手架经验（3 处首跑失败均非实现缺陷）：① pw_basis_big.h 需先包含
+  pw_basis.h/pw_basis_sup.h；② PARAM.globalv 是 const 引用，须写 PARAM.sys
+  （private，靠测试 private/public 展开）；③ GintInfo 依赖 iat2it/iat2ia/
+  itia2iat 索引表，UcellTestPrepare 不填充——按 module_hcontainer/test
+  prepare_unitcell.h 脚手架模式手工填充。
+- 回归：constraint 全量 ctest 10/10 PASS（含新目标）；deltaspin 2 PASS +
+  2 Not Run（既有）。
+- 文件：`source_estate/module_constraint/constraint_inject_lcao.h/.cpp`（新）、
+  `source_estate/module_constraint/test/constraint_inject_lcao_test.cpp`（新）、
+  `source_estate/module_constraint/test/CMakeLists.txt`（新目标
+  MODULE_ESTATE_constraint_inject_lcao，显式编译 module_gint/hcontainer/ao
+  源文件——这些对象库按 __MPI 编译，与串行测试不兼容）、
+  `docs/superpowers/specs/2026-08-31-m3b-constraint-inject-lcao.md`（新）。
+- Next：Task 2.3 LCAO esolver 薄钩子（before_scf 配置+W^α 预建 / hamilt2rho
+  H+=ΣμW / iter_finish 读数+外步）+ PW/LCAO 共用配置块下移 + H₂O LCAO 冒烟。

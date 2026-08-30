@@ -93,7 +93,7 @@ git commit -m "fix(constraint): phase-1 review debts P1/P2/P4 + V2 internal clos
 
 职责：W^α_μν = ∫ φ_μ(r) w_α(r) φ_ν(r) dr，每几何一次（对 μ 线性，每 SCF 迭代仅 μ 加权稀疏加）。**严格复用 module_gint 现有积分基建**（gint_env_gamma/gint_env_k 双变体），不写新积分框架。
 
-- [ ] **Step 1: 失败测试——与网格直积对拍**
+- [x] **Step 1: 失败测试——与网格直积对拍**（constraint_inject_lcao_test.cpp 4 测试，见 2026-08-31-m3b spec）
 
 ```cpp
 TEST(ConstraintInjectLCAOTest, MatrixElementVsDirectGrid)
@@ -104,13 +104,13 @@ TEST(ConstraintInjectLCAOTest, MatrixElementVsDirectGrid)
 }
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**（反向验证：移除 build() 内核调用 → 恰两个核相关测试 FAIL，恢复 4/4 PASS）
 
-- [ ] **Step 3: 实现**——仿 Gint 现有 vlocal/XC 核的网格-基组循环结构；gamma 与 k 双路径；输出 HContainer（与现有 LCAO 哈密顿容器同型，直接可加进 H）。分支前置注释。
+- [x] **Step 3: 实现**——`ConstraintInjectLCAO::build` 复用生产 `cal_gint_vl` vlocal 核（权重场扮演局域势），输出 HContainer（与现有 LCAO 哈密顿容器同型，直接可加进 H）；`add_weighted` 每 SCF 迭代 μ 加权稀疏加。gamma/k 共用实空间核（k 点由 esolver H(R)→H(k) 变换处理，与 Veff 完全同构）。分支前置注释。
 
-- [ ] **Step 4: 测试通过 + sum rule 推论验证**（Σ_α W^α = S 是单位分解的矩阵元级审计，二期最强自检）
+- [x] **Step 4: 测试通过 + sum rule 推论验证**（Σ_α W^α = S，实测 2.0e-15；W↔直积 3.4e-15，均优于判据；constraint ctest 10/10 全绿）
 
-- [ ] **Step 5: spec + 日志 + Commit**
+- [x] **Step 5: spec + 日志 + Commit**
 
 ```bash
 git commit -m "feat(constraint): M3b LCAO constraint matrix via existing Gint infrastructure"
