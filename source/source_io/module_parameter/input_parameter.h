@@ -751,6 +751,15 @@ struct Input_para
     bool of_cd = false;          ///< add CD potential or not
     double of_mCD_alpha = 1.0;   ///< parameter of modified CD potential
 
+    // ==============   #Parameters (26.real-space weight constraint) ======
+    bool constraint = false;      ///< switch for real-space charge constraint
+    std::string constraint_type = "charge";  ///< constraint type: charge (phase 1)
+    std::string constraint_weight_type = "becke";  ///< weight recipe: becke (phase 1)
+    std::string constraint_target_file = "";  ///< JSON file with per-fragment targets
+    std::string constraint_target_mode = "delta";  ///< "delta" or "absolute"
+    double constraint_mu_max = 5.0;  ///< cap on |mu| in Ry
+    double constraint_thr = 1e-4;    ///< per-constraint convergence threshold in e
+
     // ==============   #Parameters (25.uncommon hardware) ==================
     int dsp_count = 4;           ///< count of DSP hardwares in one node
 };

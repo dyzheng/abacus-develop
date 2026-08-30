@@ -1629,6 +1629,18 @@ TEST_F(InputTest, Item_test2)
         output = testing::internal::GetCapturedStdout();
         EXPECT_THAT(output, testing::HasSubstr("NOTICE"));
     }
+    { // constraint: real-space weight constraint items (phase 1)
+        auto it = find_label("constraint", readinput.input_lists);
+        EXPECT_EQ(it->second.default_value, "False");
+        it = find_label("constraint_weight_type", readinput.input_lists);
+        EXPECT_EQ(it->second.default_value, "becke");
+        it = find_label("constraint_target_mode", readinput.input_lists);
+        EXPECT_EQ(it->second.default_value, "delta");
+        it = find_label("constraint_mu_max", readinput.input_lists);
+        EXPECT_EQ(it->second.default_value, "5.0");
+        it = find_label("constraint_thr", readinput.input_lists);
+        EXPECT_EQ(it->second.default_value, "1.0e-4");
+    }
     { // sc_mag_switch
         auto it = find_label("sc_mag_switch", readinput.input_lists);
         param.input.sc_mag_switch = true;

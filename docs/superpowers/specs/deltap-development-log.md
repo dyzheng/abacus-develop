@@ -3152,3 +3152,28 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - 文件：`module_constraint/mu_solver.h/.cpp`、
   `module_constraint/test/mu_solver_test.cpp`、
   `docs/superpowers/specs/2026-08-31-m4-mu-solver.md`。
+
+## 2026-08-31 (4): M7 最小输入解析 + 语义守卫（T5 完成）
+
+- 新建 `module_constraint/constraint_io.h/.cpp`：ConstraintConfig（type/
+  weight_type/target_mode/mu_max/thr/targets）+ configure_constraint 语义
+  守卫 + read_target_file + 最小 JSON 子集解析器（"targets" 数组 +
+  "atoms" 嵌套/平铺，缺省 fragment i=原子 i）。
+- 守卫：weight_type!=becke → ERROR（一期未实现不静默跑）；type!=charge
+  → ERROR；无 target → ERROR（禁隐式约束）；mode 非法 → ERROR；
+  fragment 数不匹配/下标越界 → ERROR；absolute 模式 WARNING 放行
+  （口径差异 ~0.2-0.3 e vs ~e）。
+- INPUT 参数注册（`input_parameter.h` + `read_input_item_other.cpp`，
+  category=Constraint，availability 门控）：constraint（bool）、
+  constraint_type、constraint_weight_type、constraint_target_file、
+  constraint_target_mode、constraint_mu_max（缺省 5.0 Ry）、
+  constraint_thr（缺省 1e-4 e）。
+- 测试 6/6 PASS（constraint_io）+ read_input_item_test 2/2 PASS
+  （5 个参数默认值断言）。
+- 文件：`module_constraint/constraint_io.h/.cpp`、
+  `module_constraint/test/constraint_io_test.cpp`、
+  `module_constraint/test/CMakeLists.txt`、
+  `source/source_io/module_parameter/input_parameter.h`、
+  `source/source_io/module_parameter/read_input_item_other.cpp`、
+  `source/source_io/test_serial/read_input_item_test.cpp`、
+  `docs/superpowers/specs/2026-08-31-m7-constraint-io.md`。

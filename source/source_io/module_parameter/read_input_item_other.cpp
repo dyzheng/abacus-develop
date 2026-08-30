@@ -1491,6 +1491,91 @@ Manual override is allowed: if sc_acceleration_mode is explicitly set, it takes 
         };
         this->add_item(item);
     }
+    // real-space weight constraint (phase 1: PW charge constraints)
+    {
+        Input_Item item("constraint");
+        item.annotation = "enable real-space weight charge constraint";
+        item.category = "Constraint";
+        item.type = "Boolean";
+        item.description = "Switch to enable the real-space weight constraint framework (phase 1: PW basis + Becke weights, charge channel). When true, a constraint target file must be provided via constraint_target_file.";
+        item.default_value = "False";
+        item.unit = "";
+        item.availability = "basis_type is pw";
+        read_sync_bool(input.constraint);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("constraint_type");
+        item.annotation = "constraint type";
+        item.category = "Constraint";
+        item.type = "String";
+        item.description = "Type of the constraint observable. Phase 1 supports only charge.";
+        item.default_value = "charge";
+        item.unit = "";
+        item.availability = "constraint is true";
+        read_sync_string(input.constraint_type);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("constraint_weight_type");
+        item.annotation = "partition weight recipe";
+        item.category = "Constraint";
+        item.type = "String";
+        item.description = "Weight recipe for the real-space partition. Phase 1 supports only becke (heteronuclear size-adjusted Becke partition).";
+        item.default_value = "becke";
+        item.unit = "";
+        item.availability = "constraint is true";
+        read_sync_string(input.constraint_weight_type);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("constraint_target_file");
+        item.annotation = "constraint target JSON file";
+        item.category = "Constraint";
+        item.type = "String";
+        item.description = "JSON file with per-fragment charge targets, e.g. {\"targets\": [0.1, -0.1], \"atoms\": [[0], [1]]}. With constraint_target_mode=delta the values are charge shifts in e; with absolute they are target charges in e.";
+        item.default_value = "";
+        item.unit = "";
+        item.availability = "constraint is true";
+        read_sync_string(input.constraint_target_file);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("constraint_target_mode");
+        item.annotation = "target semantics: delta or absolute";
+        item.category = "Constraint";
+        item.type = "String";
+        item.description = "delta (default): targets are shifts from the reference charges; absolute: targets are absolute charges (different calibration scale, prints an explicit warning).";
+        item.default_value = "delta";
+        item.unit = "";
+        item.availability = "constraint is true";
+        read_sync_string(input.constraint_target_mode);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("constraint_mu_max");
+        item.annotation = "cap on the Lagrange multiplier magnitude";
+        item.category = "Constraint";
+        item.type = "Real";
+        item.description = "Hard cap on |mu| in Ry for the outer constraint loop; a component pinned at the cap with a flat residual plateau fuses the run as unreachable.";
+        item.default_value = "5.0";
+        item.unit = "Ry";
+        item.availability = "constraint is true";
+        read_sync_double(input.constraint_mu_max);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("constraint_thr");
+        item.annotation = "constraint convergence threshold";
+        item.category = "Constraint";
+        item.type = "Real";
+        item.description = "Per-constraint convergence threshold in e for the outer loop (|Q_alpha - target_alpha| < constraint_thr).";
+        item.default_value = "1.0e-4";
+        item.unit = "e";
+        item.availability = "constraint is true";
+        read_sync_double(input.constraint_thr);
+        this->add_item(item);
+    }
     {
         Input_Item item("deltap_branch_write");
         item.annotation = "persist deltap_branch.dat: true or false";

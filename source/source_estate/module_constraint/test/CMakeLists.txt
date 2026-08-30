@@ -30,3 +30,9 @@ AddTest(
   LIBS parameter ${math_libs} base device
   SOURCES mu_solver_test.cpp ../mu_solver.cpp
 )
+
+AddTest(
+  TARGET MODULE_ESTATE_constraint_io
+  LIBS parameter ${math_libs} base device
+  SOURCES constraint_io_test.cpp ../constraint_io.cpp
+)
