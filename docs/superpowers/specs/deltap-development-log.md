@@ -3195,3 +3195,17 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   `module_constraint/test/weight_grid_test.cpp`（+1 测试）、
   `module_constraint/test/CMakeLists.txt`、
   `docs/superpowers/specs/2026-08-31-m3a-constraint-inject-pw.md`。
+
+## 2026-08-31 (6): M5 记账 E_con + 审计行（T7 完成）
+
+- 新建 `module_constraint/constraint_accounting.h/.cpp`：
+  ConstraintAudit（e_con/max_residual/total_charge/nelec/maxdev/逐约束
+  Q/t/mu/res）+ audit() + audit_line()（key=value 机器可读，V1/V2/V3
+  脚本可直接解析）。
+- 测试 4/4 PASS：单/双约束 E_con 已知值、收敛态归零、审计行令牌断言。
+  首跑 2 项失败为 FP 表示差异 → EXPECT_NEAR 1e-12。
+- E_con 汇入电子总能量由 Task 8 外环完成（仿 f_en.dp_escon 先例）。
+- 文件：`module_constraint/constraint_accounting.h/.cpp`、
+  `module_constraint/test/constraint_accounting_test.cpp`、
+  `module_constraint/test/CMakeLists.txt`、
+  `docs/superpowers/specs/2026-08-31-m5-constraint-accounting.md`。
