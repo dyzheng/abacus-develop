@@ -1,11 +1,11 @@
 INPUT_PARAMETERS
-suffix            constraint_h2o
+suffix            autotest
 calculation       scf
 init_wfc          random
 pw_seed           1
 nbands            8
 symmetry          0
-pseudo_dir        /root/abacus-develop/tests/PP_ORB
+pseudo_dir        ../../PP_ORB
 nelec            8
 ecutwfc           20
 ecutrho           80
@@ -19,7 +19,7 @@ mixing_beta       0.7
 constraint        true
 constraint_type   charge
 constraint_weight_type becke
-constraint_target_file /root/abacus-develop/tests/constraint_pw_h2o/constraint_target.json
+constraint_target_file constraint_target.json
 constraint_target_mode delta
 constraint_mu_max  5.0
 constraint_thr     1e-4

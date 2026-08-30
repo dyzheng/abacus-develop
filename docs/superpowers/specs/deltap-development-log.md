@@ -3090,6 +3090,38 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   （M3b LCAO Gint + M6 力/力矩 + 自旋通道）。
 - 文件：`docs/superpowers/plans/2026-08-30-realspace-weight-constraint-phase1.md`。
 
+## 2026-08-31 (2): 一期完成报告实证 Review（无代码改动）
+
+- 两路独立核实（不采信报告文本）：(a) 测试实跑——constraint 9/9、
+  partition 1/1、read_input 2/2、elecstate_pw 1/1、weight_grid_mpi 2/2
+  全绿；constraint_pw_h2o 集成用例复跑逐项吻合（μ=−0.1765 Ry、6 外步
+  CONVERGED、V1 sum rule 机器精度）；(b) 8 commit 代码评审——M4 七护栏
+  真实且测试覆盖、观测量==注入算符为数值恒等式验证、三处 bug 修复均有
+  回归测试、AGENTS.md 纪律合规。
+- 裁定：**通过，可开二期**。发现问题：P1 ❌ 计划 Task 10 (V2) 勾选失信
+  （V2 阻塞却标完成，须修正）；P2 ⚠️ inject() 返回值被丢违反自身头文件
+  WARNING_QUIT 契约（constraint_loop.cpp:88-89）；P3 ⚠️ deltaspin
+  "从未生成"表述不准（实际 2/4 未构建）；P4 ⚠️ 集成用例未注册 ctest；
+  轻微：constraint_loop.cpp:113 注释与分支错位、esolver 钩子规模超计划
+  口径、M7 自研 JSON 未复用 sc_parse_json（技术债登记）。
+- T12 判决成立但附债务：V2（Multiwfn 对拍）未闭环，转入二期前置项；
+  "基组无关/口径正确"对外声明在 V2 补拍前不得作出。
+- 文件：`2026-08-31-phase1-review.md`。
+
+## 2026-08-31 (3): V2 阻塞消解——重定义为仓库内闭环验证（无代码改动）
+
+- 用户质疑"验证不应依赖外部工具"，成立。V2 风险三层拆解：权重构造 bug
+  （单测已覆盖）、FFT 网格积分误差（网格收敛测试内部可验）、文献约定一致性
+  （唯一受益于外部参照的层，判据本就宽松 ~0.05 e）。
+- V2 重定义：V2a 网格收敛三档（ecutrho 80/160/320，相邻档差 <1e-4）零新
+  代码；V2b tools/ 下 numpy 独立参考实现（从 Becke 1988 原始公式重写，
+  ~100 行，读 cube 对拍 1e-4，cube_manipulator.py 先例、numpy 可用）；
+  V2c 文献带宽核对（宽松）；Multiwfn 降级为可选 V2c'。可选 V2b' 双网格
+  内对拍（module_grid 已有 Delley 原子中心网格）。
+- 影响：V2 从"外部阻塞"转为"一期内可立即清掉的债务"；phase1-review P1
+  的 Task 10 勾选在 V2a+V2b 通过后勾回。
+- 文件：`2026-08-31-v2-redefinition.md`。
+
 ## 2026-08-30 (2): M0 Becke 异核修正 + 解析位置导数（T1 完成）
 
 - `partition.h/.cpp`：新增 `w_becke_adjusted`（异核半径比修正 μ'_ij）与
@@ -3246,6 +3278,37 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   `source_estate/CMakeLists.txt`、`source_estate/fp_energy.h/.cpp`、
   `source_base/CMakeLists.txt`（+partition.cpp）、
   `source/source_esolver/esolver_ks_pw.cpp`、
-  `tests/constraint_pw_h2o/`（INPUT/STRU/KPT/constraint_target.json/README）、
+  `tests/01_PW/211_PW_constraint_h2o/`（INPUT/STRU/KPT/constraint_target.json/README，评审 P4 后由 tests/constraint_pw_h2o 迁入并注册 ctest）、
   `docs/superpowers/specs/2026-08-31-m8-constraint-loop-integration.md`、
   `docs/superpowers/specs/2026-08-31-v1-v3-validation.md`。
+
+## 2026-08-31 (8): 一期评审修复轮（P1–P4 + 轻微项登记）
+
+- P1（勾选失信）：计划 Task 10 (V2) 改回 `[ ]` + 阻塞标注；V2 作为未清
+  债务转二期前置（Multiwfn 补拍或 V2a/V2b 仓库内闭环，见
+  `2026-08-31-v2-redefinition.md`）；补拍完成前不作"基组无关/口径正确"
+  对外声明。
+- P2（inject 契约）：`constraint_loop.cpp` inject_potential 检查
+  `ConstraintInjectPW::inject()` 两路返回值，任一失败 WARNING_QUIT——
+  头文件"must WARNING_QUIT"契约兑现；顺带修正 outer_step Branch A/B
+  注释与 `if (absolute)` 分支错位。
+- P4（ctest 注册）：`tests/constraint_pw_h2o` → `tests/01_PW/211_PW_
+  constraint_h2o`（git mv），INPUT 相对路径化 + `suffix autotest`，
+  `CASES_CPU.txt` 注册；`Autotest.sh -g` 生成 result.ref
+  （etotref=−441.9708338609649），非 -g 比对 2/2 OK；运行日志复核
+  μ=−0.17655、第 6 外步 CONVERGED、audit total_charge=6.3555 nelec=8
+  maxdev=2.2e-16。旧 README.md 详细说明由 v1-v3/m8 spec 覆盖，删除，
+  保留 1 行式 autotest README。
+- P3（措辞）：实测 deltaspin 4 目标注册、#165/#168 PASS、#166/#167
+  Not Run——文档已按"2/4 未构建"表述，无残留"从未生成"措辞。
+- 回归：constraint 相关 13/13 PASS；deltaspin 2 PASS + 2 Not Run（既有）。
+- 轻微项登记（转二期）：esolver 钩子 ~90 行/4 挂载点 vs 计划口径
+  "~10 行"（before_scf 配置块下移列入二期）；M7 自研 JSON 解析器未
+  复用 sc_parse_json（技术债）。
+- 文件：`source_estate/module_constraint/constraint_loop.cpp`、
+  `tests/01_PW/211_PW_constraint_h2o/`（INPUT/STRU/KPT/
+  constraint_target.json/README/result.ref）、`tests/01_PW/CASES_CPU.txt`、
+  `docs/superpowers/plans/2026-08-30-realspace-weight-constraint-phase1.md`、
+  `docs/superpowers/specs/2026-08-31-m8-constraint-loop-integration.md`（路径
+  同步）、`docs/superpowers/specs/2026-08-31-phase1-review-fix.md`、
+  `docs/superpowers/specs/2026-08-31-phase1-review.md`（补修复回执）。

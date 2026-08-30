@@ -6,6 +6,7 @@
 #include "constraint_inject_pw.h"
 #include "source_base/global_function.h"
 #include "source_base/global_variable.h"
+#include "source_base/tool_quit.h"
 
 namespace constraint
 {
@@ -85,8 +86,15 @@ void ConstraintLoop::inject_potential(const int iter,
     }
     // Branch B: active loop.  In the reference phase mu is all zero, so the
     // injection is a no-op by value and the first SCF stays unconstrained.
-    ConstraintInjectPW::inject(*wg_, mu_, v_eff);
-    ConstraintInjectPW::inject(*wg_, mu_, veff_smooth);
+    // The injector rejects a mu/weight length mismatch; per its contract the
+    // caller must WARNING_QUIT rather than silently run without the
+    // constraint potential (review P2).
+    if (!ConstraintInjectPW::inject(*wg_, mu_, v_eff)
+        || !ConstraintInjectPW::inject(*wg_, mu_, veff_smooth))
+    {
+        ModuleBase::WARNING_QUIT("ConstraintLoop::inject_potential",
+            "mu length does not match the constraint count (wiring bug)");
+    }
     (void)iter;
 }
 
@@ -110,14 +118,16 @@ void ConstraintLoop::outer_step(const int iter, bool& conv_esolver)
         targets_.resize(Q_.size());
         for (size_t a = 0; a < Q_.size(); ++a)
         {
-            // Branch A: delta mode — target is the reference charge plus the
-            // requested shift (calibration scale ~e).
+            // Branch A: absolute mode — target is the file value directly
+            // (calibration scale ~0.2-0.3 e, warned at configure time).
             if (cfg_.target_mode == "absolute")
             {
                 targets_[a] = cfg_.targets[a].value;
             }
             else
             {
+                // Branch B: delta mode — target is the reference charge plus
+                // the requested shift (calibration scale ~e).
                 targets_[a] = Q_ref_[a] + cfg_.targets[a].value;
             }
         }

@@ -1,0 +1,1 @@
+PW SCF of H2O (15 A box) with real-space charge constraint (becke weights, delta mode, +0.1 e on O): reference phase mu=0 -> Q_ref(O)=6.2555, constrained phase mu -> -0.1765 Ry, outer step 6 CONVERGED, CONSTRAINT_AUDIT total_charge=6.3555 nelec=8 maxdev=2.2e-16.

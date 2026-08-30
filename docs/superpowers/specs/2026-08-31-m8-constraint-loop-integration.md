@@ -18,7 +18,7 @@
 
 ## 2. Test setup
 - 平台：容器 gcc C++17 + GoogleTest + abacus_basic_para。
-- 输入（集成）：`tests/constraint_pw_h2o/`（15 Å 盒 H₂O、O.upf +
+- 输入（集成）：`tests/01_PW/211_PW_constraint_h2o/`（15 Å 盒 H₂O、O.upf +
   H_ONCV_PBE-1.0.upf、ecutwfc=20、scf_thr=1e-7、scf_nmax=200、
   constraint_target.json `{"targets": [0.1], "atoms": [[0]]}`）。
 
