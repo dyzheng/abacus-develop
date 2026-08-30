@@ -3122,6 +3122,22 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   的 Task 10 勾选在 V2a+V2b 通过后勾回。
 - 文件：`2026-08-31-v2-redefinition.md`。
 
+## 2026-08-31 (4): 二期开发计划（无代码改动）
+
+- 产出 `docs/superpowers/plans/2026-08-31-realspace-weight-constraint-phase2.md`：
+  7 个 Task（2.1 债务清零 P1/P2/P4+V2a/V2b 落地；2.2 M3b LCAO Gint 核；
+  2.3 LCAO 薄钩子接线+一期 before_scf 技术债下移；2.4 自旋通道 ±μ；
+  2.5 M6 力核——纯网格公式双基组同码，绕开矩阵元导数链；2.6 三判决验证
+  PW≡LCAO 逐位一致/力 FD stationary4 处方/力矩 FD 对标 DeltaSpin
+  0.006 eV/μB；2.7 判决门）。
+- 硬约束合规：零新组件/新算法/外部依赖——合规检查表逐项映射现成基建
+  （module_gint gamma/k 双变体、M0 已交付导数核、spinconstrain 钩子先例）；
+  显式禁止清单：Hirshfeld/Broyden/偶极/应力/Hirshfeld-I/第三方工具/新积分
+  框架/新 JSON 库。V2b 改用 C++ 内测独立参考（不用 numpy）。
+- 判决门纪律：PW≡LCAO 不一致或力 FD 超判据时**不降低判据**（一致性是
+  架构核心卖点，放水即否决架构）。
+- 文件：`docs/superpowers/plans/2026-08-31-realspace-weight-constraint-phase2.md`。
+
 ## 2026-08-30 (2): M0 Becke 异核修正 + 解析位置导数（T1 完成）
 
 - `partition.h/.cpp`：新增 `w_becke_adjusted`（异核半径比修正 μ'_ij）与
@@ -3312,3 +3328,26 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   `docs/superpowers/specs/2026-08-31-m8-constraint-loop-integration.md`（路径
   同步）、`docs/superpowers/specs/2026-08-31-phase1-review-fix.md`、
   `docs/superpowers/specs/2026-08-31-phase1-review.md`（补修复回执）。
+
+## 2026-08-31 (9): 二期 Task 2.1 债务清零收尾——V2a 网格收敛 + V2b 独立参考 + P1 勾回
+
+- V2a（零新代码，纯跑）：H₂O 参考态三档 ecutrho=80/160/320（显式
+  nx=ny=nz=81/120/162，波函数基组三档相同 34457-G，密度为同一 40 Ry
+  带限场更细采样）→ Q(O)=6.2554680/6.2554378/6.2555199，相邻档差
+  max 8.2e-5 <1e-4 ✓；FINAL_ETOT 变分单调下降 ✓。
+- V2a 解耦复核（临时工具 /tmp/v2a_decoupled，链接生产 partition.cpp，
+  不提交）：单次 162³ 密度（out_chg cube）在 54³/81³/162³ 整数比子采样
+  上重算——81-vs-162 差 ~5e-5 <1e-4 ✓，54³ 过粗 ~1e-3（确认误差随 h
+  增大）；**严格单调不成立**（Becke 切换面网格对齐振荡 ~1e-4 量级），
+  登记口径偏差：操作判据=收敛带宽 <1e-4 e。
+- V2b（提交）：`constraint_observe_test.cpp` 新增 `IndependentReferenceBecke`
+  ——测试内从 Becke 1988 原始公式独立重写权重（p(x) 迭代 3 次、s(mu)、
+  连乘归一化，不调生产 w_becke*），同核半径（生产 adjusted≡纯 Becke）
+  合成密度对拍逐原子 Q_I <1e-8 PASS。
+- P1 勾回：phase-1 计划 Task 10 改注"V2=V2a+V2b 替代完成（Multiwfn 降级
+  可选 V2c'）"并勾回 [x]；phase-2 计划 Task 2.1 Step 1-5 全部 [x]。
+- 回归：constraint 相关 9/9 PASS（含新测试）；deltaspin 2 PASS + 2 Not
+  Run（既有）。
+- 文件：`module_constraint/test/constraint_observe_test.cpp`（+1 测试）、
+  `docs/superpowers/specs/2026-08-31-v2a-grid-convergence.md`、
+  phase-1 计划（Task 10 勾回）、phase-2 计划（Task 2.1 勾选）。
