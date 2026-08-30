@@ -197,3 +197,23 @@ TEST_F(WeightGridTest, FragmentConstraint)
         EXPECT_DOUBLE_EQ(cw[0][ir], wref[0][ir] + wref[1][ir]);
     }
 }
+
+TEST_F(WeightGridTest, SetAtomsBeforeBuild)
+{
+    // Fragment map may be set before build(): build() must derive cw_ from
+    // the pre-set constraint map (defensive branch A in set_constraint_atoms).
+    constraint::WeightGrid wg(*ucell, rhopw, radii, constraint::WeightType::Becke);
+    wg.set_constraint_atoms({{0, 1}});
+    wg.build();
+    ASSERT_EQ(wg.nconstraint(), 1);
+    // Same result as setting the map after build().
+    constraint::WeightGrid ref(*ucell, rhopw, radii, constraint::WeightType::Becke);
+    ref.build();
+    ref.set_constraint_atoms({{0, 1}});
+    const auto& cw = wg.constraint_weights();
+    const auto& cref = ref.constraint_weights();
+    for (int ir = 0; ir < rhopw->nrxx; ++ir)
+    {
+        EXPECT_DOUBLE_EQ(cw[0][ir], cref[0][ir]);
+    }
+}

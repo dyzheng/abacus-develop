@@ -170,6 +170,13 @@ void WeightGrid::set_constraint_atoms(
     const std::vector<std::vector<int>>& atoms)
 {
     constraint_atoms_ = atoms;
+    // Branch A: per-atom weights not built yet (set before build()).
+    // build() derives cw_ from constraint_atoms_ itself, so nothing else to do.
+    if (w_.empty())
+    {
+        return;
+    }
+    // Branch B: per-atom weights cached (set after build()).
     // Re-derive per-constraint weights from the cached per-atom weights.
     cw_.assign(constraint_atoms_.size(), std::vector<double>(nrxx_, 0.0));
     for (size_t alpha = 0; alpha < constraint_atoms_.size(); ++alpha)

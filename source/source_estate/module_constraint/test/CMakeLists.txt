@@ -36,3 +36,16 @@ AddTest(
   LIBS parameter ${math_libs} base device
   SOURCES constraint_io_test.cpp ../constraint_io.cpp
 )
+
+AddTest(
+  TARGET MODULE_ESTATE_constraint_inject_pw
+  LIBS parameter ${math_libs} base device planewave_serial cell_info
+  SOURCES constraint_inject_pw_test.cpp
+    ../constraint_inject_pw.cpp
+    ../constraint_observe.cpp
+    ../weight_grid.cpp
+    ../../../source_base/module_grid/partition.cpp
+    ../../../source_base/module_grid/radial.cpp
+    ../../../source_base/module_grid/delley.cpp
+    ../../../source_io/module_output/output.cpp
+)

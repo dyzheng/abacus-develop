@@ -3177,3 +3177,21 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   `source/source_io/module_parameter/read_input_item_other.cpp`、
   `source/source_io/test_serial/read_input_item_test.cpp`、
   `docs/superpowers/specs/2026-08-31-m7-constraint-io.md`。
+
+## 2026-08-31 (5): M3a PW 约束势注入（T6 完成）
+
+- 新建 `module_constraint/constraint_inject_pw.h/.cpp`：veff(ispin,ir) +=
+  Σ_α μ_α w_α(ir)；nspin=1 单通道、nspin=2 两通道同加 +dV（charge 耦合，
+  自旋差 ±μ 属二期，测试锁定其不出现）；μ 长度≠nconstraint 返回 false
+  （外环须 WARNING_QUIT），veff 不动。
+- 测试 4/4 PASS：逐点注入（nspin=1 机器精度）、charge-only nspin=2、
+  观测量==注入算符（∫ρ·dV/μ 对拍 Q，1e-10）、尺寸守卫。
+- 修复 1 个鲁棒性缺陷：`WeightGrid::set_constraint_atoms` build() 前调用
+  越界（w_ 空）→ 防御分支；M1 新增 `SetAtomsBeforeBuild` 测试锁定
+  两种调用顺序逐点一致（6/6 PASS）。
+- 文件：`module_constraint/constraint_inject_pw.h/.cpp`、
+  `module_constraint/test/constraint_inject_pw_test.cpp`、
+  `module_constraint/weight_grid.cpp`（防御分支）、
+  `module_constraint/test/weight_grid_test.cpp`（+1 测试）、
+  `module_constraint/test/CMakeLists.txt`、
+  `docs/superpowers/specs/2026-08-31-m3a-constraint-inject-pw.md`。
