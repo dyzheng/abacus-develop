@@ -3103,3 +3103,22 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - 文件：`source/source_base/module_grid/partition.h/.cpp`、
   `source/source_base/module_grid/test/test_partition.cpp`、
   `docs/superpowers/specs/2026-08-30-m0-becke-heteronuclear-deriv.md`。
+
+## 2026-08-31: M1 网格权重构造 + 单位分解审计（T2 完成）
+
+- 新建 `source/source_estate/module_constraint/weight_grid.h/.cpp`（Layer 1）：
+  每几何一次 `build()`（纯几何、禁密度依赖），每约束一权重数组
+  `cw_[alpha][ir_local]`；默认每原子一约束，`set_constraint_atoms` 支持片段
+  （原子权重求和同一函数）；近邻表结构 + 可配置 `screening_radius`
+  （默认 0 = 全原子参与，空邻居集回退全原子保单位分解）；最小镜像距离处理
+  周期性；`max_partition_deviation()` 全局 allreduce 审计。
+- 串行单测 5/5 PASS（单位分解 <1e-10、镜像对称 1e-12、确定性重建、截断
+  筛选鲁棒、片段约束恒等）；MPI 单测（test_mpi，1/2/4 rank）分布式 vs
+  序列参考逐点 <1e-12，非方网格 24×16×20。
+- 基准：8000 点 × 3 原子 8.85e-4 s（每点 1.1e-7 s），~1e6 点外推 0.11 s
+  ≪ 一步 SCF。
+- 文件：`source/source_estate/module_constraint/weight_grid.h/.cpp`、
+  `module_constraint/test/weight_grid_test.cpp`、
+  `test_mpi/weight_grid_mpi_test.cpp`、
+  `source/source_estate/CMakeLists.txt`（模块接入 elecstate objects + 测试）、
+  `docs/superpowers/specs/2026-08-31-m1-weight-grid.md`。

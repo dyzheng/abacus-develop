@@ -44,6 +44,7 @@ list(APPEND objects
     cal_wfc.cpp
     setup_estate_pw.cpp
     update_pot.cpp
+    module_constraint/weight_grid.cpp
 )
 
 if(ENABLE_LCAO)
@@ -73,6 +74,7 @@ if(BUILD_TESTING)
     add_subdirectory(test)
     add_subdirectory(test_mpi)
   endif()
+  add_subdirectory(module_constraint/test)
 endif()
 
 if(ENABLE_LCAO)
