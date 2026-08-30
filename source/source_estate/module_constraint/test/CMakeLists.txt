@@ -24,3 +24,9 @@ AddTest(
     ../../../source_base/module_grid/delley.cpp
     ../../../source_io/module_output/output.cpp
 )
+
+AddTest(
+  TARGET MODULE_ESTATE_constraint_mu_solver
+  LIBS parameter ${math_libs} base device
+  SOURCES mu_solver_test.cpp ../mu_solver.cpp
+)

@@ -3139,3 +3139,16 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   `module_constraint/test/constraint_test_utils.h`（共享测试夹具）、
   `test_mpi/weight_grid_mpi_test.cpp`（+ObserveReduceConsistent）、
   `docs/superpowers/specs/2026-08-31-m2-constraint-observe.md`。
+
+## 2026-08-31 (3): M4 外环 μ 求解器（T4 完成）
+
+- 新建 `module_constraint/mu_solver.h/.cpp`：逐分量 secant，κ clamp
+  [0.3,20]（符号强制负）+ 翻号回退 + 单步限幅 step_max + μ 硬顶限
+  mu_max + 平台窗熔断（残差改进 <1% → UNREACHABLE）+ 反假收敛
+  （收敛检查先于更新）。熔断附 Q(mu) 端点报告。
+- 测试 7/7 PASS（合成 mock，无 SCF）：已知根收敛（单/双通道）、翻号
+  护栏+熔断、平通道死通道熔断、软通道顶限熔断、反假收敛、硬通道有界
+  极限环。修复历史记录缺陷（观测点 μ 误存为更新后值 → 翻号检测失效）。
+- 文件：`module_constraint/mu_solver.h/.cpp`、
+  `module_constraint/test/mu_solver_test.cpp`、
+  `docs/superpowers/specs/2026-08-31-m4-mu-solver.md`。

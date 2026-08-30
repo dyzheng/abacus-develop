@@ -46,6 +46,7 @@ list(APPEND objects
     update_pot.cpp
     module_constraint/weight_grid.cpp
     module_constraint/constraint_observe.cpp
+    module_constraint/mu_solver.cpp
 )
 
 if(ENABLE_LCAO)
