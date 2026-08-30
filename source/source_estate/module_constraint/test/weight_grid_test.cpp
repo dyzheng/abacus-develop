@@ -70,7 +70,7 @@ class WeightGridTest : public ::testing::Test
         Set_GlobalV_Default();
         ucell = make_h2o_ucell();
         rhopw = new ModulePW::PW_Basis;
-        rhopw->initgrids(1.0, ucell->latvec, 20, 20, 20); // 0.5 Bohr spacing
+        rhopw->initgrids(1.0, ucell->latvec, 40, 40, 40); // 0.5 Bohr spacing
         rhopw->distribute_r();
         radii = {1.5, 0.5, 0.5}; // O, H1, H2 (Bohr)
     }

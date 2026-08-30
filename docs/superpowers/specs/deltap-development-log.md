@@ -3122,3 +3122,20 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   `test_mpi/weight_grid_mpi_test.cpp`、
   `source/source_estate/CMakeLists.txt`（模块接入 elecstate objects + 测试）、
   `docs/superpowers/specs/2026-08-31-m1-weight-grid.md`。
+
+## 2026-08-31 (2): M2 约束读数 Q_α=∫w_α ρ dr（T3 完成）
+
+- 新建 `module_constraint/constraint_observe.h/.cpp`：Q_α=Σ_g w_α(g)ρ(g)dV
+  （dV=ω/nxyz），nspin==2 取电荷通道 ρ↑+ρ↓（自旋通道预留）；`reduce_pool`
+  归约（串行 no-op）。读数侧与注入侧共享同一 WeightGrid（观测量=注入算符）。
+- 测试：原子叠加高斯密度对拍（sum rule 1e-8 + 逐原子有界分账 + 收敛性）、
+  单点 δ 读数精确钉（1e-12）、ρ≡1 盒体积；MPI reduce 一致性（4 rank
+  位一致 + ΣQ==ω）。
+- 关键发现：Becke 分账是网格求积量，逐原子"精确 N_I"不成立（误差
+  ~(h/σ)²）；sum rule 需要密度在盒边界可忽略（10 Bohr 盒 + σ=1.0 时
+  2.1e-4 泄漏 → 20 Bohr 盒后回 FP 地板）。
+- 文件：`module_constraint/constraint_observe.h/.cpp`、
+  `module_constraint/test/constraint_observe_test.cpp`、
+  `module_constraint/test/constraint_test_utils.h`（共享测试夹具）、
+  `test_mpi/weight_grid_mpi_test.cpp`（+ObserveReduceConsistent）、
+  `docs/superpowers/specs/2026-08-31-m2-constraint-observe.md`。

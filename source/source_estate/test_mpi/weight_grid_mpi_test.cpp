@@ -9,6 +9,7 @@
 #include "source_base/global_variable.h"
 #include "source_base/parallel_global.h"
 #include "source_basis/module_pw/pw_basis.h"
+#include "source_estate/module_constraint/constraint_observe.h"
 #include "source_estate/module_constraint/weight_grid.h"
 #include "source_io/module_parameter/parameter.h"
 #include "../test/prepare_unitcell.h"
@@ -118,6 +119,63 @@ TEST(WeightGridMpiTest, DistributedMatchesSerial)
         }
     }
     EXPECT_LT(max_diff, 1e-12);
+}
+
+TEST(WeightGridMpiTest, ObserveReduceConsistent)
+{
+    PARAM.input.device = "cpu";
+    PARAM.input.precision = "double";
+    PARAM.input.nspin = 1;
+    PARAM.input.nelec = 10.0;
+    PARAM.input.basis_type = "pw";
+    GlobalV::KPAR = 1;
+    Parallel_Global::init_pools(GlobalV::NPROC,
+                                GlobalV::MY_RANK,
+                                PARAM.input.bndpar,
+                                GlobalV::KPAR,
+                                GlobalV::NPROC_IN_BNDGROUP,
+                                GlobalV::RANK_IN_BPGROUP,
+                                GlobalV::MY_BNDGROUP,
+                                GlobalV::NPROC_IN_POOL,
+                                GlobalV::RANK_IN_POOL,
+                                GlobalV::MY_POOL);
+
+    auto ucell = make_h2o_ucell();
+    const std::vector<double> radii = {1.5, 0.5, 0.5};
+
+    ModulePW::PW_Basis rhopw;
+    rhopw.initmpi(GlobalV::NPROC_IN_POOL, GlobalV::RANK_IN_POOL, POOL_WORLD);
+    rhopw.initgrids(1.0, ucell->latvec, 24, 16, 20);
+    rhopw.distribute_r();
+
+    constraint::WeightGrid wg(*ucell, &rhopw, radii, constraint::WeightType::Becke);
+    wg.build();
+
+    // Constant density rho = 1: Q_alpha = int w_alpha dr, sum = cell volume.
+    std::vector<double> rho(rhopw.nrxx, 1.0);
+    const double* rho_ptr = rho.data();
+    std::vector<double> Q;
+    constraint::ConstraintObserver::observe(wg, &rho_ptr, 1, Q);
+    const double vol = ucell->omega;
+
+    // reduce_pool is an allreduce: every rank must hold bit-identical Q.
+    std::vector<double> Q_all(GlobalV::NPROC * Q.size(), 0.0);
+    MPI_Allgather(Q.data(), static_cast<int>(Q.size()), MPI_DOUBLE,
+                  Q_all.data(), static_cast<int>(Q.size()), MPI_DOUBLE,
+                  MPI_COMM_WORLD);
+    for (int r = 0; r < GlobalV::NPROC; ++r)
+    {
+        for (size_t alpha = 0; alpha < Q.size(); ++alpha)
+        {
+            EXPECT_DOUBLE_EQ(Q[alpha], Q_all[r * Q.size() + alpha]);
+        }
+    }
+    double qsum = 0.0;
+    for (const double q : Q)
+    {
+        qsum += q;
+    }
+    EXPECT_NEAR(qsum, vol, 1e-8);
 }
 
 int main(int argc, char** argv)

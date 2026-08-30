@@ -45,6 +45,7 @@ list(APPEND objects
     setup_estate_pw.cpp
     update_pot.cpp
     module_constraint/weight_grid.cpp
+    module_constraint/constraint_observe.cpp
 )
 
 if(ENABLE_LCAO)

@@ -74,6 +74,9 @@ class WeightGrid
     // Cartesian position (Bohr) of local grid point ir.
     ModuleBase::Vector3<double> grid_position(const int ir) const;
 
+    // The density grid this weight field lives on.
+    const ModulePW::PW_Basis* rho_basis() const { return rho_basis_; }
+
   private:
     // Fractional (direct) coordinates of local grid point ir.
     ModuleBase::Vector3<double> grid_fraction(const int ir) const;
