@@ -2957,3 +2957,149 @@ F-7/F-7b/锚点套件/FD 协议纪律）、当前状态与 F-8→Stage 4→Stage
   确认。PW 对齐 LCAO 语义属破坏性变更，挂起另议。§7.5 禁止项同步交叉
   引用。
 - 无代码改动；Stage 1–5 闭合确认，分支进入收尾决策。
+
+## 2026-08-17 (6): progress-summary 更新为 Stage 1–5 闭合版
+
+§2 新增 2.3（Γ-path relax 端到端验收，4.3）与 2.4（应力交付，F-8：内部
+Maxwell 6.8–7.0% = L12 冻结-C 隙、压电杠杆 ~2× vs 力侧 17–52×）；2.2 力
+精度刷新为 4.2 正式验收数字（21/21，≤0.0066 eV/Å）。§4 改为"未完成的
+开放项"（场模式力 EFC 挂起 / ow 力未立项 / P 系列入 CI）。§5：删除
+inner_thr≤1e-6 注意事项（L11 已代码级修复，escon 每 SCF 刷新）；新增
+L12 冻结-C 隙 ~7% 说明与 LCAO/PW 无 target 语义分歧警告；γ-hold 禁止项
+与 Γ-path 可用性区分澄清。§6 补 Stage 4 证据（无 target 语义缺口、
+判据治理两例）。§7 路线更新为闭合版（分支已推 zdy fork 待 PR 决策）。
+
+## 2026-08-18: 算符谱系分析文档
+
+`2026-08-18-deltap-operator-lineage-analysis.md`：澄清"Route A+ 换了算符"
+的误解——引入三角色框架（(a) 驱动观测量=γ / (b) 哈密顿量算符=Ô /
+(c) 记账观测量=γ→Γ），Route A+ 只改 (c)、(b) 从未变。逐一分析 γ（非算符
+测量）/ Ô（现行线性化代理，R 依赖含非极化几何通道=场模式力问题住所）/
+Ô_w（增量改良，T-18 FAIL 挂起）/ Ô_θ（EFC 提案，⟨Ô_θ⟩≡γ 构造恒等，
+唯一第一性解法）+ PW Γ^PW 旁支；总对照表 + 结论：场模式需换 (b) 角色
+算符，Ô_θ 是三代代理中唯一从 γ 本身出发的构造。
+
+## 2026-08-18 (2): Route A+ 测试设计（能力展示 + 边界暴露）
+
+`2026-08-18-deltap-route-a-plus-test-design.md`：零新代码测试套件设计——
+A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/MPI/诊断，
+全部带既往验收预言值）+ B 组边界暴露 7 项（γ-hold 泄漏/场模式力 Maxwell
+失配/可达域窗口/基组低估/冻结-C 隙/守卫行为/内循环失效）；汇总表 15 项
+预言全录；纪律：A 组 FAIL=回归，B 组意外 PASS=边界移动需归因。
+
+## 2026-08-26: 实空间权重约束框架设计方案评审（无代码改动）
+
+- 评审对象：仓库根目录《实空间权重约束框架设计方案.md》（Hirshfeld/Becke
+  实空间权重替代 SMO 投影，统一 DeltaQ/DeltaSpin/偶极约束）。
+- 结论：**方向正确、值得尝试，按三期推进**。方案核心结构（观测量=注入
+  算符、冻结权重、网格读数消 PW/LCAO 口径分裂、熔断）与 DeltaP 历史教训
+  逐一吻合（dspin 恒等式三条件、T-17 活算符极限环、λ 预算熔断先例）；
+  实空间权重在本项目历史中为未探索空白区。
+- 主要风险披露（详见评审文档 R1–R12）：(a) 方案引用的 μ→−1244 Ry 与
+  H₂O ΣN_I≈11.48 两个激励数字全库查无出处（外部"原文档"，仓库无 DeltaQ
+  实现）；(b) secant 缺 κ 限幅/翻号检测（T-4a'/T-5' 发散实录）；(c) 换权重
+  只移除算符假饱和，物理可达域仍由体系刚度封顶（T-18 教训）且不可跨体系
+  外推；(d) 偶极约束↔efield 对偶的数值交叉验证（V4）属历史最高危类型
+  （屏蔽因子 ~250×、盒子淬火、协议陷阱）；(e) 应力"无贡献"说法存疑且
+  V1–V7 无应力验收；(f) veff 注入是全新接线非改造；(g) 一期建议：PW+Becke
+  +逐分量 secant+判决性 V1/V2/V3+反假收敛检验，物理可达域过窄即止损。
+- 文件：`2026-08-26-realspace-weight-framework-evaluation.md`。
+
+## 2026-08-26 (2): 权重框架 vs SMO 完整方法的计算复杂度对比评审（无代码改动）
+
+- 问题：统一电荷/自旋/极化约束目标下，实空间权重框架的运行时与工程实现
+  复杂度，对比当前 SMO 投影完整方法（deltaspin ~8630 行双路径 + DeltaP）。
+- 运行时结论：**全面 ≤ SMO 现状**。PW 路径势注入从 per-Hψ 非局域投影算符
+  （O(N_band×N_proj×N_pw)×对角化迭代）降为 per-迭代网格标量加
+  （O(N_g×N_α)），显著受益；LCAO 打平（W^α_μν=∫α_μ w_α α_ν 对 μ 线性，
+  每几何经 Gint 预积分一次 ≈ 一次局域势矩阵构建，与 pre_hr 同频）；读数
+  O(N_g×N_α) 更便宜且两基组同码；力无投影子导数链/无新增 Pulay 项；
+  外环收敛性预期更好（电荷经局域势强耦合 Hartree，无 DeltaP 弱耦合 λ
+  泄漏机制）。
+- 工程结论：一期净新增 = 自包含 weight_grid（1–2k 行）+ PW 小接线 +
+  LCAO Gint 新通道（gint/gint_dvlocal 基建现成，按新建估算）；低于
+  DeltaSpin 双路径历史成本，长期单口径维护面显著下降；迁移期双口径并存
+  需设旧口径下线时间表。
+- 统一目标修正：电荷/自旋/分子偶极统一成立（增量成本≈零）；**体相周期
+  极化不可统一**（PBC 位置算子无定义，Berry/Wilson 机制不可绕过，DeltaP
+  栈保留）；可选协同：DeltaP per-atom γ 分解换 ⟨ψ|w_I|ψ⟩ 实空间权重，
+  低成本修复 2026-07-11 诊断的 partition of unity 失败（二期后选项）。
+- 无新否决项；前轮 R6（应力待证）/R8（LCAO 新建通道）维持。
+- 文件：`2026-08-26-realspace-weight-complexity-comparison.md`。
+
+## 2026-08-26 (3): 权重框架技术点清点——ABACUS/DeltaP 已实现验证的部分（无代码改动）
+
+- 清点结论：方案承重结构几乎全部有已验证支点。关键源码事实：
+  (a) **Becke 权重原语已在仓库**——`module_grid/partition.h` 的
+  `w_becke`/`s_becke` 即方案 §3.2.1 的 3 阶迭代多项式 f_3，附 Stratmann
+  屏蔽变体（解 O(N_at²) 顾虑），有单测但生产未接线；缺口=异核半径修正
+  χ_ij 与位置导数 ∂w/∂R；
+  (b) veff 注入先例 = module_pot/efield+gatefield（F-2 对拍验证过）；
+  (c) LCAO 承重墙 = module_gint（含 gint_dvlocal 力导数核）；
+  (d) Hirshfeld 数据源 = charge_init.cpp atomic_rho；
+  (e) 外环/护栏/自旋 ±μ/片段约束/delta 模式/驻点 FD 协议/记账恒等式均
+  有 DeltaSpin/DeltaP 生产或实测背书。
+- 负向验证（历史实验已否决、方案排除正确）：活算符权重（T-17 极限环）、
+  同步 GD μ 更新、冻密度内环 BFGS（T-7''）、斜投影约束。
+- 一期真正的新写代码仅 4 点：Becke 扩展（χ_ij+导数）、Hirshfeld 构造、
+  约束势进 SCF 环（LCAO 侧按新建）、网格读数反馈环；风险最高未实现项
+  仍是偶极对偶验证（V4）与应力。
+- 文件：`2026-08-26-realspace-weight-tech-inventory.md`。
+
+## 2026-08-26 (4): 权重框架可靠性机制与电荷划分 benchmark 对标（无代码改动）
+
+- 可靠性四层清点：测量层（逐点 sum rule 断言 + 永久审计行 + 观测量=注入
+  算符）最强、三层有历史背书；物理可达层只能诊断不能保证（μ 量级表无定标、
+  窗口不可外推）；数值层缺反假收敛检验与 secant κ 护栏；验证层 V4/应力未闭环。
+- benchmark 定位：方案划分 = Hirshfeld(1977)/Becke(1988) 成熟布局分析；
+  框架本体 = Wu–Van Voorhis CDFT 标准形态，Q-Chem/NWChem/CP2K CDFT 实现
+  是最直接对标（同权重同约束形式，对拍 Q(μ) 曲线/约束能/Marcus 重组能）。
+- 可执行 benchmark 组合 B1–B8：文献 Hirshfeld 电荷、Multiwfn 同密度对拍
+  （消电子结构差异纯对拍分账）、PW≡LCAO 自对拍（实空间权重独有的护城河）、
+  CDFT 文献重组能、DeltaSpin 同靶点、efield 对偶（高危）、Bader/DDEC 定性
+  趋势、Berry 相位交叉核对。坑：Hirshfeld 电荷系统性偏小，绝对值对标必须
+  同泛函同基组同 promolecule。
+- 文件：`2026-08-26-realspace-weight-reliability-benchmark.md`。
+
+## 2026-08-26 (5): 权重框架创新性定位（无代码改动）
+
+- 纠正理解偏差："之前没有投影到原子上并约束的算法"仅对 ABACUS 电荷约束
+  成立；文献层面 Wu–Van Voorhis CDFT 即原子/片段权重约束（Q-Chem/CP2K
+  生产实现），ABACUS 内部亦有 DFT+U 与 DeltaSpin 先例。
+- 创新性收敛为四点：① PW≡LCAO 逐位同口径（双基组码独佔，文献空白的
+  benchmark 数据）；② 可审计性工程体系（sum rule 审计行/熔断/机器可读
+  证书，文献软件无对应物）；③ 统一框架扩展面（偶极通道内建路由，回应
+  单极子模型层不适配诊断）；④ ABACUS 生态协同（修 DeltaSpin 病态口径、
+  可选修 DeltaP per-atom 分解、μ 升格为物理观测量输出）。
+- 定位建议：叙事="基组一致、可审计的 CDFT 实现"，非"新约束算法"；
+  生产立项不依赖创新性判据，结论与前四轮"值得尝试"一致。
+- 文件：`2026-08-26-realspace-weight-novelty-analysis.md`。
+
+## 2026-08-30: 实空间权重框架一期开发计划（无代码改动）
+
+- 基于 `plan-architecture.md`（五层解耦 M0–M7）+ 前四轮评审，产出一期
+  （判决性）开发计划：`docs/superpowers/plans/2026-08-30-realspace-weight-constraint-phase1.md`。
+- 一期范围：M0 Becke 扩展（χ_ij+导数）/M1 网格权重/M2 读数/M3a PW 注入/
+  M4 逐分量 secant（补 κ clamp+翻号检测+联合熔断，R2/R3 缺口）/M5 记账/
+  M7 最小 IO（含 absolute 模式 WARNING 守卫，R12）+ PW esolver 接线 +
+  判决性 V1/V2/V3+反假收敛；12 个 Task，TDD 步骤化。
+- 关键接线先例已核实：`esolver_ks_pw.cpp:226` 的 deltaspin lambda_loop
+  钩子、`module_pot/efield.cpp` 的 veff 注入模式、`module_dipole` 网格归约、
+  `module_deltaspin/test/` 单测基建。
+- 止损门：V3 物理可达域过窄（R4 κ 封顶）即归档止损；通过则开二期
+  （M3b LCAO Gint + M6 力/力矩 + 自旋通道）。
+- 文件：`docs/superpowers/plans/2026-08-30-realspace-weight-constraint-phase1.md`。
+
+## 2026-08-30 (2): M0 Becke 异核修正 + 解析位置导数（T1 完成）
+
+- `partition.h/.cpp`：新增 `w_becke_adjusted`（异核半径比修正 μ'_ij）与
+  `w_becke_adjusted_deriv`（∂w_c/∂R_J 解析导数，链式经 drR/dRR 几何导数 +
+  s_becke 解析导数）。旧接口 w_becke/s_becke/w_stratmann 未动。
+- `test_partition.cpp`：新增 `BeckeHeteronuclearMidpoint`（中点大原子权重
+  > 0.5、Σw≡1、半径交换符号反转）与 `BeckeDerivFD`（解析 vs δ=1e-5 中心
+  差分 < 1e-6；不在 iR 的中心导数为零）。4/4 PASS，原有测试不回归。
+- 修复 1 个实现缺陷：距离变量 `d` 与分量循环变量 `d` 同名遮蔽 → comp0 NaN；
+  循环变量改名 `dd` 后解析 vs FD 最大偏差 5.5e-11。
+- 文件：`source/source_base/module_grid/partition.h/.cpp`、
+  `source/source_base/module_grid/test/test_partition.cpp`、
+  `docs/superpowers/specs/2026-08-30-m0-becke-heteronuclear-deriv.md`。
