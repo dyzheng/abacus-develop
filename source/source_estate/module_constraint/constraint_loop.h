@@ -1,0 +1,114 @@
+#ifndef CONSTRAINT_LOOP_H
+#define CONSTRAINT_LOOP_H
+
+#include <memory>
+#include <string>
+#include <vector>
+
+#include "constraint_accounting.h"
+#include "constraint_io.h"
+#include "constraint_observe.h"
+#include "mu_solver.h"
+#include "source_base/matrix.h"
+#include "source_cell/unitcell.h"
+#include "weight_grid.h"
+
+namespace constraint
+{
+
+enum class LoopPhase
+{
+    IDLE,        // not initialized or disabled
+    REFERENCE,   // first (mu = 0) SCF: recording the reference charges
+    CONSTRAINED, // outer secant loop active
+    DONE         // CONVERGED or UNREACHABLE: no further action
+};
+
+/**
+ * @brief Outer-loop controller of the real-space weight constraint (M8).
+ *
+ * Two-stage gating (DeltaP 4.3 / deltaspin sc_scf_thr_mode lineage):
+ *   phase REFERENCE: the first SCF runs unconstrained (mu = 0, injection is
+ *     a no-op); at its convergence the reference charges Q_ref are recorded
+ *     and the targets are built (delta mode: t = Q_ref + delta; absolute
+ *     mode: t = file values).  The first M4.step runs immediately (the
+ *     reference point IS the mu = 0 observation), and the SCF is forced to
+ *     continue into the constrained phase.
+ *   phase CONSTRAINED: at every SCF convergence the charges Q(mu) are read
+ *     (M2), M4.step advances mu (secant + guards), the constraint potential
+ *     is re-injected for the next iteration (M3a), and the audit line (M5)
+ *     is printed.  CONVERGED ends the SCF; UNREACHABLE fuses the run and
+ *     reports the Q(mu) endpoint.
+ *
+ * The loop shares one WeightGrid instance with the observer and the
+ * injector: observable == injection operator by construction.
+ */
+class ConstraintLoop
+{
+  public:
+    static ConstraintLoop& instance();
+
+    // Build M1 weights and arm the loop. Call once per geometry (PW
+    // before_scf).  Re-initialization replaces all state.
+    void init(const UnitCell& ucell,
+              const ModulePW::PW_Basis* rho_basis,
+              const ConstraintConfig& cfg,
+              const std::vector<double>& radii,
+              const double nelec);
+
+    // Inject the current mu-weighted potential into v_eff and veff_smooth
+    // before the diagonalization of SCF iteration 'iter' (1-based).
+    // No-op unless the loop is active.
+    void inject_potential(const int iter,
+                          ModuleBase::matrix& v_eff,
+                          ModuleBase::matrix& veff_smooth);
+
+    // Read the constraint charges Q from the (mixed) rho of iteration 'iter'.
+    void observe(const int iter, const double* const* rho, const int nspin);
+
+    // SCF-convergence bookkeeping.  May override conv_esolver to false so
+    // the SCF continues with the updated mu; leaves it true when the outer
+    // loop is done (CONVERGED / UNREACHABLE) or inactive.
+    void on_scf_converged(const int iter, bool& conv_esolver);
+
+    // Print the final audit report (called from PW after_scf).
+    void final_report();
+
+    // Reset all state (unit tests / re-init).
+    void reset();
+
+    bool enabled() const { return cfg_.enabled && phase_ != LoopPhase::IDLE; }
+    LoopPhase phase() const { return phase_; }
+    MuStatus status() const { return status_; }
+    int outer_steps() const { return outer_steps_; }
+    double mu_norm() const;
+    const std::vector<double>& mu() const { return mu_; }
+    const std::vector<double>& targets() const { return targets_; }
+    const std::vector<double>& charges() const { return Q_; }
+    const ConstraintAudit& last_audit() const { return audit_; }
+    const std::string& last_audit_line() const { return last_audit_line_; }
+
+  private:
+    ConstraintLoop() = default;
+    // Run one outer step from the current charges Q_ against targets_.
+    void outer_step(const int iter, bool& conv_esolver);
+    void print_audit(const int iter);
+
+    ConstraintConfig cfg_;
+    std::unique_ptr<WeightGrid> wg_;
+    MuSolver mu_solver_;
+    std::vector<double> mu_;
+    std::vector<double> Q_;
+    std::vector<double> Q_ref_;
+    std::vector<double> targets_;
+    double nelec_ = 0.0;
+    LoopPhase phase_ = LoopPhase::IDLE;
+    MuStatus status_ = MuStatus::RUNNING;
+    int outer_steps_ = 0;
+    ConstraintAudit audit_;
+    std::string last_audit_line_;
+};
+
+} // namespace constraint
+
+#endif

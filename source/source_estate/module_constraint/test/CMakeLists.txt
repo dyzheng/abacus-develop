@@ -9,7 +9,6 @@ AddTest(
   LIBS parameter ${math_libs} base device planewave_serial cell_info
   SOURCES weight_grid_test.cpp
     ../weight_grid.cpp
-    ../../../source_base/module_grid/partition.cpp
     ../../../source_io/module_output/output.cpp
 )
 
@@ -19,7 +18,6 @@ AddTest(
   SOURCES constraint_observe_test.cpp
     ../constraint_observe.cpp
     ../weight_grid.cpp
-    ../../../source_base/module_grid/partition.cpp
     ../../../source_base/module_grid/radial.cpp
     ../../../source_base/module_grid/delley.cpp
     ../../../source_io/module_output/output.cpp
@@ -44,7 +42,6 @@ AddTest(
     ../constraint_inject_pw.cpp
     ../constraint_observe.cpp
     ../weight_grid.cpp
-    ../../../source_base/module_grid/partition.cpp
     ../../../source_base/module_grid/radial.cpp
     ../../../source_base/module_grid/delley.cpp
     ../../../source_io/module_output/output.cpp
@@ -56,6 +53,21 @@ AddTest(
   SOURCES constraint_accounting_test.cpp
     ../constraint_accounting.cpp
     ../weight_grid.cpp
-    ../../../source_base/module_grid/partition.cpp
+    ../../../source_io/module_output/output.cpp
+)
+
+AddTest(
+  TARGET MODULE_ESTATE_constraint_loop
+  LIBS parameter ${math_libs} base device planewave_serial cell_info
+  SOURCES constraint_loop_test.cpp
+    ../constraint_loop.cpp
+    ../constraint_accounting.cpp
+    ../constraint_io.cpp
+    ../constraint_inject_pw.cpp
+    ../constraint_observe.cpp
+    ../mu_solver.cpp
+    ../weight_grid.cpp
+    ../../../source_base/module_grid/radial.cpp
+    ../../../source_base/module_grid/delley.cpp
     ../../../source_io/module_output/output.cpp
 )

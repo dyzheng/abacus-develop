@@ -47,6 +47,10 @@ list(APPEND objects
     module_constraint/weight_grid.cpp
     module_constraint/constraint_observe.cpp
     module_constraint/mu_solver.cpp
+    module_constraint/constraint_io.cpp
+    module_constraint/constraint_inject_pw.cpp
+    module_constraint/constraint_accounting.cpp
+    module_constraint/constraint_loop.cpp
 )
 
 if(ENABLE_LCAO)

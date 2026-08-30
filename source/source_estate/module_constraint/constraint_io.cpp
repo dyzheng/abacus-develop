@@ -179,8 +179,13 @@ bool parse_target_file(const std::string& content,
         if (pos < content.size() && content[pos] == '[')
         {
             // Nested fragments: [[a, b], [c], ...].
-            while (pos < content.size() && content[pos] == '[')
+            while (true)
             {
+                skip_ws(content, pos);
+                if (pos >= content.size() || content[pos] != '[')
+                {
+                    break;
+                }
                 ++pos;
                 std::vector<int> frag;
                 skip_ws(content, pos);

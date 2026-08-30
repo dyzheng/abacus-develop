@@ -3209,3 +3209,43 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   `module_constraint/test/constraint_accounting_test.cpp`、
   `module_constraint/test/CMakeLists.txt`、
   `docs/superpowers/specs/2026-08-31-m5-constraint-accounting.md`。
+
+## 2026-08-31 (7): M8 外环编排 + PW esolver 接线（T8 完成）+ V1/V3 验证（T9/T11）
+
+- 新建 `module_constraint/constraint_loop.h/.cpp`：ConstraintLoop 单例状态机
+  （两阶段门控）：REFERENCE 相 μ=0 首个 SCF 收敛记 Q_ref、构建 target
+  （delta: Q_ref+delta；absolute: 文件值）并跑首步 secant；CONSTRAINED 相
+  每 SCF 收敛执行 M4.step，RUNNING 时强制 conv_esolver=false 续跑，
+  CONVERGED/UNREACHABLE 时正常结束；未收敛 SCF 不推进外步。
+- esolver_ks_pw.cpp 三处钩子（~40 行，全部受 `PARAM.inp.constraint` 门控）：
+  before_scf 建 M1（pw_rhod 网格 + CovalentRadius Å→Bohr）+ 守卫
+  （double/CPU/非 double_grid 否则 WARNING_QUIT）；hamilt2rho_single 注入
+  get_eff_v()+get_veff_smooth()（仿 run_deltaspin_lambda_loop 先例）；
+  iter_finish observe + on_scf_converged + cc_escon 汇入 etot；after_scf
+  终审计。
+- `fenergy` 新增 cc_escon（calculate_etot 含入；clear_all 顺带补零
+  dp_escon/cc_escon）；`base` 库补入 module_grid/partition.cpp（M0 原语
+  主二进制需要）。
+- 单测 6/6 PASS（loop，含门控/熔断/共享实例）；修 1 个设计缺陷
+  （on_scf_converged 缺 conv 门控 → 外步追混合噪声）+ 1 个解析缺陷
+  （嵌套 fragments 逗号后空白 → "unterminated atoms array"；
+  `NestedSingleElementFragments` 单测锁定）。
+- 集成冒烟 PASS：H₂O delta=+0.1 e → 参考 SCF 14 步、约束相 6 个外步
+  CONVERGED（res=3.06e-5），FINAL_ETOT=−441.9708 eV。
+- V1 PASS：全原子约束 delta=0 → total_charge=8==nelec=8，
+  O=6.2555/H=0.87227，maxdev=2.2e-16。
+- V3 PASS：±0.05/0.1/0.2/0.3 全可达无封顶（μ*≈−1.7·delta，
+  |μ*|max=0.56 Ry）；不可达靶（+5.0 e，mu_max=0.5）熔断 UNREACHABLE 附
+  Q(μ) 端点；反假收敛全程成立。T12 判决：可达域宽，开二期。
+- V2 阻塞：本环境无 Multiwfn（协议已备：out_chg cube → Multiwfn Becke
+  对拍 1e-4 e；内部由 M2 高斯基准覆盖）。
+- 文件：`module_constraint/constraint_loop.h/.cpp`、
+  `module_constraint/test/constraint_loop_test.cpp`、
+  `module_constraint/constraint_io.cpp`（解析修复）、
+  `module_constraint/test/constraint_io_test.cpp`（+1）、
+  `source_estate/CMakeLists.txt`、`source_estate/fp_energy.h/.cpp`、
+  `source_base/CMakeLists.txt`（+partition.cpp）、
+  `source/source_esolver/esolver_ks_pw.cpp`、
+  `tests/constraint_pw_h2o/`（INPUT/STRU/KPT/constraint_target.json/README）、
+  `docs/superpowers/specs/2026-08-31-m8-constraint-loop-integration.md`、
+  `docs/superpowers/specs/2026-08-31-v1-v3-validation.md`。

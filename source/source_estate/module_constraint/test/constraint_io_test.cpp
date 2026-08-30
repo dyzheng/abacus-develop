@@ -126,3 +126,22 @@ TEST(ConstraintIOTest, MalformedJson)
                                                5.0, 1e-4, 3, error),
               constraint::ConfigStatus::ERROR);
 }
+
+TEST(ConstraintIOTest, NestedSingleElementFragments)
+{
+    // Nested fragments with one atom each (whitespace after the separators
+    // must be tolerated): [[0], [1], [2]].
+    const std::string json =
+        R"({"targets": [0.1, -0.1, 0.2], "atoms": [[0], [1], [2]]})";
+    constraint::ConstraintConfig cfg;
+    std::string error;
+    EXPECT_EQ(constraint::configure_constraint(cfg, true, "charge", "becke",
+                                               "delta", json, 5.0, 1e-4, 3,
+                                               error),
+              constraint::ConfigStatus::OK)
+        << error;
+    ASSERT_EQ(cfg.targets.size(), 3u);
+    EXPECT_EQ(cfg.targets[0].atoms, std::vector<int>({0}));
+    EXPECT_EQ(cfg.targets[1].atoms, std::vector<int>({1}));
+    EXPECT_EQ(cfg.targets[2].atoms, std::vector<int>({2}));
+}

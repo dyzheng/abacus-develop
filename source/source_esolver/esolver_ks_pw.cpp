@@ -33,6 +33,10 @@
 #include "source_pw/module_pwdft/dftu_pw.h" // mohan add 20250309
 #include "source_pw/module_pwdft/deltaspin_pw.h" // mohan add 20250309
 #include "source_pw/module_pwdft/deltap_pw.h"
+#include "source_base/constants.h"
+#include "source_base/element_covalent_radius.h"
+#include "source_base/tool_quit.h"
+#include "source_estate/module_constraint/constraint_loop.h"
 
 #include "source_hamilt/module_xc/exx_info.h" // use GlobalC::exx_info
 
@@ -188,6 +192,56 @@ void ESolver_KS_PW<T, Device>::before_scf(UnitCell& ucell, const int istep)
     //! Setup EXX helper for Hamiltonian and psi
     exx_helper->before_scf(this->p_hamilt, this->stp.template get_psi_t<T, Device>(), PARAM.inp);
 
+    // Real-space weight constraint (phase 1, PW + Becke): configure from
+    // INPUT, build the shared weight field (M1) and arm the outer loop.
+    if (PARAM.inp.constraint)
+    {
+        // Phase-1 guards: only the CPU / double / non-double-grid PW path is
+        // wired; anything else refuses to run rather than silently producing
+        // a wrong constraint potential (the operator reads veff_smooth whose
+        // float/GPU buffers are not refreshed by an in-place injection).
+        if (PARAM.globalv.double_grid || PARAM.inp.precision == "single"
+            || PARAM.inp.device == "gpu")
+        {
+            ModuleBase::WARNING_QUIT("ESolver_KS_PW::before_scf",
+                "constraint framework phase 1 requires double precision on CPU without double_grid");
+        }
+        std::string content, error;
+        if (!PARAM.inp.constraint_target_file.empty()
+            && !constraint::read_target_file(PARAM.inp.constraint_target_file,
+                                             content, error))
+        {
+            ModuleBase::WARNING_QUIT("ESolver_KS_PW::before_scf", error);
+        }
+        constraint::ConstraintConfig cfg;
+        const constraint::ConfigStatus st = constraint::configure_constraint(
+            cfg, PARAM.inp.constraint, PARAM.inp.constraint_type,
+            PARAM.inp.constraint_weight_type, PARAM.inp.constraint_target_mode,
+            content, PARAM.inp.constraint_mu_max, PARAM.inp.constraint_thr,
+            ucell.nat, error);
+        if (st == constraint::ConfigStatus::ERROR)
+        {
+            ModuleBase::WARNING_QUIT("ESolver_KS_PW::before_scf", error);
+        }
+        // Partition radii from the covalent-radius table (Angstrom -> Bohr).
+        std::vector<double> radii(ucell.nat, 0.0);
+        int iat = 0;
+        for (int it = 0; it < ucell.ntype; ++it)
+        {
+            for (int ia = 0; ia < ucell.atoms[it].na; ++ia)
+            {
+                const auto it_rad
+                    = ModuleBase::CovalentRadius.find(ucell.atoms[it].label);
+                radii[iat] = (it_rad != ModuleBase::CovalentRadius.end())
+                                 ? it_rad->second / ModuleBase::BOHR_TO_A
+                                 : 1.0 / ModuleBase::BOHR_TO_A;
+                ++iat;
+            }
+        }
+        constraint::ConstraintLoop::instance().init(
+            ucell, this->pw_rhod, cfg, radii, PARAM.inp.nelec);
+    }
+
     ModuleBase::timer::end("ESolver_KS_PW", "before_scf");
 }
 
@@ -221,6 +275,16 @@ void ESolver_KS_PW<T, Device>::hamilt2rho_single(UnitCell& ucell, const int iste
     hsolver::setup_diago_params_pw<T, Device>(istep, iter, ethr, PARAM.inp);
 
     bool skip_charge = PARAM.inp.calculation == "nscf" ? true : false;
+
+    // Real-space weight constraint (phase 1): inject the current mu-weighted
+    // potential into v_eff and veff_smooth before the diagonalization.  In
+    // the reference phase mu is zero, so the first SCF stays unconstrained.
+    if (PARAM.inp.constraint)
+    {
+        constraint::ConstraintLoop::instance().inject_potential(
+            iter, this->pelec->pot->get_eff_v(),
+            this->pelec->pot->get_veff_smooth());
+    }
 
     // run the inner lambda loop to contrain atomic moments with the DeltaSpin method
     bool skip_solve = pw::run_deltaspin_lambda_loop(iter - 1, this->drho, PARAM.inp);
@@ -306,6 +370,26 @@ void ESolver_KS_PW<T, Device>::iter_finish(UnitCell& ucell, const int istep, int
     if (PARAM.inp.deltap_switch && PARAM.inp.deltap_corr)
         this->pelec->f_en.dp_escon = pw_deltap::get_deltap_pw_escon();
 
+    // Real-space weight constraint (phase 1): read the constraint charges
+    // from the mixed density and run the outer-loop bookkeeping (reference
+    // recording / M4 secant step / audit line).  The hook may override
+    // conv_esolver to keep the SCF running until the constraint converges or
+    // fuses (two-stage gating, DeltaP lineage).
+    if (PARAM.inp.constraint)
+    {
+        constraint::ConstraintLoop& cloop
+            = constraint::ConstraintLoop::instance();
+        cloop.observe(iter, this->chr.rho, PARAM.inp.nspin);
+        cloop.on_scf_converged(iter, conv_esolver);
+        // Refresh the total energy with the constraint correction
+        // (cc_escon), mirroring the dp_escon path.
+        this->pelec->f_en.cc_escon = cloop.last_audit().e_con;
+        if (cloop.enabled())
+        {
+            this->pelec->f_en.calculate_etot();
+        }
+    }
+
     // the output quantities
     ModuleIO::ctrl_iter_pw(istep, iter, conv_esolver, this->stp.psi_cpu, 
               this->kv, this->pw_wfc, PARAM.inp);
@@ -329,6 +413,12 @@ void ESolver_KS_PW<T, Device>::after_scf(UnitCell& ucell, const int istep, const
     ModuleIO::ctrl_scf_pw<T, Device>(istep, ucell, this->pelec, this->chr, this->kv, this->pw_wfc,
               this->pw_rho, this->pw_rhod, this->pw_big, this->stp,
               this->Pgrid, PARAM.inp);
+
+    // Real-space weight constraint (phase 1): final audit report.
+    if (PARAM.inp.constraint)
+    {
+        constraint::ConstraintLoop::instance().final_report();
+    }
 
     ModuleBase::timer::end("ESolver_KS_PW", "after_scf");
 }

@@ -47,6 +47,7 @@ struct fenergy
 
     double escon = 0.0; ///< spin constraint energy
     double dp_escon = 0.0; ///< DeltaP constraint energy correction: -Σλ·γ
+    double cc_escon = 0.0; ///< real-space weight constraint energy: Σμ(Q-t)
 
     double ekinetic = 0.0;   /// kinetic energy, used in OFDFT
     double e_local_pp = 0.0; /// ion-electron interaction energy contributed by local pp, used in OFDFT
