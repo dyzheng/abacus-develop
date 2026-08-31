@@ -3587,3 +3587,23 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   `docs/superpowers/specs/2026-08-31-m6-force-pw-wiring.md`（新）。
 - Next：Task 2.5.4 LCAO 力接线（FORCE.h/.cpp，调同一 constraint_force 核，
   ρ 走 pw_rhod——"双基组同一核"验证点）。
+
+## 2026-08-31 (16): Task 2.5.4——LCAO 力接线（FORCE_STRESS 调同一核）
+
+- 实现：`FORCE_STRESS.cpp`（Force_Stress_LCAO::getForceStress）新增
+  forcecon 分量——`ConstraintLoop::instance().compute_force(
+  pelec->charge->rho, nspin, forcecon)`（与 PW 完全同一代码路径，仅密度
+  指针不同；NCPP 下 pw_rhod≡pw_rho，chr.rho 与共享权重场同网格）；总力
+  累加 `if (PARAM.inp.constraint) fcs += forcecon`（H_HK 块后）；test_force
+  下打印 `#CONSTRAINT  FORCE (Ry/Bohr)#`（与 PW 块同名同单位）。零新
+  依赖；无第二份力代码。
+- 集成冒烟（212_NAO_constraint_h2o，relax_nmax 1 + test_force 1，
+  mpirun -np 2）：μ≠0 相 6 外步 CONVERGED、μ*=−0.2193、Q_ref=6.407956559
+  （与二期评审实测吻合）、力块非零（O z=+0.1090、H1/H2 x=∓0.1072
+  z=+0.0830 Ry/Bohr）；μ=0 参考相力块精确全零。驻点守卫未触发。
+- 回归：主库 abacus_basic_para 重链无警告；212_NAO 冒烟 EXIT=0；既有
+  constraint ctest 12/12（本 Task 未触碰核与环，仅加 LCAO 编排钩子）。
+- 文件：`source/source_lcao/FORCE_STRESS.cpp`、
+  `docs/superpowers/specs/2026-08-31-m6-force-lcao-wiring.md`（新）。
+- Next：2.5.5 出口判据汇总；Task 2.6 三判决（PW≡LCAO 逐位、力 FD
+  stationary4、力矩 FD；FD 网格前提写死 ecutwfc=100/ecutrho≥400）。

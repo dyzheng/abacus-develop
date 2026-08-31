@@ -11,6 +11,7 @@
 #include "source_estate/module_pot/H_TDDFT_pw.h"       // Taoni add 2025-02-20
 #include "source_estate/module_pot/efield.h"           // liuyu add 2022-05-18
 #include "source_estate/module_pot/gatefield.h"        // liuyu add 2022-09-13
+#include "source_estate/module_constraint/constraint_loop.h"
 #include "source_hamilt/module_surchem/surchem.h" //sunml add 2022-08-10
 #include "source_hamilt/module_vdw/vdw.h"
 #include "source_io/module_parameter/parameter.h"
@@ -453,6 +454,21 @@ void Force_Stress_LCAO<T>::getForceStress(UnitCell& ucell,
         }
     }
 
+    // Real-space weight constraint force (M6): the SAME grid kernel the PW
+    // path calls (constraint_deriv); only the density pointer differs
+    // (LCAO reads the converged chr.rho on the dense pw_rhod grid, the
+    // same grid the shared weight field is built on).  The multipliers and
+    // the weight field come from the ConstraintLoop singleton; the
+    // stationary-point guard (unconverged outer loop) is inside
+    // compute_force.
+    ModuleBase::matrix forcecon;
+    if (PARAM.inp.constraint && isforce)
+    {
+        forcecon.create(nat, 3);
+        constraint::ConstraintLoop::instance().compute_force(
+            pelec->charge->rho, PARAM.inp.nspin, forcecon);
+    }
+
     // NOTE: finish_ftable is no longer needed as we don't use ForceStressArrays for overlap/kinetic
     // if (!PARAM.globalv.gamma_only_local)
     // {
@@ -533,6 +549,10 @@ void Force_Stress_LCAO<T>::getForceStress(UnitCell& ucell,
                     {
                         fcs(iat, i) += f_hk[iat * 3 + i];
                     }
+                }
+                if (PARAM.inp.constraint)
+                {
+                    fcs(iat, i) += forcecon(iat, i);
                 }
 #ifdef __EXX
                 // Force contribution from exx
@@ -676,6 +696,11 @@ void Force_Stress_LCAO<T>::getForceStress(UnitCell& ucell,
             if (PARAM.inp.sc_mag_switch)
             {
                 ModuleIO::print_force(GlobalV::ofs_running, ucell, "DeltaSpin  FORCE", force_dspin, false);
+            }
+            if (PARAM.inp.constraint)
+            {
+                ModuleIO::print_force(GlobalV::ofs_running, ucell,
+                                      "CONSTRAINT  FORCE (Ry/Bohr)", forcecon);
             }
 #ifdef __MLALGO
             // caoyu add 2021-06-03

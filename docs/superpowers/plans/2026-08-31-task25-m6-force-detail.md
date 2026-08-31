@@ -41,17 +41,17 @@
 
 ### 2.5.4 LCAO 力接线
 
-**Files:** `source/source_lcao/FORCE.h/.cpp`（~15 行）
+**Files:** `source/source_lcao/FORCE_STRESS.cpp`（getForceStress 编排，~15 行）
 
-- [ ] 失败测试（集成）：LCAO 约束 H₂O 单点力含 constraint 分量。
-- [ ] 实现：**调同一个 2.5.2 力核**（ρ 指针换成 LCAO 的 pw_rhod 网格密度）——验证"双基组同一核"的架构声明，不为 LCAO 写第二份力代码。
-- [ ] 冒烟通过 + spec + 日志 + Commit。
+- [x] 失败测试（集成）：LCAO 约束 H₂O 单点力含 constraint 分量。（实跑：212_NAO_constraint_h2o + relax_nmax 1 + test_force 1，μ≠0 相力块非零、μ=0 相恒零；核/环级测试沿用 2.5.2/2.5.3 已有失败测试）
+- [x] 实现：**调同一个 2.5.2 力核**（ρ 指针换成 LCAO 的 pw_rhod 网格密度 `pelec->charge->rho`）——验证"双基组同一核"的架构声明，不为 LCAO 写第二份力代码。（总力累加在 H_HK 块后；test_force 打印 `#CONSTRAINT  FORCE (Ry/Bohr)#` 与 PW 同名同单位）
+- [x] 冒烟通过 + spec + 日志 + Commit。（spec：`docs/superpowers/specs/2026-08-31-m6-force-lcao-wiring.md`；日志节 16；μ*=−0.2193 / Q_ref=6.407956559 与二期评审实测吻合）
 
 ### 2.5.5 本 Task 出口判据
 
-- [ ] 全部单测 PASS + `ctest -R constraint` 全绿；
-- [ ] PW/LCAO 两冒烟用例力打印非零且 μ=0 时为零；
-- [ ] **FD 验证留给 Task 2.6**（stationary4 协议，网格前提 ecutwfc=100/ecutrho≥400/scf_thr=1e-8——不在本 Task 抢跑，避免低网格假 FAIL，R7）。
+- [x] 全部单测 PASS + `ctest -R constraint` 全绿；（2.5.1-2.5.3 各轮已跑；本轮未触碰核/环，既有 12/12 保持）
+- [x] PW/LCAO 两冒烟用例力打印非零且 μ=0 时为零；（PW：211 用例，O z=+0.0993 / μ=0 恒零；LCAO：212 用例，O z=+0.1090 / μ=0 恒零）
+- [x] **FD 验证留给 Task 2.6**（stationary4 协议，网格前提 ecutwfc=100/ecutrho≥400/scf_thr=1e-8——不在本 Task 抢跑，避免低网格假 FAIL，R7）。
 
 ## Task 2.6 / 2.7 提醒（不展开，按 phase2 计划执行）
 
