@@ -3533,3 +3533,29 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - Next：Task 2.5.2 M6 力核 `constraint_deriv`（F_J=−Σμ∫ρ∂w/∂R_J，
   charge/spin 双通道 + reduce_pool 归约；合成密度解析对拍 / 牛顿第三定律 /
   μ 线性三失败测试）。
+
+## 2026-08-31 (14): Task 2.5.2——M6 力核 constraint_deriv
+
+- 实现：`constraint_deriv.h/.cpp` 新增 `constraint_force(wg, rho, nspin,
+  channel, mu, force)`：F_J^d = −Σ_α μ_α Σ_g ρ(g)·∂w_α/∂R_J^d·ΔV；
+  通道折叠（spin=m / charge nspin1+2 三分支）、μ 零乘子短路、reduce_pool
+  池归约 + 累加语义；守卫（导数网格未构建 / spin 需 nspin=2 / μ 长度 /
+  force 形状）WARNING_QUIT。
+- 失败测试先行：`ForceOnSyntheticDensity`（合成高斯密度 vs M0 核固定点求积
+  1e-8 + Q 求积 5 点差分 1e-8，实测 2.2e-10/2.4e-10）、`NewtonThirdLaw`
+  （刚性平移恒等式，observer 平移 FD 参考，1e-9，实测 7e-13）、
+  `ForceLinearInMu`（1e-12 + μ=0 恒零）、`SpinChannelReadsMagnetization`
+  （m 通道读数 1e-12）。
+- 关键认知（如实登记）：
+  1. 参考求积必须复刻 min-image 周期约定——直接距离在越胞/跨 tie-break 平面
+     处是错误分支，导致 H 分量导数积分符号翻转（三路参考对拍暴露）。
+  2. 多中心一中心式求积每中心覆盖全空间，叠加 nat 次——力参考改固定单中心。
+  3. 计划"Σ_J F_J ≡ 0"仅对常密度成立，且常密度网格和受 tie-break 尖点
+     O(Δx) 污染；改断言精确恒等式 Σ_J F_J = −Σ_α μ_α dQ_α/dt，参考 =
+     网格 observer 刚性平移 5 点 FD（同网格、无导数核，7e-13 一致）。
+     连续求积 ∫w_α∇ρ 对尖 H 权重不收敛（nrad 140→300 仍漂 1.8e-6）。
+- 回归：constraint ctest 12/12（含新目标 MODULE_ESTATE_constraint_deriv）、
+  partition 4/4 全绿。
+- 文件：`constraint_deriv.h/.cpp`（新）、`test/constraint_deriv_test.cpp`（新）、
+  `test/CMakeLists.txt`（+1 目标）、`docs/superpowers/specs/2026-08-31-m6-force-kernel.md`（新）。
+- Next：Task 2.5.3 PW 力接线（Forces::cal_force + 驻点 WARNING 守卫）。

@@ -24,20 +24,11 @@
 
 **Files:** Create `constraint_deriv.h/.cpp`、`test/constraint_deriv_test.cpp`
 
-- [ ] 失败测试 `ForceOnSyntheticDensity`：双原子 + 高斯密度（解析可积），F_J 网格积分 vs 解析期望 <1e-8 Ha/Bohr。
-- [ ] 失败测试 `NewtonThirdLaw`：**Σ_J F_J ≡ 0**（1e-10）——对"权重随原子刚性移动"推导的全局检验，能提前暴露导数链符号错误（评审提醒项）。
-- [ ] 失败测试 `ForceLinearInMu`：F(μ₁+μ₂)=F(μ₁)+F(μ₂)、μ=0 → F≡0（驻点外无条件——μ=0 即无约束力）。
-- [ ] 实现：
-
-```cpp
-// F_J = -Σ_α μ_α · Σ_g ρ(g)·∂w_α(g)/∂R_J · ΔV；网格循环 + reduce_pool 归约
-// 分支注释纪律：nspin 通道（charge 用 ρ 总密度；spin 用 m=ρ↑−ρ↓）前置注释
-void constraint_force(const WeightGrid& wg, const double* rho_up, const double* rho_dn,
-                      int nspin, Channel ch, const std::vector<double>& mu,
-                      double dv, ModuleBase::matrix& force /* 累加语义 */);
-```
-
-- [ ] 单测通过 + spec + 日志 + Commit。
+- [x] 失败测试 `ForceOnSyntheticDensity`：双原子 + 高斯密度（解析可积），F_J 网格积分 vs 解析期望 <1e-8 Ha/Bohr。
+- [x] 失败测试 `NewtonThirdLaw`：**Σ_J F_J ≡ 0**（1e-10）——对"权重随原子刚性移动"推导的全局检验，能提前暴露导数链符号错误（评审提醒项）。注：≡0 仅对常密度成立且常密度网格和被 tie-break 尖点污染（O(Δx)），改为精确恒等式 Σ_J F_J = −Σ_α μ_α dQ_α/dt（observer 平移 FD 参考，1e-9，实测 7e-13）。
+- [x] 失败测试 `ForceLinearInMu`：F(μ₁+μ₂)=F(μ₁)+F(μ₂)、μ=0 → F≡0（驻点外无条件——μ=0 即无约束力）。
+- [x] 实现：`constraint_force`（通道折叠 + reduce_pool 归约 + 累加语义；通道/守卫分支注释纪律）。
+- [x] 单测通过 + spec + 日志 + Commit。
 
 ### 2.5.3 PW 力接线
 
