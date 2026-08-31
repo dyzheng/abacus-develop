@@ -3607,3 +3607,49 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   `docs/superpowers/specs/2026-08-31-m6-force-lcao-wiring.md`（新）。
 - Next：2.5.5 出口判据汇总；Task 2.6 三判决（PW≡LCAO 逐位、力 FD
   stationary4、力矩 FD；FD 网格前提写死 ecutwfc=100/ecutrho≥400）。
+
+## 2026-08-31 (8): 进展总结文档（无代码改动）
+
+- 产出 `2026-08-31-constraint-framework-progress-summary.md`：截至 HEAD
+  3351ff6d3 的全景总结（18 commit），重点为测试总览——12 个 ctest 目标
+  全绿（当前 HEAD 实测复核 12/12）、3 个集成用例对拍偏差
+  （4.1e-9/9.5e-10/2.4e-11 eV）、判决性验证 V1/V2a/V2b/V3 全表、三道
+  sabotage 验证、MPI 一致性、评审链 4 轮问题闭环表。
+- 边界登记：力未过 stationary4 FD（2.6 前不可生产用）；M3b 悬置资产命运
+  留 2.6；V2c' 可选；037 回归与 sabotage 重做属低风险未复核项。
+- 备注：Task 2.5 全部四个子步（含 2.5.4 LCAO 力接线 52aa1e436）已完成，
+  该 Task 整体尚未经过评审——列入下轮评审议程。
+
+## 2026-08-31 (9): Task 2.5（M6 力核）实证 Review + 总结文档并入（无代码改动）
+
+- 亲自复跑核实：PW 211（test_force=1）CONSTRAINT FORCE 块 O z=+0.09929、
+  H x=∓0.0963、z=+0.0722 Ry/Bohr 与 spec 逐项吻合；**总力平移不变性**
+  ΣF≈4e-5 eV/Å≈0（含约束块；约束块自身不求和为零属预期——KS 块在约束
+  密度处补偿）；μ=0（delta=0 变体）约束块精确全零（零乘子短路实证）；
+  LCAO 212_NAO 力块 O z=+0.10902 与 spec 吻合，FORCE_STRESS.cpp:468 与 PW
+  同调一个 constraint_force 核（无双份力代码）。
+- 守卫实证：compute_force 懒建导数网格 + 驻点守卫（外环未收敛 WARNING
+  "residual O(|Q−t|)"）；核对未建导数网格的直调 WARNING_QUIT（开发期
+  "修复 1 处"声称的核守卫真实）。ctest 12/12 在 HEAD 3351ff6d3 复核全绿。
+- 裁定：**通过**。边界不变——本轮验证管线正确性，力的物理精度（FD 对拍）
+  属 Task 2.6，此前力不可用于生产。评审结果已并入总结文档 §3.7/§3.8。
+- 文件：`2026-08-31-constraint-framework-progress-summary.md`（§3.7 表 +
+  §3.8 实录）。
+
+## 2026-08-31 (17): M3b 命运判决——升格运行时审计（Tr[W^α·DM] vs ∫w_αρ）
+
+- 判决：升格（不删除）——W^α HContainer 路径成为生产运行时审计线。
+- 实现：`ConstraintInjectLCAO::build` 增 paraV 参数（MPI 分布目标，修复
+  transferSerials2Parallels 空 paraV 段错误——串行 hR.add 路径掩盖此缺陷）；
+  `trace`（nnr+IJR 双重布局校验的平面点积）+ `audit_weighted_trace`
+  （建 W → Tr[W·DM]（reduce_pool 归约）→ 对拍 q_grid，守卫返回 −1）。
+  接线在 `ESolver_KS_LCAO::iter_finish`（外环 DONE 时每几何一次，标志
+  before_scf 重置；charge→总 DM / spin→磁化 DM）。
+- 实测：单测 5/5、ctest 11/11；212_NAO 串行与 -np 2 均出审计线
+  `max |Tr[W.DM] − ∫wρ| = 1.51e-08 e`（=SCF 残差量级，矩阵/网格两路径
+  生产逐位吻合）。
+- 文件：`constraint_inject_lcao.h/.cpp`、`constraint_loop.h`（weight_grid/
+  done/type 访问器）、`esolver_ks_lcao.h/.cpp`（标志+接线）、
+  `test/constraint_inject_lcao_test.cpp`（+1 测试）、`source_estate/
+  CMakeLists.txt`（主库 +constraint_inject_lcao.cpp）、spec（新）。
+- Next：Task 2.6 三判决（PW≡LCAO 逐位 / 力 FD stationary4 / 力矩 FD）。

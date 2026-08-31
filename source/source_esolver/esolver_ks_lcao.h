@@ -110,6 +110,11 @@ class ESolver_KS_LCAO : public ESolver_KS
     // because it's hard to seperate force and stress calculation in LCAO.
     ModuleBase::matrix scs;
     bool have_force = false;
+
+    // M3b runtime audit (Task 2.6): run the Tr[W^alpha . DM] vs int w rho
+    // cross-check exactly once per geometry, when the constraint outer loop
+    // reaches DONE.  Reset in before_scf alongside the ConstraintLoop init.
+    bool constraint_audit_done_ = false;
     
     GintPrecisionController gint_precision_controller_;
 

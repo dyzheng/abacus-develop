@@ -32,6 +32,7 @@
 #include "source_lcao/rho_tau_lcao.h" // mohan add 20251024
 #include "source_lcao/LCAO_set.h" // mohan add 20251111
 #include "source_psi/setup_psi.h" // use Setup_Psi for deallocate_psi
+#include "source_estate/module_constraint/constraint_inject_lcao.h"
 #include "source_estate/module_constraint/constraint_loop.h"
 
 namespace ModuleESolver
@@ -270,6 +271,7 @@ void ESolver_KS_LCAO<TK, TR>::before_scf(UnitCell& ucell, const int istep)
         }
         constraint::ConstraintLoop::instance().init(
             ucell, this->pw_rhod, cfg, radii, PARAM.inp.nelec);
+        constraint_audit_done_ = false;
     }
 
     ModuleBase::timer::end("ESolver_KS_LCAO", "before_scf");
@@ -933,6 +935,53 @@ void ESolver_KS_LCAO<TK, TR>::iter_finish(UnitCell& ucell, const int istep, int&
         if (cloop.enabled())
         {
             this->pelec->f_en.calculate_etot();
+        }
+        // M3b runtime audit (Task 2.6): once per geometry, when the outer
+        // loop reaches its final state, cross-check the matrix-level
+        // observable Tr[W^alpha . DM] (W built by the Gint vlocal kernel)
+        // against the grid observable int w_alpha rho dr that the loop
+        // reports.  The two paths share the same weight field and grid by
+        // construction, so any non-negligible deviation is a wiring bug.
+        if (!constraint_audit_done_ && cloop.enabled() && cloop.done())
+        {
+            constraint_audit_done_ = true;
+            std::vector<std::vector<double>> cw;
+            const constraint::WeightGrid& wg = cloop.weight_grid();
+            cw.reserve(wg.nconstraint());
+            for (int a = 0; a < wg.nconstraint(); ++a)
+            {
+                cw.push_back(wg.constraint_weight(a));
+            }
+            // Channel -> DM mode: charge reads the total density matrix,
+            // spin reads the magnetization density matrix (m = up - dn),
+            // mirroring the observable the loop observes.
+            const bool spin = (cloop.type() == "spin");
+            if (PARAM.inp.nspin == 2)
+            {
+                this->dmat.dm->switch_dmr(spin ? 2 : 1);
+            }
+            const hamilt::HContainer<double>* dmr
+                = this->dmat.dm->get_DMR_pointer(1);
+            const double dev = constraint::ConstraintInjectLCAO::
+                audit_weighted_trace(cw, this->gint_info_.get(), dmr,
+                                     cloop.charges(), &this->pv);
+            if (PARAM.inp.nspin == 2)
+            {
+                this->dmat.dm->switch_dmr(0);
+            }
+            if (dev < 0.0)
+            {
+                GlobalV::ofs_running
+                    << "[constraint] M3b runtime audit: SKIPPED "
+                       "(W/DM layout or count mismatch)" << std::endl;
+            }
+            else
+            {
+                GlobalV::ofs_running
+                    << "[constraint] M3b runtime audit: max |Tr[W.DM] - "
+                       "int w rho| = " << std::setprecision(12) << dev
+                    << " e" << std::endl;
+            }
         }
     }
     // Route A+ fixed-geometry outer loop (scf + deltap_outer_nmax > 0): the

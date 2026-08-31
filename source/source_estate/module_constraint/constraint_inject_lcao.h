@@ -36,9 +36,15 @@ public:
     // the active GintInfo of the LCAO esolver (it is also registered as the
     // shared ModuleGint::Gint info).  Returns per-constraint HContainers
     // with the same layout as the LCAO Hamiltonian (gamma: real HContainer).
+    // paraV: when non-null (MPI runs), the returned HContainers carry the
+    // Parallel_Orbitals distribution so the Gint kernel's transfer
+    // (transferSerials2Parallels) can scatter the serial grid result into
+    // the per-rank layout — the same requirement the production Hamiltonian
+    // HR satisfies.  Pass the esolver's Parallel_Orbitals.
     static std::vector<hamilt::HContainer<double>> build(
         const std::vector<std::vector<double>>& cw,
-        ModuleGint::GintInfo* gint_info);
+        ModuleGint::GintInfo* gint_info,
+        const Parallel_Orbitals* paraV = nullptr);
 
     // H += sum_alpha mu_alpha * W^alpha in place.  W must have been built by
     // build() with the same gint_info (identical HContainer layout).  A zero
@@ -47,6 +53,32 @@ public:
         const std::vector<double>& mu,
         const std::vector<hamilt::HContainer<double>>& W,
         hamilt::HContainer<double>* H);
+
+    // Real-space trace of the product of two same-layout HContainers, in the
+    // ABACUS energy convention: each (iat1, iat2, R) block of A is paired
+    // with the corresponding block of B and the flat products are summed
+    // (the density matrix is stored with exactly the operator's layout).
+    // Returns false and leaves trace untouched when the layouts are not
+    // bit-identical (nnr and ijr info mismatch), so a mis-wired caller can
+    // never silently read a garbage trace.
+    static bool trace(const hamilt::HContainer<double>& A,
+                      const hamilt::HContainer<double>& B,
+                      double& trace_out);
+
+    // M3b runtime audit (Task 2.6 fate decision: promote to production):
+    // build W^alpha from the weight fields cw via the Gint vlocal kernel and
+    // compare the matrix-level observable Tr[W^alpha . DM] with the grid
+    // observable int w_alpha rho dr supplied in q_grid (the constraint
+    // loop's last observed charges).  Returns the maximum absolute deviation
+    // over alpha, or -1.0 when the audit cannot run (null DM, count
+    // mismatch, or layout incompatibility — the caller should then skip the
+    // check rather than abort).
+    static double audit_weighted_trace(
+        const std::vector<std::vector<double>>& cw,
+        ModuleGint::GintInfo* gint_info,
+        const hamilt::HContainer<double>* dmr,
+        const std::vector<double>& q_grid,
+        const Parallel_Orbitals* paraV = nullptr);
 };
 
 } // namespace constraint

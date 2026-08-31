@@ -96,6 +96,7 @@ class ConstraintLoop
     void reset();
 
     bool enabled() const { return cfg_.enabled && phase_ != LoopPhase::IDLE; }
+    const std::string& type() const { return cfg_.type; }
     LoopPhase phase() const { return phase_; }
     MuStatus status() const { return status_; }
     int outer_steps() const { return outer_steps_; }
@@ -103,6 +104,12 @@ class ConstraintLoop
     const std::vector<double>& mu() const { return mu_; }
     const std::vector<double>& targets() const { return targets_; }
     const std::vector<double>& charges() const { return Q_; }
+    // The shared weight field (M3b runtime audit / force kernel inputs).
+    // Valid while enabled(): the grid is built in init().
+    const WeightGrid& weight_grid() const { return *wg_; }
+    // True once the outer loop reached CONVERGED or UNREACHABLE (the final
+    // audited state; the M3b runtime audit runs once at this point).
+    bool done() const { return phase_ == LoopPhase::DONE; }
     const ConstraintAudit& last_audit() const { return audit_; }
     const std::string& last_audit_line() const { return last_audit_line_; }
 

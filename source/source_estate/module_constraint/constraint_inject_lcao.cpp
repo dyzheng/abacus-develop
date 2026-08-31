@@ -1,5 +1,8 @@
 #include "constraint_inject_lcao.h"
 
+#include <algorithm>
+
+#include "source_base/parallel_reduce.h"
 #include "source_lcao/module_gint/gint_interface.h"
 
 namespace constraint
@@ -7,7 +10,8 @@ namespace constraint
 
 std::vector<hamilt::HContainer<double>> ConstraintInjectLCAO::build(
     const std::vector<std::vector<double>>& cw,
-    ModuleGint::GintInfo* gint_info)
+    ModuleGint::GintInfo* gint_info,
+    const Parallel_Orbitals* paraV)
 {
     // The vlocal kernel reads the shared GintInfo; make sure it points at the
     // esolver's active instance (normally already set by the LCAO esolver).
@@ -17,7 +21,22 @@ std::vector<hamilt::HContainer<double>> ConstraintInjectLCAO::build(
     W.reserve(cw.size());
     for (size_t alpha = 0; alpha < cw.size(); ++alpha)
     {
-        W.push_back(gint_info->get_hr<double>());
+        // Branch A: MPI — the Gint kernel transfers its serial grid result
+        // into the target via transferSerials2Parallels, which requires the
+        // target to carry the Parallel_Orbitals distribution (exactly like
+        // the production Hamiltonian HR).  Build the target from the
+        // shared GintInfo IJR structure plus the esolver's distribution.
+        if (paraV != nullptr)
+        {
+            W.push_back(hamilt::HContainer<double>(
+                paraV, nullptr, &gint_info->get_ijr_info()));
+        }
+        else
+        {
+            // Branch B: serial — a plain nat-layout container suffices (the
+            // kernel's single-rank add path needs no distribution).
+            W.push_back(gint_info->get_hr<double>());
+        }
         ModuleGint::cal_gint_vl(cw[alpha].data(), &W.back());
     }
     return W;
@@ -47,6 +66,71 @@ void ConstraintInjectLCAO::add_weighted(
             h[i] += mu[alpha] * w[i];
         }
     }
+}
+
+bool ConstraintInjectLCAO::trace(const hamilt::HContainer<double>& A,
+                                  const hamilt::HContainer<double>& B,
+                                  double& trace_out)
+{
+    // Layout guard: a flat pairing is only meaningful on bit-identical
+    // (pair, R, block) structures.  Compare both the total element count and
+    // the full IJR structure so a mismatched caller fails loudly instead of
+    // silently pairing blocks that do not correspond.
+    if (A.get_nnr() != B.get_nnr())
+    {
+        return false;
+    }
+    const std::vector<int> ijr_a = A.get_ijr_info();
+    const std::vector<int> ijr_b = B.get_ijr_info();
+    if (ijr_a != ijr_b)
+    {
+        return false;
+    }
+    const double* a = A.get_wrapper();
+    const double* b = B.get_wrapper();
+    double s = 0.0;
+    for (size_t i = 0; i < A.get_nnr(); ++i)
+    {
+        s += a[i] * b[i];
+    }
+    trace_out = s;
+    return true;
+}
+
+double ConstraintInjectLCAO::audit_weighted_trace(
+    const std::vector<std::vector<double>>& cw,
+    ModuleGint::GintInfo* gint_info,
+    const hamilt::HContainer<double>* dmr,
+    const std::vector<double>& q_grid,
+    const Parallel_Orbitals* paraV)
+{
+    if (dmr == nullptr)
+    {
+        return -1.0;
+    }
+    const std::vector<hamilt::HContainer<double>> W = build(cw, gint_info, paraV);
+    if (W.size() != q_grid.size())
+    {
+        return -1.0;
+    }
+    double max_dev = 0.0;
+    for (size_t alpha = 0; alpha < W.size(); ++alpha)
+    {
+        double tr = 0.0;
+        if (!trace(W[alpha], *dmr, tr))
+        {
+            return -1.0;
+        }
+        // The DM (and W) are distributed over the pool: each rank holds the
+        // blocks of its local orbital rows, so the local flat trace is a
+        // partial sum.  Reduce over the pool to obtain the full trace, the
+        // same quantity the grid observable (q_grid) is reduced to.
+#ifdef __MPI
+        Parallel_Reduce::reduce_pool(tr);
+#endif
+        max_dev = std::max(max_dev, std::abs(tr - q_grid[alpha]));
+    }
+    return max_dev;
 }
 
 } // namespace constraint

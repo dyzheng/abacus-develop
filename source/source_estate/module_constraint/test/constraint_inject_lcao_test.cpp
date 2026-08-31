@@ -412,3 +412,48 @@ TEST_F(ConstraintInjectLCAOTest, ZeroMuIsNoOp)
         EXPECT_DOUBLE_EQ(h[i], mu[1] * w1[i]);
     }
 }
+
+// trace: the flat product over identical-layout HContainers (the ABACUS
+// energy convention) equals the manual elementwise sum; the audit wrapper
+// reproduces the grid charge exactly when fed the trace as the reference.
+TEST_F(ConstraintInjectLCAOTest, TraceAndAuditMatchFlatProduct)
+{
+    const std::vector<std::vector<double>> cw = {w1_};
+    const auto W = constraint::ConstraintInjectLCAO::build(cw, gint_info_);
+    ASSERT_EQ(W.size(), 1);
+    const size_t nnr = W[0].get_nnr();
+
+    // DM in the identical layout with a known value pattern.
+    hamilt::HContainer<double> DM = gint_info_->get_hr<double>();
+    ASSERT_EQ(DM.get_nnr(), nnr);
+    double* dm = DM.get_wrapper();
+    for (size_t i = 0; i < nnr; ++i)
+    {
+        dm[i] = (i % 3 == 0) ? 0.5 : -0.25;
+    }
+
+    double tr = -1.0;
+    ASSERT_TRUE(constraint::ConstraintInjectLCAO::trace(W[0], DM, tr));
+    double ref = 0.0;
+    const double* w = W[0].get_wrapper();
+    for (size_t i = 0; i < nnr; ++i)
+    {
+        ref += w[i] * dm[i];
+    }
+    EXPECT_DOUBLE_EQ(tr, ref);
+
+    // Full audit path: q_grid = the trace itself -> deviation at machine
+    // precision (the audit rebuilds W with a second Gint integration, so
+    // the two traces differ only by FP rounding).
+    const double dev = constraint::ConstraintInjectLCAO::audit_weighted_trace(
+        cw, gint_info_, &DM, {tr});
+    EXPECT_LT(dev, 1e-12);
+
+    // Guards: null DM and count mismatch both yield -1 (caller skips).
+    EXPECT_DOUBLE_EQ(constraint::ConstraintInjectLCAO::audit_weighted_trace(
+                         cw, gint_info_, nullptr, {tr}),
+                     -1.0);
+    EXPECT_DOUBLE_EQ(constraint::ConstraintInjectLCAO::audit_weighted_trace(
+                         cw, gint_info_, &DM, {}),
+                     -1.0);
+}
