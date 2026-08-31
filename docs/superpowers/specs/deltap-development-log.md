@@ -3636,6 +3636,34 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - 文件：`2026-08-31-constraint-framework-progress-summary.md`（§3.7 表 +
   §3.8 实录）。
 
+## 2026-08-31 (10): 术语词汇表（无代码改动）
+
+- 应协作者问答产出 `deltap-constraint-glossary.md`：SMO 展开式（仓库唯一
+  记录=Smoothed Maximum Overlap，非 Symmetrized Mulliken Orbitals）、SMO
+  简单投影 vs SMO/Löwdin 两口径边界、raw_sum/tilde_sum 精确定义、escon
+  词源（fp_energy.h:48 "spin constraint energy"）、stationary4=第 4 代
+  驻点 FD 协议（仓库仅存 v4）、T-/F-系列高频编号索引、γ/Γ/t_Γ* 定义、
+  −1244 Ry/11.48 无出处记录（R1 维持）。
+- 校正表述登记："修复 DeltaSpin 的 SMO 病态口径"的准确含义=修复"无度量外积和
+  作约束观测量"的测量口径（非单位分解+双基组口径分裂），非修改投影轨道本身；仓库
+  module_deltaspin 至今仍沿用简单外积口径，论文（npjcm 2026）描述的即此实现——"modulated NAO"
+  术语以论文为准（仓库无此字样）。
+
+## 2026-08-31 (11): 电荷+自旋同时约束可行性实测（无代码改动）
+
+- 三组 H₂O（nspin=2）实测：
+  A. 电荷双片段（O +0.1 e / HH −0.1 e）CONVERGED，μ 镜像 ±0.088 Ry——
+     同类型多片段约束支持；
+  B. 自旋双片段（O +0.1 / H1 −0.05 μB）CONVERGED 但 47 外步（单约束仅 3 步），
+     μ_O=−0.07236（与单约束一致）、μ_H1≈0——近共线约束对对角 secant 振荡后
+     自愈（T-7p 同类），可用但收敛成本高；
+  C. 混合 charge+spin：**当前不支持**——constraint_type 为 run 级单值、
+     channel 全局；charge_spin 输入被 before_scf WARNING_QUIT 拒绝（实证）。
+- 实现混合的改动评估：JSON 逐约束 type 字段 + observe/inject/force 按分量
+  取 channel（M2/M3a/M6 已参数化、M4 无关），约 1–2 天；建议立项 Task 2.4.1
+  或三期，非判决门阻塞项。
+- 文件：`2026-08-31-mixed-charge-spin-test.md`。
+
 ## 2026-08-31 (17): M3b 命运判决——升格运行时审计（Tr[W^α·DM] vs ∫w_αρ）
 
 - 判决：升格（不删除）——W^α HContainer 路径成为生产运行时审计线。
