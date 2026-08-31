@@ -34,7 +34,6 @@
 #include "source_pw/module_pwdft/deltaspin_pw.h" // mohan add 20250309
 #include "source_pw/module_pwdft/deltap_pw.h"
 #include "source_base/constants.h"
-#include "source_base/element_covalent_radius.h"
 #include "source_base/tool_quit.h"
 #include "source_estate/module_constraint/constraint_loop.h"
 
@@ -192,51 +191,20 @@ void ESolver_KS_PW<T, Device>::before_scf(UnitCell& ucell, const int istep)
     //! Setup EXX helper for Hamiltonian and psi
     exx_helper->before_scf(this->p_hamilt, this->stp.template get_psi_t<T, Device>(), PARAM.inp);
 
-    // Real-space weight constraint (phase 1, PW + Becke): configure from
-    // INPUT, build the shared weight field (M1) and arm the outer loop.
+    // Real-space weight constraint (phase 1/2, PW + Becke): configure from
+    // INPUT via the shared module function (PW and LCAO channels must
+    // observe identical guards, defaults and partition radii), then build
+    // the shared weight field (M1) and arm the outer loop.
     if (PARAM.inp.constraint)
     {
-        // Phase-1 guards: only the CPU / double / non-double-grid PW path is
-        // wired; anything else refuses to run rather than silently producing
-        // a wrong constraint potential (the operator reads veff_smooth whose
-        // float/GPU buffers are not refreshed by an in-place injection).
-        if (PARAM.globalv.double_grid || PARAM.inp.precision == "single"
-            || PARAM.inp.device == "gpu")
-        {
-            ModuleBase::WARNING_QUIT("ESolver_KS_PW::before_scf",
-                "constraint framework phase 1 requires double precision on CPU without double_grid");
-        }
-        std::string content, error;
-        if (!PARAM.inp.constraint_target_file.empty()
-            && !constraint::read_target_file(PARAM.inp.constraint_target_file,
-                                             content, error))
-        {
-            ModuleBase::WARNING_QUIT("ESolver_KS_PW::before_scf", error);
-        }
         constraint::ConstraintConfig cfg;
-        const constraint::ConfigStatus st = constraint::configure_constraint(
-            cfg, PARAM.inp.constraint, PARAM.inp.constraint_type,
-            PARAM.inp.constraint_weight_type, PARAM.inp.constraint_target_mode,
-            content, PARAM.inp.constraint_mu_max, PARAM.inp.constraint_thr,
-            ucell.nat, error);
+        std::vector<double> radii;
+        std::string error;
+        const constraint::ConfigStatus st = constraint::configure_from_inputs(
+            cfg, ucell, radii, error);
         if (st == constraint::ConfigStatus::ERROR)
         {
             ModuleBase::WARNING_QUIT("ESolver_KS_PW::before_scf", error);
-        }
-        // Partition radii from the covalent-radius table (Angstrom -> Bohr).
-        std::vector<double> radii(ucell.nat, 0.0);
-        int iat = 0;
-        for (int it = 0; it < ucell.ntype; ++it)
-        {
-            for (int ia = 0; ia < ucell.atoms[it].na; ++ia)
-            {
-                const auto it_rad
-                    = ModuleBase::CovalentRadius.find(ucell.atoms[it].label);
-                radii[iat] = (it_rad != ModuleBase::CovalentRadius.end())
-                                 ? it_rad->second / ModuleBase::BOHR_TO_A
-                                 : 1.0 / ModuleBase::BOHR_TO_A;
-                ++iat;
-            }
         }
         constraint::ConstraintLoop::instance().init(
             ucell, this->pw_rhod, cfg, radii, PARAM.inp.nelec);

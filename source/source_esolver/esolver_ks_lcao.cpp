@@ -32,6 +32,7 @@
 #include "source_lcao/rho_tau_lcao.h" // mohan add 20251024
 #include "source_lcao/LCAO_set.h" // mohan add 20251111
 #include "source_psi/setup_psi.h" // use Setup_Psi for deallocate_psi
+#include "source_estate/module_constraint/constraint_loop.h"
 
 namespace ModuleESolver
 {
@@ -247,6 +248,28 @@ void ESolver_KS_LCAO<TK, TR>::before_scf(UnitCell& ucell, const int istep)
     if (PARAM.inp.rdmft == true)
     {
         rdmft_solver.update_ion(ucell, *(this->pw_rho), this->locpp.vloc, this->sf.strucFac);
+    }
+
+    // Real-space weight constraint (phase 2, LCAO + Becke): configure from
+    // INPUT via the shared module function (PW and LCAO channels must
+    // observe identical guards, defaults and partition radii), then build
+    // the shared weight field (M1) on the dense grid and arm the outer
+    // loop.  The dense grid is the same pw_rhod the Veff operator
+    // integrates into H(R) and the same grid chr.rho lives on, so the
+    // observable and the injection operator share one WeightGrid instance.
+    if (PARAM.inp.constraint)
+    {
+        constraint::ConstraintConfig cfg;
+        std::vector<double> radii;
+        std::string error;
+        const constraint::ConfigStatus st = constraint::configure_from_inputs(
+            cfg, ucell, radii, error);
+        if (st == constraint::ConfigStatus::ERROR)
+        {
+            ModuleBase::WARNING_QUIT("ESolver_KS_LCAO::before_scf", error);
+        }
+        constraint::ConstraintLoop::instance().init(
+            ucell, this->pw_rhod, cfg, radii, PARAM.inp.nelec);
     }
 
     ModuleBase::timer::end("ESolver_KS_LCAO", "before_scf");
@@ -729,6 +752,22 @@ void ESolver_KS_LCAO<TK, TR>::hamilt2rho_single(UnitCell& ucell, int istep, int 
         skip_solve = deltap_scf_solver_->inner_loop(this->drho);
     }
 
+    // Real-space weight constraint (phase 2, LCAO): inject the current
+    // mu-weighted constraint potential into the dense-grid effective
+    // potential before the Hamiltonian is built.  The Veff operator
+    // integrates v_eff into H(R) via cal_gint_vl inside the HSolver loop,
+    // so H receives exactly the PW-identical operator Σ_α μ_α w_α(r) on
+    // the same grid the observable is read from (observable == injection
+    // operator by construction).  In the reference phase mu is all zero, so
+    // the first SCF stays unconstrained.  Skipped on inner-loop iterations
+    // (DeltaSpin/DeltaP) because HSolver does not run there and no
+    // Hamiltonian is built.
+    if (PARAM.inp.constraint && !skip_solve)
+    {
+        constraint::ConstraintLoop::instance().inject_potential_lcao(
+            iter, this->pelec->pot->get_eff_v());
+    }
+
     // 3) run Hsolver
     if (!skip_solve)
     {
@@ -876,6 +915,26 @@ void ESolver_KS_LCAO<TK, TR>::iter_finish(UnitCell& ucell, const int istep, int&
     // charge mixing is performed, potential is updated, 
     // HF and kS energies are computed, meta-GGA, Jason and restart
     ESolver_KS::iter_finish(ucell, istep, iter, conv_esolver);
+    // Real-space weight constraint (phase 2, LCAO): read the constraint
+    // charges from the mixed density and run the outer-loop bookkeeping
+    // (reference recording / M4 secant step / audit line), mirroring the PW
+    // channel.  The hook may override conv_esolver to keep the SCF running
+    // until the constraint converges or fuses (two-stage gating, DeltaP
+    // lineage).
+    if (PARAM.inp.constraint)
+    {
+        constraint::ConstraintLoop& cloop
+            = constraint::ConstraintLoop::instance();
+        cloop.observe(iter, this->chr.rho, PARAM.inp.nspin);
+        cloop.on_scf_converged(iter, conv_esolver);
+        // Refresh the total energy with the constraint correction
+        // (cc_escon), mirroring the dp_escon path.
+        this->pelec->f_en.cc_escon = cloop.last_audit().e_con;
+        if (cloop.enabled())
+        {
+            this->pelec->f_en.calculate_etot();
+        }
+    }
     // Route A+ fixed-geometry outer loop (scf + deltap_outer_nmax > 0): the
     // secant updated t_Γ at the previous convergence but |γ−t_γ| is still
     // above tolerance — continue the SCF loop with the new proxy target
@@ -946,6 +1005,12 @@ void ESolver_KS_LCAO<TK, TR>::after_scf(UnitCell& ucell, const int istep, const 
             this->orb_, this->pw_wfc, this->pw_rho, this->pw_big, this->sf,
             this->rdmft_solver, this->deepks, this->exx_nao,
             this->conv_esolver, this->scf_nmax_flag, istep);
+
+    // Real-space weight constraint (phase 2, LCAO): final audit report.
+    if (PARAM.inp.constraint)
+    {
+        constraint::ConstraintLoop::instance().final_report();
+    }
 
     //! 3) Clean up RA, which is used to serach for adjacent atoms
     if (!PARAM.inp.cal_force && !PARAM.inp.cal_stress)

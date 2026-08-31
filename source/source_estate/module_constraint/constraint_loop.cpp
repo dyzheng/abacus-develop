@@ -98,6 +98,32 @@ void ConstraintLoop::inject_potential(const int iter,
     (void)iter;
 }
 
+void ConstraintLoop::inject_potential_lcao(const int iter,
+                                           ModuleBase::matrix& v_eff)
+{
+    if (!enabled())
+    {
+        return;
+    }
+    // Branch A: outer loop finished (CONVERGED / UNREACHABLE): the potential
+    // stays as the last injected one — nothing more to add.
+    if (phase_ == LoopPhase::DONE)
+    {
+        return;
+    }
+    // Branch B: active loop.  In the reference phase mu is all zero, so the
+    // injection is a no-op by value and the first SCF stays unconstrained.
+    // The injector rejects a mu/weight length mismatch; per its contract the
+    // caller must WARNING_QUIT rather than silently run without the
+    // constraint potential (review P2).
+    if (!ConstraintInjectPW::inject(*wg_, mu_, v_eff))
+    {
+        ModuleBase::WARNING_QUIT("ConstraintLoop::inject_potential_lcao",
+            "mu length does not match the constraint count (wiring bug)");
+    }
+    (void)iter;
+}
+
 void ConstraintLoop::observe(const int iter, const double* const* rho,
                              const int nspin)
 {

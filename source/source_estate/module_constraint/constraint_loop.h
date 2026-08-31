@@ -63,6 +63,13 @@ class ConstraintLoop
                           ModuleBase::matrix& v_eff,
                           ModuleBase::matrix& veff_smooth);
 
+    // LCAO variant: inject the current mu-weighted potential into the
+    // dense-grid effective potential v_eff only.  The LCAO Hamiltonian is
+    // built from v_eff by the Veff operator (cal_gint_vl), while
+    // veff_smooth lives on the FFT grid in LCAO and is never read by the
+    // Hamiltonian — the PW path passes both.
+    void inject_potential_lcao(const int iter, ModuleBase::matrix& v_eff);
+
     // Read the constraint charges Q from the (mixed) rho of iteration 'iter'.
     void observe(const int iter, const double* const* rho, const int nspin);
 

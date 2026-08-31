@@ -31,8 +31,9 @@ AddTest(
 
 AddTest(
   TARGET MODULE_ESTATE_constraint_io
-  LIBS parameter ${math_libs} base device
+  LIBS parameter ${math_libs} base device cell_info
   SOURCES constraint_io_test.cpp ../constraint_io.cpp
+    ../../../source_io/module_output/output.cpp
 )
 
 AddTest(

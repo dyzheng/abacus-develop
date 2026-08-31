@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 
+#include "source_cell/unitcell.h"
+
 namespace constraint
 {
 
@@ -75,6 +77,21 @@ bool read_target_file(const std::string& path,
 bool parse_target_file(const std::string& content,
                        std::vector<ConstraintTarget>& targets,
                        std::string& error);
+
+// Build the fully validated constraint configuration from the global INPUT
+// (M7) plus the per-atom covalent-radius partition radii.  Shared by the PW
+// and LCAO esolvers so both basis channels observe identical guards,
+// defaults and radii (phase-1 technical debt: this ~50-line block used to
+// be duplicated in each before_scf).
+//
+// Returns ConfigStatus::DISABLED when the constraint switch is off (caller
+// may skip arming the loop), OK after a successful build, or ERROR with a
+// human-readable message in 'error' (caller must WARNING_QUIT).  'radii'
+// is filled with one radius per global atom (Bohr) only on success.
+ConfigStatus configure_from_inputs(ConstraintConfig& cfg,
+                                   const UnitCell& ucell,
+                                   std::vector<double>& radii,
+                                   std::string& error);
 
 } // namespace constraint
 

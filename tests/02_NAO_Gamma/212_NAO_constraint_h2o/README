@@ -1,0 +1,7 @@
+LCAO (gamma-only) SCF of H2O (15 A box) with real-space charge constraint
+(becke weights, delta mode, +0.1 e on O): the LCAO channel of the constraint
+framework (phase 2).  Reference phase mu=0 records Q_ref(O); the constrained
+phase drives the charge to Q_ref + 0.1 e within the outer-loop secant
+(two-stage gating).  Acceptance: outer loop CONVERGED within 6±2 outer
+steps, CONSTRAINT_AUDIT total_charge = nelec, PW==LCAO Q_ref agreement
+checked in the phase-2 validation spec.

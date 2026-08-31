@@ -4,8 +4,12 @@
 #include <fstream>
 #include <sstream>
 
+#include "source_base/constants.h"
+#include "source_base/element_covalent_radius.h"
 #include "source_base/global_function.h"
+#include "source_base/global_variable.h"
 #include "source_base/tool_quit.h"
+#include "source_io/module_parameter/parameter.h"
 
 namespace constraint
 {
@@ -393,6 +397,65 @@ ConfigStatus configure_constraint(ConstraintConfig& cfg,
         }
     }
     return ConfigStatus::OK;
+}
+
+ConfigStatus configure_from_inputs(ConstraintConfig& cfg,
+                                   const UnitCell& ucell,
+                                   std::vector<double>& radii,
+                                   std::string& error)
+{
+    cfg = ConstraintConfig();
+    radii.clear();
+    if (!PARAM.inp.constraint)
+    {
+        return ConfigStatus::DISABLED;
+    }
+
+    // Shared phase-1/2 guard: only the CPU / double / non-double-grid path
+    // is wired.  Anything else refuses to run rather than silently
+    // producing a wrong constraint potential (the injector writes the
+    // in-place potential buffers read by the Hamiltonian builders of both
+    // basis channels).
+    if (PARAM.globalv.double_grid || PARAM.inp.precision == "single"
+        || PARAM.inp.device == "gpu")
+    {
+        error = "constraint framework requires double precision on CPU "
+                "without double_grid";
+        return ConfigStatus::ERROR;
+    }
+
+    std::string content;
+    if (!PARAM.inp.constraint_target_file.empty()
+        && !read_target_file(PARAM.inp.constraint_target_file, content, error))
+    {
+        return ConfigStatus::ERROR;
+    }
+    const ConfigStatus st = configure_constraint(
+        cfg, PARAM.inp.constraint, PARAM.inp.constraint_type,
+        PARAM.inp.constraint_weight_type, PARAM.inp.constraint_target_mode,
+        content, PARAM.inp.constraint_mu_max, PARAM.inp.constraint_thr,
+        ucell.nat, error);
+    if (st == ConfigStatus::ERROR)
+    {
+        return st;
+    }
+
+    // Partition radii from the covalent-radius table (Angstrom -> Bohr).
+    radii.assign(ucell.nat, 0.0);
+    int iat = 0;
+    for (int it = 0; it < ucell.ntype; ++it)
+    {
+        for (int ia = 0; ia < ucell.atoms[it].na; ++ia)
+        {
+            const auto it_rad
+                = ModuleBase::CovalentRadius.find(ucell.atoms[it].label);
+            radii[iat] = (it_rad != ModuleBase::CovalentRadius.end())
+                             ? it_rad->second / ModuleBase::BOHR_TO_A
+                             : 1.0 / ModuleBase::BOHR_TO_A;
+            ++iat;
+        }
+    }
+    return st;
 }
 
 } // namespace constraint

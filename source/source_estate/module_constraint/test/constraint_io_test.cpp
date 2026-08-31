@@ -1,9 +1,31 @@
 #include "gtest/gtest.h"
 
+#include <cstdio>
+#include <fstream>
 #include <string>
 #include <vector>
 
+#include "constraint_test_utils.h"
+#include "source_base/constants.h"
 #include "source_estate/module_constraint/constraint_io.h"
+
+// Mock symbols required by the cell_info object library in unit tests.
+Magnetism::Magnetism()
+{
+    this->tot_mag = 0.0;
+    this->abs_mag = 0.0;
+    this->start_mag = nullptr;
+}
+Magnetism::~Magnetism()
+{
+    delete[] this->start_mag;
+}
+InfoNonlocal::InfoNonlocal()
+{
+}
+InfoNonlocal::~InfoNonlocal()
+{
+}
 
 TEST(ConstraintIOTest, DisabledByDefault)
 {
@@ -144,4 +166,63 @@ TEST(ConstraintIOTest, NestedSingleElementFragments)
     EXPECT_EQ(cfg.targets[0].atoms, std::vector<int>({0}));
     EXPECT_EQ(cfg.targets[1].atoms, std::vector<int>({1}));
     EXPECT_EQ(cfg.targets[2].atoms, std::vector<int>({2}));
+}
+
+TEST(ConstraintIOTest, ConfigureFromInputsShared)
+{
+    auto ucell = make_h2o_ucell(); // O, H, H -> 3 atoms
+    Set_GlobalV_Default();
+    PARAM.input.constraint = false;
+    PARAM.input.constraint_type = "charge";
+    PARAM.input.constraint_weight_type = "becke";
+    PARAM.input.constraint_target_mode = "delta";
+    PARAM.input.constraint_mu_max = 5.0;
+    PARAM.input.constraint_thr = 1e-4;
+    PARAM.input.constraint_target_file = "not_there.json";
+    constraint::ConstraintConfig cfg;
+    std::vector<double> radii;
+    std::string error;
+
+    // Switch off -> DISABLED, nothing else touched.
+    EXPECT_EQ(constraint::configure_from_inputs(cfg, *ucell, radii, error),
+              constraint::ConfigStatus::DISABLED);
+    EXPECT_FALSE(cfg.enabled);
+    EXPECT_TRUE(radii.empty());
+
+    // Unreadable target file -> ERROR.
+    PARAM.input.constraint = true;
+    EXPECT_EQ(constraint::configure_from_inputs(cfg, *ucell, radii, error),
+              constraint::ConfigStatus::ERROR);
+
+    // Empty target file -> ERROR (no implicit constraint without target).
+    PARAM.input.constraint_target_file = "";
+    EXPECT_EQ(constraint::configure_from_inputs(cfg, *ucell, radii, error),
+              constraint::ConfigStatus::ERROR);
+
+    // Guard: GPU device refuses to run.
+    PARAM.input.device = "gpu";
+    PARAM.input.constraint_target_file = "not_there.json";
+    EXPECT_EQ(constraint::configure_from_inputs(cfg, *ucell, radii, error),
+              constraint::ConfigStatus::ERROR);
+    PARAM.input.device = "cpu";
+
+    // OK path: real target file, delta mode, one fragment on atom 0.
+    const std::string path = "constraint_target_shared_test.json";
+    {
+        std::ofstream ofs(path);
+        ofs << R"({"targets": [0.1], "atoms": [[0]]})";
+    }
+    PARAM.input.constraint_target_file = path;
+    EXPECT_EQ(constraint::configure_from_inputs(cfg, *ucell, radii, error),
+              constraint::ConfigStatus::OK)
+        << error;
+    ASSERT_EQ(cfg.targets.size(), 1u);
+    EXPECT_DOUBLE_EQ(cfg.targets[0].value, 0.1);
+    EXPECT_EQ(cfg.targets[0].atoms, std::vector<int>({0}));
+    // Covalent radii (Angstrom -> Bohr): O = 0.64 A, H = 0.32 A.
+    ASSERT_EQ(radii.size(), 3u);
+    EXPECT_NEAR(radii[0], 0.64 / ModuleBase::BOHR_TO_A, 1e-12);
+    EXPECT_NEAR(radii[1], 0.32 / ModuleBase::BOHR_TO_A, 1e-12);
+    EXPECT_NEAR(radii[2], 0.32 / ModuleBase::BOHR_TO_A, 1e-12);
+    std::remove(path.c_str());
 }

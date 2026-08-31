@@ -124,11 +124,11 @@ git commit -m "feat(constraint): M3b LCAO constraint matrix via existing Gint in
 
 先例：`esolver_ks_lcao.cpp:446/566/600` 的 `spinconstrain::SpinConstrain<TK>::getScInstance()` + `run_lambda_loop(iter-1)` 钩子模式。
 
-- [ ] **Step 1: 失败测试**——LCAO H₂O 冒烟（delta=+0.1 e，6±2 外步内 CONVERGED）。
-- [ ] **Step 2: 运行确认失败**（LCAO 钩子不存在）
-- [ ] **Step 3: 实现**——before_scf（配置+W^α 预建）/hamilt2rho 内 H += Σμ_α W^α/iter_finish（读数+外步+cc_escon 汇入，镜像 PW 的 fp_energy 路径）。**顺带还一期技术债**：把 PW 侧 before_scf 的 ~50 行配置块下移至 `constraint_io`/`constraint_loop` 模块内函数，PW/LCAO 共用（review 轻微项）。
-- [ ] **Step 4: 冒烟通过 + 回归**（`ctest -R "constraint|lcao"` 全绿）
-- [ ] **Step 5: spec + 日志 + Commit**
+- [x] **Step 1: 失败测试**——LCAO H₂O 冒烟（delta=+0.1 e，6±2 外步内 CONVERGED）。（用例 212_NAO_constraint_h2o：串行/MPI4 均 6 外步 CONVERGED，见 2026-08-31-lcao-esolver-wiring.md）
+- [x] **Step 2: 运行确认失败**（旧二进制 0 条 `[constraint]` 行——钩子不存在，constraint 被静默忽略）
+- [x] **Step 3: 实现**——before_scf（共享 configure_from_inputs + init）/hamilt2rho 内 v_eff 网格注入（Veff 生产 cal_gint_vl 积分进 H，H 含 Σμ_α W^α）/iter_finish（读数+外步+cc_escon 汇入，镜像 PW 的 fp_energy 路径）。**一期技术债已下移**：PW before_scf ~50 行配置块下沉为 `constraint_io::configure_from_inputs`，PW/LCAO 共用（PW 回归逐位不变）。
+- [x] **Step 4: 冒烟通过 + 回归**（constraint ctest 10/10 + MODULE_LCAO 29/33（2 FAIL+2 Not Run 为既有环境问题）+ PW 211 回归 + autotest 对拍全绿）
+- [x] **Step 5: spec + 日志 + Commit**
 
 ---
 

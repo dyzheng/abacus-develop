@@ -3385,3 +3385,44 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   `docs/superpowers/specs/2026-08-31-m3b-constraint-inject-lcao.md`（新）。
 - Next：Task 2.3 LCAO esolver 薄钩子（before_scf 配置+W^α 预建 / hamilt2rho
   H+=ΣμW / iter_finish 读数+外步）+ PW/LCAO 共用配置块下移 + H₂O LCAO 冒烟。
+
+## 2026-08-31 (11): 二期 Task 2.3——LCAO esolver 接线 + 一期技术债下移
+
+- 交付（LCAO 四钩子，全部薄钩子，镜像 PW 通道）：
+  - `before_scf`：`constraint::configure_from_inputs`（共享配置）+ 
+    `ConstraintLoop::init(ucell, pw_rhod, cfg, radii, nelec)`——权重场建在
+    密集网格 pw_rhod（与 v_eff/chr.rho 同分布）。
+  - `hamilt2rho_single`（HSolver 前）：`inject_potential_lcao(iter, v_eff)`——
+    **网格注入**决策：把 μ·w 加到密集网格 v_eff，由 Veff::contributeHR 的
+    **生产 cal_gint_vl** 积分进 H(R)（Gint 线性性 ⇒ H += Σμ_α W^α），
+    与 PW 逐项同构；参考相 μ=0 按值 no-op；内环迭代跳过。
+  - `iter_finish`（ESolver_KS::iter_finish 后）：observe + on_scf_converged
+    + cc_escon + calculate_etot，与 PW 同款两段式门控。
+  - `after_scf`：final_report。
+- 一期技术债：PW before_scf ~50 行配置块（守卫/读靶文件/configure/
+  共价半径表）下沉为 `constraint_io::configure_from_inputs`，PW/LCAO 共用
+  同一守卫、默认、半径表；esolver 侧各留 ~12 行薄钩子。
+- `constraint_loop.h/.cpp`：新增 `inject_potential_lcao(iter, v_eff)`
+  （只注入 v_eff，不碰 veff_smooth——LCAO 的 veff_smooth 在 FFT 网格上，
+  LCAO 哈密顿不读它；P2 契约保留：长度不匹配 WARNING_QUIT）。
+- 测试（TDD：先集成用例失败→实现→通过）：
+  - 新集成用例 `tests/02_NAO_Gamma/212_NAO_constraint_h2o/`（已注册
+    CASES_CPU.txt，照 P4 先例迁入标准用例树）。基线旧二进制 0 条
+    `[constraint]` 行（静默忽略，失败态确认）；实现后串行 6 外步
+    CONVERGED（Q_ref=6.407956559、μ*=−0.219303873 Ry、maxdev=
+    2.220446049e-16）；MPI 4 rank 同 6 步 CONVERGED（q/μ/能量与串行
+    一致到 1e-11）；经 `Autotest.sh -r` 对拍 result.ref PASS。
+  - PW 回归：211 用例重跑 Q_ref=6.255467998、6 外步 CONVERGED、
+    FINAL_ETOT 与 result.ref 偏差 4e-9 eV——配置块下移零回归。
+  - 单测：`ConstraintIOTest.ConfigureFromInputsShared`（DISABLED/ERROR×3/
+    OK 五分支 + 共价半径表 Bohr 换算）。
+- 回归：constraint ctest 10/10 PASS；`ctest -R MODULE_LCAO` 29/33 PASS，
+  2 FAIL + 2 Not Run 均为既有环境问题（parallel_*.sh 未拷入构建树、
+  deltaspin 未构建），非本次回归。
+- 文件：`esolver_ks_lcao.cpp`（+4 钩子）、`esolver_ks_pw.cpp`（配置块
+  下沉）、`module_constraint/constraint_io.h/.cpp`（+configure_from_inputs）、
+  `module_constraint/constraint_loop.h/.cpp`（+inject_potential_lcao）、
+  `module_constraint/test/constraint_io_test.cpp`（+1 测试）、
+  `tests/02_NAO_Gamma/212_NAO_constraint_h2o/`（新用例）、
+  `docs/superpowers/specs/2026-08-31-lcao-esolver-wiring.md`（新）。
+- Next：Task 2.4 自旋通道（±μ 拆分注入、m 通道读数、nspin 守卫）。

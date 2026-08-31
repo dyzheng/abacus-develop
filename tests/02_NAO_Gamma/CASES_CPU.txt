@@ -34,4 +34,5 @@ scf_out_wf
 scf_solvation
 scf_u_spin2
 scf_upf100
+212_NAO_constraint_h2o
 test.sum
