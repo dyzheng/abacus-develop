@@ -41,7 +41,9 @@ enum class ConfigStatus
  *
  * Semantic guards (never silently run a wrong calculation):
  *  - weight_type != "becke" -> ERROR ("not implemented in phase 1")
- *  - type != "charge"       -> ERROR
+ *  - type != "charge"/"spin" -> ERROR
+ *  - type == "spin" && nspin != 2 -> ERROR (the spin channel reads and
+ *    injects the spin-difference density and requires a two-channel run)
  *  - no targets parsed      -> ERROR (no implicit constraint without target)
  *  - target_mode == "absolute" -> non-fatal WARNING (calibration scale
  *    differs from delta: charges ~0.2-0.3 e vs ~e shifts)
@@ -60,6 +62,7 @@ ConfigStatus configure_constraint(ConstraintConfig& cfg,
                                   const double mu_max,
                                   const double thr,
                                   const int nat,
+                                  const int nspin,
                                   std::string& error);
 
 // Read a target file into a string; returns false with 'error' set on IO

@@ -46,6 +46,14 @@ MuStatus MuSolver::step(const std::vector<double>& Q,
         residual_window_.assign(n, std::vector<double>());
     }
 
+    // Expected response sign of the channel (MuSolverParams::response_sign):
+    // both charge and spin respond negatively — a positive potential on the
+    // fragment repels the coupled density (for spin, V_up += mu*w repels
+    // spin-up and V_dn -= mu*w attracts spin-down, so m = rho_up - rho_dn
+    // falls with mu).  The sign flips both the Newton-secant slope and the
+    // sign-flip guard reference.
+    const double resp = (params_.response_sign > 0) ? 1.0 : -1.0;
+
     bool all_converged = true;
     for (int i = 0; i < n; ++i)
     {
@@ -65,8 +73,8 @@ MuStatus MuSolver::step(const std::vector<double>& Q,
         all_converged = false;
 
         // Secant slope.  Without history, or on a degenerate (zero) observed
-        // step, fall back to a conservative negative response.
-        double kappa = -params_.kappa_min;
+        // step, fall back to the channel's conservative response.
+        double kappa = resp * params_.kappa_min;
         if (has_history_[i])
         {
             const double dmu_obs = mu_at_obs - mu_prev_[i];
@@ -74,24 +82,25 @@ MuStatus MuSolver::step(const std::vector<double>& Q,
             if (dmu_obs != 0.0)
             {
                 const double raw = dQ_obs / dmu_obs;
-                if (raw > 0.0)
+                if (raw * resp < 0.0)
                 {
-                    // Sign flip: the observed response is non-monotonic
-                    // (historical secant oscillation / dead-channel).  Fall
-                    // back to the conservative negative slope and keep the
-                    // step bounded; the run may fuse later at the mu cap.
+                    // Sign flip: the observed response opposes the channel's
+                    // expected sign (historical secant oscillation /
+                    // dead-channel).  Fall back to the conservative slope
+                    // and keep the step bounded; the run may fuse later at
+                    // the mu cap.
                     ++sign_flip_count_;
-                    kappa = -params_.kappa_min;
+                    kappa = resp * params_.kappa_min;
                 }
                 else
                 {
                     // Clamp the magnitude into [kappa_min, kappa_max] so a
                     // stiff (large |kappa|) or soft (small |kappa|) response
                     // cannot produce an unbounded or frozen update.
-                    const double mag = clamp_value(-raw,
+                    const double mag = clamp_value(std::abs(raw),
                                               params_.kappa_min,
                                               params_.kappa_max);
-                    kappa = -mag;
+                    kappa = resp * mag;
                 }
             }
         }

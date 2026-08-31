@@ -1,12 +1,26 @@
 #ifndef CONSTRAINT_OBSERVE_H
 #define CONSTRAINT_OBSERVE_H
 
+#include <string>
 #include <vector>
 
 #include "weight_grid.h"
 
 namespace constraint
 {
+
+// Observable channel of the constraint reading/injection (M2/M3).
+enum class DensityChannel
+{
+    Charge, // Q_alpha = int w_alpha (rho_up + rho_dn); nspin == 1 reads rho[0]
+    Spin    // Q_alpha = int w_alpha (rho_up - rho_dn); requires nspin == 2
+};
+
+// Map a validated constraint_type string ("charge" | "spin") to the channel.
+inline DensityChannel channel_from_type(const std::string& type)
+{
+    return type == "spin" ? DensityChannel::Spin : DensityChannel::Charge;
+}
 
 /**
  * @brief Grid reading of constraint observables (architecture layer M2).
@@ -18,8 +32,8 @@ namespace constraint
  * dspin identity premise holds by construction).
  *
  * Charge channel: rho is the charge density; for nspin == 2 the two spin
- * channels are summed.  The spin channel m = rho_up - rho_dn is reserved for
- * phase 2 (magnetic moment constraints) and is not wired here.
+ * channels are summed.  Spin channel: m = rho_up - rho_dn (magnetic moment
+ * constraints, phase 2) and requires nspin == 2 (guarded).
  */
 class ConstraintObserver
 {
@@ -29,6 +43,7 @@ class ConstraintObserver
     static void observe(const WeightGrid& wg,
                         const double* const* rho,
                         const int nspin,
+                        const DensityChannel channel,
                         std::vector<double>& Q);
 };
 

@@ -3138,6 +3138,22 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   架构核心卖点，放水即否决架构）。
 - 文件：`docs/superpowers/plans/2026-08-31-realspace-weight-constraint-phase2.md`。
 
+## 2026-08-31 (5): Task 2.3 实证 Review（无代码改动）
+
+- 两路核实通过：LCAO 冒烟复跑逐项吻合（6 外步 CONVERGED、μ*=−0.219303873、
+  FINAL_ETOT vs ref 偏差 2.4e-11 eV）；MPI 4-rank 与串行差 3.4e-11 eV
+  （报告称 ~1e-11，同量级）；PW 回归 4.1e-9 eV；constraint ctest 10/10；
+  MODULE_LCAO 2 FAIL 确为既有 CWD 问题（commit 与相关目录零交集）。
+- 代码评审：四钩子薄且与 PW 逐行同构、P2 契约双通道完好、配置块下移
+  行为等价。补审了漏审的 2.1/2.2：V2a/V2b 真实交付且口径偏差诚实登记、
+  ΣW≡S 审计测试 2.0e-15。
+- 待办：① phase2 计划 Task 2.1 Step 6 补勾；② M3b（W^α HContainer）生产
+  零调用=审计仪器非死代码，头注需补"生产走 v_eff 网格注入"声明，Task 2.6
+  升格运行时审计（Tr[W^α·DM] vs ∫w_αρ）或二期收尾评估删除。
+- 认可 v_eff 网格注入设计决策（生产路径零新积分代码、k 点自动同构）。
+- 裁定：通过，批准继续 Task 2.4 自旋通道。
+- 文件：`2026-08-31-task23-review.md`。
+
 ## 2026-08-30 (2): M0 Becke 异核修正 + 解析位置导数（T1 完成）
 
 - `partition.h/.cpp`：新增 `w_becke_adjusted`（异核半径比修正 μ'_ij）与
@@ -3426,3 +3442,31 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   `tests/02_NAO_Gamma/212_NAO_constraint_h2o/`（新用例）、
   `docs/superpowers/specs/2026-08-31-lcao-esolver-wiring.md`（新）。
 - Next：Task 2.4 自旋通道（±μ 拆分注入、m 通道读数、nspin 守卫）。
+
+## 2026-08-31 (12): 二期 Task 2.4——自旋通道（±μ 拆分注入 + m 通道读数 + nspin 守卫）
+
+- 实现：`constraint_observe.h/.cpp`（DensityChannel 枚举 + spin 读数
+  m=ρ↑−ρ↓ + nspin≠2 → WARNING_QUIT）、`constraint_inject_pw.h/.cpp`
+  （channel 参数 + V_up += μw / V_dn −= μw 拆分注入 + 单通道缓冲
+  return false）、`constraint_io.h/.cpp`（configure nspin 参数 +
+  type=spin && nspin≠2 → ERROR）、`mu_solver.h/.cpp`（response_sign
+  通用参数，默认 −1）、`constraint_loop.cpp`（channel 接线 +
+  response_sign=−1）。
+- 关键实证（推翻实现期假设，如实登记）：集成用例实测自旋响应为负
+  （dQ_m/dμ≈−1.38 e/Ry）——"V_up += μw 吸引自旋上"的推理是错的（正势
+  排斥）。自旋与电荷同为负响应（密度响应函数对角元为负）；本框架 μ 与
+  DeltaSpin λ 符号相反（μ=−λ），2.6 对标时按此换算。response_sign 的
+  spin=+1 覆写已移除。
+- 失败测试先行 + 三道反向破坏验证各恰中目标 FAIL（nspin 守卫移除→2
+  FAIL；注入符号翻转→SplitInjectionSpin FAIL；response_sign=+1→
+  SpinChannelConvergesOnLinearResponse FAIL）。
+- 自旋集成用例 `tests/01_PW/212_PW_constraint_h2o_spin/`（nspin=2、
+  delta=+0.1 μB on O）：参考相 μ=0 → m=5.9e-6（反假收敛：自由跑不得
+  收敛到 0.1）；3 外步 CONVERGED，μ*=−0.07234 Ry，q=0.09998，
+  maxdev=2.2e-16；etotref=−442.0408674948625 eV 对拍 OK。
+- 守卫集成：nspin=1 + spin → before_scf WARNING_QUIT（EXIT=1，精确
+  错误信息）。
+- 回归：constraint ctest 10/10；PW 211（电荷 μ*=−0.1765）OK；
+  037_PW_FM（nspin=2）OK；LCAO 212_NAO_constraint_h2o OK。
+- 文件：`docs/superpowers/specs/2026-08-31-spin-channel.md`（新）。
+- Next：Task 2.5 M6 力核（F_J=−Σμ∫ρ∂w/∂R_J，纯网格，PW/LCAO 同一核）。

@@ -127,3 +127,4 @@ scf_out_chg_tau
 813_PW_LT_bacm
 814_PW_LT_triclinic
 211_PW_constraint_h2o
+212_PW_constraint_h2o_spin

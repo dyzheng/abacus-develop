@@ -16,6 +16,17 @@ namespace constraint
 // Per-geometry once: build() precomputes one HContainer per constraint.
 // Linear in the Lagrange multipliers mu, so each SCF iteration only performs
 // a mu-weighted sparse add (add_weighted) into the working Hamiltonian.
+//
+// Production wiring note (Task 2.3): the LCAO esolver channel injects the
+// constraint potential at the v_eff grid level — the Veff operator
+// integrates v_eff into H(R) via the very same cal_gint_vl kernel, so H
+// contains sum_alpha mu_alpha W^alpha by linearity without calling build()
+// here.  This class therefore currently serves as a continuously-executed
+// unit-test audit instrument (W^alpha <-> direct-grid quadrature, sum-rule
+// sum_alpha W^alpha == S) rather than the production path.  Task 2.6 may
+// promote it to a runtime audit (Tr W^alpha . DM vs int w_alpha rho dr
+// cross-check) or the phase-2 wrap-up review decides on removal — it is not
+// dead code and must not be deleted without re-auditing those checks.
 class ConstraintInjectLCAO
 {
 public:

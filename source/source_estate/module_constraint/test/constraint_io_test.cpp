@@ -32,7 +32,7 @@ TEST(ConstraintIOTest, DisabledByDefault)
     constraint::ConstraintConfig cfg;
     std::string error;
     const constraint::ConfigStatus st = constraint::configure_constraint(
-        cfg, false, "charge", "becke", "delta", "{}", 5.0, 1e-4, 3, error);
+        cfg, false, "charge", "becke", "delta", "{}", 5.0, 1e-4, 3, 1, error);
     EXPECT_EQ(st, constraint::ConfigStatus::DISABLED);
     EXPECT_FALSE(cfg.enabled);
 }
@@ -43,7 +43,7 @@ TEST(ConstraintIOTest, DefaultsAndDeltaParsing)
     constraint::ConstraintConfig cfg;
     std::string error;
     const constraint::ConfigStatus st = constraint::configure_constraint(
-        cfg, true, "charge", "becke", "delta", json, 5.0, 1e-4, 3, error);
+        cfg, true, "charge", "becke", "delta", json, 5.0, 1e-4, 3, 1, error);
     EXPECT_EQ(st, constraint::ConfigStatus::OK) << error;
     EXPECT_TRUE(cfg.enabled);
     EXPECT_EQ(cfg.weight_type, "becke");
@@ -64,7 +64,7 @@ TEST(ConstraintIOTest, FragmentParsing)
     constraint::ConstraintConfig cfg;
     std::string error;
     const constraint::ConfigStatus st = constraint::configure_constraint(
-        cfg, true, "charge", "becke", "delta", json, 5.0, 1e-4, 3, error);
+        cfg, true, "charge", "becke", "delta", json, 5.0, 1e-4, 3, 1, error);
     EXPECT_EQ(st, constraint::ConfigStatus::OK) << error;
     ASSERT_EQ(cfg.targets.size(), 1u);
     EXPECT_EQ(cfg.targets[0].atoms, std::vector<int>({0, 1, 2}));
@@ -73,7 +73,7 @@ TEST(ConstraintIOTest, FragmentParsing)
     const std::string flat = R"({"targets": [0.1, 0.2], "atoms": [2, 0]})";
     constraint::ConstraintConfig cfg2;
     EXPECT_EQ(constraint::configure_constraint(cfg2, true, "charge", "becke",
-                                               "delta", flat, 5.0, 1e-4, 3,
+                                               "delta", flat, 5.0, 1e-4, 3, 1,
                                                error),
               constraint::ConfigStatus::OK)
         << error;
@@ -89,7 +89,7 @@ TEST(ConstraintIOTest, AbsoluteModeWarnsButRuns)
     // absolute mode is accepted with an explicit warning (written to the
     // (possibly unopened) ofs_warning stream; must not abort).
     const constraint::ConfigStatus st = constraint::configure_constraint(
-        cfg, true, "charge", "becke", "absolute", json, 5.0, 1e-4, 3, error);
+        cfg, true, "charge", "becke", "absolute", json, 5.0, 1e-4, 3, 1, error);
     EXPECT_EQ(st, constraint::ConfigStatus::OK) << error;
     EXPECT_EQ(cfg.target_mode, "absolute");
 }
@@ -100,36 +100,36 @@ TEST(ConstraintIOTest, Guards)
     constraint::ConstraintConfig cfg;
     // hirshfeld weight: not implemented, never silently run.
     EXPECT_EQ(constraint::configure_constraint(cfg, true, "charge", "hirshfeld",
-                                               "delta", "{}", 5.0, 1e-4, 3,
+                                               "delta", "{}", 5.0, 1e-4, 3, 1,
                                                error),
               constraint::ConfigStatus::ERROR);
     EXPECT_NE(error.find("hirshfeld"), std::string::npos);
     // wrong type.
     EXPECT_EQ(constraint::configure_constraint(cfg, true, "magnet", "becke",
-                                               "delta", "{}", 5.0, 1e-4, 3,
+                                               "delta", "{}", 5.0, 1e-4, 3, 1,
                                                error),
               constraint::ConfigStatus::ERROR);
     // missing target: no implicit constraint.
     EXPECT_EQ(constraint::configure_constraint(cfg, true, "charge", "becke",
-                                               "delta", "", 5.0, 1e-4, 3,
+                                               "delta", "", 5.0, 1e-4, 3, 1,
                                                error),
               constraint::ConfigStatus::ERROR);
     EXPECT_NE(error.find("target"), std::string::npos);
     // bad mode.
     EXPECT_EQ(constraint::configure_constraint(cfg, true, "charge", "becke",
-                                               "relax", "{}", 5.0, 1e-4, 3,
+                                               "relax", "{}", 5.0, 1e-4, 3, 1,
                                                error),
               constraint::ConfigStatus::ERROR);
     // fragment count mismatch.
     const std::string bad = R"({"targets": [0.1], "atoms": [[0], [1]]})";
     EXPECT_EQ(constraint::configure_constraint(cfg, true, "charge", "becke",
-                                               "delta", bad, 5.0, 1e-4, 3,
+                                               "delta", bad, 5.0, 1e-4, 3, 1,
                                                error),
               constraint::ConfigStatus::ERROR);
     // atom index out of range.
     const std::string oob = R"({"targets": [0.1], "atoms": [[7]]})";
     EXPECT_EQ(constraint::configure_constraint(cfg, true, "charge", "becke",
-                                               "delta", oob, 5.0, 1e-4, 3,
+                                               "delta", oob, 5.0, 1e-4, 3, 1,
                                                error),
               constraint::ConfigStatus::ERROR);
 }
@@ -140,12 +140,47 @@ TEST(ConstraintIOTest, MalformedJson)
     constraint::ConstraintConfig cfg;
     EXPECT_EQ(constraint::configure_constraint(cfg, true, "charge", "becke",
                                                "delta", "not json", 5.0, 1e-4,
-                                               3, error),
+                                               3, 1, error),
               constraint::ConfigStatus::ERROR);
     EXPECT_EQ(constraint::configure_constraint(cfg, true, "charge", "becke",
                                                "delta",
                                                R"({"targets": [0.1, })",
-                                               5.0, 1e-4, 3, error),
+                                               5.0, 1e-4, 3, 1, error),
+              constraint::ConfigStatus::ERROR);
+}
+
+TEST(ConstraintIOTest, SpinTypeGuard)
+{
+    // Phase-2 spin channel: type=spin requires nspin=2 (the reading and the
+    // injection act on the spin-difference density rho_up - rho_dn).  A
+    // nspin != 2 run must refuse loudly rather than silently run a wrong
+    // constraint (historical false-convergence discipline, T4a').
+    const std::string json = R"({"targets": [0.1], "atoms": [[0]]})";
+    std::string error;
+    constraint::ConstraintConfig cfg;
+    // spin + nspin=1 -> ERROR.
+    EXPECT_EQ(constraint::configure_constraint(cfg, true, "spin", "becke",
+                                               "delta", json, 5.0, 1e-4, 3, 1,
+                                               error),
+              constraint::ConfigStatus::ERROR);
+    EXPECT_NE(error.find("nspin"), std::string::npos);
+    // spin + nspin=2 -> OK, channel recorded in the config.
+    EXPECT_EQ(constraint::configure_constraint(cfg, true, "spin", "becke",
+                                               "delta", json, 5.0, 1e-4, 3, 2,
+                                               error),
+              constraint::ConfigStatus::OK)
+        << error;
+    EXPECT_EQ(cfg.type, "spin");
+    // charge + nspin=2 still OK (charge couples to the total density).
+    EXPECT_EQ(constraint::configure_constraint(cfg, true, "charge", "becke",
+                                               "delta", json, 5.0, 1e-4, 3, 2,
+                                               error),
+              constraint::ConfigStatus::OK)
+        << error;
+    // unknown type still ERROR regardless of nspin.
+    EXPECT_EQ(constraint::configure_constraint(cfg, true, "magnet", "becke",
+                                               "delta", json, 5.0, 1e-4, 3, 2,
+                                               error),
               constraint::ConfigStatus::ERROR);
 }
 
@@ -158,7 +193,7 @@ TEST(ConstraintIOTest, NestedSingleElementFragments)
     constraint::ConstraintConfig cfg;
     std::string error;
     EXPECT_EQ(constraint::configure_constraint(cfg, true, "charge", "becke",
-                                               "delta", json, 5.0, 1e-4, 3,
+                                               "delta", json, 5.0, 1e-4, 3, 1,
                                                error),
               constraint::ConfigStatus::OK)
         << error;
@@ -224,5 +259,19 @@ TEST(ConstraintIOTest, ConfigureFromInputsShared)
     EXPECT_NEAR(radii[0], 0.64 / ModuleBase::BOHR_TO_A, 1e-12);
     EXPECT_NEAR(radii[1], 0.32 / ModuleBase::BOHR_TO_A, 1e-12);
     EXPECT_NEAR(radii[2], 0.32 / ModuleBase::BOHR_TO_A, 1e-12);
+
+    // Spin guard through the shared path: PARAM nspin=1 + type=spin -> ERROR
+    // (the spin channel needs a two-channel run); nspin=2 -> OK.
+    PARAM.input.constraint_type = "spin";
+    EXPECT_EQ(constraint::configure_from_inputs(cfg, *ucell, radii, error),
+              constraint::ConfigStatus::ERROR);
+    EXPECT_NE(error.find("nspin"), std::string::npos);
+    PARAM.input.nspin = 2;
+    EXPECT_EQ(constraint::configure_from_inputs(cfg, *ucell, radii, error),
+              constraint::ConfigStatus::OK)
+        << error;
+    EXPECT_EQ(cfg.type, "spin");
+    PARAM.input.nspin = 1;
+    PARAM.input.constraint_type = "charge";
     std::remove(path.c_str());
 }

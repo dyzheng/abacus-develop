@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "source_base/matrix.h"
+#include "constraint_observe.h"
 #include "weight_grid.h"
 
 namespace constraint
@@ -12,13 +13,12 @@ namespace constraint
 /**
  * @brief PW effective-potential injection of the constraint operator (M3a).
  *
- *   veff(ispin, ir) += sum_alpha mu[alpha] * w_alpha(ir)
- *
- * Phase 1 wires the charge channel only.  For nspin == 1 the single channel
- * receives the potential; for nspin == 2 the same potential is added to both
- * spin channels so that it couples to the total charge rho_up + rho_dn.  The
- * spin-difference coupling (+mu on up, -mu on down) is the phase-2 magnetic
- * extension and is deliberately not implemented here.
+ * Charge channel: veff(ispin, ir) += sum_alpha mu[alpha] * w_alpha(ir) on
+ * every spin channel (couples to the total charge rho_up + rho_dn; nspin==1
+ * is the single channel).
+ * Spin channel: veff(0, ir) += mu*w, veff(1, ir) -= mu*w (couples to the
+ * magnetization rho_up - rho_dn, DeltaSpin +/- lambda semantics); requires
+ * an nspin == 2 buffer (guarded by a false return).
  *
  * The injector reads the very same WeightGrid instance as the observer (M2):
  * the injected operator equals the measured observable by construction
@@ -32,6 +32,7 @@ class ConstraintInjectPW
   public:
     static bool inject(const WeightGrid& wg,
                        const std::vector<double>& mu,
+                       const DensityChannel channel,
                        ModuleBase::matrix& veff);
 };
 

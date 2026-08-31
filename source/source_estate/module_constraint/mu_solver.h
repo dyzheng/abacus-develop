@@ -14,6 +14,14 @@ struct MuSolverParams
     double kappa_max = 20.0; // largest kept |dQ/dmu| (secant guard)
     double conv_tol = 1e-4;  // e: per-component |Q - target| convergence
     int plateau_window = 3;  // fuse look-back: steps with <1% improvement
+    // Expected sign of the observed response dQ/dmu.  Both the charge and
+    // the spin channel respond negatively (-1): a positive potential on the
+    // fragment repels the coupled density (charge: rho; spin: m = rho_up -
+    // rho_dn, because the split injection V_up += mu*w / V_dn -= mu*w
+    // repels spin-up and attracts spin-down for mu > 0).  The sign sets both
+    // the Newton-secant slope and the sign-flip guard reference; +1 is kept
+    // as a parameter for channels with an inverted (non-standard) coupling.
+    int response_sign = -1;
 };
 
 enum class MuStatus
@@ -29,12 +37,13 @@ enum class MuStatus
  * Component-wise secant on the observed response Q(mu).  Every component is
  * advanced independently with its own (mu_prev, Q_prev) history:
  *
- *   kappa_i = clamp(dQ_i/dmu_i, kappa_min, kappa_max), sign forced negative
+ *   kappa_i = response_sign * clamp(|dQ_i/dmu_i|, kappa_min, kappa_max)
  *   dmu_i   = -(Q_i - target_i) / kappa_i,  |dmu_i| <= step_max
  *
  * Guards (each branch documented against its historical failure mode):
- *  - Sign flip (positive secant slope): fall back to kappa = -kappa_min and
- *    count the event; the update stays bounded and directional (T-4a').
+ *  - Sign flip (secant slope opposing the channel's expected response):
+ *    fall back to kappa = response_sign * kappa_min and count the event;
+ *    the update stays bounded and directional (T-4a').
  *  - Hard mu cap |mu_i| <= mu_max; a component pinned at the cap whose
  *    residual has not improved by >= 1% over the last plateau_window steps
  *    fuses the run with status UNREACHABLE (dead-channel, T-5').

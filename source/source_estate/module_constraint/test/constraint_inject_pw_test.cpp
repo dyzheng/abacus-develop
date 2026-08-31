@@ -113,7 +113,7 @@ TEST_F(ConstraintInjectPWTest, PointwiseInjectionNspin1)
     }
     ModuleBase::matrix veff_ref = veff;
 
-    ASSERT_TRUE(constraint::ConstraintInjectPW::inject(wg, mu, veff));
+    ASSERT_TRUE(constraint::ConstraintInjectPW::inject(wg, mu, constraint::DensityChannel::Charge, veff));
 
     for (int ir = 0; ir < nrxx; ++ir)
     {
@@ -146,7 +146,7 @@ TEST_F(ConstraintInjectPWTest, ChargeChannelOnlyNspin2)
     }
     ModuleBase::matrix veff_ref = veff;
 
-    ASSERT_TRUE(constraint::ConstraintInjectPW::inject(wg, mu, veff));
+    ASSERT_TRUE(constraint::ConstraintInjectPW::inject(wg, mu, constraint::DensityChannel::Charge, veff));
 
     for (int ir = 0; ir < nrxx; ++ir)
     {
@@ -179,12 +179,12 @@ TEST_F(ConstraintInjectPWTest, ObservableEqualsInjectionOperator)
     wg.set_constraint_atoms({{0, 1, 2}});
     std::vector<double> Q;
     const double* rho_ptr[1] = {rho.data()};
-    constraint::ConstraintObserver::observe(wg, rho_ptr, 1, Q);
+    constraint::ConstraintObserver::observe(wg, rho_ptr, 1, constraint::DensityChannel::Charge, Q);
     ASSERT_EQ(Q.size(), 1u);
 
     const double mu = 0.25;
     ModuleBase::matrix veff(1, nrxx);
-    ASSERT_TRUE(constraint::ConstraintInjectPW::inject(wg, {mu}, veff));
+    ASSERT_TRUE(constraint::ConstraintInjectPW::inject(wg, {mu}, constraint::DensityChannel::Charge, veff));
 
     double integral = 0.0;
     for (int ir = 0; ir < nrxx; ++ir)
@@ -201,9 +201,9 @@ TEST_F(ConstraintInjectPWTest, ObservableEqualsInjectionOperator)
     wg2.set_constraint_atoms({{0}, {1, 2}});
     std::vector<double> mu2 = {0.1, -0.2};
     ModuleBase::matrix veff2(1, nrxx);
-    ASSERT_TRUE(constraint::ConstraintInjectPW::inject(wg2, mu2, veff2));
+    ASSERT_TRUE(constraint::ConstraintInjectPW::inject(wg2, mu2, constraint::DensityChannel::Charge, veff2));
     std::vector<double> Q2;
-    constraint::ConstraintObserver::observe(wg2, rho_ptr, 1, Q2);
+    constraint::ConstraintObserver::observe(wg2, rho_ptr, 1, constraint::DensityChannel::Charge, Q2);
     ASSERT_EQ(Q2.size(), 2u);
     double integral2 = 0.0;
     for (int ir = 0; ir < nrxx; ++ir)
@@ -221,9 +221,64 @@ TEST_F(ConstraintInjectPWTest, SizeMismatchGuard)
     ModuleBase::matrix veff(1, rhopw->nrxx);
     ModuleBase::matrix veff_ref = veff;
     // Wrong mu length: reject and leave veff untouched.
-    EXPECT_FALSE(constraint::ConstraintInjectPW::inject(wg, {0.1}, veff));
+    EXPECT_FALSE(constraint::ConstraintInjectPW::inject(wg, {0.1}, constraint::DensityChannel::Charge, veff));
     for (int ir = 0; ir < rhopw->nrxx; ++ir)
     {
         EXPECT_DOUBLE_EQ(veff(0, ir), veff_ref(0, ir));
+    }
+}
+
+TEST_F(ConstraintInjectPWTest, SplitInjectionSpin)
+{
+    // Phase-2 spin channel (DeltaSpin +/- lambda semantics):
+    //   V_up += mu*w, V_dn -= mu*w
+    // driving the spin-difference density m = rho_up - rho_dn toward the
+    // target.  The injected operator must equal the measured observable
+    // (shared WeightGrid), and a single-channel buffer (nspin=1) must be
+    // rejected rather than silently run a wrong operator.
+    constraint::WeightGrid wg(*ucell, rhopw, radii);
+    wg.build();
+    const int nrxx = rhopw->nrxx;
+    const int nalpha = wg.nconstraint();
+
+    ModuleBase::matrix veff(2, nrxx);
+    std::vector<double> mu(nalpha, 0.3);
+    for (int is = 0; is < 2; ++is)
+    {
+        for (int ir = 0; ir < nrxx; ++ir)
+        {
+            veff(is, ir) = 2.0 + is;
+        }
+    }
+    ModuleBase::matrix veff_ref = veff;
+
+    ASSERT_TRUE(constraint::ConstraintInjectPW::inject(
+        wg, mu, constraint::DensityChannel::Spin, veff));
+
+    for (int ir = 0; ir < nrxx; ++ir)
+    {
+        double dv = 0.0;
+        for (int a = 0; a < nalpha; ++a)
+        {
+            dv += mu[a] * wg.constraint_weight(a)[ir];
+        }
+        // Split injection: up gains +dV, down loses dV.
+        EXPECT_NEAR(veff(0, ir), veff_ref(0, ir) + dv, 1e-12);
+        EXPECT_NEAR(veff(1, ir), veff_ref(1, ir) - dv, 1e-12);
+        // The spin-difference potential must actually change (this is the
+        // discriminant against the charge channel which leaves it fixed).
+        EXPECT_NEAR(veff(1, ir) - veff(0, ir),
+                    veff_ref(1, ir) - veff_ref(0, ir) - 2.0 * dv, 1e-12);
+    }
+
+    // Guard: spin injection into a single-channel (nspin=1) buffer fails
+    // and leaves the buffer untouched.
+    ModuleBase::matrix veff1(1, nrxx);
+    ModuleBase::matrix veff1_ref = veff1;
+    EXPECT_FALSE(constraint::ConstraintInjectPW::inject(
+        wg, mu, constraint::DensityChannel::Spin, veff1));
+    for (int ir = 0; ir < nrxx; ++ir)
+    {
+        EXPECT_DOUBLE_EQ(veff1(0, ir), veff1_ref(0, ir));
     }
 }

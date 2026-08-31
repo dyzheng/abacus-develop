@@ -137,13 +137,49 @@ class ConstraintLoopTest : public ::testing::Test
         return q * dV;
     }
 
+    // Spin-channel mock response: the split injection (V_up += mu*w,
+    // V_dn -= mu*w) repels spin-up from / attracts spin-down to the
+    // fragment with the same normalized stiffness S = int w0^2 dV as the
+    // charge mock, so
+    //   rho_up(mu) = rho_ref - mu*w0/S, rho_dn(mu) = rho_ref + mu*w0/S
+    //   =>  Q_m(mu) = int w0 (rho_up - rho_dn) dr = -2 mu
+    // (negative response — same direction as charge, verified in the
+    // 212_PW_constraint_h2o_spin integration case).
+    void fill_rho_mock_spin(const std::vector<double>& mu,
+                            std::vector<double>& rho_up,
+                            std::vector<double>& rho_dn) const
+    {
+        rho_up = rho_ref;
+        rho_dn = rho_ref;
+        const double S = S_int();
+        const std::vector<double>& w0 = wg->constraint_weight(0);
+        for (int ir = 0; ir < rhopw->nrxx; ++ir)
+        {
+            rho_up[ir] -= mu[0] * w0[ir] / S;
+            rho_dn[ir] += mu[0] * w0[ir] / S;
+        }
+    }
+
+    double Q_m_of(const std::vector<double>& rho_up,
+                  const std::vector<double>& rho_dn) const
+    {
+        const std::vector<double>& w0 = wg->constraint_weight(0);
+        double q = 0.0;
+        for (int ir = 0; ir < rhopw->nrxx; ++ir)
+        {
+            q += w0[ir] * (rho_up[ir] - rho_dn[ir]);
+        }
+        return q * dV;
+    }
+
     constraint::ConstraintConfig make_cfg(const double delta,
                                           const double mu_max = 5.0,
-                                          const double thr = 1e-4) const
+                                          const double thr = 1e-4,
+                                          const std::string& type = "charge") const
     {
         constraint::ConstraintConfig cfg;
         cfg.enabled = true;
-        cfg.type = "charge";
+        cfg.type = type;
         cfg.weight_type = "becke";
         cfg.target_mode = "delta";
         cfg.mu_max = mu_max;
@@ -224,6 +260,56 @@ TEST_F(ConstraintLoopTest, ConvergesOnLinearResponse)
     EXPECT_TRUE(conv); // outer loop done: SCF ends normally
     EXPECT_NEAR(loop.mu()[0], mu_star, 1e-6);
     EXPECT_NEAR(Q_of(rho), loop.targets()[0], 1e-4);
+}
+
+TEST_F(ConstraintLoopTest, SpinChannelConvergesOnLinearResponse)
+{
+    // Phase-2 spin channel: the split injection (V_up += mu*w, V_dn -= mu*w)
+    // repels spin-up from / attracts spin-down to the fragment for mu > 0,
+    // driving m = rho_up - rho_dn down.  Normalized linear response gives
+    // Q_m(mu) = -2 mu, so the root for target delta is mu* = -delta/2 — the
+    // same sign pattern as the charge channel (verified in the
+    // 212_PW_constraint_h2o_spin integration case, dQ/dmu ~ -1.4 e/Ry).
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    const double delta = 0.02;
+    loop.init(*ucell, rhopw, make_cfg(delta, 5.0, 1e-4, "spin"), radii, 10.0);
+    ASSERT_TRUE(loop.enabled());
+
+    std::vector<double> rho_up, rho_dn;
+    // Reference SCF (mu = 0): the free run must NOT converge to the
+    // unnatural target (anti-fake convergence, T4a'): at mu = 0 the
+    // observed m = 0 != target = delta, so the loop must stay RUNNING and
+    // the first secant step must move mu away from zero.
+    fill_rho_mock_spin({0.0}, rho_up, rho_dn);
+    const double* rho_ptr[2] = {rho_up.data(), rho_dn.data()};
+    int iter = 1;
+    bool conv = false;
+    loop.observe(iter, rho_ptr, 2);
+    EXPECT_NEAR(loop.charges()[0], 0.0, 1e-10); // natural m at mu=0
+    conv = true;
+    loop.on_scf_converged(iter, conv);
+    EXPECT_FALSE(conv); // forced to continue — not a free-run convergence
+    EXPECT_EQ(loop.status(), constraint::MuStatus::RUNNING);
+    EXPECT_LT(loop.mu()[0], 0.0); // increasing m needs mu < 0 (charge-like)
+
+    int guard = 0;
+    while (loop.status() == constraint::MuStatus::RUNNING && guard < 20)
+    {
+        ++iter;
+        fill_rho_mock_spin(loop.mu(), rho_up, rho_dn);
+        const double* rp[2] = {rho_up.data(), rho_dn.data()};
+        loop.observe(iter, rp, 2);
+        conv = true;
+        loop.on_scf_converged(iter, conv);
+        ++guard;
+    }
+    EXPECT_LT(guard, 20);
+    EXPECT_EQ(loop.status(), constraint::MuStatus::CONVERGED);
+    EXPECT_EQ(loop.phase(), constraint::LoopPhase::DONE);
+    EXPECT_TRUE(conv);
+    EXPECT_NEAR(loop.mu()[0], -delta / 2.0, 1e-6); // root of Q_m = -2 mu
+    EXPECT_NEAR(Q_m_of(rho_up, rho_dn), loop.targets()[0], 1e-4);
+    EXPECT_NEAR(loop.targets()[0], delta, 1e-10); // m_ref = 0
 }
 
 TEST_F(ConstraintLoopTest, FuseUnreachable)

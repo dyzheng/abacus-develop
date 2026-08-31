@@ -77,7 +77,7 @@ TEST(ConstraintObserveTest, IndependentReferenceBecke) { /* 对拍 Q_I < 1e-8 */
 
 V2a+V2b 通过后，phase1 计划 Task 10 改注"V2=V2a+V2b 替代完成（Multiwfn 降级可选项）"再勾回 `[x]`。
 
-- [ ] **Step 6: spec + 日志 + Commit**
+- [x] **Step 6: spec + 日志 + Commit**（评审补勾：提交 f6fcc443d 已含 spec/日志；此前勾选遗漏，随 Task 2.4 轮次修正）
 
 ```bash
 git commit -m "fix(constraint): phase-1 review debts P1/P2/P4 + V2 internal closed-loop validation"
@@ -138,7 +138,9 @@ git commit -m "feat(constraint): M3b LCAO constraint matrix via existing Gint in
 
 一期已预留接口（M2 的 DensityChannel、M3a 的 charge-only nspin=2 测试）。二期接通：
 
-- [ ] **Step 1: 失败测试**
+- [x] **Step 1: 失败测试**（SplitInjectionSpin / SpinChannelMagnetizationReading /
+  SpinTypeGuard / SpinChannelConvergesOnLinearResponse 四测试先行；三道反向破坏验证
+  各恰中目标 FAIL，见 2026-08-31-spin-channel.md）
 
 ```cpp
 TEST(ConstraintSpinTest, SplitInjection)
@@ -148,8 +150,16 @@ TEST(ConstraintSpinTest, SplitInjection)
 }
 ```
 
-- [ ] **Step 2-4: 实现 + 守卫 + 集成**（`tests/constraint_pw_h2o_spin/` 注册 ctest）
-- [ ] **Step 5: spec + 日志 + Commit**
+- [x] **Step 2-4: 实现 + 守卫 + 集成**（`tests/01_PW/212_PW_constraint_h2o_spin/`
+  注册 CASES_CPU.txt，Autotest 对拍通过）
+
+> **符号实证（实现期假设被集成用例推翻，如实登记）**：自旋通道响应为负
+> （dQ_m/dμ≈−1.38 e/Ry，与电荷同号）——`V_up += μw` 排斥自旋上、`V_dn −= μw`
+> 吸引自旋下，m 随 μ 减小。故 delta=+0.1 μB → **μ*=−0.07234（负）**，与电荷通道
+> 符号模式一致（delta=+0.1 e → μ*=−0.1765 Ry）。评审预期"μ>0"基于错误的
+> 正响应假设；本框架 μ 与 DeltaSpin λ 符号相反（μ=−λ），2.6 力矩 FD 对标时换算。
+
+- [x] **Step 5: spec + 日志 + Commit**（`2026-08-31-spin-channel.md` + 日志 (12)）
 
 ---
 

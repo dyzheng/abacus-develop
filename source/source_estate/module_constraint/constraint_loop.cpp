@@ -64,6 +64,13 @@ void ConstraintLoop::init(const UnitCell& ucell,
     MuSolverParams params;
     params.mu_max = cfg_.mu_max;
     params.conv_tol = cfg_.thr;
+    // Response sign: both channels respond negatively.  For the spin
+    // channel the split injection (V_up += mu*w, V_dn -= mu*w) repels
+    // spin-up from / attracts spin-down to the fragment for mu > 0, so the
+    // magnetization reading m = rho_up - rho_dn decreases with mu — the
+    // same negative density response as charge, verified empirically in the
+    // 212_PW_constraint_h2o_spin integration case (dQ/dmu ~ -1.4 e/Ry).
+    params.response_sign = -1;
     mu_solver_ = MuSolver(params);
     phase_ = LoopPhase::REFERENCE;
     status_ = MuStatus::RUNNING;
@@ -89,8 +96,9 @@ void ConstraintLoop::inject_potential(const int iter,
     // The injector rejects a mu/weight length mismatch; per its contract the
     // caller must WARNING_QUIT rather than silently run without the
     // constraint potential (review P2).
-    if (!ConstraintInjectPW::inject(*wg_, mu_, v_eff)
-        || !ConstraintInjectPW::inject(*wg_, mu_, veff_smooth))
+    const DensityChannel channel = channel_from_type(cfg_.type);
+    if (!ConstraintInjectPW::inject(*wg_, mu_, channel, v_eff)
+        || !ConstraintInjectPW::inject(*wg_, mu_, channel, veff_smooth))
     {
         ModuleBase::WARNING_QUIT("ConstraintLoop::inject_potential",
             "mu length does not match the constraint count (wiring bug)");
@@ -116,7 +124,8 @@ void ConstraintLoop::inject_potential_lcao(const int iter,
     // The injector rejects a mu/weight length mismatch; per its contract the
     // caller must WARNING_QUIT rather than silently run without the
     // constraint potential (review P2).
-    if (!ConstraintInjectPW::inject(*wg_, mu_, v_eff))
+    const DensityChannel channel = channel_from_type(cfg_.type);
+    if (!ConstraintInjectPW::inject(*wg_, mu_, channel, v_eff))
     {
         ModuleBase::WARNING_QUIT("ConstraintLoop::inject_potential_lcao",
             "mu length does not match the constraint count (wiring bug)");
@@ -131,7 +140,8 @@ void ConstraintLoop::observe(const int iter, const double* const* rho,
     {
         return;
     }
-    ConstraintObserver::observe(*wg_, rho, nspin, Q_);
+    ConstraintObserver::observe(*wg_, rho, nspin,
+                                channel_from_type(cfg_.type), Q_);
     (void)iter;
 }
 

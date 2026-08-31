@@ -155,7 +155,7 @@ TEST(WeightGridMpiTest, ObserveReduceConsistent)
     std::vector<double> rho(rhopw.nrxx, 1.0);
     const double* rho_ptr = rho.data();
     std::vector<double> Q;
-    constraint::ConstraintObserver::observe(wg, &rho_ptr, 1, Q);
+    constraint::ConstraintObserver::observe(wg, &rho_ptr, 1, constraint::DensityChannel::Charge, Q);
     const double vol = ucell->omega;
 
     // reduce_pool is an allreduce: every rank must hold bit-identical Q.

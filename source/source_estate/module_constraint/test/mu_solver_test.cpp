@@ -131,6 +131,50 @@ TEST(MuSolverTest, SignFlipGuardAndFuse)
     EXPECT_TRUE(std::isfinite(mu[0]));
 }
 
+TEST(MuSolverTest, PositiveResponseWithPositiveSignParam)
+{
+    // Parameter machinery test (not the spin channel's physics): a channel
+    // with an inverted (non-standard) positive response Q(mu) = 1.0 + 2.0 mu
+    // converges only when response_sign = +1 tells the secant to expect it.
+    // With the default -1 the same mock is a sign-flip channel (see
+    // SignFlipGuardAndFuse) and fuses, so the parameter is the
+    // discriminator, not the test tolerance.  The real spin channel responds
+    // negatively like charge (V_up += mu*w repels spin-up), so the default
+    // -1 applies there too (SpinChannelConvergesOnLinearResponse).
+    constraint::MuSolverParams params;
+    params.step_max = 0.05;
+    params.mu_max = 5.0;
+    params.kappa_min = 0.3;
+    params.kappa_max = 20.0;
+    params.conv_tol = 1e-4;
+    params.response_sign = 1;
+    constraint::MuSolver solver(params);
+    MockResponse mock{1.0, -2.0}; // Q = 1 + 2 mu, root mu* = 0.05 for t=1.1
+
+    std::vector<double> mu = {0.0};
+    const std::vector<double> target = {1.1};
+    std::vector<double> mu_trace;
+    constraint::MuStatus st = constraint::MuStatus::RUNNING;
+    for (int k = 0; k < 10; ++k)
+    {
+        const double Q = mock(mu[0]);
+        st = solver.step({Q}, target, mu);
+        mu_trace.push_back(mu[0]);
+        if (st != constraint::MuStatus::RUNNING)
+        {
+            break;
+        }
+    }
+    EXPECT_EQ(st, constraint::MuStatus::CONVERGED);
+    EXPECT_NEAR(mu[0], 0.05, 1e-3);
+    EXPECT_NEAR(mock(mu[0]), 1.1, 1e-6);
+    // Approaches the root monotonically from below (step-limited).
+    for (size_t k = 1; k < mu_trace.size(); ++k)
+    {
+        EXPECT_GE(mu_trace[k], mu_trace[k - 1]);
+    }
+}
+
 TEST(MuSolverTest, FlatChannelFuse)
 {
     // Both-sides-unreachable channel Q(mu) = Q0 constant: mu marches to the

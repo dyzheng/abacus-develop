@@ -306,6 +306,7 @@ ConfigStatus configure_constraint(ConstraintConfig& cfg,
                                   const double mu_max,
                                   const double thr,
                                   const int nat,
+                                  const int nspin,
                                   std::string& error)
 {
     cfg = ConstraintConfig();
@@ -320,18 +321,26 @@ ConfigStatus configure_constraint(ConstraintConfig& cfg,
     cfg.mu_max = mu_max;
     cfg.thr = thr;
 
-    // Guard: phase-1 recipes only.  A wrong recipe must abort loudly rather
-    // than silently run an unvalidated partition.
+    // Guard: phase-1/2 recipes only.  A wrong recipe must abort loudly
+    // rather than silently run an unvalidated partition.
     if (weight_type != "becke")
     {
         error = "constraint_weight_type=\"" + weight_type
                 + "\" is not implemented in phase 1 (only \"becke\")";
         return ConfigStatus::ERROR;
     }
-    if (type != "charge")
+    if (type != "charge" && type != "spin")
     {
         error = "constraint_type=\"" + type
-                + "\" is not implemented in phase 1 (only \"charge\")";
+                + "\" is not implemented in phase 2 (only \"charge\" and "
+                  "\"spin\")";
+        return ConfigStatus::ERROR;
+    }
+    if (type == "spin" && nspin != 2)
+    {
+        error = "constraint_type=spin requires nspin=2 (the spin channel "
+                "reads and injects the spin-difference density rho_up - "
+                "rho_dn)";
         return ConfigStatus::ERROR;
     }
     if (target_mode != "delta" && target_mode != "absolute")
@@ -434,7 +443,7 @@ ConfigStatus configure_from_inputs(ConstraintConfig& cfg,
         cfg, PARAM.inp.constraint, PARAM.inp.constraint_type,
         PARAM.inp.constraint_weight_type, PARAM.inp.constraint_target_mode,
         content, PARAM.inp.constraint_mu_max, PARAM.inp.constraint_thr,
-        ucell.nat, error);
+        ucell.nat, PARAM.inp.nspin, error);
     if (st == ConfigStatus::ERROR)
     {
         return st;

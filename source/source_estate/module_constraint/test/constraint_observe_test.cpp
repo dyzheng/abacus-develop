@@ -191,7 +191,7 @@ TEST_F(ConstraintObserveTest, AtomicSuperposition)
     constraint::WeightGrid wg(*ucell, rhopw, radii, constraint::WeightType::Becke);
     wg.build();
     std::vector<double> Q;
-    constraint::ConstraintObserver::observe(wg, &rho_ptr, 1, Q);
+    constraint::ConstraintObserver::observe(wg, &rho_ptr, 1, constraint::DensityChannel::Charge, Q);
 
     // Sum rule: sum_alpha Q_alpha == N_el.  The partition of unity is exact
     // pointwise; the 1e-8 tolerance absorbs the floating-point accumulation
@@ -229,7 +229,7 @@ TEST_F(ConstraintObserveTest, AtomicSuperposition)
     fill_rho_coarse(coarse_pw, sigma, rho_c);
     const double* rho_c_ptr = rho_c.data();
     std::vector<double> Q_c;
-    constraint::ConstraintObserver::observe(wg_c, &rho_c_ptr, 1, Q_c);
+    constraint::ConstraintObserver::observe(wg_c, &rho_c_ptr, 1, constraint::DensityChannel::Charge, Q_c);
     double err_one = 0.0;
     for (size_t alpha = 0; alpha < Q_c.size(); ++alpha)
     {
@@ -256,11 +256,60 @@ TEST_F(ConstraintObserveTest, PointwiseDeltaReading)
         std::fill(rho.begin(), rho.end(), 0.0);
         rho[ir] = 1.0 / dV;
         std::vector<double> Q;
-        constraint::ConstraintObserver::observe(wg, &rho_ptr, 1, Q);
+        constraint::ConstraintObserver::observe(wg, &rho_ptr, 1, constraint::DensityChannel::Charge, Q);
         for (int alpha = 0; alpha < nalpha; ++alpha)
         {
             EXPECT_NEAR(Q[alpha], wg.constraint_weight(alpha)[ir], 1e-12)
                 << "probe " << probe << " alpha " << alpha;
+        }
+    }
+}
+
+TEST_F(ConstraintObserveTest, SpinChannelMagnetizationReading)
+{
+    // Phase-2 spin channel: Q_m,alpha = int w_alpha (rho_up - rho_dn) dr.
+    // Grid-delta probes pin the channel split against the charge channel:
+    //   rho_up = delta, rho_dn = 0    -> spin == w(ir*), charge == w(ir*)
+    //   rho_up = rho_dn = delta       -> spin == 0,     charge == 2 w(ir*)
+    constraint::WeightGrid wg(*ucell, rhopw, radii, constraint::WeightType::Becke);
+    wg.build();
+    const double dV = rhopw->omega / static_cast<double>(rhopw->nxyz);
+    const int nalpha = wg.nconstraint();
+    std::vector<double> rho_up(rhopw->nrxx, 0.0);
+    std::vector<double> rho_dn(rhopw->nrxx, 0.0);
+    const double* rho_ptr[2] = {rho_up.data(), rho_dn.data()};
+
+    for (int probe = 0; probe < 20; ++probe)
+    {
+        const int ir = (probe * 997) % rhopw->nrxx;
+        std::fill(rho_up.begin(), rho_up.end(), 0.0);
+        std::fill(rho_dn.begin(), rho_dn.end(), 0.0);
+        rho_up[ir] = 1.0 / dV;
+        if (probe % 2 == 1)
+        {
+            // Half the probes put the same delta in the down channel: the
+            // spin reading must vanish while the charge reading doubles.
+            rho_dn[ir] = 1.0 / dV;
+        }
+        std::vector<double> Qm;
+        constraint::ConstraintObserver::observe(
+            wg, rho_ptr, 2, constraint::DensityChannel::Spin, Qm);
+        std::vector<double> Qc;
+        constraint::ConstraintObserver::observe(
+            wg, rho_ptr, 2, constraint::DensityChannel::Charge, Qc);
+        for (int alpha = 0; alpha < nalpha; ++alpha)
+        {
+            const double w = wg.constraint_weight(alpha)[ir];
+            if (probe % 2 == 0)
+            {
+                EXPECT_NEAR(Qm[alpha], w, 1e-12);
+                EXPECT_NEAR(Qc[alpha], w, 1e-12);
+            }
+            else
+            {
+                EXPECT_NEAR(Qm[alpha], 0.0, 1e-12);
+                EXPECT_NEAR(Qc[alpha], 2.0 * w, 1e-12);
+            }
         }
     }
 }
@@ -274,7 +323,7 @@ TEST_F(ConstraintObserveTest, ConstantDensitySum)
     constraint::WeightGrid wg(*ucell, rhopw, radii, constraint::WeightType::Becke);
     wg.build();
     std::vector<double> Q;
-    constraint::ConstraintObserver::observe(wg, &rho_ptr, 1, Q);
+    constraint::ConstraintObserver::observe(wg, &rho_ptr, 1, constraint::DensityChannel::Charge, Q);
 
     double qsum = 0.0;
     for (const double q : Q)
@@ -346,7 +395,7 @@ TEST_F(ConstraintObserveTest, IndependentReferenceBecke)
     constraint::WeightGrid wg(*ucell, rhopw, radii, constraint::WeightType::Becke);
     wg.build();
     std::vector<double> Q_prod;
-    constraint::ConstraintObserver::observe(wg, &rho_ptr, 1, Q_prod);
+    constraint::ConstraintObserver::observe(wg, &rho_ptr, 1, constraint::DensityChannel::Charge, Q_prod);
 
     // Interatomic distance matrix (all atoms inside the cell, no wrapping).
     std::vector<double> dRR(pos.size() * pos.size(), 0.0);
