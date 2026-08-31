@@ -1,5 +1,6 @@
 #include "gtest/gtest.h"
 
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <memory>
@@ -7,6 +8,7 @@
 #define private public
 #define protected public
 #include "source_base/global_variable.h"
+#include "source_base/module_grid/partition.h"
 #include "source_basis/module_pw/pw_basis.h"
 #include "source_estate/module_constraint/weight_grid.h"
 #include "source_io/module_parameter/parameter.h"
@@ -215,5 +217,284 @@ TEST_F(WeightGridTest, SetAtomsBeforeBuild)
     for (int ir = 0; ir < rhopw->nrxx; ++ir)
     {
         EXPECT_DOUBLE_EQ(cw[0][ir], cref[0][ir]);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 2.5.1 M1 derivative grid: analytic vs direct kernel, translation
+// invariance (strong chain-rule check), coincident-point zero derivative.
+// ---------------------------------------------------------------------------
+
+// Minimum-image fractional displacement wrap, replicated independently from
+// WeightGrid::min_image_displacement (deliberately not reusing it).
+static double wrap_frac(const double v)
+{
+    return v - std::floor(v + 0.5);
+}
+
+// Becke input arrays (drR, eR, dRR) for the 10 Bohr cubic test box
+// (Cartesian == fractional * 10, lat0 = 1) at a given fractional grid point.
+struct PointGeom
+{
+    std::vector<double> drR;
+    std::vector<double> eR;
+    std::vector<double> dRR;
+};
+static PointGeom eval_geom(const std::vector<std::array<double, 3>>& taud,
+                           const std::array<double, 3>& rfrac)
+{
+    const int nat = static_cast<int>(taud.size());
+    PointGeom g;
+    g.drR.assign(nat, 0.0);
+    g.eR.assign(3 * nat, 0.0);
+    g.dRR.assign(nat * nat, 0.0);
+    for (int I = 0; I < nat; ++I)
+    {
+        // Direction cosines must point from the grid point toward the atom
+        // (M0 kernel convention).  WeightGrid builds them as the negated
+        // atom -> grid-point minimum-image displacement; we replicate that
+        // exactly — wrap is not odd at the +/-0.5 tie-break boundary, so
+        // plain wrap(taud - rfrac) would pick the opposite image there.
+        std::array<double, 3> disp{};
+        for (int d = 0; d < 3; ++d)
+        {
+            disp[d] = -wrap_frac(rfrac[d] - taud[I][d]) * 10.0;
+        }
+        g.drR[I] = std::sqrt(disp[0] * disp[0] + disp[1] * disp[1]
+                             + disp[2] * disp[2]);
+        for (int d = 0; d < 3; ++d)
+        {
+            g.eR[3 * I + d] = disp[d] / g.drR[I];
+        }
+        for (int J = I + 1; J < nat; ++J)
+        {
+            std::array<double, 3> dij{};
+            for (int d = 0; d < 3; ++d)
+            {
+                dij[d] = wrap_frac(taud[I][d] - taud[J][d]) * 10.0;
+            }
+            const double dIJ = std::sqrt(dij[0] * dij[0] + dij[1] * dij[1]
+                                         + dij[2] * dij[2]);
+            g.dRR[I * nat + J] = dIJ;
+            g.dRR[J * nat + I] = dIJ;
+        }
+    }
+    return g;
+}
+
+// Fractional coordinates of every atom in the cell (global atom index).
+static std::vector<std::array<double, 3>> cell_taud(const UnitCell& ucell)
+{
+    std::vector<std::array<double, 3>> taud(ucell.nat);
+    int iat = 0;
+    for (int it = 0; it < ucell.ntype; ++it)
+    {
+        for (int ia = 0; ia < ucell.atoms[it].na; ++ia)
+        {
+            taud[iat] = {ucell.atoms[it].taud[ia].x,
+                         ucell.atoms[it].taud[ia].y,
+                         ucell.atoms[it].taud[ia].z};
+            ++iat;
+        }
+    }
+    return taud;
+}
+
+// Fractional coordinate of the local grid point ir (serial: nplane == nz).
+static std::array<double, 3> grid_frac(const ModulePW::PW_Basis& pw,
+                                       const int ir)
+{
+    const int i = ir / (pw.ny * pw.nz);
+    const int j = ir / pw.nz - i * pw.ny;
+    const int k = ir % pw.nz;
+    return {static_cast<double>(i) / pw.nx,
+            static_cast<double>(j) / pw.ny,
+            static_cast<double>(k) / pw.nz};
+}
+
+TEST_F(WeightGridTest, DerivGridAnalytic)
+{
+    // The assembled derivative grid must equal a direct per-point call of
+    // the M0 kernel w_becke_adjusted_deriv (independent geometry rebuild in
+    // the test, same min-image convention) for the O weight vs every atom.
+    constraint::WeightGrid wg(*ucell, rhopw, radii, constraint::WeightType::Becke);
+    wg.build();
+    wg.build_derivatives();
+    ASSERT_TRUE(wg.derivatives_built());
+
+    const auto taud = cell_taud(*ucell);
+    std::vector<int> iR_all = {0, 1, 2};
+
+    int checked = 0;
+    for (int probe = 0; probe < 400 && checked < 20; ++probe)
+    {
+        const int ir = (probe * 997 + 123) % rhopw->nrxx;
+        const auto rfrac = grid_frac(*rhopw, ir);
+        const PointGeom g = eval_geom(taud, rfrac);
+        // Skip points coinciding (or nearly coinciding) with an atom: the
+        // coincident case is exact-zero and covered by its own test.
+        bool near_atom = false;
+        for (const double d : g.drR)
+        {
+            near_atom = near_atom || d < 1e-3;
+        }
+        if (near_atom)
+        {
+            continue;
+        }
+        for (int J = 0; J < 3; ++J)
+        {
+            double dw[3] = {0.0, 0.0, 0.0};
+            Grid::Partition::w_becke_adjusted_deriv(
+                3, g.drR.data(), g.dRR.data(), radii.data(), g.eR.data(),
+                3, iR_all.data(), 0, J, dw);
+            for (int d = 0; d < 3; ++d)
+            {
+                EXPECT_NEAR(wg.weight_derivative(0, J, d, ir), dw[d], 1e-12)
+                    << "probe " << probe << " J " << J << " d " << d;
+            }
+        }
+        ++checked;
+    }
+    EXPECT_GT(checked, 10);
+}
+
+TEST_F(WeightGridTest, DerivGridCoincidentPointZero)
+{
+    // O sits exactly on a grid point ((5,5,5) Bohr <-> frac (0.5,0.5,0.5)
+    // on the 40^3 / 10 Bohr grid).  At r = R_c every Becke cell function
+    // factor is s(+-1) = {1, 0} with s'(+-1) = 0, so all per-atom weight
+    // derivatives vanish identically (the raw kernel would hit a 0/0 at
+    // mu = +-1, so the build must short-circuit the point).
+    constraint::WeightGrid wg(*ucell, rhopw, radii, constraint::WeightType::Becke);
+    wg.build();
+    wg.build_derivatives();
+
+    const int nx = rhopw->nx, ny = rhopw->ny, nz = rhopw->nz;
+    const int ir = ((nx / 2) * ny + ny / 2) * nz + nz / 2;
+    for (int alpha = 0; alpha < wg.nconstraint(); ++alpha)
+    {
+        for (int J = 0; J < wg.nat(); ++J)
+        {
+            for (int d = 0; d < 3; ++d)
+            {
+                EXPECT_DOUBLE_EQ(wg.weight_derivative(alpha, J, d, ir), 0.0);
+            }
+        }
+    }
+}
+
+TEST_F(WeightGridTest, DerivGridTranslationInvariance)
+{
+    // Strong chain-rule self-check: under a rigid translation of the whole
+    // system (grid point and all atoms together) the weight is unchanged,
+    // so  sum_J d w_alpha/d R_J + d w_alpha/d r = 0  pointwise.  The
+    // d w/d r term is obtained independently by a 5-point central
+    // difference of the analytic weight on shifted grid points.
+    constraint::WeightGrid wg(*ucell, rhopw, radii, constraint::WeightType::Becke);
+    wg.build();
+    wg.build_derivatives();
+
+    const auto taud = cell_taud(*ucell);
+    std::vector<int> iR_all = {0, 1, 2};
+    const double h = 1e-3; // Bohr; 5-point stencil error ~ h^4 |w^(5)|
+
+    int checked = 0;
+    for (int probe = 0; probe < 400 && checked < 20; ++probe)
+    {
+        const int ir = (probe * 701 + 5) % rhopw->nrxx;
+        const auto rfrac0 = grid_frac(*rhopw, ir);
+        const PointGeom g0 = eval_geom(taud, rfrac0);
+        bool near_atom = false;
+        for (const double d : g0.drR)
+        {
+            near_atom = near_atom || d < 1e-3;
+        }
+        if (near_atom)
+        {
+            continue;
+        }
+        // Skip probes near a minimum-image tie-break boundary: when any atom
+        // sits at |frac displacement| >= 0.49 from the grid point (~0.1 Bohr
+        // from the +/-0.5 image-jump boundary on this 0.25 Bohr grid), w as
+        // a function of the atom position is non-differentiable there — the
+        // wrapped image jumps as the atom crosses, so the analytic chain-rule
+        // derivative (single side) and the stencil (which crosses the jump)
+        // cannot agree.  The set has measure zero and no bearing on the force
+        // volume integral; 0.49 leaves a conservative 0.1 Bohr margin for the
+        // 1e-3 Bohr stencil.
+        bool tie_break = false;
+        for (int I = 0; I < wg.nat(); ++I)
+        {
+            for (int d = 0; d < 3; ++d)
+            {
+                if (std::abs(wrap_frac(rfrac0[d] - taud[I][d])) >= 0.49)
+                {
+                    tie_break = true;
+                }
+            }
+        }
+        if (tie_break)
+        {
+            continue;
+        }
+        for (int dd = 0; dd < 3; ++dd)
+        {
+            // Grid sum: sum_J d w_O / d R_J (component dd).
+            double S = 0.0;
+            for (int J = 0; J < 3; ++J)
+            {
+                S += wg.weight_derivative(0, J, dd, ir);
+            }
+            // Independent d w/d r_dd via the 5-point stencil.
+            auto w_at_shift = [&](const double s) {
+                std::array<double, 3> rf = rfrac0;
+                rf[dd] += s / 10.0; // Cartesian shift s (Bohr) -> frac
+                const PointGeom g = eval_geom(taud, rf);
+                return Grid::Partition::w_becke_adjusted(
+                    3, g.drR.data(), g.dRR.data(), radii.data(), 3,
+                    iR_all.data(), 0);
+            };
+            const double wm2 = w_at_shift(-2.0 * h);
+            const double wm1 = w_at_shift(-h);
+            const double wp1 = w_at_shift(h);
+            const double wp2 = w_at_shift(2.0 * h);
+            const double dwdr = (wm2 - 8.0 * wm1 + 8.0 * wp1 - wp2)
+                                / (12.0 * h);
+            EXPECT_NEAR(S, -dwdr, 1e-10)
+                << "probe " << probe << " component " << dd;
+        }
+        ++checked;
+    }
+    EXPECT_GT(checked, 10);
+}
+
+TEST_F(WeightGridTest, DerivFragmentConstraint)
+{
+    // Per-constraint derivative = sum of the per-atom derivatives of the
+    // fragment; setting the constraint map after build_derivatives must
+    // re-derive the cached grid (set_constraint_atoms branch B).
+    constraint::WeightGrid wg(*ucell, rhopw, radii, constraint::WeightType::Becke);
+    wg.build();
+    wg.build_derivatives();
+    wg.set_constraint_atoms({{0, 1}});
+    ASSERT_EQ(wg.nconstraint(), 1);
+
+    // Direct check: build a fresh grid with the fragment map set BEFORE
+    // build_derivatives; both orders must agree.
+    constraint::WeightGrid ref(*ucell, rhopw, radii, constraint::WeightType::Becke);
+    ref.set_constraint_atoms({{0, 1}});
+    ref.build();
+    ref.build_derivatives();
+    for (int J = 0; J < ref.nat(); ++J)
+    {
+        for (int d = 0; d < 3; ++d)
+        {
+            for (int ir = 0; ir < rhopw->nrxx; ++ir)
+            {
+                EXPECT_DOUBLE_EQ(wg.weight_derivative(0, J, d, ir),
+                                 ref.weight_derivative(0, J, d, ir));
+            }
+        }
     }
 }

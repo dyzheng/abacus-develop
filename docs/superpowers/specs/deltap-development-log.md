@@ -3154,6 +3154,35 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - 裁定：通过，批准继续 Task 2.4 自旋通道。
 - 文件：`2026-08-31-task23-review.md`。
 
+## 2026-08-31 (6): Task 2.4 实证 Review（无代码改动）
+
+- 亲自复跑核实（未派代理）：自旋用例 3 外步 CONVERGED、μ*=−0.07233853426、
+  q=0.09998 vs t=0.100006、maxdev=2.2e-16、FINAL_ETOT 差 9.5e-10 eV；
+  负响应轨迹独立验证（μ=−0.05→q=0.0691，斜率 −1.38）；守卫
+  nspin=1+spin → EXIT=1 精确报错；反假收敛成立（m_ref=5.9e-6）；ctest
+  constraint 10/10；PW 211 回归 4.1e-9 eV、LCAO 212 回归 2.4e-11 eV。
+- 符号修正判定为**正当的实测驱动修正**：物理独立推导自洽（响应函数对角
+  元为负、μ>0 排斥自旋上）；diff 为参数泛化（response_sign 默认 −1）非
+  改判据；三道 sabotage 验证守卫真实判别；μ=−λ 换算已为 2.6 预案。
+- 上轮遗留待办全闭环：Task 2.1 Step 6 补勾、M3b 头注生产旁路声明已补。
+- 未独立复核项（低风险登记）：037_PW_FM 回归、sabotage 重做。
+- 裁定：通过，批准继续 Task 2.5（M6 力核）。
+- 文件：`2026-08-31-task24-review.md`。
+
+## 2026-08-31 (7): Task 2.5（M6 力核）详细实施 Todo（无代码改动）
+
+- 产出 `docs/superpowers/plans/2026-08-31-task25-m6-force-detail.md`：
+  2.5.1 权重导数网格（平移不变性自检 Σ_J ∂w/∂R_J + ∂w/∂r ≡ 0）→
+  2.5.2 力核（合成密度解析对拍 1e-8 + 牛顿第三定律 1e-10 + 力对 μ 线性）→
+  2.5.3 PW 接线（仿 forces_onsite dspin 先例 + 驻点 WARNING 守卫）→
+  2.5.4 LCAO 接线（同一力核，验证双基组同码架构声明）→ 2.5.5 出口判据
+  （FD 留给 2.6，不在低网格抢跑，R7）。
+- 接线落点已核实：PW `Forces::cal_force` 编排 + `forces_onsite.cpp:62`
+  dspin 先例；LCAO `source_lcao/FORCE.h`。力核纯网格、双基组同码——
+  "权重与基组解耦"的架构红利在力路径兑现。
+- 2.6 附加议程登记：M3b 命运判决（升格运行时审计 Tr[W^α·DM] vs ∫w_αρ
+  或收尾删除）；力矩 FD 严格 μ=−λ 换算。
+
 ## 2026-08-30 (2): M0 Becke 异核修正 + 解析位置导数（T1 完成）
 
 - `partition.h/.cpp`：新增 `w_becke_adjusted`（异核半径比修正 μ'_ij）与
@@ -3470,3 +3499,37 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   037_PW_FM（nspin=2）OK；LCAO 212_NAO_constraint_h2o OK。
 - 文件：`docs/superpowers/specs/2026-08-31-spin-channel.md`（新）。
 - Next：Task 2.5 M6 力核（F_J=−Σμ∫ρ∂w/∂R_J，纯网格，PW/LCAO 同一核）。
+
+## 2026-08-31 (13): Task 2.5.1——M1 扩充：权重位置导数网格 ∂w_α/∂R_J
+
+- 实现：`weight_grid.h/.cpp` 新增 `build_derivatives()`（每几何一次，缓存
+  `wat_deriv_`/`dw_`，布局 `[alpha][(J*3+d)*nrxx_+ir]`）、
+  `weight_derivative(alpha,J,d,ir)`、`derivatives_built()`；
+  `set_constraint_atoms` 分支 B 同步重导 dw_。
+- 失败测试先行（TDD）：`DerivGridAnalytic`（组装网格 vs M0 核逐点一致 1e-12）、
+  `DerivGridCoincidentPointZero`、`DerivGridTranslationInvariance`
+  （Σ_J ∂w/∂R_J + ∂w/∂r ≡ 0，1e-10）、`DerivFragmentConstraint`；
+  MPI 侧 `DerivGridMPI`（4 rank vs 串行逐点一致 1e-12）。
+- 修复 3 处 bug：
+  1. eR 方向：`min_image_displacement` 返回 原子→网格点，M0 核约定
+     网格点→原子，取反（实现已改对）。
+  2. 测试 helper `eval_geom` 的 wrap 平局边界：须用 `−wrap(rfrac−taud)`
+     与生产完全同构（±0.5 处两取像不同）。
+  3. `partition.cpp` M0 核 s=0 的 0/0 NaN：μ=±1（网格点在原子连线延长线）
+     时 `sp/s` 除零；该因子导数为 0，加 `s!=0`/`1−s!=0` 守卫跳过精确。
+- 关键认知（如实登记）：tie-break 边界（原子恰在 ±0.5 分数坐标）处 `w(R)`
+  不可微——中心差分给"平均导数"、解析链式给"解析侧"值（grid=0.893 vs
+  fd=0.000）。测度零、对力积分无影响；测试跳过图像不稳定探针
+  （`|wrap_frac|≥0.49`），实现不改。调试测试 `DbgTieBreak` 已删除。
+- CMake 修复（既有问题）：`partition.cpp` 自 M8 入 `base` OBJECT 库后，
+  `weight_grid_mpi` 测试目标直编它导致 multiple definition（本构建树从未
+  链成过该目标）；按串行 `weight_grid` 模式移除直编行，由 `base` 提供。
+- 回归：weight_grid 10/10、MPI 3/3（4np）、partition 4/4、
+  `ctest -R constraint` 10/10 全绿。
+- 文件：`weight_grid.h/.cpp`（+build_derivatives）、`weight_grid_test.cpp`
+  （+4 测试）、`weight_grid_mpi_test.cpp`（+DerivGridMPI）、
+  `partition.cpp`（s=0 守卫）、`test_mpi/CMakeLists.txt`（去重）、
+  `docs/superpowers/specs/2026-08-31-m6-deriv-grid.md`（新）。
+- Next：Task 2.5.2 M6 力核 `constraint_deriv`（F_J=−Σμ∫ρ∂w/∂R_J，
+  charge/spin 双通道 + reduce_pool 归约；合成密度解析对拍 / 牛顿第三定律 /
+  μ 线性三失败测试）。

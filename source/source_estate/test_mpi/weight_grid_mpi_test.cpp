@@ -121,6 +121,90 @@ TEST(WeightGridMpiTest, DistributedMatchesSerial)
     EXPECT_LT(max_diff, 1e-12);
 }
 
+TEST(WeightGridMpiTest, DerivGridMPI)
+{
+    PARAM.input.device = "cpu";
+    PARAM.input.precision = "double";
+    PARAM.input.nspin = 1;
+    PARAM.input.nelec = 10.0;
+    PARAM.input.basis_type = "pw";
+    GlobalV::KPAR = 1;
+    Parallel_Global::init_pools(GlobalV::NPROC,
+                                GlobalV::MY_RANK,
+                                PARAM.input.bndpar,
+                                GlobalV::KPAR,
+                                GlobalV::NPROC_IN_BNDGROUP,
+                                GlobalV::RANK_IN_BPGROUP,
+                                GlobalV::MY_BNDGROUP,
+                                GlobalV::NPROC_IN_POOL,
+                                GlobalV::RANK_IN_POOL,
+                                GlobalV::MY_POOL);
+
+    auto ucell = make_h2o_ucell();
+    const std::vector<double> radii = {1.5, 0.5, 0.5};
+
+    // Distributed density grid over the whole world pool (non-square mesh).
+    ModulePW::PW_Basis rhopw;
+    rhopw.initmpi(GlobalV::NPROC_IN_POOL, GlobalV::RANK_IN_POOL, POOL_WORLD);
+    rhopw.initgrids(1.0, ucell->latvec, 24, 16, 20);
+    rhopw.distribute_r();
+
+    constraint::WeightGrid wg(*ucell, &rhopw, radii, constraint::WeightType::Becke);
+    wg.build();
+    wg.build_derivatives();
+    ASSERT_TRUE(wg.derivatives_built());
+
+    // Rank 0 additionally builds the full serial reference derivative grid
+    // (layout [alpha][(J*3+d)*nxyz + ir], same as WeightGrid::dw_).
+    const int nat = wg.nat();
+    const int ncomp = 3 * nat; // (J,d) Cartesian components
+    const int nxyz = rhopw.nx * rhopw.ny * rhopw.nz;
+    std::vector<double> ref(nat * ncomp * nxyz, 0.0);
+    if (GlobalV::MY_RANK == 0)
+    {
+        ModulePW::PW_Basis refpw;
+        refpw.initmpi(1, 0, MPI_COMM_SELF);
+        refpw.initgrids(1.0, ucell->latvec, rhopw.nx, rhopw.ny, rhopw.nz);
+        refpw.distribute_r();
+        constraint::WeightGrid wg_ref(*ucell, &refpw, radii, constraint::WeightType::Becke);
+        wg_ref.build();
+        wg_ref.build_derivatives();
+        const auto& dw = wg_ref.weight_derivatives();
+        for (int alpha = 0; alpha < nat; ++alpha)
+        {
+            for (int c = 0; c < ncomp; ++c)
+            {
+                for (int ir = 0; ir < nxyz; ++ir)
+                {
+                    ref[(alpha * ncomp + c) * nxyz + ir] = dw[alpha][c * nxyz + ir];
+                }
+            }
+        }
+    }
+    MPI_Bcast(ref.data(), static_cast<int>(ref.size()), MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+    // Every rank checks its local slice against the serial reference using
+    // the global index gi = ixy * nz + iz_global.
+    const int nz = rhopw.nz;
+    double max_diff = 0.0;
+    for (int alpha = 0; alpha < nat; ++alpha)
+    {
+        for (int c = 0; c < ncomp; ++c)
+        {
+            for (int ir = 0; ir < rhopw.nrxx; ++ir)
+            {
+                const int ixy = ir / rhopw.nplane;
+                const int iz = rhopw.startz_current + ir % rhopw.nplane;
+                const int gi = ixy * nz + iz;
+                max_diff = std::max(max_diff,
+                                    std::abs(wg.weight_derivatives()[alpha][c * rhopw.nrxx + ir]
+                                             - ref[(alpha * ncomp + c) * nxyz + gi]));
+            }
+        }
+    }
+    EXPECT_LT(max_diff, 1e-12);
+}
+
 TEST(WeightGridMpiTest, ObserveReduceConsistent)
 {
     PARAM.input.device = "cpu";

@@ -49,6 +49,31 @@ class WeightGrid
     // twice with the same geometry yields bit-identical results.
     void build();
 
+    // (Re)compute the position-derivative grid d w_alpha / d R_J (M6 force
+    // kernel input).  Pure function of the geometry like build(); must be
+    // re-run once per geometry.  The grid layout is
+    //   dw_[alpha][(J * 3 + d) * nrxx_ + ir]
+    // with J the global atom index and d the Cartesian component (Bohr^-1).
+    // Cost is O(N_g * N_at^3) once per geometry; storage is
+    // 3 * N_at * N_alpha * N_g doubles (negligible next to the density).
+    void build_derivatives();
+
+    bool derivatives_built() const { return !dw_.empty(); }
+
+    // d w_alpha / d R_J, Cartesian component d, at local grid point ir.
+    double weight_derivative(const int alpha,
+                             const int J,
+                             const int d,
+                             const int ir) const
+    {
+        return dw_[alpha][(J * 3 + d) * nrxx_ + ir];
+    }
+    // Raw per-constraint derivative grid (same layout as weight_derivative).
+    const std::vector<std::vector<double>>& weight_derivatives() const
+    {
+        return dw_;
+    }
+
     int nat() const { return nat_; }
     int nrxx() const { return nrxx_; }
     int nconstraint() const { return constraint_atoms_.size(); }
@@ -97,6 +122,10 @@ class WeightGrid
     // Per-atom weights w_[iat][ir_local] and derived per-constraint weights.
     std::vector<std::vector<double>> w_;
     std::vector<std::vector<double>> cw_;
+    // Per-atom position-derivative cache wat_deriv_[iat][(J*3+d)*nrxx_+ir]
+    // and the derived per-constraint derivative grid dw_ (same layout).
+    std::vector<std::vector<double>> wat_deriv_;
+    std::vector<std::vector<double>> dw_;
     std::vector<std::vector<int>> constraint_atoms_;
 
     // Partition-of-unity audit result (global max over ranks).

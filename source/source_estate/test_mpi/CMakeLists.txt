@@ -23,7 +23,6 @@ AddTest(
   SOURCES weight_grid_mpi_test.cpp
     ../module_constraint/weight_grid.cpp
     ../module_constraint/constraint_observe.cpp
-    ../../source_base/module_grid/partition.cpp
     ../../source_io/module_output/output.cpp
 )
 

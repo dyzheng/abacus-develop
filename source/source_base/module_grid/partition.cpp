@@ -276,8 +276,20 @@ void w_becke_adjusted_deriv(
                 dmup_dmu * dmu_dRJ[1],
                 dmup_dmu * dmu_dRJ[2]};
             for (int dd = 0; dd < 3; ++dd) {
-                dlnP[i*3 + dd] += (sp / s) * dmu_p_dRJ[dd];
-                dlnP[j*3 + dd] += (sp / (1.0 - s)) * (-dmu_p_dRJ[dd]);
+                // Guard the s = 0 (mu = +-1) points: the grid point lies
+                // exactly on the I-K axis beyond one end, so s(+-1) = 0
+                // with s'(+-1) = 0.  The zero pair factor makes P_A = 0,
+                // whose derivative is exactly 0 (product of a zero factor
+                // with zero slope), so the log-derivative term (sp/s) must
+                // be skipped rather than evaluated as 0/0 = NaN.  The other
+                // center carries the factor s(-+1) = 1 with zero slope, so
+                // its term is exactly 0 as well.
+                if (s != 0.0) {
+                    dlnP[i*3 + dd] += (sp / s) * dmu_p_dRJ[dd];
+                }
+                if (1.0 - s != 0.0) {
+                    dlnP[j*3 + dd] += (sp / (1.0 - s)) * (-dmu_p_dRJ[dd]);
+                }
             }
             P[i] *= s;
             P[j] *= (1.0 - s);
