@@ -34,10 +34,10 @@
 
 **Files:** `source/source_pw/module_pwdft/forces.h/.cpp`（~15 行）、`constraint_loop.h/.cpp`（暴露 `compute_force`）
 
-- [ ] 失败测试（集成）：PW 约束 H₂O 单点，打印力中含 constraint 分量；μ=0 参考相 constraint 力恒零。
-- [ ] 实现：`Forces::cal_force` 编排内加 `cal_force_constraint`（仿 `forces_onsite.cpp:62` 的 dspin 先例位置）；力核调 2.5.2。
-- [ ] **驻点守卫**：外环未收敛（max_res > constraint_thr）时打印 WARNING"约束力基于未收敛约束，残余误差 O(|Q−t|)"（包络定理前提，方案 §5.1 推论 1）。
-- [ ] 冒烟通过 + spec + 日志 + Commit。
+- [x] 失败测试（集成）：PW 约束 H₂O 单点，打印力中含 constraint 分量；μ=0 参考相 constraint 力恒零。（实跑：relax_nmax 1 + test_force 1，μ≠0 相力块非零、μ=0 相恒零；单测 3 个：Disabled no-op / ConvergedMatchesKernel 逐位一致 / MuZero 精确零）
+- [x] 实现：`Forces::cal_force` 编排内加 `cal_force_constraint`（仿 `forces_onsite.cpp:62` 的 dspin 先例位置）；力核调 2.5.2。
+- [x] **驻点守卫**：外环未收敛（max_res > constraint_thr）时打印 WARNING"约束力基于未收敛约束，残余误差 O(|Q−t|)"（包络定理前提，方案 §5.1 推论 1）。——`compute_force` 内 `mu_norm()>0 && status_!=CONVERGED` → WARNING（不阻断）；本次冒烟两相收敛未触发
+- [x] 冒烟通过 + spec + 日志 + Commit。（spec：`docs/superpowers/specs/2026-08-31-m6-force-pw-wiring.md`；日志节 15）
 
 ### 2.5.4 LCAO 力接线
 

@@ -81,6 +81,17 @@ class ConstraintLoop
     // Print the final audit report (called from PW after_scf).
     void final_report();
 
+    // Constraint contribution to the atomic forces (M6): the shared weight
+    // field times the current multipliers, integrated against the density
+    // by the grid force kernel (constraint_deriv — the same kernel the LCAO
+    // path calls, so PW and LCAO forces are identical by construction).
+    // rho is the per-spin density on the weight grid (nspin = 1/2); the
+    // density channel follows cfg_.type.  Accumulates into forcecon
+    // (nat x 3, Ry/Bohr).  No-op when the loop is disabled.
+    void compute_force(const double* const* rho,
+                       const int nspin,
+                       ModuleBase::matrix& forcecon);
+
     // Reset all state (unit tests / re-init).
     void reset();
 

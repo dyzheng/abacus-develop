@@ -51,6 +51,7 @@ list(APPEND objects
     module_constraint/constraint_inject_pw.cpp
     module_constraint/constraint_accounting.cpp
     module_constraint/constraint_loop.cpp
+    module_constraint/constraint_deriv.cpp
 )
 
 if(ENABLE_LCAO)

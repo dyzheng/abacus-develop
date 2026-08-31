@@ -105,6 +105,11 @@ class Forces
                        const bool vnew_exist,
                        const bool* numeric,
                        const UnitCell& ucell_in);
+    /// @brief real-space weight constraint force (M6): grid-only kernel
+    /// (constraint_deriv) shared with the LCAO path; the multipliers and
+    /// the shared weight field come from the ConstraintLoop singleton.
+    void cal_force_constraint(ModuleBase::matrix& forcecon,
+                              const Charge* const chr);
     void cal_force_us(ModuleBase::matrix& forcenl,
                       const ModulePW::PW_Basis* const rho_basis,
                       const pseudopot_cell_vnl& ppcell_in,

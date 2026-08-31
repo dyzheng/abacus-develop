@@ -3559,3 +3559,31 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - 文件：`constraint_deriv.h/.cpp`（新）、`test/constraint_deriv_test.cpp`（新）、
   `test/CMakeLists.txt`（+1 目标）、`docs/superpowers/specs/2026-08-31-m6-force-kernel.md`（新）。
 - Next：Task 2.5.3 PW 力接线（Forces::cal_force + 驻点 WARNING 守卫）。
+
+## 2026-08-31 (15): Task 2.5.3——PW 力接线（cal_force_constraint + 驻点守卫）
+
+- 实现：`constraint_loop.h/.cpp` 新增 `compute_force(rho, nspin, forcecon)`
+  ——懒建导数网格（每几何一次）、驻点守卫（mu_norm>0 且未 CONVERGED →
+  WARNING"residual O(|Q−t|)"，不阻断）、未启用 no-op、调 2.5.2 核。
+  `forces.h/.cpp` 新增 `cal_force_constraint` 编排（cal_force_cc 前调用，
+  仿 dspin 先例位置）；总力 `if (PARAM.inp.constraint) force += forcecon`；
+  `test_force` 下独立打印 `#CONSTRAINT  FORCE (Ry/Bohr)#` 块。
+  `source_estate/CMakeLists.txt` 主库 + `constraint_deriv.cpp`；constraint_loop
+  测试目标同步 + 该源。
+- 失败测试先行：`ComputeForceZeroWhenDisabled`（no-op 不碰缓冲）、
+  `ComputeForceConvergedMatchesKernel`（环输出 vs 直调核**逐位一致** +
+  力非零）、`ComputeForceZeroWhenMuZero`（target==Q_ref → μ*=0 → 力精确零）。
+- 集成冒烟（211_PW_constraint_h2o，relax_nmax 1 触发 cal_force，mpirun -np 2）：
+  μ≠0 相 6 外步 CONVERGED、μ=−0.17655（README −0.1765 吻合）、力块非零
+  （O z=+0.0993、H1/H2 x=∓0.0963 z=+0.0722 Ry/Bohr）；μ=0 参考相力块恒零。
+  驻点守卫两相均未触发（收敛），warning.log 无守卫记录。
+- 测试期修复：`ComputeForceConvergedMatchesKernel` 直调核前补
+  `wg->build_derivatives()`（fixture 网格未建导数缓存触发核 WARNING_QUIT，
+  反向证明守卫真实；环路径在 compute_force 内懒建不受影响）。
+- 回归：constraint ctest 12/12、partition 4/4；主库 forces.cpp/elecstate
+  （含新源）编译无警告。
+- 文件：`constraint_loop.h/.cpp`、`forces.h/.cpp`、`source_estate/CMakeLists.txt`、
+  `test/CMakeLists.txt`、`test/constraint_loop_test.cpp`、
+  `docs/superpowers/specs/2026-08-31-m6-force-pw-wiring.md`（新）。
+- Next：Task 2.5.4 LCAO 力接线（FORCE.h/.cpp，调同一 constraint_force 核，
+  ρ 走 pw_rhod——"双基组同一核"验证点）。

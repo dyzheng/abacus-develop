@@ -3,6 +3,7 @@
 #include <cmath>
 #include <numeric>
 
+#include "constraint_deriv.h"
 #include "constraint_inject_pw.h"
 #include "source_base/global_function.h"
 #include "source_base/global_variable.h"
@@ -263,6 +264,34 @@ double ConstraintLoop::mu_norm() const
                            [](const double s, const double v) {
                                return s + std::abs(v);
                            });
+}
+
+void ConstraintLoop::compute_force(const double* const* rho,
+                                   const int nspin,
+                                   ModuleBase::matrix& forcecon)
+{
+    if (!enabled() || !wg_)
+    {
+        return; // constraint off: no constraint force
+    }
+    // Build the position-derivative grid lazily (M6 kernel input); the
+    // loop is one-per-geometry, so this happens once per force evaluation.
+    if (!wg_->derivatives_built())
+    {
+        wg_->build_derivatives();
+    }
+    // Stationary-point guard (envelope-theorem premise, plan section 5.1):
+    // the force is the exact derivative of the constrained energy only at
+    // the converged outer loop; with a transient mu the residual is
+    // O(|Q - t|) and the force must not be silently reported as exact.
+    if (mu_norm() > 0.0 && status_ != MuStatus::CONVERGED)
+    {
+        ModuleBase::WARNING("ConstraintLoop::compute_force",
+                            "constraint force from an unconverged outer loop: "
+                            "residual O(|Q - t|)");
+    }
+    constraint::constraint_force(*wg_, rho, nspin,
+                                 channel_from_type(cfg_.type), mu_, forcecon);
 }
 
 } // namespace constraint

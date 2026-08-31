@@ -23,6 +23,7 @@ InfoNonlocal::InfoNonlocal()
 InfoNonlocal::~InfoNonlocal()
 {
 }
+#include "source_estate/module_constraint/constraint_deriv.h"
 #include "source_estate/module_constraint/constraint_loop.h"
 
 using ModuleBase::PI;
@@ -425,4 +426,120 @@ TEST_F(ConstraintLoopTest, IgnoresUnconvergedScf)
     conv = false;
     loop.on_scf_converged(2, conv);
     EXPECT_EQ(loop.outer_steps(), 1); // unchanged
+}
+
+TEST_F(ConstraintLoopTest, ComputeForceZeroWhenDisabled)
+{
+    // The loop is disabled (never initialized in this test): compute_force
+    // must be a no-op and leave the buffer untouched (zero).
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    EXPECT_FALSE(loop.enabled());
+    const double* rho_ptr[1] = {rho_ref.data()};
+    ModuleBase::matrix F(ucell->nat, 3);
+    F.fill_out(7.0);
+    loop.compute_force(rho_ptr, 1, F);
+    for (int J = 0; J < ucell->nat; ++J)
+    {
+        for (int d = 0; d < 3; ++d)
+        {
+            EXPECT_DOUBLE_EQ(F(J, d), 7.0); // untouched
+        }
+    }
+}
+
+TEST_F(ConstraintLoopTest, ComputeForceConvergedMatchesKernel)
+{
+    // Drive the outer loop to convergence on the normalized linear mock
+    // response (mu* = -delta), then compare compute_force against a direct
+    // constraint_force call with the same density and the loop's mu.  The
+    // loop builds its own WeightGrid from the same cell/radii as the
+    // fixture's, so the two grids are bit-identical (deterministic build):
+    // an exact match proves the wiring (density pointer, channel, shared
+    // weight field) and that "observable == injection operator" carries
+    // over to the force.
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    const double delta = 0.01;
+    loop.init(*ucell, rhopw, make_cfg(delta), radii, 10.0);
+
+    std::vector<double> rho;
+    int iter = 1;
+    bool conv = false;
+    const double* rho_ptr[1] = {rho_ref.data()};
+    loop.observe(iter, rho_ptr, 1);
+    conv = true;
+    loop.on_scf_converged(iter, conv);
+    int guard = 0;
+    while (loop.status() == constraint::MuStatus::RUNNING && guard < 20)
+    {
+        ++iter;
+        fill_rho_mock(loop.mu(), rho);
+        const double* rp[1] = {rho.data()};
+        loop.observe(iter, rp, 1);
+        conv = true;
+        loop.on_scf_converged(iter, conv);
+        ++guard;
+    }
+    ASSERT_EQ(loop.status(), constraint::MuStatus::CONVERGED);
+    ASSERT_NE(loop.mu()[0], 0.0);
+
+    fill_rho_mock(loop.mu(), rho);
+    const double* rho_arr[1] = {rho.data()};
+    ModuleBase::matrix Floop(ucell->nat, 3);
+    loop.compute_force(rho_arr, 1, Floop);
+    // The fixture's weight grid builds only the weight field; the direct
+    // kernel call below needs the position-derivative grid too (the loop
+    // path builds it lazily inside compute_force).
+    wg->build_derivatives();
+    ModuleBase::matrix Fdir(ucell->nat, 3);
+    constraint::constraint_force(*wg, rho_arr, 1,
+                                 constraint::DensityChannel::Charge,
+                                 loop.mu(), Fdir);
+    for (int J = 0; J < ucell->nat; ++J)
+    {
+        for (int d = 0; d < 3; ++d)
+        {
+            EXPECT_DOUBLE_EQ(Floop(J, d), Fdir(J, d))
+                << "J " << J << " d " << d;
+        }
+    }
+    // The converged force is nonzero (mu* != 0 and the density overlaps the
+    // weight derivative field): the wiring does something.
+    double norm = 0.0;
+    for (int J = 0; J < ucell->nat; ++J)
+    {
+        for (int d = 0; d < 3; ++d)
+        {
+            norm += Floop(J, d) * Floop(J, d);
+        }
+    }
+    EXPECT_GT(norm, 0.0);
+}
+
+TEST_F(ConstraintLoopTest, ComputeForceZeroWhenMuZero)
+{
+    // delta = 0 -> target == reference charge -> the outer loop converges
+    // with mu = 0.  The constraint force must then be EXACTLY zero (the
+    // kernel short-circuits zero multipliers), which is the mu = 0
+    // reference-phase check of the force wiring.
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    loop.init(*ucell, rhopw, make_cfg(0.0), radii, 10.0);
+    const double* rho_ptr[1] = {rho_ref.data()};
+    loop.observe(1, rho_ptr, 1);
+    bool conv = true;
+    loop.on_scf_converged(1, conv);
+    EXPECT_EQ(loop.status(), constraint::MuStatus::CONVERGED);
+    EXPECT_DOUBLE_EQ(loop.mu()[0], 0.0);
+
+    std::vector<double> rho;
+    fill_rho_mock(loop.mu(), rho);
+    const double* rho_arr[1] = {rho.data()};
+    ModuleBase::matrix F(ucell->nat, 3);
+    loop.compute_force(rho_arr, 1, F);
+    for (int J = 0; J < ucell->nat; ++J)
+    {
+        for (int d = 0; d < 3; ++d)
+        {
+            EXPECT_DOUBLE_EQ(F(J, d), 0.0);
+        }
+    }
 }

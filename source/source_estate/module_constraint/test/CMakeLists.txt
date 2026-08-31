@@ -75,6 +75,7 @@ AddTest(
   SOURCES constraint_loop_test.cpp
     ../constraint_loop.cpp
     ../constraint_accounting.cpp
+    ../constraint_deriv.cpp
     ../constraint_io.cpp
     ../constraint_inject_pw.cpp
     ../constraint_observe.cpp

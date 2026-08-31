@@ -18,6 +18,7 @@
 #include "source_hamilt/module_ewald/H_Ewald_pw.h"
 #include "source_hamilt/module_surchem/surchem.h"
 #include "source_hamilt/module_vdw/vdw.h"
+#include "source_estate/module_constraint/constraint_loop.h"
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -54,6 +55,7 @@ void Forces<FPTYPE, Device>::cal_force(UnitCell& ucell,
     ModuleBase::matrix forcescc(nat, 3);
     ModuleBase::matrix forcepaw(nat, 3);
     ModuleBase::matrix forceonsite(nat, 3);
+    ModuleBase::matrix forcecon(nat, 3);
 
     // Force due to local ionic potential
     this->cal_force_loc(ucell,forcelc, rho_basis, locpp->vloc, chr);
@@ -79,6 +81,10 @@ void Forces<FPTYPE, Device>::cal_force(UnitCell& ucell,
             this->cal_force_onsite(forceonsite, wg, wfc_basis, ucell, *p_dftu, psi_in);
         }
     }
+
+    // Real-space weight constraint force (M6): grid kernel, shares the
+    // weight field and multipliers with the constraint loop.
+    this->cal_force_constraint(forcecon, chr);
 
     // non-linear core correction
     Forces::cal_force_cc(forcecc, rho_basis, chr, locpp->numeric, ucell);
@@ -177,6 +183,11 @@ void Forces<FPTYPE, Device>::cal_force(UnitCell& ucell,
                     force(iat, ipol) += forceonsite(iat, ipol);
                 }
 
+                if (PARAM.inp.constraint)
+                {
+                    force(iat, ipol) += forcecon(iat, ipol);
+                }
+
                 sum += force(iat, ipol);
 
                 iat++;
@@ -196,6 +207,12 @@ void Forces<FPTYPE, Device>::cal_force(UnitCell& ucell,
     if (PARAM.inp.gate_flag || PARAM.inp.efield_flag)
     {
         GlobalV::ofs_running << "Atomic forces are not shifted if gate_flag or efield_flag == true!" << std::endl;
+    }
+
+    if (PARAM.inp.test_force)
+    {
+        ModuleIO::print_force(GlobalV::ofs_running, ucell,
+                              "CONSTRAINT  FORCE (Ry/Bohr)", forcecon);
     }
 
     if (ModuleSymmetry::Symmetry::symm_flag == 1)
@@ -719,3 +736,18 @@ template class Forces<double, base_device::DEVICE_CPU>;
 #if ((defined __CUDA) || (defined __ROCM))
 template class Forces<double, base_device::DEVICE_GPU>;
 #endif
+
+template <typename FPTYPE, typename Device>
+void Forces<FPTYPE, Device>::cal_force_constraint(ModuleBase::matrix& forcecon,
+                                                  const Charge* const chr)
+{
+    if (!PARAM.inp.constraint)
+    {
+        return; // constraint off: the force buffer stays zero
+    }
+    // The density channel (charge/spin), the shared weight field and the
+    // current multipliers all live in the constraint loop; the stationary
+    // point guard (unconverged outer loop) is inside compute_force.
+    constraint::ConstraintLoop::instance().compute_force(
+        chr->rho, PARAM.inp.nspin, forcecon);
+}
