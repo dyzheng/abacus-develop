@@ -171,18 +171,9 @@ TEST(ConstraintSpinTest, SplitInjection)
 
 **架构要点**：力公式 F_J = −Σ_α μ_α ∫ ρ(r) ∂w_α/∂R_J dr 是纯网格运算，**PW/LCAO 共用同一核**——不需要 gint_dvlocal 的矩阵元导数链（那是基组空间路径，本框架绕开）。LCAO 的 ρ 网格现成（Hartree/XC 同网格）。
 
-- [ ] **Step 1: 失败测试——解析力 vs 合成密度解析期望**
-
-```cpp
-TEST(ConstraintDerivTest, ForceOnSyntheticDensity)
-{
-    // 双原子 + 高斯密度（解析可积），F_J 解析期望 vs 力核网格积分 <1e-8 Ha/Bohr
-    // 牛顿第三定律自检：Σ_J F_J == 0（1e-10）
-}
-```
-
-- [ ] **Step 2-4: 实现 + 单测通过 + 接入力输出**（PW/LCAO 各自的 FORCE 汇总点，仿 dp/onsite 力汇入先例）
-- [ ] **Step 5: spec + 日志 + Commit**
+- [x] **Step 1: 失败测试——解析力 vs 合成密度解析期望**（constraint_deriv_test 4 测试：M0 求积参考 2.2e-10 / observer 平移 FD 7e-13 / μ 线性 1e-12 / spin 通道 1e-12；"Σ_J F_J≡0"按 2.5.2 认知修正为精确恒等式 Σ_J F_J=−Σ_α μ_α dQ_α/dt，见 2026-08-31-m6-force-kernel.md）
+- [x] **Step 2-4: 实现 + 单测通过 + 接入力输出**（2.5.1 导数网格 f0c221b3c → 2.5.2 核 e59ebb103 → 2.5.3 PW 接线 60c67e79d → 2.5.4 LCAO 接线 52aa1e436：同一 constraint_force 核、双基组无第二份力代码；PW 211 冒烟 μ=−0.1765 力非零/μ=0 恒零，LCAO 212 冒烟 μ*=−0.2193 Q_ref=6.40796 力非零/μ=0 恒零；驻点 WARNING 守卫收敛态不触发）
+- [x] **Step 5: spec + 日志 + Commit**（spec：2026-08-31-m6-deriv-grid.md / m6-force-kernel.md / m6-force-pw-wiring.md / m6-force-lcao-wiring.md；日志节 13-16）
 
 ---
 
