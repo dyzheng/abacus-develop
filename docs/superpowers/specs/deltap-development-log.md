@@ -3909,3 +3909,57 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - Next：R7 pinned-μ LCAO 18 腿全量重跑（中量，待批准）→ 残余∝|Q−t| 档位 →
   2.6.3 力矩 FD → 2.6.4 → 2.6.1 → 2.7（净力/补偿前力入标准检查、F_ana
   补偿前后双值入档）。
+
+## 2026-09-08 (7): 《统一多约束框架架构重设计》评审（无代码改动）
+
+- 裁定：方向正确、骨架评估准确（ChannelProfile 泛化成立、不变量保留、
+  纪律继承完整），**修订后批准阶段 A；B/C 暂缓**。
+- 问题清单：P1【内部矛盾】47 步基准=spin+spin 同 kind 近共线（Jacobian 近
+  奇异），方案按 kind 分块（块内对角）解决不了其头号动机案例——须改块结构
+  或单列近共线处理；P2【排序】2.6 判决门未闭合，架构改动会废验收基线，
+  阶段 A 代码必须在 2.6 后启动；P3【未验证】"跨类型耦合强"无实测（偶极通道
+  不存在），Broyden 改测量驱动立项；P4 松-紧 SCF 需 Q 噪声预算硬断言
+  （κ 是 Q 差商）；P5 schema 迁移需含 3 旧用例 result.ref 链。
+- 修订分期：前置=2.6 闭合；A=ConstraintSpec+逐约束 channel+schema 迁移
+  （不含 z 权重，偶极留 C 防惰性代码）；B/C 以测量报告为立项前提。
+- 文件：`2026-09-08-unified-multi-constraint-redesign-review.md`。
+
+## 2026-09-08 (8): 阶段 A（电荷+自旋混合）分步开发验证计划（无代码改动）
+
+- 用户决策：偶极暂缓，先实现 charge+spin 同时约束；要开发-验证稳步推进。
+- 产出 `docs/superpowers/plans/2026-09-08-mixed-charge-spin-stageA.md`：
+  A0 纸面决策（target_mode 保持 run 级简化；新 JSON 约束列表格式 +
+  旧格式自动转换+deprecation；mu_max 逐约束保留）→ A1 M7 数据模型/守卫
+  → A2 M2 逐约束 channel 读数 → A3 M3a 逐约束注入（逐通道恒等式 +
+  交叉零项断言）→ A4 M8 接线+M5 kind 标签 → A5 M6 力核逐约束 channel
+  → A6 H₂O 混合集成（charge+spin 同原子，注册 ctest，三旧用例逐位回归，
+  μ 耦合偏移测量=阶段 B 立项依据）→ A7 文档收尾。
+- 验证门 G1–G6 逐 Task 卡死；硬前置=Task 2.6 闭合；sabotage 与守卫一一
+  对应；偶极/Dipole kind 守卫拒绝不开发；Broyden/松紧 SCF 不开发。
+- 文件：`docs/superpowers/plans/2026-09-08-mixed-charge-spin-stageA.md`。
+
+## 2026-09-08 (9): 阶段 A Task A0——混合约束 schema 决策定稿（纸面，无代码改动）
+
+- 复核硬前置：**Task 2.6 判决门未闭合**——2.6.1（PW≡LCAO 对拍）、2.6.2 LCAO 18 腿全量 +
+  残余∝|Q-t| 档位、2.6.3 力矩 FD、2.6.4 自旋反假收敛集成 + LCAO 4-rank、2.7 闭合文档
+  均仍开放（PW 18 腿 9/9 PASS、LCAO O-z fixed-μ 三腿 |d|=0.000364 与净力≈0 已 PASS）。
+  按计划"闭合前只做 A0"，本轮止于纸面，未动 A1 代码。
+- 三决策定稿（记录 `2026-09-08-taskA0-schema-decisions.md`，A1 spec 并入引用）：
+  D1 target_mode 保持 run 级（spec 不含 mode；偏离重设计 §1，YAGNI）；D2 新 JSON
+  顶层 `constraints` 数组 `{type,target,atoms?,mu_max?}` + v1 `{"targets","atoms"}`
+  自动转换 + deprecation WARNING（3 旧用例零修改，G6 逐位回归把关 WARNING 不进
+  result.ref 口径；同现 constraints+targets → ERROR；v2 下 run 级 constraint_type 收窄
+  v1-only，非默认时 WARNING）；D3 mu_max 逐约束保留（软/硬通道熔断上限不同，
+  M4 已按分量处理）。thr 保持 run 级，与重设计偏差登记在记录 §3。
+- 数据模型蓝本：ConstraintSpec{kind, atoms, chan(工厂推导,禁手填), target, mu_max}，
+  charge=(+1,+1,+1,+1)/spin=(+1,-1,+1,-1)；内部顺序=JSON 顺序；审计行 c[0..N-1]
+  A4 起加 kind= 标签。去掉重设计 weight_id（A 阶段仅 Becke 片段权重，atoms 即定义）。
+- G1 失败测试清单已固化在记录 §1（MixedConstraintListParsing / MixedGuards），A1 起跑用。
+- 文件：本日志 + 计划 `2026-09-08-mixed-charge-spin-stageA.md`（A0 四框勾选）+
+  spec `2026-09-08-taskA0-schema-decisions.md`。
+- Bug/Fix：无新 bug（纸面轮）。风险登记：v2 解析是自研 JSON 子集解析器首次碰"对象数组"，
+  A1 需先扩解析器（白名单 schema，仍拒绝任意 JSON），结构错误路径用失败测试锁定；
+  deprecation WARNING 输出流选择以 G6 三旧用例逐位复现为验收。
+- Next：待用户批准 2.6 收口路径——路径 1（轻量：2.6.4 反假收敛 1 条 + LCAO 4-rank 单腿 +
+  2.6.1 对拍 1 对 + 2.6.3 力矩 FD 单腿，~0.5-1 h np4）或路径 2（原判据全量：
+  LCAO 18 腿 + 档位 + 4-rank，~2-4 h np4 并行）；任一闭合后写 2.7 文档 → A1 起跑。
