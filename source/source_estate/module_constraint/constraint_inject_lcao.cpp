@@ -11,7 +11,8 @@ namespace constraint
 std::vector<hamilt::HContainer<double>> ConstraintInjectLCAO::build(
     const std::vector<std::vector<double>>& cw,
     ModuleGint::GintInfo* gint_info,
-    const Parallel_Orbitals* paraV)
+    const Parallel_Orbitals* paraV,
+    const hamilt::HContainer<double>* dm_layout)
 {
     // The vlocal kernel reads the shared GintInfo; make sure it points at the
     // esolver's active instance (normally already set by the LCAO esolver).
@@ -24,12 +25,34 @@ std::vector<hamilt::HContainer<double>> ConstraintInjectLCAO::build(
         // Branch A: MPI — the Gint kernel transfers its serial grid result
         // into the target via transferSerials2Parallels, which requires the
         // target to carry the Parallel_Orbitals distribution (exactly like
-        // the production Hamiltonian HR).  Build the target from the
-        // shared GintInfo IJR structure plus the esolver's distribution.
+        // the production Hamiltonian HR).
         if (paraV != nullptr)
         {
-            W.push_back(hamilt::HContainer<double>(
-                paraV, nullptr, &gint_info->get_ijr_info()));
+            // Branch A1: a production DM is supplied as the layout reference
+            // (the runtime audit always passes one) — twin its structure
+            // exactly.  The DM is assembled per-rank from the grid-independent
+            // adjacency list, so every participating rank holds at least one
+            // local block; a Gint grid-derived IJR list, by contrast, can be
+            // empty on a rank whose real-space grid sub-domain overlaps no
+            // atom, and transferSerials2Parallels dereferences an empty
+            // target's atom-pair list (segfault).  Twinning the DM layout
+            // also makes the per-rank W blocks bit-identical to the DM, which
+            // is exactly what trace() requires afterwards.
+            if (dm_layout != nullptr)
+            {
+                W.push_back(hamilt::HContainer<double>(*dm_layout));
+            }
+            else
+            {
+                // Branch A2: no reference layout available — fall back to
+                // deriving the target from the shared GintInfo IJR structure
+                // plus the esolver's distribution.  This can leave a rank
+                // with an empty target when its grid sub-domain overlaps no
+                // atom, so MPI callers should always pass the production DM
+                // as dm_layout (Branch A1).
+                W.push_back(hamilt::HContainer<double>(
+                    paraV, nullptr, &gint_info->get_ijr_info()));
+            }
         }
         else
         {
@@ -108,7 +131,11 @@ double ConstraintInjectLCAO::audit_weighted_trace(
     {
         return -1.0;
     }
-    const std::vector<hamilt::HContainer<double>> W = build(cw, gint_info, paraV);
+    // Build W with the DM as the MPI layout reference so that (1) the target
+    // is never empty on a rank and (2) the flat trace below pairs blocks that
+    // are bit-identical by construction.
+    const std::vector<hamilt::HContainer<double>> W
+        = build(cw, gint_info, paraV, dmr);
     if (W.size() != q_grid.size())
     {
         return -1.0;

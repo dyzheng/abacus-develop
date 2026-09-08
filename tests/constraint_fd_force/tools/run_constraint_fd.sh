@@ -12,9 +12,11 @@
 #         Freezing t* is mandatory (stationary4): with delta-mode targets the
 #         reference Q_ref would drift with R and the FD would be polluted by
 #         mu*dQ_free/dR (O(eV/A) systematic error).
-#   FD:   F_FD = -(E'_+ - E'_-) / (2 delta_A),  E' = E_tot - mu*t*  (the
-#         Lagrangian L = E_KS + mu(Q-t); the printed E_tot includes +mu*Q, so
-#         the mu*t* correction removes the t*dmu*/dR envelope term).
+#   FD:   F_FD = -(E_+ - E_-) / (2 delta_A) with the RAW printed E_tot as the
+#         observable (Task 2.6 attribution, 2026-09-07 spec section 1: the
+#         printed E_tot = E_KS_phys(rho_mu) + cc_escon does NOT include mu*Q,
+#         so E' = E_tot - mu*t* is WRONG here — it reintroduces the
+#         t*dmu*/dR envelope pseudo-term, O(eV/A) at dmu/dR ~ 1 Ry/A).
 #   criterion: |F_FD - F_ana| < CRIT (5e-4 Ry/Bohr = 0.0128555 eV/A).
 #   Grid prerequisites (R7): ecutwfc=100, ecutrho=400, scf_thr=1e-8.
 #
@@ -231,7 +233,7 @@ for iat in $(seq 0 $((NAT-1))); do
 done
 echo "  [legs] ${#LEGS[@]} legs, max ${MAXJOBS} concurrent..."
 
-run_leg() { # leg -> "iat axis sign E mu Eprime"
+run_leg() { # leg -> "iat axis sign E mu"
     local leg="$1"
     local iat="${leg%%_*}"; local rest="${leg#*_}"
     local axis="${rest%%_*}"; local sign="${rest##*_}"
@@ -246,12 +248,7 @@ run_leg() { # leg -> "iat axis sign E mu Eprime"
     write_input "$step/INPUT" s absolute constraint_target.json "${WORK}/restart"
     E=$(run_scf "$step" s)
     MU=$(extract_mu "$step/OUT.s"/running_*.log 2>/dev/null || echo NA)
-    if [ -n "$E" ] && [ -n "$MU" ] && [ "$MU" != "NA" ]; then
-        EP=$(python3 -c "print(${E} - ${MU} * ${TSTAR} * ${RYTOEV})")
-    else
-        EP=NA
-    fi
-    echo "${iat} ${axis} ${sign} ${E} ${MU} ${EP}"
+    echo "${iat} ${axis} ${sign} ${E:-NA} ${MU}"
 }
 
 declare -a ROWS
@@ -269,14 +266,14 @@ while [ "$running" -gt 0 ]; do
   running=$((running - 1))
 done
 
-# ---- aggregate: FD of E' = E_tot - mu*t* (Lagrangian), central difference
+# ---- aggregate: FD of the raw FINAL_ETOT (see header note), central diff
 for iat in $(seq 0 $((NAT-1))); do
   for axis in 0 1 2; do
     [ -n "$ONLY" ] && [ "$ONLY" != "${iat}_${axis}" ] && continue
-    P=$(awk -v i="$iat" -v a="$axis" '$1==i && $2==a && $3=="plus" {print $6}' "${WORK}"/leg_${iat}_${axis}_plus.out)
-    M=$(awk -v i="$iat" -v a="$axis" '$1==i && $2==a && $3=="minus" {print $6}' "${WORK}"/leg_${iat}_${axis}_minus.out)
+    P=$(awk -v i="$iat" -v a="$axis" '$1==i && $2==a && $3=="plus" {print $4}' "${WORK}"/leg_${iat}_${axis}_plus.out)
+    M=$(awk -v i="$iat" -v a="$axis" '$1==i && $2==a && $3=="minus" {print $4}' "${WORK}"/leg_${iat}_${axis}_minus.out)
     if [ -z "$P" ] || [ -z "$M" ] || [ "$P" = "NA" ] || [ "$M" = "NA" ]; then
-      echo "  atom ${iat} axis ${axis}: RUN FAILED (E'+=${P:-NA} E'-=${M:-NA})"
+      echo "  atom ${iat} axis ${axis}: RUN FAILED (E+=${P:-NA} E-=${M:-NA})"
       continue
     fi
     FFD=$(python3 -c "print(-(${P} - ${M}) / (2 * ${DELTA_A}))")
@@ -289,7 +286,7 @@ for iat in $(seq 0 $((NAT-1))); do
 done
 
 echo ""
-echo "===== ${BASIS} summary (E' = E_tot - mu*t*, frozen t*=${TSTAR}) ====="
+echo "===== ${BASIS} summary (raw FINAL_ETOT central diff, frozen t*=${TSTAR}) ====="
 printf '%-4s %-4s %-16s %-16s %-16s %s\n' iat axis F_FD F_ana RES PASS
 printf '%s\n' "${ROWS[@]}"
 echo "criterion = ${CRIT} eV/A  (5e-4 Ry/Bohr);  work dir = ${WORK}"

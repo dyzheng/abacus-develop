@@ -41,10 +41,16 @@ public:
     // (transferSerials2Parallels) can scatter the serial grid result into
     // the per-rank layout — the same requirement the production Hamiltonian
     // HR satisfies.  Pass the esolver's Parallel_Orbitals.
+    // dm_layout: optional MPI-only layout reference (pass the production DM
+    // container).  When set, every returned HContainer twins its structure
+    // exactly, which guarantees a non-empty per-rank target (a grid-derived
+    // IJR list can be empty on a rank whose real-space sub-domain overlaps no
+    // atom) and bit-identical trace() pairing with that DM.
     static std::vector<hamilt::HContainer<double>> build(
         const std::vector<std::vector<double>>& cw,
         ModuleGint::GintInfo* gint_info,
-        const Parallel_Orbitals* paraV = nullptr);
+        const Parallel_Orbitals* paraV = nullptr,
+        const hamilt::HContainer<double>* dm_layout = nullptr);
 
     // H += sum_alpha mu_alpha * W^alpha in place.  W must have been built by
     // build() with the same gint_info (identical HContainer layout).  A zero
