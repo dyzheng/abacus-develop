@@ -1,6 +1,6 @@
 # 《统一多约束框架架构重设计》评审
 
-> 评审对象：`/root/abacus-develop/unified-multi-constraint-redesign.md`。
+> 评审对象：`docs/superpowers/specs/2026-09-08-unified-multi-constraint-redesign.md`。
 > 评审依据：module_constraint 现状（HEAD 7bd4fd3ee/c9c914548）、开发者文档风险表、评审链全部历史（R1–R12、47 步实测、T-7p/T-7″、净力指纹两案）。
 > 本轮无代码改动，属评审轮。
 

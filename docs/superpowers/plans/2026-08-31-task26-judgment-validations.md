@@ -1,5 +1,10 @@
 # 下一步计划：Task 2.6 三判决验证 + 二期闭合（含算力预算与失败归因预案）
 
+> **闭合状态（2026-09-08）**：判决门经"修订版路径 1"收口完成，判定与能力声明见
+> `docs/superpowers/specs/2026-09-08-task26-closure.md`（批复：
+> `docs/superpowers/specs/2026-09-08-a0-pass-and-26-closure-decision.md`）。
+> 力口径由"未验收"转"限定包络可用"；2.6.1 严格同密度跨基组读数登记开放项。
+
 > 定位：二期收尾的判决性验证轮。**不写新功能代码**（唯一例外：归因发现的 bug 修复与 M3b 命运判决的执行）。
 > 依据：phase2 计划 Task 2.6/2.7 + 评审链遗留项（c984b708e 未评审、037 回归与 sabotage 未复核）。
 > FD 脚本已就位：`tests/constraint_fd_force/tools/run_constraint_fd.sh`、`run_constraint_torque_fd.sh`。

@@ -3,6 +3,8 @@
 > 依据：《统一多约束框架架构重设计》评审（2026-09-08-unified-multi-constraint-redesign-review.md）修订版阶段 A。
 > **范围收缩（用户决定）：本期只做 charge+spin 混合；偶极（z 权重/Dipole kind）不开发，守卫拒绝。Broyden/松紧 SCF 不开发（测量驱动，属阶段 B）。**
 > **硬前置：Task 2.6 判决门闭合。** 闭合前只允许 Task A0（纸面）。
+> **硬前置状态（2026-09-08 更新）**：Task 2.6 判决门经修订版路径 1 收口闭合
+> （见 `docs/superpowers/specs/2026-09-08-task26-closure.md`），A1 可起跑。
 > 原则：每个 Task = 失败测试先行 → 实现 → 验证 → commit；前一 Task 全绿才开下一 Task；任何守卫配 sabotage 验证。
 
 ---

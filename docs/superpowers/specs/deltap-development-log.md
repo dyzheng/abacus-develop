@@ -3963,3 +3963,50 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - Next：待用户批准 2.6 收口路径——路径 1（轻量：2.6.4 反假收敛 1 条 + LCAO 4-rank 单腿 +
   2.6.1 对拍 1 对 + 2.6.3 力矩 FD 单腿，~0.5-1 h np4）或路径 2（原判据全量：
   LCAO 18 腿 + 档位 + 4-rank，~2-4 h np4 并行）；任一闭合后写 2.7 文档 → A1 起跑。
+
+## 2026-09-08 (10): A0 通过 + 2.6 收口路径批复（修订版路径 1）
+
+- A0 裁定通过：D1/D2/D3 有据、偏差登记完整、G1 断言清单可执行；特别认可
+  deprecation WARNING 不污染 result.ref 口径的前瞻条款。
+- 2.6 收口：批准**修订版路径 1**——轻量 4 项（反假收敛 1 条 / LCAO 4-rank
+  单腿 / PW≡LCAO 全 3 原子分划对拍 + M3b trace / 力矩 FD 带 DeltaSpin 同体系
+  参照）+ **补强：LCAO H1-x FD 腿一对**（Pulay 修复后变化最大 ±2.2 eV/Å 的轴
+  从未过 FD，净力≈0 只证求和不证逐轴）。判据全程不豁免。
+- 2.7 文档要求写死：覆盖表诚实呈现（未覆盖 LCAO 轴列明+外推理由）、净力/
+  补偿前力入标准检查、F_ana 双值入档、力能力声明限定已验证包络。
+- 归档批复：redesign 文档移入 specs/ 并加日期前缀，同步修正评审引用。
+- 文件：`2026-09-08-a0-pass-and-26-closure-decision.md`。
+
+## 2026-09-08 (11): Task 2.6 判决门收口——修订版路径 1 五项验证（判据不豁免）
+
+- 批复落地（decision spec `2026-09-08-a0-pass-and-26-closure-decision.md`）：A0 通过；
+  2.6 收口=轻量 4 项 + LCAO H1-x 补强腿；2.7 文档要求写死；redesign 归档批准。
+- 执行结果（R7 网格 np4；判据不豁免）：
+  1. 自旋反假收敛（PW delta=0 集成级）：audit μ=0、res=0、q=t=自然磁矩 4.3e-6，
+     **1 外步 CONVERGED**（E=-466.9510093819987）——无假收敛。PASS。
+  2. LCAO 4-rank 单腿（R0 fixed-μ）：np1/np4 ETOT 差 3.7e-12 eV，audit 与 9 力分量
+     逐位一致（最大差 ~2e-10）。PASS。
+  3. PW≡LCAO 3 原子分划对拍（δ=[-0.1,+0.05,+0.05]，PW 211 导 cube → LCAO 读入）：
+     双基组 CONVERGED、partition-of-unity maxdev=2.2e-16；LCAO M3b trace=2.54e-8 e
+     （残差地板级）；跨基组端点差 Δt_O=0.0268 e、μ 差 ~15% 归因基组自由密度差。
+     裁定：算子口径 PASS；**严格同密度跨基组 <1e-8 需只读观测口——登记开放项**
+     （现有 init_chg=file 会重收敛密度，09-07(2) 已知限制）。
+  4. 力矩 FD（R7，DM=0.01，base m*=0.1000021944 μ*=-0.07193070771）：hi/lo 腿
+     CONVERGED；**raw-E 口径 T_FD=0.978556 vs T_ana=0.978667，|d|=0.000111 ≪0.006
+     PASS（~54×）**；μ(m) 三点线性 dμ/dm=-0.723。DeltaSpin 同体系同靶点参照
+     （遗留功能 ecut20 冒烟）：O λ*≈-10.5..-10.8 eV/μB——**符号与 μ=-λ 一致**，
+     量级 ~10× 差归因 on-site 投影 vs Becke 口径 + 冒烟未全收敛，记录不入判据。
+     另：repo 力矩工具的 E'=E-μt 口径是伪项（T_FD'=2.94 FAIL）——与力归因同源，
+     **工具缺陷登记**。
+  5. **LCAO H1-x FD 补强腿**（fixed-μ，±0.005 Bohr）：F_FD=-2.2241221 vs
+     F_ana=-2.2238993，|d|=0.000223 ≪0.0128555 PASS（~58×）——变化最大轴证实。
+- 能力声明（2.7）：约束态解析力在限定包络可用（H₂O 类、|μ|≲0.5 Ry、res<1e-4、
+  双基组 R7）；覆盖表逐轴诚实呈现（LCAO 余 7 轴未跑=外推，理由=机制级修复+双极端轴
+  FD+PW 9/9 包围）；净力/补偿前力入标准检查；F_ana 补偿前后双值入档。
+- 文件：closure spec `2026-09-08-task26-closure.md`；redesign 文档归档
+  `docs/superpowers/specs/2026-09-08-unified-multi-constraint-redesign.md`
+  （评审引用同步修正）；批复记录 + dev log 已入库。
+- Bug/Fix：无代码改动；登记 2 个工具/测量开放项（力矩工具 E' 口径；
+  PW≡LCAO 严格读数需只读观测口）。
+- Next：提交本轮 + 批复记录 + redesign 归档（随 A1 首批推送 zdy）；
+  **阶段 A1 起跑**（G1 失败测试先行：MixedConstraintListParsing / MixedGuards）。
