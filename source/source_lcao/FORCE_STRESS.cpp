@@ -28,6 +28,58 @@
 #include "source_lcao/module_operator_lcao/overlap.h"
 #include "source_lcao/pulay_fs.h"
 
+namespace
+{
+// Task 2.6.2 attribution fix (constraint lifecycle, mirror of the SCC-vnew
+// fix): on the converged SCF iteration Potential::get_vnew() -- called from
+// ElecState::cal_converged() -- rebuilds v_eff from the charge via
+// update_from_charge(), which drops the injected mu*w, and the SCF loop then
+// breaks before the next injection.  The local Pulay kernel (cal_pulay_fs ->
+// Gint cal_gint_fvl) differentiates the basis against the v_eff grid, so
+// without mu*w in that grid it misses the basis-derivative half of the
+// constraint-potential force.  forcecon (constraint_deriv) only carries the
+// explicit dw/dR half; the two halves must cancel under a uniform
+// translation (the pre-fix net force equals exactly the forcecon sum).
+// This guard re-injects mu*w into v_eff around the fvl_dphi evaluation only
+// and restores the physical potential on scope exit (no-op when the
+// constraint is off or all multipliers are zero).
+class ConstraintPulayPotGuard
+{
+  public:
+    explicit ConstraintPulayPotGuard(elecstate::Potential* pot): pot_(pot)
+    {
+        if (PARAM.inp.constraint && pot_ != nullptr
+            && constraint::ConstraintLoop::instance().enabled()
+            && constraint::ConstraintLoop::instance().mu_norm() > 0.0)
+        {
+            // Branch A: constraint active -- snapshot the physical v_eff,
+            // add the injected mu*w back, and restore on destruction.
+            saved_ = pot_->get_eff_v();
+            constraint::ConstraintLoop::instance()
+                .add_back_constraint_potential(pot_->get_eff_v());
+            active_ = true;
+        }
+        // Branch B: constraint off / zero multipliers -- v_eff already
+        // carries no mu*w; nothing to do.
+    }
+    ~ConstraintPulayPotGuard()
+    {
+        if (active_)
+        {
+            pot_->get_eff_v() = saved_;
+        }
+    }
+    // Copying would double-restore; the guard is used as a local only.
+    ConstraintPulayPotGuard(const ConstraintPulayPotGuard&) = delete;
+    ConstraintPulayPotGuard& operator=(const ConstraintPulayPotGuard&) = delete;
+
+  private:
+    elecstate::Potential* pot_ = nullptr;
+    ModuleBase::matrix saved_;
+    bool active_ = false;
+};
+}
+
 
 // mohan add 2025-11-04
 template <>
@@ -219,6 +271,9 @@ void Force_Stress_LCAO<T>::getForceStress(UnitCell& ucell,
         // Calculate local potential force/stress (vl_dphi)
         // This uses grid integration, not operator-based method
         flk.ParaV = dmat.dm->get_paraV_pointer();
+        // Re-add the dropped constraint potential for the Pulay kernel
+        // (see ConstraintPulayPotGuard); restored on scope exit.
+        const ConstraintPulayPotGuard cp_guard(pelec->pot);
         PulayForceStress::cal_pulay_fs(fvl_dphi, svl_dphi, *dmat.dm, ucell, pelec->pot,
                                        isforce, isstress, false /*reset dm to gint*/);
     }
@@ -255,6 +310,9 @@ void Force_Stress_LCAO<T>::getForceStress(UnitCell& ucell,
 
         // Calculate local potential force/stress (vl_dphi)
         flk.ParaV = dmat.dm->get_paraV_pointer();
+        // Re-add the dropped constraint potential for the Pulay kernel
+        // (see ConstraintPulayPotGuard); restored on scope exit.
+        const ConstraintPulayPotGuard cp_guard(pelec->pot);
         PulayForceStress::cal_pulay_fs(fvl_dphi, svl_dphi, *dmat.dm, ucell, pelec->pot,
                                        isforce, isstress, false /*reset dm to gint*/);
     }
