@@ -29,9 +29,15 @@
 
 ## Task A1：M7 数据模型 + 解析 + 守卫（1 天）
 
+> **状态（2026-09-08）**：已完成并通过 G1（spec `2026-09-08-taskA1-mixed-schema-io.md`）。
+> 两处偏差登记：configure 层混合 run 阶段性 ERROR（A4 移除，防单通道 loop 静默错跑）；
+> configure_from_inputs 签名推迟到 A4（specs 的真实消费方 loop 届时接线）。
+> Step 4 sabotage 实测：每处守卫移除恰中 `MixedGuards` 1 个测试 FAIL（计划"恰 2 FAIL"
+> 是断言数估计，实际该守卫在 T2 有独立断言且 v1 路径守卫分置，如实记录于 spec §3）。
+
 **Files:** `constraint_io.{h,cpp}`、`test/constraint_io_test.cpp`
 
-- [ ] **Step 1 失败测试——新 schema 解析**：
+- [x] **Step 1 失败测试——新 schema 解析**：
 ```cpp
 TEST(ConstraintIOTest, MixedConstraintListParsing)
 {
@@ -40,7 +46,7 @@ TEST(ConstraintIOTest, MixedConstraintListParsing)
     // 嵌套/平铺 atoms、缺省 atoms、逐约束 mu_max 缺省回退 run 级。
 }
 ```
-- [ ] **Step 2 失败测试——守卫**：
+- [x] **Step 2 失败测试——守卫**：
 ```cpp
 TEST(ConstraintIOTest, MixedGuards)
 {
@@ -48,9 +54,9 @@ TEST(ConstraintIOTest, MixedGuards)
     // 空 constraints → ERROR；atoms 越界 → ERROR；重复 kind+atoms 组合 → WARNING（近共线预警）
 }
 ```
-- [ ] **Step 3 实现**：`ConstraintSpec { kind, atoms, chan, target, mu_max }`（ChannelProfile 由 kind 工厂推导：charge=(+1,+1,+1,+1)、spin=(+1,−1,+1,−1)）；`configure_from_inputs` 输出 `std::vector<ConstraintSpec>`。
-- [ ] **Step 4 测试通过 + sabotage**：移除 spin/nspin 守卫 → 恰 2 FAIL。
-- [ ] **Step 5 spec + 日志 + commit**。
+- [x] **Step 3 实现**：`ConstraintSpec { kind, atoms, chan, target, mu_max }`（ChannelProfile 由 kind 工厂推导：charge=(+1,+1,+1,+1)、spin=(+1,−1,+1,−1)）；`configure_from_inputs` 输出 `std::vector<ConstraintSpec>`。
+- [x] **Step 4 测试通过 + sabotage**：移除 spin/nspin 守卫 → 恰 2 FAIL。
+- [x] **Step 5 spec + 日志 + commit**。
 
 **验证门 G1**：io 单测全绿 + 旧用例兼容测试通过。
 

@@ -4010,3 +4010,45 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   PW≡LCAO 严格读数需只读观测口）。
 - Next：提交本轮 + 批复记录 + redesign 归档（随 A1 首批推送 zdy）；
   **阶段 A1 起跑**（G1 失败测试先行：MixedConstraintListParsing / MixedGuards）。
+
+## 2026-09-08 (12): Task 2.6/2.7 闭合严格评审——通过，A1 解锁（无代码改动）
+
+- 独立核实：H1-x FD 重算 −2.2241221（|d|=0.0002228）与文档逐位一致；
+  力矩 FD 重算 dE/dt=+0.97855623（|d|=0.00011，54× 富余）、base
+  μ*=−0.07193070771 与磁盘一致、抛物线曲率自洽；np4 能量旁证一致。
+- 评审意见：诚实边界处理（严格 PW≡LCAO 同密度对拍登记开放项不硬凑；
+  DeltaSpin 10× 量级差归因口径不粉饰）；力矩验证实为包络恒等式
+  （T_ana=−μ* vs FD）强于原设计，判据变更如实记录，接受；torque 工具
+  E' 伪项与力 FD raw-E 同源，修复建议登记。
+- **判决门正式闭合**，力口径"未验收"→"限定包络可用"（§3.6）；批准启动
+  Task A1（按 A0 G1 断言清单失败测试先行）。
+- 开放项跟踪：① 严格 PW≡LCAO 需只读观测口；② torque 脚本 E' 修复；
+  ③ DeltaSpin 量级对等（阶段 B）。
+- 文件：`2026-09-08-task26-closure-review.md`。
+
+## 2026-09-08 (13): Task A1 完成——M7 混合数据模型 + v2 解析/守卫（G1 通过）
+
+- 范围：`constraint_io.{h,cpp}` + `test/constraint_io_test.cpp`（轻量单测，无重算）。
+  TDD 环：编译红 → stub 红 → 实现绿 → 3×sabotage 恰中 → spec/计划/日志入库。
+- 新增数据模型：`ConstraintKind{Charge,Spin}`、`ChannelProfile{read_up,read_dn,
+  inj_up,inj_dn}`、`ConstraintSpec{kind,atoms,chan,target,mu_max}`、
+  `ConstraintFileFormat{V1,V2}`、`build_channel_profile(kind)` 工厂、
+  `parse_constraint_file`（v1 自动转换 + v2 原生 + 逐约束守卫 + duplicate/
+  deprecation WARNING）、13 参 `configure_constraint(cfg,specs,warnings,...)` 扩展核
+  （legacy 11 参签名保留为薄包装，10 个既有 IO 测试原样回归）。
+- 守卫落位（每处配 sabotage，恰中 `MixedGuards`）：v2 spin+nspin=1 ERROR；
+  dipole/未知 type ERROR；空 constraints ERROR；atoms 越界/空片段 ERROR；
+  mu_max≤0 ERROR；同现 constraints+targets ERROR；重复 (kind,atoms) WARNING；
+  v2+run 级 type 非默认 WARNING supersede；v2 混合 kind configure 层阶段性 ERROR。
+- **偏差登记**（spec §4）：① configure 层混合 run 拒绝至 A4（单通道 loop 会静默
+  错跑 spin 靶当 charge；解析层照常出 specs，T1 断言混合 specs 正确）；②
+  configure_from_inputs 签名推迟到 A4（specs 消费方 loop 届时接线，避免无人消费
+  形参 + esolver 空改）。sabotage 实测与计划"恰 2 FAIL"措辞差异已在计划页登记。
+- 结果：`MODULE_ESTATE_constraint_io` 11/11、全套 `MODULE_ESTATE_constraint`
+  11/11 PASS；旧 v1 用例行为逐位不变（deprecation WARNING 走 ofs_warning 不进
+  result.ref 口径，A6 逐位回归把关）。
+- 文件：spec `2026-09-08-taskA1-mixed-schema-io.md`；计划 A1 四步勾选 + 状态横幅；
+  本日志。评审轮 2 笔文档（closure-review spec + 本日志 (11)/(12)）随本批入库。
+- Next：提交后推送 zdy（含前两 commit 03d43537c/bb814be57）；请求裁决；批准后
+  启动 Task A2（M2 逐约束 channel 读数，G2）。开放项延续：① 严格 PW≡LCAO 需
+  只读观测口；② torque E' 修复；③ DeltaSpin 量级对等（阶段 B）。
