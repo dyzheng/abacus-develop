@@ -3664,6 +3664,22 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   或三期，非判决门阻塞项。
 - 文件：`2026-08-31-mixed-charge-spin-test.md`。
 
+## 2026-08-31 (12): 下一步计划——Task 2.6 三判决验证（无代码改动）
+
+- 战略裁定：不重构（无驱动信号）、不续写力代码（开发已完，缺的是验证）、
+  实例测试先做判决性而非表征性——**力未过 FD 判决是最大开口风险**
+  （DeltaP 84.8→0.0138 eV/Å 教训正发生在力验收环节）。
+- 产出 `docs/superpowers/plans/2026-08-31-task26-judgment-validations.md`：
+  2.6.0 前置评审（c984b708e M3b 升格 + 037/sabotage 复核清零）；
+  2.6.1 PW≡LCAO 逐位一致（<1e-8，含 M3b 运行时审计兑现）；2.6.2 力 FD
+  stationary4（判据 0.0128555 eV/Å，双基组 36 腿，算力预算 4-rank 3–6 h，
+  ONLY 分批；四级失败归因链：记账恒等式→驻点泄漏→egg-box→导数符号）；
+  2.6.3 力矩 FD（<0.006 eV/μB，μ=−λ 换算写死）；2.6.4 自旋补验；
+  2.7 判决门（不过不降判据）。
+- 二期闭合后序列登记：V6 Au:Si 本职场景、混合约束 2.4.1、三期立项
+  （应力推导/偶极协议/Hirshfeld/Broyden）、多自旋约束收敛成本优化。
+- 文件：`docs/superpowers/plans/2026-08-31-task26-judgment-validations.md`。
+
 ## 2026-08-31 (17): M3b 命运判决——升格运行时审计（Tr[W^α·DM] vs ∫w_αρ）
 
 - 判决：升格（不删除）——W^α HContainer 路径成为生产运行时审计线。
@@ -3681,3 +3697,201 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   `test/constraint_inject_lcao_test.cpp`（+1 测试）、`source_estate/
   CMakeLists.txt`（主库 +constraint_inject_lcao.cpp）、spec（新）。
 - Next：Task 2.6 三判决（PW≡LCAO 逐位 / 力 FD stationary4 / 力矩 FD）。
+
+## 2026-09-07 (1): Task 2.6.0 前置评审闭环 + np=4 MPI 空目标段错误修复
+
+- 评审 c984b708e（M3b 升格运行时审计）四项 (a)-(d)：(a) paraV MPI
+  传递与 transferSerials2Parallels——**发现真实缺陷**（见下 bug 清单）；
+  (b) trace() nnr+IJR 双重布局守卫评审正确；(c) 接线正确、默认零开销
+  （无约束直接跳过）；(d) 单测 12/12 绿。
+- 低风险复核清零：037_PW_FM 5/5；三道 sabotage 评审者亲做各恰中
+  目标后恢复；PW constraint 集成 211/212 4/4。
+- 修复 np=4 段错误：`ConstraintInjectLCAO::build` 增 `dm_layout` 可选
+  参数，MPI 目标 W 改为生产 DM 布局的逐位孪生（永不为空 + trace 配对
+  构造保证）；`audit_weighted_trace` 传入 dmr。验证：212_NAO np=1/2/4
+  FINAL_ETOT 与 result.ref 一致、audit=1.5126e-08 e 三档 rank 同量级。
+- 文件：`constraint_inject_lcao.h/.cpp`（+dm_layout 参数与 A1/A2 分支、
+  audit 传参）、spec（新 `2026-09-07-task26-review-m3b-np4-fix.md`）。
+- Bug/Fix：c984b708e 引入——np≥4 下 rank 网格域不覆盖原子时 IJR 派生
+  目标容器为空，transferSerials2Parallels 解引用空 atom-pair 越界
+  （生产 DM/HR 用邻接表布局因此不崩）；Fix=DM 布局孪生。
+- Next：Task 2.6.1 PW≡LCAO 逐位一致（同密度同网格读数 Q_α<1e-8、
+  同靶 μ*<1%、M3b 审计随跑）；随后 2.6.2 力 FD / 2.6.3 力矩 FD /
+  2.6.4 自旋反假收敛 + 4-rank 逐位一致；2.7 判决门。
+
+## 2026-09-07 (2): Task 2.6.1 准备——PW→LCAO 密度回读机制验证 + FD 冒烟启动
+
+- 目标：2.6.1 "同一收敛密度两基组逐位一致"需要把 PW 密度喂给 LCAO 观测。
+  机制验证：PW 211 用 out_chg=1 导出 chg.cube（非 gamma 81³ 实空间网格）；
+  LCAO gamma（212 同几何/同网格）init_chg=file 读该 cube。二进制
+  {suffix}-CHARGE-DENSITY.restart 回读被 gamma_only 标志不匹配拒绝
+  （read_rhog 不实现 gamma↔非 gamma 变换），cube 路径可用
+  （read_vdata_palgrid 处理 gamma 布局）。
+- 结果（np=2）：LCAO 从 PW cube 起步重收敛到与原子起步**完全同一**
+  约束末态——outer step 1 q=6.407956559（Q_ref 不变）、
+  μ*=−0.219303885 vs 原子起步 −0.2193038793（差 6e-9）、
+  FINAL_ETOT=−466.2533233606761（与 result.ref 差 ~3e-11 eV）：
+  回读不扭曲观测/注入路径，机制 OK。
+- 注：SCF 会重收敛密度，故"冻结同一密度逐位 Q"尚需不改变密度的观测口
+  （现有能力下 2.6.1 逐位判据的严格读数待与 FD 基态结合裁定——两基组在
+  R7 高网格下密度接近后比较更有意义）。
+- FD 冒烟（流程验证）：低网格（ECUTWFC=50/ECUTRHO=200/SCF_THR=1e-6）
+  `ONLY="0_2" run_constraint_fd.sh pw`——base 完成：E0=−465.68975284、
+  t*=6.475777687、μ*=−0.19193168 Ry、解析力块抽取正常；2 腿进行中。
+  R7 全量 PW FD（18 腿）在冒烟通过后启动。
+- Next：冒烟判定（流程/冻结逻辑）→ 启动 R7 全量 PW FD →
+  2.6.1 数据块（PW/LCAO Q_ref、μ*、M3b 审计行）→ 2.6.2 判决。
+
+## 2026-09-07 (3): Task 2.6.2 R7 PW 力 FD 18 腿完成——判据 FAIL，进入归因
+
+- 目标：R7 高网格（ecutwfc=100/ecutrho=400/scf_thr=1e-8，np4）PW 力 FD
+  18 腿判决（stationary4：绝对冻结 t*=6.478779656，δ=0.005 Bohr，
+  判据 |F_FD−F_ana|<0.0128555 eV/Å）。
+- 结果（详见 `2026-09-07-task26-r7-judgments.md` §3）：18/18 腿 CONVERGED。
+  判据**未过**——PASS 仅 4 轴（O-x/O-y/H1-y/H2-y，|F_ana|≲1e-5 eV/Å），
+  FAIL 5 轴：O-z |d|=3.359、H1-x/H2-x |d|=2.335、H1-z/H2-z |d|=1.685 eV/Å。
+  失败方向与 μ*(R) 陡变严格对应（Δμ(±腿) 0.0027–0.0055 Ry；PASS 轴 ≤6e-5 Ry）。
+- plain 对照：无约束 O-z 双腿 FD=−0.6232 vs F_ana(R0)≈−0.6296 eV/Å
+  （|d|=0.0064 PASS）→ FD 机制/单位/δ 排除；问题约束态特有。
+- 归因定位（结论先行）：F_ana=F_plain+F_constr（M6，核单测锁定符号）与
+  约束态打印能量 E_KS_phys(ρ_μ) 的 R 斜率在 ∂Q/∂R 强方向不一致，
+  量级≈μ·∂Q/∂R；端点残差与镜像复现均排除数值噪声。
+  两候选根因：(1) 约束相位打印能量非约束 PES 值函数（cc_escon 只补
+  μ(Q−t)，缺 μ∂Q/∂R·δR 类修正；外环末段 μ 更新后仅 2–3 电子步）；
+  (2) F_constr 加入总力与能量表达式不同源。下轮以"固定 μ 常数外势
+  三腿"判决实验切分。
+- 文件：spec（`2026-09-07-task26-r7-judgments.md` 全面回填）；
+  数据 /tmp/cfd_pw_r7_legs/、/tmp/cfd_r7_repro_b1、/tmp/cfd_r7_plain、
+  /tmp/plain_z_{minus,plus}；脚本 /tmp/cfd_pw_r7_run_legs.sh、
+  /tmp/cfd_pw_r7_analyze.py、/tmp/cfd_plain_zpair.sh。
+- Bug/Fix：待归因（力 FD FAIL；未豁免、未降判据）。力状态保持"未验收"，
+  二期不闭合。
+- Next：归因实验 (a) 固定 μ 常数势 R0/R0±δ 三腿对照；(b) 审阅
+  esolver_ks_pw 约束相位 etot 组成（f_en.n/cc_escon 注入点）；修复后
+  R7 全 18 腿重跑；其后 LCAO FD → 2.6.3 力矩 → 2.6.4 → 2.6.1 数据块 →
+  2.7 判决门。
+
+## 2026-09-08 (1): 力 FD 根因闭环——SCC 力核被约束 μw 污染，已修复
+
+- 归因判决（承接 09-07 spec §4.1/§4.2 附加数据）：(a) 小 δ 扫描 O-z
+  （0.0005/0.001 Bohr）斜率与 δ=0.005 一致到 1e-3 → 无分支/迟滞，确定性记账差；
+  (b) R0 test_force 全分解：标准五项和(TOTAL−compen 关系)与 CONSTRAINT 块需代码
+  审计 → 候选 2 物证。
+- fixed-μ 判决实验（新开关 `ABA_CONSTRAINT_FIXED_MU`，默认关）：μ 冻结=base μ*
+  在 R0/R0±δ 三腿——**修复前**打印力 O-z=+1.4772 而 E(R) FD=−1.8796 eV/Å
+  （差 3.357，与 re-optimized-μ 的 R7 完全同量级）→ **候选 1（外环/能量记账）排除**；
+  力/能量不一致是 fixed-μ 单态固有 → 候选 2 证实。
+- 根因：`Potential::get_vnew` 的 vnew 快照含注入的 μw（hamilt2rho_single 先注入、
+  cal_converged 后取快照、rebuild 不含 μw）→ vnew=v_phys(out)−[v_phys(in)+μw]；
+  `cal_force_scc`（vnew×∂ρ_core/∂R）拾取伪 SCC 力 −μ∂Q_core/∂R（O-z 实测
+  +7.230 eV/Å，修复后 −0.003），恰覆盖全部 FAIL 轴（∂w/∂R 强方向）；
+  PASS 轴 ∂Q/∂R≈0 不受影响。能量侧因 eband(+μQ)+deband(−μQ) 收敛抵消而不炸。
+- 修复：`ConstraintLoop::add_back_constraint_potential()` 把 μw 加回 vnew；
+  `Forces::cal_force_scc` 约束态先修正再积分（PW/LCAO/sto 三条力路径同函数一次修齐）。
+  fixed-μ R0 复验：O-z +1.4772→−1.8841（FD −1.8796，|d|=0.0045 PASS）；
+  H1-x →−1.7091（FD −1.7094）；H1-z →+0.9421（FD +0.9453）。判据 0.0128555 富余。
+- 单测：constraint_{loop,inject_pw,inject_lcao,accounting} 24/24 PASS。
+- 文件：spec `2026-09-08-task26-r7-scc-fix.md`；改动
+  source/source_estate/module_constraint/constraint_loop.{h,cpp}（fixed-mu 开关 +
+  add_back）、source/source_pw/module_pwdft/forces_scc.cpp；数据 /tmp/cfd_fixedmu/
+  （*.old=修复前）。R7 18 腿 + base 重跑（/tmp/cfd_r7_rerun_fix.log）进行中。
+- Bug/Fix：fix 记录=「约束态 SCC 力核 vnew 含 μw → 伪力 O(eV/Å)」；
+  fixed-mu 开关为归因工具（默认关），保留。
+- Next：R7 PW 18 腿重跑判决表（不豁免）→ LCAO FD → 力矩 FD → 2.6.4 → 2.6.1 → 2.7。
+
+## 2026-09-08 (2): R7 PW 力 FD 修复后重跑——9/9 轴全 PASS
+
+- 全部 18 腿 + R0 参照以修复后二进制重跑（np4，2 并发，每腿 61–75 SCF 次）。
+  FINAL_ETOT 与修复前逐位一致（例：0_0± 腿 −466.8218291598797123/
+  −466.8218291841495784）→ FD 观测量不变，仅 F_ana 修正。
+- 判决表（判据 0.0128555 eV/Å 不豁免，详见 `2026-09-08-task26-r7-scc-fix.md` §7）：
+  **9/9 PASS**。原 FAIL 轴：O-z 3.359→0.00433、H1-x 2.335→0.00036、
+  H1-z 1.685→0.00321、H2-x 0.00035、H2-z 0.00321；PASS 轴 ≤1.3e-5 不变。
+- 结论：**2.6.2 PW 力 FD PASS**；约束态力与能量口径经 SCC-μw 修复后一致
+  （包络定理成立，|d| ≈ SCC 残项+compen+腿-μ 差 ~0.005 量级）。
+- 集成 result.ref（211/212）只含能量、不含力 → 无需更新；单测 24/24 保持绿。
+- Next：2.6.2 LCAO 18 腿 FD（同协议同修复）→ 2.6.3 力矩 FD → 2.6.4 → 2.6.1 → 2.7。
+
+## 2026-09-08 (3): LCAO 力 FD O-z 冒烟 FAIL——归因进展（plain 对照 PASS、候选收窄）
+
+- 承接 R7 PW 9/9 PASS（同 SCC-μw 修复二进制）后启动 LCAO 力 FD。
+  R7 协议 O-z 腿（np4 高网格、绝对 t*=6.505559879、μ 每腿重优化、
+  自 base 密度 restart）：E(R−δ)=−466.2137612395323、
+  E(R+δ)=−466.1998489632887 → F_FD=−2.629 eV/Å；F_ana(R0)=−1.3602401011
+  → |d|=1.269 ≫ 判据 0.0128555 → **FAIL 未豁免**（详见 spec
+  `2026-09-08-task26-lcao-force-fd-attribution.md`）。
+- 归因排除链（物证）：(1) raw-E 口径已用于 PW ✓；(2) SCC-μw 修复后
+  SCC 分量 −3e-7 ✓；(3) "Ewald 不随几何"系固定-μ 首批 STRU 坏数据
+  （3 文件几何全同 R0）假象——正确位移腿 Ewald 102.8272/103.1329/
+  103.4388 正常变化 ✓；(4) 腿内能量收敛 1e-9、系统性差 0.0067 eV/2δ
+  非噪声 ✓；(5) 外环容差代价 ~1e-8 Ry ✓。
+- plain LCAO 对照（同网格同 δ 无约束）：F_FD=−1.21027 vs F_ana=−1.21040，
+  |d|=0.00013 **PASS** → LCAO 通用机制自洽，不一致为**约束态特有**。
+- 固定-μ 判决腿（ABA_CONSTRAINT_FIXED_MU，oz_minus2/oz_plus2）：FD 同值
+  −2.629、dQ/dz=−0.53 e/Å → FD 面稳健、记账性差；排除 μ(R) 路径假说。
+- R0 test_force 分解自洽（分量和+COM 修正=TOTAL −1.360240）；分析力侧无
+  隐藏项。剩余候选：A) LCAO μw 走 veff 网格、力侧 fvl_dphi（含 μw 的
+  Pulay）+ forcecon 互补闭合在 LCAO 基下不精确；B) escon/forcecon 快照
+  不同步。判别实验（O-x/H1-x 双腿，~30–40 min）已设计未跑完（用户叫停
+  重测试；半成品在 /tmp/cfd_lcao_morelegs2、脚本 /tmp/ab_mkleg.py）。
+- 状态：2.6.2 PW PASS / LCAO FAIL 归因中；2.6.2 残差档位、LCAO 18 腿、
+  2.6.3/2.6.4/2.6.1/2.7 未动。力维持"未验收"。
+- 待办：重建二进制纳入 constraint_inject_lcao np4 audit 修复（11:51 改、
+  bin 11:04，audit-only）；用户批准后先跑 O-x/H1-x 判别腿再定修复。
+
+## 2026-09-08 (4): LCAO 力 FD 归因评审——根因定案（μw Pulay 生命周期缺失）
+
+- 评审 `2026-09-08-task26-lcao-force-fd-attribution.md`：文档质量通过；
+  **不批准按原方案跑 O-x/H1-x 判别腿**——现有数据已可定案。
+- 根因（证据链，零新 SCF）：(i) 分解表 COM 修正 −2.3594 ⇒ 补偿前净力
+  net_z=7.078 eV/Å（约束态特有的平移违反；plain/PW 净力≈0）；(ii) R0
+  CONSTRAINT 力块 Σ_z=0.275393 Ry/Bohr=7.081 eV/Å——净力=Σforcecon
+  吻合 0.04% ⇒ **μw Pulay（fvl_dphi 对 μw 的导数）在力求值时完全缺失**；
+  (iii) 机制：μw 在 hamilt2rho_single 内注入，而 v_eff 每轮 iter_finish
+  由 update_pot 重建不含 μw，末轮后无注入 → cal_pulay_fs 读的 pot 无 μw。
+  与 PW SCC-μw bug 同族（势生命周期末端丢 μw，PW 丢 vnew、LCAO 丢 v_eff）。
+- 候选裁决：A 方向对但机制修正为"生命周期缺失"非"求积不精确"；B 被净力
+  指纹排除（标量错位不产生平移违反）。
+- 批复路径：cal_pulay_fs 用 pot 修正副本回加 μw（复用
+  add_back_constraint_potential）→ 重跑 O-z 腿；**可证伪预言**：net_z≈0
+  且 |d|≪判据；原 4 腿方案降为后备。文档建议：净力/补偿前力纳入 FD 归因
+  标准检查项；F_ana 补偿前后两值都入档。
+- 文件：`2026-09-08-task26-lcao-fd-rootcause-review.md`。
+
+## 2026-09-08 (5): LCAO Pulay 修复实证评审 + 后续批准（无代码改动）
+
+- 核实 `2026-09-08-task26-lcao-fd-rootcause-fix.md`：±δ 腿能量与修复前逐位
+  一致（能量路径零改动属实）；独立重算 F_FD=−2.627493、|d|=0.000364
+  （判据 0.0128555，35× 富余）；R0 净力 Σz≈0（修复前 +7.078）；RAII 守卫
+  代码质量合规；ctest 12/12。两条可证伪预言全成立，根因链闭合。
+- "势生命周期末端丢 μw"确认为同族 bug 模式（PW vnew / LCAO v_eff 两例，
+  共用 add_back_constraint_potential 修复）——登记：未来任何新注入点
+  （应力、偶极）必须过"注入势在力求值时刻是否存活"检查。
+- 批准：18 腿全量 → 残余档位 → 2.6.3 → 2.7；**前置要求：一天未提交的
+  修复（SCC/Pulay/audit+spec）先按 2–3 commit 提交，重型验收跑必须对干净
+  commit**。
+- 文件：`2026-09-08-lcao-pulay-fix-review.md`。
+
+## 2026-09-08 (4): LCAO 力 FD 根因修复——μw Pulay 生命周期缺失（评审定案执行）
+
+- 评审（归档 `2026-09-08-task26-lcao-fd-rootcause-review.md`）用归因 spec
+  分解表直接定案：COM 修正 −2.3594 eV/Å ⇒ 补偿前 net_z=7.078 eV/Å = Σ
+  forcecon（7.081，0.04% 吻合）⇒ 分析力只有 μw 显式一半，基函数导数一半
+  （μw Pulay）缺失。裁定不跑 O-x/H1-x 判别腿，改定点修复+可证伪验证。
+- 机制代码级核实：收敛轮 `ElecState::cal_converged() → Potential::get_vnew()`
+  内部 `update_from_charge()` 重建 v_eff（μw 被抹），SCF 在下次注入前退出
+  → 力评估时 `cal_pulay_fs`(fvl_dphi) 读到的 v_eff 无 μw。与 PW SCC bug
+  同族（PW 丢 vnew、已修；LCAO 丢 v_eff）。
+- 修复：FORCE_STRESS.cpp 新增 `ConstraintPulayPotGuard`（RAII，快照 v_eff→
+  `add_back_constraint_potential` 回加 μw→cal_pulay_fs→恢复），包裹 nspin
+  1/2 与 4 两处 fvl_dphi 评估；forcecon 仍供显式 ∂w/∂R 半，两半闭合平移不变。
+- 可证伪验证（固定-μ 三腿，np4，修复后二进制）：能量与修复前逐位一致
+  （FD=−2.627493 eV/Å 不变）；R0 解析 O-z −1.3602401→**−2.6271286**
+  （Δ=−1.26689=缺失 μw Pulay）；**|F_FD−F_ana|=0.000364 ≪ 0.0128555 PASS
+  （富余 35×）**；R0 全轴净力≈0（修复前净_z=+7.078）→ 两预言均成立。
+- 文件：spec `2026-09-08-task26-lcao-fd-rootcause-fix.md`；改动
+  source/source_lcao/FORCE_STRESS.cpp（单文件，力路径）。legacy ftable
+  （FORCE_gamma/k.cpp）为死代码未动。
+- Next：R7 pinned-μ LCAO 18 腿全量重跑（中量，待批准）→ 残余∝|Q−t| 档位 →
+  2.6.3 力矩 FD → 2.6.4 → 2.6.1 → 2.7（净力/补偿前力入标准检查、F_ana
+  补偿前后双值入档）。
