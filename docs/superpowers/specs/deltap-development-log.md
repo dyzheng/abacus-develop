@@ -3872,6 +3872,20 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   commit**。
 - 文件：`2026-09-08-lcao-pulay-fix-review.md`。
 
+## 2026-09-08 (6): 提交整理 + 推送 + 开发者文档（无代码改动）
+
+- 一天修复整理为 4 commit 并推 zdy：ddd485d5c（PW SCC-μw 修复）、
+  d6d0e021b（LCAO Pulay RAII 守卫）、757fb1430（M3b np4 dm_layout +
+  FD raw-E）、7bd4fd3ee（归因/修复/评审 spec + Task 2.6 计划 + 日志）。
+- 产出 `docs/constraint_developer_guide.md`：模块地图（M 编号→文件）、
+  数据格式（ConstraintConfig/靶点 JSON/网格布局/审计行）、SCF 数据流全链
+  （核心事实：模块从不触碰 ψ 与哈密顿对象，唯一耦合点是 v_eff 与 ρ 网格；
+  LCAO 的 H 含 ΣμW^α 靠 cal_gint_vl 线性性隐式成立）、势生命周期陷阱
+  （vnew/v_eff 两案，永久检查项）、关键函数↔公式↔单测对照表、覆盖总账
+  （未覆盖：response_sign=+1/inject_lcao k 点/fixed_mu）、设计评估
+  （得当处 5 条 + 兼容风险分级 7 条：时序契约隐式=高危、单例/channel 全局/
+  网格假设=中危）+ 扩展点指南。
+
 ## 2026-09-08 (4): LCAO 力 FD 根因修复——μw Pulay 生命周期缺失（评审定案执行）
 
 - 评审（归档 `2026-09-08-task26-lcao-fd-rootcause-review.md`）用归因 spec
