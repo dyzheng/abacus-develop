@@ -70,6 +70,14 @@ class ConstraintLoop
     // Hamiltonian — the PW path passes both.
     void inject_potential_lcao(const int iter, ModuleBase::matrix& v_eff);
 
+    // Add the currently injected constraint potential back into a potential
+    // matrix (same sign/layout as the injector).  The vnew snapshot taken by
+    // Potential::get_vnew() holds v_phys(out) - [v_phys(in) + mu*w]; the SCC
+    // force integral must see the physical difference only, so the callers
+    // add the mu*w term back before the core-correction integral (no-op when
+    // the loop is disabled or mu is all zero).
+    void add_back_constraint_potential(ModuleBase::matrix& veff) const;
+
     // Read the constraint charges Q from the (mixed) rho of iteration 'iter'.
     void observe(const int iter, const double* const* rho, const int nspin);
 
@@ -132,6 +140,10 @@ class ConstraintLoop
     int outer_steps_ = 0;
     ConstraintAudit audit_;
     std::string last_audit_line_;
+    // Experiment switch (default off): when ABA_CONSTRAINT_FIXED_MU is set,
+    // the multiplier is frozen at the env value and the outer secant loop
+    // is disabled (constraint potential acts as a fixed external potential).
+    bool fixed_mu_ = false;
 };
 
 } // namespace constraint

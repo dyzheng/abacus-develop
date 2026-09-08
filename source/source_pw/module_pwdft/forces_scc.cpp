@@ -1,5 +1,6 @@
 #include "forces.h"
 #include "source_base/parallel_reduce.h"
+#include "source_io/module_parameter/parameter.h"
 #include "source_io/module_output/output_log.h"
 #include "stress_func.h"
 // new
@@ -11,6 +12,7 @@
 #include "source_base/tool_threading.h"
 #include "source_estate/module_pot/efield.h"
 #include "source_estate/module_pot/gatefield.h"
+#include "source_estate/module_constraint/constraint_loop.h"
 #include "source_hamilt/module_ewald/H_Ewald_pw.h"
 #include "source_hamilt/module_surchem/surchem.h"
 #include "source_hamilt/module_vdw/vdw.h"
@@ -42,12 +44,30 @@ void Forces<FPTYPE, Device>::cal_force_scc(ModuleBase::matrix& forcescc,
     const int nrxx = vnew.nc;
     const int nspin = vnew.nr;
 
+    // Constraint branch: the vnew snapshot taken by Potential::get_vnew()
+    // holds v_phys(out) - [v_phys(in) + mu*w] because the constraint
+    // potential was injected into v_eff before the last diagonalization.
+    // The SCC (self-consistent/core) force integral must see the physical
+    // potential difference only; the mu*w term is added back so the
+    // constraint force enters exclusively through the M6 forcecon kernel.
+    // Without this the SCC picks up a spurious -mu*dQ_core/dR on every axis
+    // where the Becke weight moves (measured ~7 eV/Angstrom on O-z in the
+    // R7 FD round).
+    ModuleBase::matrix vnew_phys;
+    const ModuleBase::matrix* vnew_use = &vnew;
+    if (PARAM.inp.constraint)
+    {
+        vnew_phys = vnew;
+        constraint::ConstraintLoop::instance().add_back_constraint_potential(vnew_phys);
+        vnew_use = &vnew_phys;
+    }
+
     if (nspin == 1 || nspin == 4) {
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static, 1024)
 #endif
         for (int ir = 0; ir < nrxx; ir++) {
-            psic[ir] = vnew(0, ir);
+            psic[ir] = (*vnew_use)(0, ir);
         }
     } else {
         int isup = 0;
@@ -56,7 +76,7 @@ void Forces<FPTYPE, Device>::cal_force_scc(ModuleBase::matrix& forcescc,
 #pragma omp parallel for schedule(static, 1024)
 #endif
         for (int ir = 0; ir < nrxx; ir++) {
-            psic[ir] = (vnew(isup, ir) + vnew(isdw, ir)) * 0.5;
+            psic[ir] = ((*vnew_use)(isup, ir) + (*vnew_use)(isdw, ir)) * 0.5;
         }
     }
 

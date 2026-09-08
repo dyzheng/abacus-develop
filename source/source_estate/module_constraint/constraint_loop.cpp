@@ -1,6 +1,7 @@
 #include "constraint_loop.h"
 
 #include <cmath>
+#include <cstdlib>
 #include <numeric>
 
 #include "constraint_deriv.h"
@@ -28,6 +29,7 @@ void ConstraintLoop::reset()
     Q_ref_.clear();
     targets_.clear();
     nelec_ = 0.0;
+    fixed_mu_ = false;
     phase_ = LoopPhase::IDLE;
     status_ = MuStatus::RUNNING;
     outer_steps_ = 0;
@@ -62,6 +64,27 @@ void ConstraintLoop::init(const UnitCell& ucell,
 
     // mu starts at zero: the first SCF is the unconstrained reference.
     mu_.assign(wg_->nconstraint(), 0.0);
+    // Experiment branch (default off): freeze the multiplier at a constant
+    // read from the environment so the constraint potential acts as an
+    // ordinary fixed external potential (no outer secant loop, no reference
+    // SCF).  This is the attribution harness for the force FD round: with
+    // mu constant, the printed SCF energy slope and the printed force must
+    // agree if the energy and force derivations are mutually consistent.
+    const char* fixed_mu_env = std::getenv("ABA_CONSTRAINT_FIXED_MU");
+    if (fixed_mu_env != nullptr && std::strlen(fixed_mu_env) > 0)
+    {
+        const double mu_fixed = std::atof(fixed_mu_env);
+        std::fill(mu_.begin(), mu_.end(), mu_fixed);
+        fixed_mu_ = true;
+        targets_.resize(wg_->nconstraint());
+        for (size_t a = 0; a < targets_.size(); ++a)
+        {
+            targets_[a] = cfg_.targets[a].value;
+        }
+        phase_ = LoopPhase::CONSTRAINED;
+        status_ = MuStatus::RUNNING;
+        return;
+    }
     MuSolverParams params;
     params.mu_max = cfg_.mu_max;
     params.conv_tol = cfg_.thr;
@@ -134,6 +157,23 @@ void ConstraintLoop::inject_potential_lcao(const int iter,
     (void)iter;
 }
 
+void ConstraintLoop::add_back_constraint_potential(ModuleBase::matrix& veff) const
+{
+    if (!enabled() || !wg_ || mu_.empty())
+    {
+        return; // constraint off or not armed: nothing was injected
+    }
+    // Mirror of the injector (ConstraintInjectPW::inject): the same
+    // per-channel sum mu_alpha * w_alpha that entered the vnew snapshot is
+    // added back, restoring the physical potential difference for the SCC
+    // force integral (see header comment).
+    if (!ConstraintInjectPW::inject(*wg_, mu_, channel_from_type(cfg_.type), veff))
+    {
+        ModuleBase::WARNING_QUIT("ConstraintLoop::add_back_constraint_potential",
+            "mu/veff length mismatch (wiring bug)");
+    }
+}
+
 void ConstraintLoop::observe(const int iter, const double* const* rho,
                              const int nspin)
 {
@@ -148,6 +188,17 @@ void ConstraintLoop::observe(const int iter, const double* const* rho,
 
 void ConstraintLoop::outer_step(const int iter, bool& conv_esolver)
 {
+    // Experiment branch (fixed mu): the multiplier never changes, so the
+    // first genuine SCF convergence closes the run.  No secant step runs;
+    // the audit reports the fixed-mu residual Q(mu) - t for the record.
+    if (fixed_mu_)
+    {
+        ++outer_steps_;
+        print_audit(iter);
+        status_ = MuStatus::CONVERGED;
+        phase_ = LoopPhase::DONE;
+        return;
+    }
     if (phase_ == LoopPhase::REFERENCE)
     {
         // Reference convergence: record Q_ref and build the targets.
@@ -240,7 +291,12 @@ void ConstraintLoop::final_report()
         return;
     }
     GlobalV::ofs_running << "\n[constraint] final status: ";
-    if (status_ == MuStatus::CONVERGED)
+    if (fixed_mu_)
+    {
+        GlobalV::ofs_running
+            << "FIXED_MU (experiment switch; multiplier frozen, targets not enforced)\n";
+    }
+    else if (status_ == MuStatus::CONVERGED)
     {
         GlobalV::ofs_running << "CONVERGED (targets reached within "
                              << cfg_.thr << " e)\n";
