@@ -4182,6 +4182,7 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - 裁定：通过，批准 Task A5（M6 力核逐约束 channel）。
 - 文件：`2026-09-09-taskA4-review.md`。
 
+
 ## 2026-09-09 (21): Task A5 完成——M6 逐约束力核（G5 通过）
 
 - 范围：`constraint_deriv.{h,cpp}`（per-α 力核）、`constraint_loop.cpp`（compute_force
@@ -4208,3 +4209,39 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - Next：提交后推送 zdy；请求裁决；批准后启动 Task A6（H₂O 混合集成用例 213，G6；
   需记录混合 μ 偏移 vs 单约束 μ_c=-0.1765/μ_s=-0.07234，即阶段 B Broyden 立项实测）。
   开放项延续：① PW≡LCAO 只读观测口；② torque E' 修复；③ DeltaSpin 对等（B）。
+
+## 2026-09-09 (22): Task A5 严格评审——G5 通过，A6 解锁（无代码改动）
+
+- 核实：3bf9f4c7d 已推 zdy、工作树干净；ctest 11/11 亲测；两新测试
+  （MixedChannelForce/MixedForceNewtonThirdLaw）在案；力核 per-α channels
+  签名落位、A4 两趟掩码收回、驻点守卫原样；混合力 FD 未抢跑；sabotage 恰中。
+- 物理审查：混合牛三用非平凡恒等式 Σ_J F_J=−Σ_α μ_α dQ_α/dδ（约束块单独
+  不必为零——7.08 eV/Å 净力案正是此性质），RHS 独立 5 点 FD 折叠=可证伪器，
+  表述正确且把净力现象变成永久回归锚。
+- 裁定：通过，批准 Task A6（H₂O 混合集成 + 三旧用例逐位回归 + μ 耦合实测）。
+  阶段 A 代码层（读数/注入/编排/力）全部单一实现+薄适配，无第二路径残留。
+- 文件：`2026-09-09-taskA5-review.md`。
+
+## 2026-09-09 (23): Task A6 完成——H₂O 混合集成 + 三旧回归 + μ 耦合实测（G6 通过）
+
+- 新集成用例 `tests/01_PW/213_PW_constraint_h2o_mixed/`（已注册 CASES_CPU.txt）：
+  nspin=2、v2 JSON `[charge +0.1e @O, spin +0.1μB @O]`（同原子双类型——最直接用户
+  场景），INPUT 同 212（charge run 级 type 不触发 supersede）；result.ref 入库
+  （etot −441.9159885324229）。
+- 实测（np1，本机 build/abacus_basic_para）：双通道 CONVERGED（外步 15、SCF 迭代
+  117，res_c=−1.38e-5、res_s=−7.86e-5 均 <1e-4）；审计行带 kind=charge/spin 标签；
+  maxdev=2.220446049e-16；总电荷守恒（total_charge=6.455283 = q_c+q_s、nelec=8）。
+- μ 耦合实测（P3 数据，阶段 B 立项依据）：
+  - 单约束参考：211（nspin1 charge+0.1e）μ_c=−0.176548；212（spin+0.1μB）μ_s=−0.072339；
+  - nspin2 charge-only 基线（spin target 0 休眠）：μ_c=−0.176354（nspin 效应仅 +1.9e-4）；
+  - 混合 213：μ_c=−0.181173（耦合偏移 −0.004819 vs nspin2 基线）、μ_s=−0.081544
+    （耦合偏移 −0.009206 vs 212）——两分量同向变负（互致刚化），耦合非可加。
+- 三旧用例逐位回归（旧 v1 格式兼容路径，np1）：211 Δetot=4.1e-9 a.u.、212
+  Δetot=9.5e-11 a.u.、212_NAO Δetot=2.4e-11 a.u.，均 CONVERGED、μ 值与历史记录一致。
+- sabotage 复验（临时恢复 A1 staging mixed 守卫于扩展 configure 核）恰中 3 测试
+  （io MixedGuards + loop MixedConverges/MixedFuse），还原后模块 ctest 11/11 全绿。
+- 文件：spec `2026-09-09-taskA6-mixed-integration.md`；计划 A6 勾选；本日志
+  （(22)=A5 评审草稿 (4) 重编号并移至 (21) 后，随本批入库；A5-review spec 入库）。
+- Next：提交后推送 zdy；请求裁决；批准后启动 Task A7（收尾文档：用户手册/开发者
+  指南/进展总结 + 评审申请）。开放项延续：① PW≡LCAO 只读观测口（A 工具补件）；
+  ② torque E' 修复；③ DeltaSpin 对等（B）。

@@ -149,13 +149,22 @@ TEST(ConstraintDerivTest, MixedChannelForce)
 
 ## Task A6：H₂O 混合集成用例（0.5 天）
 
+> **状态（2026-09-09）**：已完成并通过 G6（spec `2026-09-09-taskA6-mixed-integration.md`）。
+> 213 混合用例（nspin=2，charge+spin 同原子 O）np1 395 s 收敛：双通道 CONVERGED
+> （res_c=-1.4e-5/res_s=-7.9e-5 <1e-4）、maxdev=2.2e-16、kind= 审计齐备、result.ref 入库
+> （etot −441.9159885324229）。μ 耦合实测（P3）：μ_c=−0.181173（vs nspin2 基线 −0.176354
+> 耦合偏移 −0.0048）、μ_s=−0.081544（vs 单约束 −0.07234 偏移 −0.0092），两分量同向刚化、
+> 外步 3→15 收敛退化——阶段 B Broyden 立项数据到手。三旧用例逐位复现（211 Δ=4.1e-9 /
+> 212 Δ=9.5e-11 / 212_NAO Δ=2.4e-11 a.u.）；sabotage（恢复 A1 staging mixed 守卫）恰中
+> 3 测试，模块 ctest 11/11 全绿。
+
 **Files:** `tests/01_PW/213_PW_constraint_h2o_mixed/`（注册 CASES_CPU.txt）
 
-- [ ] Step 1 用例：nspin=2、charge +0.1 e on O + spin +0.1 μB on O（同原子双类型——最直接的用户场景）；
-- [ ] Step 2 验收：两分量均 CONVERGED（res<1e-4）；μ_c、μ_s 与单约束值（−0.1765 / −0.07234）同量级（耦合偏移如实记录——这是 P3 的实测数据）；maxdev=2.2e-16；result.ref 入库；
-- [ ] Step 3 回归：211（charge）/212（spin）/212_NAO 三旧用例（旧格式兼容路径）逐位复现；
-- [ ] Step 4 sabotage 复验 + `ctest -R constraint` 全绿；
-- [ ] Step 5 spec（含 μ 偏移测量表——阶段 B 立项依据）+ 日志 + commit。**G6**。
+- [x] Step 1 用例：nspin=2、charge +0.1 e on O + spin +0.1 μB on O（同原子双类型——最直接的用户场景）；
+- [x] Step 2 验收：两分量均 CONVERGED（res<1e-4）；μ_c、μ_s 与单约束值（−0.1765 / −0.07234）同量级（耦合偏移如实记录——这是 P3 的实测数据）；maxdev=2.2e-16；result.ref 入库；
+- [x] Step 3 回归：211（charge）/212（spin）/212_NAO 三旧用例（旧格式兼容路径）逐位复现；
+- [x] Step 4 sabotage 复验 + `ctest -R constraint` 全绿；
+- [x] Step 5 spec（含 μ 偏移测量表——阶段 B 立项依据）+ 日志 + commit。**G6**。
 
 ## Task A7：文档与收尾（0.5 天）
 

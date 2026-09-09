@@ -1,0 +1,3 @@
+{"constraints": [
+    {"type": "charge", "target": 0.1, "atoms": [0]},
+    {"type": "spin", "target": 0.1, "atoms": [0]}]}

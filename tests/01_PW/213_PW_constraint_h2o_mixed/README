@@ -1,0 +1,10 @@
+PW SCF of H2O (15 A box) with real-space MIXED charge+spin constraints on the
+SAME atom (becke weights, delta mode, +0.1 e and +0.1 uB on O, nspin=2): the
+stage-A per-constraint list (v2 JSON) drives both channels in one outer loop.
+mu_c -> -0.18117 Ry, mu_s -> -0.08154 Ry, outer step 15 CONVERGED (res_c =
+-1.4e-5, res_s = -7.9e-5, both < 1e-4), CONSTRAINT_AUDIT q_c=6.35536 (delta
+0.1 on Q_ref_c=6.25537), q_s=0.09993 (delta 0.1 uB on Q_ref_s=5.9e-6),
+total_charge=6.45528 nelec=8 maxdev=2.2e-16.  Coupling offsets (P3 data, vs
+the single-constraint runs 211 mu_c=-0.1765 / 212 mu_s=-0.07234 and an
+nspin=2 charge-only baseline mu_c=-0.17635): charge channel -0.0048, spin
+channel -0.0092 (both more negative = mutual stiffening).
