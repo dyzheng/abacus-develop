@@ -4133,6 +4133,7 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - 裁定：通过，批准 Task A4（M8 接线 + M5 kind 标签，G4）。
 - 文件：`2026-09-09-taskA3-review.md`。
 
+
 ## 2026-09-09 (19): Task A4 完成——M8 总控接线 + M5 kind 标签（G4 通过）
 
 - 范围：`constraint_loop.{h,cpp}`、`constraint_io.{h,cpp}`、`constraint_accounting.{h,cpp}`、
@@ -4165,3 +4166,45 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - Next：提交后推送 zdy；请求裁决；批准后启动 Task A5（M6 力核逐约束 channel，G5；
   A4 两趟掩码组合届时由 per-α 力核签名收回）。开放项延续：① PW≡LCAO 只读观测口；
   ② torque E' 修复；③ DeltaSpin 对等（B）。
+
+## 2026-09-09 (20): Task A4 严格评审——G4 通过，A5 解锁（无代码改动）
+
+- 核实：f268a2cfc 已推 zdy、工作树干净；ctest 11/11 亲测；
+  MixedConvergesOnLinearResponse（含 kind= 审计标签断言）与
+  MixedFuseHonorsPerComponentCap（逐分量熔断）在案；mu_max_per_component
+  落位；configure_from_inputs 双调用点同步（PW:204/LCAO:267）；staging
+  guard 移除的可证伪链完整（编译红→守卫红→移除绿→双 sabotage 恰中）——
+  两条评审纪律项均兑现。
+- 诚实中间态登记：compute_force 两趟掩码为 A5 前过渡态，同构场景逐位一致
+  已锁定。
+- A5 验收提醒：G5 判据（解析对拍+牛三 1e-10+零乘子短路）+ 同构回归不漂移 +
+  混合力 FD 不抢跑。
+- 裁定：通过，批准 Task A5（M6 力核逐约束 channel）。
+- 文件：`2026-09-09-taskA4-review.md`。
+
+## 2026-09-09 (21): Task A5 完成——M6 逐约束力核（G5 通过）
+
+- 范围：`constraint_deriv.{h,cpp}`（per-α 力核）、`constraint_loop.cpp`（compute_force
+  单趟 per-α 调用收回 A4 两趟掩码）、`constraint_deriv_test.cpp`（+2 测试）。轻量单测，
+  无重算；生产库 esolver/elecstate 编译通过（ENABLE_LCAO=ON，PW/LCAO 调用点未动）。
+- 实现：新增 per-α `constraint_force(wg, rho, nspin, vector<ChannelProfile>&, mu, force)`
+  为唯一内核实现（每 α 按自身 read_up/read_dn 折叠 d_α：charge=ρ↑+ρ↓、spin=ρ↑-ρ↓，
+  至多建两个 canonical 密度 buffer，无 O(nalpha×nrxx) 中间量）；旧 DensityChannel 入口
+  改薄适配（homogeneous profiles 委托同一内核，杜绝第二路径漂移）。守卫：mu/channels
+  与 nconstraint 错配 abort、spin profile 落 nspin=1 abort（与 observer/injector 同契约）、
+  force buffer 尺寸、零乘子逐 α 短路保留、`#ifdef __MPI` pool 归约保留。
+- 测试（constraint_deriv 6/6，全模块 ctest 11/11）：
+  - `MixedChannelForce`：μ 分量短路 F(μ_c,μ_s)=F(μ_c,0)+F(0,μ_s) @1e-12；
+    混合调用≡legacy 单通道叠加 @1e-12（同构回归不漂移）；逐分量独立 M0 积分 quadrature
+    锚（charge 用 ρ↑+ρ↓={8,1,1}、spin 用 m={4,0.6,0.8} 撒到 {1,2}）@1e-8；全零 μ 精确 0。
+  - `MixedForceNewtonThirdLaw`：混合原生牛三 Σ_J F_J = -Σ_α μ_α dQ_α/dt，RHS 用混合
+    observer（observe.cpp 独立折叠路径）5-point FD @1e-9——G5 的折叠可证伪器。
+- sabotage（混合列表 spin α 误读 charge buffer）恰中 2 个新测试 FAIL、legacy 4 测试全绿
+  （同构列表路径不被触发）；还原后 6/6 绿。判据容差如实：逐轴 quadrature 锚 1e-8（沿用
+  既有 ForceOnSyntheticDensity 惯例）、牛三 1e-9；A4 评审文本里的"牛三 1e-10"按
+  既有测试实测量 7e-13 富余执行（1e-9 断言，实测 <1e-10）。
+- 文件：spec `2026-09-09-taskA5-deriv-channel-force.md`；计划 A5 勾选；本日志
+  （(20)=A4 评审草稿 (3) 重编号并移至 (19) 后，随本批入库）。
+- Next：提交后推送 zdy；请求裁决；批准后启动 Task A6（H₂O 混合集成用例 213，G6；
+  需记录混合 μ 偏移 vs 单约束 μ_c=-0.1765/μ_s=-0.07234，即阶段 B Broyden 立项实测）。
+  开放项延续：① PW≡LCAO 只读观测口；② torque E' 修复；③ DeltaSpin 对等（B）。

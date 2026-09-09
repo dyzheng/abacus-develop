@@ -15,6 +15,25 @@ void constraint_force(const WeightGrid& wg,
                       const std::vector<double>& mu,
                       ModuleBase::matrix& force)
 {
+    // Legacy single-channel entry (pre-A5 callers / historical tests): the
+    // whole constraint list shares one channel.  Expanding it to a
+    // homogeneous per-constraint profile list keeps the force integral in a
+    // single implementation (no second kernel path to drift).
+    const ConstraintKind kind = (channel == DensityChannel::Spin)
+                                    ? ConstraintKind::Spin
+                                    : ConstraintKind::Charge;
+    const ChannelProfile profile = build_channel_profile(kind);
+    std::vector<ChannelProfile> channels(wg.nconstraint(), profile);
+    constraint_force(wg, rho, nspin, channels, mu, force);
+}
+
+void constraint_force(const WeightGrid& wg,
+                      const double* const* rho,
+                      const int nspin,
+                      const std::vector<ChannelProfile>& channels,
+                      const std::vector<double>& mu,
+                      ModuleBase::matrix& force)
+{
     const ModulePW::PW_Basis* rho_basis = wg.rho_basis();
     const double dV = rho_basis->omega / static_cast<double>(rho_basis->nxyz);
     const int nrxx = rho_basis->nrxx;
@@ -29,20 +48,31 @@ void constraint_force(const WeightGrid& wg,
                                  "weight derivative grid not built "
                                  "(call build_derivatives)");
     }
-    // Guard: the spin channel reads rho_up - rho_dn and requires nspin == 2
-    // (same contract as ConstraintObserver; a wrong combination must abort
-    // loudly, never silently read a nonsense observable).
-    if (channel == DensityChannel::Spin && nspin != 2)
-    {
-        ModuleBase::WARNING_QUIT("constraint_force",
-                                 "spin channel requires nspin == 2");
-    }
-    // Guard: one multiplier per constraint and a nat x 3 accumulation
-    // buffer; a mismatch means the caller is not wired to this kernel.
+    // Guard: one multiplier and one channel profile per constraint; a
+    // mismatch would silently pair a weight with the wrong multiplier or
+    // density channel (wiring bug).
     if (static_cast<int>(mu.size()) != nalpha)
     {
         ModuleBase::WARNING_QUIT("constraint_force",
                                  "mu size != nconstraint");
+    }
+    if (static_cast<int>(channels.size()) != nalpha)
+    {
+        ModuleBase::WARNING_QUIT("constraint_force",
+                                 "channel count != nconstraint");
+    }
+    // Guard: a profile that reads the down density (read_dn != read_up,
+    // i.e. the spin channel) needs the two-channel density buffer.  Under
+    // nspin == 1 only rho[0] (the total density) exists, so a spin reading
+    // would silently integrate a nonsense observable (same contract as the
+    // observer / injector).
+    for (const ChannelProfile& ch : channels)
+    {
+        if (nspin != 2 && ch.read_dn != ch.read_up)
+        {
+            ModuleBase::WARNING_QUIT("constraint_force",
+                                     "spin channel requires nspin == 2");
+        }
     }
     if (force.nr != nat || force.nc != 3)
     {
@@ -50,32 +80,58 @@ void constraint_force(const WeightGrid& wg,
                                  "force buffer must be nat x 3");
     }
 
-    // Fold the channel choice into one per-point density array so the inner
-    // loops below read a single contiguous buffer (the derivative grid is
-    // laid out [alpha][(J*3+d)*nrxx+ir], so the innermost stride is ir).
-    std::vector<double> dens(nrxx);
-    if (channel == DensityChannel::Spin)
+    // Scan which combined densities the list needs.  Factory profiles are
+    // charge (+1,+1) and spin (+1,-1), so a profile with read_dn == read_up
+    // folds rho_up + rho_dn (charge) and one with read_dn != read_up folds
+    // rho_up - rho_dn (spin); building at most the two canonical buffers
+    // keeps the inner loop over one contiguous array per alpha without an
+    // O(nalpha x nrxx) intermediate.
+    bool need_charge = false;
+    bool need_spin = false;
+    for (const ChannelProfile& ch : channels)
     {
-        // Spin channel: magnetization density rho_up - rho_dn.
-        for (int ir = 0; ir < nrxx; ++ir)
+        // Branch A: spin-like profile (split read signs).
+        if (ch.read_dn != ch.read_up)
         {
-            dens[ir] = rho[0][ir] - rho[1][ir];
+            need_spin = true;
+        }
+        else
+        {
+            // Branch B: charge-like profile (symmetric read signs).
+            need_charge = true;
         }
     }
-    else if (nspin == 2)
+    std::vector<double> dens_charge;
+    std::vector<double> dens_spin;
+    if (nspin == 2)
     {
-        // Charge channel, nspin == 2: total charge rho_up + rho_dn.
-        for (int ir = 0; ir < nrxx; ++ir)
+        // Branch: two-channel density; build the combined arrays the list
+        // needs (charge = total, spin = magnetization).
+        if (need_charge)
         {
-            dens[ir] = rho[0][ir] + rho[1][ir];
+            dens_charge.assign(nrxx, 0.0);
+            for (int ir = 0; ir < nrxx; ++ir)
+            {
+                dens_charge[ir] = rho[0][ir] + rho[1][ir];
+            }
+        }
+        if (need_spin)
+        {
+            dens_spin.assign(nrxx, 0.0);
+            for (int ir = 0; ir < nrxx; ++ir)
+            {
+                dens_spin[ir] = rho[0][ir] - rho[1][ir];
+            }
         }
     }
-    else
+    else if (need_charge)
     {
-        // Charge channel, nspin == 1: the single rho[0] density array.
+        // Branch: nspin == 1 stores the total density in rho[0]; only
+        // charge-like profiles survive the guard above.
+        dens_charge.assign(nrxx, 0.0);
         for (int ir = 0; ir < nrxx; ++ir)
         {
-            dens[ir] = rho[0][ir];
+            dens_charge[ir] = rho[0][ir];
         }
     }
 
@@ -89,6 +145,11 @@ void constraint_force(const WeightGrid& wg,
         {
             continue; // zero multiplier: this constraint contributes nothing
         }
+        // Per-constraint combined density (A5): every alpha folds rho with
+        // its own channel signs; a mixed charge+spin list needs no loop-side
+        // masking any more.
+        const bool spinlike = channels[alpha].read_dn != channels[alpha].read_up;
+        const double* dens = spinlike ? dens_spin.data() : dens_charge.data();
         for (int J = 0; J < nat; ++J)
         {
             for (int d = 0; d < 3; ++d)

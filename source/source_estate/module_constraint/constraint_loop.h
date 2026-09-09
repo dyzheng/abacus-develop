@@ -109,8 +109,10 @@ class ConstraintLoop
     // field times the current multipliers, integrated against the density
     // by the grid force kernel (constraint_deriv — the same kernel the LCAO
     // path calls, so PW and LCAO forces are identical by construction).
-    // rho is the per-spin density on the weight grid (nspin = 1/2); the
-    // density channel follows cfg_.type.  Accumulates into forcecon
+    // rho is the per-spin density on the weight grid (nspin = 1/2); every
+    // constraint folds the density with its own channel (A5 per-constraint
+    // kernel: charge uses rho_up + rho_dn, spin uses rho_up - rho_dn), so a
+    // mixed charge+spin list is one call.  Accumulates into forcecon
     // (nat x 3, Ry/Bohr).  No-op when the loop is disabled.
     void compute_force(const double* const* rho,
                        const int nspin,

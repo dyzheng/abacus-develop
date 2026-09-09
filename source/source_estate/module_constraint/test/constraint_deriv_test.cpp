@@ -141,6 +141,49 @@ class ConstraintDerivTest : public ::testing::Test
         }
     }
 
+    // Spin-resolved atomic-superposition densities with independent per-spin
+    // electron counts (up + dn need not equal nelec_atom): used by the mixed
+    // charge+spin force tests (charge density = up + dn, magnetization =
+    // up - dn are both smooth Gaussian superpositions).
+    void fill_rho_spin_resolved(const ModulePW::PW_Basis& pw,
+                                const double sigma,
+                                const std::vector<double>& nelec_up,
+                                const std::vector<double>& nelec_dn,
+                                std::vector<double>& rho_up,
+                                std::vector<double>& rho_dn) const
+    {
+        rho_up.assign(pw.nrxx, 0.0);
+        rho_dn.assign(pw.nrxx, 0.0);
+        for (int ir = 0; ir < pw.nrxx; ++ir)
+        {
+            const int i = ir / (pw.ny * pw.nplane);
+            const int j = ir / pw.nplane - i * pw.ny;
+            const int k = ir % pw.nplane + pw.startz_current;
+            const ModuleBase::Vector3<double> rfrac(
+                static_cast<double>(i) / pw.nx,
+                static_cast<double>(j) / pw.ny,
+                static_cast<double>(k) / pw.nz);
+            const ModuleBase::Vector3<double> rc =
+                rfrac * ucell->latvec * ucell->lat0;
+            const std::array<double, 3> r{rc.x, rc.y, rc.z};
+            for (size_t I = 0; I < pos.size(); ++I)
+            {
+                rho_up[ir] += nelec_up[I] * gaussian(r, pos[I], sigma);
+                rho_dn[ir] += nelec_dn[I] * gaussian(r, pos[I], sigma);
+            }
+        }
+    }
+
+    // Mixed fragments {{0}, {1, 2}} with their per-kind channel profiles and
+    // the spin-resolved density arrays in the fixture layout.
+    void fill_mixed_channels(std::vector<constraint::ChannelProfile>& channels) const
+    {
+        channels.push_back(constraint::build_channel_profile(
+            constraint::ConstraintKind::Charge)); // fragment {0}
+        channels.push_back(constraint::build_channel_profile(
+            constraint::ConstraintKind::Spin)); // fragment {1, 2}
+    }
+
     // High-order continuous quadrature of Q_alpha = int w_alpha rho dr,
     // independent of the density grid.  wpos are the atom positions used by
     // the weight function (possibly shifted); rhopos are the fixed density
@@ -216,11 +259,16 @@ class ConstraintDerivTest : public ::testing::Test
     // O position, independent of the WeightGrid grid assembly).  The points
     // do not move with the atoms, so d/dR of the quadrature is exactly the
     // sum of the M0 kernel values (no moving-center extra terms).
+    // 'dens_coef' holds the per-atom Gaussian amplitude of the density
+    // channel being integrated (total charge nelec_atom for the charge
+    // channel, per-atom magnetization for the spin channel), so the same
+    // fixed-point machinery serves the per-component mixed references.
     std::vector<double> f_quadrature(
         const std::vector<std::array<double, 3>>& wpos,
         const std::vector<std::array<double, 3>>& rhopos,
         const double sigma,
-        const std::vector<double>& mu) const
+        const std::vector<double>& mu,
+        const std::vector<double>& dens_coef) const
     {
         const int nat = static_cast<int>(wpos.size());
         std::vector<double> r_ang, w_ang;
@@ -272,7 +320,7 @@ class ConstraintDerivTest : public ::testing::Test
                     eR[3 * J] = -disp[0] / drR[J];
                     eR[3 * J + 1] = -disp[1] / drR[J];
                     eR[3 * J + 2] = -disp[2] / drR[J];
-                    rho_val += nelec_atom[J] * gaussian(rf, rhopos[J], sigma);
+                    rho_val += dens_coef[J] * gaussian(rf, rhopos[J], sigma);
                 }
                 const double wq = w_rad[irad] * w_ang[iang] * 4.0 * PI;
                 for (int alpha = 0; alpha < nat; ++alpha)
@@ -343,7 +391,8 @@ TEST_F(ConstraintDerivTest, ForceOnSyntheticDensity)
                                  constraint::DensityChannel::Charge, mu, F);
 
     // Reference 1: continuous M0-kernel quadrature of the same integral.
-    const std::vector<double> Fref = f_quadrature(pos, pos, sigma, mu);
+    const std::vector<double> Fref = f_quadrature(pos, pos, sigma, mu,
+                                                  nelec_atom);
     // Reference 2: 5-point FD of the quadrature Q_0 (no derivative kernel).
     for (int J = 0; J < 3; ++J)
     {
@@ -542,5 +591,186 @@ TEST_F(ConstraintDerivTest, SpinChannelReadsMagnetization)
         {
             EXPECT_DOUBLE_EQ(Fzero(J, d), 0.0);
         }
+    }
+}
+
+TEST_F(ConstraintDerivTest, MixedChannelForce)
+{
+    // Per-constraint mixed kernel (A5) on a fragment map {{0}, {1, 2}} with
+    // a spin-resolved density.  Checks:
+    //  1. component short-circuit: F(mu_c, mu_s) == F(mu_c, 0) + F(0, mu_s),
+    //     grid-exact to 1e-12 (the kernel is linear in mu and a zero
+    //     multiplier contributes exactly nothing);
+    //  2. the mixed call reproduces the legacy single-channel superposition
+    //     bit-for-bit, so the A5 refactor does not move the homogeneous-list
+    //     semantics the loop tests pin;
+    //  3. per-component analytic anchors by the independent M0-kernel
+    //     quadrature: the charge component over rho_up + rho_dn (== the
+    //     nelec_atom Gaussian superposition) on fragment {0} and the spin
+    //     component over rho_up - rho_dn on fragment {1, 2} (the fragment
+    //     derivative grid is the sum of the per-atom derivatives, so the
+    //     quadrature spreads the spin multiplier over the two H atoms).
+    const double sigma = 1.5;
+    // Up/down electron counts per atom: up + dn == nelec_atom {8, 1, 1}, so
+    // the charge channel is exactly the reference Gaussian superposition,
+    // while the magnetization {4, 0.6, 0.8} is NOT proportional to it — the
+    // spin fold is a non-trivial rho_up - rho_dn combination.
+    std::vector<double> rho_up, rho_dn;
+    fill_rho_spin_resolved(*rhopw, sigma, {6.0, 0.8, 0.9}, {2.0, 0.2, 0.1},
+                           rho_up, rho_dn);
+    const double* up = rho_up.data();
+    const double* dn = rho_dn.data();
+    const double* rho_arr[2] = {up, dn};
+
+    constraint::WeightGrid wg(*ucell, rhopw, radii, constraint::WeightType::Becke);
+    wg.set_constraint_atoms({{0}, {1, 2}});
+    wg.build();
+    wg.build_derivatives();
+    std::vector<constraint::ChannelProfile> channels;
+    fill_mixed_channels(channels); // fragment {0} charge, {1, 2} spin
+
+    ModuleBase::matrix F_mix(ucell->nat, 3), F_c(ucell->nat, 3),
+        F_s(ucell->nat, 3), F0(ucell->nat, 3);
+    constraint::constraint_force(wg, rho_arr, 2, channels, {0.1, -0.05},
+                                 F_mix);
+    constraint::constraint_force(wg, rho_arr, 2, channels, {0.1, 0.0}, F_c);
+    constraint::constraint_force(wg, rho_arr, 2, channels, {0.0, -0.05}, F_s);
+    constraint::constraint_force(wg, rho_arr, 2, channels, {0.0, 0.0}, F0);
+
+    // Legacy single-channel superposition (homogeneous profiles).
+    ModuleBase::matrix F_c_legacy(ucell->nat, 3), F_s_legacy(ucell->nat, 3);
+    constraint::constraint_force(wg, rho_arr, 2,
+                                 constraint::DensityChannel::Charge,
+                                 {0.1, 0.0}, F_c_legacy);
+    constraint::constraint_force(wg, rho_arr, 2,
+                                 constraint::DensityChannel::Spin,
+                                 {0.0, -0.05}, F_s_legacy);
+
+    // Independent M0-kernel quadrature anchors per component (density
+    // amplitudes: charge = up + dn, spin = up - dn; the spin fragment spans
+    // both H atoms, hence the multiplier spread over {1, 2}).
+    const std::vector<double> Fref_c = f_quadrature(pos, pos, sigma,
+                                                    {0.1, 0.0, 0.0},
+                                                    {8.0, 1.0, 1.0});
+    const std::vector<double> Fref_s = f_quadrature(pos, pos, sigma,
+                                                    {0.0, -0.05, -0.05},
+                                                    {4.0, 0.6, 0.8});
+    for (int J = 0; J < ucell->nat; ++J)
+    {
+        for (int d = 0; d < 3; ++d)
+        {
+            EXPECT_NEAR(F_mix(J, d), F_c(J, d) + F_s(J, d), 1e-12)
+                << "component short-circuit J " << J << " d " << d;
+            EXPECT_NEAR(F_mix(J, d), F_c_legacy(J, d) + F_s_legacy(J, d), 1e-12)
+                << "legacy superposition J " << J << " d " << d;
+            EXPECT_NEAR(F_c(J, d), F_c_legacy(J, d), 1e-12)
+                << "charge homogeneous path J " << J << " d " << d;
+            EXPECT_NEAR(F_s(J, d), F_s_legacy(J, d), 1e-12)
+                << "spin homogeneous path J " << J << " d " << d;
+            EXPECT_DOUBLE_EQ(F0(J, d), 0.0);
+            EXPECT_NEAR(F_c_legacy(J, d), Fref_c[J * 3 + d], 1e-8)
+                << "charge quadrature anchor J " << J << " d " << d;
+            EXPECT_NEAR(F_s_legacy(J, d), Fref_s[J * 3 + d], 1e-8)
+                << "spin quadrature anchor J " << J << " d " << d;
+        }
+    }
+}
+
+TEST_F(ConstraintDerivTest, MixedForceNewtonThirdLaw)
+{
+    // Native mixed third law under a rigid global translation: for every
+    // alpha the pointwise grid identity sum_J d w_alpha/dR_J = -d w_alpha/dr
+    // gives sum_J F_J = -sum_alpha mu_alpha dQ_alpha/dt.  The RHS comes from
+    // a 5-point FD of the MIXED grid observer (observe.cpp folds every alpha
+    // with its own channel signs — a different code path from the force
+    // kernel), so a kernel channel-folding bug (e.g. the spin alpha reading
+    // rho_up + rho_dn instead of rho_up - rho_dn) breaks the identity: this
+    // test is the A5 per-channel folding falsifier.  The single-channel
+    // NewtonThirdLaw above already pins the charge identity; here both
+    // components sit on one list.
+    const double sigma = 1.5;
+    // The identity is grid-consistent (both sides on the same grid), so a
+    // local coarser grid keeps the 1e-9 assertion while halving the cost of
+    // the twelve shifted-geometry rebuilds below.
+    ModulePW::PW_Basis local_pw;
+    local_pw.initgrids(1.0, ucell->latvec, 64, 64, 64);
+    local_pw.distribute_r();
+    std::vector<double> rho_up, rho_dn;
+    fill_rho_spin_resolved(local_pw, sigma, {6.0, 0.8, 0.9}, {2.0, 0.2, 0.1},
+                           rho_up, rho_dn);
+    const double* up = rho_up.data();
+    const double* dn = rho_dn.data();
+    const double* rho_arr[2] = {up, dn};
+
+    constraint::WeightGrid wg(*ucell, &local_pw, radii, constraint::WeightType::Becke);
+    wg.set_constraint_atoms({{0}, {1, 2}});
+    wg.build();
+    wg.build_derivatives();
+    std::vector<constraint::ChannelProfile> channels;
+    fill_mixed_channels(channels);
+    const std::vector<double> mu = {0.1, -0.05};
+
+    ModuleBase::matrix F(ucell->nat, 3);
+    constraint::constraint_force(wg, rho_arr, 2, channels, mu, F);
+
+    // FD sweep of the mixed grid observable under rigid translations: every
+    // shift gives dQ_alpha/dt for both components at once (5-point stencil,
+    // h = 1e-3 Bohr; the cubic 20 Bohr box maps a Cartesian shift s to frac
+    // s/20).
+    const int nalpha = 2;
+    const double h = 1e-3;
+    std::vector<std::vector<double>> dQdt(nalpha, std::vector<double>(3, 0.0));
+    const double shift[4] = {-2.0 * h, -h, h, 2.0 * h};
+    for (int d = 0; d < 3; ++d)
+    {
+        std::vector<double> q[4];
+        for (int k = 0; k < 4; ++k)
+        {
+            for (int it = 0; it < ucell->ntype; ++it)
+            {
+                for (int ia = 0; ia < ucell->atoms[it].na; ++ia)
+                {
+                    if (d == 0) ucell->atoms[it].taud[ia].x += shift[k] / 20.0;
+                    if (d == 1) ucell->atoms[it].taud[ia].y += shift[k] / 20.0;
+                    if (d == 2) ucell->atoms[it].taud[ia].z += shift[k] / 20.0;
+                }
+            }
+            constraint::WeightGrid wgs(*ucell, &local_pw, radii,
+                                       constraint::WeightType::Becke);
+            wgs.set_constraint_atoms({{0}, {1, 2}});
+            wgs.build();
+            constraint::ConstraintObserver::observe(wgs, rho_arr, 2, channels,
+                                                    q[k]);
+            for (int it = 0; it < ucell->ntype; ++it)
+            {
+                for (int ia = 0; ia < ucell->atoms[it].na; ++ia)
+                {
+                    if (d == 0) ucell->atoms[it].taud[ia].x -= shift[k] / 20.0;
+                    if (d == 1) ucell->atoms[it].taud[ia].y -= shift[k] / 20.0;
+                    if (d == 2) ucell->atoms[it].taud[ia].z -= shift[k] / 20.0;
+                }
+            }
+        }
+        for (int alpha = 0; alpha < nalpha; ++alpha)
+        {
+            dQdt[alpha][d] = (q[0][alpha] - 8.0 * q[1][alpha]
+                              + 8.0 * q[2][alpha] - q[3][alpha])
+                             / (12.0 * h);
+        }
+    }
+
+    for (int d = 0; d < 3; ++d)
+    {
+        double sum = 0.0;
+        for (int J = 0; J < ucell->nat; ++J)
+        {
+            sum += F(J, d);
+        }
+        double ref = 0.0;
+        for (int alpha = 0; alpha < nalpha; ++alpha)
+        {
+            ref -= mu[alpha] * dQdt[alpha][d];
+        }
+        EXPECT_NEAR(sum, ref, 1e-9) << "component " << d;
     }
 }

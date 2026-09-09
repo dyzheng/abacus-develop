@@ -125,9 +125,17 @@ TEST(ConstraintLoopTest, MixedConvergesOnLinearResponse)
 
 ## Task A5：M6 力核逐约束 channel（0.5 天）
 
+> **状态（2026-09-09）**：已完成并通过 G5（spec `2026-09-09-taskA5-deriv-channel-force.md`）。
+> per-α 力核重载成为唯一实现（legacy 单通道入口薄适配 homogeneous profiles 委托）；
+> compute_force 收回 A4 两趟掩码、单趟 per-α 调用；零乘子逐 α 短路、spin 落 nspin=1
+> 守卫与 observer/injector 同契约。G5 覆盖：混合逐分量解析 quadrature 锚（charge 总密度 /
+> spin 磁化，1e-8）+ 混合原生牛三（observer-FD，1e-9）+ 零 μ 短路（精确 0）+ 同构回归
+> 不漂移（1e-12）；sabotage 恰中 2 新测试。模块 ctest 11/11 + 生产库 esolver/elecstate
+> （ENABLE_LCAO=ON）编译通过。
+
 **Files:** `constraint_deriv.{h,cpp}`、测试
 
-- [ ] Step 1 失败测试：
+- [x] Step 1 失败测试：
 ```cpp
 TEST(ConstraintDerivTest, MixedChannelForce)
 {
@@ -135,8 +143,8 @@ TEST(ConstraintDerivTest, MixedChannelForce)
     // 牛顿第三定律 Σ_J F_J ≡ 0（1e-10）；μ=0 分量短路
 }
 ```
-- [ ] Step 2-3 实现：力核签名加 channel 数组（d_α 按 read_up/read_dn 组合）。
-- [ ] Step 4 通过 + spec + commit。**G5**。
+- [x] Step 2-3 实现：力核签名加 channel 数组（d_α 按 read_up/read_dn 组合）。
+- [x] Step 4 通过 + sabotage（混合列表 spin 误读 charge → 恰 2 FAIL）+ spec + commit。**G5**。
 - 注：混合力 FD 属 A6 后的验收轮（stationary4 协议，不抢跑）。
 
 ## Task A6：H₂O 混合集成用例（0.5 天）

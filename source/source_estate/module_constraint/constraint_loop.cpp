@@ -411,47 +411,12 @@ void ConstraintLoop::compute_force(const double* const* rho,
                             "constraint force from an unconverged outer loop: "
                             "residual O(|Q - t|)");
     }
-    // Stage-A composition (interim until the Task A5 per-constraint kernel
-    // signature): the kernel is linear in the multipliers and reads one
-    // density channel per call, so a mixed list is split into a charge-kind
-    // pass and a spin-kind pass with the complementary components masked to
-    // zero (a zero multiplier contributes nothing).  A homogeneous list
-    // reduces to the historical single call bit-for-bit (one mask is all
-    // zero and skipped).
-    std::vector<double> mu_charge(mu_.size(), 0.0);
-    std::vector<double> mu_spin(mu_.size(), 0.0);
-    bool any_charge = false;
-    bool any_spin = false;
-    for (size_t a = 0; a < kinds_.size(); ++a)
-    {
-        // Branch A: spin-kind constraint -> spin (magnetization) channel.
-        if (kinds_[a] == ConstraintKind::Spin)
-        {
-            mu_spin[a] = mu_[a];
-            any_spin = true;
-        }
-        else
-        {
-            // Branch B: charge-kind constraint -> charge (total density)
-            // channel.
-            mu_charge[a] = mu_[a];
-            any_charge = true;
-        }
-    }
-    if (any_charge)
-    {
-        constraint::constraint_force(*wg_, rho, nspin,
-                                     DensityChannel::Charge, mu_charge,
-                                     forcecon);
-    }
-    if (any_spin)
-    {
-        // The spin channel needs nspin == 2; the kernel aborts loudly on a
-        // wrong combination (a spin spec under nspin = 1 is already rejected
-        // at configure time).
-        constraint::constraint_force(*wg_, rho, nspin,
-                                     DensityChannel::Spin, mu_spin, forcecon);
-    }
+    // Stage-A per-constraint call (A5): the force kernel folds every alpha
+    // with its own density channel (d_alpha = read_up*rho_up +
+    // read_dn*rho_dn), so a mixed charge+spin list reaches the kernel in one
+    // call — the A4 loop-side two-pass masking is retired.  The kernel
+    // aborts loudly on a mu/channel/buffer mismatch.
+    constraint::constraint_force(*wg_, rho, nspin, channels_, mu_, forcecon);
 }
 
 } // namespace constraint
