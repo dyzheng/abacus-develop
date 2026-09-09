@@ -101,9 +101,17 @@ TEST(ConstraintInjectPWTest, MixedObservableEqualsInjection)
 
 ## Task A4：M8 接线 + M5 审计标签（1 天）
 
+> **状态（2026-09-09）**：已完成并通过 G4（spec `2026-09-09-taskA4-loop-wiring.md`）。
+> ConstraintLoop 双 init 收敛到唯一 specs_（legacy cfg 推导 / A4 specs 直入），
+> observe/inject/add_back/audit/force 全走 specs_ 派生的平行数组；MuSolver 增逐分量
+> mu_max（A0 D3 落位）；审计行 c[i] 加 kind= 标签；staging guard 从扩展核移入 legacy
+> 11 参入口（specs 出参的 configure_from_inputs 不受限）；compute_force 混合两趟掩码
+> 组合（A5 换 per-α 力核签名收回）；PW/LCAO 双 esolver 调用点同步 + 双基组编译通过。
+
+
 **Files:** `constraint_loop.{h,cpp}`、`constraint_accounting.{h,cpp}`、测试
 
-- [ ] Step 1 失败测试——loop 级混合收敛：
+- [x] Step 1 失败测试——loop 级混合收敛：
 ```cpp
 TEST(ConstraintLoopTest, MixedConvergesOnLinearResponse)
 {
@@ -112,8 +120,8 @@ TEST(ConstraintLoopTest, MixedConvergesOnLinearResponse)
     // 审计行含 kind 标签：c[0] kind=charge、c[1] kind=spin
 }
 ```
-- [ ] Step 2-3 实现：ConstraintLoop 持 `std::vector<ConstraintSpec>`，observe/inject 传 specs；审计行加 `kind=`。
-- [ ] Step 4 通过 + spec + commit。**G4**。
+- [x] Step 2-3 实现：ConstraintLoop 持 `std::vector<ConstraintSpec>`，observe/inject 传 specs；审计行加 `kind=`。
+- [x] Step 4 通过 + 2×sabotage（恢复 core 守卫→恰 2 FAIL；cap 退化标量→恰 1 FAIL）+ spec + commit。**G4**。
 
 ## Task A5：M6 力核逐约束 channel（0.5 天）
 

@@ -68,6 +68,7 @@ AddTest(
   LIBS parameter ${math_libs} base device planewave_serial cell_info
   SOURCES constraint_accounting_test.cpp
     ../constraint_accounting.cpp
+    ../constraint_io.cpp
     ../weight_grid.cpp
     ../../../source_io/module_output/output.cpp
 )

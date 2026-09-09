@@ -4121,3 +4121,47 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   G4）。A4 必做（评审提醒入档）：staging guard 移除可证伪（G4 混合收敛测试先失败
   后通过 + 恢复守卫 sabotage 恰中）；configure_from_inputs 签名改时 PW/LCAO 双调用
   点同步。开放项延续：① PW≡LCAO 只读观测口；② torque E' 修复；③ DeltaSpin 对等（B）。
+
+## 2026-09-09 (18): Task A3 严格评审——G3 通过，A4 解锁（无代码改动）
+
+- 核实：9c540f104 已推 zdy、工作树干净；ctest 11/11 亲测；inject_pw 7 tests
+  （5 旧+2 新）；注入侧 4 条 false-return 守卫（错配/spin 落单通道 buffer）
+  符合契约；完整混合恒等式 E=∫(ρ↑V↑+ρ↓V↓)≡Σμ_αQ_α（1e-12/1e-10）与 A2
+  读数闭环——混合"观测量==注入算符"构造性保证闭合；sabotage 恰中 2 新测试。
+- A4 验收项重申：staging guard 移除可证伪（先败后绿+sabotage）；
+  configure_from_inputs 签名改造 PW/LCAO 双调用点同步。
+- 裁定：通过，批准 Task A4（M8 接线 + M5 kind 标签，G4）。
+- 文件：`2026-09-09-taskA3-review.md`。
+
+## 2026-09-09 (19): Task A4 完成——M8 总控接线 + M5 kind 标签（G4 通过）
+
+- 范围：`constraint_loop.{h,cpp}`、`constraint_io.{h,cpp}`、`constraint_accounting.{h,cpp}`、
+  `mu_solver.{h,cpp}`、`esolver_ks_{pw,lcao}.cpp`（双调用点同步）、loop/io 测试 + CMake。
+  轻量单测，无重算；生产库 esolver/elecstate 编译通过（ENABLE_LCAO=ON）。
+- 实现：
+  - loop 双 init 收敛到唯一 `specs_`（legacy 从 cfg 推导 homogeneous specs；A4 specs 直入），
+    observe/inject/add_back/audit/force 全改读 `specs_` 派生的
+    `kinds_/channels_/mu_caps_` 平行数组（无第二读数/注入路径）；
+  - MuSolverParams 增 `mu_max_per_component`（A0 D3 逐约束 cap 落位，pin/fuse 按 cap_i）；
+  - audit 增 kinds 重载，审计行 c[i] 加 `kind=charge|spin`；`kind_to_type_string` 公开
+    （审计与 cfg.type 词汇同源）；legacy 5 参 audit 空 kinds、输出逐位不变；
+  - `configure_from_inputs(cfg, specs, ucell, radii, error)` specs 出参（A1 偏差 2 兑现），
+    PW/LCAO 双 esolver 调用点同步 + 新 loop init；
+  - staging guard（mixed + 异构 cap 拒绝）从扩展核移入 **legacy 11 参入口**
+    （该入口丢弃 specs 无法表达混合，防静默错跑；specs 出参生产入口不受限）；
+  - compute_force 混合按 kind 两趟掩码组合（A5 换力核签名前的诚实中间态；同构场景
+    与历史单调用逐位一致）。
+- 测试：全套 MODULE_ESTATE_constraint 11/11；loop +2 新测试
+  （MixedConvergesOnLinearResponse = G4 收敛+反假收敛+kind= 审计；经扩展 configure
+  核取 specs = 守卫移除的可证伪锚点；MixedFuseHonorsPerComponentCap = 异构 cap 判别）；
+  io MixedGuards 扩展（扩展核 mixed/异构 cap OK + legacy 入口仍 ERROR）。
+- 守卫移除可证伪链：新 API 编译红 → 守卫在位时 G4/io 扩展断言红 → 移除后绿 →
+  sabotage A（恢复 core mixed 守卫）恰中 2 测试（loop MixedConverges + io MixedGuards）；
+  sabotage B2（cap 退化标量首 cap）恰中 1 测试（MixedFuse），legacy FuseUnreachable 绿
+  （判别力实证）。
+- 文件：spec `2026-09-09-taskA4-loop-wiring.md`；计划 A4 勾选；本日志。评审轮 2 笔
+  随本批入库：A3-review spec；dev-log A3 评审条目顺延 (2)→(18) 并物理移至 (17) 后
+  （编号依 (13)-(17) 链式惯例：A3 评审=(18)、本 A4 完成=(19)）。
+- Next：提交后推送 zdy；请求裁决；批准后启动 Task A5（M6 力核逐约束 channel，G5；
+  A4 两趟掩码组合届时由 per-α 力核签名收回）。开放项延续：① PW≡LCAO 只读观测口；
+  ② torque E' 修复；③ DeltaSpin 对等（B）。

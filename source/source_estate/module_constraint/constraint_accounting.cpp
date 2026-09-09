@@ -14,6 +14,18 @@ ConstraintAudit ConstraintAccounting::audit(const WeightGrid& wg,
                                             const std::vector<double>& target,
                                             const double nelec)
 {
+    // Legacy entry: no per-constraint kind information (no kind= tokens).
+    std::vector<ConstraintKind> kinds;
+    return audit(wg, mu, Q, target, nelec, kinds);
+}
+
+ConstraintAudit ConstraintAccounting::audit(const WeightGrid& wg,
+                                            const std::vector<double>& mu,
+                                            const std::vector<double>& Q,
+                                            const std::vector<double>& target,
+                                            const double nelec,
+                                            const std::vector<ConstraintKind>& kinds)
+{
     ConstraintAudit a;
     a.nelec = nelec;
     a.maxdev = wg.max_partition_deviation();
@@ -21,6 +33,7 @@ ConstraintAudit ConstraintAccounting::audit(const WeightGrid& wg,
     a.Q = Q;
     a.target = target;
     a.mu = mu;
+    a.kinds = kinds;
     a.residual.assign(n, 0.0);
     for (int i = 0; i < n; ++i)
     {
@@ -45,9 +58,16 @@ std::string ConstraintAccounting::audit_line(const ConstraintAudit& a)
     // Per-constraint detail lines follow on separate lines.
     for (size_t i = 0; i < a.Q.size(); ++i)
     {
-        os << "\nCONSTRAINT_AUDIT c[" << i << "] q=" << std::setprecision(10)
-           << a.Q[i] << " t=" << a.target[i] << " mu=" << a.mu[i]
-           << " res=" << a.residual[i];
+        os << "\nCONSTRAINT_AUDIT c[" << i << "]";
+        // Kind label (M5, stage A): present only when the caller supplied
+        // the per-constraint kinds (the legacy audit call keeps the
+        // historical output unchanged).
+        if (a.kinds.size() == a.Q.size())
+        {
+            os << " kind=" << kind_to_type_string(a.kinds[i]);
+        }
+        os << " q=" << std::setprecision(10) << a.Q[i] << " t=" << a.target[i]
+           << " mu=" << a.mu[i] << " res=" << a.residual[i];
     }
     return os.str();
 }

@@ -173,6 +173,76 @@ class ConstraintLoopTest : public ::testing::Test
         return q * dV;
     }
 
+    // --- Stage-A mixed-channel mock helpers --------------------------------
+    // The mixed test drives the loop's OWN weight grid (loop.weight_grid(),
+    // fragments {{0}, {1, 2}}), so the mock response uses the same weights
+    // the observer integrates — decoupling by construction:
+    //   charge channel: Sigma(mu_c) = rho_ref - mu_c * w0 / S_c
+    //   spin channel:   m(mu_s)    = -2 mu_s * w12 / S_m   (split-injection
+    //                   repels up / attracts down, Q_s = -2 mu_s)
+    // with rho_up = (Sigma + m)/2, rho_dn = (Sigma - m)/2, so Q_c sees only
+    // mu_c and Q_s sees only mu_s (independent linear-response channels).
+    double S_alpha(const constraint::WeightGrid& g, const int a) const
+    {
+        const std::vector<double>& w = g.constraint_weight(a);
+        double s = 0.0;
+        for (int ir = 0; ir < rhopw->nrxx; ++ir)
+        {
+            s += w[ir] * w[ir];
+        }
+        return s * dV;
+    }
+
+    double Q_w(const constraint::WeightGrid& g,
+               const int a,
+               const std::vector<double>& rho) const
+    {
+        const std::vector<double>& w = g.constraint_weight(a);
+        double q = 0.0;
+        for (int ir = 0; ir < rhopw->nrxx; ++ir)
+        {
+            q += w[ir] * rho[ir];
+        }
+        return q * dV;
+    }
+
+    void fill_rho_mock_mixed(const std::vector<double>& mu,
+                             const constraint::WeightGrid& g,
+                             std::vector<double>& rho_up,
+                             std::vector<double>& rho_dn) const
+    {
+        const double S_c = S_alpha(g, 0);
+        const double S_m = S_alpha(g, 1);
+        const std::vector<double>& w0 = g.constraint_weight(0);
+        const std::vector<double>& w12 = g.constraint_weight(1);
+        rho_up.resize(rhopw->nrxx);
+        rho_dn.resize(rhopw->nrxx);
+        for (int ir = 0; ir < rhopw->nrxx; ++ir)
+        {
+            const double sig = rho_ref[ir] - mu[0] * w0[ir] / S_c;
+            const double m = -2.0 * mu[1] * w12[ir] / S_m;
+            rho_up[ir] = 0.5 * (sig + m);
+            rho_dn[ir] = 0.5 * (sig - m);
+        }
+    }
+
+    // Mixed charge+spin specs through the extended configure core (the A1
+    // staging-guard site): returns ConfigStatus::OK only once the A4 guard
+    // removal landed, so the G4 test fails while the guard rejects.
+    static constraint::ConfigStatus configure_mixed(
+        const std::string& json,
+        constraint::ConstraintConfig& cfg,
+        std::vector<constraint::ConstraintSpec>& specs,
+        std::vector<std::string>& warnings,
+        std::string& error,
+        const int nat,
+        const int nspin)
+    {
+        return constraint::configure_constraint(
+            cfg, specs, warnings, true, "charge", "becke", "delta", json, 5.0,
+            1e-4, nat, nspin, error);
+    }
+
     constraint::ConstraintConfig make_cfg(const double delta,
                                           const double mu_max = 5.0,
                                           const double thr = 1e-4,
@@ -311,6 +381,141 @@ TEST_F(ConstraintLoopTest, SpinChannelConvergesOnLinearResponse)
     EXPECT_NEAR(loop.mu()[0], -delta / 2.0, 1e-6); // root of Q_m = -2 mu
     EXPECT_NEAR(Q_m_of(rho_up, rho_dn), loop.targets()[0], 1e-4);
     EXPECT_NEAR(loop.targets()[0], delta, 1e-10); // m_ref = 0
+}
+
+TEST_F(ConstraintLoopTest, MixedConvergesOnLinearResponse)
+{
+    // G4 gate: the mixed charge+spin run is served end-to-end by the stage-A
+    // loop.  The spec list goes through the extended configure core — the
+    // A1 staging-guard site — so this test FAILS while the guard still
+    // rejects a mixed run (guard-removal falsifiability: the ASSERT below is
+    // the red/green boundary) and converges after the A4 removal.
+    constraint::ConstraintConfig cfg;
+    std::vector<constraint::ConstraintSpec> specs;
+    std::vector<std::string> warnings;
+    std::string error;
+    const std::string json = R"({"constraints": [
+        {"type": "charge", "target": 0.01, "atoms": [0]},
+        {"type": "spin", "target": 0.02, "atoms": [1, 2]}]})";
+    const constraint::ConfigStatus st = configure_mixed(
+        json, cfg, specs, warnings, error, ucell->nat, 2);
+    ASSERT_EQ(st, constraint::ConfigStatus::OK) << error;
+    ASSERT_EQ(specs.size(), 2u);
+    EXPECT_EQ(specs[0].kind, constraint::ConstraintKind::Charge);
+    EXPECT_EQ(specs[1].kind, constraint::ConstraintKind::Spin);
+
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    loop.init(*ucell, rhopw, cfg, specs, radii, 10.0);
+    ASSERT_TRUE(loop.enabled());
+    EXPECT_EQ(loop.phase(), constraint::LoopPhase::REFERENCE);
+
+    // Reference SCF (mu = 0): the free run must NOT reach either target
+    // (charge delta != 0 and the natural spin reference m = 0 != delta) —
+    // anti-fake convergence per channel.  Both multipliers must move away
+    // from zero after the first secant step.
+    const constraint::WeightGrid& g = loop.weight_grid();
+    std::vector<double> rho_up, rho_dn;
+    fill_rho_mock_mixed({0.0, 0.0}, g, rho_up, rho_dn);
+    const double qc_ref = Q_w(g, 0, rho_ref);
+    const double* rho_ptr[2] = {rho_up.data(), rho_dn.data()};
+    int iter = 1;
+    bool conv = false;
+    loop.observe(iter, rho_ptr, 2);
+    EXPECT_NEAR(loop.charges()[0], qc_ref, 1e-6);
+    EXPECT_NEAR(loop.charges()[1], 0.0, 1e-10);
+    conv = true;
+    loop.on_scf_converged(iter, conv);
+    EXPECT_FALSE(conv); // forced to continue — no free-run convergence
+    EXPECT_EQ(loop.status(), constraint::MuStatus::RUNNING);
+    EXPECT_EQ(loop.phase(), constraint::LoopPhase::CONSTRAINED);
+    EXPECT_LT(loop.mu()[0], 0.0); // charge: increasing Q needs mu < 0
+    EXPECT_LT(loop.mu()[1], 0.0); // spin: increasing m needs mu < 0
+
+    // Drive both channels to their independent linear-response roots:
+    // Q_c(mu_c) = Q_ref - mu_c (root -delta_c) and Q_s(mu_s) = -2 mu_s
+    // (root -delta_s/2), so mu* = (-0.01, -0.01).
+    int guard = 0;
+    while (loop.status() == constraint::MuStatus::RUNNING && guard < 30)
+    {
+        ++iter;
+        fill_rho_mock_mixed(loop.mu(), g, rho_up, rho_dn);
+        const double* rp[2] = {rho_up.data(), rho_dn.data()};
+        loop.observe(iter, rp, 2);
+        conv = true;
+        loop.on_scf_converged(iter, conv);
+        ++guard;
+    }
+    ASSERT_LT(guard, 30);
+    EXPECT_EQ(loop.status(), constraint::MuStatus::CONVERGED);
+    EXPECT_EQ(loop.phase(), constraint::LoopPhase::DONE);
+    EXPECT_TRUE(conv); // outer loop done: SCF ends normally
+    EXPECT_NEAR(loop.mu()[0], -0.01, 1e-6);
+    EXPECT_NEAR(loop.mu()[1], -0.01, 1e-6);
+    EXPECT_NEAR(loop.targets()[0], qc_ref + 0.01, 1e-8);
+    EXPECT_NEAR(loop.targets()[1], 0.02, 1e-8); // m_ref = 0
+    EXPECT_NEAR(loop.charges()[0], loop.targets()[0], 1e-3);
+    EXPECT_NEAR(loop.charges()[1], loop.targets()[1], 1e-3);
+
+    // M5 kind= audit labels: the mixed run is tagged per constraint.
+    const std::string& line = loop.last_audit_line();
+    EXPECT_NE(line.find("c[0] kind=charge"), std::string::npos);
+    EXPECT_NE(line.find("c[1] kind=spin"), std::string::npos);
+}
+
+TEST_F(ConstraintLoopTest, MixedFuseHonorsPerComponentCap)
+{
+    // A0 decision D3: per-constraint mu_max must reach the fuse logic of the
+    // correct component.  Charge (cap 5.0, root -0.01) converges while spin
+    // (cap 0.05, root -0.25) pins at ITS OWN small cap and fuses the run as
+    // UNREACHABLE.  A buggy single scalar cap (e.g. the legacy cfg.mu_max
+    // mirror = 5.0, the first spec's cap) would let the spin channel run to
+    // its root and CONVERGE — this test discriminates the per-component path.
+    constraint::ConstraintConfig cfg;
+    std::vector<constraint::ConstraintSpec> specs;
+    std::vector<std::string> warnings;
+    std::string error;
+    const std::string json = R"({"constraints": [
+        {"type": "charge", "target": 0.01, "atoms": [0], "mu_max": 5.0},
+        {"type": "spin", "target": 0.5, "atoms": [1, 2], "mu_max": 0.05}]})";
+    const constraint::ConfigStatus st = configure_mixed(
+        json, cfg, specs, warnings, error, ucell->nat, 2);
+    ASSERT_EQ(st, constraint::ConfigStatus::OK) << error;
+    ASSERT_EQ(specs.size(), 2u);
+    EXPECT_DOUBLE_EQ(specs[0].mu_max, 5.0);
+    EXPECT_DOUBLE_EQ(specs[1].mu_max, 0.05);
+
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    loop.init(*ucell, rhopw, cfg, specs, radii, 10.0);
+    ASSERT_TRUE(loop.enabled());
+    const constraint::WeightGrid& g = loop.weight_grid();
+    std::vector<double> rho_up, rho_dn;
+    int iter = 1;
+    bool conv = false;
+    fill_rho_mock_mixed({0.0, 0.0}, g, rho_up, rho_dn);
+    const double* rho_ptr[2] = {rho_up.data(), rho_dn.data()};
+    loop.observe(iter, rho_ptr, 2);
+    conv = true;
+    loop.on_scf_converged(iter, conv);
+    int guard = 0;
+    while (loop.status() == constraint::MuStatus::RUNNING && guard < 30)
+    {
+        ++iter;
+        fill_rho_mock_mixed(loop.mu(), g, rho_up, rho_dn);
+        const double* rp[2] = {rho_up.data(), rho_dn.data()};
+        loop.observe(iter, rp, 2);
+        conv = true;
+        loop.on_scf_converged(iter, conv);
+        ++guard;
+    }
+    ASSERT_LT(guard, 30);
+    EXPECT_EQ(loop.status(), constraint::MuStatus::UNREACHABLE);
+    EXPECT_EQ(loop.phase(), constraint::LoopPhase::DONE);
+    EXPECT_TRUE(conv); // fused: SCF terminates cleanly
+    // Spin pinned at ITS own cap (0.05), not at the charge spec's 5.0.
+    EXPECT_DOUBLE_EQ(loop.mu()[1], -0.05);
+    // Charge channel converged independently of the spin cap.
+    EXPECT_NEAR(loop.mu()[0], -0.01, 1e-4);
+    EXPECT_LT(std::abs(loop.mu()[0]), 0.05); // not pinned at the spin cap
 }
 
 TEST_F(ConstraintLoopTest, FuseUnreachable)

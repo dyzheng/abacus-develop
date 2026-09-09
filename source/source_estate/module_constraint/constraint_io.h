@@ -82,22 +82,6 @@ bool parse_target_file(const std::string& content,
                        std::vector<ConstraintTarget>& targets,
                        std::string& error);
 
-// Build the fully validated constraint configuration from the global INPUT
-// (M7) plus the per-atom covalent-radius partition radii.  Shared by the PW
-// and LCAO esolvers so both basis channels observe identical guards,
-// defaults and radii (phase-1 technical debt: this ~50-line block used to
-// be duplicated in each before_scf).
-//
-// Returns ConfigStatus::DISABLED when the constraint switch is off (caller
-// may skip arming the loop), OK after a successful build, or ERROR with a
-// human-readable message in 'error' (caller must WARNING_QUIT).  'radii'
-// is filled with one radius per global atom (Bohr) only on success.
-ConfigStatus configure_from_inputs(ConstraintConfig& cfg,
-                                   const UnitCell& ucell,
-                                   std::vector<double>& radii,
-                                   std::string& error);
-
-
 // ---------------------------------------------------------------------------
 // Stage A mixed (charge + spin) constraint model (architecture layer M7).
 // A single constraint list may now mix observable kinds; each entry carries
@@ -137,6 +121,27 @@ struct ConstraintSpec
     double mu_max = 5.0;    // per-constraint cap; omitted -> run-level cap
 };
 
+// Build the fully validated constraint configuration from the global INPUT
+// (M7) plus the per-atom covalent-radius partition radii.  Shared by the PW
+// and LCAO esolvers so both basis channels observe identical guards,
+// defaults and radii (phase-1 technical debt: this ~50-line block used to
+// be duplicated in each before_scf).
+//
+// 'specs' is the fully validated per-constraint list (kind / atoms / chan /
+// target / per-constraint mu_max) that the stage-A outer loop consumes —
+// the legacy single-type 'cfg' mirror can not express a mixed kind list or
+// heterogeneous caps, so the specs output is the authority (A4 wiring).
+//
+// Returns ConfigStatus::DISABLED when the constraint switch is off (caller
+// may skip arming the loop), OK after a successful build, or ERROR with a
+// human-readable message in 'error' (caller must WARNING_QUIT).  'radii'
+// is filled with one radius per global atom (Bohr) only on success.
+ConfigStatus configure_from_inputs(ConstraintConfig& cfg,
+                                   std::vector<ConstraintSpec>& specs,
+                                   const UnitCell& ucell,
+                                   std::vector<double>& radii,
+                                   std::string& error);
+
 // File-format tag reported by the parser / configuration core.
 enum class ConstraintFileFormat
 {
@@ -153,6 +158,15 @@ enum class ConstraintFileFormat
  * signs; ConstraintSpec.chan must always equal build_channel_profile(kind).
  */
 ChannelProfile build_channel_profile(ConstraintKind kind);
+
+/**
+ * @brief Kind -> run-level type string ("charge" | "spin").
+ *
+ * Shared by the legacy cfg mirror (cfg.type vocabulary), the audit
+ * serialization (M5 kind= token) and diagnostics.  Single source so the
+ * machine-readable kind label can never drift from the config vocabulary.
+ */
+const char* kind_to_type_string(ConstraintKind kind);
 
 /**
  * @brief Parse a target-file content into validated ConstraintSpecs.

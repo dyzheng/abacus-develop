@@ -10,6 +10,11 @@ struct MuSolverParams
 {
     double step_max = 0.05;  // Ry: largest |dmu| per outer step per component
     double mu_max = 5.0;     // Ry: hard cap on |mu| (fuse trigger boundary)
+    // Per-constraint hard caps (stage A, A0 decision D3): parallel to the
+    // component list; empty means every component uses the scalar 'mu_max'
+    // above.  Different channels may need different fuse limits (soft
+    // charge channels tolerate large caps, hard spin caps must fuse early).
+    std::vector<double> mu_max_per_component;
     double kappa_min = 0.3;  // smallest kept |dQ/dmu| (secant guard)
     double kappa_max = 20.0; // largest kept |dQ/dmu| (secant guard)
     double conv_tol = 1e-4;  // e: per-component |Q - target| convergence

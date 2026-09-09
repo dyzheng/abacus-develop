@@ -261,16 +261,17 @@ void ESolver_KS_LCAO<TK, TR>::before_scf(UnitCell& ucell, const int istep)
     if (PARAM.inp.constraint)
     {
         constraint::ConstraintConfig cfg;
+        std::vector<constraint::ConstraintSpec> specs;
         std::vector<double> radii;
         std::string error;
         const constraint::ConfigStatus st = constraint::configure_from_inputs(
-            cfg, ucell, radii, error);
+            cfg, specs, ucell, radii, error);
         if (st == constraint::ConfigStatus::ERROR)
         {
             ModuleBase::WARNING_QUIT("ESolver_KS_LCAO::before_scf", error);
         }
         constraint::ConstraintLoop::instance().init(
-            ucell, this->pw_rhod, cfg, radii, PARAM.inp.nelec);
+            ucell, this->pw_rhod, cfg, specs, radii, PARAM.inp.nelec);
         constraint_audit_done_ = false;
     }
 

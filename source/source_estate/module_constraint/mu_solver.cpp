@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cmath>
 
+#include "source_base/tool_quit.h"
+
 namespace constraint
 {
 
@@ -44,6 +46,16 @@ MuStatus MuSolver::step(const std::vector<double>& Q,
         mu_prev_.assign(n, 0.0);
         Q_prev_.assign(n, 0.0);
         residual_window_.assign(n, std::vector<double>());
+    }
+    // Guard: a heterogeneous per-constraint cap list must stay parallel to
+    // the component list.  A size mismatch would silently pair a component
+    // with the wrong fuse limit (wiring bug).
+    if (!params_.mu_max_per_component.empty()
+        && static_cast<int>(params_.mu_max_per_component.size()) != n)
+    {
+        ModuleBase::WARNING_QUIT(
+            "MuSolver::step",
+            "mu_max_per_component size does not match the component count");
     }
 
     // Expected response sign of the channel (MuSolverParams::response_sign):
@@ -110,15 +122,22 @@ MuStatus MuSolver::step(const std::vector<double>& Q,
         dmu = clamp_value(dmu, -params_.step_max, params_.step_max);
         mu[i] += dmu;
 
-        // Hard cap: |mu| never leaves [-mu_max, mu_max].  A component pinned
-        // at the cap is a fuse candidate below.
-        if (mu[i] > params_.mu_max)
+        // Per-constraint hard cap (A0 D3): |mu_i| never leaves
+        // [-cap_i, cap_i].  The per-component list overrides the scalar
+        // fallback so a mixed run honors each constraint's own fuse limit; a
+        // component pinned at its cap is a fuse candidate below.
+        const double cap_i = (static_cast<int>(
+                                  params_.mu_max_per_component.size())
+                              == n)
+                                 ? params_.mu_max_per_component[i]
+                                 : params_.mu_max;
+        if (mu[i] > cap_i)
         {
-            mu[i] = params_.mu_max;
+            mu[i] = cap_i;
         }
-        else if (mu[i] < -params_.mu_max)
+        else if (mu[i] < -cap_i)
         {
-            mu[i] = -params_.mu_max;
+            mu[i] = -cap_i;
         }
 
         has_history_[i] = true;
@@ -137,7 +156,7 @@ MuStatus MuSolver::step(const std::vector<double>& Q,
         // look-back window means the constraint is unreachable in this
         // channel (R4/R3 dead channel); report the Q(mu) endpoint instead of
         // marching on forever.
-        const bool pinned = (mu[i] == params_.mu_max) || (mu[i] == -params_.mu_max);
+        const bool pinned = (mu[i] == cap_i) || (mu[i] == -cap_i);
         if (pinned && static_cast<int>(window.size()) == params_.plateau_window)
         {
             const double base = std::max(window.front(), 1e-30);

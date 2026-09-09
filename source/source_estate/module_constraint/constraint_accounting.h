@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 
+#include "constraint_io.h"
 #include "weight_grid.h"
 
 namespace constraint
@@ -21,6 +22,10 @@ struct ConstraintAudit
     std::vector<double> target;
     std::vector<double> mu;
     std::vector<double> residual;
+    // Per-constraint observable kind (parallel to Q); empty for callers that
+    // do not know the kinds (legacy homogeneous audit) — the audit line then
+    // omits the kind= token.
+    std::vector<ConstraintKind> kinds;
 };
 
 /**
@@ -45,6 +50,16 @@ class ConstraintAccounting
                                  const std::vector<double>& Q,
                                  const std::vector<double>& target,
                                  const double nelec);
+
+    // Stage-A overload: per-constraint kinds (M5 kind= tag on the audit
+    // line).  'kinds' must be parallel to Q; the legacy overload above fills
+    // an empty kind list (no kind= tokens, historical output unchanged).
+    static ConstraintAudit audit(const WeightGrid& wg,
+                                 const std::vector<double>& mu,
+                                 const std::vector<double>& Q,
+                                 const std::vector<double>& target,
+                                 const double nelec,
+                                 const std::vector<ConstraintKind>& kinds);
 
     // One-line machine-readable summary (key=value tokens).
     static std::string audit_line(const ConstraintAudit& a);

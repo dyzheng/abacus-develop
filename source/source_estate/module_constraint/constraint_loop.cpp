@@ -22,6 +22,10 @@ ConstraintLoop& ConstraintLoop::instance()
 void ConstraintLoop::reset()
 {
     cfg_ = ConstraintConfig();
+    specs_.clear();
+    kinds_.clear();
+    channels_.clear();
+    mu_caps_.clear();
     wg_.reset();
     mu_solver_.reset();
     mu_.clear();
@@ -43,27 +47,68 @@ void ConstraintLoop::init(const UnitCell& ucell,
                           const std::vector<double>& radii,
                           const double nelec)
 {
+    // Legacy entry (pre-A4 callers / unit tests): derive a homogeneous
+    // per-constraint list from the single-type cfg so every consumer below
+    // reads only the specs — there is no second loop path to drift.
+    std::vector<ConstraintSpec> specs;
+    const ConstraintKind kind = (cfg.type == "spin")
+                                    ? ConstraintKind::Spin
+                                    : ConstraintKind::Charge;
+    specs.reserve(cfg.targets.size());
+    for (const ConstraintTarget& t : cfg.targets)
+    {
+        ConstraintSpec spec;
+        spec.kind = kind;
+        spec.atoms = t.atoms;
+        spec.chan = build_channel_profile(kind);
+        spec.target = t.value;
+        spec.mu_max = cfg.mu_max;
+        specs.push_back(spec);
+    }
+    init(ucell, rho_basis, cfg, specs, radii, nelec);
+}
+
+void ConstraintLoop::init(const UnitCell& ucell,
+                          const ModulePW::PW_Basis* rho_basis,
+                          const ConstraintConfig& cfg,
+                          const std::vector<ConstraintSpec>& specs,
+                          const std::vector<double>& radii,
+                          const double nelec)
+{
     reset();
     cfg_ = cfg;
+    specs_ = specs;
     nelec_ = nelec;
     if (!cfg_.enabled)
     {
         return;
     }
+    // Derive the per-constraint fields (M7 -> M2/M3/M4/M5): observable kind,
+    // density channel and fuse cap per spec.  All consumers below iterate
+    // these parallel vectors, so a mixed charge+spin list needs no special
+    // casing in the observers / injectors / accounting.
+    kinds_.reserve(specs_.size());
+    channels_.reserve(specs_.size());
+    mu_caps_.reserve(specs_.size());
+    for (const ConstraintSpec& spec : specs_)
+    {
+        kinds_.push_back(spec.kind);
+        channels_.push_back(spec.chan);
+        mu_caps_.push_back(spec.mu_max);
+    }
     // Build the shared weight field (M1) once per geometry.  The fragment
-    // map comes from the parsed target file (default: one atom per
-    // constraint).
+    // map comes from the per-constraint fragments of the spec list.
     wg_.reset(new WeightGrid(ucell, rho_basis, radii, WeightType::Becke));
     std::vector<std::vector<int>> atom_map;
-    for (const ConstraintTarget& t : cfg_.targets)
+    for (const ConstraintSpec& spec : specs_)
     {
-        atom_map.push_back(t.atoms);
+        atom_map.push_back(spec.atoms);
     }
     wg_->set_constraint_atoms(atom_map);
     wg_->build();
 
     // mu starts at zero: the first SCF is the unconstrained reference.
-    mu_.assign(wg_->nconstraint(), 0.0);
+    mu_.assign(specs_.size(), 0.0);
     // Experiment branch (default off): freeze the multiplier at a constant
     // read from the environment so the constraint potential acts as an
     // ordinary fixed external potential (no outer secant loop, no reference
@@ -76,17 +121,20 @@ void ConstraintLoop::init(const UnitCell& ucell,
         const double mu_fixed = std::atof(fixed_mu_env);
         std::fill(mu_.begin(), mu_.end(), mu_fixed);
         fixed_mu_ = true;
-        targets_.resize(wg_->nconstraint());
+        targets_.resize(specs_.size());
         for (size_t a = 0; a < targets_.size(); ++a)
         {
-            targets_[a] = cfg_.targets[a].value;
+            targets_[a] = specs_[a].target;
         }
         phase_ = LoopPhase::CONSTRAINED;
         status_ = MuStatus::RUNNING;
         return;
     }
     MuSolverParams params;
-    params.mu_max = cfg_.mu_max;
+    // Per-constraint fuse caps (A0 D3): every spec carries its own mu_max;
+    // the scalar field stays as a fallback only (legacy tests construct
+    // homogeneous lists through the cfg entry above).
+    params.mu_max_per_component = mu_caps_;
     params.conv_tol = cfg_.thr;
     // Response sign: both channels respond negatively.  For the spin
     // channel the split injection (V_up += mu*w, V_dn -= mu*w) repels
@@ -117,12 +165,13 @@ void ConstraintLoop::inject_potential(const int iter,
     }
     // Branch B: active loop.  In the reference phase mu is all zero, so the
     // injection is a no-op by value and the first SCF stays unconstrained.
-    // The injector rejects a mu/weight length mismatch; per its contract the
+    // Every alpha injects through its own channel profile (stage A: a mixed
+    // charge+spin list reaches both potentials in one call); the injector
+    // rejects a mu/weight/profile length mismatch — per its contract the
     // caller must WARNING_QUIT rather than silently run without the
     // constraint potential (review P2).
-    const DensityChannel channel = channel_from_type(cfg_.type);
-    if (!ConstraintInjectPW::inject(*wg_, mu_, channel, v_eff)
-        || !ConstraintInjectPW::inject(*wg_, mu_, channel, veff_smooth))
+    if (!ConstraintInjectPW::inject(*wg_, mu_, channels_, v_eff)
+        || !ConstraintInjectPW::inject(*wg_, mu_, channels_, veff_smooth))
     {
         ModuleBase::WARNING_QUIT("ConstraintLoop::inject_potential",
             "mu length does not match the constraint count (wiring bug)");
@@ -145,11 +194,12 @@ void ConstraintLoop::inject_potential_lcao(const int iter,
     }
     // Branch B: active loop.  In the reference phase mu is all zero, so the
     // injection is a no-op by value and the first SCF stays unconstrained.
-    // The injector rejects a mu/weight length mismatch; per its contract the
-    // caller must WARNING_QUIT rather than silently run without the
-    // constraint potential (review P2).
-    const DensityChannel channel = channel_from_type(cfg_.type);
-    if (!ConstraintInjectPW::inject(*wg_, mu_, channel, v_eff))
+    // Every alpha injects through its own channel profile (stage A: a mixed
+    // charge+spin list reaches the dense-grid potential in one call); the
+    // injector rejects a mu/weight/profile length mismatch — per its
+    // contract the caller must WARNING_QUIT rather than silently run without
+    // the constraint potential (review P2).
+    if (!ConstraintInjectPW::inject(*wg_, mu_, channels_, v_eff))
     {
         ModuleBase::WARNING_QUIT("ConstraintLoop::inject_potential_lcao",
             "mu length does not match the constraint count (wiring bug)");
@@ -166,8 +216,9 @@ void ConstraintLoop::add_back_constraint_potential(ModuleBase::matrix& veff) con
     // Mirror of the injector (ConstraintInjectPW::inject): the same
     // per-channel sum mu_alpha * w_alpha that entered the vnew snapshot is
     // added back, restoring the physical potential difference for the SCC
-    // force integral (see header comment).
-    if (!ConstraintInjectPW::inject(*wg_, mu_, channel_from_type(cfg_.type), veff))
+    // force integral (see header comment).  Per-constraint channels keep the
+    // mixed charge+spin potential in sync with the forward injection.
+    if (!ConstraintInjectPW::inject(*wg_, mu_, channels_, veff))
     {
         ModuleBase::WARNING_QUIT("ConstraintLoop::add_back_constraint_potential",
             "mu/veff length mismatch (wiring bug)");
@@ -181,8 +232,9 @@ void ConstraintLoop::observe(const int iter, const double* const* rho,
     {
         return;
     }
-    ConstraintObserver::observe(*wg_, rho, nspin,
-                                channel_from_type(cfg_.type), Q_);
+    // Stage-A reading: every alpha reads with its own channel signs, so a
+    // mixed charge+spin list is observed in one integral (A2 core).
+    ConstraintObserver::observe(*wg_, rho, nspin, channels_, Q_);
     (void)iter;
 }
 
@@ -210,13 +262,13 @@ void ConstraintLoop::outer_step(const int iter, bool& conv_esolver)
             // (calibration scale ~0.2-0.3 e, warned at configure time).
             if (cfg_.target_mode == "absolute")
             {
-                targets_[a] = cfg_.targets[a].value;
+                targets_[a] = specs_[a].target;
             }
             else
             {
                 // Branch B: delta mode — target is the reference charge plus
                 // the requested shift (calibration scale ~e).
-                targets_[a] = Q_ref_[a] + cfg_.targets[a].value;
+                targets_[a] = Q_ref_[a] + specs_[a].target;
             }
         }
         // The reference point is the mu = 0 observation: run the first
@@ -274,7 +326,11 @@ void ConstraintLoop::on_scf_converged(const int iter, bool& conv_esolver)
 
 void ConstraintLoop::print_audit(const int iter)
 {
-    audit_ = ConstraintAccounting::audit(*wg_, mu_, Q_, targets_, nelec_);
+    // Stage-A audit: per-constraint kinds label every detail line (M5:
+    // c[i] kind=charge / kind=spin), so a mixed run stays machine
+    // readable per channel.
+    audit_ = ConstraintAccounting::audit(*wg_, mu_, Q_, targets_, nelec_,
+                                         kinds_);
     last_audit_line_ = ConstraintAccounting::audit_line(audit_);
     GlobalV::ofs_running << "\n[constraint] outer step " << outer_steps_
                          << " after SCF iteration " << iter << " (phase="
@@ -303,8 +359,17 @@ void ConstraintLoop::final_report()
     }
     else if (status_ == MuStatus::UNREACHABLE)
     {
+        // Report the cap of the component that actually fused: with
+        // per-constraint caps (A0 D3) the scalar cfg.mu_max mirror may not
+        // be the triggering limit.
+        double fused_cap = cfg_.mu_max;
+        const int fc = mu_solver_.fuse_component();
+        if (fc >= 0 && static_cast<size_t>(fc) < mu_caps_.size())
+        {
+            fused_cap = mu_caps_[fc];
+        }
         GlobalV::ofs_running << "UNREACHABLE (fused at mu cap "
-                             << cfg_.mu_max << " Ry)\n";
+                             << fused_cap << " Ry)\n";
     }
     else
     {
@@ -346,8 +411,47 @@ void ConstraintLoop::compute_force(const double* const* rho,
                             "constraint force from an unconverged outer loop: "
                             "residual O(|Q - t|)");
     }
-    constraint::constraint_force(*wg_, rho, nspin,
-                                 channel_from_type(cfg_.type), mu_, forcecon);
+    // Stage-A composition (interim until the Task A5 per-constraint kernel
+    // signature): the kernel is linear in the multipliers and reads one
+    // density channel per call, so a mixed list is split into a charge-kind
+    // pass and a spin-kind pass with the complementary components masked to
+    // zero (a zero multiplier contributes nothing).  A homogeneous list
+    // reduces to the historical single call bit-for-bit (one mask is all
+    // zero and skipped).
+    std::vector<double> mu_charge(mu_.size(), 0.0);
+    std::vector<double> mu_spin(mu_.size(), 0.0);
+    bool any_charge = false;
+    bool any_spin = false;
+    for (size_t a = 0; a < kinds_.size(); ++a)
+    {
+        // Branch A: spin-kind constraint -> spin (magnetization) channel.
+        if (kinds_[a] == ConstraintKind::Spin)
+        {
+            mu_spin[a] = mu_[a];
+            any_spin = true;
+        }
+        else
+        {
+            // Branch B: charge-kind constraint -> charge (total density)
+            // channel.
+            mu_charge[a] = mu_[a];
+            any_charge = true;
+        }
+    }
+    if (any_charge)
+    {
+        constraint::constraint_force(*wg_, rho, nspin,
+                                     DensityChannel::Charge, mu_charge,
+                                     forcecon);
+    }
+    if (any_spin)
+    {
+        // The spin channel needs nspin == 2; the kernel aborts loudly on a
+        // wrong combination (a spin spec under nspin = 1 is already rejected
+        // at configure time).
+        constraint::constraint_force(*wg_, rho, nspin,
+                                     DensityChannel::Spin, mu_spin, forcecon);
+    }
 }
 
 } // namespace constraint

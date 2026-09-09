@@ -215,29 +215,35 @@ TEST(ConstraintIOTest, ConfigureFromInputsShared)
     PARAM.input.constraint_thr = 1e-4;
     PARAM.input.constraint_target_file = "not_there.json";
     constraint::ConstraintConfig cfg;
+    std::vector<constraint::ConstraintSpec> specs;
     std::vector<double> radii;
     std::string error;
 
     // Switch off -> DISABLED, nothing else touched.
-    EXPECT_EQ(constraint::configure_from_inputs(cfg, *ucell, radii, error),
+    EXPECT_EQ(constraint::configure_from_inputs(cfg, specs, *ucell, radii,
+                                                error),
               constraint::ConfigStatus::DISABLED);
     EXPECT_FALSE(cfg.enabled);
     EXPECT_TRUE(radii.empty());
+    EXPECT_TRUE(specs.empty());
 
     // Unreadable target file -> ERROR.
     PARAM.input.constraint = true;
-    EXPECT_EQ(constraint::configure_from_inputs(cfg, *ucell, radii, error),
+    EXPECT_EQ(constraint::configure_from_inputs(cfg, specs, *ucell, radii,
+                                                error),
               constraint::ConfigStatus::ERROR);
 
     // Empty target file -> ERROR (no implicit constraint without target).
     PARAM.input.constraint_target_file = "";
-    EXPECT_EQ(constraint::configure_from_inputs(cfg, *ucell, radii, error),
+    EXPECT_EQ(constraint::configure_from_inputs(cfg, specs, *ucell, radii,
+                                                error),
               constraint::ConfigStatus::ERROR);
 
     // Guard: GPU device refuses to run.
     PARAM.input.device = "gpu";
     PARAM.input.constraint_target_file = "not_there.json";
-    EXPECT_EQ(constraint::configure_from_inputs(cfg, *ucell, radii, error),
+    EXPECT_EQ(constraint::configure_from_inputs(cfg, specs, *ucell, radii,
+                                                error),
               constraint::ConfigStatus::ERROR);
     PARAM.input.device = "cpu";
 
@@ -248,12 +254,20 @@ TEST(ConstraintIOTest, ConfigureFromInputsShared)
         ofs << R"({"targets": [0.1], "atoms": [[0]]})";
     }
     PARAM.input.constraint_target_file = path;
-    EXPECT_EQ(constraint::configure_from_inputs(cfg, *ucell, radii, error),
+    EXPECT_EQ(constraint::configure_from_inputs(cfg, specs, *ucell, radii,
+                                                error),
               constraint::ConfigStatus::OK)
         << error;
     ASSERT_EQ(cfg.targets.size(), 1u);
     EXPECT_DOUBLE_EQ(cfg.targets[0].value, 0.1);
     EXPECT_EQ(cfg.targets[0].atoms, std::vector<int>({0}));
+    // The stage-A specs output is populated through the shared path (v1 file
+    // + run-level type=charge -> homogeneous charge specs).
+    ASSERT_EQ(specs.size(), 1u);
+    EXPECT_EQ(specs[0].kind, constraint::ConstraintKind::Charge);
+    EXPECT_EQ(specs[0].atoms, std::vector<int>({0}));
+    EXPECT_DOUBLE_EQ(specs[0].target, 0.1);
+    EXPECT_DOUBLE_EQ(specs[0].mu_max, 5.0); // run-level fallback
     // Covalent radii (Angstrom -> Bohr): O = 0.64 A, H = 0.32 A.
     ASSERT_EQ(radii.size(), 3u);
     EXPECT_NEAR(radii[0], 0.64 / ModuleBase::BOHR_TO_A, 1e-12);
@@ -263,14 +277,18 @@ TEST(ConstraintIOTest, ConfigureFromInputsShared)
     // Spin guard through the shared path: PARAM nspin=1 + type=spin -> ERROR
     // (the spin channel needs a two-channel run); nspin=2 -> OK.
     PARAM.input.constraint_type = "spin";
-    EXPECT_EQ(constraint::configure_from_inputs(cfg, *ucell, radii, error),
+    EXPECT_EQ(constraint::configure_from_inputs(cfg, specs, *ucell, radii,
+                                                error),
               constraint::ConfigStatus::ERROR);
     EXPECT_NE(error.find("nspin"), std::string::npos);
     PARAM.input.nspin = 2;
-    EXPECT_EQ(constraint::configure_from_inputs(cfg, *ucell, radii, error),
+    EXPECT_EQ(constraint::configure_from_inputs(cfg, specs, *ucell, radii,
+                                                error),
               constraint::ConfigStatus::OK)
         << error;
     EXPECT_EQ(cfg.type, "spin");
+    ASSERT_EQ(specs.size(), 1u);
+    EXPECT_EQ(specs[0].kind, constraint::ConstraintKind::Spin);
     PARAM.input.nspin = 1;
     PARAM.input.constraint_type = "charge";
     std::remove(path.c_str());
@@ -489,14 +507,56 @@ TEST(ConstraintIOTest, MixedGuards)
     ASSERT_EQ(specs.size(), 2u);
     EXPECT_EQ(specs[0].kind, constraint::ConstraintKind::Charge);
     EXPECT_EQ(specs[1].kind, constraint::ConstraintKind::Spin);
-    // ... but the single-channel legacy cfg cannot express a mixed run, so
-    // the configure layer must refuse until the A4 loop wiring lands.
+    // ... but the legacy 11-arg entry (which discards 'specs') still cannot
+    // express a mixed run and refuses (the expressibility guard moved from
+    // the extended core to this entry at A4 — the specs-bearing callers go
+    // through configure_from_inputs and the stage-A loop instead).
     error.clear();
     EXPECT_EQ(constraint::configure_constraint(cfg, true, "charge", "becke",
                                                "delta", mixed, 5.0, 1e-4, 3, 2,
                                                error),
               constraint::ConfigStatus::ERROR);
     EXPECT_NE(error.find("mixed"), std::string::npos);
+
+    // A4: the extended core (specs out) SERVES a mixed kind run — the specs
+    // list is what the stage-A loop consumes; this is the guard-removal
+    // assertion (red while the staging guard rejects, green after A4).
+    error.clear();
+    specs.clear();
+    warnings.clear();
+    EXPECT_EQ(constraint::configure_constraint(cfg, specs, warnings, true,
+                                               "charge", "becke", "delta",
+                                               mixed, 5.0, 1e-4, 3, 2, error),
+              constraint::ConfigStatus::OK)
+        << error;
+    ASSERT_EQ(specs.size(), 2u);
+    EXPECT_EQ(specs[0].kind, constraint::ConstraintKind::Charge);
+    EXPECT_EQ(specs[1].kind, constraint::ConstraintKind::Spin);
+
+    // Heterogeneous per-constraint mu_max (A0 D3): served by the extended
+    // core (each cap survives in its spec) ...
+    error.clear();
+    specs.clear();
+    warnings.clear();
+    const std::string hetero = R"({"constraints": [
+        {"type": "charge", "target": 0.1, "atoms": [0], "mu_max": 3.0},
+        {"type": "charge", "target": -0.1, "atoms": [1], "mu_max": 0.2}]})";
+    EXPECT_EQ(constraint::configure_constraint(cfg, specs, warnings, true,
+                                               "charge", "becke", "delta",
+                                               hetero, 5.0, 1e-4, 3, 1, error),
+              constraint::ConfigStatus::OK)
+        << error;
+    ASSERT_EQ(specs.size(), 2u);
+    EXPECT_DOUBLE_EQ(specs[0].mu_max, 3.0);
+    EXPECT_DOUBLE_EQ(specs[1].mu_max, 0.2);
+    // ... and refused by the legacy single-cap entry (which can not carry
+    // per-constraint caps).
+    error.clear();
+    EXPECT_EQ(constraint::configure_constraint(cfg, true, "charge", "becke",
+                                               "delta", hetero, 5.0, 1e-4, 3,
+                                               1, error),
+              constraint::ConfigStatus::ERROR);
+    EXPECT_NE(error.find("mu_max"), std::string::npos);
 
     // v2 + non-default run-level constraint_type -> WARNING "supersede"
     // (explicit run-level type is not silently ignored on a v2 file).

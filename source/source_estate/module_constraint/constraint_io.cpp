@@ -302,12 +302,11 @@ bool parse_target_file(const std::string& content,
 // Stage A: mixed constraint parsing helpers.
 // ---------------------------------------------------------------------------
 
-namespace
-{
-
 // Kind <-> run-level type-string ("charge" | "spin").  The cfg.type kept for
 // the legacy single-channel loop must stay on this vocabulary (the loop maps
-// it through channel_from_type()).
+// it through channel_from_type()); the audit serialization (M5) and
+// diagnostics share this same mapping so the machine-readable kind token can
+// never drift from the config vocabulary.
 const char* kind_to_type_string(ConstraintKind kind)
 {
     // Branch: spin channel string.
@@ -318,6 +317,9 @@ const char* kind_to_type_string(ConstraintKind kind)
     // Branch: charge channel string (default).
     return "charge";
 }
+
+namespace
+{
 
 // Detect the file schema from the presence of the top-level keys; a file
 // mixing "constraints" (v2) and "targets" (v1) is a hard error: guessing the
@@ -953,32 +955,14 @@ ConfigStatus configure_constraint(ConstraintConfig& cfg,
                 saw_charge = true;
             }
         }
-        // Staging guard (A1, removed at A4): the single-channel legacy loop
-        // can not express a mixed charge+spin run; parsing is supported and
-        // specs are returned, execution lands with the A2-A4 loop wiring.
-        if (saw_charge && saw_spin)
-        {
-            error = "mixed charge+spin constraint runs require the stage-A "
-                    "loop wiring (Tasks A2-A4): parsing is supported, "
-                    "execution is not wired yet";
-            return ConfigStatus::ERROR;
-        }
+        // Legacy single-type mirror (A4): cfg.type / cfg.mu_max summarize
+        // the validated list for consumers that can not read 'specs'
+        // (legacy loop entry, historical tests).  The specs output is the
+        // authority for a mixed kind run and for heterogeneous per-constraint
+        // caps; the mirror only reports a representative kind and cap.  The
+        // legacy 11-arg entry below re-guards what it can not express.
         cfg.type = saw_spin ? "spin" : "charge";
-        const double cap = specs.front().mu_max;
-        for (size_t i = 1; i < specs.size(); ++i)
-        {
-            // Branch: heterogeneous per-constraint caps can not be honored by
-            // the single-cap legacy chain (staging guard, lands at A4).
-            if (specs[i].mu_max != cap)
-            {
-                error = "per-constraint \"mu_max\" differs between c[0] and c["
-                        + std::to_string(i)
-                        + "]: the single-cap legacy loop can not honor it "
-                          "(stage-A loop wiring, Tasks A2-A4)";
-                return ConfigStatus::ERROR;
-            }
-        }
-        cfg.mu_max = cap;
+        cfg.mu_max = specs.front().mu_max;
     }
 
     // Fill the legacy single-target list used by the (pre-A4) loop chain;
@@ -1011,17 +995,61 @@ ConfigStatus configure_constraint(ConstraintConfig& cfg,
 {
     std::vector<ConstraintSpec> specs;
     std::vector<std::string> warnings;
-    return configure_constraint(cfg, specs, warnings, enabled, type,
-                                weight_type, target_mode, target_file_content,
-                                mu_max, thr, nat, nspin, error);
+    const ConfigStatus st = configure_constraint(
+        cfg, specs, warnings, enabled, type, weight_type, target_mode,
+        target_file_content, mu_max, thr, nat, nspin, error);
+    if (st != ConfigStatus::OK)
+    {
+        return st;
+    }
+    // Expressibility guard (moved from the extended core at A4): this entry
+    // returns only the legacy single-type cfg, which can not carry a mixed
+    // kind list or heterogeneous per-constraint caps.  Refusing here keeps a
+    // caller that discards 'specs' from silently running a wrong channel —
+    // the specs-bearing configure_from_inputs / stage-A loop is required.
+    bool saw_charge = false;
+    bool saw_spin = false;
+    const double cap = specs.front().mu_max;
+    for (size_t i = 0; i < specs.size(); ++i)
+    {
+        // Branch A: spin entry in the list.
+        if (specs[i].kind == ConstraintKind::Spin)
+        {
+            saw_spin = true;
+        }
+        else
+        {
+            // Branch B: charge entry.
+            saw_charge = true;
+        }
+        if (i > 0 && specs[i].mu_max != cap)
+        {
+            error = "per-constraint \"mu_max\" differs between c[0] and c["
+                    + std::to_string(i)
+                    + "]: the legacy single-cap configure entry can not honor "
+                      "it; use the specs-bearing configure_from_inputs "
+                      "(stage-A loop wiring)";
+            return ConfigStatus::ERROR;
+        }
+    }
+    if (saw_charge && saw_spin)
+    {
+        error = "mixed charge+spin constraint runs can not be expressed by "
+                "the legacy single-channel configure entry; use the "
+                "specs-bearing configure_from_inputs (stage-A loop wiring)";
+        return ConfigStatus::ERROR;
+    }
+    return st;
 }
 
 ConfigStatus configure_from_inputs(ConstraintConfig& cfg,
+                                   std::vector<ConstraintSpec>& specs,
                                    const UnitCell& ucell,
                                    std::vector<double>& radii,
                                    std::string& error)
 {
     cfg = ConstraintConfig();
+    specs.clear();
     radii.clear();
     if (!PARAM.inp.constraint)
     {
@@ -1047,7 +1075,6 @@ ConfigStatus configure_from_inputs(ConstraintConfig& cfg,
     {
         return ConfigStatus::ERROR;
     }
-    std::vector<ConstraintSpec> specs;
     std::vector<std::string> warnings;
     const ConfigStatus st = configure_constraint(
         cfg, specs, warnings, PARAM.inp.constraint,

@@ -50,9 +50,25 @@ class ConstraintLoop
 
     // Build M1 weights and arm the loop. Call once per geometry (PW
     // before_scf).  Re-initialization replaces all state.
+    // Legacy entry: derives a homogeneous spec list from the single-type cfg
+    // (kept for pre-A4 callers / unit tests).  The specs-driven overload
+    // below is the production entry (esolvers).
     void init(const UnitCell& ucell,
               const ModulePW::PW_Basis* rho_basis,
               const ConstraintConfig& cfg,
+              const std::vector<double>& radii,
+              const double nelec);
+
+    // Stage-A entry: arm the loop from the fully validated per-constraint
+    // list (M7).  The loop stores 'specs' verbatim: the weight-fragment map,
+    // the per-constraint density channels (M2/M3a) and the per-constraint
+    // mu_max caps (M4, A0 D3) all come from the specs, never from the
+    // legacy single-type cfg mirror.  'cfg' still supplies the run-level
+    // switches (enabled / weight_type / target_mode / thr).
+    void init(const UnitCell& ucell,
+              const ModulePW::PW_Basis* rho_basis,
+              const ConstraintConfig& cfg,
+              const std::vector<ConstraintSpec>& specs,
               const std::vector<double>& radii,
               const double nelec);
 
@@ -128,6 +144,12 @@ class ConstraintLoop
     void print_audit(const int iter);
 
     ConstraintConfig cfg_;
+    // Stage-A per-constraint list and the derived per-component fields
+    // (parallel vectors, filled in init()).
+    std::vector<ConstraintSpec> specs_;
+    std::vector<ConstraintKind> kinds_;
+    std::vector<ChannelProfile> channels_;
+    std::vector<double> mu_caps_; // per-constraint |mu| fuse caps (A0 D3)
     std::unique_ptr<WeightGrid> wg_;
     MuSolver mu_solver_;
     std::vector<double> mu_;
