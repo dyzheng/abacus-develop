@@ -81,9 +81,13 @@ TEST(ConstraintObserveTest, MixedChannelReading)
 
 ## Task A3：M3a 逐约束 channel 注入（0.5 天）
 
+> **状态（2026-09-09）**：已完成并通过 G3（spec `2026-09-09-taskA3-inject-channel.md`）。
+> 实现=单一注入核心（逐约束 ChannelProfile）+ legacy 入口薄适配；守卫 return-false 不动
+> buffer（mu/channels 长度错配、spin profile 落 nspin=1 buffer）。
+
 **Files:** `constraint_inject_pw.{h,cpp}`、测试
 
-- [ ] Step 1 失败测试——**逐通道恒等式（核心不变量）**：
+- [x] Step 1 失败测试——**逐通道恒等式（核心不变量）**：
 ```cpp
 TEST(ConstraintInjectPWTest, MixedObservableEqualsInjection)
 {
@@ -92,8 +96,8 @@ TEST(ConstraintInjectPWTest, MixedObservableEqualsInjection)
     // 交叉零项：charge μ 不进自旋差势、spin μ 不进总势（逐点断言）
 }
 ```
-- [ ] Step 2-3 实现：按分量 `inj_up/inj_dn` 注入两个自旋势。
-- [ ] Step 4 通过 + sabotage（翻转某分量 inj 符号 → 恰中 FAIL）+ spec + commit。**G3**。
+- [x] Step 2-3 实现：按分量 `inj_up/inj_dn` 注入两个自旋势。
+- [x] Step 4 通过 + sabotage（翻转某分量 inj 符号 → 恰中 FAIL）+ spec + commit。**G3**。
 
 ## Task A4：M8 接线 + M5 审计标签（1 天）
 

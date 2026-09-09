@@ -4087,3 +4087,37 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   评审轮 2 笔文档随本批入库（A1-review spec；dev-log 评审条目编号 (13)→(14) 顺延）。
 - Next：提交后推送 zdy；请求裁决；批准后启动 Task A3（M3a 逐约束注入，G3）。
   开放项延续：① PW≡LCAO 只读观测口；② torque E' 修复；③ DeltaSpin 量级对等（B）。
+
+## 2026-09-09 (16): Task A2 严格评审——G2 通过，A3 解锁（无代码改动）
+
+- 核实：2ba46981e 已推 zdy、工作树干净；ctest 11/11 亲测；observe 7 tests
+  （5 旧+2 新 MixedChannelReading/MixedChannelConservation）；纵深守卫
+  （channels.size 错配/nspin=1 spin profile → WARNING_QUIT，observe.cpp:51/67）；
+  单一求积实现+薄适配成立；sabotage 恰中 2 新测试。
+- 诚实边界认可：Becke 盆地漏磁使"spin 片段≈原子磁矩和"非恒等式，弃用改
+  三条干净断言（防假验收）。
+- 给 A3 提醒入档：交叉零项逐点断言是混合"观测量==注入算符"最后一块构造性
+  保证；注入侧应有同型 channels.size 守卫且与 false-return 契约一致。
+- 裁定：通过，批准 Task A3（M3a 逐约束注入，G3）。
+- 文件：`2026-09-09-taskA2-review.md`。
+
+## 2026-09-09 (17): Task A3 完成——M3a 逐约束 channel 注入（G3 通过）
+
+- 范围：`constraint_inject_pw.{h,cpp}` + `constraint_inject_pw_test.cpp`（+2 tests）。
+  轻量单测，无重算。
+- 实现：新增 `inject(wg,mu,vector<ChannelProfile>&,veff)` 为唯一注入实现
+  （nspin=2 逐 α up/dn 符号；nspin=1 仅 charge 放行）；旧 DensityChannel 入口
+  改薄适配（homogeneous profiles 委托）。守卫 return-false 不动 buffer：
+  mu/channels 与 nconstraint 不匹配、spin profile 落 nspin=1。
+- 测试：inject_pw 7/7（5 旧 + MixedChannelCrossZeroPointwise /
+  MixedObservableEqualsInjection）、全套 MODULE_ESTATE_constraint 11/11、
+  elecstate 生产库编译通过。
+- G3 覆盖：交叉零项逐点 1e-12（charge μ 不进差势、spin μ 不进总势）；全局恒等式
+  E=∫(ρ↑V↑+ρ↓V↓)≡Σμ_αQ_α（observable==injection operator，δ 探针 1e-12 +
+  平滑自旋密度 1e-10）——与 A2 读数同 (w, chan) 闭环。
+- sabotage S1（逐 α channel 选择恒用 channels[0]）恰中 2 个新测试，5 旧全绿。
+- 文件：spec `2026-09-09-taskA3-inject-channel.md`；计划 A3 勾选；本日志。
+- Next：提交后推送 zdy；请求裁决；批准后启动 Task A4（M8 接线 + M5 kind 标签，
+  G4）。A4 必做（评审提醒入档）：staging guard 移除可证伪（G4 混合收敛测试先失败
+  后通过 + 恢复守卫 sabotage 恰中）；configure_from_inputs 签名改时 PW/LCAO 双调用
+  点同步。开放项延续：① PW≡LCAO 只读观测口；② torque E' 修复；③ DeltaSpin 对等（B）。

@@ -85,9 +85,39 @@ class ConstraintInjectPWTest : public ::testing::Test
         }
     }
 
+
     void TearDown() override
     {
         delete rhopw;
+    }
+
+    // Spin-resolved atomic-superposition density with per-spin amplitudes.
+    void fill_spin_rho(const double sigma,
+                       const std::vector<double>& amp_up,
+                       const std::vector<double>& amp_dn,
+                       std::vector<double>& rho_up,
+                       std::vector<double>& rho_dn) const
+    {
+        rho_up.assign(rhopw->nrxx, 0.0);
+        rho_dn.assign(rhopw->nrxx, 0.0);
+        for (int ir = 0; ir < rhopw->nrxx; ++ir)
+        {
+            const int i = ir / (rhopw->ny * rhopw->nplane);
+            const int j = ir / rhopw->nplane - i * rhopw->ny;
+            const int k = ir % rhopw->nplane + rhopw->startz_current;
+            const ModuleBase::Vector3<double> rfrac(
+                static_cast<double>(i) / rhopw->nx,
+                static_cast<double>(j) / rhopw->ny,
+                static_cast<double>(k) / rhopw->nz);
+            const ModuleBase::Vector3<double> rc =
+                rfrac * ucell->latvec * ucell->lat0;
+            const std::array<double, 3> r{rc.x, rc.y, rc.z};
+            for (size_t I = 0; I < pos.size(); ++I)
+            {
+                rho_up[ir] += amp_up[I] * gaussian(r, pos[I], sigma);
+                rho_dn[ir] += amp_dn[I] * gaussian(r, pos[I], sigma);
+            }
+        }
     }
 };
 
@@ -281,4 +311,147 @@ TEST_F(ConstraintInjectPWTest, SplitInjectionSpin)
     {
         EXPECT_DOUBLE_EQ(veff1(0, ir), veff1_ref(0, ir));
     }
+}
+
+// ---------------------------------------------------------------------------
+// Stage A (Task A3): per-constraint channel injection.  One inject call
+// mixes charge components (+mu*w into both spin channels) and spin
+// components (+mu*w up / -mu*w down) through the per-alpha ChannelProfile
+// list, which must be parallel to the WeightGrid constraint order and mu.
+// ---------------------------------------------------------------------------
+
+namespace
+{
+// Fragments and profiles shared by the mixed-injection tests: charge on
+// {0},{1},{2} plus overlapping spin fragments {1,2} and {0}.
+const std::vector<std::vector<int>> g_inj_fragments
+    = {{0}, {1}, {2}, {1, 2}, {0}};
+
+std::vector<constraint::ChannelProfile> inj_mixed_profiles()
+{
+    const constraint::ChannelProfile charge
+        = constraint::build_channel_profile(constraint::ConstraintKind::Charge);
+    const constraint::ChannelProfile spin
+        = constraint::build_channel_profile(constraint::ConstraintKind::Spin);
+    return {charge, charge, charge, spin, spin};
+}
+} // namespace
+
+TEST_F(ConstraintInjectPWTest, MixedChannelCrossZeroPointwise)
+{
+    // Two constraints: charge on {0} (mu_c) and spin on {1,2} (mu_s).  After
+    // the mixed injection the per-point sum/difference potentials split by
+    // channel (charge couples to the total potential only, spin to the
+    // difference only):
+    //   sum  V = sum0  + 2 mu_c w0     (spin +/- cancels)
+    //   diff V = diff0 - 2 mu_s w12    (charge cancels)
+    constraint::WeightGrid wg(*ucell, rhopw, radii,
+                              constraint::WeightType::Becke);
+    wg.set_constraint_atoms({{0}, {1, 2}});
+    wg.build();
+    const int nrxx = rhopw->nrxx;
+    const std::vector<constraint::ChannelProfile> chans = {
+        constraint::build_channel_profile(constraint::ConstraintKind::Charge),
+        constraint::build_channel_profile(constraint::ConstraintKind::Spin)};
+    const std::vector<double> mu = {0.3, -0.2};
+
+    ModuleBase::matrix veff(2, nrxx);
+    for (int is = 0; is < 2; ++is)
+    {
+        for (int ir = 0; ir < nrxx; ++ir)
+        {
+            veff(is, ir) = 2.0 + is + 0.01 * std::sin(0.01 * ir);
+        }
+    }
+    ModuleBase::matrix veff_ref = veff;
+
+    ASSERT_TRUE(constraint::ConstraintInjectPW::inject(wg, mu, chans, veff));
+
+    const std::vector<double>& w0 = wg.constraint_weight(0);
+    const std::vector<double>& w12 = wg.constraint_weight(1);
+    for (int ir = 0; ir < nrxx; ++ir)
+    {
+        const double sum_ref = veff_ref(0, ir) + veff_ref(1, ir);
+        const double diff_ref = veff_ref(1, ir) - veff_ref(0, ir);
+        // Total potential carries the charge term only.
+        EXPECT_NEAR(veff(0, ir) + veff(1, ir), sum_ref + 2.0 * mu[0] * w0[ir],
+                    1e-12);
+        // Difference potential carries the spin term only (charge cancels).
+        EXPECT_NEAR(veff(1, ir) - veff(0, ir),
+                    diff_ref - 2.0 * mu[1] * w12[ir], 1e-12);
+    }
+}
+
+TEST_F(ConstraintInjectPWTest, MixedObservableEqualsInjection)
+{
+    // Observable == injection operator with mixed per-alpha channels:
+    //   E = int (rho_up * V_up + rho_dn * V_dn) dV == sum_alpha mu_a Q_a
+    // where Q comes from the mixed observer on the same (w, chan) list.
+    constraint::WeightGrid wg(*ucell, rhopw, radii,
+                              constraint::WeightType::Becke);
+    wg.set_constraint_atoms(g_inj_fragments);
+    wg.build();
+    const int nrxx = rhopw->nrxx;
+    const double dV = rhopw->omega / static_cast<double>(rhopw->nxyz);
+    const std::vector<constraint::ChannelProfile> chans = inj_mixed_profiles();
+    const std::vector<double> mu = {0.3, -0.15, 0.1, -0.2, 0.25};
+
+    // Exact grid-delta probes: rho_up only, then rho_up = rho_dn.
+    std::vector<double> rho_up(nrxx, 0.0);
+    std::vector<double> rho_dn(nrxx, 0.0);
+    const double* rho_ptr[2] = {rho_up.data(), rho_dn.data()};
+    for (int probe = 0; probe < 20; ++probe)
+    {
+        const int ir = (probe * 997) % nrxx;
+        std::fill(rho_up.begin(), rho_up.end(), 0.0);
+        std::fill(rho_dn.begin(), rho_dn.end(), 0.0);
+        rho_up[ir] = 1.0 / dV;
+        const bool up_and_dn = (probe % 2 == 1);
+        if (up_and_dn)
+        {
+            rho_dn[ir] = 1.0 / dV;
+        }
+        std::vector<double> Q;
+        constraint::ConstraintObserver::observe(wg, rho_ptr, 2, chans, Q);
+        ModuleBase::matrix veff(2, nrxx);
+        ASSERT_TRUE(constraint::ConstraintInjectPW::inject(wg, mu, chans, veff));
+        double energy = 0.0;
+        double ref = 0.0;
+        for (int alpha = 0; alpha < wg.nconstraint(); ++alpha)
+        {
+            ref += mu[alpha] * Q[alpha];
+        }
+        for (int jr = 0; jr < nrxx; ++jr)
+        {
+            energy += rho_up[jr] * veff(0, jr) + rho_dn[jr] * veff(1, jr);
+        }
+        energy *= dV;
+        EXPECT_NEAR(energy, ref, 1e-12)
+            << "delta probe " << probe;
+    }
+
+    // Smooth spin-resolved density: the same identity holds for a realistic
+    // composite density (per-atom totals still 10 e, up/dn split known).
+    std::vector<double> s_up;
+    std::vector<double> s_dn;
+    fill_spin_rho(1.0, {7.4, 0.6, 0.6}, {0.6, 0.4, 0.4}, s_up, s_dn);
+    const double* s_ptr[2] = {s_up.data(), s_dn.data()};
+    std::vector<double> Q;
+    constraint::ConstraintObserver::observe(wg, s_ptr, 2, chans, Q);
+    ModuleBase::matrix veff(2, nrxx);
+    ASSERT_TRUE(constraint::ConstraintInjectPW::inject(wg, mu, chans, veff));
+    double energy = 0.0;
+    double ref = 0.0;
+    double scale = 0.0;
+    for (int alpha = 0; alpha < wg.nconstraint(); ++alpha)
+    {
+        ref += mu[alpha] * Q[alpha];
+        scale = std::max(scale, std::abs(mu[alpha] * Q[alpha]));
+    }
+    for (int jr = 0; jr < nrxx; ++jr)
+    {
+        energy += s_up[jr] * veff(0, jr) + s_dn[jr] * veff(1, jr);
+    }
+    energy *= dV;
+    EXPECT_NEAR(energy, ref, 1e-10 * scale);
 }

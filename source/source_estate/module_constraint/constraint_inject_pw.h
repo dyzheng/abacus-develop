@@ -34,6 +34,15 @@ class ConstraintInjectPW
                        const std::vector<double>& mu,
                        const DensityChannel channel,
                        ModuleBase::matrix& veff);
+
+    // Per-constraint injection (stage A): every alpha injects with its own
+    // channel signs, so one call can mix charge and spin components.  The
+    // profile list must be parallel to wg's constraint list and to mu; any
+    // mismatch returns false and leaves veff untouched.
+    static bool inject(const WeightGrid& wg,
+                       const std::vector<double>& mu,
+                       const std::vector<ChannelProfile>& channels,
+                       ModuleBase::matrix& veff);
 };
 
 } // namespace constraint
