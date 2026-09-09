@@ -4052,3 +4052,38 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - Next：提交后推送 zdy（含前两 commit 03d43537c/bb814be57）；请求裁决；批准后
   启动 Task A2（M2 逐约束 channel 读数，G2）。开放项延续：① 严格 PW≡LCAO 需
   只读观测口；② torque E' 修复；③ DeltaSpin 量级对等（阶段 B）。
+
+## 2026-09-08 (14): Task A1 严格评审——G1 通过，A2 解锁（无代码改动）
+
+- 核实：14fabba2c 已推 zdy（rev-parse 一致）、工作树干净；ctest
+  MODULE_ESTATE_constraint 亲测 11/11（10 旧+2 新，v1 兼容）；工厂函数、
+  spin+nspin 守卫、staging guard（constraint_io.cpp:956-977 标注 removed
+  at A4）在案。
+- 偏差裁定：①混合阶段性 ERROR=防御性设计（防静默错跑，S3 sabotage 实证）
+  非偷懒；②configure_from_inputs 签名推迟 A4 合理。
+- 提醒入档：A4 移除 staging guard 须可证伪（先失败后通过+sabotage）；
+  A4 改签名时 PW/LCAO 双调用点同步（勿再分叉）。
+- 裁定：通过，批准 Task A2（M2 逐约束 channel 读数，G2）。
+- 文件：`2026-09-08-taskA1-review.md`。
+
+## 2026-09-09 (15): Task A2 完成——M2 逐约束 channel 读数（G2 通过）
+
+- 范围：`constraint_observe.{h,cpp}` + `constraint_observe_test.cpp`（+2 tests）
+  + test/CMakeLists（observe/deriv/inject_pw 靶补 constraint_io.cpp 源）。轻量单测。
+- 实现：新增 `observe(wg,rho,nspin,vector<ChannelProfile>&,Q)` 为唯一读数核心；
+  旧 DensityChannel 入口改薄适配（homogeneous profiles 委托，保留 spin+nspin=1
+  前置守卫）；每条 α 按自身 chan 组合 ρ↑/ρ↓。守卫：channels 数与权重网格
+  nconstraint 不匹配 → QUIT；(nspin=1 && read_dn≠read_up) → QUIT（纵深防御，
+  parse 级已有）。
+- 测试：observe 7/7（5 旧 + MixedChannelReading/MixedChannelConservation 新）、
+  全套 MODULE_ESTATE_constraint 11/11、elecstate 生产库编译通过。
+- G2 覆盖：δ 探针逐 α 1e-12（charge 读和、spin 读差，单调用内混合，含同原子
+  双类型片段重叠形状=A6 场景）；charge 分量（partition-of-unity）平滑自旋密度
+  Σ=N_el 1e-8 + 逐分量对拍 reference_charges；常数密度 spin=0（1e-12）/
+  charge Σ=2Ω。原拟"spin 片段≈原子磁矩和"因 Becke 盆地漏磁非干净恒等式而弃用
+  （诚实边界，见 spec §4）。
+- sabotage S1（逐 α channel 选择恒用 channels[0]）恰中 2 个新测试，5 旧全绿。
+- 文件：spec `2026-09-09-taskA2-observe-channel-read.md`；计划 A2 勾选；本日志。
+  评审轮 2 笔文档随本批入库（A1-review spec；dev-log 评审条目编号 (13)→(14) 顺延）。
+- Next：提交后推送 zdy；请求裁决；批准后启动 Task A3（M3a 逐约束注入，G3）。
+  开放项延续：① PW≡LCAO 只读观测口；② torque E' 修复；③ DeltaSpin 量级对等（B）。

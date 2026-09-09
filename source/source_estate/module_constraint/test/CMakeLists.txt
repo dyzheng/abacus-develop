@@ -16,6 +16,7 @@ AddTest(
   TARGET MODULE_ESTATE_constraint_observe
   LIBS parameter ${math_libs} base device planewave_serial cell_info
   SOURCES constraint_observe_test.cpp
+    ../constraint_io.cpp
     ../constraint_observe.cpp
     ../weight_grid.cpp
     ../../../source_base/module_grid/radial.cpp
@@ -27,6 +28,7 @@ AddTest(
   TARGET MODULE_ESTATE_constraint_deriv
   LIBS parameter ${math_libs} base device planewave_serial cell_info
   SOURCES constraint_deriv_test.cpp
+    ../constraint_io.cpp
     ../constraint_deriv.cpp
     ../constraint_observe.cpp
     ../weight_grid.cpp
@@ -52,6 +54,7 @@ AddTest(
   TARGET MODULE_ESTATE_constraint_inject_pw
   LIBS parameter ${math_libs} base device planewave_serial cell_info
   SOURCES constraint_inject_pw_test.cpp
+    ../constraint_io.cpp
     ../constraint_inject_pw.cpp
     ../constraint_observe.cpp
     ../weight_grid.cpp

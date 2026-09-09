@@ -62,9 +62,13 @@ TEST(ConstraintIOTest, MixedGuards)
 
 ## Task A2：M2 逐约束 channel 读数（0.5 天）
 
+> **状态（2026-09-09）**：已完成并通过 G2（spec `2026-09-09-taskA2-observe-channel-read.md`）。
+> 实现=单一读数核心（逐约束 ChannelProfile）+ legacy 入口薄适配（无第二读数路径）；
+> 守卫：channels 数与权重网格约束数不匹配、nspin=1 下 spin 型 profile 均立即 QUIT。
+
 **Files:** `constraint_observe.{h,cpp}`、测试
 
-- [ ] Step 1 失败测试——混合 mock：
+- [x] Step 1 失败测试——混合 mock：
 ```cpp
 TEST(ConstraintObserveTest, MixedChannelReading)
 {
@@ -72,8 +76,8 @@ TEST(ConstraintObserveTest, MixedChannelReading)
     // 同一 observe 调用内两分量各对拍解析期望（1e-12）；守恒和：charge 分量 Σ=N_el
 }
 ```
-- [ ] Step 2-3 实现：`observe` 签名改为接收 `std::vector<ChannelProfile>`（或 specs），按分量组合密度。
-- [ ] Step 4 通过 + spec + commit。**G2**。
+- [x] Step 2-3 实现：`observe` 签名改为接收 `std::vector<ChannelProfile>`（或 specs），按分量组合密度。
+- [x] Step 4 通过 + spec + commit。**G2**。
 
 ## Task A3：M3a 逐约束 channel 注入（0.5 天）
 

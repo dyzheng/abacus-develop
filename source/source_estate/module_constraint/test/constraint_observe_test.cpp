@@ -95,6 +95,34 @@ class ConstraintObserveTest : public ::testing::Test
         }
     }
 
+
+    void fill_rho_spin(const double sigma,
+                       const std::vector<double>& amp_up,
+                       const std::vector<double>& amp_dn,
+                       std::vector<double>& rho_up,
+                       std::vector<double>& rho_dn) const
+    {
+        rho_up.assign(rhopw->nrxx, 0.0);
+        rho_dn.assign(rhopw->nrxx, 0.0);
+        for (int ir = 0; ir < rhopw->nrxx; ++ir)
+        {
+            const int i = ir / (rhopw->ny * rhopw->nplane);
+            const int j = ir / rhopw->nplane - i * rhopw->ny;
+            const int k = ir % rhopw->nplane + rhopw->startz_current;
+            const ModuleBase::Vector3<double> rfrac(
+                static_cast<double>(i) / rhopw->nx,
+                static_cast<double>(j) / rhopw->ny,
+                static_cast<double>(k) / rhopw->nz);
+            const ModuleBase::Vector3<double> rc =
+                rfrac * ucell->latvec * ucell->lat0;
+            const std::array<double, 3> r{rc.x, rc.y, rc.z};
+            for (size_t I = 0; I < pos.size(); ++I)
+            {
+                rho_up[ir] += amp_up[I] * gaussian(r, pos[I], sigma);
+                rho_dn[ir] += amp_dn[I] * gaussian(r, pos[I], sigma);
+            }
+        }
+    }
     void fill_rho(const double sigma, std::vector<double>& rho) const
     {
         rho.assign(rhopw->nrxx, 0.0);
@@ -451,4 +479,135 @@ TEST_F(ConstraintObserveTest, IndependentReferenceBecke)
         EXPECT_NEAR(Q_prod[I], Q_ref[I], 1e-8)
             << "per-atom charge mismatch at atom " << I;
     }
+}
+
+// ---------------------------------------------------------------------------
+// Stage A (Task A2): per-constraint channel reading.  One observe call mixes
+// charge components (read rho_up + rho_dn) and spin components (read
+// rho_up - rho_dn) through the per-alpha ChannelProfile list, which must be
+// parallel to the WeightGrid constraint order.
+// ---------------------------------------------------------------------------
+
+namespace
+{
+// Fragment set: charge partition of unity {0},{1},{2} plus two spin
+// fragments that OVERLAP the charge ones (spin [1,2] and spin on atom 0) —
+// the same-atom charge+spin shape of the A6 integration case.
+const std::vector<std::vector<int>> g_mixed_fragments
+    = {{0}, {1}, {2}, {1, 2}, {0}};
+
+std::vector<constraint::ChannelProfile> mixed_profiles()
+{
+    const constraint::ChannelProfile charge
+        = constraint::build_channel_profile(constraint::ConstraintKind::Charge);
+    const constraint::ChannelProfile spin
+        = constraint::build_channel_profile(constraint::ConstraintKind::Spin);
+    return {charge, charge, charge, spin, spin};
+}
+} // namespace
+
+TEST_F(ConstraintObserveTest, MixedChannelReading)
+{
+    // Grid-delta probes with spin-resolved density: a single observe call
+    // with mixed profiles must read every alpha through its own channel.
+    //   rho_up = delta, rho_dn = 0  -> every alpha reads w_alpha(g*)
+    //   rho_up = rho_dn = delta     -> charge reads 2 w_alpha, spin reads 0
+    constraint::WeightGrid wg(*ucell, rhopw, radii,
+                              constraint::WeightType::Becke);
+    wg.set_constraint_atoms(g_mixed_fragments);
+    wg.build();
+    const double dV = rhopw->omega / static_cast<double>(rhopw->nxyz);
+    const std::vector<constraint::ChannelProfile> chans = mixed_profiles();
+    std::vector<double> rho_up(rhopw->nrxx, 0.0);
+    std::vector<double> rho_dn(rhopw->nrxx, 0.0);
+    const double* rho_ptr[2] = {rho_up.data(), rho_dn.data()};
+
+    for (int probe = 0; probe < 20; ++probe)
+    {
+        const int ir = (probe * 997) % rhopw->nrxx;
+        std::fill(rho_up.begin(), rho_up.end(), 0.0);
+        std::fill(rho_dn.begin(), rho_dn.end(), 0.0);
+        rho_up[ir] = 1.0 / dV;
+        const bool up_and_dn = (probe % 2 == 1);
+        if (up_and_dn)
+        {
+            // Half the probes put the same delta in the down channel: the
+            // spin components must vanish while charge components double.
+            rho_dn[ir] = 1.0 / dV;
+        }
+        std::vector<double> Q;
+        constraint::ConstraintObserver::observe(wg, rho_ptr, 2, chans, Q);
+        for (int alpha = 0; alpha < wg.nconstraint(); ++alpha)
+        {
+            const double w = wg.constraint_weight(alpha)[ir];
+            const bool is_spin = (alpha >= 3);
+            if (up_and_dn && is_spin)
+            {
+                EXPECT_NEAR(Q[alpha], 0.0, 1e-12)
+                    << "probe " << probe << " spin alpha " << alpha;
+            }
+            else if (up_and_dn)
+            {
+                EXPECT_NEAR(Q[alpha], 2.0 * w, 1e-12)
+                    << "probe " << probe << " charge alpha " << alpha;
+            }
+            else
+            {
+                EXPECT_NEAR(Q[alpha], w, 1e-12)
+                    << "probe " << probe << " alpha " << alpha;
+            }
+        }
+    }
+}
+
+TEST_F(ConstraintObserveTest, MixedChannelConservation)
+{
+    // Spin-resolved atomic-superposition density: per-atom totals still
+    // {8, 1, 1} e (N_el = 10), split into up/dn components with known
+    // magnetizations.  In one mixed call the charge components (fragments
+    // {0},{1},{2} form a partition of unity) must sum to N_el exactly, and
+    // each charge component must match the independent high-order quadrature
+    // of the total charge.
+    const double sigma = 1.0;
+    std::vector<double> rho_up;
+    std::vector<double> rho_dn;
+    fill_rho_spin(sigma, {7.4, 0.6, 0.6}, {0.6, 0.4, 0.4}, rho_up, rho_dn);
+    const double* rho_ptr[2] = {rho_up.data(), rho_dn.data()};
+
+    constraint::WeightGrid wg(*ucell, rhopw, radii,
+                              constraint::WeightType::Becke);
+    wg.set_constraint_atoms(g_mixed_fragments);
+    wg.build();
+    const std::vector<constraint::ChannelProfile> chans = mixed_profiles();
+    std::vector<double> Q;
+    constraint::ConstraintObserver::observe(wg, rho_ptr, 2, chans, Q);
+
+    double qsum = 0.0;
+    for (int alpha = 0; alpha < 3; ++alpha)
+    {
+        qsum += Q[alpha];
+    }
+    EXPECT_NEAR(qsum, 10.0, 1e-8);
+
+    const std::vector<double> Qref = reference_charges(sigma, 120, 35, 8.0);
+    for (int alpha = 0; alpha < 3; ++alpha)
+    {
+        EXPECT_LT(std::abs(Q[alpha] - Qref[alpha]), 0.05)
+            << "mixed charge component alpha " << alpha;
+    }
+
+    // Constant spin densities rho_up = rho_dn = 1: the charge components sum
+    // to 2 * cell volume, every spin component reads exactly zero.
+    std::vector<double> c_up(rhopw->nrxx, 1.0);
+    std::vector<double> c_dn(rhopw->nrxx, 1.0);
+    const double* c_ptr[2] = {c_up.data(), c_dn.data()};
+    constraint::ConstraintObserver::observe(wg, c_ptr, 2, chans, Q);
+    qsum = 0.0;
+    for (int alpha = 0; alpha < 3; ++alpha)
+    {
+        qsum += Q[alpha];
+    }
+    EXPECT_NEAR(qsum, 2.0 * ucell->omega, 1e-8);
+    EXPECT_NEAR(Q[3], 0.0, 1e-12);
+    EXPECT_NEAR(Q[4], 0.0, 1e-12);
 }

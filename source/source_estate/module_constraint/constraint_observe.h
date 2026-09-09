@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 
+#include "constraint_io.h"
 #include "weight_grid.h"
 
 namespace constraint
@@ -44,6 +45,18 @@ class ConstraintObserver
                         const double* const* rho,
                         const int nspin,
                         const DensityChannel channel,
+                        std::vector<double>& Q);
+
+    // Per-constraint reading (stage A): every alpha reads with its own
+    // channel signs, so one call can mix charge and spin components (the
+    // shared (w, chan) pair of the constraint list).  'channels' must be
+    // parallel to wg's constraint list (same order as the WeightGrid was
+    // built from); a size mismatch aborts loudly rather than silently
+    // mis-pairing weights with channels.
+    static void observe(const WeightGrid& wg,
+                        const double* const* rho,
+                        const int nspin,
+                        const std::vector<ChannelProfile>& channels,
                         std::vector<double>& Q);
 };
 
