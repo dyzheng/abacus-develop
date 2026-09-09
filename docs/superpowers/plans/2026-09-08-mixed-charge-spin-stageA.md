@@ -168,9 +168,14 @@ TEST(ConstraintDerivTest, MixedChannelForce)
 
 ## Task A7：文档与收尾（0.5 天）
 
-- [ ] 用户手册 §2/§3：新 JSON 格式 + 旧格式 deprecation + 混合约束边界（偶极未实现、力 FD 前提不变）；
-- [ ] 开发者指南：ConstraintSpec 数据模型 + 逐约束 channel 数据流更新 + 风险表刷新（channel run 级全局一项移除）；
-- [ ] 进展总结文档更新；评审申请。
+> **状态（2026-09-09）**：已完成（本批）。用户手册 §2/§3 落 v2 JSON + v1 deprecation +
+> 混合边界（偶极守卫拒绝、力限定包络/relax 未接线）；开发者指南刷新数据模型/逐约束
+> 数据流/风险表（run 级 channel 全局项移除，改 v1/v2 双格式项）；阶段 A 进展总结
+> `2026-09-09-stageA-progress-summary.md` 落盘。**阶段 A（A0–A7）全部完成。**
+
+- [x] 用户手册 §2/§3：新 JSON 格式 + 旧格式 deprecation + 混合约束边界（偶极未实现、力 FD 前提不变）；
+- [x] 开发者指南：ConstraintSpec 数据模型 + 逐约束 channel 数据流更新 + 风险表刷新（channel run 级全局一项移除）；
+- [x] 进展总结文档更新；评审申请。
 
 ---
 

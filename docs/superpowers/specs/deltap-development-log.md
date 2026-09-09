@@ -4245,3 +4245,24 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - Next：提交后推送 zdy；请求裁决；批准后启动 Task A7（收尾文档：用户手册/开发者
   指南/进展总结 + 评审申请）。开放项延续：① PW≡LCAO 只读观测口（A 工具补件）；
   ② torque E' 修复；③ DeltaSpin 对等（B）。
+## 2026-09-09 (24): Task A7 完成——收尾文档 + 阶段 A 闭合（A0–A7 全部交付）
+
+- 用户手册 `docs/constraint_user_manual.md`：版本基线更新至 fc93bac1e；§2 澄清
+  constraint_type 只对 v1 生效；§3 重写为 v2（逐约束 type/target/atoms/mu_max，可混合）
+  + v1 deprecated + 文件级规则（混用 ERROR / supersede WARNING / 空文件 ERROR）；
+  §4 审计示例带 kind= 标签并修正 total_charge 语义（混合 run 为 ΣQ_α 信息性总和）；
+  §5 边界更新（力=限定包络、relax/MD 未接线、混合已实现、偶极守卫拒绝、外环退化提示）；
+  §6 增 213 用例；§7 增阶段 A 汇总引用。
+- 开发者指南 `docs/constraint_developer_guide.md`：版本基线更新；模块地图 M2/M3a/M5/M6/M7
+  职责补逐约束通道；"单一实现+薄适配"事实声明；§2.2 重写为 ConstraintSpec 数据模型
+  （v2+v1，工厂契约，守卫清单）；§2.4 kind= 审计；§3 数据流补 A4 平行数组 + A5 单趟
+  per-α 力调用；§4 函数表补混合测试；§5 覆盖 11 ctest 全绿 + A2–A6  sabotage 链 +
+  混合 stationary4 FD 弱覆盖登记；§6 风险表 run 级 channel 全局项移除、改 v1/v2 双格式项，
+  时序契约回归网扩到 213；§6.3 扩展点/Broyden 基准更新；§7 资产索引更新。
+- 进展总结 `docs/superpowers/specs/2026-09-09-stageA-progress-summary.md`（新）：判决门闭合 +
+  A0–A6 交付/测试/sabotage/μ 耦合实测/力口径包络/风险清单/下一步，衔接 08-31 总结。
+- 计划 A7 勾选 + 状态 note；**阶段 A（A0–A7）完成**。
+- Next：提交后推送 zdy；请求裁决（A6 已由"继续"批准；本批无新评审文档产生——
+  如评审补充 A6/A7 意见将随下一批归档）。后续开放项：混合 stationary4 FD 验收轮、
+  阶段 B（Broyden 立项数据 §3.4 已齐）；① PW≡LCAO 只读观测口；② torque E' 修复；
+  ③ DeltaSpin 对等（B）。
