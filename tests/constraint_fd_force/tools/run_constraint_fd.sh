@@ -20,8 +20,18 @@
 #   criterion: |F_FD - F_ana| < CRIT (5e-4 Ry/Bohr = 0.0128555 eV/A).
 #   Grid prerequisites (R7): ecutwfc=100, ecutrho=400, scf_thr=1e-8.
 #
+# Channels (V1): the case directory defaults to the historical charge cases
+#   (PW 211 / LCAO 212_NAO) and is selected with CASE=/path/to/case.  nspin,
+#   constraint_type and nelec are inherited from that case's INPUT, so the
+#   spin case (tests/01_PW/212_PW_constraint_h2o_spin: nspin=2,
+#   constraint_type spin, mag 0.5 on O) reuses the identical leg protocol.
+#
 # Usage: bash run_constraint_fd.sh <pw|lcao> [delta_bohr] [nproc] [max_jobs]
 #   ONLY="iat_axis"  (e.g. ONLY="0_2") runs a single atom-axis pair (smoke).
+#   CASE=<dir>       override the testcase directory (V1: spin case).
+#   TEST_FORCE=1     add "test_force 1" so the run prints the per-term force
+#                    decomposition (2.7 standard checks: net force before
+#                    compensation + constraint-force sum).  Off by default.
 set -uo pipefail
 
 BASIS="${1:-lcao}"
@@ -37,8 +47,26 @@ SRCDIR="$(cd "$(dirname "$0")/../.." && pwd)/01_PW"
 if [ "$BASIS" = "lcao" ]; then
   SRCDIR="$(cd "$(dirname "$0")/../.." && pwd)/02_NAO_Gamma"
 fi
-TESTCASE="$SRCDIR/211_PW_constraint_h2o"
-[ "$BASIS" = "lcao" ] && TESTCASE="$SRCDIR/212_NAO_constraint_h2o"
+# Branch: the LCAO default is its own charge-channel case.
+DEFAULT_CASE="$SRCDIR/211_PW_constraint_h2o"
+if [ "$BASIS" = "lcao" ]; then
+  DEFAULT_CASE="$SRCDIR/212_NAO_constraint_h2o"
+fi
+TESTCASE="${CASE:-$DEFAULT_CASE}"
+if [ ! -f "${TESTCASE}/INPUT" ]; then
+  echo "!! testcase INPUT not found: ${TESTCASE}/INPUT"; exit 1
+fi
+# Channel parameters are inherited from the case INPUT (nspin=2 +
+# constraint_type spin for the spin case).  Absent tokens fall back to the
+# historical charge-channel values, so the 211 / 212_NAO INPUT files stay
+# byte-identical to the pre-V1 script.
+CASE_NSPIN=$(awk '$1 == "nspin" {print $2; exit}' "${TESTCASE}/INPUT")
+CASE_NSPIN="${CASE_NSPIN:-1}"
+CASE_CTYPE=$(awk '$1 == "constraint_type" {print $2; exit}' "${TESTCASE}/INPUT")
+CASE_CTYPE="${CASE_CTYPE:-charge}"
+CASE_NELE=$(awk '$1 == "nelec" {print $2; exit}' "${TESTCASE}/INPUT")
+CASE_NELE="${CASE_NELE:-8}"
+TEST_FORCE="${TEST_FORCE:-0}"
 WORK="$(mktemp -d /tmp/cfd_${BASIS}_XXXX)"
 DELTA_A=$(python3 -c "print(${DELTA_BOHR} * 0.5291772109)")
 CRIT=$(python3 -c "print(5e-4 * 13.605693 / 0.5291772109)")  # 0.0128555 eV/A
@@ -127,20 +155,30 @@ write_input() { # out_dir suffix mode target_file read_from
             echo "gamma_only  1"
             echo "orbital_dir /root/abacus-develop/tests/PP_ORB"
         fi
-        echo "nelec       8"
+        # Branch: spin-polarized runs must declare nspin; the charge cases
+        # keep the nspin=1 default and their INPUT stays unchanged.
+        if [ "$CASE_NSPIN" != "1" ]; then
+            echo "nspin       ${CASE_NSPIN}"
+        fi
+        echo "nelec       ${CASE_NELE}"
         echo "smearing_method gauss"
         echo "smearing_sigma  0.002"
         echo "mixing_type     broyden"
         echo "mixing_beta     0.4"
         echo "pseudo_dir  /root/abacus-develop/tests/PP_ORB"
         echo "constraint        true"
-        echo "constraint_type   charge"
+        echo "constraint_type   ${CASE_CTYPE}"
         echo "constraint_weight_type becke"
         echo "constraint_target_file ${tfile}"
         echo "constraint_target_mode ${mode}"
         echo "constraint_mu_max  5.0"
         echo "constraint_thr     1e-4"
         echo "cal_force       1"
+        # Branch: optional per-term force dump, needed by the 2.7 standard
+        # checks (pre-compensation net force, constraint-force sum).
+        if [ "$TEST_FORCE" = "1" ]; then
+            echo "test_force      1"
+        fi
     } > "$out"
 }
 
@@ -182,6 +220,64 @@ sys.exit(1)
 PYEOF
 }
 
+# 2.7 standard checks: sum the per-term force blocks of one running_*.log.
+#   - Sigma CONSTRAINT force per axis (translation invariance: must be ~0)
+#   - Sigma pre-compensation total force per axis (= the net force the code
+#     removes via compen; a non-zero value here is the fingerprint of a
+#     missing Pulay-type term)
+#   - compen per axis and the consistency max|pre - compen - printed|
+# Requires test_force=1 in the leg inputs (TEST_FORCE=1).
+std_checks() { # log nat
+    python3 - "$1" "$2" <<'PYEOF_CHECK'
+import sys, re
+log, nat = sys.argv[1], int(sys.argv[2])
+txt = open(log).read()
+RYBOHR2EVA = 13.605693 / 0.5291772109
+
+def blk(name):
+    m = re.search(re.escape('#' + name + '#') + r'\n(.*?)\n\s*\n', txt, re.S)
+    if not m:
+        return None
+    rows = []
+    for l in m.group(1).splitlines():
+        t = l.split()
+        if len(t) == 4 and t[0][0].isalpha() and t[0] != 'Atoms':
+            rows.append([float(x) for x in t[1:4]])
+    return rows if len(rows) == nat else None
+
+terms = ['LOCAL    FORCE (eV/Angstrom)', 'NONLOCAL FORCE (eV/Angstrom)',
+         'NLCC     FORCE (eV/Angstrom)', 'ION      FORCE (eV/Angstrom)',
+         'SCC      FORCE (eV/Angstrom)']
+pre = [[0.0] * 3 for _ in range(nat)]
+cons = blk('CONSTRAINT  FORCE (Ry/Bohr)')
+if cons is None:
+    sys.exit('missing CONSTRAINT block (run with TEST_FORCE=1)')
+for i in range(nat):
+    for a in range(3):
+        pre[i][a] += cons[i][a] * RYBOHR2EVA
+for nm in terms:
+    b = blk(nm)
+    if b is None:
+        sys.exit('missing block: ' + nm)
+    for i in range(nat):
+        for a in range(3):
+            pre[i][a] += b[i][a]
+tot = blk('TOTAL-FORCE (eV/Angstrom)')
+if tot is None:
+    sys.exit('missing TOTAL block')
+sumcons = [sum(cons[i][a] for i in range(nat)) * RYBOHR2EVA for a in range(3)]
+sumpre = [sum(pre[i][a] for i in range(nat)) for a in range(3)]
+compen = [x / nat for x in sumpre]
+sumtot = [sum(tot[i][a] for i in range(nat)) for a in range(3)]
+dev = max(abs(pre[i][a] - compen[a] - tot[i][a]) for i in range(nat) for a in range(3))
+print('  [std-check] Sigma CONSTRAINT force (eV/A)   : ' + ' '.join('%+.6f' % x for x in sumcons))
+print('  [std-check] Sigma pre-compensation (eV/A)   : ' + ' '.join('%+.6f' % x for x in sumpre))
+print('  [std-check] compen (eV/A)                   : ' + ' '.join('%+.6f' % x for x in compen))
+print('  [std-check] Sigma printed TOTAL (eV/A)      : ' + ' '.join('%+.6f' % x for x in sumtot))
+print('  [std-check] max|pre - compen - printed|     : %.3e eV/A' % dev)
+PYEOF_CHECK
+}
+
 # Last CONSTRAINT_AUDIT detail line: final converged mu (Ry).
 extract_mu() {
     python3 - "$1" <<'PYEOF'
@@ -196,6 +292,7 @@ PYEOF
 }
 
 read NAT MODE < <(parse_stru "${TESTCASE}/STRU")
+NAT_LEG="$NAT"
 echo "  atoms=${NAT} (${MODE})"
 mkdir -p "${WORK}/base"
 cp "${TESTCASE}/STRU" "${TESTCASE}/KPT" "${TESTCASE}/constraint_target.json" "${WORK}/base/"
@@ -208,6 +305,9 @@ echo "  [base] E0=${E0} eV; frozen absolute target t*=${TSTAR} e"
 MU0=$(extract_mu "${WORK}/base/OUT.base"/running_*.log 2>/dev/null || echo NA)
 F0LOG=$(ls "${WORK}"/base/OUT.base/running_*.log | head -1)
 mapfile -t F0 < <(extract_force "$F0LOG" "$NAT") || { echo "  !! force extraction failed"; exit 1; }
+if [ "$TEST_FORCE" = "1" ]; then
+    std_checks "$F0LOG" "$NAT"
+fi
 echo "  [base] mu*=${MU0} Ry; analytic forces (eV/A):"
 for i in $(seq 0 $((NAT-1))); do
   printf '    atom %d: %s %s %s\n' "$i" "${F0[$((i*3))]}" "${F0[$((i*3+1))]}" "${F0[$((i*3+2))]}"
@@ -249,6 +349,11 @@ run_leg() { # leg -> "iat axis sign E mu"
     E=$(run_scf "$step" s)
     MU=$(extract_mu "$step/OUT.s"/running_*.log 2>/dev/null || echo NA)
     echo "${iat} ${axis} ${sign} ${E:-NA} ${MU}"
+    # Branch: with TEST_FORCE=1 also dump the per-leg standard checks; the
+    # extra lines do not match the aggregator's "iat axis sign E mu" pattern.
+    if [ "$TEST_FORCE" = "1" ]; then
+        std_checks "$step/OUT.s"/running_*.log "$NAT_LEG"
+    fi
 }
 
 declare -a ROWS
