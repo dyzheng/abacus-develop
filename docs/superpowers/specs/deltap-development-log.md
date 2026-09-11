@@ -192,6 +192,7 @@
 | 2026-09-11 | `2026-09-11-ii1b-baseline-triage-and-step-cap.md` | **II-1 续：S1T 分诊证明 Γ-only `50_FeO` 多解且 k 未收敛（模 4.0 冷启动直达低解；2×2×2 → ±1.48 μB / 低 2.1 eV；4×4×4 → ±3.10 μB / 再低 0.56 eV）；框架 `step_max`/`step_probe` INPUT 化落地（默认逐位不变 + 单测）；重锚定后仅 ±0.1 μB 可测，±0.3 处**固定 μ 双稳**；能量口径判定 E_tot = E[ρ]；仍缺在线分支守卫** |
 | 2026-09-11 | `2026-09-11-online-branch-guard.md` | **在线能量分支守卫落地（`constraint_branch_tol`，默认 0=关）：能量判据 `E_tot<E_ref−tol` → 第四态 `MuStatus::BRANCH_FLIP` 熔断不静默；单测 12→18、4 发 sabotage 全恰中；H₂O 端到端无假触发（能升 +0.0087 Ry ≫ tol 1e-3）；FeO 换态点外步 2 即熔断（−0.643 eV），旧流程要到外步 6 才误报 CONVERGED** |
 | 2026-09-11 | `2026-09-11-onsite-moment-audit.md` | **审计行 on-site 投影矩（DFT+U 迹差，无对角化，与 `atomic mag` 同量到 1e-8）：FeO δ=+0.1 μB 良态点 q 与 d 矩同向但仅 74% 幅值，与 II-1b 塌陷点反向脱钩合起来给出"同向跟随 → 反向脱钩"图景；单测 18→19 / 4→5，无 DFT+U 输出逐位不变；半径敏感性(4b)顺延** |
+| 2026-09-11 | `2026-09-11-capability-boundary-decoupling.md` | **能力边界表补 L14（Becke 矩 ≠ on-site d 局域矩，附反向脱钩/74% 跟随两实测点）+ L15（在线分支守卫两条盲区：只抓能量向下换态、只在收敛点判）+ F9/F10 诊断项 + §5 适用域"自旋约束观测量缺口"** |
 | 2026-07-12 | `2026-07-12-deltap-risk-points-and-solutions.md` | 18 项风险点 + 解决方案 |
 | 2026-07-12 | `2026-07-12-deltap-root-cause-analysis.md` | B14+B15 found+fixed |
 | 2026-07-12 | `2026-07-12-deltap-algorithm-technical-review.md` | 完整算法推导 + 21 项风险 |
@@ -4645,3 +4646,24 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   （`MODULE_ESTATE_charge_test` / `_elecstate_energy` / `_elecstate_print`）与上轮同。
 - 下一轮：④b 半径敏感性 + II-1 重锚定合批（新增半径覆写 INPUT，在定死的锚点上跑）
   → ⑤ 能力边界文档补脱钩条目（含守卫两条盲区）→ ⑥ I-1 MgO 继续；FeO S4/S5 暂缓。
+
+## 2026-09-11 (32): 能力边界表补 L14/L15——Becke 矩/d 矩脱钩 + 守卫盲区（批复顺序第 5 项）
+
+- 动机：L10 是"分支纪律"流程教训，II-1 的两类事故（换态被记成 CONVERGED、约束
+  动的是 Becke 矩而非 d 矩）分别暴露"读数可能是另一个解"与"读到的不是那个量"。
+  按批复把这两条登记为能力边界，供阶段 B 立项评审的适用范围声明引用。
+- 落地（纯文档，`2026-08-13-deltap-capability-boundaries.md`）：
+  **L14** Becke 加权矩 ≠ on-site d 局域矩（CDFT 共轭仍严格，但"约束 TM 自旋"≠
+  "控制 d 矩"；盆地含尾部/间隙磁化）；**L15** 在线分支守卫两条盲区（① 只抓能量
+  向下换态、② 只在 SCF 收敛点判，固定 μ 不收敛 → RUNNING）+ 容差选择题；
+  §4 诊断表补 **F9**（CONVERGED 但 d 矩没动/反向 → 并读 `onsite=`）/**F10**
+  （换态被静默接受 → 开 `constraint_branch_tol` 查 `final status`）；§5 适用域补
+  "自旋约束的观测量缺口"段落（"驱动 TM d 矩"仅在良态点 + 事后能量核对下成立，
+  幅值需并读 `onsite=`/`onsite_radius`）。
+- 证据：引用 II-1b 实测（反向脱钩 −1.28 vs −0.20 μB）、本轮 on-site 仪器
+  （良态点 74% 跟随）、守卫 spec §4.6（FeO −0.643 eV 被抓 / H₂O 无假触发）。
+- 文件：`docs/superpowers/specs/2026-08-13-deltap-capability-boundaries.md`（L14/L15/
+  F9/F10/§5/本轮记录）、本轮 spec `docs/superpowers/specs/2026-09-11-capability-boundary-decoupling.md`。
+- Bug/fix list：无（纯边界登记，非 bug 修复）；预存在未修三项与上轮同。
+- 下一轮：⑥ I-1 MgO 继续（写回设计文档 §1.4 的适用域修正）；4b 半径敏感性 +
+  II-1 重锚定合批；FeO S4/S5 暂缓。
