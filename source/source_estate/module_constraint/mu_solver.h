@@ -9,6 +9,16 @@ namespace constraint
 struct MuSolverParams
 {
     double step_max = 0.05;  // Ry: largest |dmu| per outer step per component
+    // Ry: largest |dmu| for the FIRST step of a component only, i.e. the one
+    // step taken before any secant slope has been measured.  Without a
+    // history the solver falls back to kappa_min, so the first step always
+    // sits at the step_max cap regardless of how far the target is -- a fixed
+    // overshoot.  On a stiff correlated channel that overshoot is enough to
+    // tear the SCF out of the reference magnetic branch (II-1 FeO: dQ/dmu
+    // ~ 24 e/Ry, so one 0.05 Ry step moves Q by > 1 e).  A small probe lets
+    // the secant measure a local slope first, after which step_max governs.
+    // 0 (default) keeps the legacy behaviour (probe = step_max).
+    double step_probe = 0.0;
     double mu_max = 5.0;     // Ry: hard cap on |mu| (fuse trigger boundary)
     // Per-constraint hard caps (stage A, A0 decision D3): parallel to the
     // component list; empty means every component uses the scalar 'mu_max'

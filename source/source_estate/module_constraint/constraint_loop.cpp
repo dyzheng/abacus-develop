@@ -136,6 +136,12 @@ void ConstraintLoop::init(const UnitCell& ucell,
     // homogeneous lists through the cfg entry above).
     params.mu_max_per_component = mu_caps_;
     params.conv_tol = cfg_.thr;
+    // Outer-step caps (II-1): step_max bounds every step; step_probe bounds
+    // only the first, history-free step, where the solver has no measured
+    // slope and would otherwise always sit at the cap.  Both default to the
+    // pre-II-1 behaviour when the INPUT keys are left alone.
+    params.step_max = cfg_.step_max;
+    params.step_probe = cfg_.step_probe;
     // Response sign: both channels respond negatively.  For the spin
     // channel the split injection (V_up += mu*w, V_dn -= mu*w) repels
     // spin-up from / attracts spin-down to the fragment for mu > 0, so the

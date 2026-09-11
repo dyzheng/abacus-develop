@@ -759,6 +759,8 @@ struct Input_para
     std::string constraint_target_mode = "delta";  ///< "delta" or "absolute"
     double constraint_mu_max = 5.0;  ///< cap on |mu| in Ry
     double constraint_thr = 1e-4;    ///< per-constraint convergence threshold in e
+    double constraint_step_max = 0.05;   ///< Ry, cap on |dmu| per outer step
+    double constraint_step_probe = 0.0;  ///< Ry, first (history-free) step cap; 0 = use step_max
 
     // ==============   #Parameters (25.uncommon hardware) ==================
     int dsp_count = 4;           ///< count of DSP hardwares in one node

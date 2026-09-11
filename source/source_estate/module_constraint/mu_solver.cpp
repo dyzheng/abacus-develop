@@ -66,6 +66,14 @@ MuStatus MuSolver::step(const std::vector<double>& Q,
     // sign-flip guard reference.
     const double resp = (params_.response_sign > 0) ? 1.0 : -1.0;
 
+    // First-step cap.  A component with no accepted observation yet has no
+    // measured secant slope, so kappa falls back to kappa_min and the
+    // Newton step would always be clipped at step_max -- the fixed overshoot
+    // that step_probe exists to avoid.  step_probe == 0 means "no probe":
+    // fall back to step_max, i.e. the pre-probe behaviour.
+    const double probe_cap = (params_.step_probe > 0.0) ? params_.step_probe
+                                                        : params_.step_max;
+
     bool all_converged = true;
     for (int i = 0; i < n; ++i)
     {
@@ -119,7 +127,12 @@ MuStatus MuSolver::step(const std::vector<double>& Q,
 
         // Newton-secant step toward the target, capped in magnitude.
         double dmu = -res / kappa;
-        dmu = clamp_value(dmu, -params_.step_max, params_.step_max);
+        // Branch A: history-free component -- the probe cap applies (the
+        // step is a slope measurement, not a Newton move).
+        // Branch B: at least one accepted observation exists -- the secant
+        // slope is real, so the full step_max cap applies.
+        const double step_cap = has_history_[i] ? params_.step_max : probe_cap;
+        dmu = clamp_value(dmu, -step_cap, step_cap);
         mu[i] += dmu;
 
         // Per-constraint hard cap (A0 D3): |mu_i| never leaves

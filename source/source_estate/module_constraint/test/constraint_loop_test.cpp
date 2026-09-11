@@ -240,7 +240,7 @@ class ConstraintLoopTest : public ::testing::Test
     {
         return constraint::configure_constraint(
             cfg, specs, warnings, true, "charge", "becke", "delta", json, 5.0,
-            1e-4, nat, nspin, error);
+            1e-4, 0.05, 0.0, nat, nspin, error);
     }
 
     constraint::ConstraintConfig make_cfg(const double delta,

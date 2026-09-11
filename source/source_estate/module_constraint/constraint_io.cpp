@@ -838,6 +838,8 @@ ConfigStatus configure_constraint(ConstraintConfig& cfg,
                                   const std::string& target_file_content,
                                   const double mu_max,
                                   const double thr,
+                                  const double step_max,
+                                  const double step_probe,
                                   const int nat,
                                   const int nspin,
                                   std::string& error)
@@ -853,6 +855,8 @@ ConfigStatus configure_constraint(ConstraintConfig& cfg,
     cfg.weight_type = weight_type;
     cfg.target_mode = target_mode;
     cfg.thr = thr;
+    cfg.step_max = step_max;
+    cfg.step_probe = step_probe;
 
     // Guard: phase-1/2 recipes only.  A wrong recipe must abort loudly
     // rather than silently run an unvalidated partition.
@@ -875,6 +879,20 @@ ConfigStatus configure_constraint(ConstraintConfig& cfg,
     if (thr <= 0.0)
     {
         error = "constraint_thr must be > 0";
+        return ConfigStatus::ERROR;
+    }
+    // Guard: the outer-step cap must be positive, and the first-step probe
+    // must be a genuine sub-cap (larger than it would defeat its purpose and
+    // silently change which cap governs the first step).
+    if (step_max <= 0.0)
+    {
+        error = "constraint_step_max must be > 0";
+        return ConfigStatus::ERROR;
+    }
+    if (step_probe < 0.0 || step_probe > step_max)
+    {
+        error = "constraint_step_probe must satisfy 0 <= step_probe <= "
+                "constraint_step_max (0 selects the legacy probe = step_max)";
         return ConfigStatus::ERROR;
     }
     // Absolute mode: explicit warning that the calibration scale differs
@@ -995,9 +1013,14 @@ ConfigStatus configure_constraint(ConstraintConfig& cfg,
 {
     std::vector<ConstraintSpec> specs;
     std::vector<std::string> warnings;
+    // Legacy entry: this overload predates the run-level outer-step caps, so
+    // it forwards the ConstraintConfig defaults (step_max 0.05 Ry, probe off)
+    // -- exactly the behaviour its pre-A1 callers were written against.
+    const ConstraintConfig defaults;
     const ConfigStatus st = configure_constraint(
         cfg, specs, warnings, enabled, type, weight_type, target_mode,
-        target_file_content, mu_max, thr, nat, nspin, error);
+        target_file_content, mu_max, thr, defaults.step_max,
+        defaults.step_probe, nat, nspin, error);
     if (st != ConfigStatus::OK)
     {
         return st;
@@ -1080,7 +1103,8 @@ ConfigStatus configure_from_inputs(ConstraintConfig& cfg,
         cfg, specs, warnings, PARAM.inp.constraint,
         PARAM.inp.constraint_type, PARAM.inp.constraint_weight_type,
         PARAM.inp.constraint_target_mode, content, PARAM.inp.constraint_mu_max,
-        PARAM.inp.constraint_thr, ucell.nat, PARAM.inp.nspin, error);
+        PARAM.inp.constraint_thr, PARAM.inp.constraint_step_max,
+        PARAM.inp.constraint_step_probe, ucell.nat, PARAM.inp.nspin, error);
     if (st == ConfigStatus::ERROR)
     {
         return st;

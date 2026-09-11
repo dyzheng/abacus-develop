@@ -257,3 +257,43 @@ TEST(MuSolverTest, StiffChannelBoundedLimitCycle)
     EXPECT_LE(std::abs(mu[0]), params.mu_max);
     EXPECT_LE(std::abs(mock(mu[0]) - target[0]), 5.0); // residual stays bounded
 }
+
+TEST(MuSolverTest, StepProbeCapsOnlyTheFirstStep)
+{
+    // II-1: the first step of a component has no measured slope, so it would
+    // always sit at the step_max cap.  step_probe must cap that step alone
+    // and leave every later step on step_max.
+    constraint::MuSolverParams params;
+    params.step_max = 0.05;
+    params.step_probe = 0.004;
+    params.mu_max = 5.0;
+    params.kappa_min = 0.3;
+    params.conv_tol = 1e-4;
+    constraint::MuSolver solver(params);
+    MockResponse mock{2.0, 0.5};
+
+    std::vector<double> mu = {0.0};
+    const std::vector<double> target = {1.9};
+
+    // First step: history-free -> the probe cap, not the step_max cap.
+    EXPECT_EQ(solver.step({mock(0.0)}, target, mu),
+              constraint::MuStatus::RUNNING);
+    EXPECT_DOUBLE_EQ(mu[0], params.step_probe);
+
+    // Second step: the secant slope is real now (chi = 0.5 is inside the
+    // clamp window), so the move is -res/kappa = 0.18/0.5 = 0.36 Ry, capped
+    // at step_max -- i.e. strictly larger than the probe.
+    EXPECT_EQ(solver.step({mock(mu[0])}, target, mu),
+              constraint::MuStatus::RUNNING);
+    EXPECT_DOUBLE_EQ(mu[0], params.step_probe + params.step_max);
+
+    // Legacy: probe == 0 means "use step_max", i.e. the first step is the
+    // full cap, exactly as before this parameter existed.
+    constraint::MuSolverParams legacy;
+    legacy.step_max = 0.05;
+    constraint::MuSolver solver2(legacy);
+    std::vector<double> mu2 = {0.0};
+    EXPECT_EQ(solver2.step({mock(0.0)}, target, mu2),
+              constraint::MuStatus::RUNNING);
+    EXPECT_DOUBLE_EQ(mu2[0], legacy.step_max);
+}

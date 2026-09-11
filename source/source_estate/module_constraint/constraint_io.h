@@ -26,6 +26,8 @@ struct ConstraintConfig
     std::string target_mode = "delta";  // "delta" | "absolute"
     double mu_max = 5.0;                // Ry, cap on |mu|
     double thr = 1e-4;                  // e, per-constraint convergence
+    double step_max = 0.05;             // Ry, cap on |dmu| per outer step
+    double step_probe = 0.0;            // Ry, first-step cap; 0 = use step_max
     std::vector<ConstraintTarget> targets;
 };
 
@@ -49,6 +51,8 @@ enum class ConfigStatus
  *  - target_mode == "absolute" -> non-fatal WARNING (calibration scale
  *    differs from delta: charges ~0.2-0.3 e vs ~e shifts)
  *  - mu_max / thr sanity    -> ERROR
+ *  - step_max / step_probe sanity -> ERROR (step_max > 0, and 0 <= step_probe
+ *    <= step_max; the probe is a sub-cap for the history-free first step)
  *
  * @param target_file_content Content of the target JSON file (empty string
  *        when no file is configured).
@@ -213,6 +217,8 @@ ConfigStatus configure_constraint(ConstraintConfig& cfg,
                                   const std::string& target_file_content,
                                   const double mu_max,
                                   const double thr,
+                                  const double step_max,
+                                  const double step_probe,
                                   const int nat,
                                   const int nspin,
                                   std::string& error);

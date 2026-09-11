@@ -1577,6 +1577,30 @@ Manual override is allowed: if sc_acceleration_mode is explicitly set, it takes 
         this->add_item(item);
     }
     {
+        Input_Item item("constraint_step_max");
+        item.annotation = "cap on the per-step multiplier update";
+        item.category = "Constraint";
+        item.type = "Real";
+        item.description = "Cap on |dmu| per outer step, per constraint (Ry). Lower it when a single large step tears the SCF out of the reference branch (soft/stiff correlated channels: one 0.05 Ry step at dQ/dmu ~ 24 e/Ry moves Q by more than 1 e).";
+        item.default_value = "0.05";
+        item.unit = "Ry";
+        item.availability = "constraint is true";
+        read_sync_double(input.constraint_step_max);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("constraint_step_probe");
+        item.annotation = "first-step multiplier cap (history-free step)";
+        item.category = "Constraint";
+        item.type = "Real";
+        item.description = "Cap on |dmu| for the FIRST step of each constraint only, before any secant slope has been measured (Ry). The first step otherwise falls back to the conservative kappa_min slope and therefore always sits at the full step_max cap, which is the classic branch-flip overshoot; set this small so the secant gets a local slope first, then let step_max govern. 0 (default) keeps the legacy behaviour (probe = step_max).";
+        item.default_value = "0.0";
+        item.unit = "Ry";
+        item.availability = "constraint is true";
+        read_sync_double(input.constraint_step_probe);
+        this->add_item(item);
+    }
+    {
         Input_Item item("deltap_branch_write");
         item.annotation = "persist deltap_branch.dat: true or false";
         item.category = "DeltaP";
