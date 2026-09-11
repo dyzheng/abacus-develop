@@ -1,0 +1,28 @@
+[constraint] outer step 1 after SCF iteration 51 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.005 max_residual=0.1 total_charge=3.137600651 nelec=44 maxdev=3.330669074e-16
+CONSTRAINT_AUDIT c[0] kind=spin q=3.137600651 t=3.237600651 mu=-0.05 res=-0.1
+[constraint] outer step 2 after SCF iteration 74 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.002606775797 max_residual=0.03426912882 total_charge=3.203331523 nelec=44 maxdev=3.330669074e-16
+CONSTRAINT_AUDIT c[0] kind=spin q=3.203331523 t=3.237600651 mu=-0.07606775797 res=-0.03426912882
+[constraint] outer step 3 after SCF iteration 93 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-0.0003915358524 max_residual=0.005399018893 total_charge=3.24299967 nelec=44 maxdev=3.330669074e-16
+CONSTRAINT_AUDIT c[0] kind=spin q=3.24299967 t=3.237600651 mu=-0.07251981521 res=0.005399018893
+[constraint] outer step 4 after SCF iteration 103 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.0001614406204 max_residual=0.002195116243 total_charge=3.235405535 nelec=44 maxdev=3.330669074e-16
+CONSTRAINT_AUDIT c[0] kind=spin q=3.235405535 t=3.237600651 mu=-0.07354536277 res=-0.002195116243
+[constraint] outer step 5 after SCF iteration 117 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=8.144870607e-06 max_residual=0.0001106642893 total_charge=3.237489987 nelec=44 maxdev=3.330669074e-16
+CONSTRAINT_AUDIT c[0] kind=spin q=3.237489987 t=3.237600651 mu=-0.07359980945 res=-0.0001106642893
+[constraint] outer step 6 after SCF iteration 119 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-3.660770908e-06 max_residual=4.973886393e-05 total_charge=3.23765039 nelec=44 maxdev=3.330669074e-16
+CONSTRAINT_AUDIT c[0] kind=spin q=3.23765039 t=3.237600651 mu=-0.07359980945 res=4.973886393e-05
+[constraint] final status: CONVERGED (targets reached within 0.00010000000 e)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-3.660770908e-06 max_residual=4.973886393e-05 total_charge=3.23765039 nelec=44 maxdev=3.330669074e-16
+CONSTRAINT_AUDIT c[0] kind=spin q=3.23765039 t=3.237600651 mu=-0.07359980945 res=4.973886393e-05
+ !FINAL_ETOT_IS -7652.3447129198739276 eV
+          Total magnetism (Bohr mag/cell) = 0.01165623
+       Absolute magnetism (Bohr mag/cell) = 7.75004184
+atomic mag: 2 3.54105691
+atomic mag: 3 -3.52312924
+          Total magnetism (Bohr mag/cell) = 0.01146801
+       Absolute magnetism (Bohr mag/cell) = 7.75008303

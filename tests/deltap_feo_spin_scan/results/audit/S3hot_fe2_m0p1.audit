@@ -1,0 +1,28 @@
+[constraint] outer step 1 after SCF iteration 24 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.005 max_residual=0.1 total_charge=3.137560545 nelec=44 maxdev=3.330669074e-16
+CONSTRAINT_AUDIT c[0] kind=spin q=3.137560545 t=3.037560545 mu=0.05 res=0.1
+[constraint] outer step 2 after SCF iteration 173 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0 max_residual=1.124141898 total_charge=1.913418647 nelec=44 maxdev=3.330669074e-16
+CONSTRAINT_AUDIT c[0] kind=spin q=1.913418647 t=3.037560545 mu=0 res=-1.124141898
+[constraint] outer step 3 after SCF iteration 476 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.006008828805 max_residual=0.3466649335 total_charge=3.384225478 nelec=44 maxdev=3.330669074e-16
+CONSTRAINT_AUDIT c[0] kind=spin q=3.384225478 t=3.037560545 mu=0.01733324667 res=0.3466649335
+[constraint] outer step 4 after SCF iteration 502 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.02147160664 max_residual=0.3188856575 total_charge=3.356446203 nelec=44 maxdev=3.330669074e-16
+CONSTRAINT_AUDIT c[0] kind=spin q=3.356446203 t=3.037560545 mu=0.06733324667 res=0.3188856575
+[constraint] outer step 5 after SCF iteration 525 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.02724738663 max_residual=0.2322222167 total_charge=3.269782762 nelec=44 maxdev=3.330669074e-16
+CONSTRAINT_AUDIT c[0] kind=spin q=3.269782762 t=3.037560545 mu=0.1173332467 res=0.2322222167
+[constraint] outer step 6 after SCF iteration 739 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-0.4820298704 max_residual=7.158868675 total_charge=-4.12130813 nelec=44 maxdev=3.330669074e-16
+CONSTRAINT_AUDIT c[0] kind=spin q=-4.12130813 t=3.037560545 mu=0.06733324667 res=-7.158868675
+[constraint] final status: RUNNING (SCF ended before the outer loop converged — raise scf_nmax)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-0.4820298704 max_residual=7.158868675 total_charge=-4.12130813 nelec=44 maxdev=3.330669074e-16
+CONSTRAINT_AUDIT c[0] kind=spin q=-4.12130813 t=3.037560545 mu=0.06733324667 res=-7.158868675
+ !FINAL_ETOT_IS -7659.2048276808473020 eV
+          Total magnetism (Bohr mag/cell) = -8.00000000
+       Absolute magnetism (Bohr mag/cell) = 8.32395900
+atomic mag: 2 -4.06330097
+atomic mag: 3 -3.83193601
+          Total magnetism (Bohr mag/cell) = -8.00000000
+       Absolute magnetism (Bohr mag/cell) = 8.32412645

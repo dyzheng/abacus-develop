@@ -1,0 +1,16 @@
+[constraint] outer step 1 after SCF iteration 18 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.005 max_residual=0.1 total_charge=3.137543567 nelec=44 maxdev=3.330669074e-16
+CONSTRAINT_AUDIT c[0] kind=spin q=3.137543567 t=3.037543567 mu=0.05 res=0.1
+[constraint] outer step 2 after SCF iteration 112 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0 max_residual=1.122430625 total_charge=1.915112942 nelec=44 maxdev=3.330669074e-16
+CONSTRAINT_AUDIT c[0] kind=spin q=1.915112942 t=3.037543567 mu=0 res=-1.122430625
+[constraint] final status: RUNNING (SCF ended before the outer loop converged — raise scf_nmax)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0 max_residual=1.122430625 total_charge=1.915112942 nelec=44 maxdev=3.330669074e-16
+CONSTRAINT_AUDIT c[0] kind=spin q=1.915112942 t=3.037543567 mu=0 res=-1.122430625
+ !FINAL_ETOT_IS -7652.9757961491022797 eV
+          Total magnetism (Bohr mag/cell) = -0.00000000
+       Absolute magnetism (Bohr mag/cell) = 7.88213747
+atomic mag: 2 3.70941110
+atomic mag: 3 -3.69646965
+          Total magnetism (Bohr mag/cell) = 0.00000000
+       Absolute magnetism (Bohr mag/cell) = 7.88255296

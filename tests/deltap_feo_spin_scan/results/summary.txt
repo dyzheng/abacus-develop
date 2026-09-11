@@ -1,0 +1,28 @@
+II-1 FeO spin-constraint scan (2026-09-11)
+Regenerate with: python3 tools/extract_results.py
+
+  S1_base_1e6                      Q_ref=             ? Q_final=             ? mu=               ? outer=  0          ? E=-7652.395783
+  S1x_base_1e8                     Q_ref=             ? Q_final=             ? mu=               ? outer=  0          ? E=-7652.395876
+  S1x_cstr_1e8                     Q_ref=   3.137543567 Q_final=   3.494395682 mu=   -0.0224705013 outer=  4    RUNNING E=-7653.070940
+  S1x_cstr_1e7                     Q_ref=   3.137543567 Q_final=   3.237605548 mu=  -0.07359516411 outer=  8  CONVERGED E=-7652.344769
+  S1x_cstr_1e7_mix02               Q_ref=   3.137600651 Q_final=   3.237508261 mu=   -0.0735338335 outer=  5  CONVERGED E=-7652.344713
+  S2R_ref_delta0                   Q_ref=   3.137543567 Q_final=   3.137543567 mu=               0 outer=  1  CONVERGED E=-7652.395876
+  S0B_warmstart                    Q_ref=             ? Q_final=             ? mu=               ? outer=  0          ? E=-7652.395876
+  S2_fe2_p01                       Q_ref=   3.137543567 Q_final=   3.237604506 mu=  -0.07359521369 outer=  8  CONVERGED E=-7652.344769
+  S1x_cstr_1e7_mix02_adhoc         Q_ref=   3.137600651 Q_final=    3.23765039 mu=  -0.07359980945 outer=  6  CONVERGED E=-7652.344713
+  H1_fe2_m01_hot                   Q_ref=   3.137560545 Q_final=  -4.124017667 mu=   0.01732454492 outer=  7    RUNNING E=-7654.210135
+  H3_fe2_p03_hot                   Q_ref=   3.137560545 Q_final=   3.437619515 mu=  -0.03438609497 outer=  6  CONVERGED E=-7652.995586
+  X_lowstate_unconstrained         Q_ref=             ? Q_final=             ? mu=               ? outer=  0          ? E=-7653.007961
+  X_case11_fe_sublattice_p01       Q_ref=   3.236042576 Q_final=   3.335985037 mu= -0.008107256492 outer=  9  CONVERGED E=-6364.260262
+  S3cold_fe2_0p1                   Q_ref=   3.137543567 Q_final=   3.237604279 mu=  -0.07359522651 outer=  8  CONVERGED E=-7652.344769
+  S3hot_fe2_0p1                    Q_ref=   3.137560545 Q_final=   1.517530881 mu=   0.03931542657 outer=  9    RUNNING E=-7652.524873
+  S3cold_fe2_0p3                   Q_ref=   3.137543567 Q_final=   3.329533465 mu=   -0.1427878082 outer=  3    RUNNING E=-7651.801145
+  S3hot_fe2_0p3                    Q_ref=   3.137560545 Q_final=   3.437488986 mu=  -0.03430201559 outer=  7  CONVERGED E=-7652.995600
+  S3cold_fe2_0p5                   Q_ref=   3.137543567 Q_final=   3.329533795 mu=           -0.15 outer=  3    RUNNING E=-7652.151863
+  S3hot_fe2_0p5                    Q_ref=   3.137560545 Q_final=   3.637591811 mu=   -0.1666127537 outer=  8  CONVERGED E=-7652.717364
+  S3cold_fe2_m0p1                  Q_ref=   3.137543567 Q_final=   1.915112942 mu=               0 outer=  2    RUNNING E=-7652.975796
+  S3hot_fe2_m0p1                   Q_ref=   3.137560545 Q_final=   -4.12130813 mu=   0.06733324667 outer=  6    RUNNING E=-7659.204828
+  S3cold_fe2_m0p3                  Q_ref=   3.137543567 Q_final=   1.914410814 mu=  0.003843362349 outer=  2    RUNNING E=-7652.944832
+  S3hot_fe2_m0p3                   Q_ref=   3.137560545 Q_final=   2.053946776 mu=  -0.01912698683 outer=  8    RUNNING E=-7652.789796
+  S3cold_fe2_m0p5                  Q_ref=   3.137543567 Q_final=   3.440224886 mu=  0.004011718755 outer=  4    RUNNING E=-7652.963176
+  S3hot_fe2_m0p5                   Q_ref=   3.137560545 Q_final=   3.294144837 mu=     0.103928009 outer=  6    RUNNING E=-7650.570885

@@ -1,0 +1,37 @@
+[constraint] outer step 1 after SCF iteration 16 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.005 max_residual=0.1 total_charge=3.236042576 nelec=32 maxdev=0
+CONSTRAINT_AUDIT c[0] kind=spin q=3.236042576 t=3.336042576 mu=-0.05 res=-0.1
+[constraint] outer step 2 after SCF iteration 33 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-0.003239686003 max_residual=0.1840402341 total_charge=3.52008281 nelec=32 maxdev=0
+CONSTRAINT_AUDIT c[0] kind=spin q=3.52008281 t=3.336042576 mu=-0.01760313997 res=0.1840402341
+[constraint] outer step 3 after SCF iteration 52 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.003791777033 max_residual=0.1170414982 total_charge=3.453084074 nelec=32 maxdev=0
+CONSTRAINT_AUDIT c[0] kind=spin q=3.453084074 t=3.336042576 mu=0.03239686003 res=0.1170414982
+[constraint] outer step 4 after SCF iteration 133 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.002756407766 max_residual=0.4160407466 total_charge=2.920001829 nelec=32 maxdev=0
+CONSTRAINT_AUDIT c[0] kind=spin q=2.920001829 t=3.336042576 mu=-0.006625331267 res=-0.4160407466
+[constraint] outer step 5 after SCF iteration 159 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.000168466384 max_residual=0.01967523205 total_charge=3.316367344 nelec=32 maxdev=0
+CONSTRAINT_AUDIT c[0] kind=spin q=3.316367344 t=3.336042576 mu=-0.008562358179 res=-0.01967523205
+[constraint] outer step 6 after SCF iteration 178 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-5.059821694e-05 max_residual=0.006250267145 total_charge=3.342292843 nelec=32 maxdev=0
+CONSTRAINT_AUDIT c[0] kind=spin q=3.342292843 t=3.336042576 mu=-0.008095368688 res=0.006250267145
+[constraint] outer step 7 after SCF iteration 198 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=2.128797352e-06 max_residual=0.0002623551738 total_charge=3.335780221 nelec=32 maxdev=0
+CONSTRAINT_AUDIT c[0] kind=spin q=3.335780221 t=3.336042576 mu=-0.008114180943 res=-0.0002623551738
+[constraint] outer step 8 after SCF iteration 201 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-1.122766016e-06 max_residual=0.0001384890212 total_charge=3.336181065 nelec=32 maxdev=0
+CONSTRAINT_AUDIT c[0] kind=spin q=3.336181065 t=3.336042576 mu=-0.008107256492 res=0.0001384890212
+[constraint] outer step 9 after SCF iteration 203 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=4.664854859e-07 max_residual=5.753925343e-05 total_charge=3.335985037 nelec=32 maxdev=0
+CONSTRAINT_AUDIT c[0] kind=spin q=3.335985037 t=3.336042576 mu=-0.008107256492 res=-5.753925343e-05
+[constraint] final status: CONVERGED (targets reached within 0.00010000000 e)
+CONSTRAINT_AUDIT nconstraint=1 e_con=4.664854859e-07 max_residual=5.753925343e-05 total_charge=3.335985037 nelec=32 maxdev=0
+CONSTRAINT_AUDIT c[0] kind=spin q=3.335985037 t=3.336042576 mu=-0.008107256492 res=-5.753925343e-05
+ !FINAL_ETOT_IS -6364.2602620504940205 eV
+          Total magnetism (Bohr mag/cell) = 0.19975582
+       Absolute magnetism (Bohr mag/cell) = 9.27259642
+atomic mag: 0 3.61558618
+atomic mag: 1 -3.54020241
+          Total magnetism (Bohr mag/cell) = 0.19981779
+       Absolute magnetism (Bohr mag/cell) = 9.27260337

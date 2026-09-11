@@ -188,6 +188,7 @@
 | 2026-08-01 | `2026-08-01-deltap-esolver-refactor-r3.md` | R3 实施：PW 接入同一状态机（7 全局 → 状态机实例），PW A/B 逐字节全等 + LCAO/内循环回归 |
 | 2026-08-01 | `2026-08-01-deltap-esolver-refactor-r4.md` | R4 实施：MPI rank0+Bcast（C-23）、PW λ 同步/rank 守卫（S-09/C-28）、打印/WARNING 收口、deltap_common 单测 10 例 |
 | 2026-09-11 | `2026-09-11-i1-mgo-charge-scan.md` | **I-1 MgO 宽电荷扫描（R4 判决）：线性区 ≥ ±0.8 e ≈ 2.7× H₂O，离子体系适用域论断成立；sum rule bulk 首证；μ*=−dE/dδ 恒等式 <0.8%；Mg³⁺ 化未熔断（计划预期被推翻）** |
+| 2026-09-11 | `2026-09-11-ii1-feo-spin-scan.md` | **II-1 FeO 自旋约束：DFT+U+约束同开首测通过；δ=0 空操作逐位恒等；**根因 = 继承基线 `50_FeO` 的参考态是亚稳态（另一条 AFM 解低 0.612 eV）**；计划扫描窗口不成立；`step_max=0.05 Ry` 硬编码首步 + 无分支守卫 = 框架侧两条待修项** |
 | 2026-07-12 | `2026-07-12-deltap-risk-points-and-solutions.md` | 18 项风险点 + 解决方案 |
 | 2026-07-12 | `2026-07-12-deltap-root-cause-analysis.md` | B14+B15 found+fixed |
 | 2026-07-12 | `2026-07-12-deltap-algorithm-technical-review.md` | 完整算法推导 + 21 项风险 |
@@ -4433,3 +4434,56 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   `tests/deltap_mgo_scan/{INPUT 生成器,STRU,KPT,README.md,run_mgo_scan.sh,results/}`（新增）。
 - 下一轮：II-1 FeO 自旋约束（协议已就绪）；可选把 `step_max` INPUT 化
   （需批准，属代码改动）以解除宽 δ 扫描的外步瓶颈。
+
+## 2026-09-11 (28): II-1 FeO 自旋约束——DFT+U 同开通过，但继承基线是亚稳态
+
+- 计划：`docs/superpowers/plans/2026-09-09-p0-cases-feomgo.md` 算例 II-1；
+  本轮做 II-1a（能力验证），II-1b（μ vs λ 口径）按计划仍等 V3b。
+  实盘目录 `tests/deltap_feo_spin_scan/`（driver `run_feo_spin_scan.sh`
+  + `results/summary.txt` + `results/audit/` 25 份摘录）。
+- **体系修正（计划笔误）**：计划点名的 `17_DS_DFTU/11_PW_DFTU_S2_FeO` 的 STRU
+  只有 2 个 Fe、**没有 O**（是 rocksalt 原胞的 Fe 子晶格，不是 FeO）。
+  真正的 FeO 是 `50_FeO_O_first_Fe_second`（O 2 + Fe 2，ecutwfc 50，
+  `orbital_corr -1 2`）。本算例改继承 50 号，11 号作旁证。
+- **根因（本轮最重要发现）**：`50_FeO` 在它自己的 Γ-only k 网格上至少有
+  两条 AFM 自洽解——harness 参考态（Fe ±3.4850 μB，E = −7652.3958756613 eV）
+  与一条**低 0.612 eV** 的解（Fe ±3.7148 μB，E = −7653.0079614903 eV，
+  drho 3.4e-9，两条都是无约束 SCF）。**`result.ref` 记录的是高的那一条。**
+  于是任何扰动（包括一个正确的小 μ）都可能把 SCF 推进低解，而外环只测
+  `|Q − target| < thr`，无法分辨「达标」与「换了状态」。此前被归因于
+  「框架 SCF 震荡」的现象，主因在此。
+- **通过的判据**：① S1 基线复现 |dE| = 4.0e-12 eV；② **S2R（δ=0 走完整约束
+  路径）E_tot 与无约束基线逐位相同（−7652.3958756612619254 eV，16 位）**，
+  1 外步 CONVERGED；③ S2 δ=+0.1 μB 冷启动 **CONVERGED**，μ* =
+  −0.0735952 Ry，Q 3.137543567 → 3.237604506 μB，E 比参考态**高** 0.0511 eV
+  （= 在参考分支上，唯一点）；④ 两次独立运行 μ* 差 1.8e-7，mixing 0.4 vs
+  0.2 差 8.3e-4；⑤ 旁证体系 11 号（Fe 子晶格）δ=+0.1 **CONVERGED**，
+  μ* = −0.008107256492 Ry、maxdev = 0 —— **DFT+U + 约束两条势通道同开首测
+  通过，两个独立体系**。
+- **不成立的计划假设**：±0.1/±0.3/±0.5 μB 不是「温和扰动」。冷启动只有
+  +0.1 可信；热启动 +0.3/+0.5「CONVERGED」但落在低 0.60/0.32 eV 的另一条
+  分支（E 低于参考态 ⇒ 必非同一能量面），μ* = −0.0343 / −0.1666 非单调；
+  负侧六次尝试（冷/热 × 400/900 迭代）全败，Fe 2 磁矩被翻转到 −4.12。
+- **协议成果（可复用）**：① 约束 ON 时 SCF 可达 drho 比 OFF 时高两个数量级
+  （1e-8 下 400 迭代不收敛，1e-7 下 90 迭代收敛）→ DFT+U 体系生产用
+  `scf_thr 1e-7`，I-1 的 1e-8 不可外推；② **单侧一点的 μ\* vs dE/dQ 校核会
+  稳定差 2 倍**（无约束态是驻点，λ(Q_ref)=0 ⇒ 割线 = λ(Q\*)/2），必须用
+  I-1 的中点口径；③ 热启动需要 `out_chg 1` 才会写 DFT+U `onsite.dm`，
+  否则 `Plus_U::read_occup_m` 直接终止；④ 参考观测量 Q_ref 冷启动六点九位
+  一致（3.137543567 μB），是唯一与协议无关的量。
+- **框架侧待修（阻塞 stage B）**：① `MuSolverParams::step_max = 0.05 Ry`
+  硬编码 + 首步无历史回落 `kappa_min` ⇒ 首步永远满量程；软响应通道
+  （FeO 负侧 dQ/dμ ≈ +24 μB/Ry）需要小一个量级的首步（建议 INPUT 化 +
+  试探步）；② **无分支守卫**：Q 突变（实测跳 0.33）无拒绝/回退机制，
+  分支解会被记成 CONVERGED（建议加第四态「状态跳变」）；③ Becke 加权矩与
+  目标物理量（d 局域矩）脱钩：掉分支后 Becke 读数 1.5–1.9 μB 而 on-site
+  矩仍 ±3.7 μB —— 这是 II-1b 的核心，且已证明它决定约束可用性。
+- 未跑：S4 熔断（δ=+3.0 μB）、S5 DeltaSpin 对照——在基线与分支守卫修好前
+  跑没有归因意义（spec §3.7）。
+- 成本：约 3 h（np4），含 12 点扫描 + 6 次诊断。
+- 文件：`docs/superpowers/specs/2026-09-11-ii1-feo-spin-scan.md`（本轮 spec）、
+  `tests/deltap_feo_spin_scan/`（新增：STRU/KPT/INPUT.production/README.md/
+  run_feo_spin_scan.sh/tools/{summarize,extract_results,make_deltaspin_stru}.py/
+  results/{summary.txt,audit/}）。
+- 下一轮：先修基线（S1 判据加「参考态须为最低解」，候选 2×2×2 MP 或 51 号
+  交叉校验），再落框架侧两条改动，然后复跑 II-1 的 S3/S4/S5。

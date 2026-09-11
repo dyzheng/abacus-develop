@@ -1,0 +1,25 @@
+[constraint] outer step 1 after SCF iteration 51 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.005 max_residual=0.1 total_charge=3.137600651 nelec=44 maxdev=3.330669074e-16
+CONSTRAINT_AUDIT c[0] kind=spin q=3.137600651 t=3.237600651 mu=-0.05 res=-0.1
+[constraint] outer step 2 after SCF iteration 74 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.002606776253 max_residual=0.03426913276 total_charge=3.203331519 nelec=44 maxdev=3.330669074e-16
+CONSTRAINT_AUDIT c[0] kind=spin q=3.203331519 t=3.237600651 mu=-0.07606776253 res=-0.03426913276
+[constraint] outer step 3 after SCF iteration 93 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-0.0003913419151 max_residual=0.005396226333 total_charge=3.242996878 nelec=44 maxdev=3.330669074e-16
+CONSTRAINT_AUDIT c[0] kind=spin q=3.242996878 t=3.237600651 mu=-0.07252140496 res=0.005396226333
+[constraint] outer step 4 after SCF iteration 104 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.0001585430822 max_residual=0.002156056262 total_charge=3.235444595 nelec=44 maxdev=3.330669074e-16
+CONSTRAINT_AUDIT c[0] kind=spin q=3.235444595 t=3.237600651 mu=-0.0735338335 res=-0.002156056262
+[constraint] outer step 5 after SCF iteration 114 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=6.793792366e-06 max_residual=9.239002025e-05 total_charge=3.237508261 nelec=44 maxdev=3.330669074e-16
+CONSTRAINT_AUDIT c[0] kind=spin q=3.237508261 t=3.237600651 mu=-0.0735338335 res=-9.239002025e-05
+[constraint] final status: CONVERGED (targets reached within 0.00010000000 e)
+CONSTRAINT_AUDIT nconstraint=1 e_con=6.793792366e-06 max_residual=9.239002025e-05 total_charge=3.237508261 nelec=44 maxdev=3.330669074e-16
+CONSTRAINT_AUDIT c[0] kind=spin q=3.237508261 t=3.237600651 mu=-0.0735338335 res=-9.239002025e-05
+ !FINAL_ETOT_IS -7652.3447127457302486 eV
+          Total magnetism (Bohr mag/cell) = 0.01156279
+       Absolute magnetism (Bohr mag/cell) = 7.75008524
+atomic mag: 2 3.54102446
+atomic mag: 3 -3.52313077
+          Total magnetism (Bohr mag/cell) = 0.01134612
+       Absolute magnetism (Bohr mag/cell) = 7.75006452

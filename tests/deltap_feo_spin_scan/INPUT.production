@@ -1,0 +1,36 @@
+INPUT_PARAMETERS
+suffix                autotest
+calculation           scf
+basis_type            pw
+gamma_only            0
+ecutwfc               50
+
+nspin                 2
+scf_thr               1e-7
+scf_nmax              400
+out_chg               0
+smearing_method       gaussian
+smearing_sigma        0.01
+mixing_type           broyden
+mixing_beta           0.4
+ks_solver             dav_subspace
+symmetry              0
+
+# DFT+U: O carries no U (orbital_corr -1), Fe-3d carries U = 5 eV.
+dft_plus_u            1
+orbital_corr          -1 2
+hubbard_u             0 5.0
+onsite_radius         3.0
+
+# Constraint (II-1a: spin channel, single Fe atom 2).
+constraint            true
+constraint_type       spin
+constraint_weight_type becke
+constraint_target_file constraint_target.json
+constraint_target_mode delta
+constraint_mu_max     5.0
+constraint_thr        1e-4
+
+pseudo_dir            /root/abacus-develop/tests/PP_ORB
+orbital_dir           /root/abacus-develop/tests/PP_ORB
+pw_seed               1
