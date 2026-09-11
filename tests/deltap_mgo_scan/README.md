@@ -26,7 +26,7 @@ defect systems") to be tightened.
 
 | step | content | criterion |
 |---|---|---|
-| S1 | grid ladder, delta = 0 (reference phase = the mu = 0 observation) | Q_ref(O) stable to < 3e-5 e (= `constraint_thr`/3) |
+| S1 | grid ladder, delta = 0 (reference phase = the mu = 0 observation) | ~~Q_ref(O) stable to < 3e-5 e (= `constraint_thr`/3)~~ **superseded 2026-09-11**: the absolute floor is 2.8e-4 e (deterministic FFT-grid discretisation), so the criterion is formally re-based on the *response*: the local slope / κ is grid-stable to < 1% (measured 0.018% on μ* at δ=+0.8 e, 60/240 vs 80/320) |
 | S1X | ecutwfc/ecutrho separation | LCAO forces ecutrho = 4*ecutwfc, so the two knobs are not independent |
 | S2 | reference at the calibrated grid, full coverage (O + Mg sublattices) | converged; Q_ref(O)/Q_ref(Mg) in the literature band; `total_charge == nelec`, maxdev ~ 1e-16 |
 | S3 | single-O scan +-0.3/0.5/0.8/1.0 e | all points CONVERGED, no fuse; mu(delta) monotone; record the linear window |
@@ -93,3 +93,26 @@ extracted audit table in `results/summary.txt`, raw logs in `results/logs/`.
   that band, it is not an exact-value comparison.
 - Periodic images contribute to the Becke weights (M1 sums them); S2's
   full-coverage sum rule is the first bulk test of that partition.
+
+## Mg(3+) far-side fuse attempt (2026-09-11 late) — BLOCKED
+
+The plan's "physical fuse case" (drive Mg far negative until |mu| hits the
+5.0 Ry cap -> `UNREACHABLE`) does **not** exist at delta = -1.0 e (mu* = +2.12
+Ry); the follow-up was to push to -2 / -3 e.  delta = -2.0 e gets to outer
+step 55 (q = 10.2651, mu = 2.75 Ry) and then the constrained SCF **fails to
+converge** in `scf_nmax = 800`; the non-converged path then hits **heap
+corruption** on all four ranks (`free(): invalid next size`) and the ranks spin
+(signal handler prints but does not exit -- wrap runs in `timeout`).
+
+This is **pre-existing** (bug C-29): rerunning the identical case with the
+parent-commit binary reproduces the same outer step, the same read and the same
+abort.  The kappa hardens (cumulative 2.115 Ry/e at -1.0 e -> local ~3.5 Ry/e
+over the last steps), so at that slope the 5.0 Ry cap would be reached around
+delta ~ -1.8 e and delta = -2.0 e is *expected* to fuse (extrapolated
+mu* ~ 5.6-5.7 Ry > cap).  The run simply never gets there -- the SCF breaks at
+delta ~ -1.19 e.  The binding limit is the SCF itself, not the mu cap.  Evidence:
+`results/farside/S4_Mg_m2p0.audit`, `results/farside/S4_Mg_m2p0.crash.log`.
+Full write-up: `docs/superpowers/specs/2026-09-11-i1-mgo-farside-fuse-attempt.md`.
+
+Practical rule until C-29 is fixed: wrap any far-side scan in `timeout`, and do
+not treat "SCF IS NOT CONVERGED" as a benign warning on the constrained path.

@@ -133,6 +133,7 @@
 | C-27 | PW 无 target 时 `targets[iat]` 对空 vector 越界读（UB，实际按 0 约束 γ→0） | **Fixed (R3 08-01：`deltap_init` 显式把空 target 填 0 向量，行为不变)** |
 | C-28 | PW 无 MPI λ 同步 + 打印无 rank 守卫（S-09：多 rank 时 λ/escon 不一致、重复输出） | **Fixed (R4 08-01：backend `sync_lambda` Bcast + `s_lambda` 全 rank 刷新；init/report 打印 rank0 守卫)** |
 | B16 | Branch unwrapping inconsistent across λ | Fixed (P0 Hungarian matching)（注：match 文件 MPI 写竞争 C-10 削弱其跨 run 可靠性） |
+| C-29 | **约束 LCAO 非收敛路径堆破坏**：MgO δ=−2.0 e 在外步 56 约束 SCF 于 `scf_nmax=800` 内不收敛后，四 rank 报 `corrupted size vs. prev_size` / `free(): invalid next size` 并 abort，信号处理器打印后不退 → 进程空转挂死。父提交二进制 `ee7ac0b4c` 逐位复现 ⇒ 预存在，与 on-site 仪器无关 | **Open（2026-09-11 发现，未定位）**：非收敛收尾路径，四 rank 同中指向集合/全局缓冲或收尾代码；定位手段 = 崩溃密度热启动 + ASAN（首次非法写即报含栈）或 gdb 捕获 free 调用栈 |
 
 ## Closed Bugs
 
@@ -193,6 +194,7 @@
 | 2026-09-11 | `2026-09-11-online-branch-guard.md` | **在线能量分支守卫落地（`constraint_branch_tol`，默认 0=关）：能量判据 `E_tot<E_ref−tol` → 第四态 `MuStatus::BRANCH_FLIP` 熔断不静默；单测 12→18、4 发 sabotage 全恰中；H₂O 端到端无假触发（能升 +0.0087 Ry ≫ tol 1e-3）；FeO 换态点外步 2 即熔断（−0.643 eV），旧流程要到外步 6 才误报 CONVERGED** |
 | 2026-09-11 | `2026-09-11-onsite-moment-audit.md` | **审计行 on-site 投影矩（DFT+U 迹差，无对角化，与 `atomic mag` 同量到 1e-8）：FeO δ=+0.1 μB 良态点 q 与 d 矩同向但仅 74% 幅值，与 II-1b 塌陷点反向脱钩合起来给出"同向跟随 → 反向脱钩"图景；单测 18→19 / 4→5，无 DFT+U 输出逐位不变；半径敏感性(4b)顺延** |
 | 2026-09-11 | `2026-09-11-capability-boundary-decoupling.md` | **能力边界表补 L14（Becke 矩 ≠ on-site d 局域矩，附反向脱钩/74% 跟随两实测点）+ L15（在线分支守卫两条盲区：只抓能量向下换态、只在收敛点判）+ F9/F10 诊断项 + §5 适用域"自旋约束观测量缺口"** |
+| 2026-09-11 | `2026-09-11-i1-mgo-farside-fuse-attempt.md` | **I-1 继续：Mg³⁺ 远侧熔断用例尝试 BLOCKED——δ=−2.0 e 在外步 55（q=10.2651 / μ=2.75 Ry）后约束 SCF 不收敛，非收敛收尾路径触发四 rank 堆破坏（`free(): invalid next size`）并挂死；父提交二进制逐位复现 ⇒ 预存在 bug C-29；κ 随位移变硬，约束先崩于 SCF 而非 μ 顶限 ⇒ 计划设想的顶限熔断在本体系不可达；设计文档 §1.4 写回 + S1 判据改判完成** |
 | 2026-07-12 | `2026-07-12-deltap-risk-points-and-solutions.md` | 18 项风险点 + 解决方案 |
 | 2026-07-12 | `2026-07-12-deltap-root-cause-analysis.md` | B14+B15 found+fixed |
 | 2026-07-12 | `2026-07-12-deltap-algorithm-technical-review.md` | 完整算法推导 + 21 项风险 |
@@ -4667,3 +4669,43 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - Bug/fix list：无（纯边界登记，非 bug 修复）；预存在未修三项与上轮同。
 - 下一轮：⑥ I-1 MgO 继续（写回设计文档 §1.4 的适用域修正）；4b 半径敏感性 +
   II-1 重锚定合批；FeO S4/S5 暂缓。
+
+## 2026-09-11 (33): I-1 MgO 继续——Mg³⁺ 远侧熔断尝试 BLOCKED（预存在堆破坏 C-29）+ 设计文档写回
+
+- 动机（批复顺序第 6 项）：I-1 主扫描已给正向判决（线性区 ≥±0.8 e ≈ 2.7× H₂O），
+  但其"下一步"第 2 条指出 ±1.0 e 处预测的物理熔断**没有发生**（Mg³⁺ 侧 μ*=+2.12
+  Ry ≪ 5.0 Ry 顶限），要真熔断用例需把 Mg 推到 −2…−3 e；另完成其第 1、5 条
+  （设计文档写回 + S1 判据改判）。
+- 落地：
+  ① **设计文档写回**（`实空间权重约束框架设计方案.md` §1.4）：追加"2026-09-11 修正"
+  块——线性区 −1.0…+0.8 e、**机制=离子体系在大扰动下保持近二次能量面（κ 反而更硬：
+  1.90–2.53 vs H₂O ≈1.7 Ry/e）**、Mg/O 位点与增/减电荷不对称、自旋侧 L14 不随此外推；
+  §4.1 V3 行与 §4.2 风险 5 同步补注。
+  ② **S1 判据改判**（MgO runner README）：绝对 `<3e-5 e` 标注 superseded，正式改为
+  "μ/κ 网格稳定 <1%"（实测 0.018%）。
+  ③ **远侧熔断尝试**（δ=−2.0 e，S4 路径、60/240、np4）：外步 1…55 正常，外步 55
+  读数 `q=10.26511135 / μ=2.75 Ry / res=0.822451932`（Δq=−1.1775 e；累计
+  κ_eff≈0.428 e/Ry，末段局部 |dμ/dδ|≈3.5 Ry/e——硬化）；外步 56（μ=2.80）约束 SCF 在 `scf_nmax=800` 内
+  **不收敛**（drho ~1.1e-3 平台、能量锯齿 ~0.1 eV）→ `!!SCF IS NOT CONVERGED!!` +
+  约束环 `final status: RUNNING`，**随后四 rank 全部堆破坏 abort**
+  （`corrupted size vs. prev_size` ×2 / `free(): invalid next size` ×2）并空转挂死。
+- 归因（**预存在**）：用**父提交 `ee7ac0b4c` 二进制**（`nm` 验证 0 个 `onsite_moment`
+  符号）跑同一 δ=−2.0 用例，在**同一外步 55、同一读数、同一崩溃点**逐位复现 ⇒ 与
+  本轮 on-site 仪器无关（MgO 无 DFT+U，`set_onsite_moments` 从未调用）。新 bug 记
+  **C-29（Open，未定位）**：非收敛收尾路径，四 rank 同中 ⇒ 指向集合/全局缓冲或收尾
+  代码；定位手段 = 崩溃密度热启动 + ASAN（首次非法写即报含栈）或 gdb 捕获 free 栈。
+- 物理结论：κ 随 |δ| 硬化（−1.0 e 累计 2.115 → 末段局部 ≈3.5 Ry/e），按该斜率
+  外推 5.0 Ry 顶限约在 δ≈−1.8 e 被触及，即 δ=−2.0 e **本应**触发顶限熔断
+  （外推 μ*≈5.6–5.7 Ry > 顶限）——但约束 SCF 在 δ≈−1.19 e（μ=2.80）先崩，故
+  "顶限熔断"在本体系**实际不可达**；熔断机制实例需另寻（II-1 S4 或金属/强关联通道）。
+  I-1 判决（只用已收敛点）不受影响，仅把 Mg³⁺ 远侧边界由"μ 顶限"改写为"SCF 收敛极限"。
+- 文件：本轮 spec `docs/superpowers/specs/2026-09-11-i1-mgo-farside-fuse-attempt.md`；
+  证据 `tests/deltap_mgo_scan/results/farside/{S4_Mg_m2p0.audit, S4_Mg_m2p0.crash.log}`
+  + `results/summary.txt`（新增远侧段）；文档 `实空间权重约束框架设计方案.md`、
+  `tests/deltap_mgo_scan/README.md`；规格外恢复：`build_rel/abacus_basic_para` 已回到
+  HEAD（`onsite_moment` 符号 2 个，父提交试验二进制未留存）。
+- Bug/fix list：**新增 Active Bug C-29**（约束 LCAO 非收敛路径堆破坏，预存在，未定位/
+  未修——超出本轮授权范围）；顺带记录远侧扫描纪律：mpirun 必须 `timeout` 包裹、崩溃
+  现场立即入库、归因先用父提交二进制。预存在未修三项测试目标与上轮同。
+- 下一轮：C-29 专项定位轮（ASAN/gdb）→ 修后重跑 F1/F2/F3；II-1 重锚定 (a)+(c) 与
+  4b 半径敏感性合批；FeO S4/S5 仍暂缓。

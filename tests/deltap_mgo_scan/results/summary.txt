@@ -59,3 +59,33 @@ constraint: Becke, delta mode, mu_max 5.0 Ry, thr 1e-4 e, scf_thr 1e-8, scf_nmax
 [verdict] linear window: -1.0 .. +0.8 e (negative side dev <= 4.0%, positive side <= 12.2%
           up to +0.8 e; +1.0 e deviates +23.0%) => >= +-0.8 e = 2.7x the H2O +-0.3 e
           window.  R4 CONFIRMED (ionic systems do have a substantially wider linear domain).
+
+====================================================================================================
+[I-1 continued, 2026-09-11 late] Mg(3+) far side (delta = -2.0 / -3.0 e): BLOCKED
+====================================================================================================
+goal: the plan's "physical fuse case" (mu -> 5.0 Ry cap -> UNREACHABLE) that did NOT occur at -1.0 e.
+result: the constrained SCF breaks down long before the mu cap, and the non-converged path
+        then corrupts the heap (pre-existing bug, C-29).
+
+  delta=-2.0 e on Mg(0):  outer 1..55 fine.  at outer 55: q=10.26511135 (Q_ref 11.44265943,
+      moved -1.1775 e), mu=2.75 Ry, res=0.822451932, cumulative kappa_eff=0.428 e/Ry
+      (local |dmu/ddelta| ~3.5 Ry/e over the last steps, hardening)
+  outer 56 (mu=2.80): constrained SCF does NOT converge in scf_nmax=800 (drho plateau ~1.1e-3,
+      energy sawtooth ~0.1 eV) -> "!!SCF IS NOT CONVERGED!!"
+      constraint loop reports: final status: RUNNING (SCF ended before the outer loop converged)
+      then all 4 ranks abort: "corrupted size vs. prev_size" / "free(): invalid next size (normal)"
+      the signal handler prints but does not exit -> ranks spin (must be killed).
+
+  attribution: PRE-EXISTING.  rerunning the identical case with the parent-commit binary
+      ee7ac0b4c (nm: 0 onsite_moment symbols) reproduces the same outer step, the same read
+      (q=10.26511135 mu=2.75), the same IS-NOT-CONVERGED and the same free() abort.
+      The on-site instrument is inert here (MgO has no DFT+U).
+
+  extrapolation: kappa HARDENS with |delta| (cumulative 2.115 Ry/e at -1.0 e -> local ~3.5 Ry/e
+      over the last outer steps).  At that hardening slope the 5.0 Ry cap would be reached around
+      delta ~ -1.8 e, so delta=-2.0 e is EXPECTED to fuse (extrapolated mu* ~ 5.6-5.7 Ry > cap).
+      The run never gets there: the constrained SCF breaks down at delta ~ -1.19 e (mu=2.80).
+      So the binding limit is SCF convergence, not the mu cap -> the plan's cap-fuse case is not
+      reachable in this system until C-29 / the SCF breakdown is fixed.
+
+  evidence: results/farside/S4_Mg_m2p0.audit (outer 1..55), results/farside/S4_Mg_m2p0.crash.log.
