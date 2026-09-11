@@ -65,7 +65,47 @@ Work directories live under `/tmp/feo_spin` (`WORKROOT` overrides); the ABACUS
 binary defaults to `build_rel/abacus_basic_para` (`ABACUS` overrides).
 Useful overrides: `SCF_THR`, `SCF_NMAX`, `MIXB`, `MIXB=0.2`, `DELTAS`.
 
+## Re-anchor round (2026-09-11, second entry) -- S1T triage + outer-step caps
+
+The II-1a baseline above was shown to be the *metastable* solution, so this
+round first settles which solution the scan must be anchored on, then removes
+the framework defect that II-1a found.
+
+**S1T triage** (`run_feo_baseline_triage.sh`, records in `results/triage/`):
+nine unconstrained SCFs, all converged.  The SCF basin is selected by the STRU
+`mag` guess: `mag 2.0/1.0/0.2` cold start -> the harness state
+(Fe +-3.4850 uB, -7652.3958757 eV), `mag 4.0` cold start -> the LOWER state
+(Fe +-3.7149 uB, -7653.0079658 eV).  Both basins are stationary under warm
+re-entry.  Neither is k converged: 2x2x2 collapses both guesses onto
++-1.477 uB / -7655.1237 eV, 4x4x4 gives +-3.097 uB / -7655.6855 eV.  Verdict:
+the Gamma-only cell cannot anchor a quantitative kappa scan.
+
+**Framework** (`constraint_step_max`, `constraint_step_probe`): two new INPUT
+keys bound the outer step.  `step_probe` applies to the history-free FIRST step
+only -- without a measured secant slope that step always sat at the
+`step_max` cap, which is the fixed overshoot II-1a diagnosed.  Defaults
+(0.05 Ry / 0.0 = "use step_max") reproduce the previous behaviour bit for bit;
+`0 <= step_probe <= step_max` is enforced at configure time.
+
+**S3L re-anchored scan** (`run_feo_spin_scan.sh S3L`, records in
+`results/s3l/`): anchor = the lower state, `Q_ref = 3.384107449 uB`.
+Only +-0.1 uB is reachable: `mu* = -0.0655152 / +0.0594118 Ry`,
+`dE = +0.04392 / +0.04139 eV`, against the linear-response prediction
+`0.5*|delta|*|mu*| = 0.04456 / 0.04042 eV` (1.4% / 2.4%).  +-0.3 and +-0.5
+fail even with `step_max` cut to 1/5: the SCF is *bistable at fixed mu*
+(Q oscillates 3.61 <-> 4.08 at mu ~ -0.17 Ry) and on the negative side the
+moment collapses to Q ~ 2.07 and will not return even at mu ~ 0.
+
+**Becke vs on-site decoupling**: at that collapsed point the Becke observable
+reads Q = 2.1012 uB while the Fe on-site moments are still +3.5180 / -3.6585 uB
+(anchor 3.7149).  The constraint moves the Becke-weighted moment without moving
+the physical d local moment, which makes the II-1b observable question a
+prerequisite for II-1's capability claim rather than a follow-up.
+
+Full write-up: `docs/superpowers/specs/2026-09-11-ii1b-baseline-triage-and-step-cap.md`.
+
 ## Protocol findings (2026-09-11)
+
 
 0. **The inherited baseline's reference state is metastable, and that is the
    root cause of everything below.**  A plainly *unconstrained* FeO SCF

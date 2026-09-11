@@ -1,0 +1,7 @@
+ #SCF IS CONVERGED#
+ !FINAL_ETOT_IS -7652.3958948157987834 eV
+          Total magnetism (Bohr mag/cell) = -0.00000000
+       Absolute magnetism (Bohr mag/cell) = 7.65285824
+atomic mag: 2 3.48497823
+atomic mag: 3 -3.48497499
+ last_iter=DS24 etot=-7.65239589e+03 drho=5.5262e-08

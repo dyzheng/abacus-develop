@@ -1,0 +1,12 @@
+!FINAL_ETOT_IS -7652.8460689055282273 eV
+[constraint] final status: RUNNING (SCF ended before the outer loop converged — raise scf_nmax)
+atomic mag: 2 -3.68685705
+atomic mag: 3 3.69344465
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.002 max_residual=0.5 total_charge=-3.383906243 nelec=44 maxdev=3.330669074e-16
+CONSTRAINT_AUDIT c[0] kind=spin q=-3.383906243 t=-2.883906243 mu=-0.004 res=-0.5
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.006915613997 max_residual=0.4939724284 total_charge=-3.377878671 nelec=44 maxdev=3.330669074e-16
+CONSTRAINT_AUDIT c[0] kind=spin q=-3.377878671 t=-2.883906243 mu=-0.014 res=-0.4939724284
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.01147021724 max_residual=0.4779257183 total_charge=-3.361831961 nelec=44 maxdev=3.330669074e-16
+CONSTRAINT_AUDIT c[0] kind=spin q=-3.361831961 t=-2.883906243 mu=-0.024 res=-0.4779257183
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.01147021724 max_residual=0.4779257183 total_charge=-3.361831961 nelec=44 maxdev=3.330669074e-16
+CONSTRAINT_AUDIT c[0] kind=spin q=-3.361831961 t=-2.883906243 mu=-0.024 res=-0.4779257183

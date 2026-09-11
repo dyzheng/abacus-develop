@@ -1,0 +1,4 @@
+atomic mag: 2 3.71182724
+atomic mag: 3 -3.71266034
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.002 max_residual=0.5 total_charge=3.384132074 nelec=44 maxdev=3.330669074e-16
+CONSTRAINT_AUDIT c[0] kind=spin q=3.384132074 t=2.884132074 mu=0.004 res=0.5

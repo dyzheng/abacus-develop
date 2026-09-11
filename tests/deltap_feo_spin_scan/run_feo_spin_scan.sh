@@ -53,6 +53,15 @@ TARGET_ATOM="${TARGET_ATOM:-2}"
 # and a cold start (atomic charge) picks whichever branch the SCF wanders into,
 # not the one adiabatically connected to the reference state.
 RESTART="${RESTART:-}"
+# Initial magnetic guess override (the S1T triage showed the SCF basin is
+# selected by the STRU mag value: mag 2 -> the metastable result.ref state,
+# mag 4 -> the lower one).  Empty = use the case STRU verbatim.
+MAG2="${MAG2:-}"; MAG3="${MAG3:-}"
+# Outer-step caps (II-1 framework hardening).  The history-free first step
+# otherwise always sits at the step_max cap (kappa falls back to kappa_min),
+# which on FeO flips the magnetic branch; the probe lets the secant measure a
+# local slope first.
+STEP_MAX="${STEP_MAX:-0.05}"; STEP_PROBE="${STEP_PROBE:-0.0}"
 
 mkdir -p "$WORKROOT" "$RESDIR"
 
@@ -72,7 +81,14 @@ run_case()
     local work="$WORKROOT/$name"
     python3 -c 'import shutil,sys; shutil.rmtree(sys.argv[1], ignore_errors=True)' "$work"
     mkdir -p "$work"
-    cp "$CASEDIR/STRU" "$CASEDIR/KPT" "$work/"
+    cp "$CASEDIR/KPT" "$work/"
+    # Branch: with MAG2/MAG3 set the Fe starting guesses are rewritten;
+    # without them the inherited STRU is used unchanged.
+    if [ -n "$MAG2" ]; then
+        python3 "$CASEDIR/tools/make_stru_mag.py" "$CASEDIR/STRU" "$work/STRU" "$MAG2" "$MAG3"
+    else
+        cp "$CASEDIR/STRU" "$work/"
+    fi
     {
         echo "INPUT_PARAMETERS"
         echo "suffix                autotest"
@@ -103,6 +119,8 @@ run_case()
             echo "constraint_target_mode delta"
             echo "constraint_mu_max     5.0"
             echo "constraint_thr        1e-4"
+            echo "constraint_step_max   $STEP_MAX"
+            echo "constraint_step_probe $STEP_PROBE"
         fi
         # Branch: warm start from a previous run's charge density + onsite.dm.
         if [ -n "$RESTART" ]; then
@@ -167,6 +185,43 @@ S3)
         JSON="{\"constraints\": [{\"type\": \"spin\", \"target\": $d, \"atoms\": [$TARGET_ATOM]}]}"
         run_case "S3_fe2_${tag}" "$JSON"
         echo "-- delta=$d"; audit "S3_fe2_${tag}"
+    done
+    ;;
+S3L)
+    # Re-anchored six-point scan on the LOWER Gamma-only branch (S1T triage
+    # verdict; see run_feo_baseline_triage.sh).  The inherited result.ref
+    # state (Fe +-3.4850 uB, E = -7652.3958757 eV) is the metastable one, so
+    # the scan anchors on the lower solution (Fe +-3.7148 uB,
+    # E = -7653.0079658 eV), which the mag 4.0 cold start reaches.
+    #
+    # Hot start in delta order within each side: 0 -> +0.1 -> +0.3 -> +0.5 and
+    # 0 -> -0.1 -> -0.3 -> -0.5, every point warm started from the previous
+    # point's OUT.autotest, so the SCF always begins from a density already on
+    # this branch (adiabatic continuation in delta).  The two sides restart
+    # from the donor instead of chaining through each other, which would need
+    # one unphysical -0.6 uB jump.  out_chg 1 is what makes ABACUS write the
+    # DFT+U onsite.dm that Plus_U::read_occup_m needs on re-entry.
+    POS_DELTAS="${POS_DELTAS-0.1 0.3 0.5}"
+    NEG_DELTAS="${NEG_DELTAS--0.1 -0.3 -0.5}"
+    MAG2=4.0; MAG3=-4.0; OUTCHG=1
+    SCF_THR="${SCF_THR:-1e-7}"; SCF_NMAX="${SCF_NMAX:-400}"
+    run_case "S3L_donor" ""
+    for side in pos neg; do
+        prev="$WORKROOT/S3L_donor/OUT.autotest"
+        # Branch: pos walks the moment up, neg walks it down; both chains
+        # leave the donor, so neither inherits the other side's displacement.
+        if [ "$side" = "pos" ]; then
+            deltas="$POS_DELTAS"
+        else
+            deltas="$NEG_DELTAS"
+        fi
+        for d in $deltas; do
+            tag=$(echo "$d" | sed 's/^+//; s/-/m/; s/\./p/')
+            JSON="{\"constraints\": [{\"type\": \"spin\", \"target\": $d, \"atoms\": [$TARGET_ATOM]}]}"
+            RESTART="$prev" run_case "S3L_fe2_${tag}" "$JSON"
+            echo "-- delta=$d"; audit "S3L_fe2_${tag}"
+            prev="$WORKROOT/S3L_fe2_${tag}/OUT.autotest"
+        done
     done
     ;;
 S4)

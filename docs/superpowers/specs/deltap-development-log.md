@@ -189,6 +189,7 @@
 | 2026-08-01 | `2026-08-01-deltap-esolver-refactor-r4.md` | R4 实施：MPI rank0+Bcast（C-23）、PW λ 同步/rank 守卫（S-09/C-28）、打印/WARNING 收口、deltap_common 单测 10 例 |
 | 2026-09-11 | `2026-09-11-i1-mgo-charge-scan.md` | **I-1 MgO 宽电荷扫描（R4 判决）：线性区 ≥ ±0.8 e ≈ 2.7× H₂O，离子体系适用域论断成立；sum rule bulk 首证；μ*=−dE/dδ 恒等式 <0.8%；Mg³⁺ 化未熔断（计划预期被推翻）** |
 | 2026-09-11 | `2026-09-11-ii1-feo-spin-scan.md` | **II-1 FeO 自旋约束：DFT+U+约束同开首测通过；δ=0 空操作逐位恒等；**根因 = 继承基线 `50_FeO` 的参考态是亚稳态（另一条 AFM 解低 0.612 eV）**；计划扫描窗口不成立；`step_max=0.05 Ry` 硬编码首步 + 无分支守卫 = 框架侧两条待修项** |
+| 2026-09-11 | `2026-09-11-ii1b-baseline-triage-and-step-cap.md` | **II-1 续：S1T 分诊证明 Γ-only `50_FeO` 多解且 k 未收敛（模 4.0 冷启动直达低解；2×2×2 → ±1.48 μB / 低 2.1 eV；4×4×4 → ±3.10 μB / 再低 0.56 eV）；框架 `step_max`/`step_probe` INPUT 化落地（默认逐位不变 + 单测）；重锚定后仅 ±0.1 μB 可测，±0.3 处**固定 μ 双稳**；能量口径判定 E_tot = E[ρ]；仍缺在线分支守卫** |
 | 2026-07-12 | `2026-07-12-deltap-risk-points-and-solutions.md` | 18 项风险点 + 解决方案 |
 | 2026-07-12 | `2026-07-12-deltap-root-cause-analysis.md` | B14+B15 found+fixed |
 | 2026-07-12 | `2026-07-12-deltap-algorithm-technical-review.md` | 完整算法推导 + 21 项风险 |
@@ -4487,3 +4488,62 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   results/{summary.txt,audit/}）。
 - 下一轮：先修基线（S1 判据加「参考态须为最低解」，候选 2×2×2 MP 或 51 号
   交叉校验），再落框架侧两条改动，然后复跑 II-1 的 S3/S4/S5。
+
+## 2026-09-11 (29): II-1 续——基线分诊 + 外环步长上限 INPUT 化
+
+- 计划：续做 II-1a 的两条阻塞项（基线该锚哪条解 / `step_max` 首步过冲）。
+  spec `docs/superpowers/specs/2026-09-11-ii1b-baseline-triage-and-step-cap.md`。
+- **S1T 分诊（9 次无约束 SCF，全部收敛）**：
+  ① Γ-only `50_FeO` 至少两条 AFM 自洽解——`mag 2.0/1.0/0.2` 冷启动全部落到
+  harness 参考态（Fe ±3.4850 μB，−7652.3958757 eV），**`mag 4.0` 冷启动
+  直接落到低解（Fe ±3.7149 μB，−7653.0079658 eV，低 0.612 eV）**；
+  两盆地热重入各自自洽（T5/T6，偏差 ≤1e-8 eV 量级）⇒ 多解是真盆地，
+  初始磁矩猜测选盆地，不是扰动假象。
+  ② **Γ-only 网格本身没收敛**：2×2×2 两种猜测都塌到 ±1.477 μB、
+  −7655.1237/−7655.1251 eV（互差 1.5 meV）；4×4×4 又回到 ±3.097 μB、
+  −7655.6855 eV。E 随 k 网格降 3.3 eV、矩 3.48→1.48→3.10 摆动 ⇒ **该算例
+  不能作为约束扫描的锚**（I-1 MgO 之所以干净，正因为参考态唯一且平滑）。
+- **框架改动（本轮落地）**：`constraint_step_max`（默认 0.05 Ry）与
+  `constraint_step_probe`（默认 0，语义 = 退回 `step_max`）INPUT 化；
+  probe **只作用于无历史的首步**（首步无割线斜率 ⇒ 恒为 cap 的"固定过冲"）。
+  守卫 `step_max>0`、`0≤probe≤step_max`。默认路径逐位不变。
+  单测：mu_solver 9/9（新 `StepProbeCapsOnlyTheFirstStep`）、
+  constraint_io 12/12（新 `OuterStepCapGuards`）、constraint_loop 12/12。
+  `ctest -R constraint` 9/11；2 项失败为**既有、与本轮无关**：
+  `MODULE_ESTATE_constraint_weight_grid_mpi` 链接失败
+  （`undefined reference to constraint::build_channel_profile`——该 MPI 目标
+  SOURCES 未列 `constraint_io.cpp`）。端到端确认首步精确等于 probe
+  （probe 0.004 ⇒ audit `mu = -0.004`）。
+- **重锚定扫描 S3L（锚 = 低解，Q_ref = 3.384107449 μB）**：
+  δ=0 走完整约束路径与无约束锚点逐位一致（`res=0`、`mu=0`、`e_con=0`）。
+  **只有 ±0.1 μB 可测**：μ* = −0.0655152 / +0.0594118 Ry，
+  ΔE = +0.04392 / +0.04139 eV，与线性响应预言 ½δ|μ*| = 0.04456 / 0.04042
+  eV 吻合到 1.4%/2.4% ⇒ **判定打印的 E_tot 就是 E[ρ]**（约束项双计数已被
+  标准 KS 公式抵消），B1/B2/B3 三条分支判据全过。
+  ±0.3/±0.5 全败，两种形态：① 链 A（step_max=0.05）δ=+0.3 前 5 外步完全
+  绝热（Q 3.3839→3.6121，斜率稳定 −1.45 μB/Ry），第 6 步 SCF 用 240 迭代
+  后整块跳到 Q=4.2248（换态）；② 链 B（step_max=0.01，1/5）δ=+0.3 在
+  μ≈−0.17 Ry 处 **Q 在 3.61↔4.08 反复跳**（固定 μ 下 SCF 自身双稳），
+  δ=−0.3 则 Q 塌到 2.07 后外环把 μ 收到 +0.004 也回不来（困在低 Q 盆地）。
+  **步长压到 1/5 后 δ=+0.1 的 μ* 只变 0.1%** ⇒ 0.05 Ry 首步过冲确实存在
+  且已修好，但它不是本轮扫描上限的唯一原因：地貌本身在 ±0.2 μB 外就多稳。
+- **Becke 矩 vs on-site d 矩脱钩（本轮升级为阻塞级）**：δ=−0.3 的塌陷点
+  Becke Q = 2.1012 μB 而 on-site 矩仍 +3.5180 / −3.6585 μB（锚点 3.7149）
+  —— 一个 −0.3 μB 的靶点把 Becke 读数压掉 1.28 μB，物理 d 局域矩几乎没动。
+  本条使 II-1b 从"口径归因"变成 II-1 能力结论的前提；最小可行做法是直接在
+  约束收敛点打印同原子的 on-site 投影矩（ABACUS 已算，只是没进 audit 行）。
+- 未跑：S4 熔断、S5 DeltaSpin——锚点与分支守卫定死前无归因意义。
+- 成本：约 2.5 h（np4）。
+- 文件：`docs/superpowers/specs/2026-09-11-ii1b-baseline-triage-and-step-cap.md`
+  （本轮 spec）；`tests/deltap_feo_spin_scan/{run_feo_baseline_triage.sh,
+  tools/make_stru_mag.py,tools/summarize_low_scan.py,results/triage/}`（新增），
+  `run_feo_spin_scan.sh`（新增 S3L 步 + MAG2/MAG3/STEP_MAX/STEP_PROBE 旋钮）；
+  源码 `source_estate/module_constraint/{mu_solver.{h,cpp},constraint_io.{h,cpp},
+  constraint_loop.cpp}`、`source_io/module_parameter/{input_parameter.h,
+  read_input_item_other.cpp}` + 3 个单测文件。
+- 下一轮（优先级）：① **在线分支守卫按能量式落地**（`on_scf_converged` 增传
+  `etot` + `constraint_branch_tol` + 第四态 `MuStatus::BRANCH_FLIP` + 单测；
+  本轮已补齐能量口径的经验依据）；② II-1 换锚（同体系换 k 网格 + 多猜测搜索，
+  或换 TM 氧化物）与「只报 ±0.1 窗口」并行；③ audit 行加 on-site 矩打印；
+  ④ 顺手：`MODULE_ESTATE_constraint_weight_grid_mpi` 的 SOURCES 补
+  `constraint_io.cpp`。
