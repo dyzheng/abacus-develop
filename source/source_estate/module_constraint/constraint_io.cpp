@@ -840,6 +840,7 @@ ConfigStatus configure_constraint(ConstraintConfig& cfg,
                                   const double thr,
                                   const double step_max,
                                   const double step_probe,
+                                  const double branch_tol,
                                   const int nat,
                                   const int nspin,
                                   std::string& error)
@@ -857,6 +858,7 @@ ConfigStatus configure_constraint(ConstraintConfig& cfg,
     cfg.thr = thr;
     cfg.step_max = step_max;
     cfg.step_probe = step_probe;
+    cfg.branch_tol = branch_tol;
 
     // Guard: phase-1/2 recipes only.  A wrong recipe must abort loudly
     // rather than silently run an unvalidated partition.
@@ -893,6 +895,14 @@ ConfigStatus configure_constraint(ConstraintConfig& cfg,
     {
         error = "constraint_step_probe must satisfy 0 <= step_probe <= "
                 "constraint_step_max (0 selects the legacy probe = step_max)";
+        return ConfigStatus::ERROR;
+    }
+    // Guard: a negative branch tolerance has no meaning; 0 is the explicit
+    // "guard off" value and must stay reachable (the guard is opt-in).
+    if (branch_tol < 0.0)
+    {
+        error = "constraint_branch_tol must be >= 0 (0 disables the energy "
+                "branch guard)";
         return ConfigStatus::ERROR;
     }
     // Absolute mode: explicit warning that the calibration scale differs
@@ -1020,7 +1030,7 @@ ConfigStatus configure_constraint(ConstraintConfig& cfg,
     const ConfigStatus st = configure_constraint(
         cfg, specs, warnings, enabled, type, weight_type, target_mode,
         target_file_content, mu_max, thr, defaults.step_max,
-        defaults.step_probe, nat, nspin, error);
+        defaults.step_probe, defaults.branch_tol, nat, nspin, error);
     if (st != ConfigStatus::OK)
     {
         return st;
@@ -1104,7 +1114,8 @@ ConfigStatus configure_from_inputs(ConstraintConfig& cfg,
         PARAM.inp.constraint_type, PARAM.inp.constraint_weight_type,
         PARAM.inp.constraint_target_mode, content, PARAM.inp.constraint_mu_max,
         PARAM.inp.constraint_thr, PARAM.inp.constraint_step_max,
-        PARAM.inp.constraint_step_probe, ucell.nat, PARAM.inp.nspin, error);
+        PARAM.inp.constraint_step_probe, PARAM.inp.constraint_branch_tol,
+        ucell.nat, PARAM.inp.nspin, error);
     if (st == ConfigStatus::ERROR)
     {
         return st;

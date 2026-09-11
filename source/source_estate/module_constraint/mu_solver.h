@@ -43,7 +43,16 @@ enum class MuStatus
 {
     RUNNING,
     CONVERGED,
-    UNREACHABLE
+    UNREACHABLE,
+    // Online energy branch guard (L10 lineage, set by ConstraintLoop, never
+    // returned by MuSolver::step): the SCF converged at some mu, but the
+    // constrained total energy fell below the unconstrained reference energy
+    // by more than constraint_branch_tol.  That is the signature of a branch
+    // flip — a different self-consistent solution (or a different magnetic
+    // state) satisfied the weighted observable instead of the target being
+    // reached along the reference branch.  BRANCH_FLIP fuses the run: the
+    // targets are NOT validated, so the result must not be read as CONVERGED.
+    BRANCH_FLIP
 };
 
 /**

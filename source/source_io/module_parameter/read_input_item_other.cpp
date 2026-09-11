@@ -1601,6 +1601,18 @@ Manual override is allowed: if sc_acceleration_mode is explicitly set, it takes 
         this->add_item(item);
     }
     {
+        Input_Item item("constraint_branch_tol");
+        item.annotation = "energy branch-guard tolerance (0 = guard off)";
+        item.category = "Constraint";
+        item.type = "Real";
+        item.description = "Online branch guard tolerance in Ry (default 0 = off). When > 0, at every converged SCF the constrained total energy E_tot = E_KS + sum_a mu_a(Q_a - t_a) is compared with the reference (mu = 0) energy E_ref of the same run; if E_tot drops more than this tolerance BELOW E_ref, the run is fused as BRANCH_FLIP (the SCF left the reference electronic branch, so the targets are not validated) instead of silently reporting CONVERGED. Only catches downward branch flips (a flipped state lying above E_ref is not detected). Recommended setting: a few times the SCF energy noise but far below the expected constraint energy rise 0.5*|delta|*|mu*| (FeO II-1: 0.044 eV at delta = 0.1 uB -> use ~1e-3 Ry).";
+        item.default_value = "0.0";
+        item.unit = "Ry";
+        item.availability = "constraint is true";
+        read_sync_double(input.constraint_branch_tol);
+        this->add_item(item);
+    }
+    {
         Input_Item item("deltap_branch_write");
         item.annotation = "persist deltap_branch.dat: true or false";
         item.category = "DeltaP";

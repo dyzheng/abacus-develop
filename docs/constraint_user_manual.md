@@ -4,6 +4,10 @@
 >
 > 2026-09-11 增补：§2 新增 `constraint_step_max` / `constraint_step_probe`
 > 两个外环步长上限参数（默认值与此前硬编码行为一致，老输入无需改动）。
+>
+> 2026-09-11 增补（第二件）：**在线能量分支守卫**落地——§2 新增
+> `constraint_branch_tol`（默认 0 = 关），触发时熔断并报 `BRANCH_FLIP`；
+> §4 增补状态 token，§5.7 由"尚未落地"改写为使用与限制说明。
 
 ## 1. 功能概述
 
@@ -30,6 +34,7 @@ Q_α = ∫ w_α(r) d_α(r) dr 施加 Lagrange 约束，约束势 V_con = Σ_α �
 | `constraint_thr` | 1e-4 | 约束收敛容差（每分量 \|Q−t\|，单位 e 或 μB） |
 | `constraint_step_max` | 0.05 | 外环**每步** \|Δμ\| 上限（Ry）。外步数 ≈ \|μ\*\|/该值，故调小时 `scf_nmax` 要相应放大 |
 | `constraint_step_probe` | 0.0 | **仅首步**（该分量尚无历史读数、还没有割线斜率时）的 \|Δμ\| 上限（Ry）。`0` = 沿用 `constraint_step_max`（旧行为）。必须满足 `0 ≤ probe ≤ step_max`，越界 → WARNING_QUIT |
+| `constraint_branch_tol` | 0.0 | **在线能量分支守卫**容差（Ry，`0` = 关）。>0 时：每个 SCF 收敛点比较约束态总能量 `E_tot = E_KS + Σ_α μ_α(Q_α−t_α)` 与同一 run 的参考能量 `E_ref`（μ=0 参考相）；若 `E_tot` 比 `E_ref` 低超过该容差，判定 SCF 换了自洽解 → **熔断并报 `BRANCH_FLIP`**（不再静默当 CONVERGED）。必须 `≥ 0`，负数 → WARNING_QUIT |
 
 **为什么有"首步"专用上限**：外环用割线法推进 μ，需要两次读数才能得到斜率
 `dQ/dμ`；首步没有历史，只能回落到保守斜率 `kappa_min`，于是**首步永远顶到
@@ -40,7 +45,7 @@ Q_α = ∫ w_α(r) d_α(r) dr 施加 Lagrange 约束，约束势 V_con = Σ_α �
 斜率，之后由 `constraint_step_max` 接管。**该参数只影响首步**：步数增加有限，
 但收敛的 μ\* 与步长选择无关（FeO 实测 `step_max` 0.05 vs 0.01，μ\* 只差 0.1%）。
 注意这两个参数是**缓解**手段，不替代分支守卫（在线分支守卫尚未落地，
-见 §5）。
+见 §5；在线能量守卫已按 §2 的 `constraint_branch_tol` 落地）。
 
 ## 3. 靶点文件（JSON）
 
@@ -99,7 +104,21 @@ CONSTRAINT_AUDIT c[1] kind=spin q=0.09993 t=0.10001 mu=-0.0815 res=-7.9e-05
 - `q/t/mu/res`：逐约束读数/靶点/乘子（Ry）/残差；
 - `total_charge`：Σ_α Q_α（混合 run 含 spin 分量、按 e 记账——为信息性总和，不声称
   恒等于 nelec；单约束/全片段覆盖时才具备 sum-rule 语义）；
-- 终态：`CONVERGED`（全部达标）或 `UNREACHABLE`（熔断，附 Q(μ) 端点——目标物理不可达，非数值故障）。
+- 终态三态：
+  - `CONVERGED`：全部达标（残差 < `constraint_thr`），且分支守卫未触发；
+  - `UNREACHABLE`：熔断（顶到 μ 上限且残差平台——目标物理不可达，非数值故障），附 Q(μ) 端点；
+  - `BRANCH_FLIP`：**在线能量分支守卫熔断**——某个 SCF 收敛点的约束态能量低于参考能量
+    超过 `constraint_branch_tol`，说明 SCF 换了自洽解（换态），**靶点未被验证**，
+    结果不得当作 CONVERGED 使用（见 §5.7）。
+
+开启分支守卫后，每个 SCF 收敛点还会打印一行（机器可读，可 grep `branch guard` / `BRANCH_FLIP`）：
+
+```
+[constraint] branch guard armed: constraint_branch_tol=0.001 Ry, e_ref=-562.440523 Ry (mu = 0 reference energy)
+[constraint] branch guard: e_tot=-562.427201 Ry, de=e_tot-e_ref=0.013322 Ry (tol=0.001000 Ry)
+[constraint] BRANCH_FLIP: constrained energy is 0.047280 Ry (0.643282 eV) BELOW the reference, ...
+[constraint] final status: BRANCH_FLIP (fused: ... the targets are NOT validated)
+```
 
 **符号约定**：两通道均为负响应——正 μ 排斥该区域电荷/自旋上。delta>0（增电荷/增磁矩）对应 μ*<0。与 DeltaSpin 的 λ 换算：**μ = −λ**。
 
@@ -115,12 +134,22 @@ CONSTRAINT_AUDIT c[1] kind=spin q=0.09993 t=0.10001 mu=-0.0815 res=-7.9e-05
 5. **多自旋约束**：近共线靶点（如同时对 O 和 H 约束磁矩）收敛显著变慢，属预期行为；
    混合双约束实测也会拉长外环（H₂O 同原子 case 3→15 外步）——阶段 B 将上 Broyden；
 6. 金属/近简并体系未验证。
-7. **在线分支守卫尚未落地**：外环只判 `|Q−t| < thr`，**无法区分"达标"与"SCF
-   换了自洽解"**。多解体系（DFT+U 氧化物、强关联绝缘体等）上必须逐点事后核对：
-   约束态能量不得低于锚点（`E(δ) ≥ E_anchor`），且能升与线性响应预言
-   `½·δ·|μ*|` 一致。缓解手段是 §2 的两个步长上限；在线守卫（能量式
-   `BRANCH_FLIP`，一旦触发即熔断并报告，不静默接受）计划落地，落地前请把
-   上述事后核对作为多解体系上的强制检查项。
+7. **在线分支守卫（`constraint_branch_tol > 0`）**：外环单凭 `|Q−t| < thr`
+   无法区分"达标"与"SCF 换了自洽解"；开启守卫后，每个 SCF 收敛点用能量判据
+   `E_tot < E_ref − tol` 判断换态，触发即熔断报 `BRANCH_FLIP`（不静默接受）。
+   适用要点与**残余盲区**：
+   - **只抓"向下的换态"**：换态后的解若能量仍在 `E_ref` 之上，守卫不触发
+     （这是判据边界，不是可调项）；因此多解体系仍建议保留事后核对
+     `E(δ) ≥ E_anchor`、能升 ≈ 线性响应 `½·δ·|μ*|`（FeO II-1 实测 1.4%/2.4% 吻合）；
+   - **只在 SCF 收敛点判**：固定 μ 下 SCF 自身双稳（不收敛）时守卫不触发，
+     这类点表现为 `RUNNING`（`scf_nmax` 耗尽）——仍按失败处理；
+   - **正确量级**：容差要高于 SCF 能量噪声、低于预期的约束能升。参考 FeO II-1：
+     δ=+0.1 μB 时能升 +0.0439 eV（≈3.2e-3 Ry），故 `1e-3 Ry` 合适；
+     H₂O 集成用例 δ=+0.1 e 能升 +0.0087 Ry，`1e-3 Ry` 同样安全（无假触发）；
+   - **实验开关**：与 `ABA_CONSTRAINT_FIXED_MU`（无参考相）不兼容，同时给出 →
+     WARNING_QUIT；守卫需要 `E_KS` 输入，未接线（缺能量）也 WARNING_QUIT；
+   - 熔断只停止 SCF 并打印终态，进程正常退出、照常写能量与密度——**脚本/使用者必须
+     检查 `final status` 是否是 `CONVERGED`**，不得只看 `!FINAL_ETOT_IS`。
 
 ## 6. 示例用例（已注册测试套件）
 

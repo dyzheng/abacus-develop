@@ -134,56 +134,74 @@ TEST(ConstraintIOTest, Guards)
               constraint::ConfigStatus::ERROR);
 }
 
-TEST(ConstraintIOTest, OuterStepCapGuards)
+TEST(ConstraintIOTest, OuterStepCapAndBranchGuardGuards)
 {
-    // II-1: the outer-step caps are run level (constraint_step_max /
-    // constraint_step_probe) and live on the specs-bearing overload.  They
-    // must land in the validated config, and a malformed pair must refuse
-    // loudly instead of silently running with an unintended first step.
+    // II-1 / online branch guard: the run-level outer-step caps
+    // (constraint_step_max / constraint_step_probe) and the energy branch
+    // guard tolerance (constraint_branch_tol) live on the specs-bearing
+    // overload.  They must land in the validated config, and a malformed
+    // value must refuse loudly instead of silently running with an
+    // unintended first step or an armed-but-broken branch guard.
     const std::string json = R"({"targets": [0.1], "atoms": [[0]]})";
     std::string error;
     constraint::ConstraintConfig cfg;
     std::vector<constraint::ConstraintSpec> specs;
     std::vector<std::string> warnings;
-    // Defaults: legacy behaviour (step_max 0.05 Ry, probe off).
+    // Defaults: legacy behaviour (step_max 0.05 Ry, probe off, guard off).
     EXPECT_EQ(constraint::configure_constraint(cfg, specs, warnings, true,
                                                "charge", "becke", "delta", json,
-                                               5.0, 1e-4, 0.05, 0.0, 3, 1,
+                                               5.0, 1e-4, 0.05, 0.0, 0.0, 3, 1,
                                                error),
               constraint::ConfigStatus::OK)
         << error;
     EXPECT_DOUBLE_EQ(cfg.step_max, 0.05);
     EXPECT_DOUBLE_EQ(cfg.step_probe, 0.0);
+    EXPECT_DOUBLE_EQ(cfg.branch_tol, 0.0); // guard default off
     // An explicit probe is carried through verbatim.
     EXPECT_EQ(constraint::configure_constraint(cfg, specs, warnings, true,
                                                "charge", "becke", "delta", json,
-                                               5.0, 1e-4, 0.05, 0.004, 3, 1,
+                                               5.0, 1e-4, 0.05, 0.004, 0.0, 3, 1,
                                                error),
               constraint::ConfigStatus::OK)
         << error;
     EXPECT_DOUBLE_EQ(cfg.step_probe, 0.004);
+    // An explicit branch tolerance is carried through verbatim.
+    EXPECT_EQ(constraint::configure_constraint(cfg, specs, warnings, true,
+                                               "charge", "becke", "delta", json,
+                                               5.0, 1e-4, 0.05, 0.0, 1e-3, 3, 1,
+                                               error),
+              constraint::ConfigStatus::OK)
+        << error;
+    EXPECT_DOUBLE_EQ(cfg.branch_tol, 1e-3);
     // Probe larger than the cap: it would silently change which cap governs
     // the first step, so refuse.
     EXPECT_EQ(constraint::configure_constraint(cfg, specs, warnings, true,
                                                "charge", "becke", "delta", json,
-                                               5.0, 1e-4, 0.05, 0.06, 3, 1,
+                                               5.0, 1e-4, 0.05, 0.06, 0.0, 3, 1,
                                                error),
               constraint::ConfigStatus::ERROR);
     EXPECT_NE(error.find("constraint_step_probe"), std::string::npos);
     // Non-positive step cap: no step could ever be taken.
     EXPECT_EQ(constraint::configure_constraint(cfg, specs, warnings, true,
                                                "charge", "becke", "delta", json,
-                                               5.0, 1e-4, 0.0, 0.0, 3, 1,
+                                               5.0, 1e-4, 0.0, 0.0, 0.0, 3, 1,
                                                error),
               constraint::ConfigStatus::ERROR);
     EXPECT_NE(error.find("constraint_step_max"), std::string::npos);
     // Negative probe: refuse.
     EXPECT_EQ(constraint::configure_constraint(cfg, specs, warnings, true,
                                                "charge", "becke", "delta", json,
-                                               5.0, 1e-4, 0.05, -1e-3, 3, 1,
+                                               5.0, 1e-4, 0.05, -1e-3, 0.0, 3, 1,
                                                error),
               constraint::ConfigStatus::ERROR);
     EXPECT_NE(error.find("constraint_step_probe"), std::string::npos);
+    // Negative branch tolerance: refuse (0 is the explicit "guard off").
+    EXPECT_EQ(constraint::configure_constraint(cfg, specs, warnings, true,
+                                               "charge", "becke", "delta", json,
+                                               5.0, 1e-4, 0.05, 0.0, -1e-9, 3, 1,
+                                               error),
+              constraint::ConfigStatus::ERROR);
+    EXPECT_NE(error.find("constraint_branch_tol"), std::string::npos);
 }
 
 TEST(ConstraintIOTest, MalformedJson)
@@ -578,8 +596,8 @@ TEST(ConstraintIOTest, MixedGuards)
     warnings.clear();
     EXPECT_EQ(constraint::configure_constraint(cfg, specs, warnings, true,
                                                "charge", "becke", "delta",
-                                               mixed, 5.0, 1e-4, 0.05, 0.0, 3,
-                                               2, error),
+                                               mixed, 5.0, 1e-4, 0.05, 0.0, 0.0,
+                                               3, 2, error),
               constraint::ConfigStatus::OK)
         << error;
     ASSERT_EQ(specs.size(), 2u);
@@ -596,8 +614,8 @@ TEST(ConstraintIOTest, MixedGuards)
         {"type": "charge", "target": -0.1, "atoms": [1], "mu_max": 0.2}]})";
     EXPECT_EQ(constraint::configure_constraint(cfg, specs, warnings, true,
                                                "charge", "becke", "delta",
-                                               hetero, 5.0, 1e-4, 0.05, 0.0, 3,
-                                               1, error),
+                                               hetero, 5.0, 1e-4, 0.05, 0.0, 0.0,
+                                               3, 1, error),
               constraint::ConfigStatus::OK)
         << error;
     ASSERT_EQ(specs.size(), 2u);
@@ -622,7 +640,7 @@ TEST(ConstraintIOTest, MixedGuards)
     EXPECT_EQ(constraint::configure_constraint(cfg, specs, warnings, true,
                                                "spin", "becke", "delta",
                                                charge_only, 5.0, 1e-4, 0.05,
-                                               0.0, 3, 2, error),
+                                               0.0, 0.0, 3, 2, error),
               constraint::ConfigStatus::OK)
         << error;
     EXPECT_TRUE(warning_has(warnings, "supersede"));

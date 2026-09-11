@@ -21,7 +21,7 @@ enum class LoopPhase
     IDLE,        // not initialized or disabled
     REFERENCE,   // first (mu = 0) SCF: recording the reference charges
     CONSTRAINED, // outer secant loop active
-    DONE         // CONVERGED or UNREACHABLE: no further action
+    DONE         // CONVERGED / UNREACHABLE / BRANCH_FLIP: no further action
 };
 
 /**
@@ -38,7 +38,9 @@ enum class LoopPhase
  *     (M2), M4.step advances mu (secant + guards), the constraint potential
  *     is re-injected for the next iteration (M3a), and the audit line (M5)
  *     is printed.  CONVERGED ends the SCF; UNREACHABLE fuses the run and
- *     reports the Q(mu) endpoint.
+ *     reports the Q(mu) endpoint; with constraint_branch_tol > 0 the energy
+ *     branch guard additionally fuses a converged SCF whose constrained
+ *     energy dropped below the reference (BRANCH_FLIP).
  *
  * The loop shares one WeightGrid instance with the observer and the
  * injector: observable == injection operator by construction.
@@ -99,8 +101,18 @@ class ConstraintLoop
 
     // SCF-convergence bookkeeping.  May override conv_esolver to false so
     // the SCF continues with the updated mu; leaves it true when the outer
-    // loop is done (CONVERGED / UNREACHABLE) or inactive.
+    // loop is done (CONVERGED / UNREACHABLE / BRANCH_FLIP) or inactive.
     void on_scf_converged(const int iter, bool& conv_esolver);
+
+    // Energy-branch-guard input (L10 lineage; consumed only when
+    // constraint_branch_tol > 0).  The esolver feeds the plain (constraint-
+    // correction-free) KS total energy [Ry] of the SCF iteration it is about
+    // to report as converged; the loop adds its own sum_a mu_a (Q_a - t_a)
+    // so both sides of the comparison use one energy convention.  Called
+    // right before on_scf_converged() every iteration; only consumed at a
+    // genuine SCF convergence.  If the guard is armed but no energy was ever
+    // supplied the loop WARNING_QUITs rather than running unguarded.
+    void set_scf_energy(const double etot_ks);
 
     // Print the final audit report (called from PW after_scf).
     void final_report();
@@ -126,6 +138,14 @@ class ConstraintLoop
     LoopPhase phase() const { return phase_; }
     MuStatus status() const { return status_; }
     int outer_steps() const { return outer_steps_; }
+    // Energy branch guard (L10 lineage): armed iff constraint_branch_tol > 0.
+    // reference_energy() is the constrained energy of the mu = 0 reference
+    // SCF (valid once recorded); guard_energy() is the constrained energy
+    // evaluated at the last guard check.
+    bool branch_guard_armed() const { return cfg_.branch_tol > 0.0; }
+    bool reference_recorded() const { return e_ref_valid_; }
+    double reference_energy() const { return e_ref_; }
+    double guard_energy() const { return e_guard_; }
     double mu_norm() const;
     const std::vector<double>& mu() const { return mu_; }
     const std::vector<double>& targets() const { return targets_; }
@@ -133,8 +153,8 @@ class ConstraintLoop
     // The shared weight field (M3b runtime audit / force kernel inputs).
     // Valid while enabled(): the grid is built in init().
     const WeightGrid& weight_grid() const { return *wg_; }
-    // True once the outer loop reached CONVERGED or UNREACHABLE (the final
-    // audited state; the M3b runtime audit runs once at this point).
+    // True once the outer loop reached CONVERGED, UNREACHABLE or BRANCH_FLIP
+    // (the final audited state; the M3b runtime audit runs once here).
     bool done() const { return phase_ == LoopPhase::DONE; }
     const ConstraintAudit& last_audit() const { return audit_; }
     const std::string& last_audit_line() const { return last_audit_line_; }
@@ -164,6 +184,16 @@ class ConstraintLoop
     int outer_steps_ = 0;
     ConstraintAudit audit_;
     std::string last_audit_line_;
+    // Energy branch guard (L10 lineage) state.  scf_energy_ is the
+    // esolver-supplied plain KS energy of the current SCF iteration; e_ref_
+    // the reference (mu = 0) constrained energy; e_guard_ the constrained
+    // energy evaluated at the last check.  All stay at their defaults while
+    // the guard is off (the default configuration).
+    double scf_energy_ = 0.0;
+    bool scf_energy_set_ = false;
+    double e_ref_ = 0.0;
+    bool e_ref_valid_ = false;
+    double e_guard_ = 0.0;
     // Experiment switch (default off): when ABA_CONSTRAINT_FIXED_MU is set,
     // the multiplier is frozen at the env value and the outer secant loop
     // is disabled (constraint potential acts as a fixed external potential).

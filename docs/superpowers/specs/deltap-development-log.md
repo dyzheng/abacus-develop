@@ -190,6 +190,7 @@
 | 2026-09-11 | `2026-09-11-i1-mgo-charge-scan.md` | **I-1 MgO 宽电荷扫描（R4 判决）：线性区 ≥ ±0.8 e ≈ 2.7× H₂O，离子体系适用域论断成立；sum rule bulk 首证；μ*=−dE/dδ 恒等式 <0.8%；Mg³⁺ 化未熔断（计划预期被推翻）** |
 | 2026-09-11 | `2026-09-11-ii1-feo-spin-scan.md` | **II-1 FeO 自旋约束：DFT+U+约束同开首测通过；δ=0 空操作逐位恒等；**根因 = 继承基线 `50_FeO` 的参考态是亚稳态（另一条 AFM 解低 0.612 eV）**；计划扫描窗口不成立；`step_max=0.05 Ry` 硬编码首步 + 无分支守卫 = 框架侧两条待修项** |
 | 2026-09-11 | `2026-09-11-ii1b-baseline-triage-and-step-cap.md` | **II-1 续：S1T 分诊证明 Γ-only `50_FeO` 多解且 k 未收敛（模 4.0 冷启动直达低解；2×2×2 → ±1.48 μB / 低 2.1 eV；4×4×4 → ±3.10 μB / 再低 0.56 eV）；框架 `step_max`/`step_probe` INPUT 化落地（默认逐位不变 + 单测）；重锚定后仅 ±0.1 μB 可测，±0.3 处**固定 μ 双稳**；能量口径判定 E_tot = E[ρ]；仍缺在线分支守卫** |
+| 2026-09-11 | `2026-09-11-online-branch-guard.md` | **在线能量分支守卫落地（`constraint_branch_tol`，默认 0=关）：能量判据 `E_tot<E_ref−tol` → 第四态 `MuStatus::BRANCH_FLIP` 熔断不静默；单测 12→18、4 发 sabotage 全恰中；H₂O 端到端无假触发（能升 +0.0087 Ry ≫ tol 1e-3）；FeO 换态点外步 2 即熔断（−0.643 eV），旧流程要到外步 6 才误报 CONVERGED** |
 | 2026-07-12 | `2026-07-12-deltap-risk-points-and-solutions.md` | 18 项风险点 + 解决方案 |
 | 2026-07-12 | `2026-07-12-deltap-root-cause-analysis.md` | B14+B15 found+fixed |
 | 2026-07-12 | `2026-07-12-deltap-algorithm-technical-review.md` | 完整算法推导 + 21 项风险 |
@@ -4565,3 +4566,44 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   族）→ 最小 II-1b + 半径敏感性 → I-1 MgO 继续 → S4/S5 暂缓。
 - 遗留：constraint_step_max/step_probe 未进用户手册（列入下轮文档）。
 - 文件：`2026-09-11-ii1-triage-review.md`。
+
+## 2026-09-11 (30): 在线能量分支守卫落地（`BRANCH_FLIP`）——批复顺序第 3 项
+
+- 动机（评审 §三.3）：外环只判 `|Q−t|<thr`，无法区分"达标"与"SCF 换了自洽解"；
+  II-1a 已出现"Q 突变被记成 CONVERGED"，II-1b 出现固定 μ 双稳。要求：能量式、
+  触发即熔断不静默、默认关、单测 + sabotage。
+- 落地：新 INPUT `constraint_branch_tol`（Ry，默认 0.0 = 关；负值 ERROR）；
+  `MuStatus::BRANCH_FLIP`（第四态）；`ConstraintLoop::set_scf_energy(etot_ks)`；
+  守卫在 `on_scf_converged` 内、`outer_step` **之前**判
+  `E_tot = E_KS + Σμ(Q−t)` vs `E_ref`（μ=0 参考相记录一次，两侧同口径）。
+  触发 → `status_ = BRANCH_FLIP` + `phase_ = DONE` + 响亮的 ofs_running 三行
+  （判据值 / 熔断声明 / final_report）；`conv_esolver` 保持 true，与 UNREACHABLE
+  同族（熔断在状态 token，不在退出码——手册 §5.7 已写成"脚本必须查 final status"）。
+  接线守卫两处 WARNING_QUIT：开守卫但无能量输入；与 `ABA_CONSTRAINT_FIXED_MU` 同开。
+  两个 esolver（PW `esolver_ks_pw.cpp` / LCAO `esolver_ks_lcao.cpp`）都按
+  `observe → set_scf_energy(etot − cc_escon) → on_scf_converged` 接线（必须减掉上一
+  外步残留的 `cc_escon`，否则传入的不是纯 E_KS）。
+- 证据：① 单测 11 目标全绿（loop 12→18 用例，含 2 个死亡测试）；② sabotage 4 发
+  全恰中（整块停用→3 红；比较置假→恰 1 红；缺能量守卫置假→恰 1 红；fixed-μ 守卫
+  置假→恰 1 红），默认关用例在任何破坏下都保持绿；③ H₂O 211 端到端：缺省无任何新
+  输出、etot 落在三次"关"运行的固有抖动带（5.9e-8 eV）内；开守卫后 e_ref=−32.493 Ry，
+  五步 de 全为正（+0.0043…+0.0087 Ry）→ CONVERGED，无假触发；④ FeO 换态点
+  （δ=+0.3 μB 热启动自 S0B 亚稳锚，tol 1e-3）：外步 1 的 de=+0.181 eV 通过，
+  外步 2 的 de=−0.643 eV 触发 BRANCH_FLIP——而旧流程同设置跑到外步 6 报 CONVERGED
+  （相对锚 −0.600 eV）⇒ 守卫不仅改结论，还提前 4 个外步停止在错误分支上"跟踪靶点"。
+- 文件：`docs/superpowers/specs/2026-09-11-online-branch-guard.md`（本轮 spec）；
+  源码 `source_estate/module_constraint/{mu_solver.h, constraint_io.{h,cpp},
+  constraint_loop.{h,cpp}}`、`source_io/module_parameter/{input_parameter.h,
+  read_input_item_other.cpp}`、`source_esolver/{esolver_ks_pw.cpp,
+  esolver_ks_lcao.cpp}`；单测 `module_constraint/test/{constraint_loop_test.cpp,
+  constraint_io_test.cpp}`；脚本/工件 `tests/deltap_feo_spin_scan/{run_feo_spin_scan.sh,
+  README.md, results/guard/GUARD_fe2_p03_hot.audit}`；文档
+  `docs/constraint_user_manual.md`、`docs/constraint_developer_guide.md`。
+- Bug/fix list：新增框架能力（非 bug 修复）——F-BG1「收敛判据无分支感知」关闭。
+  预存在未修（本轮核实与改动无关）：`build/` 的 `MODULE_ESTATE_charge_test` /
+  `MODULE_ESTATE_elecstate_energy` / `MODULE_ESTATE_elecstate_print` 三个测试目标
+  链接/编译失败（缺 `InfoNonlocal`、`ElecState::get_dftu_energy` mock 符号）；
+  `git stash` 复核确认预存在。
+- 下一轮（用户批复顺序）：④ 审计行打印 on-site 投影矩 + Fe 半径敏感性 →
+  ⑤ 能力边界文档补 Becke 矩/d 矩脱钩（含本守卫两条盲区）→ ⑥ I-1 MgO 继续；
+  FeO S4/S5 暂缓；框架内待议：FeO 扫描开 `BRANCH_TOL` 重测 + B1 是否升为框架默认。

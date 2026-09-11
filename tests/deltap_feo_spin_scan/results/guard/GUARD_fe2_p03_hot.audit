@@ -1,0 +1,14 @@
+[constraint] branch guard armed: constraint_branch_tol=0.001000 Ry, e_ref=-562.440523 Ry (mu = 0 reference energy)
+[constraint] outer step 1 after SCF iteration 24 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.015 max_residual=0.3 total_charge=3.137560545 nelec=44 maxdev=3.330669074e-16
+CONSTRAINT_AUDIT c[0] kind=spin q=3.137560545 t=3.437560545 mu=-0.05 res=-0.3
+[constraint] branch guard: e_tot=-562.427201 Ry, de=e_tot-e_ref=0.013322 Ry (tol=0.001000 Ry)
+[constraint] outer step 2 after SCF iteration 44 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.02341830446 max_residual=0.2341830446 total_charge=3.2033775 nelec=44 maxdev=3.330669074e-16
+CONSTRAINT_AUDIT c[0] kind=spin q=3.2033775 t=3.437560545 mu=-0.1 res=-0.2341830446
+[constraint] branch guard: e_tot=-562.487803 Ry, de=e_tot-e_ref=-0.047280 Ry (tol=0.001000 Ry)
+[constraint] BRANCH_FLIP: constrained energy is 0.047280 Ry (0.643282 eV) BELOW the reference, beyond constraint_branch_tol=0.001000 Ry -> the SCF left the reference electronic branch; fusing and reporting BRANCH_FLIP (the constraint targets are NOT validated)
+[constraint] final status: BRANCH_FLIP (fused: constrained energy -562.48780305767 Ry is 0.04728035786 Ry (0.64328227039 eV) below the reference -562.44052269981 Ry at constraint_branch_tol=0.00100000000 Ry — the SCF left the reference electronic branch; the targets are NOT validated)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.02341830446 max_residual=0.2341830446 total_charge=3.2033775 nelec=44 maxdev=3.330669074e-16
+CONSTRAINT_AUDIT c[0] kind=spin q=3.2033775 t=3.437560545 mu=-0.1 res=-0.2341830446
+ !FINAL_ETOT_IS -7652.5888221635959781 eV

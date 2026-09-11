@@ -28,6 +28,11 @@ struct ConstraintConfig
     double thr = 1e-4;                  // e, per-constraint convergence
     double step_max = 0.05;             // Ry, cap on |dmu| per outer step
     double step_probe = 0.0;            // Ry, first-step cap; 0 = use step_max
+    // Ry, online energy branch-guard tolerance; 0 (default) = guard off.
+    // When > 0 the outer loop fuses as BRANCH_FLIP as soon as the constrained
+    // total energy drops more than this below the unconstrained reference
+    // energy of the same run (see ConstraintLoop::set_scf_energy).
+    double branch_tol = 0.0;
     std::vector<ConstraintTarget> targets;
 };
 
@@ -53,6 +58,7 @@ enum class ConfigStatus
  *  - mu_max / thr sanity    -> ERROR
  *  - step_max / step_probe sanity -> ERROR (step_max > 0, and 0 <= step_probe
  *    <= step_max; the probe is a sub-cap for the history-free first step)
+ *  - branch_tol sanity      -> ERROR (>= 0; 0 disables the guard)
  *
  * @param target_file_content Content of the target JSON file (empty string
  *        when no file is configured).
@@ -219,6 +225,7 @@ ConfigStatus configure_constraint(ConstraintConfig& cfg,
                                   const double thr,
                                   const double step_max,
                                   const double step_probe,
+                                  const double branch_tol,
                                   const int nat,
                                   const int nspin,
                                   std::string& error);

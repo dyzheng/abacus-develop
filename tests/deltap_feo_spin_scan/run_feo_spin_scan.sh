@@ -62,15 +62,24 @@ MAG2="${MAG2:-}"; MAG3="${MAG3:-}"
 # which on FeO flips the magnetic branch; the probe lets the secant measure a
 # local slope first.
 STEP_MAX="${STEP_MAX:-0.05}"; STEP_PROBE="${STEP_PROBE:-0.0}"
+# Online energy branch guard (constraint_branch_tol, Ry).  0 = off (the
+# framework default, so every pre-guard run reproduces); a small positive
+# value fuses the run as BRANCH_FLIP as soon as the constrained energy drops
+# more than the tolerance below the mu = 0 reference energy of the same run.
+# FeO guidance: the well-behaved +-0.1 uB points rise by 0.0439 eV
+# (~3.2e-3 Ry), so 1e-3 Ry sits well below the physical rise and well above
+# the SCF energy noise.
+BRANCH_TOL="${BRANCH_TOL:-0.0}"
 
 mkdir -p "$WORKROOT" "$RESDIR"
 
-# Audit facts for one finished case: CONVERGED / UNREACHABLE / RUNNING plus the
-# first and last constraint observation.
+# Audit facts for one finished case: CONVERGED / UNREACHABLE / BRANCH_FLIP /
+# RUNNING plus the first and last constraint observation and the branch-guard
+# energy checks (when the guard is armed).
 audit()
 {
     local log="$WORKROOT/$1/OUT.autotest/running_scf.log"
-    grep -E "CONSTRAINT_AUDIT|final status" "$log" 2>/dev/null
+    grep -E "CONSTRAINT_AUDIT|final status|branch guard|BRANCH_FLIP" "$log" 2>/dev/null
 }
 
 # run_case <name> <target-json|empty>
@@ -121,6 +130,7 @@ run_case()
             echo "constraint_thr        1e-4"
             echo "constraint_step_max   $STEP_MAX"
             echo "constraint_step_probe $STEP_PROBE"
+            echo "constraint_branch_tol $BRANCH_TOL"
         fi
         # Branch: warm start from a previous run's charge density + onsite.dm.
         if [ -n "$RESTART" ]; then

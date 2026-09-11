@@ -1,6 +1,7 @@
 #include "gtest/gtest.h"
 
 #include <cmath>
+#include <cstdlib>
 #include <memory>
 #include <vector>
 
@@ -240,7 +241,7 @@ class ConstraintLoopTest : public ::testing::Test
     {
         return constraint::configure_constraint(
             cfg, specs, warnings, true, "charge", "becke", "delta", json, 5.0,
-            1e-4, 0.05, 0.0, nat, nspin, error);
+            1e-4, 0.05, 0.0, 0.0, nat, nspin, error);
     }
 
     constraint::ConstraintConfig make_cfg(const double delta,
@@ -747,4 +748,227 @@ TEST_F(ConstraintLoopTest, ComputeForceZeroWhenMuZero)
             EXPECT_DOUBLE_EQ(F(J, d), 0.0);
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Online energy branch guard (L10 lineage, constraint_branch_tol > 0)
+// ---------------------------------------------------------------------------
+//
+// The guard compares the constrained energy E_tot = E_KS + sum_a mu_a(Q_a -
+// t_a) at every converged SCF against the mu = 0 reference energy E_ref.  A
+// dip below E_ref beyond the tolerance means the SCF left the reference
+// electronic branch: the run must be fused as BRANCH_FLIP instead of being
+// reported CONVERGED.  The mock response (Q = Q_ref - mu) is unchanged; only
+// the energy fed to the guard is synthetic, which is exactly the seam the
+// esolver drives through set_scf_energy().
+
+TEST_F(ConstraintLoopTest, BranchGuardDefaultOffDoesNotFuse)
+{
+    // Default-off contract: without constraint_branch_tol the guard is a
+    // pure no-op (legacy runs stay bit-identical), so even a nonsense energy
+    // must not change the verdict.
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    constraint::ConstraintConfig cfg = make_cfg(0.01);
+    ASSERT_DOUBLE_EQ(cfg.branch_tol, 0.0); // default
+    loop.init(*ucell, rhopw, cfg, radii, 10.0);
+    EXPECT_FALSE(loop.branch_guard_armed());
+
+    std::vector<double> rho;
+    int iter = 1;
+    bool conv = false;
+    const double* rho_ptr[1] = {rho_ref.data()};
+    loop.observe(iter, rho_ptr, 1);
+    loop.set_scf_energy(-1.0e6); // nonsense: must be ignored
+    conv = true;
+    loop.on_scf_converged(iter, conv);
+    EXPECT_FALSE(loop.reference_recorded());
+    int guard = 0;
+    while (loop.status() == constraint::MuStatus::RUNNING && guard < 20)
+    {
+        ++iter;
+        fill_rho_mock(loop.mu(), rho);
+        const double* rp[1] = {rho.data()};
+        loop.observe(iter, rp, 1);
+        loop.set_scf_energy(-1.0e6);
+        conv = true;
+        loop.on_scf_converged(iter, conv);
+        ++guard;
+    }
+    EXPECT_EQ(loop.status(), constraint::MuStatus::CONVERGED);
+    EXPECT_EQ(loop.phase(), constraint::LoopPhase::DONE);
+}
+
+// Synthetic energy feed: place the guard's E_tot exactly de_target above the
+// reference by subtracting the constraint term the loop will add back.
+static void feed_guard_energy(constraint::ConstraintLoop& loop,
+                              const double de_target)
+{
+    double e_con = 0.0;
+    for (size_t a = 0; a < loop.mu().size(); ++a)
+    {
+        e_con += loop.mu()[a] * (loop.charges()[a] - loop.targets()[a]);
+    }
+    loop.set_scf_energy(loop.reference_energy() + de_target - e_con);
+}
+
+TEST_F(ConstraintLoopTest, BranchGuardRisingEnergyConverges)
+{
+    // Well-behaved run: the constrained energy rises above the reference by
+    // the linear-response amount 0.5 |delta| |mu| (the II-1 FeO shape).  The
+    // guard must not fire.
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    const double delta = 0.01;
+    constraint::ConstraintConfig cfg = make_cfg(delta);
+    cfg.branch_tol = 1e-3;
+    loop.init(*ucell, rhopw, cfg, radii, 10.0);
+    ASSERT_TRUE(loop.branch_guard_armed());
+
+    const double e_ref = -100.0;
+    const double* rho_ptr[1] = {rho_ref.data()};
+    loop.observe(1, rho_ptr, 1);
+    loop.set_scf_energy(e_ref);
+    bool conv = true;
+    loop.on_scf_converged(1, conv);
+    ASSERT_FALSE(conv);
+    ASSERT_TRUE(loop.reference_recorded());
+    EXPECT_DOUBLE_EQ(loop.reference_energy(), e_ref);
+
+    std::vector<double> rho;
+    int iter = 1;
+    int guard = 0;
+    while (loop.status() == constraint::MuStatus::RUNNING && guard < 20)
+    {
+        ++iter;
+        fill_rho_mock(loop.mu(), rho);
+        const double* rp[1] = {rho.data()};
+        loop.observe(iter, rp, 1);
+        feed_guard_energy(loop, 0.5 * delta * std::abs(loop.mu()[0]));
+        conv = true;
+        loop.on_scf_converged(iter, conv);
+        EXPECT_GE(loop.guard_energy(), loop.reference_energy());
+        ++guard;
+    }
+    EXPECT_LT(guard, 20);
+    EXPECT_EQ(loop.status(), constraint::MuStatus::CONVERGED);
+    EXPECT_NEAR(loop.mu()[0], -delta, 1e-6);
+}
+
+TEST_F(ConstraintLoopTest, BranchGuardToleratesDipWithinTolerance)
+{
+    // Boundary: a dip of exactly half the tolerance is numerical noise, not a
+    // branch flip — the run must still converge.
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    constraint::ConstraintConfig cfg = make_cfg(0.01);
+    cfg.branch_tol = 1e-3;
+    loop.init(*ucell, rhopw, cfg, radii, 10.0);
+
+    const double* rho_ptr[1] = {rho_ref.data()};
+    loop.observe(1, rho_ptr, 1);
+    loop.set_scf_energy(-50.0);
+    bool conv = true;
+    loop.on_scf_converged(1, conv);
+
+    std::vector<double> rho;
+    int iter = 1;
+    int guard = 0;
+    while (loop.status() == constraint::MuStatus::RUNNING && guard < 20)
+    {
+        ++iter;
+        fill_rho_mock(loop.mu(), rho);
+        const double* rp[1] = {rho.data()};
+        loop.observe(iter, rp, 1);
+        feed_guard_energy(loop, -0.5 * cfg.branch_tol);
+        conv = true;
+        loop.on_scf_converged(iter, conv);
+        ++guard;
+    }
+    EXPECT_LT(guard, 20);
+    EXPECT_EQ(loop.status(), constraint::MuStatus::CONVERGED);
+    EXPECT_EQ(loop.phase(), constraint::LoopPhase::DONE);
+}
+
+TEST_F(ConstraintLoopTest, BranchGuardPreemptsTargetReachedOnFlippedBranch)
+{
+    // No-silent-acceptance discriminator: at the step where the mock response
+    // lands EXACTLY on the target (|Q - t| < thr, so the residual test alone
+    // would report CONVERGED) the energy is fed 2*tol BELOW the reference.
+    // The guard runs before the outer step, so the verdict must be
+    // BRANCH_FLIP — never CONVERGED.
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    constraint::ConstraintConfig cfg = make_cfg(0.01);
+    cfg.branch_tol = 1e-3;
+    loop.init(*ucell, rhopw, cfg, radii, 10.0);
+    ASSERT_TRUE(loop.enabled());
+
+    const double* rho_ptr[1] = {rho_ref.data()};
+    loop.observe(1, rho_ptr, 1);
+    loop.set_scf_energy(-50.0);
+    bool conv = true;
+    loop.on_scf_converged(1, conv);
+    ASSERT_FALSE(conv);
+
+    std::vector<double> rho;
+    int iter = 1;
+    int guard = 0;
+    bool fused_at_target = false;
+    while (loop.status() == constraint::MuStatus::RUNNING && guard < 20)
+    {
+        ++iter;
+        fill_rho_mock(loop.mu(), rho);
+        const double* rp[1] = {rho.data()};
+        loop.observe(iter, rp, 1);
+        const bool at_target
+            = std::abs(loop.charges()[0] - loop.targets()[0]) < cfg.thr;
+        feed_guard_energy(loop, at_target ? -2.0 * cfg.branch_tol : 0.0);
+        conv = true;
+        loop.on_scf_converged(iter, conv);
+        if (at_target)
+        {
+            fused_at_target = true;
+        }
+        ++guard;
+    }
+    EXPECT_LT(guard, 20);
+    EXPECT_TRUE(fused_at_target); // the residual test WAS satisfied ...
+    EXPECT_LT(std::abs(loop.charges()[0] - loop.targets()[0]), cfg.thr);
+    EXPECT_EQ(loop.status(), constraint::MuStatus::BRANCH_FLIP); // ... and rejected
+    EXPECT_EQ(loop.phase(), constraint::LoopPhase::DONE);
+    EXPECT_TRUE(conv); // fused: the SCF terminates cleanly
+    EXPECT_LT(loop.guard_energy(),
+              loop.reference_energy() - cfg.branch_tol);
+}
+
+TEST_F(ConstraintLoopTest, BranchGuardRefusesMissingEnergyDeathTest)
+{
+    // Wiring guard: an armed branch guard without an energy input must abort
+    // loudly (exit 1) rather than silently running unguarded.
+    EXPECT_EXIT(
+        {
+            constraint::ConstraintConfig cfg = make_cfg(0.01);
+            cfg.branch_tol = 1e-3;
+            constraint::ConstraintLoop& loop
+                = constraint::ConstraintLoop::instance();
+            loop.init(*ucell, rhopw, cfg, radii, 10.0);
+            const double* rp[1] = {rho_ref.data()};
+            loop.observe(1, rp, 1);
+            bool conv = true;
+            loop.on_scf_converged(1, conv); // no set_scf_energy() call
+        },
+        ::testing::ExitedWithCode(1), "");
+}
+
+TEST_F(ConstraintLoopTest, BranchGuardRefusesFixedMuDeathTest)
+{
+    // The fixed-mu experiment has no mu = 0 reference SCF, so an armed guard
+    // there would never fire; refuse the combination loudly (exit 1).
+    EXPECT_EXIT(
+        {
+            setenv("ABA_CONSTRAINT_FIXED_MU", "0.01", 1);
+            constraint::ConstraintConfig cfg = make_cfg(0.01);
+            cfg.branch_tol = 1e-3;
+            constraint::ConstraintLoop& loop
+                = constraint::ConstraintLoop::instance();
+            loop.init(*ucell, rhopw, cfg, radii, 10.0);
+        },
+        ::testing::ExitedWithCode(1), "");
 }

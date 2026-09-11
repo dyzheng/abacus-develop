@@ -6,6 +6,7 @@
 
 #include "constraint_deriv.h"
 #include "constraint_inject_pw.h"
+#include "source_base/constants.h"
 #include "source_base/global_function.h"
 #include "source_base/global_variable.h"
 #include "source_base/tool_quit.h"
@@ -39,6 +40,11 @@ void ConstraintLoop::reset()
     outer_steps_ = 0;
     audit_ = ConstraintAudit();
     last_audit_line_.clear();
+    scf_energy_ = 0.0;
+    scf_energy_set_ = false;
+    e_ref_ = 0.0;
+    e_ref_valid_ = false;
+    e_guard_ = 0.0;
 }
 
 void ConstraintLoop::init(const UnitCell& ucell,
@@ -118,6 +124,18 @@ void ConstraintLoop::init(const UnitCell& ucell,
     const char* fixed_mu_env = std::getenv("ABA_CONSTRAINT_FIXED_MU");
     if (fixed_mu_env != nullptr && std::strlen(fixed_mu_env) > 0)
     {
+        // Compatibility guard: the energy branch guard compares every
+        // constrained energy against the mu = 0 reference SCF energy, which
+        // the fixed-mu experiment never runs.  Refuse the combination instead
+        // of silently running a partially armed (trigger-free) guard.
+        if (cfg_.branch_tol > 0.0)
+        {
+            ModuleBase::WARNING_QUIT("ConstraintLoop::init",
+                "constraint_branch_tol > 0 is incompatible with the "
+                "ABA_CONSTRAINT_FIXED_MU experiment (no reference SCF energy "
+                "is available); unset the env variable or set "
+                "constraint_branch_tol = 0");
+        }
         const double mu_fixed = std::atof(fixed_mu_env);
         std::fill(mu_.begin(), mu_.end(), mu_fixed);
         fixed_mu_ = true;
@@ -163,8 +181,8 @@ void ConstraintLoop::inject_potential(const int iter,
     {
         return;
     }
-    // Branch A: outer loop finished (CONVERGED / UNREACHABLE): the potential
-    // stays as the last injected one — nothing more to add.
+    // Branch A: outer loop finished (CONVERGED / UNREACHABLE / BRANCH_FLIP):
+    // the potential stays as the last injected one — nothing more to add.
     if (phase_ == LoopPhase::DONE)
     {
         return;
@@ -192,8 +210,8 @@ void ConstraintLoop::inject_potential_lcao(const int iter,
     {
         return;
     }
-    // Branch A: outer loop finished (CONVERGED / UNREACHABLE): the potential
-    // stays as the last injected one — nothing more to add.
+    // Branch A: outer loop finished (CONVERGED / UNREACHABLE / BRANCH_FLIP):
+    // the potential stays as the last injected one — nothing more to add.
     if (phase_ == LoopPhase::DONE)
     {
         return;
@@ -326,8 +344,93 @@ void ConstraintLoop::on_scf_converged(const int iter, bool& conv_esolver)
     {
         return;
     }
+    // Online energy branch guard (L10 lineage, opt-in via
+    // constraint_branch_tol > 0; default off = this whole block is skipped).
+    // A converged SCF whose constrained energy lies BELOW the mu = 0
+    // reference by more than the tolerance is not a constrained solution:
+    // the SCF switched to another self-consistent branch (or magnetic state)
+    // that happens to satisfy the weighted observable.  The targets are then
+    // meaningless, so the run is fused here (BRANCH_FLIP) instead of being
+    // reported as CONVERGED (II-1a/II-1b: a flipped Q was once recorded as
+    // CONVERGED by the residual test alone).
+    if (cfg_.branch_tol > 0.0)
+    {
+        // Wiring guard: the guard is only meaningful with an energy input;
+        // fail loud rather than silently accepting an unguarded run.
+        if (!scf_energy_set_)
+        {
+            ModuleBase::WARNING_QUIT("ConstraintLoop::on_scf_converged",
+                "constraint_branch_tol > 0 but no SCF total energy was "
+                "supplied (set_scf_energy); the esolver wiring is incomplete");
+        }
+        // Branch G1: reference phase — mu is identical zero, so the
+        // constraint energy correction is exactly zero and the plain KS
+        // energy IS the constrained reference energy.  Record it; nothing
+        // can have flipped yet.
+        if (phase_ == LoopPhase::REFERENCE)
+        {
+            e_ref_ = scf_energy_;
+            e_ref_valid_ = true;
+            GlobalV::ofs_running
+                << "[constraint] branch guard armed: constraint_branch_tol="
+                << cfg_.branch_tol << " Ry, e_ref=" << e_ref_
+                << " Ry (mu = 0 reference energy)\n";
+        }
+        else
+        {
+            // Branch G2: constrained phase — compare the constrained energy
+            // evaluated at the multiplier the SCF actually felt.  mu_ is
+            // still the in-SCF value here (outer_step advances it below),
+            // and Q_ was read from the just-converged density, so
+            //   E_tot = E_KS + sum_a mu_a (Q_a - t_a)
+            // is the energy the SCF minimized; e_ref_ uses the same
+            // convention (its correction term is zero).
+            if (Q_.size() != targets_.size())
+            {
+                // Defensive (wiring bug): indexing one of the two parallel
+                // vectors with the other's size would read out of bounds.
+                ModuleBase::WARNING_QUIT("ConstraintLoop::on_scf_converged",
+                    "branch guard: observed-charge/target size mismatch");
+            }
+            double e_con = 0.0;
+            for (size_t a = 0; a < mu_.size(); ++a)
+            {
+                e_con += mu_[a] * (Q_[a] - targets_[a]);
+            }
+            e_guard_ = scf_energy_ + e_con;
+            const double de = e_guard_ - e_ref_;
+            GlobalV::ofs_running
+                << "[constraint] branch guard: e_tot=" << e_guard_
+                << " Ry, de=e_tot-e_ref=" << de
+                << " Ry (tol=" << cfg_.branch_tol << " Ry)\n";
+            if (de < -cfg_.branch_tol)
+            {
+                status_ = MuStatus::BRANCH_FLIP;
+                phase_ = LoopPhase::DONE;
+                GlobalV::ofs_running
+                    << "[constraint] BRANCH_FLIP: constrained energy is "
+                    << -de << " Ry (" << -de * ModuleBase::Ry_to_eV
+                    << " eV) BELOW the reference, beyond "
+                       "constraint_branch_tol="
+                    << cfg_.branch_tol << " Ry -> the SCF left the reference "
+                       "electronic branch; fusing and reporting BRANCH_FLIP "
+                       "(the constraint targets are NOT validated)\n";
+                // Leave conv_esolver true: the SCF itself did converge — the
+                // fuse is the outer-loop verdict, exactly like UNREACHABLE.
+                return;
+            }
+        }
+    }
     // Branch C: converged SCF with an active outer loop — outer step.
     outer_step(iter, conv_esolver);
+}
+
+void ConstraintLoop::set_scf_energy(const double etot_ks)
+{
+    // Guard input: stored unconditionally (cheap) and consumed only by the
+    // branch guard above, so the default-off configuration is a pure no-op.
+    scf_energy_ = etot_ks;
+    scf_energy_set_ = true;
 }
 
 void ConstraintLoop::print_audit(const int iter)
@@ -377,6 +480,19 @@ void ConstraintLoop::final_report()
         GlobalV::ofs_running << "UNREACHABLE (fused at mu cap "
                              << fused_cap << " Ry)\n";
     }
+    else if (status_ == MuStatus::BRANCH_FLIP)
+    {
+        // Online energy branch guard verdict: report the two energies in Ry
+        // and eV so the fuse is auditable without re-parsing the run.
+        const double de = e_guard_ - e_ref_;
+        GlobalV::ofs_running
+            << "BRANCH_FLIP (fused: constrained energy " << e_guard_
+            << " Ry is " << -de << " Ry (" << -de * ModuleBase::Ry_to_eV
+            << " eV) below the reference " << e_ref_
+            << " Ry at constraint_branch_tol=" << cfg_.branch_tol
+            << " Ry — the SCF left the reference electronic branch; the "
+               "targets are NOT validated)\n";
+    }
     else
     {
         GlobalV::ofs_running << "RUNNING (SCF ended before the outer loop "
@@ -411,7 +527,19 @@ void ConstraintLoop::compute_force(const double* const* rho,
     // the force is the exact derivative of the constrained energy only at
     // the converged outer loop; with a transient mu the residual is
     // O(|Q - t|) and the force must not be silently reported as exact.
-    if (mu_norm() > 0.0 && status_ != MuStatus::CONVERGED)
+    // Branch A: the branch guard fused the run — the residual may be small
+    // (Q ~ t) yet the underlying state is not the constrained reference-branch
+    // solution, so the envelope-theorem premise fails for a different reason.
+    if (status_ == MuStatus::BRANCH_FLIP)
+    {
+        ModuleBase::WARNING("ConstraintLoop::compute_force",
+                            "constraint force from a BRANCH_FLIP run: the SCF "
+                            "left the reference branch, the force is not the "
+                            "derivative of the intended constrained energy");
+    }
+    // Branch B: transient multiplier (outer loop not converged) — residual
+    // O(|Q - t|).
+    else if (mu_norm() > 0.0 && status_ != MuStatus::CONVERGED)
     {
         ModuleBase::WARNING("ConstraintLoop::compute_force",
                             "constraint force from an unconverged outer loop: "

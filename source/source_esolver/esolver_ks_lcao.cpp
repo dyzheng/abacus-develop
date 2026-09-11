@@ -929,6 +929,12 @@ void ESolver_KS_LCAO<TK, TR>::iter_finish(UnitCell& ucell, const int istep, int&
         constraint::ConstraintLoop& cloop
             = constraint::ConstraintLoop::instance();
         cloop.observe(iter, this->chr.rho, PARAM.inp.nspin);
+        // Energy branch guard input: the plain KS total energy of this SCF
+        // iteration (etot still carries the cc_escon of the PREVIOUS outer
+        // step, so subtract it to hand over a constraint-correction-free
+        // value).  No-op unless constraint_branch_tol > 0.
+        cloop.set_scf_energy(this->pelec->f_en.etot
+                             - this->pelec->f_en.cc_escon);
         cloop.on_scf_converged(iter, conv_esolver);
         // Refresh the total energy with the constraint correction
         // (cc_escon), mirroring the dp_escon path.

@@ -761,6 +761,7 @@ struct Input_para
     double constraint_thr = 1e-4;    ///< per-constraint convergence threshold in e
     double constraint_step_max = 0.05;   ///< Ry, cap on |dmu| per outer step
     double constraint_step_probe = 0.0;  ///< Ry, first (history-free) step cap; 0 = use step_max
+    double constraint_branch_tol = 0.0;  ///< Ry, energy branch-guard tolerance; 0 = guard off
 
     // ==============   #Parameters (25.uncommon hardware) ==================
     int dsp_count = 4;           ///< count of DSP hardwares in one node

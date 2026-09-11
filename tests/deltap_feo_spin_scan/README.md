@@ -64,6 +64,10 @@ bash run_feo_spin_scan.sh S6              # table from the work tree
 Work directories live under `/tmp/feo_spin` (`WORKROOT` overrides); the ABACUS
 binary defaults to `build_rel/abacus_basic_para` (`ABACUS` overrides).
 Useful overrides: `SCF_THR`, `SCF_NMAX`, `MIXB`, `MIXB=0.2`, `DELTAS`.
+`STEP_MAX` / `STEP_PROBE` bound the outer multiplier step; `BRANCH_TOL` arms
+the online energy branch guard (Ry, default 0 = off) and fuses the run as
+`BRANCH_FLIP` when the constrained energy drops more than that below the
+`mu = 0` reference energy of the same run.
 
 ## Re-anchor round (2026-09-11, second entry) -- S1T triage + outer-step caps
 

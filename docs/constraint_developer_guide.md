@@ -39,6 +39,9 @@
 | constraint_target_mode | `target_mode` | "delta"（默认）\|"absolute"（WARNING） |
 | constraint_mu_max | `mu_max` | Ry，>0 |
 | constraint_thr | `thr` | e，>0 |
+| constraint_step_max | `step_max` | Ry，>0（外环每步 \|Δμ\| 上限） |
+| constraint_step_probe | `step_probe` | Ry，0 ≤ probe ≤ step_max（仅无历史首步的子上限；0 = 用 step_max） |
+| constraint_branch_tol | `branch_tol` | Ry，≥0（能量分支守卫容差；0 = 关；见 §3.2） |
 | constraint_target_file | （文件内容） | 见 2.2（v1 旧格式 deprecated / v2 新格式）；空 → ERROR |
 
 ### 2.2 靶点 JSON → 数据模型（M7，constraint_io.h）
@@ -110,7 +113,9 @@ CONSTRAINT_AUDIT c[1] kind=spin q=.. t=.. mu=.. res=..
                  │ observe (M8→M2)：Q_α = Σ_g w_α·d_α·ΔV（reduce_pool）              │
                  │      ▼                                                          │
                  │ iter_finish：cc_escon = Σμ(Q−t) 汇入 etot；                       │
-                 │   SCF 收敛? → on_scf_converged → M4.step 更新 μ → 继续/结束        │
+                 │   SCF 收敛? → set_scf_energy(etot−cc_escon) → on_scf_converged    │
+                 │     （分支守卫：E_tot<E_ref−tol → BRANCH_FLIP 熔断）                    │
+                 │     → M4.step 更新 μ → 继续/结束                                   │
                  └───────────────────────────────────────────────────────────────────┘
 
  外环收敛后（SCF 结束）：
@@ -135,6 +140,39 @@ CONSTRAINT_AUDIT c[1] kind=spin q=.. t=.. mu=.. res=..
 2. LCAO：收敛轮 `update_from_charge` 重建 v_eff → `cal_pulay_fs` 的 μw Pulay 缺失（修复：`FORCE_STRESS.cpp` 的 `ConstraintPulayPotGuard` RAII）。
 **任何新的势注入点（应力、偶极、未来的新通道）必须回答："力求值/能量决算时刻，注入的 μw 还在势里吗？"** 修复统一用 `ConstraintLoop::add_back_constraint_potential()` 的**修正副本**模式，禁止改写共享势。
 
+### 3.2 在线能量分支守卫（L10 同族，`constraint_branch_tol`，默认关）
+
+**问题**：外环只判 `|Q−t| < thr`，无法区分"达标"与"SCF 换了自洽解"（II-1a：Q
+突变被记成 CONVERGED；II-1b：固定 μ 双稳被记成极限环）。
+
+**判据（能量式）**：在每个**真收敛**的 SCF 点上比较
+`E_tot = E_KS + Σ_α μ_α(Q_α−t_α)` 与同 run 的参考能量 `E_ref`（μ=0 参考相，此时
+约束修正项恒为 0，故 `E_ref = E_KS,ref`，两侧同口径）；`E_tot < E_ref − tol` ⇒
+`MuStatus::BRANCH_FLIP` + `phase_ = DONE`（熔断）。经验依据（II-1b §4.1）：良好
+run 的能升 = `½·|δ|·|μ*|` 且为正，打印的 `E_tot` 就是 E[ρ]（双计数被 ∫V_effρ
+抵消）。
+
+**接线顺序（必须保持，否则判据用错乘子）**：
+```
+cloop.observe(iter, rho, nspin);              // Q_ ← 本次收敛密度
+cloop.set_scf_energy(etot − cc_escon);        // 去掉上一外步的约束修正 = 纯 E_KS
+cloop.on_scf_converged(iter, conv);           // 守卫在第 4 步之前判（此时 mu_ 仍是
+                                              // 本次 SCF 实际使用的 μ），再 outer_step
+```
+1. `on_scf_converged` 内守卫必须在 `outer_step()` **之前**：`outer_step` 会推进
+   `mu_`，其后判据会拿"新 μ"配"旧 Q"，既换口径又错过"残差已达标但换态"的点
+   （`BranchGuardPreemptsTargetReachedOnFlippedBranch` 正是这条的判别测试）；
+2. `f_en.etot` 在 hook 时刻仍含**上一外步**的 `cc_escon`（`iter_finish` 的
+   `cal_energies(2)` 会重算 etot），故传入前必须减去它——两个 esolver
+   （`esolver_ks_pw.cpp` / `esolver_ks_lcao.cpp`）都按此写；
+3. 参考能量在**参考相**收敛点记录一次（`e_ref_valid_`）；守卫开启但从未收到
+   能量 → WARNING_QUIT（不静默无守卫）；与 `ABA_CONSTRAINT_FIXED_MU`（无参考相）
+   同时给出 → WARNING_QUIT。
+
+**盲区（设计边界，不是 bug）**：只抓"能量向下"的换态；换态后能量仍在 `E_ref`
+之上不触发；固定 μ 下非收敛的 SCF 没有收敛点，守卫无从判定（表现为 RUNNING）。
+架构安全的推广（ΔQ 式 / 多解枚举）见能力边界文档。
+
 ## 4. 关键函数 ↔ 公式 ↔ 操作 ↔ 单测覆盖
 
 | 函数 | 公式/操作 | 单测（目标::用例） |
@@ -149,19 +187,22 @@ CONSTRAINT_AUDIT c[1] kind=spin q=.. t=.. mu=.. res=..
 | `ConstraintAccounting::audit` | E_con=Σμ(Q−t) + 审计行 | accounting 4 用例 |
 | `constraint_force` | F_J=−Σ_α μ_α Σ_g d_α·∂w_α/∂R_J ΔV（双基组同核；per-α d_α=read_up·ρ↑+read_dn·ρ↓，A5） | deriv::ForceOnSyntheticDensity / NewtonThirdLaw / ForceLinearInMu / **MixedChannelForce / MixedForceNewtonThirdLaw** |
 | `ConstraintLoop::on_scf_converged` | 两阶段门控状态机 + conv_esolver 门控 | loop::IgnoresUnconvergedScf / InjectMatchesObserver / SpinChannelConvergesOnLinearResponse |
+| `ConstraintLoop::set_scf_energy` + 守卫分支 | `E_tot=E_KS+Σμ(Q−t)` vs `E_ref`；越界 → `MuStatus::BRANCH_FLIP`（熔断） | loop::BranchGuard{DefaultOffDoesNotFuse,RisingEnergyConverges,ToleratesDipWithinTolerance,PreemptsTargetReachedOnFlippedBranch,RefusesMissingEnergyDeathTest,RefusesFixedMuDeathTest} |
 | `configure_from_inputs` | 全部语义守卫（PW/LCAO 共享；v1/v2 解析+逐约束 specs 出参） | io::Guards / ConfigureFromInputsShared / **MixedConstraintListParsing / MixedGuards** |
 | `ConstraintInjectLCAO::build/trace` | W^α_μν Gint 积分；Tr[W·DM] 审计 | inject_lcao::PartitionSumRuleEqualsOverlap（ΣW≡S，2e-15） |
 
-## 5. 单测覆盖总账（11 个注册 ctest 目标全绿，2026-09-09 实测）与未覆盖点
+## 5. 单测覆盖总账（11 个注册 ctest 目标全绿，2026-09-11 复测）与未覆盖点
 
 已覆盖：全部数学核、守卫分支、双通道、MPI 一致性、记账、力核、**混合 charge+spin 列表的读/注/编排/力**。
 **反向破坏验证**：每轮 sabotage 恰中对应新测试（A2/A3/A4/A5/A6 共 5 轮，含 staging guard 恢复、
-通道误读、cap 退化、混合列表 spin 误读 charge 等判别），守卫非摆设。
+通道误读、cap 退化、混合列表 spin 误读 charge 等判别；分支守卫轮 4 发：整体停用 → 3 测试、
+判据置假 → 恰 1 测试、缺能量守卫置假 → 恰 1 测试、fixed-μ 兼容守卫置假 → 恰 1 测试），守卫非摆设。
 **未覆盖/弱覆盖**（后续开发注意）：
 1. `response_sign=+1` 路径——参数保留但无正响应通道实例，测试只验证它在 spin 上 FAIL（sabotage）；
 2. `ConstraintInjectLCAO` 的 k 点（complex）变体——生产未接线、测试仅 gamma 实数；
 3. nspin=4（非共线）——显式不支持（守卫拒绝），无测试需求；
-4. `fixed_mu_` 实验开关——无单测（属诊断工具，默认关）；
+4. `fixed_mu_` 实验开关——无单测（属诊断工具，默认关）；其与 `constraint_branch_tol`
+   的不兼容守卫有死亡测试（`BranchGuardRefusesFixedMuDeathTest`）；
 5. FD 级力/力矩验收不在单测（在 `tests/constraint_fd_force/tools/` 脚本 + 集成用例）；
 6. **混合力的 stationary4 FD 未跑**（按计划留 A6 后验收轮，不抢跑）：阶段 A 的力能力
    声明基于单通道 18 轴 FD + 混合单元级自洽/牛三（G5），包络限定 H₂O 类小分子、
