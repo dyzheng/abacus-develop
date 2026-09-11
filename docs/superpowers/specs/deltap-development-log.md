@@ -4547,3 +4547,21 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   或换 TM 氧化物）与「只报 ±0.1 窗口」并行；③ audit 行加 on-site 矩打印；
   ④ 顺手：`MODULE_ESTATE_constraint_weight_grid_mpi` 的 SOURCES 补
   `constraint_io.cpp`。
+
+## 2026-09-11 (2): II-1 分诊+步长修复轮 严格评审（含评审者修复 MPI 链接）
+
+- 裁定通过。核查：MPI 测试失败确为 A2 埋的缺源（observe.cpp 引入
+  build_channel_profile 依赖而 test_mpi 目标未列 constraint_io.cpp），
+  此后各轮 11/11 均系陈旧二进制掩盖（含评审者自己的复核）——教训：
+  **ctest 复核必须在触发全量重链后运行**。评审者修复 CMake 一行补源，
+  重建后亲测 11/11。
+- 三发现评估：① FeO 继承基线亚稳+未 k 收敛，解集分诊应入磁体系 SOP；
+  ② 步长过冲已修（INPUT 化纪律合规）但 ±0.3 固定-μ 双稳是体系地貌非外环；
+  ③ **Becke 加权矩与 d 局域矩脱钩**（塌陷点 Becke −1.28 μB vs d 矩 −0.20）——
+  非 bug 是观测量定义边界：CDFT 共轭关系仍合法，但"约束 Fe 自旋"≠"控制 d 矩"；
+  基组无关卖点在此付真实代价（on-site 投影才贴 d 矩）。处理链：audit 打印
+  on-site 矩 → 半径敏感性 → 能力边界条目 → on-site 权重类型留阶段 C 明示权衡。
+- 批复顺序：手册补两 INPUT → 在线分支守卫（能量式 BRANCH_FLIP，同 L10
+  族）→ 最小 II-1b + 半径敏感性 → I-1 MgO 继续 → S4/S5 暂缓。
+- 遗留：constraint_step_max/step_probe 未进用户手册（列入下轮文档）。
+- 文件：`2026-09-11-ii1-triage-review.md`。
