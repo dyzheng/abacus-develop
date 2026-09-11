@@ -45,6 +45,7 @@ void ConstraintLoop::reset()
     e_ref_ = 0.0;
     e_ref_valid_ = false;
     e_guard_ = 0.0;
+    onsite_atom_.clear();
 }
 
 void ConstraintLoop::init(const UnitCell& ucell,
@@ -433,13 +434,24 @@ void ConstraintLoop::set_scf_energy(const double etot_ks)
     scf_energy_set_ = true;
 }
 
+void ConstraintLoop::set_onsite_moments(const std::vector<double>& per_atom)
+{
+    // Informational instrument (II-1b): stored verbatim and folded into the
+    // audit line only; never read by the injection / solver / force paths, so
+    // a missing or stale value can not change the physics.
+    onsite_atom_ = per_atom;
+}
+
 void ConstraintLoop::print_audit(const int iter)
 {
     // Stage-A audit: per-constraint kinds label every detail line (M5:
     // c[i] kind=charge / kind=spin), so a mixed run stays machine
     // readable per channel.
+    // On-site moments (when supplied) ride along in the same audit record:
+    // per-constraint fragment sum, the on-site counterpart of the
+    // Becke-weighted q (II-1b instrument).
     audit_ = ConstraintAccounting::audit(*wg_, mu_, Q_, targets_, nelec_,
-                                         kinds_);
+                                         kinds_, onsite_atom_);
     last_audit_line_ = ConstraintAccounting::audit_line(audit_);
     GlobalV::ofs_running << "\n[constraint] outer step " << outer_steps_
                          << " after SCF iteration " << iter << " (phase="

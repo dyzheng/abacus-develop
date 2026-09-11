@@ -114,6 +114,14 @@ class ConstraintLoop
     // supplied the loop WARNING_QUITs rather than running unguarded.
     void set_scf_energy(const double etot_ks);
 
+    // Optional per-atom on-site projected moments (indexed by global atom,
+    // supplied by the esolver from the DFT+U occupation matrices).  When
+    // non-empty the audit line adds `onsite=` per constraint: the fragment sum
+    // of these moments, i.e. the on-site counterpart of the Becke-weighted
+    // q.  Purely informational (never enters the loop logic); leave empty and
+    // the audit line is unchanged (II-1b instrument).
+    void set_onsite_moments(const std::vector<double>& per_atom);
+
     // Print the final audit report (called from PW after_scf).
     void final_report();
 
@@ -146,6 +154,8 @@ class ConstraintLoop
     bool reference_recorded() const { return e_ref_valid_; }
     double reference_energy() const { return e_ref_; }
     double guard_energy() const { return e_guard_; }
+    // Per-atom on-site moments as supplied by the esolver (empty when none).
+    const std::vector<double>& onsite_moments() const { return onsite_atom_; }
     double mu_norm() const;
     const std::vector<double>& mu() const { return mu_; }
     const std::vector<double>& targets() const { return targets_; }
@@ -194,6 +204,9 @@ class ConstraintLoop
     double e_ref_ = 0.0;
     bool e_ref_valid_ = false;
     double e_guard_ = 0.0;
+    // Per-atom on-site moments supplied by the esolver (empty = not
+    // available; audit line then omits the onsite= token).
+    std::vector<double> onsite_atom_;
     // Experiment switch (default off): when ABA_CONSTRAINT_FIXED_MU is set,
     // the multiplier is frozen at the env value and the outer secant loop
     // is disabled (constraint potential acts as a fixed external potential).

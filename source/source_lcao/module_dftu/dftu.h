@@ -246,6 +246,16 @@ class Plus_U
     /// nspin=4: fills occ with locale[iat][l][0][0] data (all 4 Pauli blocks)
     void get_locale_flat(const int iat, const int l, std::vector<double>& occ) const;
 
+    /// On-site projected moment of one atom's correlated orbital:
+    ///   Tr[locale[iat][lc][0][up]] - Tr[locale[iat][lc][0][dn]]
+    /// i.e. exactly the quantity the DFT+U "atomic mag" line reports
+    /// (write_occup_m: sum of the occupation eigenvalues per spin).  A trace
+    /// needs no diagonalization, so this is the same number by construction.
+    /// Returns 0.0 when the atom type carries no correlated orbital, when the
+    /// occupation matrices are not initialized yet (first SCF iteration) or
+    /// when the run has no spin-difference channel (nspin != 2).
+    double onsite_moment(const UnitCell& ucell, const int iat) const;
+
     /// set flat occupation matrix for an atom's correlated orbital (write-back)
     void set_locale_flat(const int iat, const int l, const int spin,
                         const std::vector<double>& occ);

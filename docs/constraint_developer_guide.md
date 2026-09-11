@@ -173,6 +173,29 @@ cloop.on_scf_converged(iter, conv);           // 守卫在第 4 步之前判（�
 之上不触发；固定 μ 下非收敛的 SCF 没有收敛点，守卫无从判定（表现为 RUNNING）。
 架构安全的推广（ΔQ 式 / 多解枚举）见能力边界文档。
 
+### 3.3 on-site 投影矩审计（II-1b 仪器，`onsite=` token）
+
+**动机**：Becke 加权矩与 TM 的 d 局域矩会脱钩（II-1b：FeO 换态点 Becke −1.28 μB
+而 d 矩只动 −0.20 μB）。最小可行的透明化手段是在**同一行**审计里并排给出两者。
+
+**数据流**：`Plus_U::onsite_moment(ucell, iat)`（`dftu_io.cpp`）——
+`Tr[locale[iat][lc][0][↑]] − Tr[locale[iat][lc][0][↓]]`，即 DFT+U `atomic mag`
+行的同一量（占据矩阵迹 = 该代码求和的本征值之和，无需对角化）；
+esolver（PW/LCAO，`dft_plus_u` 为真时）逐原子调用 →
+`ConstraintLoop::set_onsite_moments(per_atom)` →
+`ConstraintAccounting::audit(..., onsite_per_atom)` 按**约束片段求和**写进
+`ConstraintAudit.onsite` → `audit_line` 追加 `onsite=`。
+
+**边界与纪律**：
+1. 该量**纯信息**：不参与注入/求解/力，缺省（无 DFT+U）时 token 不出现，
+   历史输出逐位不变（集成用例 H₂O 四个用例零改动）；
+2. 片段求和与 `q` 的片段定义一致（同一 `WeightGrid::constraint_atoms()`），
+   所以两个数描述同一组原子、只是投影子不同；
+3. `locale` 是**上一迭代**占据（PW 在 `iter_init` 计算），收敛点上两者一致到
+   ~1e-4 μB 量级——读数时不要把它当逐位精确的同迭代量；
+4. `onsite_radius` 同时控制 DFT+U 投影球与这个读数；改变它是在改变**观测量定义**，
+   不是收敛参数（半径敏感性研究因此必须重跑参考相）。
+
 ## 4. 关键函数 ↔ 公式 ↔ 操作 ↔ 单测覆盖
 
 | 函数 | 公式/操作 | 单测（目标::用例） |
@@ -188,6 +211,7 @@ cloop.on_scf_converged(iter, conv);           // 守卫在第 4 步之前判（�
 | `constraint_force` | F_J=−Σ_α μ_α Σ_g d_α·∂w_α/∂R_J ΔV（双基组同核；per-α d_α=read_up·ρ↑+read_dn·ρ↓，A5） | deriv::ForceOnSyntheticDensity / NewtonThirdLaw / ForceLinearInMu / **MixedChannelForce / MixedForceNewtonThirdLaw** |
 | `ConstraintLoop::on_scf_converged` | 两阶段门控状态机 + conv_esolver 门控 | loop::IgnoresUnconvergedScf / InjectMatchesObserver / SpinChannelConvergesOnLinearResponse |
 | `ConstraintLoop::set_scf_energy` + 守卫分支 | `E_tot=E_KS+Σμ(Q−t)` vs `E_ref`；越界 → `MuStatus::BRANCH_FLIP`（熔断） | loop::BranchGuard{DefaultOffDoesNotFuse,RisingEnergyConverges,ToleratesDipWithinTolerance,PreemptsTargetReachedOnFlippedBranch,RefusesMissingEnergyDeathTest,RefusesFixedMuDeathTest} |
+| `Plus_U::onsite_moment` → `ConstraintLoop::set_onsite_moments` → `onsite=` | `Tr[M↑−M↓]` 逐原子 → 按约束片段求和，与 `q` 同点对照（II-1b 仪器） | accounting::OnsiteMomentFragmentSum / loop::OnsiteMomentsReachTheAuditLine |
 | `configure_from_inputs` | 全部语义守卫（PW/LCAO 共享；v1/v2 解析+逐约束 specs 出参） | io::Guards / ConfigureFromInputsShared / **MixedConstraintListParsing / MixedGuards** |
 | `ConstraintInjectLCAO::build/trace` | W^α_μν Gint 积分；Tr[W·DM] 审计 | inject_lcao::PartitionSumRuleEqualsOverlap（ΣW≡S，2e-15） |
 

@@ -22,6 +22,11 @@ struct ConstraintAudit
     std::vector<double> target;
     std::vector<double> mu;
     std::vector<double> residual;
+    // Per-constraint on-site projected moment: the fragment sum of the
+    // per-atom moments handed in by the esolver (DFT+U occupation trace
+    // difference).  Empty when the caller supplied none — the audit line then
+    // omits the onsite= token (historical output unchanged).
+    std::vector<double> onsite;
     // Per-constraint observable kind (parallel to Q); empty for callers that
     // do not know the kinds (legacy homogeneous audit) — the audit line then
     // omits the kind= token.
@@ -60,6 +65,19 @@ class ConstraintAccounting
                                  const std::vector<double>& target,
                                  const double nelec,
                                  const std::vector<ConstraintKind>& kinds);
+
+    // Overload with the per-atom on-site moments (indexed by global atom
+    // index; empty = not available).  Each constraint reports the sum over its
+    // own fragment, the direct counterpart of its weighted charge Q_alpha, so
+    // a run can see "Becke observable vs on-site projected moment" side by
+    // side (II-1b: the two decouple on TM magnetic systems).
+    static ConstraintAudit audit(const WeightGrid& wg,
+                                 const std::vector<double>& mu,
+                                 const std::vector<double>& Q,
+                                 const std::vector<double>& target,
+                                 const double nelec,
+                                 const std::vector<ConstraintKind>& kinds,
+                                 const std::vector<double>& onsite_per_atom);
 
     // One-line machine-readable summary (key=value tokens).
     static std::string audit_line(const ConstraintAudit& a);

@@ -355,6 +355,19 @@ void ESolver_KS_PW<T, Device>::iter_finish(UnitCell& ucell, const int istep, int
         // value).  No-op unless constraint_branch_tol > 0.
         cloop.set_scf_energy(this->pelec->f_en.etot
                              - this->pelec->f_en.cc_escon);
+        // II-1b instrument: hand the on-site projected moment of every atom
+        // (DFT+U occupation trace difference) to the audit line, so it can be
+        // read next to the Becke-weighted q.  Only meaningful with DFT+U on;
+        // otherwise the audit line stays exactly as before.
+        if (PARAM.inp.dft_plus_u)
+        {
+            std::vector<double> onsite_moments(ucell.nat, 0.0);
+            for (int iat = 0; iat < ucell.nat; ++iat)
+            {
+                onsite_moments[iat] = this->dftu.onsite_moment(ucell, iat);
+            }
+            cloop.set_onsite_moments(onsite_moments);
+        }
         cloop.on_scf_converged(iter, conv_esolver);
         // Refresh the total energy with the constraint correction
         // (cc_escon), mirroring the dp_escon path.

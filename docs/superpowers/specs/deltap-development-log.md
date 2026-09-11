@@ -191,6 +191,7 @@
 | 2026-09-11 | `2026-09-11-ii1-feo-spin-scan.md` | **II-1 FeO 自旋约束：DFT+U+约束同开首测通过；δ=0 空操作逐位恒等；**根因 = 继承基线 `50_FeO` 的参考态是亚稳态（另一条 AFM 解低 0.612 eV）**；计划扫描窗口不成立；`step_max=0.05 Ry` 硬编码首步 + 无分支守卫 = 框架侧两条待修项** |
 | 2026-09-11 | `2026-09-11-ii1b-baseline-triage-and-step-cap.md` | **II-1 续：S1T 分诊证明 Γ-only `50_FeO` 多解且 k 未收敛（模 4.0 冷启动直达低解；2×2×2 → ±1.48 μB / 低 2.1 eV；4×4×4 → ±3.10 μB / 再低 0.56 eV）；框架 `step_max`/`step_probe` INPUT 化落地（默认逐位不变 + 单测）；重锚定后仅 ±0.1 μB 可测，±0.3 处**固定 μ 双稳**；能量口径判定 E_tot = E[ρ]；仍缺在线分支守卫** |
 | 2026-09-11 | `2026-09-11-online-branch-guard.md` | **在线能量分支守卫落地（`constraint_branch_tol`，默认 0=关）：能量判据 `E_tot<E_ref−tol` → 第四态 `MuStatus::BRANCH_FLIP` 熔断不静默；单测 12→18、4 发 sabotage 全恰中；H₂O 端到端无假触发（能升 +0.0087 Ry ≫ tol 1e-3）；FeO 换态点外步 2 即熔断（−0.643 eV），旧流程要到外步 6 才误报 CONVERGED** |
+| 2026-09-11 | `2026-09-11-onsite-moment-audit.md` | **审计行 on-site 投影矩（DFT+U 迹差，无对角化，与 `atomic mag` 同量到 1e-8）：FeO δ=+0.1 μB 良态点 q 与 d 矩同向但仅 74% 幅值，与 II-1b 塌陷点反向脱钩合起来给出"同向跟随 → 反向脱钩"图景；单测 18→19 / 4→5，无 DFT+U 输出逐位不变；半径敏感性(4b)顺延** |
 | 2026-07-12 | `2026-07-12-deltap-risk-points-and-solutions.md` | 18 项风险点 + 解决方案 |
 | 2026-07-12 | `2026-07-12-deltap-root-cause-analysis.md` | B14+B15 found+fixed |
 | 2026-07-12 | `2026-07-12-deltap-algorithm-technical-review.md` | 完整算法推导 + 21 项风险 |
@@ -4607,3 +4608,40 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - 下一轮（用户批复顺序）：④ 审计行打印 on-site 投影矩 + Fe 半径敏感性 →
   ⑤ 能力边界文档补 Becke 矩/d 矩脱钩（含本守卫两条盲区）→ ⑥ I-1 MgO 继续；
   FeO S4/S5 暂缓；框架内待议：FeO 扫描开 `BRANCH_TOL` 重测 + B1 是否升为框架默认。
+
+## 2026-09-11 (31): 审计行 on-site 投影矩落地（II-1b 最小仪器）——批复顺序第 4 项前半
+
+- 动机（评审 §三.4）：II-1 证明 Becke 加权矩与 d 局域矩可脱钩（塌陷点 Becke
+  −1.28 μB vs d 矩 −0.20），"约束 Fe 自旋"≠"控制 d 矩"。要让这份基组无关代价
+  可定量归因，先把 on-site 投影矩读进审计行；半径敏感性（4b）因依赖"定死的参考
+  态锚点"（下一轮 II-1 重锚定才定）而显式顺延。
+- 落地：
+  ① `Plus_U::onsite_moment(ucell, iat)`（`module_dftu/dftu_io.cpp`）=
+  `Tr[locale[iat][lc][0][↑]] − Tr[locale[iat][lc][0][↓]]`，与 DFT+U `atomic mag`
+  行同量（迹 = 本征值之和恒等式，实测 1e-8 一致）但省掉每次迭代的 5×5 对角化；
+  未初始化 / 无关联轨道 / nspin≠2 → 0。
+  ② `ConstraintAudit.onsite` + `audit(...)` 重载接收 `onsite_per_atom`，按
+  `wg.constraint_atoms()` 片段求和（与 Q_α 同片段，故差值只来自投影子）；`audit_line`
+  仅在 `onsite.size()==Q.size()` 时追加 ` onsite=`，越界索引 → 整个 token 丢弃
+  （不部分求和）。
+  ③ `ConstraintLoop::set_onsite_moments / onsite_moments`（纯信息，`reset()` 清空，
+  不进注入/求解/力任何路径）；两个 esolver（PW/LCAO）在 `dft_plus_u` 时逐原子喂入。
+- 证据：① `ctest -R constraint` 11/11（accounting 4→5、loop 18→19）；② FeO
+  δ=+0.1 μB（S3L 设置，CONVERGED，μ*=−0.06549837621 Ry）：参考相 q=3.384107449 /
+  onsite=3.714721308，收敛点 q=3.484068604 / onsite=3.788478732 ⇒ Δq=+0.09996 vs
+  Δonsite=+0.07376（on-site 只跟上 74%）；③ H₂O 211（无 DFT+U）`onsite=` 出现
+  **0 次**、其余 token 逐位同格式；④ 收敛点 onsite=3.788478732 与同迭代
+  `atomic mag: 2 3.78847873` 一致到 1e-8，与**上一**迭代差 ~4.5e-5 μB
+  （`locale` 是上一迭代占据，陈旧度写进开发者文档，避免误当 bug）。
+- 文件：本轮 spec `docs/superpowers/specs/2026-09-11-onsite-moment-audit.md`；
+  源码 `source_lcao/module_dftu/{dftu.h,dftu_io.cpp}`、
+  `source_estate/module_constraint/{constraint_accounting.{h,cpp},
+  constraint_loop.{h,cpp}}`、`source_esolver/{esolver_ks_pw.cpp,esolver_ks_lcao.cpp}`；
+  单测 `module_constraint/test/{constraint_accounting_test.cpp,constraint_loop_test.cpp}`；
+  工件 `tests/deltap_feo_spin_scan/results/onsite/ONSITE_fe2_p01.audit`；文档
+  `docs/constraint_user_manual.md`（§4 token + §5.8 边界）、
+  `docs/constraint_developer_guide.md`（§2.1 / §3.3 / §4）。
+- Bug/fix list：新增仪器（非 bug 修复），无新增 bug；预存在未修三项
+  （`MODULE_ESTATE_charge_test` / `_elecstate_energy` / `_elecstate_print`）与上轮同。
+- 下一轮：④b 半径敏感性 + II-1 重锚定合批（新增半径覆写 INPUT，在定死的锚点上跑）
+  → ⑤ 能力边界文档补脱钩条目（含守卫两条盲区）→ ⑥ I-1 MgO 继续；FeO S4/S5 暂缓。

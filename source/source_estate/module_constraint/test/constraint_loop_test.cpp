@@ -972,3 +972,35 @@ TEST_F(ConstraintLoopTest, BranchGuardRefusesFixedMuDeathTest)
         },
         ::testing::ExitedWithCode(1), "");
 }
+
+TEST_F(ConstraintLoopTest, OnsiteMomentsReachTheAuditLine)
+{
+    // II-1b instrument wiring: per-atom on-site moments supplied by the
+    // esolver appear as the fragment sum in the audit line; with none supplied
+    // (the default, and the case without DFT+U) the token is absent so the
+    // historical output is unchanged.
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    loop.init(*ucell, rhopw, make_cfg(0.01), radii, 10.0);
+
+    const double* rho_ptr[1] = {rho_ref.data()};
+    loop.observe(1, rho_ptr, 1);
+    bool conv = true;
+    loop.on_scf_converged(1, conv); // reference step, no moments supplied
+    ASSERT_TRUE(loop.onsite_moments().empty());
+    EXPECT_EQ(loop.last_audit_line().find("onsite="), std::string::npos);
+
+    // Supply the esolver-side moments (indexed by global atom; the constraint
+    // fragment is atom 0 only) and run one more converged SCF.
+    loop.set_onsite_moments({3.5, -3.5, 0.25});
+    std::vector<double> rho;
+    fill_rho_mock(loop.mu(), rho);
+    const double* rp[1] = {rho.data()};
+    loop.observe(2, rp, 1);
+    conv = true;
+    loop.on_scf_converged(2, conv);
+    ASSERT_EQ(loop.last_audit().onsite.size(), 1u);
+    EXPECT_DOUBLE_EQ(loop.last_audit().onsite[0], 3.5);
+    EXPECT_NE(loop.last_audit_line().find("onsite=3.5"), std::string::npos);
+    // Informational only: the moments never touch the solver state.
+    EXPECT_TRUE(loop.enabled());
+}

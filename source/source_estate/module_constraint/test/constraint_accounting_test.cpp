@@ -118,3 +118,42 @@ TEST_F(ConstraintAccountingTest, AuditLineMachineReadable)
     EXPECT_NE(line.find("mu=0.5"), std::string::npos);
     EXPECT_NE(line.find("res=-0.1"), std::string::npos);
 }
+
+TEST_F(ConstraintAccountingTest, OnsiteMomentFragmentSum)
+{
+    // II-1b instrument: with per-atom on-site moments supplied, each
+    // constraint reports the fragment sum (same atom set as its weighted q),
+    // and the legacy entry keeps the historical line free of the token.
+    wg->set_constraint_atoms({{0}, {1, 2}});
+    const std::vector<double> mu = {-0.1, -0.1};
+    const std::vector<double> Q = {6.0, 0.2};
+    const std::vector<double> target = {6.1, 0.1};
+    // O = 8.5, H1 = 0.25, H2 = -0.25 (global atom order).
+    const std::vector<double> onsite = {8.5, 0.25, -0.25};
+
+    // Legacy overload (no moments): no onsite= token anywhere.
+    const constraint::ConstraintAudit legacy =
+        constraint::ConstraintAccounting::audit(*wg, mu, Q, target, 8.0);
+    EXPECT_TRUE(legacy.onsite.empty());
+    const std::string legacy_line
+        = constraint::ConstraintAccounting::audit_line(legacy);
+    EXPECT_EQ(legacy_line.find("onsite="), std::string::npos);
+
+    // Moments supplied: fragment {0} -> 8.5, fragment {1,2} -> 0.0.
+    const constraint::ConstraintAudit a = constraint::ConstraintAccounting::audit(
+        *wg, mu, Q, target, 8.0, {}, onsite);
+    ASSERT_EQ(a.onsite.size(), 2u);
+    EXPECT_DOUBLE_EQ(a.onsite[0], 8.5);
+    EXPECT_DOUBLE_EQ(a.onsite[1], 0.0);
+    const std::string line = constraint::ConstraintAccounting::audit_line(a);
+    EXPECT_NE(line.find("c[0]"), std::string::npos);
+    EXPECT_NE(line.find("onsite=8.5"), std::string::npos);
+    EXPECT_NE(line.find("onsite=0"), std::string::npos);
+
+    // Out-of-range atom index: the token is dropped rather than a partial sum
+    // (loud by absence, no silent wrong number).
+    const std::vector<double> bad = {1.0};
+    const constraint::ConstraintAudit r = constraint::ConstraintAccounting::audit(
+        *wg, mu, Q, target, 8.0, {}, bad);
+    EXPECT_TRUE(r.onsite.empty());
+}

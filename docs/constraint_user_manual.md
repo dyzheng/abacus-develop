@@ -8,6 +8,11 @@
 > 2026-09-11 增补（第二件）：**在线能量分支守卫**落地——§2 新增
 > `constraint_branch_tol`（默认 0 = 关），触发时熔断并报 `BRANCH_FLIP`；
 > §4 增补状态 token，§5.7 由"尚未落地"改写为使用与限制说明。
+>
+> 2026-09-11 增补（第三件）：**审计行 on-site 投影矩**（最小 II-1b）——DFT+U
+> 运行下每条约束的审计行新增 `onsite=`（该片段原子的 DFT+U 关联轨道占据迹差，
+> 即日志 `atomic mag` 的同一个量），与 Becke 加权 `q` 并排可读；无 DFT+U 时
+> 该 token 不出现，历史输出逐位不变。
 
 ## 1. 功能概述
 
@@ -102,6 +107,13 @@ CONSTRAINT_AUDIT c[1] kind=spin q=0.09993 t=0.10001 mu=-0.0815 res=-7.9e-05
 
 - `c[i] kind=...`：逐约束通道标签（charge/spin；A4 起生产审计恒带）；
 - `q/t/mu/res`：逐约束读数/靶点/乘子（Ry）/残差；
+- `onsite=...`（**仅 DFT+U 运行时出现**）：该约束片段内原子的 **on-site 投影矩**
+  之和——每个原子取 DFT+U 关联轨道占据矩阵的自旋迹差
+  `Tr[M↑] − Tr[M↓]`（即 running log 里 `atomic mag: iat <m>` 的同一个量，投影
+  球半径由 `onsite_radius` 控制）。它与 `q` 是两个**不同的观测量**：`q` 是
+  Becke 加权盆地矩，`onsite` 是关联轨道的局域投影矩。TM 磁性体系上二者会
+  **脱钩**（II-1b：FeO 换态点 Becke 掉 1.28 μB 而 on-site 只动 0.20 μB），
+  `onsite=` 就是为此提供的同点对照读数；
 - `total_charge`：Σ_α Q_α（混合 run 含 spin 分量、按 e 记账——为信息性总和，不声称
   恒等于 nelec；单约束/全片段覆盖时才具备 sum-rule 语义）；
 - 终态三态：
@@ -150,6 +162,12 @@ CONSTRAINT_AUDIT c[1] kind=spin q=0.09993 t=0.10001 mu=-0.0815 res=-7.9e-05
      WARNING_QUIT；守卫需要 `E_KS` 输入，未接线（缺能量）也 WARNING_QUIT；
    - 熔断只停止 SCF 并打印终态，进程正常退出、照常写能量与密度——**脚本/使用者必须
      检查 `final status` 是否是 `CONVERGED`**，不得只看 `!FINAL_ETOT_IS`。
+8. **`q`（Becke 加权矩）≠ on-site 局域矩**：约束作用在 Becke 加权观测量的共轭
+   量上（这一点是 CDFT 意义上严格的），但"约束 Fe 的自旋"**不等于**"控制 Fe 的
+   d 局域矩"——Becke 盆地含尾部与间隙磁化，最软的响应通道是尾部重排。TM 磁性
+   体系上请**同时读 `q` 与 `onsite`**（§4）：II-1b 实测在 FeO 换态点两者反向
+   脱钩（`q` −1.28 μB vs `onsite` −0.20 μB），而良态的 δ=+0.1 μB 点两者同向
+   （+0.100 vs +0.074 μB）。多解体系上还需配合 §5.7 的事后能量核对。
 
 ## 6. 示例用例（已注册测试套件）
 

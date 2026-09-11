@@ -185,3 +185,24 @@ baseline, not the constraint framework.**
 
 See `results/summary.txt` and the trimmed audit trails in `results/audit/`.
 Full write-up: `docs/superpowers/specs/2026-09-11-ii1-feo-spin-scan.md`.
+
+## On-site projected-moment instrument (2026-09-11)
+
+The audit line now carries an optional `onsite=` token: the fragment sum of the
+DFT+U d-orbital projected moments (occupation-matrix trace difference), the
+on-site counterpart of the Becke-weighted `q`.  It is printed only when DFT+U
+is on; without DFT+U the audit line is byte-for-byte as before.
+
+Read `onsite` next to `q` to separate "the constraint moved the Becke
+observable" from "the constraint moved the physical d moment":
+
+- at the good `S3L_fe2_0p1` point (CONVERGED, `mu* = -0.06549837621 Ry` the
+  reference phase q=3.384107449 / onsite=3.714721308 moves to
+  q=3.484068604 / onsite=3.788478732: dq=+0.09996 vs donsite=+0.07376, so the
+  on-site moment follows only 74% of the Becke response;
+- at the collapsed II-1b point the two move in *opposite* directions
+  (Becke -1.28 uB vs on-site -0.20 uB).
+
+The one-point snapshot is `results/onsite/ONSITE_fe2_p01.audit`.  The instrument
+is informational only: it never enters injection, solver or force paths.
+Full write-up: `docs/superpowers/specs/2026-09-11-onsite-moment-audit.md`.

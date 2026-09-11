@@ -73,6 +73,47 @@ void Plus_U::output(const UnitCell &ucell)
 // define the function calculate the eigenvalues of a matrix
 std::vector<double> CalculateEigenvalues(std::vector<std::vector<double>>& A, int n);
 
+// On-site projected moment of one atom's correlated orbital (trace difference
+// of the spin-up/down occupation matrices).  Mirrors the "atomic mag" line in
+// write_occup_m below, which sums the eigenvalues of the same matrices: the
+// trace equals that sum, so both paths report the same number while this one
+// avoids the diagonalization.
+double Plus_U::onsite_moment(const UnitCell& ucell, const int iat) const
+{
+    // Branch A: occupation matrices not computed yet (the first SCF iteration
+    // runs before cal_occ_*), or an out-of-range index from a caller bug.
+    if (!initialed_locale || iat < 0 || static_cast<size_t>(iat) >= locale.size())
+    {
+        return 0.0;
+    }
+    const int it = ucell.iat2it[iat];
+    // Branch B: atom type without a correlated orbital — nothing to project.
+    if (!has_correlated_orbital(it))
+    {
+        return 0.0;
+    }
+    const int lc = get_orbital_corr(it);
+    if (lc < 0 || static_cast<size_t>(lc) >= locale[iat].size())
+    {
+        return 0.0;
+    }
+    // Only the first zeta (n = 0) enters the DFT+U occupation (write_occup_m
+    // skips n != 0); a spin-difference channel exists only for nspin == 2.
+    if (locale[iat][lc].empty() || locale[iat][lc][0].size() < 2)
+    {
+        return 0.0;
+    }
+    const ModuleBase::matrix& occ_up = locale[iat][lc][0][0];
+    const ModuleBase::matrix& occ_dn = locale[iat][lc][0][1];
+    const int nm = occ_up.nr;
+    double mag = 0.0;
+    for (int m = 0; m < nm; ++m)
+    {
+        mag += occ_up(m, m) - occ_dn(m, m);
+    }
+    return mag;
+}
+
 void Plus_U::write_occup_m(const UnitCell& ucell,
                          std::ofstream &ofs, 
                          bool diag)
