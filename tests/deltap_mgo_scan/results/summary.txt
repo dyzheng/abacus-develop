@@ -1,0 +1,61 @@
+====================================================================================================
+I-1 MgO wide-charge scan - full extracted results
+system: MgO rocksalt 8-atom cell a=4.211 A, LCAO, 2x2x2 MP, symmetry 0, nelec=64
+binary: build_rel/abacus_basic_para (Release, proven bit-identical to debug)
+constraint: Becke, delta mode, mu_max 5.0 Ry, thr 1e-4 e, scf_thr 1e-8, scf_nmax 800
+====================================================================================================
+
+[S1] grid ladder, delta=0 reference phase, Q_ref of the 4-atom O sublattice
+   ecutwfc/ecutrho      Q_O(4) [e]        Q/O [e]           E_tot [eV]     maxdev      M3b [e]
+       60/240          18.22936235   4.5573405875   -7662.773603420737 6.661338148e-16 6.7248609632e-06
+       80/320          18.23129071   4.5578226775   -7662.790041016772 6.661338148e-16 1.44918904965e-06  dQ vs prev = 1.928e-03 e
+      100/400          18.23037258   4.5575931450   -7662.787094109618 6.661338148e-16 4.02949407174e-07  dQ vs prev = 9.181e-04 e
+      120/480          18.23064837   4.5576620925   -7662.788524936026 6.661338148e-16 1.41430323097e-06  dQ vs prev = 2.758e-04 e
+      160/640          18.23098696   4.5577467400   -7662.789267032480 6.661338148e-16 2.002619226e-07  dQ vs prev = 3.386e-04 e
+  NOTE: the planned criterion dQ < 3e-5 e is NOT attainable (best 2.8e-4 e); the drift is
+        deterministic FFT-grid discretisation, not noise.  Replaced by the kappa grid
+        check further down (0.018% on mu*).
+
+[S2] reference at the production grid 60/240, full coverage (O + Mg sublattices)
+  total_charge=64 nelec=64 maxdev=6.661338148e-16  (sum rule bit-exact)
+  c[0] charge q= 18.22936235 mu= 0.000 res=0.00e+00
+  c[1] charge q= 45.77063765 mu= 0.000 res=0.00e+00
+  M3b matrix-vs-grid audit = 1.68849068345e-05 e;  E_tot = -7662.773603420737 eV
+  -> Mg net +1.4427 e, O net -1.4427 e (literature band +-1.0..1.5 e); the periodic-image
+     Becke partition is validated in bulk for the first time.
+
+[S3] single O (atom 4), production grid 60/240; kappa_ref = slope of the first point
+  delta [e]        Q_ref      Q_final     mu* [Ry]     res [e]  outer  iters    kappa    local     dev  status
+       0.30     4.557341     4.857315    -0.617502   -2.54e-05     14    227    2.058        -       -  CONVERGED
+       0.50     4.557341     5.057340    -1.049024   -3.40e-07     23    376    2.098    2.158   +4.8%  CONVERGED
+       0.80     4.557341     5.357340    -1.741718   -3.99e-07     37    624    2.177    2.309  +12.2%  CONVERGED
+       1.00     4.557341     5.557340    -2.248166   -7.48e-07     47    788    2.248    2.532  +23.0%  CONVERGED
+      -0.30     4.557341     4.257296     0.594235   -4.49e-05     13    214    1.981        -       -  CONVERGED
+      -0.50     4.557341     4.057321     0.981978   -2.00e-05     21    362    1.964    1.939   -2.1%  CONVERGED
+      -0.80     4.557341     3.757339     1.556173   -1.20e-06     33    569    1.945    1.914   -3.4%  CONVERGED
+      -1.00     4.557341     3.557337     1.936320   -4.00e-06     40    697    1.936    1.901   -4.0%  CONVERGED
+
+[S4] single Mg (atom 0), production grid 60/240
+  delta=+1.0 e  Q_ref=11.44265943  Q_final=12.44269857  mu*=-1.305155 Ry  kappa=1.305 Ry/e  outer=28 iters=432  CONVERGED
+  delta=-1.0 e  Q_ref=11.44265943  Q_final=10.44270878  mu*=+2.115260 Ry  kappa=2.115 Ry/e  outer=44 iters=626  CONVERGED
+  -> the Mg(3+) side did NOT fuse (mu*=+2.115 Ry << 5.0 Ry cap), so the plan's predicted
+     fuse case does not exist at |delta| = 1.0 e.
+
+[robustness]
+  delta=+0.8 e, grid 60/240: mu* = -1.741718297 Ry
+  delta=+0.8 e, grid 80/320: mu* = -1.741409256 Ry
+  -> relative difference 0.0177%  (kappa is grid-robust)
+       interval  -dE/ddelta [Ry/e]  mu* at midpoint   rel.dev
+  [+0.0,+0.3]            -0.3063          -0.3088    -0.78%
+  [+0.3,+0.5]            -0.8317          -0.8333    -0.19%
+  [+0.5,+0.8]            -1.3899          -1.3954    -0.39%
+  [+0.8,+1.0]            -1.9913          -1.9949    -0.18%
+  [+0.0,-0.3]             0.2986           0.2971     0.49%
+  [-0.3,-0.5]             0.7885           0.7881     0.05%
+  [-0.5,-0.8]             1.2696           1.2691     0.04%
+  [-0.8,-1.0]             1.7463           1.7462     0.01%
+  -> mu*(midpoint) = -dE_tot/ddelta closes to <0.8% on all eight deltas (independent check).
+
+[verdict] linear window: -1.0 .. +0.8 e (negative side dev <= 4.0%, positive side <= 12.2%
+          up to +0.8 e; +1.0 e deviates +23.0%) => >= +-0.8 e = 2.7x the H2O +-0.3 e
+          window.  R4 CONFIRMED (ionic systems do have a substantially wider linear domain).

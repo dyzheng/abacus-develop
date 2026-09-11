@@ -1,0 +1,2 @@
+# trimmed stdout log: S1x_e60r400 (work dir /tmp/mgo_scan/S1x_e60r400)
+                              ABACUS v3.11.0-beta.1

@@ -1,0 +1,6 @@
+# trimmed stdout log: S2_ref__cross80 (work dir /tmp/mgo_cross/S2_ref)
+                              ABACUS v3.11.0-beta.1
+ WARNING: some of potential function is set to zero cause of less than 1e-30.
+ WARNING: some of potential function is set to zero cause of less than 1e-30.
+ TOTAL  Time  : 15
+ SEE INFORMATION IN : OUT.autotest/

@@ -1,0 +1,6 @@
+# trimmed stdout log: S1_grid80 (work dir /tmp/mgo_scan/S1_grid80)
+                              ABACUS v3.11.0-beta.1
+ WARNING: some of potential function is set to zero cause of less than 1e-30.
+ WARNING: some of potential function is set to zero cause of less than 1e-30.
+ TOTAL  Time  : 18
+ SEE INFORMATION IN : OUT.autotest/

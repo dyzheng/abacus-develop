@@ -1,0 +1,6 @@
+# trimmed stdout log: S4_Mg_m1p0 (work dir /tmp/mgo_prod/S4_Mg_m1p0)
+                              ABACUS v3.11.0-beta.1
+ WARNING: some of potential function is set to zero cause of less than 1e-30.
+ WARNING: some of potential function is set to zero cause of less than 1e-30.
+ TOTAL  Time  : 1018
+ SEE INFORMATION IN : OUT.autotest/

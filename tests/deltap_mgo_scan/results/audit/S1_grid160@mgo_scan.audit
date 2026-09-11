@@ -1,0 +1,9 @@
+# trimmed audit extract of S1_grid160 (root /tmp/mgo_scan)
+[constraint] outer step 1 after SCF iteration 9 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0 max_residual=0 total_charge=18.23098696 nelec=64 maxdev=6.661338148e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=18.23098696 t=18.23098696 mu=0 res=0
+[constraint] M3b runtime audit: max |Tr[W.DM] - int w rho| = 2.002619226e-07 e
+[constraint] final status: CONVERGED (targets reached within 0.0001 e)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0 max_residual=0 total_charge=18.23098696 nelec=64 maxdev=6.661338148e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=18.23098696 t=18.23098696 mu=0 res=0
+ !FINAL_ETOT_IS -7662.78926703248 eV

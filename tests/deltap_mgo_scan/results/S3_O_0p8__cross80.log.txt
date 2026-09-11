@@ -1,0 +1,6 @@
+# trimmed stdout log: S3_O_0p8__cross80 (work dir /tmp/mgo_cross/S3_O_0p8)
+                              ABACUS v3.11.0-beta.1
+ WARNING: some of potential function is set to zero cause of less than 1e-30.
+ WARNING: some of potential function is set to zero cause of less than 1e-30.
+ TOTAL  Time  : 779
+ SEE INFORMATION IN : OUT.autotest/
