@@ -1613,6 +1613,42 @@ Manual override is allowed: if sc_acceleration_mode is explicitly set, it takes 
         this->add_item(item);
     }
     {
+        Input_Item item("constraint_mu_schedule");
+        item.annotation = "mu update schedule: outer or inner";
+        item.category = "Constraint";
+        item.type = "String";
+        item.description = "Where the Lagrange multiplier is updated. outer (default): the SCF runs to full convergence and one M4 secant step is taken per converged SCF (bit-identical to the pre-dual-iteration behaviour). inner (DeltaSpin lambda_loop lineage): inside the SCF, once drho drops below constraint_inner_thr the observable is read and mu is updated during the iteration, the charge-mixing history is reset (mix_reset), and the SCF continues; convergence additionally requires the target to still hold after the density has settled (settle check).";
+        item.default_value = "outer";
+        item.unit = "";
+        item.availability = "constraint is true";
+        read_sync_string(input.constraint_mu_schedule);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("constraint_inner_thr");
+        item.annotation = "drho gate for the INNER mu schedule";
+        item.category = "Constraint";
+        item.type = "Real";
+        item.description = "Density-residual gate for the INNER schedule: mu is only updated on SCF iterations whose drho is below this value (the observable on a still-drifting density is mixing noise, not Q(mu)). Default 1e-3. Ignored when constraint_mu_schedule=outer.";
+        item.default_value = "1.0e-3";
+        item.unit = "";
+        item.availability = "constraint is true";
+        read_sync_double(input.constraint_inner_thr);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("constraint_inner_nmax");
+        item.annotation = "max INNER mu updates before falling back to OUTER";
+        item.category = "Constraint";
+        item.type = "Integer";
+        item.description = "Safety budget for the INNER schedule: the maximum number of in-SCF mu updates in one run. When exhausted the loop logs a loud warning and falls back to the OUTER schedule for the remainder (never spins forever). Raise it for scans that need many outer steps (a run needing N outer steps also needs about N inner updates). Ignored when constraint_mu_schedule=outer.";
+        item.default_value = "20";
+        item.unit = "";
+        item.availability = "constraint is true";
+        read_sync_int(input.constraint_inner_nmax);
+        this->add_item(item);
+    }
+    {
         Input_Item item("deltap_branch_write");
         item.annotation = "persist deltap_branch.dat: true or false";
         item.category = "DeltaP";

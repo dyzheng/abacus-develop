@@ -244,6 +244,33 @@ class ConstraintLoopTest : public ::testing::Test
             1e-4, 0.05, 0.0, 0.0, nat, nspin, error);
     }
 
+    // One mock SCF iteration in the real hook order:
+    //   fill rho(mu_obs) -> observe -> on_iteration(iter, drho) ->
+    //   on_scf_converged.
+    // Returns the on_iteration() verdict (the mix-reset request); the SCF
+    // verdict the esolver would take after on_scf_converged() goes to
+    // conv_out.  'mu_obs' is the multiplier the mock density is built at:
+    // loop.mu()[0] for a settled density, a perturbed value to simulate a
+    // settling bounce.  'scf_conv_in' is the drho-based verdict handed in
+    // (true unless the test wants to keep the SCF running).
+    bool mock_iteration(constraint::ConstraintLoop& loop,
+                        std::vector<double>& rho,
+                        const int iter,
+                        const double mu_obs,
+                        const double drho,
+                        bool& conv_out,
+                        const bool scf_conv_in = true)
+    {
+        fill_rho_mock({mu_obs}, rho);
+        const double* rp[1] = {rho.data()};
+        loop.observe(iter, rp, 1);
+        const bool reset = loop.on_iteration(iter, drho);
+        bool conv = scf_conv_in;
+        loop.on_scf_converged(iter, conv);
+        conv_out = conv;
+        return reset;
+    }
+
     constraint::ConstraintConfig make_cfg(const double delta,
                                           const double mu_max = 5.0,
                                           const double thr = 1e-4,
@@ -1003,4 +1030,331 @@ TEST_F(ConstraintLoopTest, OnsiteMomentsReachTheAuditLine)
     EXPECT_NE(loop.last_audit_line().find("onsite=3.5"), std::string::npos);
     // Informational only: the moments never touch the solver state.
     EXPECT_TRUE(loop.enabled());
+}
+// ---------------------------------------------------------------------------
+// Dual-iteration schedule (plan 2026-09-11-dual-iteration-strategy.md, §2).
+// Six tests cover the new INNER schedule: gating + budget, the mix-reset
+// contract, the settle check (pass and bounce), the anti-fake-convergence
+// discipline, the OUTER legacy contract, and the configuration guards.
+// ---------------------------------------------------------------------------
+
+TEST_F(ConstraintLoopTest, InnerScheduleGating)
+{
+    // Gate (drho < constraint_inner_thr) + budget (constraint_inner_nmax).
+    // The mock response is exactly linear, so a loose conv_tol would
+    // converge after two updates; thr is pinned at 1e-12 and the target is
+    // far enough (delta = 0.5, step_max = 0.05) that the solver keeps
+    // stepping RUNNING, which is what lets the budget be exercised.
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    constraint::ConstraintConfig cfg = make_cfg(0.5, 5.0, 1e-12);
+    cfg.mu_schedule = "inner";
+    cfg.inner_thr = 1e-4;
+    cfg.inner_nmax = 3;
+    loop.init(*ucell, rhopw, cfg, radii, 10.0);
+    ASSERT_TRUE(loop.enabled());
+    EXPECT_EQ(loop.schedule(), "inner");
+    EXPECT_TRUE(loop.inner_active());
+    EXPECT_EQ(loop.inner_steps(), 0);
+
+    std::vector<double> rho;
+    bool conv = false;
+    // Reference SCF (mu = 0): the OUTER path records it and takes the first
+    // history-free probe step.  The gate is open (drho << inner_thr) but the
+    // reference phase must stay free of in-SCF updates.
+    EXPECT_FALSE(mock_iteration(loop, rho, 1, 0.0, 1e-9, conv));
+    ASSERT_FALSE(conv);
+    ASSERT_EQ(loop.phase(), constraint::LoopPhase::CONSTRAINED);
+    EXPECT_EQ(loop.inner_steps(), 0);
+
+    // drho above the gate -> the hook is inert: no update, no reset request.
+    // Above the gate the SCF is by construction not converged (inner_thr >
+    // scf_thr), so the esolver hands in scf_conv_in = false and no outer step
+    // runs either.
+    EXPECT_FALSE(mock_iteration(loop, rho, 2, loop.mu()[0], 1e-1, conv,
+                                /*scf_conv_in=*/false));
+    EXPECT_EQ(loop.inner_steps(), 0);
+    EXPECT_FALSE(conv);
+
+    // drho below the gate -> exactly one in-SCF update (and one reset).
+    EXPECT_TRUE(mock_iteration(loop, rho, 3, loop.mu()[0], 1e-6, conv));
+    EXPECT_EQ(loop.inner_steps(), 1);
+
+    // Two more updates fit the budget (inner_nmax = 3) ...
+    EXPECT_TRUE(mock_iteration(loop, rho, 4, loop.mu()[0], 1e-6, conv));
+    EXPECT_TRUE(mock_iteration(loop, rho, 5, loop.mu()[0], 1e-6, conv));
+    EXPECT_EQ(loop.inner_steps(), 3);
+
+    // ... the fourth gated iteration is refused, and the run degrades to the
+    // OUTER schedule loudly instead of spinning forever.
+    EXPECT_FALSE(mock_iteration(loop, rho, 6, loop.mu()[0], 1e-6, conv));
+    EXPECT_EQ(loop.inner_steps(), 3);
+    EXPECT_FALSE(loop.inner_active()); // degraded, never silently continued
+}
+
+TEST_F(ConstraintLoopTest, InnerMixResetOnUpdate)
+{
+    // The mix-reset contract: on_iteration() returns true iff mu actually
+    // moved, and the caller then resets the Broyden/DIIS history.  A step
+    // that reports CONVERGED leaves mu untouched (MuSolver's convergence
+    // check precedes any update), so it must NOT request a reset.
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    constraint::ConstraintConfig cfg = make_cfg(0.1, 5.0, 0.005);
+    cfg.mu_schedule = "inner";
+    cfg.inner_thr = 1e-4;
+    cfg.inner_nmax = 10;
+    loop.init(*ucell, rhopw, cfg, radii, 10.0);
+    ASSERT_TRUE(loop.enabled());
+
+    std::vector<double> rho;
+    bool conv = false;
+    // Reference SCF (SCF converged): the OUTER path records it and takes the
+    // history-free probe step (mu = -0.05) but never resets the mixing.
+    EXPECT_FALSE(mock_iteration(loop, rho, 1, 0.0, 1e-9, conv));
+    ASSERT_FALSE(conv);
+    const double mu_after_ref = loop.mu()[0];
+    EXPECT_NEAR(mu_after_ref, -0.05, 1e-9);
+    EXPECT_EQ(loop.inner_steps(), 0);
+
+    // Above the gate: no update -> no reset request, mu untouched.
+    EXPECT_FALSE(mock_iteration(loop, rho, 2, mu_after_ref, 1e-1, conv,
+                                /*scf_conv_in=*/false));
+    EXPECT_DOUBLE_EQ(loop.mu()[0], mu_after_ref);
+    EXPECT_EQ(loop.inner_steps(), 0);
+
+    // Below the gate, residual still above tol: mu moves -> exactly one
+    // reset request (the fixed-point map changed).
+    EXPECT_TRUE(mock_iteration(loop, rho, 3, mu_after_ref, 1e-6, conv,
+                               /*scf_conv_in=*/false));
+    EXPECT_EQ(loop.inner_steps(), 1);
+    const double mu_star = loop.mu()[0];
+    EXPECT_NEAR(mu_star, -0.1, 1e-9); // root of the normalized response
+
+    // The next gated iteration lands on the target: CONVERGED without moving
+    // mu -> no reset request.  The SCF is held open this iteration, so the
+    // settle check is deferred to the next one.
+    EXPECT_FALSE(mock_iteration(loop, rho, 4, mu_star, 1e-6, conv,
+                                /*scf_conv_in=*/false));
+    EXPECT_DOUBLE_EQ(loop.mu()[0], mu_star);
+    EXPECT_EQ(loop.status(), constraint::MuStatus::CONVERGED);
+    EXPECT_EQ(loop.phase(), constraint::LoopPhase::CONSTRAINED);
+    EXPECT_EQ(loop.settle_failures(), 0);
+
+    // Settle check on the relaxed density: the target survived -> the run is
+    // genuinely done.  No outer step was ever taken after the reference
+    // (outer_steps == 1), so the INNER path produced the convergence.
+    EXPECT_FALSE(mock_iteration(loop, rho, 5, mu_star, 1e-9, conv));
+    EXPECT_EQ(loop.status(), constraint::MuStatus::CONVERGED);
+    EXPECT_EQ(loop.phase(), constraint::LoopPhase::DONE);
+    EXPECT_EQ(loop.settle_failures(), 0);
+    EXPECT_TRUE(conv); // the run really terminated here
+    EXPECT_EQ(loop.outer_steps(), 1);
+    // NOTE: the emitted "[constraint] settle step N ... (phase=constrained)"
+    // header line goes to ofs_running and is not captured by this unit test;
+    // it is verified end-to-end on cases 211/212 (spec
+    // 2026-09-14-dual-iteration-inner-schedule.md section 3.5).
+}
+
+TEST_F(ConstraintLoopTest, InnerSettleCheck)
+{
+    // Settle check (§2.4): an inner CONVERGED verdict is provisional until
+    // the density has settled with mu frozen.  A bounce withdraws the claim
+    // and resumes the inner loop; a second bounce degrades to OUTER.
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    constraint::ConstraintConfig cfg = make_cfg(0.1, 5.0, 0.005);
+    cfg.mu_schedule = "inner";
+    cfg.inner_thr = 1e-4;
+    cfg.inner_nmax = 10;
+    loop.init(*ucell, rhopw, cfg, radii, 10.0);
+    ASSERT_TRUE(loop.enabled());
+
+    std::vector<double> rho;
+    bool conv = false;
+    // Reference SCF -> probe step to mu = -0.05.
+    mock_iteration(loop, rho, 1, 0.0, 1e-9, conv);
+    ASSERT_FALSE(conv);
+    ASSERT_NEAR(loop.mu()[0], -0.05, 1e-9);
+
+    // One gated update lands mu on the target (-0.1) but stays RUNNING.
+    EXPECT_TRUE(mock_iteration(loop, rho, 2, loop.mu()[0], 1e-6, conv,
+                               /*scf_conv_in=*/false));
+    ASSERT_EQ(loop.inner_steps(), 1);
+    ASSERT_NEAR(loop.mu()[0], -0.1, 1e-9);
+
+    // Next gated iteration: residual is zero -> CONVERGED, settle armed.  The
+    // SCF is held open (scf_conv_in = false) so the settle check is deferred
+    // to the next iteration, where the density has had a chance to relax.
+    EXPECT_FALSE(mock_iteration(loop, rho, 3, loop.mu()[0], 1e-6, conv,
+                                /*scf_conv_in=*/false));
+    ASSERT_EQ(loop.status(), constraint::MuStatus::CONVERGED);
+    ASSERT_EQ(loop.phase(), constraint::LoopPhase::CONSTRAINED);
+    ASSERT_EQ(loop.settle_failures(), 0);
+    EXPECT_FALSE(conv);
+
+    // Bounce #1: the relaxed density no longer meets the target (simulated
+    // by observing a density built at a perturbed mu).  The verdict must be
+    // withdrawn, the SCF kept running and the inner loop resumed.
+    EXPECT_FALSE(mock_iteration(loop, rho, 4, -0.07, 1e-9, conv));
+    EXPECT_EQ(loop.settle_failures(), 1);
+    EXPECT_EQ(loop.status(), constraint::MuStatus::RUNNING);
+    EXPECT_TRUE(loop.inner_active()); // one bounce: still INNER
+    EXPECT_FALSE(conv);
+
+    // The inner loop re-converges on the settled density (mu is still the
+    // frozen -0.1).
+    EXPECT_FALSE(mock_iteration(loop, rho, 5, loop.mu()[0], 1e-6, conv,
+                                /*scf_conv_in=*/false));
+    ASSERT_EQ(loop.status(), constraint::MuStatus::CONVERGED);
+    EXPECT_EQ(loop.settle_failures(), 1);
+
+    // Bounce #2: two failed settle checks -> degrade to OUTER.  The SCF is
+    // settled, so the outer secant takes over on this density immediately.
+    mock_iteration(loop, rho, 6, -0.07, 1e-9, conv);
+    EXPECT_EQ(loop.settle_failures(), 2);
+    EXPECT_FALSE(loop.inner_active()); // degraded, loudly
+    EXPECT_GT(loop.outer_steps(), 1);  // the OUTER path took over
+}
+
+TEST_F(ConstraintLoopTest, InnerAntiFakeConvergence)
+{
+    // T4a discipline in INNER mode: an open density gate is not target
+    // convergence.  At mu = 0 the observed Q is the natural reference Q_ref,
+    // which sits exactly 'delta' away from the target, so the reference
+    // iteration must stay RUNNING (never CONVERGED) and the first gated
+    // iteration must move mu away from zero.
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    constraint::ConstraintConfig cfg = make_cfg(0.01, 5.0, 1e-12);
+    cfg.mu_schedule = "inner";
+    cfg.inner_thr = 1e-4;
+    cfg.inner_nmax = 10;
+    loop.init(*ucell, rhopw, cfg, radii, 10.0);
+    ASSERT_TRUE(loop.enabled());
+
+    std::vector<double> rho;
+    bool conv = false;
+    // Reference: gate open (drho = 1e-9 << inner_thr), yet no convergence
+    // and no in-SCF update.
+    EXPECT_FALSE(mock_iteration(loop, rho, 1, 0.0, 1e-9, conv));
+    EXPECT_FALSE(conv);
+    EXPECT_EQ(loop.status(), constraint::MuStatus::RUNNING);
+    EXPECT_EQ(loop.inner_steps(), 0);
+    // The free density really is off-target: this is why a stop here would
+    // be a fake convergence.
+    EXPECT_NEAR(loop.targets()[0] - loop.charges()[0], 0.01, 1e-10);
+    EXPECT_LT(loop.mu()[0], 0.0); // already stepped away from mu = 0
+
+    int iter = 1;
+    int guard = 0;
+    while (loop.status() == constraint::MuStatus::RUNNING && guard < 30)
+    {
+        ++iter;
+        mock_iteration(loop, rho, iter, loop.mu()[0], 1e-9, conv);
+        ++guard;
+    }
+    EXPECT_LT(guard, 30);
+    EXPECT_EQ(loop.status(), constraint::MuStatus::CONVERGED);
+    EXPECT_EQ(loop.phase(), constraint::LoopPhase::DONE);
+    EXPECT_NEAR(loop.mu()[0], -0.01, 1e-9); // root for delta = 0.01
+    EXPECT_NEAR(loop.charges()[0], loop.targets()[0], 1e-10);
+    EXPECT_GT(loop.inner_steps(), 0); // the INNER path did the work
+}
+
+TEST_F(ConstraintLoopTest, OuterLegacyBitIdentical)
+{
+    // OUTER is the default and must behave exactly as before the feature:
+    // the per-iteration hook never fires (even with the gate wide open), the
+    // mu trajectory and the outer-step count are unchanged.  Byte-level
+    // regression is covered by ConvergesOnLinearResponse (untouched) still
+    // passing; here the schedule-specific invariants are pinned.
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    constraint::ConstraintConfig cfg = make_cfg(0.01); // defaults
+    ASSERT_EQ(cfg.mu_schedule, "outer");
+    loop.init(*ucell, rhopw, cfg, radii, 10.0);
+    EXPECT_FALSE(loop.inner_active());
+    EXPECT_EQ(loop.schedule(), "outer");
+
+    std::vector<double> rho;
+    bool conv = false;
+    // drho = 0 would satisfy any positive gate: a sabotaged gate must still
+    // not turn the OUTER schedule into an INNER one.
+    EXPECT_FALSE(mock_iteration(loop, rho, 1, 0.0, 0.0, conv));
+    ASSERT_FALSE(conv);
+    EXPECT_EQ(loop.outer_steps(), 1);
+    EXPECT_EQ(loop.inner_steps(), 0);
+
+    int iter = 1;
+    int guard = 0;
+    while (loop.status() == constraint::MuStatus::RUNNING && guard < 20)
+    {
+        ++iter;
+        EXPECT_FALSE(mock_iteration(loop, rho, iter, loop.mu()[0], 0.0, conv));
+        EXPECT_EQ(loop.inner_steps(), 0);
+        EXPECT_EQ(loop.settle_failures(), 0);
+        ++guard;
+    }
+    EXPECT_LT(guard, 20);
+    EXPECT_EQ(loop.status(), constraint::MuStatus::CONVERGED);
+    EXPECT_EQ(loop.phase(), constraint::LoopPhase::DONE);
+    EXPECT_TRUE(conv);
+    EXPECT_NEAR(loop.mu()[0], -0.01, 1e-6);
+    EXPECT_EQ(loop.outer_steps(), guard + 1); // reference + one per iteration
+}
+
+TEST_F(ConstraintLoopTest, InnerGuards)
+{
+    // (1) Configuration guards: an unusable INNER schedule must abort
+    // loudly rather than silently behave like OUTER or trip immediately.
+    constraint::ConstraintConfig cfg;
+    std::vector<constraint::ConstraintSpec> specs;
+    std::vector<std::string> warnings;
+    std::string error;
+    const std::string json = R"({"targets": [0.1], "atoms": [[0]]})";
+    auto configure = [&](const std::string& schedule, const double thr,
+                         const int nmax) {
+        return constraint::configure_constraint(
+            cfg, specs, warnings, true, "charge", "becke", "delta", json, 5.0,
+            1e-4, 0.05, 0.0, 0.0, 3, 1, error, schedule, thr, nmax);
+    };
+    // Branch: an unknown schedule is refused (no silent OUTER fallback).
+    EXPECT_EQ(configure("bogus", 1e-3, 20), constraint::ConfigStatus::ERROR);
+    EXPECT_NE(error.find("constraint_mu_schedule"), std::string::npos);
+    // Branch: INNER with a non-positive density gate.
+    EXPECT_EQ(configure("inner", 0.0, 20), constraint::ConfigStatus::ERROR);
+    EXPECT_NE(error.find("constraint_inner_thr"), std::string::npos);
+    // Branch: INNER with a non-positive update budget.
+    EXPECT_EQ(configure("inner", 1e-3, 0), constraint::ConfigStatus::ERROR);
+    EXPECT_NE(error.find("constraint_inner_nmax"), std::string::npos);
+    // Branch: OUTER keeps ignoring both knobs -> the legacy runs stay valid.
+    EXPECT_EQ(configure("outer", 0.0, 0), constraint::ConfigStatus::OK);
+    EXPECT_EQ(configure("inner", 1e-3, 20), constraint::ConfigStatus::OK);
+
+    // (2) Sabotage detector: the gate is a STRICT inequality.  A sabotage
+    // that widened it (drho <= inner_thr) or zeroed it is exactly what this
+    // boundary pins down: drho == inner_thr must NOT update, drho just below
+    // it must.
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    constraint::ConstraintConfig lcfg = make_cfg(0.5, 5.0, 1e-12);
+    lcfg.mu_schedule = "inner";
+    lcfg.inner_thr = 1e-3;
+    lcfg.inner_nmax = 10;
+    loop.init(*ucell, rhopw, lcfg, radii, 10.0);
+
+    std::vector<double> rho;
+    bool conv = false;
+    mock_iteration(loop, rho, 1, 0.0, 1e-9, conv); // reference: inert
+    ASSERT_EQ(loop.inner_steps(), 0);
+    const double mu_after_ref = loop.mu()[0];
+
+    // The two boundary iterations hand in scf_conv_in = false so that the
+    // OUTER secant cannot move mu: the assertion isolates the schedule gate.
+    // drho exactly at the gate: strict '<' -> no update.
+    EXPECT_FALSE(mock_iteration(loop, rho, 2, mu_after_ref, 1e-3, conv,
+                                /*scf_conv_in=*/false));
+    EXPECT_EQ(loop.inner_steps(), 0);
+    EXPECT_DOUBLE_EQ(loop.mu()[0], mu_after_ref);
+
+    // drho just below the gate: open -> exactly one update.
+    EXPECT_TRUE(mock_iteration(loop, rho, 3, mu_after_ref, 1e-3 * (1.0 - 1e-9),
+                               conv, /*scf_conv_in=*/false));
+    EXPECT_EQ(loop.inner_steps(), 1);
+    EXPECT_NE(loop.mu()[0], mu_after_ref);
 }

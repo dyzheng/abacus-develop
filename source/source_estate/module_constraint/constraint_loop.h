@@ -104,6 +104,17 @@ class ConstraintLoop
     // loop is done (CONVERGED / UNREACHABLE / BRANCH_FLIP) or inactive.
     void on_scf_converged(const int iter, bool& conv_esolver);
 
+    // Dual-iteration schedule hook (plan 2026-09-11-dual-iteration-strategy.md),
+    // called by the esolver once per SCF iteration, after observe() and before
+    // on_scf_converged().  No-op unless constraint_mu_schedule=inner, the loop
+    // is in the constrained phase and the density gate drho < inner_thr is
+    // passed.  On a real mu update the observable is read (observe()), M4 runs
+    // one step, the audit line is printed, and the function returns true: the
+    // caller MUST reset the charge-mixing history (mix_reset) so the Broyden
+    // cache does not survive the change of fixed-point map.  Returns false in
+    // every other case (no update -> no reset).
+    bool on_iteration(const int iter, const double drho);
+
     // Energy-branch-guard input (L10 lineage; consumed only when
     // constraint_branch_tol > 0).  The esolver feeds the plain (constraint-
     // correction-free) KS total energy [Ry] of the SCF iteration it is about
@@ -156,6 +167,15 @@ class ConstraintLoop
     double guard_energy() const { return e_guard_; }
     // Per-atom on-site moments as supplied by the esolver (empty when none).
     const std::vector<double>& onsite_moments() const { return onsite_atom_; }
+    // Dual-iteration schedule diagnostics (measurement objects of the plan):
+    // how many mu updates went through the INNER path, how many settle checks
+    // bounced, and whether the inner schedule is still in effect (it degrades
+    // to OUTER when constraint_inner_nmax is exhausted or the settle check
+    // fails twice threshold).  schedule() reports the configured value.
+    const std::string& schedule() const { return cfg_.mu_schedule; }
+    bool inner_active() const { return inner_active_; }
+    int inner_steps() const { return inner_steps_; }
+    int settle_failures() const { return settle_fail_; }
     double mu_norm() const;
     const std::vector<double>& mu() const { return mu_; }
     const std::vector<double>& targets() const { return targets_; }
@@ -173,7 +193,18 @@ class ConstraintLoop
     ConstraintLoop() = default;
     // Run one outer step from the current charges Q_ against targets_.
     void outer_step(const int iter, bool& conv_esolver);
+    // One INNER-schedule mu update from the current observation.  Returns true
+    // when mu actually changed (the caller must reset the mixing history).
+    bool take_inner_step(const int iter);
+    // Log once and hand the remainder of the run back to the OUTER schedule
+    // (used when the inner budget is exhausted or the settle check bounced
+    // twice).  Never silently continues: the reason is printed.
+    void degrade_to_outer(const char* reason);
+    // Largest |Q_a - target_a| over the constraint list (settle-check gate).
+    double max_residual() const;
     void print_audit(const int iter);
+    // Shared audit emitter: 'label' is "outer" / "inner" / "settle".
+    void print_audit_line(const int iter, const int step, const char* label);
 
     ConstraintConfig cfg_;
     // Stage-A per-constraint list and the derived per-component fields
@@ -207,6 +238,22 @@ class ConstraintLoop
     // Per-atom on-site moments supplied by the esolver (empty = not
     // available; audit line then omits the onsite= token).
     std::vector<double> onsite_atom_;
+    // Dual-iteration schedule state (plan 2026-09-11-dual-iteration-strategy.md).
+    // inner_schedule_ mirrors cfg_.mu_schedule at init; inner_active_ is the
+    // live flag (false = OUTER dynamics, set false permanently on degrade).
+    // settle_armed_ is set when the inner M4 step reports CONVERGED: mu is then
+    // frozen and the SCF settles, and on_scf_converged re-verifies the target
+    // on the settled density (the "inner converged but the relaxation bounced"
+    // trap of 2026-07-20).  last_reset_iter_ measures the mixing-reset cost.
+    bool inner_schedule_ = false;
+    bool inner_active_ = false;
+    double inner_thr_ = 1e-3;
+    int inner_nmax_ = 20;
+    int inner_steps_ = 0;
+    int settle_fail_ = 0;
+    bool settle_armed_ = false;
+    bool inner_step_this_iter_ = false;
+    int last_reset_iter_ = 0;
     // Experiment switch (default off): when ABA_CONSTRAINT_FIXED_MU is set,
     // the multiplier is frozen at the env value and the outer secant loop
     // is disabled (constraint potential acts as a fixed external potential).

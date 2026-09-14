@@ -14,6 +14,23 @@
 namespace constraint
 {
 
+namespace
+{
+// Diagnostic experiment switch (default off; the production behaviour always
+// resets).  ABA_CONSTRAINT_INNER_NO_RESET suppresses the charge-mixing reset
+// that normally follows every INNER mu update, so the mixing-damage question
+// (is the Broyden/DIIS cache corruption the real cost of an in-SCF mu change?)
+// can be answered against a no-reset control (plan 2026-09-11 §3.3-3).  The mu
+// update itself is untouched: only the history reset is skipped, and the run
+// logs MIX_RESET SUPPRESSED so a control run is never mistaken for a normal one.
+bool inner_no_reset_experiment()
+{
+    static const bool enabled
+        = (std::getenv("ABA_CONSTRAINT_INNER_NO_RESET") != nullptr);
+    return enabled;
+}
+} // anonymous namespace
+
 ConstraintLoop& ConstraintLoop::instance()
 {
     static ConstraintLoop loop;
@@ -46,6 +63,15 @@ void ConstraintLoop::reset()
     e_ref_valid_ = false;
     e_guard_ = 0.0;
     onsite_atom_.clear();
+    inner_schedule_ = false;
+    inner_active_ = false;
+    inner_thr_ = 1e-3;
+    inner_nmax_ = 20;
+    inner_steps_ = 0;
+    settle_fail_ = 0;
+    settle_armed_ = false;
+    inner_step_this_iter_ = false;
+    last_reset_iter_ = 0;
 }
 
 void ConstraintLoop::init(const UnitCell& ucell,
@@ -86,10 +112,21 @@ void ConstraintLoop::init(const UnitCell& ucell,
     cfg_ = cfg;
     specs_ = specs;
     nelec_ = nelec;
+    // Dual-iteration schedule (plan 2026-09-11-dual-iteration-strategy.md):
+    // the config switch is mirrored into live state.  inner_active_ is what
+    // on_iteration() gates on, so a degrade can switch the run back to OUTER
+    // dynamics without touching the configuration.
+    inner_schedule_ = (cfg_.mu_schedule == "inner");
+    inner_active_ = false; // armed below only when the loop really runs
+    inner_thr_ = cfg_.inner_thr;
+    inner_nmax_ = cfg_.inner_nmax;
     if (!cfg_.enabled)
     {
         return;
     }
+    // The loop really runs: arm the INNER schedule (if selected).  A degrade
+    // below clears inner_active_ without changing inner_schedule_.
+    inner_active_ = inner_schedule_;
     // Derive the per-constraint fields (M7 -> M2/M3/M4/M5): observable kind,
     // density channel and fuse cap per spec.  All consumers below iterate
     // these parallel vectors, so a mixed charge+spin list needs no special
@@ -140,6 +177,9 @@ void ConstraintLoop::init(const UnitCell& ucell,
         const double mu_fixed = std::atof(fixed_mu_env);
         std::fill(mu_.begin(), mu_.end(), mu_fixed);
         fixed_mu_ = true;
+        // Fixed-mu experiment: the multiplier never changes, so there is no
+        // inner update to schedule; refuse to pretend otherwise.
+        inner_active_ = false;
         targets_.resize(specs_.size());
         for (size_t a = 0; a < targets_.size(); ++a)
         {
@@ -337,12 +377,80 @@ void ConstraintLoop::on_scf_converged(const int iter, bool& conv_esolver)
     {
         return;
     }
+    // Consume the per-iteration marker set by take_inner_step(): an INNER mu
+    // update happened this SCF iteration.  Cleared here (every iteration) so
+    // the OUTER path can never see a stale flag.
+    const bool inner_step = inner_step_this_iter_;
+    inner_step_this_iter_ = false;
+    // Branch S: INNER settle check (plan 2026-09-11-dual-iteration-strategy.md
+    // section 2.4).  The inner solver announced CONVERGED (this or an earlier
+    // iteration) and mu has been frozen since; the density is now settled
+    // (conv_esolver).  Re-verify the target on the settled density: the
+    // historical trap is an inner optimisation that holds on the frozen
+    // density but bounces once the density relaxes (2026-07-20 lesson).
+    if (inner_active_ && phase_ == LoopPhase::CONSTRAINED && settle_armed_
+        && conv_esolver)
+    {
+        const double res = max_residual();
+        if (res < cfg_.thr)
+        {
+            // Branch S1: the target survived the relaxation -> genuine
+            // CONVERGED.  Re-emit the audit on the settled density so the
+            // reported e_con / Q are the settled values, not the frozen ones.
+            status_ = MuStatus::CONVERGED;
+            // Emit the audit BEFORE the phase flips to DONE: the audit line
+            // carries the phase token, and the settle line describes a
+            // constrained-phase decision (mirrors outer_step, which also
+            // prints while phase_ is still CONSTRAINED).
+            print_audit_line(iter, inner_steps_, "settle");
+            phase_ = LoopPhase::DONE;
+            GlobalV::ofs_running
+                << "[constraint] settle check PASSED: residual " << res
+                << " < " << cfg_.thr
+                << " on the settled density (INNER schedule CONVERGED)\n";
+            return; // conv_esolver stays true: the run is done
+        }
+        // Branch S2: the inner convergence claim did not survive the density
+        // relaxation -> withdraw it (status back to RUNNING: the loop must
+        // not report CONVERGED while the run continues) and resume the inner
+        // loop.
+        settle_armed_ = false;
+        status_ = MuStatus::RUNNING;
+        ++settle_fail_;
+        GlobalV::ofs_running
+            << "[constraint] settle check FAILED (x" << settle_fail_
+            << "): residual " << res << " >= " << cfg_.thr
+            << " on the settled density (the inner target did not survive "
+               "the relaxation)\n";
+        if (settle_fail_ >= 2)
+        {
+            // Branch S2a: two bounces -> stop pretending INNER works here;
+            // fall through to the OUTER path (the SCF is settled, so an outer
+            // step on this density is valid).
+            degrade_to_outer("settle check failed twice");
+        }
+        else
+        {
+            // Branch S2b: first bounce -> keep the SCF running so the inner
+            // loop can correct mu again.
+            conv_esolver = false;
+            return;
+        }
+    }
     // Branch B: SCF not converged yet — keep iterating; the observable is
     // only read at genuine SCF convergence (two-stage gating).  Without this
     // gate the outer step would run on the unconverged density and the
     // secant would chase the mixing noise instead of Q(mu).
     if (!conv_esolver)
     {
+        return;
+    }
+    // Branch I: an INNER mu update was made this iteration but the target is
+    // not reached yet — keep the SCF running so the density feels the new mu
+    // (the mixing history was reset by the caller in the same iteration).
+    if (inner_step)
+    {
+        conv_esolver = false;
         return;
     }
     // Online energy branch guard (L10 lineage, opt-in via
@@ -442,7 +550,163 @@ void ConstraintLoop::set_onsite_moments(const std::vector<double>& per_atom)
     onsite_atom_ = per_atom;
 }
 
+double ConstraintLoop::max_residual() const
+{
+    // Settle-check gate: the same residual the M4 convergence test uses
+    // (|Q_a - t_a|), evaluated on whatever density Q_ currently describes.
+    double worst = 0.0;
+    const size_t n = std::min(Q_.size(), targets_.size());
+    for (size_t a = 0; a < n; ++a)
+    {
+        worst = std::max(worst, std::abs(Q_[a] - targets_[a]));
+    }
+    return worst;
+}
+
+void ConstraintLoop::degrade_to_outer(const char* reason)
+{
+    if (!inner_active_)
+    {
+        return; // already degraded (or never inner): log exactly once
+    }
+    inner_active_ = false;
+    settle_armed_ = false;
+    // The inner convergence claim is withdrawn; the outer secant loop resumes
+    // from the current mu/Q state and must be free to continue.
+    if (status_ == MuStatus::CONVERGED)
+    {
+        status_ = MuStatus::RUNNING;
+    }
+    GlobalV::ofs_running
+        << "[constraint] INNER schedule degraded to OUTER (" << reason
+        << "): the in-SCF mu updates stop, the outer secant loop takes over "
+           "at SCF convergence\n";
+}
+
+bool ConstraintLoop::take_inner_step(const int iter)
+{
+    // Budget guard (constraint_inner_nmax): the inner loop must not churn
+    // forever.  When the budget is spent, hand the run back to the OUTER
+    // schedule and report it loudly -- never spin, never silently continue.
+    if (inner_steps_ >= inner_nmax_)
+    {
+        degrade_to_outer("constraint_inner_nmax exhausted");
+        return false;
+    }
+    ++inner_steps_;
+    // A real update happened this SCF iteration: on_scf_converged() must keep
+    // the SCF running so the new mu is felt by the density.
+    inner_step_this_iter_ = true;
+    // M4 secant step on the freshly observed Q at the current mu.  The same
+    // solver, caps and guards as the outer path (this is a schedule change,
+    // not a solver change).
+    status_ = mu_solver_.step(Q_, targets_, mu_);
+    print_audit_line(iter, inner_steps_, "inner");
+    // Branch A: the inner solver reached the target.  mu is frozen from now
+    // on; convergence is NOT declared here -- the density must settle first
+    // and the settle check re-verifies the target (historical trap: an inner
+    // optimisation against the frozen density can bounce once the density
+    // relaxes).
+    if (status_ == MuStatus::CONVERGED)
+    {
+        settle_armed_ = true;
+        return false;
+    }
+    // Branch B: a component fused at its mu cap.  Fuse the run exactly like
+    // the outer path (no mixing reset: the run is over).
+    if (status_ == MuStatus::UNREACHABLE)
+    {
+        phase_ = LoopPhase::DONE;
+        return false;
+    }
+    // Branch C: mu moved -> the fixed-point map changed, so the caller must
+    // reset the mixing history before the next SCF iteration.
+    return true;
+}
+
+bool ConstraintLoop::on_iteration(const int iter, const double drho)
+{
+    // Guard: without an enabled loop there is no schedule at all.
+    if (!enabled())
+    {
+        return false;
+    }
+    // Branch A: the loop already finished (CONVERGED / UNREACHABLE /
+    // BRANCH_FLIP) -- no further updates.
+    if (phase_ == LoopPhase::DONE)
+    {
+        return false;
+    }
+    // Branch B: OUTER schedule (default) or a degraded INNER run -- the
+    // per-iteration hook is inert, exactly as before this feature.
+    if (!inner_active_)
+    {
+        return false;
+    }
+    // Branch C: the reference SCF must stay the clean mu = 0 observation;
+    // inner updates start only after it has recorded Q_ref.
+    if (phase_ != LoopPhase::CONSTRAINED || fixed_mu_)
+    {
+        return false;
+    }
+    // Branch D: the settle phase -- mu is frozen and the density is allowed
+    // to relax; the settle check in on_scf_converged() adjudicates.
+    if (settle_armed_)
+    {
+        return false;
+    }
+    // Density gate (two-stage gating, deltaspin lineage): only update mu when
+    // drho is small enough that the observed Q is a response to mu rather
+    // than mixing noise.
+    if (!(drho < inner_thr_))
+    {
+        return false;
+    }
+    // Reset-cost accounting: the first gated iteration after a reset closes
+    // the previous update cycle (iterations spent re-converging the density).
+    if (last_reset_iter_ > 0)
+    {
+        GlobalV::ofs_running
+            << "[constraint] mixing recovered after "
+            << (iter - last_reset_iter_) << " SCF iteration(s) (reset cost)\n";
+        last_reset_iter_ = 0;
+    }
+    const bool reset = take_inner_step(iter);
+    // Branch R1: mu did not change (CONVERGED / UNREACHABLE / budget
+    // exhausted) -> the fixed-point map is untouched and no reset is needed.
+    if (!reset)
+    {
+        return false;
+    }
+    // Branch R2 (diagnostic, default off): the no-reset control of the
+    // mixing-damage experiment (plan 2026-09-11 §3.3-3).  The mu update stands;
+    // only the history reset is skipped, and the suppression is logged.
+    if (inner_no_reset_experiment())
+    {
+        GlobalV::ofs_running
+            << "[constraint] MIX_RESET SUPPRESSED at SCF iteration " << iter
+            << " (ABA_CONSTRAINT_INNER_NO_RESET experiment)\n";
+        return false;
+    }
+    // Branch R3 (production): every mu update that changes the fixed-point map
+    // is paired with exactly one reset.  The iteration of the reset is kept so
+    // the next gated iteration can report the reset cost (mixing damage
+    // measurement, plan §3.2).
+    last_reset_iter_ = iter;
+    GlobalV::ofs_running << "[constraint] MIX_RESET at SCF iteration " << iter
+                         << " (mu update)\n";
+    return true;
+}
+
 void ConstraintLoop::print_audit(const int iter)
+{
+    // OUTER-schedule audit: the historical label ("outer step N") is kept
+    // byte-identical so legacy runs and their parsers are unaffected.
+    print_audit_line(iter, outer_steps_, "outer");
+}
+
+void ConstraintLoop::print_audit_line(const int iter, const int step,
+                                      const char* label)
 {
     // Stage-A audit: per-constraint kinds label every detail line (M5:
     // c[i] kind=charge / kind=spin), so a mixed run stays machine
@@ -453,7 +717,7 @@ void ConstraintLoop::print_audit(const int iter)
     audit_ = ConstraintAccounting::audit(*wg_, mu_, Q_, targets_, nelec_,
                                          kinds_, onsite_atom_);
     last_audit_line_ = ConstraintAccounting::audit_line(audit_);
-    GlobalV::ofs_running << "\n[constraint] outer step " << outer_steps_
+    GlobalV::ofs_running << "\n[constraint] " << label << " step " << step
                          << " after SCF iteration " << iter << " (phase="
                          << (phase_ == LoopPhase::CONSTRAINED ? "constrained"
                                                               : "reference")

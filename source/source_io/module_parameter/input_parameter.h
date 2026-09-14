@@ -762,6 +762,9 @@ struct Input_para
     double constraint_step_max = 0.05;   ///< Ry, cap on |dmu| per outer step
     double constraint_step_probe = 0.0;  ///< Ry, first (history-free) step cap; 0 = use step_max
     double constraint_branch_tol = 0.0;  ///< Ry, energy branch-guard tolerance; 0 = guard off
+    std::string constraint_mu_schedule = "outer"; ///< "outer" (SCF fully converges, then one mu step) or "inner" (drho-gated in-SCF mu update + mix_reset)
+    double constraint_inner_thr = 1e-3;  ///< drho gate for the INNER schedule (Ry); only used when constraint_mu_schedule=inner
+    int constraint_inner_nmax = 20;      ///< max INNER mu updates per run before falling back to OUTER
 
     // ==============   #Parameters (25.uncommon hardware) ==================
     int dsp_count = 4;           ///< count of DSP hardwares in one node

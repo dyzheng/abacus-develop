@@ -948,6 +948,17 @@ void ESolver_KS_LCAO<TK, TR>::iter_finish(UnitCell& ucell, const int istep, int&
             }
             cloop.set_onsite_moments(onsite_moments);
         }
+        // Dual-iteration schedule (plan 2026-09-11-dual-iteration-strategy.md):
+        // under constraint_mu_schedule=inner, update mu in-SCF once drho has
+        // dropped below constraint_inner_thr.  A true return means mu changed,
+        // so the charge-mixing history (Broyden/DIIS cache) now describes a
+        // fixed-point map that no longer exists: reset it before the SCF
+        // continues.  Under the default OUTER schedule the hook is inert and
+        // no reset happens (legacy behaviour byte-for-byte).
+        if (cloop.on_iteration(iter, this->drho))
+        {
+            this->p_chgmix->mix_reset();
+        }
         cloop.on_scf_converged(iter, conv_esolver);
         // Refresh the total energy with the constraint correction
         // (cc_escon), mirroring the dp_escon path.

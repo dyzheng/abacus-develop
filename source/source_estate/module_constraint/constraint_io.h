@@ -33,6 +33,15 @@ struct ConstraintConfig
     // total energy drops more than this below the unconstrained reference
     // energy of the same run (see ConstraintLoop::set_scf_energy).
     double branch_tol = 0.0;
+    // Dual-iteration schedule (plan 2026-09-11-dual-iteration-strategy.md):
+    //   "outer" (default): the SCF converges fully, then one M4 secant step.
+    //   "inner": inside the SCF, once drho < inner_thr the observable is read
+    //     and mu is updated in-iteration (DeltaSpin lambda_loop lineage); the
+    //     charge-mixing history is reset and the SCF continues, with a settle
+    //     check before a run may report CONVERGED.
+    std::string mu_schedule = "outer";
+    double inner_thr = 1e-3; // INNER drho gate (ignored when schedule=outer)
+    int inner_nmax = 20;     // INNER mu-update budget (ignored when outer)
     std::vector<ConstraintTarget> targets;
 };
 
@@ -59,6 +68,10 @@ enum class ConfigStatus
  *  - step_max / step_probe sanity -> ERROR (step_max > 0, and 0 <= step_probe
  *    <= step_max; the probe is a sub-cap for the history-free first step)
  *  - branch_tol sanity      -> ERROR (>= 0; 0 disables the guard)
+ *  - mu_schedule            -> ERROR unless "outer" / "inner"
+ *  - INNER schedule only    -> ERROR unless inner_thr > 0 and inner_nmax > 0
+ *    (the schedule must receive positive values; an unusable inner loop would
+ *    otherwise silently behave like outer or trip the budget immediately)
  *
  * @param target_file_content Content of the target JSON file (empty string
  *        when no file is configured).
@@ -228,6 +241,9 @@ ConfigStatus configure_constraint(ConstraintConfig& cfg,
                                   const double branch_tol,
                                   const int nat,
                                   const int nspin,
-                                  std::string& error);
+                                  std::string& error,
+                                  const std::string& mu_schedule = "outer",
+                                  const double inner_thr = 1e-3,
+                                  const int inner_nmax = 20);
 } // namespace constraint
 #endif

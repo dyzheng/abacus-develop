@@ -843,7 +843,10 @@ ConfigStatus configure_constraint(ConstraintConfig& cfg,
                                   const double branch_tol,
                                   const int nat,
                                   const int nspin,
-                                  std::string& error)
+                                  std::string& error,
+                                  const std::string& mu_schedule,
+                                  const double inner_thr,
+                                  const int inner_nmax)
 {
     cfg = ConstraintConfig();
     specs.clear();
@@ -859,6 +862,9 @@ ConfigStatus configure_constraint(ConstraintConfig& cfg,
     cfg.step_max = step_max;
     cfg.step_probe = step_probe;
     cfg.branch_tol = branch_tol;
+    cfg.mu_schedule = mu_schedule;
+    cfg.inner_thr = inner_thr;
+    cfg.inner_nmax = inner_nmax;
 
     // Guard: phase-1/2 recipes only.  A wrong recipe must abort loudly
     // rather than silently run an unvalidated partition.
@@ -904,6 +910,34 @@ ConfigStatus configure_constraint(ConstraintConfig& cfg,
         error = "constraint_branch_tol must be >= 0 (0 disables the energy "
                 "branch guard)";
         return ConfigStatus::ERROR;
+    }
+    // Guard: the dual-iteration schedule is an explicit two-value switch.
+    // Anything else must abort rather than silently fall back to outer (the
+    // user asked for a different dynamics and would not get it).
+    if (mu_schedule != "outer" && mu_schedule != "inner")
+    {
+        error = "constraint_mu_schedule must be \"outer\" or \"inner\"";
+        return ConfigStatus::ERROR;
+    }
+    // Guard (INNER only): both inner knobs must be usable.  A non-positive
+    // gate would disable the dynamics the user asked for, and a non-positive
+    // budget would trip the fallback on the first update; both are refused up
+    // front instead of silently behaving like outer.  The outer schedule keeps
+    // ignoring both values (legacy runs stay bit-identical).
+    if (mu_schedule == "inner")
+    {
+        if (inner_thr <= 0.0)
+        {
+            error = "constraint_inner_thr must be > 0 when "
+                    "constraint_mu_schedule=inner";
+            return ConfigStatus::ERROR;
+        }
+        if (inner_nmax <= 0)
+        {
+            error = "constraint_inner_nmax must be > 0 when "
+                    "constraint_mu_schedule=inner";
+            return ConfigStatus::ERROR;
+        }
     }
     // Absolute mode: explicit warning that the calibration scale differs
     // from delta mode (charges ~0.2-0.3 e instead of ~e shifts).
@@ -1115,7 +1149,9 @@ ConfigStatus configure_from_inputs(ConstraintConfig& cfg,
         PARAM.inp.constraint_target_mode, content, PARAM.inp.constraint_mu_max,
         PARAM.inp.constraint_thr, PARAM.inp.constraint_step_max,
         PARAM.inp.constraint_step_probe, PARAM.inp.constraint_branch_tol,
-        ucell.nat, PARAM.inp.nspin, error);
+        ucell.nat, PARAM.inp.nspin, error,
+        PARAM.inp.constraint_mu_schedule, PARAM.inp.constraint_inner_thr,
+        PARAM.inp.constraint_inner_nmax);
     if (st == ConfigStatus::ERROR)
     {
         return st;
