@@ -1698,7 +1698,7 @@ TEST_F(InputTest, Item_test2)
     { // sc_scf_thr_mode
         auto it = find_label("sc_scf_thr_mode", readinput.input_lists);
         ASSERT_NE(it, readinput.input_lists.end());
-        EXPECT_EQ(param.input.sc_scf_thr_mode, "threshold");
+        EXPECT_EQ(param.input.sc_scf_thr_mode, "immediate");
     }
     { // sc_dir_phase1_steps
         auto it = find_label("sc_dir_phase1_steps", readinput.input_lists);

@@ -178,6 +178,7 @@
 | `esolver_ks_pw.cpp` / `esolver_ks_lcao.cpp` | 约束钩子接线（`observe → set_scf_energy → [on_iteration+mix_reset] → on_scf_converged`） | 2026-09-14 |
 | `source_io/module_chgpot/rhog_io.cpp` | 重启电荷读取（C-29 修复：补 `ig < 0` 守卫，防跨基组重启越界写） | 2026-09-14 |
 | `source_io/test/read_rhog_test.cpp` | 新增 `ReadRhogTest.LargerBasisInFileDoesNotWriteBeforeBuffer`（C-29 哨兵回归） | 2026-09-14 |
+| `source_io/test/read_input_ptest.cpp`、`source_io/test_serial/read_input_item_test.cpp` | 同步陈旧 `sc_scf_thr`/`sc_scf_thr_mode` 默认期望（`10`/`"immediate"`，测试卫生） | 2026-09-14 |
 
 ---
 
@@ -204,6 +205,7 @@
 | 2026-09-14 | `2026-09-14-dual-iteration-inner-schedule.md` | **双迭代调度 Q0–Q4 全落地：`constraint_mu_schedule=outer|inner` + `inner_thr`(1e-3) + `inner_nmax`(20)；SCF 内 μ 更新 + `mix_reset` + settle 检查；单测 loop 19→25，sabotage 3 发恰中且 OUTER 回归三发全绿；OUTER 211 对照二进制逐位一致；**Q1–Q3 实测：μ* 差 ≤0.17% / E_tot 差 ≤8.5e-7 eV 全部命中，成本 211 +14% / 212 +4.8% / 213 −46% / MgO −75%，mixing 不复位则 2.2× 慢或不收敛（`mix_reset` 是刚需），settle 抓到 3 次假收敛；决策表入手册 §5.9**；顺带修 C-30、扩 C-29 范围（收敛后收尾路径）、记录 OMP 线程数导致算例不可复现** |
 | 2026-09-14 | `2026-09-14-c29-localization.md` | **C-29 定位完成（**非**约束 bug）：`ModuleIO::read_rhog` 缺 `ig<0` 守卫——读取"更大平面波基组"写的 `-CHARGE-DENSITY.restart` 时，盒内/球外平面波映射为 −1，`rhog[is][-1]` 写坏 malloc chunk 头（ASAN 2.6 s 首报；关 constraint 同样复现）；收尾 `Charge::destroy` 只是**检测点**（写入发生在 run 开头的 `before_all_runners`）；修复 = `if (ig<0) continue;` + 哨兵回归单测 `ReadRhogTest.LargerBasisInFileDoesNotWriteBeforeBuffer`（拆守卫必红）** |
 | 2026-09-14 | `2026-09-14-inner-thr-calibration.md` | **`constraint_inner_thr` 三档标定（212/213，补充 MgO）：门控是**纯成本旋钮**（三体系 μ* 散布 ≤0.34%、|ΔE_tot| ≤4.2e-7 eV）；成本效应**符号随体系翻转**——212 +4.8%→−9.5%、213 −46%→−47%（平）、MgO −75%→−72%→−66%（收紧变差）⇒ **默认保持 1e-3**，定位为逐体系旋钮；settle 检查在三档下都仍在触发，非松门控产物** |
+| 2026-09-14 | `2026-09-14-moduleio-test-hygiene.md` | **MODULE_IO 测试卫生：3 个长期红灯目标（`sc_scf_thr=1e-3`/`"threshold"`）同步为结构体默认 `10`/`"immediate"`（`5735ea673` 遗留不同步）⇒ 3/3 转绿、`MODULE_IO|constraint` 56/56；零行为改动；发现未改的文档元数据同族漂移（`item.default_value` + `input-main.md`）** |
 | 2026-09-11 | `2026-09-11-i1-mgo-farside-fuse-attempt.md` | **I-1 继续：Mg³⁺ 远侧熔断用例尝试 BLOCKED——δ=−2.0 e 在外步 55（q=10.2651 / μ=2.75 Ry）后约束 SCF 不收敛，非收敛收尾路径触发四 rank 堆破坏（`free(): invalid next size`）并挂死；父提交二进制逐位复现 ⇒ 预存在 bug C-29；κ 随位移变硬，约束先崩于 SCF 而非 μ 顶限 ⇒ 计划设想的顶限熔断在本体系不可达；设计文档 §1.4 写回 + S1 判据改判完成** |
 | 2026-07-12 | `2026-07-12-deltap-risk-points-and-solutions.md` | 18 项风险点 + 解决方案 |
 | 2026-07-12 | `2026-07-12-deltap-root-cause-analysis.md` | B14+B15 found+fixed |
@@ -217,12 +219,15 @@
 > 2026-07-29 起以 `2026-07-29-deltap-risk-assessment-review.md` §9 的 P0/P1/P2 清单为准。以下旧条目保留备查。
 
 **当前主线（统一实空间权重约束框架，2026-09-14）**：
-  1. **C-29 定位（最高优先级）**——约束 LCAO 堆破坏，范围已扩为"非收敛收尾 + 收敛后
-     收尾"两条路径（MgO δ=−2.0 e 与 δ=+0.5 e）；ASAN 或 gdb 捕获 free 栈；未修前
-     所有 MgO 类长跑必须 `timeout` 包裹且只信已落盘输出。
-  2. 双迭代调度 Q0–Q4 **已完成**（决策表入用户手册 §5.9）；遗留可选项：`inner_thr`
-     vs `scf_thr` 三档扫描、FeO 双稳体系对照（待 II-1b 锚定收口 + 用户放行 S4/S5）。
-  3. 能力边界文档（`2026-08-13-deltap-capability-boundaries.md`）持续补条目。
+  1. **已闭合**：C-29（定位 + 修复 + 哨兵回归，入库 `098091b4d`；非约束 bug）、双迭代调度
+     Q0–Q4（入库 `afb97690d`/`a95014bd9`，决策表入用户手册 §5.9）、`inner_thr` 三档标定
+     （入库 `39146832e`，默认保持 1e-3）、MODULE_IO 测试卫生（本轮，3 目标转绿）。
+  2. **开放项**：4b 半径敏感性（待锚点）、II-1 重锚定（(a)+(c)）、**阶段 B 立项评审**
+     （输入数据已齐：A6 μ 耦合表、47/15 步收敛数据、INNER 收益曲线与交叉点、
+     inner_thr 标定结论）；FeO 双稳体系对照**维持暂缓**（用户批复）。
+  3. （可选小件）同步 `sc_scf_thr`/`sc_scf_thr_mode`/`sc_drop_thr` 的文档元数据并重新生成
+     `input-main.md`（`2026-09-14-moduleio-test-hygiene.md` §4）。
+  4. 能力边界文档（`2026-08-13-deltap-capability-boundaries.md`）持续补条目。
 
 0. **R0 esolver 重构（R1/R2/R3/R4 全部完成）** — 按 `2026-07-31-deltap-esolver-refactor-design.md` 4 轮迁移：~~R1 删死代码~~ → ~~R2 LCAO 抽 `DeltapScfSolver`~~ → ~~R3 PW 接入同一状态机~~ → ~~R4 MPI rank0+Bcast（C-23）、PW λ 同步（C-28）、打印/WARNING 收口、deltap_common 单测~~；设计文档状态已改"已实施"
 1. ~~**Fix Z01**~~ — 07-20 快速 O_kpair 路径已上线（本文档此前状态滞后，07-29 核实）
@@ -4973,3 +4978,26 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   仍待修，已登记。
 - 下一轮：① 把三档结论回填用户手册 §5.9 决策表 + 开发者文档 §3.4 成本画像；
   ② 登记项的测试卫生修复（可并入任一 docs/test commit）；③ FeO 对照仍暂缓。
+
+## 2026-09-14 (6): MODULE_IO 测试卫生——同步陈旧 `sc_scf_thr`/`sc_scf_thr_mode` 期望（3 目标转绿，独立小 commit）
+
+- 用户令：优先级队列开放项「MODULE_IO 测试卫生（已批）」，要求**单独小 commit**（域不同：
+  deltaspin 默认值 vs 约束工作），消息 `fix(test): update stale sc_scf_thr_mode expectations`。
+- 根因（亲验）：`5735ea673`（2026-05-27，`sc_strategy` 简化）**有意**把结构体默认值改为
+  `sc_scf_thr: 1e-3 → 10`、`sc_scf_thr_mode: threshold → immediate`（commit message 明列），
+  但未同步测试期望 ⇒ 自那时起 3 个目标长期红灯。以结构体默认为真值，修测试。
+- 改动（2 文件 3 行断言，**零行为改动**）：`read_input_ptest.cpp:436-437`（`1e-3`→`10.0`、
+  `"threshold"`→`"immediate"`）、`read_input_item_test.cpp:1701`（`"threshold"`→`"immediate"`）。
+  证据链：`git log -L 602,603:input_parameter.h` + `support/INPUT` 无这两条标签（读完即默认值）。
+- 验证：`MODULE_IO_input_test_para`（#241）、`_para_4`（#242）、`MODULE_IO_read_item_serial`（#281）
+  3/3 转绿；`ctest -R "MODULE_IO|constraint"` **56/56**（此前 53/56，唯一红项即这 3 个）；
+  全仓库排查无第 4 处同类断言。
+- 发现但**本轮未改**（同族、需单独裁定）：`read_input_item_other.cpp` 文档元数据仍为旧值
+  （`sc_scf_thr` `"1.0e-3"` L174、`sc_scf_thr_mode` `"threshold"` L193；`5735ea673` 只同步了
+  `nsc` 的元数据）⇒ `--help`/`input-main.md` 会继续显示旧默认值；同族还有 `sc_drop_thr`
+  元数据（`"1.0e-2"` vs 结构体 `1e-3`）与 `spin_constrain.h:52` 注释。已登记为可选小件。
+- 文件：`source/source_io/test/read_input_ptest.cpp`、
+  `source/source_io/test_serial/read_input_item_test.cpp`；
+  spec `docs/superpowers/specs/2026-09-14-moduleio-test-hygiene.md`。
+- Bug/fix list：无新增 bug；测试卫生项**登记转闭合**（C-29/C-30 状态不变）。
+- 下一轮：开放项回到 4b 半径敏感性 / II-1 重锚定 / 阶段 B 立项评审；FeO 对照仍暂缓。

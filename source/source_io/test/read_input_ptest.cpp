@@ -433,8 +433,8 @@ TEST_F(InputParaTest, ParaRead)
     EXPECT_EQ(param.inp.nsc_min, 4);
     EXPECT_DOUBLE_EQ(param.inp.alpha_trial, 0.02);
     EXPECT_DOUBLE_EQ(param.inp.sccut, 4.0);
-    EXPECT_EQ(param.inp.sc_scf_thr, 1e-3);
-    EXPECT_EQ(param.inp.sc_scf_thr_mode, "threshold");
+    EXPECT_EQ(param.inp.sc_scf_thr, 10.0);
+    EXPECT_EQ(param.inp.sc_scf_thr_mode, "immediate");
     EXPECT_EQ(param.inp.sc_dir_phase1_steps, 5);
     EXPECT_EQ(param.inp.sc_drop_thr, 1e-3);
     EXPECT_EQ(param.inp.lr_nstates, 1);
