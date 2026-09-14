@@ -32,6 +32,23 @@
 #   TEST_FORCE=1     add "test_force 1" so the run prints the per-term force
 #                    decomposition (2.7 standard checks: net force before
 #                    compensation + constraint-force sum).  Off by default.
+#
+# Archiving (mandatory for long runs): the scratch work dir under WORKROOT is
+# disposable, so every base/leg audit, force block and timing is copied into
+# RESDIR as it completes.  The 09-10 / 09-14 V1 batches ran 18 legs into
+# /tmp only and lost all leg-level results when the session was cleaned --
+# that is the trap this archive closes.
+#   RESDIR=<dir>     archive root (default tests/constraint_fd_force/results).
+#   TAG=<name>       archive subdir (default <basis>_<case>_<timestamp>).
+#   WORKROOT=<dir>   parent of the scratch work dir (default /tmp/cfd_<basis>).
+#
+# Protocol (FD case redesign 2026-09-09 section 4):
+#   FIXED_MU=1       legs freeze mu at the base mu* (ABA_CONSTRAINT_FIXED_MU);
+#                    default 1.  FIXED_MU=0 re-optimizes mu per leg (legacy):
+#                    the fixed-vs-reoptimized equivalence must be re-confirmed
+#                    once per new channel (charge has it; spin/mixed do not).
+#   KS_SOLVER=<s>    write "ks_solver <s>" into the INPUT (e.g. dav_subspace);
+#                    unset keeps the code default (zero change for old cases).
 set -uo pipefail
 
 BASIS="${1:-lcao}"
@@ -67,7 +84,17 @@ CASE_CTYPE="${CASE_CTYPE:-charge}"
 CASE_NELE=$(awk '$1 == "nelec" {print $2; exit}' "${TESTCASE}/INPUT")
 CASE_NELE="${CASE_NELE:-8}"
 TEST_FORCE="${TEST_FORCE:-0}"
-WORK="$(mktemp -d /tmp/cfd_${BASIS}_XXXX)"
+WORKROOT="${WORKROOT:-/tmp/cfd_${BASIS}}"
+mkdir -p "$WORKROOT"
+WORK="$(mktemp -d "${WORKROOT}/run_XXXXXX")"
+# Archive destination: audits, force blocks, timings and the FD table land here
+# (the scratch WORK dir stays disposable).  TOOLDIR is tests/constraint_fd_force.
+TOOLDIR="$(cd "$(dirname "$0")/.." && pwd)"
+TAG="${TAG:-${BASIS}_$(basename "$TESTCASE")_$(date +%Y%m%d-%H%M%S)}"
+RESDIR="${RESDIR:-${TOOLDIR}/results}/${TAG}"
+mkdir -p "$RESDIR"
+FIXED_MU="${FIXED_MU:-1}"
+KS_SOLVER="${KS_SOLVER:-}"
 DELTA_A=$(python3 -c "print(${DELTA_BOHR} * 0.5291772109)")
 CRIT=$(python3 -c "print(5e-4 * 13.605693 / 0.5291772109)")  # 0.0128555 eV/A
 RYTOEV=13.605693
@@ -174,6 +201,11 @@ write_input() { # out_dir suffix mode target_file read_from
         echo "constraint_mu_max  5.0"
         echo "constraint_thr     1e-4"
         echo "cal_force       1"
+        # Branch: only pin a solver when the caller asked for one, so the
+        # historical PW/LCAO cases keep their INPUT byte-identical.
+        if [ -n "$KS_SOLVER" ]; then
+            echo "ks_solver       ${KS_SOLVER}"
+        fi
         # Branch: optional per-term force dump, needed by the 2.7 standard
         # checks (pre-compensation net force, constraint-force sum).
         if [ "$TEST_FORCE" = "1" ]; then
@@ -245,20 +277,38 @@ def blk(name):
             rows.append([float(x) for x in t[1:4]])
     return rows if len(rows) == nat else None
 
-terms = ['LOCAL    FORCE (eV/Angstrom)', 'NONLOCAL FORCE (eV/Angstrom)',
-         'NLCC     FORCE (eV/Angstrom)', 'ION      FORCE (eV/Angstrom)',
-         'SCC      FORCE (eV/Angstrom)']
+# The per-term decomposition is basis dependent (PW prints LOCAL/NONLOCAL/NLCC/
+# ION/SCC; LCAO prints EWALD/NLCC/OVERLAP/SCC), so discover the blocks in the
+# log instead of hardcoding one basis's set.  Every non-TOTAL block is part of
+# the pre-compensation total; the CONSTRAINT block is the only one in Ry/Bohr.
+def discover():
+    found, cons = [], None
+    # Headers are indented by one space in the printed decomposition.
+    for m in re.finditer(r'^\s*#([^#\n]*FORCE[^#\n]*)#\s*$', txt, re.M):
+        name = m.group(1).strip()
+        if 'TOTAL' in name.upper():
+            continue
+        rows = blk(name)
+        if rows is None:
+            continue
+        # Branch: the constraint block is printed in Ry/Bohr, everything else
+        # in eV/Angstrom -- convert the former before summing.
+        if 'CONSTRAINT' in name.upper():
+            cons = rows
+        else:
+            found.append((name, rows))
+    return found, cons
+
 pre = [[0.0] * 3 for _ in range(nat)]
-cons = blk('CONSTRAINT  FORCE (Ry/Bohr)')
+found, cons = discover()
 if cons is None:
     sys.exit('missing CONSTRAINT block (run with TEST_FORCE=1)')
+if not found:
+    sys.exit('missing term force blocks (run with TEST_FORCE=1)')
 for i in range(nat):
     for a in range(3):
         pre[i][a] += cons[i][a] * RYBOHR2EVA
-for nm in terms:
-    b = blk(nm)
-    if b is None:
-        sys.exit('missing block: ' + nm)
+for _, b in found:
     for i in range(nat):
         for a in range(3):
             pre[i][a] += b[i][a]
@@ -270,12 +320,23 @@ sumpre = [sum(pre[i][a] for i in range(nat)) for a in range(3)]
 compen = [x / nat for x in sumpre]
 sumtot = [sum(tot[i][a] for i in range(nat)) for a in range(3)]
 dev = max(abs(pre[i][a] - compen[a] - tot[i][a]) for i in range(nat) for a in range(3))
+print('  [std-check] blocks summed                  : ' + ', '.join(n for n, _ in found))
 print('  [std-check] Sigma CONSTRAINT force (eV/A)   : ' + ' '.join('%+.6f' % x for x in sumcons))
 print('  [std-check] Sigma pre-compensation (eV/A)   : ' + ' '.join('%+.6f' % x for x in sumpre))
 print('  [std-check] compen (eV/A)                   : ' + ' '.join('%+.6f' % x for x in compen))
 print('  [std-check] Sigma printed TOTAL (eV/A)      : ' + ' '.join('%+.6f' % x for x in sumtot))
 print('  [std-check] max|pre - compen - printed|     : %.3e eV/A' % dev)
 PYEOF_CHECK
+}
+
+# Archive the audit-relevant lines of one running log plus the wall-clock footer
+# (same extraction as run_ct_scan.sh / run_inner_thr_scan.sh), so a leg can be
+# re-checked later without keeping the full SCF output in the repo.
+archive_run() { # workdir suffix archive_name
+    local dir="$1" suf="$2" name="$3"
+    grep -E "CONSTRAINT_AUDIT|constraint\]|MIX_RESET|mixing recovered|!FINAL_ETOT_IS|!SCF IS NOT CONVERGED" \
+        "$dir"/OUT.${suf}/running_*.log > "${RESDIR}/${name}.audit" 2>/dev/null
+    grep -E "TOTAL  Time|FINISH Time" "$dir/run.log" >> "${RESDIR}/${name}.audit" 2>/dev/null
 }
 
 # Last CONSTRAINT_AUDIT detail line: final converged mu (Ry).
@@ -313,6 +374,27 @@ for i in $(seq 0 $((NAT-1))); do
   printf '    atom %d: %s %s %s\n' "$i" "${F0[$((i*3))]}" "${F0[$((i*3+1))]}" "${F0[$((i*3+2))]}"
 done
 
+# Archive the base before the legs start: base is the single most expensive run
+# and the file a reviewer needs to reproduce every leg's frozen target.
+archive_run "${WORK}/base" base base
+{
+  echo "# Constraint FD archive (base)"
+  echo "case=${TESTCASE}"
+  echo "basis=${BASIS} delta_bohr=${DELTA_BOHR} nproc=${NPROC} maxjobs=${MAXJOBS}"
+  echo "binary=${ABACUS}"
+  echo "ks_solver=${KS_SOLVER:-<default>}"
+  echo "leg_protocol=$( [ "$FIXED_MU" = "1" ] && echo "fixed-mu=${MU0}" || echo "reoptimize-mu" )"
+  echo "criterion_eV_per_A=${CRIT}"
+  echo "E0_eV=${E0}"
+  echo "t_star=${TSTAR}"
+  echo "mu_star_Ry=${MU0}"
+  echo "# base analytic forces (eV/A)"
+  for i in $(seq 0 $((NAT-1))); do
+    printf 'atom %d: %s %s %s\n' "$i" "${F0[$((i*3))]}" "${F0[$((i*3+1))]}" "${F0[$((i*3+2))]}"
+  done
+} > "${RESDIR}/summary.txt"
+: > "${RESDIR}/legs.tsv"
+
 # Legs restart from the base's converged density.  init_chg file reads
 # {read_file_dir}/{suffix}-CHARGE-DENSITY.restart, so stage the base restart
 # under the leg suffix name in a dedicated restart dir.
@@ -346,8 +428,19 @@ run_leg() { # leg -> "iat axis sign E mu"
     if [ "$sign" = plus ]; then SD="$DELTA_A"; else SD="-$DELTA_A"; fi
     displace_stru "${TESTCASE}/STRU" "$step/STRU" "$iat" "$axis" "$SD" "$MODE"
     write_input "$step/INPUT" s absolute constraint_target.json "${WORK}/restart"
-    E=$(run_scf "$step" s)
+    # Branch A: FIXED_MU=1 -- freeze the multiplier at the base mu*
+    # (ABA_CONSTRAINT_FIXED_MU, redesign protocol; the leg then costs one SCF).
+    # Branch B: FIXED_MU=0 -- legacy in-leg re-optimization of mu.  Equivalence
+    # of the two was proven for the charge channel only, so a new channel needs
+    # one comparison leg before the whole sweep trusts fixed-mu.
+    if [ "$FIXED_MU" = "1" ] && [ -n "$MU0" ] && [ "$MU0" != "NA" ]; then
+        E=$(ABA_CONSTRAINT_FIXED_MU="$MU0" run_scf "$step" s)
+    else
+        E=$(run_scf "$step" s)
+    fi
     MU=$(extract_mu "$step/OUT.s"/running_*.log 2>/dev/null || echo NA)
+    archive_run "$step" s "leg_${leg}"
+    printf '%s\n' "${iat} ${axis} ${sign} ${E:-NA} ${MU}" >> "${RESDIR}/legs.tsv"
     echo "${iat} ${axis} ${sign} ${E:-NA} ${MU}"
     # Branch: with TEST_FORCE=1 also dump the per-leg standard checks; the
     # extra lines do not match the aggregator's "iat axis sign E mu" pattern.
@@ -395,3 +488,11 @@ echo "===== ${BASIS} summary (raw FINAL_ETOT central diff, frozen t*=${TSTAR}) =
 printf '%-4s %-4s %-16s %-16s %-16s %s\n' iat axis F_FD F_ana RES PASS
 printf '%s\n' "${ROWS[@]}"
 echo "criterion = ${CRIT} eV/A  (5e-4 Ry/Bohr);  work dir = ${WORK}"
+{
+  echo ""
+  echo "# FD table (raw FINAL_ETOT central diff, frozen t*=${TSTAR})"
+  printf '%-4s %-4s %-16s %-16s %-16s %s\n' iat axis F_FD F_ana RES PASS
+  printf '%s\n' "${ROWS[@]}"
+  echo "criterion = ${CRIT} eV/A (5e-4 Ry/Bohr)"
+} >> "${RESDIR}/summary.txt"
+echo "archived -> ${RESDIR}"
