@@ -1,0 +1,10 @@
+[constraint] outer step 1 after SCF iteration 32 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=7.415830493e-06 max_residual=9.030246796e-05 total_charge=0.09990969753 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=spin q=0.09990969753 t=0.1 mu=-0.08212212424 res=-9.030246796e-05
+[constraint] M3b runtime audit: max |Tr[W.DM] - int w rho| = 2.13867715204e-10 e
+[constraint] final status: FIXED_MU (experiment switch; multiplier frozen, targets not enforced)
+CONSTRAINT_AUDIT nconstraint=1 e_con=7.415830493e-06 max_residual=9.030246796e-05 total_charge=0.09990969753 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=spin q=0.09990969753 t=0.1 mu=-0.08212212424 res=-9.030246796e-05
+ !FINAL_ETOT_IS -466.2986891829325486 eV
+ FINISH Time  : Mon Sep 14 17:58:59 2026
+ TOTAL  Time  : 151

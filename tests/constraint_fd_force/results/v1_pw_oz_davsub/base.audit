@@ -1,0 +1,15 @@
+[constraint] outer step 1 after SCF iteration 18 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.005 max_residual=0.1 total_charge=1.036350727e-06 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=spin q=1.036350727e-06 t=0.1000010364 mu=-0.05 res=-0.1
+[constraint] outer step 2 after SCF iteration 38 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.002189321089 max_residual=0.0304524038 total_charge=0.06954863255 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=spin q=0.06954863255 t=0.1000010364 mu=-0.07189321089 res=-0.0304524038
+[constraint] outer step 3 after SCF iteration 55 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=2.402863499e-06 max_residual=3.342267607e-05 total_charge=0.09996761367 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=spin q=0.09996761367 t=0.1000010364 mu=-0.07189321089 res=-3.342267607e-05
+[constraint] final status: CONVERGED (targets reached within 0.0001 e)
+CONSTRAINT_AUDIT nconstraint=1 e_con=2.402863499e-06 max_residual=3.342267607e-05 total_charge=0.09996761367 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=spin q=0.09996761367 t=0.1000010364 mu=-0.07189321089 res=-3.342267607e-05
+ !FINAL_ETOT_IS -466.9020975520369348 eV
+ FINISH Time  : Mon Sep 14 18:39:51 2026
+ TOTAL  Time  : 1346

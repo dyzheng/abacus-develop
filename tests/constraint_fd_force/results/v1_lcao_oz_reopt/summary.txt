@@ -1,0 +1,19 @@
+# Constraint FD archive (base)
+case=/root/abacus-develop/tests/constraint_fd_force/cases/212_NAO_constraint_h2o_spin
+basis=lcao delta_bohr=0.005 nproc=4 maxjobs=2
+binary=/root/abacus-develop/build_rel/abacus_basic_para
+ks_solver=<default>
+leg_protocol=reoptimize-mu
+criterion_eV_per_A=0.012855516752941864
+E0_eV=-466.2989480199703394
+t_star=0.1
+mu_star_Ry=-0.08212212424
+# base analytic forces (eV/A)
+atom 0: -5.2948100000e-05 -5.1629400000e-05 -1.3364833783e+00
+atom 1: -8.8655163630e-01 2.5814800000e-05 6.6824168380e-01
+atom 2: 8.8660458430e-01 2.5814500000e-05 6.6824169450e-01
+
+# FD table (raw FINAL_ETOT central diff, frozen t*=0.1)
+iat  axis F_FD             F_ana            RES              PASS
+0 2 -1.3365405564557589 -1.3364833783e+00 5.717815575878582e-05 PASS
+criterion = 0.012855516752941864 eV/A (5e-4 Ry/Bohr)

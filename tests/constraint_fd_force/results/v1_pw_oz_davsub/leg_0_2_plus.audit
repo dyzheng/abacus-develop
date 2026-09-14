@@ -1,0 +1,9 @@
+[constraint] outer step 1 after SCF iteration 11 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=4.100322107e-05 max_residual=0.0005703350924 total_charge=0.09943070131 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=spin q=0.09943070131 t=0.1000010364 mu=-0.07189321089 res=-0.0005703350924
+[constraint] final status: FIXED_MU (experiment switch; multiplier frozen, targets not enforced)
+CONSTRAINT_AUDIT nconstraint=1 e_con=4.100322107e-05 max_residual=0.0005703350924 total_charge=0.09943070131 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=spin q=0.09943070131 t=0.1000010364 mu=-0.07189321089 res=-0.0005703350924
+ !FINAL_ETOT_IS -466.9000451273325325 eV
+ FINISH Time  : Mon Sep 14 18:45:27 2026
+ TOTAL  Time  : 337
