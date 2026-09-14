@@ -1,0 +1,12 @@
+[constraint] outer step 1 after SCF iteration 30 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=2 e_con=0 max_residual=0 total_charge=20 nelec=20 maxdev=5.551115123e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=9.992852052 t=9.992852052 mu=0 res=0
+CONSTRAINT_AUDIT c[1] kind=charge q=10.00714795 t=10.00714795 mu=0 res=0
+[constraint] M3b runtime audit: max |Tr[W.DM] - int w rho| = 4.94457365718e-07 e
+[constraint] final status: CONVERGED (targets reached within 0.0001 e)
+CONSTRAINT_AUDIT nconstraint=2 e_con=0 max_residual=0 total_charge=20 nelec=20 maxdev=5.551115123e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=9.992852052 t=9.992852052 mu=0 res=0
+CONSTRAINT_AUDIT c[1] kind=charge q=10.00714795 t=10.00714795 mu=0 res=0
+ !FINAL_ETOT_IS -903.8383885124715 eV
+ FINISH Time  : Mon Sep 14 14:12:20 2026
+ TOTAL  Time  : 21

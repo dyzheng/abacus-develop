@@ -1,0 +1,25 @@
+INPUT_PARAMETERS
+suffix            autotest
+calculation       scf
+init_wfc          atomic
+nbands            20
+symmetry          0
+pseudo_dir        ../../PP_ORB
+orbital_dir       ../../PP_ORB
+nelec             20
+ecutwfc           60
+ecutrho           240
+scf_thr           1e-7
+scf_nmax          400
+basis_type        lcao
+gamma_only        1
+smearing_method   gauss
+smearing_sigma    0.002
+mixing_type       broyden
+mixing_beta       0.7
+constraint        true
+constraint_weight_type becke
+constraint_target_file constraint_target.json
+constraint_target_mode delta
+constraint_mu_max  5.0
+constraint_thr     1e-4

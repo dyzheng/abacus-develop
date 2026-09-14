@@ -1,0 +1,24 @@
+[constraint] outer step 1 after SCF iteration 30 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=2 e_con=0.005 max_residual=0.05 total_charge=20 nelec=20 maxdev=5.551115123e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=9.992852052 t=9.942852052 mu=0.05 res=0.05
+CONSTRAINT_AUDIT c[1] kind=charge q=10.00714795 t=10.05714795 mu=-0.05 res=-0.05
+[constraint] outer step 2 after SCF iteration 65 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=2 e_con=0.003401512726 max_residual=0.02024345399 total_charge=20 nelec=20 maxdev=5.551115123e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=9.963095506 t=9.942852052 mu=0.08401512726 res=0.02024345399
+CONSTRAINT_AUDIT c[1] kind=charge q=10.03690449 t=10.05714795 mu=-0.08401512726 res=-0.02024345399
+[constraint] outer step 3 after SCF iteration 97 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=2 e_con=-0.00024849542 max_residual=0.001521960913 total_charge=20 nelec=20 maxdev=5.551115123e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=9.941330092 t=9.942852052 mu=0.08163659718 res=-0.001521960913
+CONSTRAINT_AUDIT c[1] kind=charge q=10.05866991 t=10.05714795 mu=-0.08163659718 res=0.001521960913
+[constraint] outer step 4 after SCF iteration 127 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=2 e_con=9.308343167e-06 max_residual=5.701084742e-05 total_charge=20 nelec=20 maxdev=5.551115123e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=9.942909063 t=9.942852052 mu=0.08163659718 res=5.701084742e-05
+CONSTRAINT_AUDIT c[1] kind=charge q=10.05709094 t=10.05714795 mu=-0.08163659718 res=-5.701084737e-05
+[constraint] M3b runtime audit: max |Tr[W.DM] - int w rho| = 6.08892909426e-07 e
+[constraint] final status: CONVERGED (targets reached within 0.0001 e)
+CONSTRAINT_AUDIT nconstraint=2 e_con=9.308343167e-06 max_residual=5.701084742e-05 total_charge=20 nelec=20 maxdev=5.551115123e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=9.942909063 t=9.942852052 mu=0.08163659718 res=5.701084742e-05
+CONSTRAINT_AUDIT c[1] kind=charge q=10.05709094 t=10.05714795 mu=-0.08163659718 res=-5.701084737e-05
+ !FINAL_ETOT_IS -903.7815505156681 eV
+ FINISH Time  : Mon Sep 14 13:59:03 2026
+ TOTAL  Time  : 80

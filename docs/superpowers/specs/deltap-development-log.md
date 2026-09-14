@@ -180,6 +180,7 @@
 | `source_io/test/read_rhog_test.cpp` | 新增 `ReadRhogTest.LargerBasisInFileDoesNotWriteBeforeBuffer`（C-29 哨兵回归） | 2026-09-14 |
 | `source_io/test/read_input_ptest.cpp`、`source_io/test_serial/read_input_item_test.cpp` | 同步陈旧 `sc_scf_thr`/`sc_scf_thr_mode` 默认期望（`10`/`"immediate"`，测试卫生） | 2026-09-14 |
 | `source_io/module_parameter/read_input_item_other.cpp`、`spin_constrain.h`、`esolver_ks_lcao.cpp` | spin-constrain **元数据/注释**默认值同步到结构体真值（`10`/`"immediate"`/`1e-3`，无逻辑改动） | 2026-09-14 |
+| `tests/constraint_ct_dimer/`（新增） | III-1 电荷转移对（H₂O 二聚体 + CT 扫描 runner + 提取器 + 结果） | 2026-09-14 |
 
 ---
 
@@ -208,6 +209,7 @@
 | 2026-09-14 | `2026-09-14-inner-thr-calibration.md` | **`constraint_inner_thr` 三档标定（212/213，补充 MgO）：门控是**纯成本旋钮**（三体系 μ* 散布 ≤0.34%、|ΔE_tot| ≤4.2e-7 eV）；成本效应**符号随体系翻转**——212 +4.8%→−9.5%、213 −46%→−47%（平）、MgO −75%→−72%→−66%（收紧变差）⇒ **默认保持 1e-3**，定位为逐体系旋钮；settle 检查在三档下都仍在触发，非松门控产物** |
 | 2026-09-14 | `2026-09-14-moduleio-test-hygiene.md` | **MODULE_IO 测试卫生：3 个长期红灯目标（`sc_scf_thr=1e-3`/`"threshold"`）同步为结构体默认 `10`/`"immediate"`（`5735ea673` 遗留不同步）⇒ 3/3 转绿、`MODULE_IO|constraint` 56/56；零行为改动；发现未改的文档元数据同族漂移（`item.default_value` + `input-main.md`）** |
 | 2026-09-14 | `2026-09-14-spinconstrain-metadata-sync.md` | **spin-constrain 元数据/注释同步：`sc_scf_thr` `1.0e-3`→`10`、`sc_scf_thr_mode` `threshold`→`immediate`（含描述默认标注与 `spin_constrain.h`/`esolver_ks_lcao.cpp` 注释，并顺带修正 `sc_drop_thr` `1.0e-2`→`1e-3`）；`--help` 实证前后对比、单测 56/56 不变；**生成文档链路待裁定**：`docs/parameters.yaml` 自 2026-05 起未重建，重建将首次公开 48 个参数（28 `deltap_*` + 12 `constraint_*`）** |
+| 2026-09-14 | `2026-09-14-iii1-h2o-dimer-ct.md` | **III-1 电荷转移对首轮（H₂O 二聚体，SCF 级、零资源门槛）：双片段 charge 约束同 run 9/9 CONVERGED；`total_charge = nelec` 每点成立（~5.6e-16）、μ_acc = −μ_don 严格反对称（0）、δ=0 点为能量极小且 μ=0；能量恒等式 −dE/dδ ↔ (μ_acc−μ_don) 在 |δ|≥0.05 偏差 ≤2.34%；**强非线性/角色不对称：分支 κ −1.12 vs −0.30 Ry/e（≈3.7×）**；δ≈0 邻域恒等式偏差跳到 22.3% ⇒ 需加密扫描后再谈重组能；全扫 ~15 min** |
 | 2026-09-11 | `2026-09-11-i1-mgo-farside-fuse-attempt.md` | **I-1 继续：Mg³⁺ 远侧熔断用例尝试 BLOCKED——δ=−2.0 e 在外步 55（q=10.2651 / μ=2.75 Ry）后约束 SCF 不收敛，非收敛收尾路径触发四 rank 堆破坏（`free(): invalid next size`）并挂死；父提交二进制逐位复现 ⇒ 预存在 bug C-29；κ 随位移变硬，约束先崩于 SCF 而非 μ 顶限 ⇒ 计划设想的顶限熔断在本体系不可达；设计文档 §1.4 写回 + S1 判据改判完成** |
 | 2026-07-12 | `2026-07-12-deltap-risk-points-and-solutions.md` | 18 项风险点 + 解决方案 |
 | 2026-07-12 | `2026-07-12-deltap-root-cause-analysis.md` | B14+B15 found+fixed |
@@ -5062,3 +5064,33 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - Bug/fix list：无新增 bug；本轮为文档面修复（C-29/C-30 状态不变）。
 - 下一轮：等用户裁定文档面两项（生成文档重建 / `spin.md` 刷新）；开放队列回到
   4b 半径敏感性、II-1 重锚定、阶段 B 立项评审；FeO 继续暂缓。
+
+## 2026-09-14 (8): III-1 电荷转移对首轮（H₂O 二聚体，SCF 级）——旗舰 CDFT 接口可用
+
+- 用户令：批复"可开始不依赖力的 SCF 级物理"，起步组合 = III-1（H₂O 二聚体 CT+Marcus）
+  + 并行补完 V1；FeO 继续暂缓；参数文档重建推迟到 merge-readiness。
+- 前置（同轮）：`spin.md` 刷新入库 `c7fe70472`；评审件 + 日志入库 `d600ff63c`。
+- 新建算例 `tests/constraint_ct_dimer/`（设计文档 §3 的零资源起步版）：H₂O 二聚体，
+  受体片段 `[0,2,3]`(=O1+2H) 取 +δ、给体片段 `[1,4,5]`(=O2+2H) 取 −δ（O2–H···O1
+  氢键，O1···H = 2.02 Å），v2 靶文件 + delta 模式，LCAO/gamma-only/ecut 60/240。
+  产物：`run_ct_scan.sh` + `tools/extract_scan.py` + `results/d_*.audit` + `summary.txt`。
+- **结果（9 点 δ = 0, ±0.05, ±0.10, ±0.15, ±0.20 e，全部 CONVERGED）**：
+  - 双片段同 run 混合约束可用（A6 真实场景复用）；`total_charge = 20 = nelec` 每点成立
+    （maxdev ~5.6e-16）；**μ_acc = −μ_don 严格反对称**（max|和| = 0）；δ=0 点 μ=0 且
+    E_tot 最低 ⇒ 自由态是 CT 坐标的极小；
+  - 能量恒等式（本轮修正了单位坑：E 是 eV、μ 是 Ry）：−dE_tot/dδ 与 (μ_acc − μ_don)
+    在 8 个区间偏差 +0.00%…+2.34%（仅 δ≈0 邻域跳到 +22.3%）；
+  - **主要物理发现 = 强非线性 + 角色不对称**：分支平均 κ = **−1.12 Ry/e**（受体失电子）
+    vs **−0.30 Ry/e**（受体得电子，δ>+0.05 后稳定），差 ≈3.7×；正侧斜率在 +0.05…+0.10
+    间有 4× 突变 ⇒ 单一全局 κ 无意义，且 δ≈0 邻域必须加密才能谈重组能；
+  - 量级登记（不外推）：正反向 μ 差 @ q=0.1 e = 0.2308 Ry ≈ 3.14 eV；CT 垂直能
+    δ=+0.10 → 0.154 eV、δ=−0.10 → 0.216 eV；W = ΣμᵢΔQᵢ 每点输出（δ=+0.10 为 −0.01616 Ry）；
+  - 成本：单点 21–189 s，全扫 ~15 min（III 组算例最廉价，可反复加密）。
+- 未完成（如实登记）：Marcus 重组能的**定义式 + 文献对照**未做（需先加密 δ≈0）；
+  III-1 判据② 暂记"口径级待定"。
+- 文件：`tests/constraint_ct_dimer/{README.md,run_ct_scan.sh,h2o_dimer/*,tools/extract_scan.py,results/*}`；
+  spec `docs/superpowers/specs/2026-09-14-iii1-h2o-dimer-ct.md`。
+- Bug/fix list：无新增 bug（C-29/C-30 不变）；新增**工具坑**：能量恒等式跨单位（eV vs Ry）
+  比较会给出 ~1260% 的假偏差，`extract_scan.py` 已内置换算。
+- 下一轮：① 加密 δ ∈ [−0.05, +0.10]（0.01–0.02 e）判定 δ≈0 拐点性质；② V1 自旋力 FD
+  18 腿（本轮已用 release 二进制重启，结果待补）；③ 之后 I-1 扩展 / 阶段 B 评审。
