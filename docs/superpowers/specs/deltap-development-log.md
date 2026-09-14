@@ -204,7 +204,7 @@
 | 2026-09-11 | `2026-09-11-online-branch-guard.md` | **在线能量分支守卫落地（`constraint_branch_tol`，默认 0=关）：能量判据 `E_tot<E_ref−tol` → 第四态 `MuStatus::BRANCH_FLIP` 熔断不静默；单测 12→18、4 发 sabotage 全恰中；H₂O 端到端无假触发（能升 +0.0087 Ry ≫ tol 1e-3）；FeO 换态点外步 2 即熔断（−0.643 eV），旧流程要到外步 6 才误报 CONVERGED** |
 | 2026-09-11 | `2026-09-11-onsite-moment-audit.md` | **审计行 on-site 投影矩（DFT+U 迹差，无对角化，与 `atomic mag` 同量到 1e-8）：FeO δ=+0.1 μB 良态点 q 与 d 矩同向但仅 74% 幅值，与 II-1b 塌陷点反向脱钩合起来给出"同向跟随 → 反向脱钩"图景；单测 18→19 / 4→5，无 DFT+U 输出逐位不变；半径敏感性(4b)顺延** |
 | 2026-09-11 | `2026-09-11-capability-boundary-decoupling.md` | **能力边界表补 L14（Becke 矩 ≠ on-site d 局域矩，附反向脱钩/74% 跟随两实测点）+ L15（在线分支守卫两条盲区：只抓能量向下换态、只在收敛点判）+ F9/F10 诊断项 + §5 适用域"自旋约束观测量缺口"** |
-| 2026-09-10 | `2026-09-10-taskV1-spin-force-fd.md` | **V1 单自旋通道力 FD（PW `212_PW_constraint_h2o_spin` 载体）：O-z 轴 PASS（F_FD −0.72247438 vs F_ana −0.72594423 eV/Å，\|d\|=0.00347 < 判据 0.0128555，3.7× 富余），无 μw-Pulay 缺失特征（Σ 补偿前 z ≈ +0.015 vs 修复前电荷通道 +11.62 eV/Å）；09-14 release 重跑：base 与 debug 逐位一致（μ* 一致到 4e-11 Ry）、**release 仅提速 1.14×**、18 腿未跑完且产物随 `/tmp` 清理丢失 ⇒ **G-V1 仅完成 1/9 轴，力相关物理仍锁定**；根因 = runner 不归档（流程，非物理）** |
+| 2026-09-10 | `2026-09-10-taskV1-spin-force-fd.md` | **V1 单自旋通道力 FD：G-V1 闭合（2026-09-14 补跑）**——LCAO 全 9 轴 PASS（max \|d\|=1.781e-4 = 判据 1/72）+ PW 冒烟 2 轴 PASS（O-z 3.1× / H1-x 107×，净力指纹无异常）；fixed-μ vs 重优化等价性在自旋通道成立（F_FD 差 2.35e-4 eV/Å，成本 1.9× 省）；前置归档修复（`RESDIR`）+ LCAO spin 载体入库 `62819bd46`，41 个证据文件；**成本更正**：dav_subspace 在本载体上约 1.2× 慢（'2–5×'未获实测），真杠杆 = LCAO 载体（全 18 腿 27m36s）** |
 | 2026-09-14 | `2026-09-14-completed-tests-and-results-summary.md` | **已闭合测试与结果总览（阶段 B 立项 / merge-readiness 输入基线）：14 组测试逐条给判据+实测+证据；**已验收包络** = charge 约束（PW 9/9 + LCAO 双轴力 FD、力矩 54× 富余）、混合 charge+spin（μ 耦合 Δμ_c −0.004819 / Δμ_s −0.009206）、双迭代调度（μ* ≤0.17% / E_tot ≤8.5e-7 eV）、在线分支守卫、C-29、III-1；**三道闸门** = V1 自旋力 FD（1/9 轴）、II-1b 脱钩/4b 半径、V6 Au:Si；阶段 B 四类立项数据齐备；附 4 条流程纪律（归档/OMP/raw-E 口径/元数据=契约）** |
 | 2026-09-14 | `2026-09-14-summary-and-v1-review.md` | **评审：总览/V1 对账三项改动获批入库（`74eff461b`）；核实 V1 仅 O-z 1/9 轴、18 腿随 /tmp 丢失、base 跨二进制可复现；**更正评审链成本估计**——release 实测仅 1.14×（BLAS/FFT 厂商库与 -O0/-O3 无关），修订杠杆排序 LCAO 载体 > 求解器 > fixed-μ > 网格 > 构建类型；V1 补跑（fixed-μ + LCAO 全轴 + PW 冒烟）入近期队列** |
 | 2026-09-14 | `2026-09-14-dual-iteration-inner-schedule.md` | **双迭代调度 Q0–Q4 全落地：`constraint_mu_schedule=outer|inner` + `inner_thr`(1e-3) + `inner_nmax`(20)；SCF 内 μ 更新 + `mix_reset` + settle 检查；单测 loop 19→25，sabotage 3 发恰中且 OUTER 回归三发全绿；OUTER 211 对照二进制逐位一致；**Q1–Q3 实测：μ* 差 ≤0.17% / E_tot 差 ≤8.5e-7 eV 全部命中，成本 211 +14% / 212 +4.8% / 213 −46% / MgO −75%，mixing 不复位则 2.2× 慢或不收敛（`mix_reset` 是刚需），settle 抓到 3 次假收敛；决策表入手册 §5.9**；顺带修 C-30、扩 C-29 范围（收敛后收尾路径）、记录 OMP 线程数导致算例不可复现** |
@@ -229,7 +229,8 @@
   1. **已闭合**：C-29（定位 + 修复 + 哨兵回归，入库 `098091b4d`；非约束 bug）、双迭代调度
      Q0–Q4（入库 `afb97690d`/`a95014bd9`，决策表入用户手册 §5.9）、`inner_thr` 三档标定
      （入库 `39146832e`，默认保持 1e-3）、MODULE_IO 测试卫生（本轮，3 目标转绿）。
-  2. **近期队列第 1 项（力相关物理唯一闸门）：V1 补跑**——处方 = **fixed-μ + LCAO 载体全轴 + PW 冒烟**（用户 2026-09-14 批复）；**前置** = 给 `run_constraint_fd.sh` 加 `RESDIR` 归档。
+  2. **V1 补跑 ✅ 闭合（2026-09-14）**：LCAO 全轴 9/9 + PW 冒烟 2/2 PASS，G-V1 过闸门（归档修复 + LCAO spin 载体入库 `62819bd46`；证据 `tests/constraint_fd_force/results/`）。
+     **下一项（力 FD 同族最后一环）：混合通道（charge+spin 同原子）力 FD** —— LCAO 全轴 + PW 冒烟，213 几何，协议复用本轮；随后做约束 relax 单步冒烟（跨离子步 λ/μ 生命周期）。
   3. **开放项**：4b 半径敏感性（待锚点）、II-1 重锚定（(a)+(c)）、**阶段 B 立项评审**
      （输入数据已齐：A6 μ 耦合表、47/15 步收敛数据、INNER 收益曲线与交叉点、
      inner_thr 标定结论）；FeO 双稳体系对照**维持暂缓**（用户批复）。
@@ -5177,3 +5178,33 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - Bug/fix list：无新增物理 bug；C-29/C-30 状态不变。
 - 下一轮：① V1 runner 加 `RESDIR`；② V1 补跑（fixed-μ + LCAO 全轴 + PW 冒烟）；
   ③ III-1 δ≈0 加密；④ II-1 重锚定 + 4b；⑤ 阶段 B 立项评审。
+
+## 2026-09-14 (11): V1 补跑完成——G-V1 闭合（LCAO 全轴 9/9 + PW 冒烟 2/2）
+
+- 用户令："先归档再开始 V1"（归档修复 → 重跑）。
+- **前置（入库 `62819bd46`）**：`run_constraint_fd.sh` 加 `RESDIR`/`TAG` 归档（base/腿的 audit +
+  力块 + 计时 + FD 表逐条落 `tests/constraint_fd_force/results/<TAG>/`）、`FIXED_MU`
+  （默认 1 = 腿冻结 μ=base μ*）+ `KS_SOLVER` 开关、`std_checks` **块名自动发现**
+  （PW 打 LOCAL/NONLOCAL/NLCC/ION/SCC，LCAO 打 OVERLAP/T_VNL/VL_dPHI/VL_dVL/EWALD/NLCC/SCC；
+  PW 求和块集与修复前逐字相同）、新载体 `cases/212_NAO_constraint_h2o_spin`（212 几何 + nspin 2）；
+  回归自证：电荷/自旋两路径 base INPUT 与修复前**逐字节一致**（`ABACUS=/bin/true` 对比）+ README。
+- **协议等价性（自旋通道首发）**：LCAO O-z，fixed-μ vs 重优化-μ 的 F_FD 差 **2.35e-4 eV/Å**
+  （判据 0.0128555 的 1.8%）⇒ 等价；成本 fixed 8m28s vs 重优化 16m20s ≈ **1.9×** 省。
+- **结果 A：LCAO spin 全轴 9/9 PASS**（fixed-μ + R7 + release，np4/MAXJOBS=2，**27m36s**）：
+  base `t*=0.1` / `μ*=−0.08212212424 Ry` / `E0=−466.2989480199703394 eV`，
+  Σ 补偿前 z = **+0.000490 eV/Å ≈ 0**，一致自证 1.286e-07；**max \|d\| = 1.781e-4（O-z）= 1/72 判据**，
+  其余轴 2.59e-5…1.36e-4（94×–496×）。
+- **结果 B：PW 冒烟 2 轴 PASS**（dav_subspace + release + fixed-μ）：base `t*=0.1000010364` /
+  `μ*=−0.07189321089 Ry` / `E0=−466.9020975520369348 eV`；O-z \|d\|=4.199e-3（3.1×）、
+  H1-x \|d\|=1.1969e-4（107×）；净力指纹 ≈ +0.014 eV/Å（与修复后电荷通道同量级）⇒ 无新的力签名。
+- **G-V1 判决：闭合**（覆盖包络 = LCAO 全轴 + PW 2 轴；机制与电荷共用 M6 折叠核、最坏轴已验、
+  净力指纹兜底）⇒ **力相关物理（约束 relax/MD）过闸门**；包络外仍须按同协议补验。
+- **成本更正第 2 条**：`dav_subspace` 每轴 ~28 min，比 debug+DiagoCG 的 23m42s 还慢 ~1.2×
+  ⇒ 重设计 §1 的 "dav_subspace 2–5×" 在本 PW/ecut=100 小分子载体上**未被实测支持**；
+  真杠杆是载体（LCAO 全 18 腿 27m36s vs PW 单轴 28 min）。跨求解器 base 差异仅 3.4e-6 Ry（0.005%）。
+- 证据：`tests/constraint_fd_force/results/{v1_lcao_fullaxis_fixedmu, v1_lcao_oz_fixedmu,
+  v1_lcao_oz_reopt, v1_pw_oz_davsub, v1_pw_h1x_davsub}`（41 文件，≤88 KB/组）；
+  spec `2026-09-10-taskV1-spin-force-fd.md`（§3.5–3.8 新增、§4/§5 重写）。
+- Bug/fix list：无新增 bug；**流程项闭合**（V1 runner 归档已修并生效）。
+- 下一轮：① **混合通道力 FD**（LCAO 全轴 + PW 冒烟，213 几何）；② 约束 relax 单步冒烟；
+  ③ III-1 δ≈0 加密；④ 4b + II-1 重锚定；⑤ 阶段 B 立项评审。
