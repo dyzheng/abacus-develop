@@ -1,0 +1,158 @@
+[constraint] outer step 1 after SCF iteration 14 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.005 max_residual=0.1 total_charge=6.255467998 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.255467998 t=6.355467998 mu=-0.05 res=-0.1
+[constraint] inner step 1 after SCF iteration 24 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.007410446664 max_residual=0.07410446664 total_charge=6.281363532 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.281363532 t=6.355467998 mu=-0.1 res=-0.07410446664
+[constraint] MIX_RESET at SCF iteration 24 (mu update)
+[constraint] mixing recovered after 2 SCF iteration(s) (reset cost)
+[constraint] inner step 2 after SCF iteration 26 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.007908409365 max_residual=0.0527227291 total_charge=6.302745269 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.302745269 t=6.355467998 mu=-0.15 res=-0.0527227291
+[constraint] MIX_RESET at SCF iteration 26 (mu update)
+[constraint] mixing recovered after 2 SCF iteration(s) (reset cost)
+[constraint] inner step 3 after SCF iteration 28 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.005963180519 max_residual=0.02981590259 total_charge=6.325652096 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.325652096 t=6.355467998 mu=-0.2 res=-0.02981590259
+[constraint] MIX_RESET at SCF iteration 28 (mu update)
+[constraint] mixing recovered after 2 SCF iteration(s) (reset cost)
+[constraint] inner step 4 after SCF iteration 30 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.001257614105 max_residual=0.005921240767 total_charge=6.349546758 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.349546758 t=6.355467998 mu=-0.2123903004 res=-0.005921240767
+[constraint] MIX_RESET at SCF iteration 30 (mu update)
+[constraint] mixing recovered after 1 SCF iteration(s) (reset cost)
+[constraint] inner step 5 after SCF iteration 31 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-0.000608186269 max_residual=0.002919784332 total_charge=6.358387783 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.358387783 t=6.355467998 mu=-0.2082983535 res=0.002919784332
+[constraint] MIX_RESET at SCF iteration 31 (mu update)
+[constraint] mixing recovered after 1 SCF iteration(s) (reset cost)
+[constraint] inner step 6 after SCF iteration 32 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-0.0006285987506 max_residual=0.003179561658 total_charge=6.35864756 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.35864756 t=6.355467998 mu=-0.1976998147 res=0.003179561658
+[constraint] MIX_RESET at SCF iteration 32 (mu update)
+[constraint] mixing recovered after 1 SCF iteration(s) (reset cost)
+[constraint] inner step 7 after SCF iteration 33 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-0.0003301740747 max_residual=0.001719955576 total_charge=6.357187954 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.357187954 t=6.355467998 mu=-0.1919666294 res=0.001719955576
+[constraint] MIX_RESET at SCF iteration 33 (mu update)
+[constraint] mixing recovered after 1 SCF iteration(s) (reset cost)
+[constraint] inner step 8 after SCF iteration 34 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-0.0001415382511 max_residual=0.0007469957692 total_charge=6.356214994 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.356214994 t=6.355467998 mu=-0.1894766435 res=0.0007469957692
+[constraint] MIX_RESET at SCF iteration 34 (mu update)
+[constraint] mixing recovered after 1 SCF iteration(s) (reset cost)
+[constraint] inner step 9 after SCF iteration 35 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-9.715311334e-05 max_residual=0.0005174550485 total_charge=6.355985453 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.355985453 t=6.355467998 mu=-0.1877517934 res=0.0005174550485
+[constraint] MIX_RESET at SCF iteration 35 (mu update)
+[constraint] mixing recovered after 1 SCF iteration(s) (reset cost)
+[constraint] inner step 10 after SCF iteration 36 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-7.729857518e-05 max_residual=0.0004147603292 total_charge=6.355882759 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.355882759 t=6.355467998 mu=-0.1863692589 res=0.0004147603292
+[constraint] MIX_RESET at SCF iteration 36 (mu update)
+[constraint] mixing recovered after 1 SCF iteration(s) (reset cost)
+[constraint] inner step 11 after SCF iteration 37 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-7.973794481e-05 max_residual=0.000431174378 total_charge=6.355899173 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.355899173 t=6.355467998 mu=-0.184932011 res=0.000431174378
+[constraint] MIX_RESET at SCF iteration 37 (mu update)
+[constraint] mixing recovered after 1 SCF iteration(s) (reset cost)
+[constraint] inner step 12 after SCF iteration 38 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-6.371090305e-05 max_residual=0.0003466761499 total_charge=6.355814675 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.355814675 t=6.355467998 mu=-0.1837764238 res=0.0003466761499
+[constraint] MIX_RESET at SCF iteration 38 (mu update)
+[constraint] mixing recovered after 1 SCF iteration(s) (reset cost)
+[constraint] inner step 13 after SCF iteration 39 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-5.992055454e-05 max_residual=0.0003280027582 total_charge=6.355796001 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.355796001 t=6.355467998 mu=-0.1826830813 res=0.0003280027582
+[constraint] MIX_RESET at SCF iteration 39 (mu update)
+[constraint] mixing recovered after 1 SCF iteration(s) (reset cost)
+[constraint] inner step 14 after SCF iteration 40 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-4.502765459e-05 max_residual=0.0002475982113 total_charge=6.355715597 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.355715597 t=6.355467998 mu=-0.1818577539 res=0.0002475982113
+[constraint] MIX_RESET at SCF iteration 40 (mu update)
+[constraint] mixing recovered after 1 SCF iteration(s) (reset cost)
+[constraint] inner step 15 after SCF iteration 41 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-4.323905643e-05 max_residual=0.0002388083742 total_charge=6.355706807 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.355706807 t=6.355467998 mu=-0.181061726 res=0.0002388083742
+[constraint] MIX_RESET at SCF iteration 41 (mu update)
+[constraint] mixing recovered after 1 SCF iteration(s) (reset cost)
+[constraint] inner step 16 after SCF iteration 42 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-3.239526518e-05 max_residual=0.0001795115986 total_charge=6.35564751 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.35564751 t=6.355467998 mu=-0.180463354 res=0.0001795115986
+[constraint] MIX_RESET at SCF iteration 42 (mu update)
+[constraint] mixing recovered after 1 SCF iteration(s) (reset cost)
+[constraint] inner step 17 after SCF iteration 43 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-3.139260782e-05 max_residual=0.0001745181449 total_charge=6.355642517 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.355642517 t=6.355467998 mu=-0.1798816269 res=0.0001745181449
+[constraint] MIX_RESET at SCF iteration 43 (mu update)
+[constraint] mixing recovered after 1 SCF iteration(s) (reset cost)
+[constraint] inner step 18 after SCF iteration 44 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-2.375110627e-05 max_residual=0.0001323620747 total_charge=6.35560036 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.35560036 t=6.355467998 mu=-0.17944042 res=0.0001323620747
+[constraint] MIX_RESET at SCF iteration 44 (mu update)
+[constraint] mixing recovered after 1 SCF iteration(s) (reset cost)
+[constraint] inner step 19 after SCF iteration 45 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-2.312859265e-05 max_residual=0.000129202982 total_charge=6.355597201 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.355597201 t=6.355467998 mu=-0.1790097434 res=0.000129202982
+[constraint] MIX_RESET at SCF iteration 45 (mu update)
+[constraint] mixing recovered after 1 SCF iteration(s) (reset cost)
+[constraint] inner step 20 after SCF iteration 46 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-1.708669158e-05 max_residual=9.545118194e-05 total_charge=6.35556345 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.35556345 t=6.355467998 mu=-0.1790097434 res=9.545118194e-05
+[constraint] settle check FAILED (x1): residual 0.00138928 >= 0.0001 on the settled density (the inner target did not survive the relaxation)
+[constraint] inner step 21 after SCF iteration 51 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-0.0002389850092 max_residual=0.001369988192 total_charge=6.356837987 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.356837987 t=6.355467998 mu=-0.1744431161 res=0.001369988192
+[constraint] MIX_RESET at SCF iteration 51 (mu update)
+[constraint] mixing recovered after 1 SCF iteration(s) (reset cost)
+[constraint] inner step 22 after SCF iteration 52 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=8.373356134e-05 max_residual=0.0004767826354 total_charge=6.354991216 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.354991216 t=6.355467998 mu=-0.1756220867 res=-0.0004767826354
+[constraint] MIX_RESET at SCF iteration 52 (mu update)
+[constraint] mixing recovered after 1 SCF iteration(s) (reset cost)
+[constraint] inner step 23 after SCF iteration 53 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-2.430100187e-05 max_residual=0.0001385804953 total_charge=6.355606579 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.355606579 t=6.355467998 mu=-0.1753565811 res=0.0001385804953
+[constraint] MIX_RESET at SCF iteration 53 (mu update)
+[constraint] mixing recovered after 1 SCF iteration(s) (reset cost)
+[constraint] inner step 24 after SCF iteration 54 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=6.253159073e-05 max_residual=0.0003562084961 total_charge=6.35511179 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.35511179 t=6.355467998 mu=-0.1755477239 res=-0.0003562084961
+[constraint] MIX_RESET at SCF iteration 54 (mu update)
+[constraint] mixing recovered after 1 SCF iteration(s) (reset cost)
+[constraint] inner step 25 after SCF iteration 55 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=3.134507922e-05 max_residual=0.000178361118 total_charge=6.355289637 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.355289637 t=6.355467998 mu=-0.1757394188 res=-0.000178361118
+[constraint] MIX_RESET at SCF iteration 55 (mu update)
+[constraint] mixing recovered after 1 SCF iteration(s) (reset cost)
+[constraint] inner step 26 after SCF iteration 56 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=8.549908789e-05 max_residual=0.0004821021199 total_charge=6.354985896 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.354985896 t=6.355467998 mu=-0.1773464259 res=-0.0004821021199
+[constraint] MIX_RESET at SCF iteration 56 (mu update)
+[constraint] mixing recovered after 1 SCF iteration(s) (reset cost)
+[constraint] inner step 27 after SCF iteration 57 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-4.281255314e-05 max_residual=0.0002421399236 total_charge=6.355710138 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.355710138 t=6.355467998 mu=-0.1768091462 res=0.0002421399236
+[constraint] MIX_RESET at SCF iteration 57 (mu update)
+[constraint] mixing recovered after 1 SCF iteration(s) (reset cost)
+[constraint] inner step 28 after SCF iteration 58 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=9.848964984e-06 max_residual=5.570393386e-05 total_charge=6.355412294 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.355412294 t=6.355467998 mu=-0.1768091462 res=-5.570393386e-05
+[constraint] settle check FAILED (x2): residual 0.000165265 >= 0.0001 on the settled density (the inner target did not survive the relaxation)
+[constraint] INNER schedule degraded to OUTER (settle check failed twice): the in-SCF mu updates stop, the outer secant loop takes over at SCF convergence
+[constraint] outer step 2 after SCF iteration 60 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-2.912924881e-05 max_residual=0.0001652645845 total_charge=6.355633263 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.355633263 t=6.355467998 mu=-0.1762582642 res=0.0001652645845
+[constraint] outer step 3 after SCF iteration 68 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=4.667458166e-05 max_residual=0.0002642996586 total_charge=6.355203699 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.355203699 t=6.355467998 mu=-0.1765972075 res=-0.0002642996586
+[constraint] outer step 4 after SCF iteration 70 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-2.884915882e-05 max_residual=0.000163481264 total_charge=6.35563148 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.35563148 t=6.355467998 mu=-0.1764676765 res=0.000163481264
+[constraint] outer step 5 after SCF iteration 72 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=5.853380906e-06 max_residual=3.316970576e-05 total_charge=6.355434829 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.355434829 t=6.355467998 mu=-0.1764676765 res=-3.316970576e-05
+[constraint] final status: CONVERGED (targets reached within 0.0001 e)
+CONSTRAINT_AUDIT nconstraint=1 e_con=5.853380906e-06 max_residual=3.316970576e-05 total_charge=6.355434829 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.355434829 t=6.355467998 mu=-0.1764676765 res=-3.316970576e-05
+ !FINAL_ETOT_IS -441.9708338634222 eV

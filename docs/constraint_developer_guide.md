@@ -196,6 +196,98 @@ esolver（PW/LCAO，`dft_plus_u` 为真时）逐原子调用 →
 4. `onsite_radius` 同时控制 DFT+U 投影球与这个读数；改变它是在改变**观测量定义**，
    不是收敛参数（半径敏感性研究因此必须重跑参考相）。
 
+### 3.4 双迭代调度：μ 的 SCF 内环更新（`constraint_mu_schedule`，默认 `outer`）
+
+**两种调度的精确定义**（计划 `2026-09-11-dual-iteration-strategy.md` §0）：
+
+```
+OUTER（默认，逐位=旧行为）：  SCF 完整收敛 → 读 Q → M4 一次秒差步 → 重复
+INNER（新增，DeltaSpin lambda_loop 血统）：
+    SCF 迭代内：drho < constraint_inner_thr（严格 <）→ 读 Q → M4 一步 →
+                mix_reset()（清 Broyden/DIIS 历史）→ 继续 SCF
+    判决：同一迭代须同时满足 drho<scf_thr 且 |Q−t|<thr，且 **settle 检查通过**
+```
+
+**钩子与次序**（esolver 侧，PW/LCAO 对称）：在 `on_scf_converged()` **之前**插入
+
+```cpp
+if (cloop.on_iteration(iter, this->drho)) this->p_chgmix->mix_reset();
+```
+
+完整次序：`observe → set_scf_energy(etot−cc_escon) → [on_iteration + maybe mix_reset]
+→ on_scf_converged`。`on_iteration()` 返回真 = μ 真的变了 → 调用方**必须**复位
+mixing 历史（不动点映射 G(ρ) 已改变，缓存失效）。
+
+**M8 状态机新增分支**：
+
+| 位置 | 分支 | 行为 |
+|---|---|---|
+| `on_iteration(iter, drho)` | `!enabled` / `phase==DONE` / `!inner_active_` / `phase!=CONSTRAINED` / `fixed_mu_` / `settle_armed_` / `drho≥inner_thr_` | 全部返回 false（纯 no-op；OUTER 走这一支） |
+| `take_inner_step()` | 预算耗尽 | `degrade_to_outer("constraint_inner_nmax exhausted")`，**打印原因** |
+| | M4==CONVERGED | `settle_armed_=true`，返回 false（μ 未变 → **不复位**） |
+| | M4==UNREACHABLE | `phase_=DONE`（熔断，与 OUTER 同） |
+| | M4==RUNNING | 返回 true → 调用方 `mix_reset()` |
+| `on_scf_converged()` Branch S | settle 通过（`max_residual()<thr`） | `status_=CONVERGED, phase_=DONE`，重发 `settle` 审计行 |
+| | settle 反弹第 1 次 | 撤回判决（**`status_` 必须回 `RUNNING`**）、`settle_fail++`、`conv=false` → 回内环 |
+| | settle 反弹第 2 次 | `degrade_to_outer("settle check failed twice")` → 落到 OUTER 外步 |
+| `on_scf_converged()` Branch I | 本迭代发生过内环更新 | 强制 `conv_esolver=false`（让密度感受新 μ），**不做**外步 |
+
+**关键不变式（改动时务必保持）**：
+
+1. **OUTER 是 no-op 路径**：`inner_active_` 为假时 `on_iteration()` 立即返回 false，
+   无副作用；`print_audit_line(iter, outer_steps_, "outer")` 必须复现原字符串
+   `"[constraint] outer step N after SCF iteration M (phase=...)"`。211 PW 算例
+   固定 `OMP_NUM_THREADS=1` 下逐位对照通过（ETOT + 7 条审计行的迭代号全等）。
+2. **`status_` 与 `phase_` 必须一致**：任何"撤回 CONVERGED 判决"的路径都要把
+   `status_` 置回 `RUNNING`——否则会对继续运行的 run 报 CONVERGED（本轮已修
+   一处真实缺陷，由 `InnerSettleCheck` 红灯暴露）。
+3. **不静默降级**：`degrade_to_outer()` 一定打印原因；`inner_nmax` 用尽与
+   settle 连续反弹是仅有的两条降级入口。
+4. **INNER 不禁用 OUTER 外步**：外步作为安全网保留（门控配置自相矛盾或已降级时
+   接管），避免"调度导致停在未达标点"。
+
+**测试**（`loop::Inner*` / `loop::OuterLegacyBitIdentical`，6 例）：门控+预算、
+复位契约、settle 通过/反弹/二次反弹降级、反假收敛（T4a）、OUTER 零回归、守卫 ERROR
+与门控边界（严格 `<`）。**sabotage 3 发**（门控放宽 `≤` / 恒真 / 恒假）恰中对应测试，
+且 `OuterLegacyBitIdentical` 三发全绿。
+
+**实测成本画像（2026-09-14，证据 `tests/deltap_dual_iteration/`）**：
+
+| 体系 | OUTER SCF 迭代（外步） | INNER SCF 迭代（内步/复位） | 变化 |
+|---|---|---|---|
+| H₂O PW 电荷 δ=+0.1 e | 63（7） | 72（28/26，settle 反弹×2 后降级） | +14% |
+| H₂O PW 自旋 δ=+0.1 μB | 42（3） | 44（27/26，settle 通过） | +4.8% |
+| H₂O PW 混合 | 117（15） | 63（28/26，反弹×1→通过×1） | **−46%** |
+| MgO 体相电荷 δ=+0.5 e | 381（23） | 94（31/30，通过） | **−75%** |
+
+规律：**INNER 的收益 ≈ 省掉的"每外步一次 SCF 重收敛"**——外步 ≲7 时净亏，
+≳15 时大赚。mixing 复位是刚需（`ABA_CONSTRAINT_INNER_NO_RESET=1` 对照下
+211 迭代 72→161、213 用满 `scf_nmax` 仍不收敛）；settle 检查实测抓到 3 次假收敛。
+
+详见 `docs/superpowers/specs/2026-09-14-dual-iteration-inner-schedule.md` 与
+`tests/deltap_dual_iteration/README.md`。
+
+### 3.5 可复现性纪律：对照/验收跑一律 `OMP_NUM_THREADS=1`
+
+**为什么是纪律而不是建议**：约束模块的验收判据里有两条处在"阈值边缘"的对照——
+OUTER 逐位（bit-identical）回归和 autotest 的 `1e-7 eV` 能量阈值。两者都对
+**OpenMP 归约顺序**敏感：同一输入、不同线程数下浮点求和次序不同，末位会漂移，
+量级（1e-7~1e-6 eV）恰好与验收阈值同阶。
+
+> 实测教训（2026-09-14）：OUTER/INNER 的正确性等价判据写成 `E_tot 差 ≤ 8.5e-7 eV`，
+> 与 autotest 的 `1e-7 eV` 阈值贴脸；这类"边缘通过"多半是线程噪声而不是物理，
+> 归因时必须先把线程数钉死。
+
+**SOP**：
+
+1. **对照实验与验收跑一律 `OMP_NUM_THREADS=1`**：逐位回归、A/B 调度对照、
+   能耗/迭代数计量、autotest 的 `1e-7 eV` 级判据——全部单线程；
+2. **性能/时延类测量允许多线程**，但须记录线程数，且不得与单线程数值结论混用；
+3. **报告任何"贴阈值通过/失败"前，先重跑 `OMP_NUM_THREADS=1`**排除线程噪声——
+   若单线程稳定复现，才按物理/实现缺陷定性；
+4. 证据目录（`tests/deltap_dual_iteration/`）里的审计行均为 `OMP_NUM_THREADS=1`
+   产出，比较时不得与多线程结果混判。
+
 ## 4. 关键函数 ↔ 公式 ↔ 操作 ↔ 单测覆盖
 
 | 函数 | 公式/操作 | 单测（目标::用例） |
@@ -210,15 +302,19 @@ esolver（PW/LCAO，`dft_plus_u` 为真时）逐原子调用 →
 | `ConstraintAccounting::audit` | E_con=Σμ(Q−t) + 审计行 | accounting 4 用例 |
 | `constraint_force` | F_J=−Σ_α μ_α Σ_g d_α·∂w_α/∂R_J ΔV（双基组同核；per-α d_α=read_up·ρ↑+read_dn·ρ↓，A5） | deriv::ForceOnSyntheticDensity / NewtonThirdLaw / ForceLinearInMu / **MixedChannelForce / MixedForceNewtonThirdLaw** |
 | `ConstraintLoop::on_scf_converged` | 两阶段门控状态机 + conv_esolver 门控 | loop::IgnoresUnconvergedScf / InjectMatchesObserver / SpinChannelConvergesOnLinearResponse |
+| `ConstraintLoop::on_iteration` + `take_inner_step` | INNER 调度：drho 门控 → M4 一步 → 返回真（调用方复位 mixing）；预算耗尽/收敛/熔断三分支 | loop::InnerScheduleGating / InnerMixResetOnUpdate / InnerAntiFakeConvergence / InnerGuards |
+| `ConstraintLoop` settle 分支（Branch S） | 冻结 μ + 密度松弛后复核 `\|Q−t\|`；通过→CONVERGED，反弹→撤回重入内环，两次→降级 OUTER | loop::InnerSettleCheck |
 | `ConstraintLoop::set_scf_energy` + 守卫分支 | `E_tot=E_KS+Σμ(Q−t)` vs `E_ref`；越界 → `MuStatus::BRANCH_FLIP`（熔断） | loop::BranchGuard{DefaultOffDoesNotFuse,RisingEnergyConverges,ToleratesDipWithinTolerance,PreemptsTargetReachedOnFlippedBranch,RefusesMissingEnergyDeathTest,RefusesFixedMuDeathTest} |
 | `Plus_U::onsite_moment` → `ConstraintLoop::set_onsite_moments` → `onsite=` | `Tr[M↑−M↓]` 逐原子 → 按约束片段求和，与 `q` 同点对照（II-1b 仪器） | accounting::OnsiteMomentFragmentSum / loop::OnsiteMomentsReachTheAuditLine |
 | `configure_from_inputs` | 全部语义守卫（PW/LCAO 共享；v1/v2 解析+逐约束 specs 出参） | io::Guards / ConfigureFromInputsShared / **MixedConstraintListParsing / MixedGuards** |
 | `ConstraintInjectLCAO::build/trace` | W^α_μν Gint 积分；Tr[W·DM] 审计 | inject_lcao::PartitionSumRuleEqualsOverlap（ΣW≡S，2e-15） |
 
-## 5. 单测覆盖总账（11 个注册 ctest 目标全绿，2026-09-11 复测）与未覆盖点
+## 5. 单测覆盖总账（11 个注册 ctest 目标全绿，2026-09-14 复测）与未覆盖点
 
 已覆盖：全部数学核、守卫分支、双通道、MPI 一致性、记账、力核、**混合 charge+spin 列表的读/注/编排/力**。
-**反向破坏验证**：每轮 sabotage 恰中对应新测试（A2/A3/A4/A5/A6 共 5 轮，含 staging guard 恢复、
+**反向破坏验证**（2026-09-14 增）：双迭代调度轮 3 发——门控放宽为 `≤` → 恰 `InnerGuards`、
+门控恒真 → 3 测试、门控恒假 → 5 个 INNER 测试；`OuterLegacyBitIdentical` **三发全绿**
+（OUTER 不依赖内环逻辑）。每轮 sabotage 恰中对应新测试（A2/A3/A4/A5/A6 共 5 轮，含 staging guard 恢复、
 通道误读、cap 退化、混合列表 spin 误读 charge 等判别；分支守卫轮 4 发：整体停用 → 3 测试、
 判据置假 → 恰 1 测试、缺能量守卫置假 → 恰 1 测试、fixed-μ 兼容守卫置假 → 恰 1 测试），守卫非摆设。
 **未覆盖/弱覆盖**（后续开发注意）：

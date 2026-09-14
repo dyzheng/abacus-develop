@@ -1,0 +1,183 @@
+[constraint] outer step 1 after SCF iteration 14 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.005 max_residual=0.1 total_charge=6.255467998 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.255467998 t=6.355467998 mu=-0.05 res=-0.1
+[constraint] inner step 1 after SCF iteration 24 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.007410446664 max_residual=0.07410446664 total_charge=6.281363532 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.281363532 t=6.355467998 mu=-0.1 res=-0.07410446664
+[constraint] MIX_RESET SUPPRESSED at SCF iteration 24 (ABA_CONSTRAINT_INNER_NO_RESET experiment)
+[constraint] inner step 2 after SCF iteration 32 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.006214399298 max_residual=0.04142932865 total_charge=6.31403867 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.31403867 t=6.355467998 mu=-0.15 res=-0.04142932865
+[constraint] MIX_RESET SUPPRESSED at SCF iteration 32 (ABA_CONSTRAINT_INNER_NO_RESET experiment)
+[constraint] inner step 3 after SCF iteration 41 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.002654708009 max_residual=0.01490578611 total_charge=6.340562212 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.340562212 t=6.355467998 mu=-0.1780991615 res=-0.01490578611
+[constraint] MIX_RESET SUPPRESSED at SCF iteration 41 (ABA_CONSTRAINT_INNER_NO_RESET experiment)
+[constraint] inner step 4 after SCF iteration 42 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.00190845199 max_residual=0.009149036632 total_charge=6.346318962 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.346318962 t=6.355467998 mu=-0.2085959503 res=-0.009149036632
+[constraint] MIX_RESET SUPPRESSED at SCF iteration 42 (ABA_CONSTRAINT_INNER_NO_RESET experiment)
+[constraint] inner step 5 after SCF iteration 44 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.004091021553 max_residual=0.01582013001 total_charge=6.339647868 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.339647868 t=6.355467998 mu=-0.2585959503 res=-0.01582013001
+[constraint] MIX_RESET SUPPRESSED at SCF iteration 44 (ABA_CONSTRAINT_INNER_NO_RESET experiment)
+[constraint] inner step 6 after SCF iteration 50 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-0.007228786531 max_residual=0.03211396561 total_charge=6.387581964 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.387581964 t=6.355467998 mu=-0.2250979097 res=0.03211396561
+[constraint] MIX_RESET SUPPRESSED at SCF iteration 50 (ABA_CONSTRAINT_INNER_NO_RESET experiment)
+[constraint] inner step 7 after SCF iteration 51 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-0.00557535946 max_residual=0.03184138217 total_charge=6.387309381 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.387309381 t=6.355467998 mu=-0.1750979097 res=0.03184138217
+[constraint] MIX_RESET SUPPRESSED at SCF iteration 51 (ABA_CONSTRAINT_INNER_NO_RESET experiment)
+[constraint] inner step 8 after SCF iteration 57 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-0.000964875847 max_residual=0.005892601295 total_charge=6.3613606 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.3613606 t=6.355467998 mu=-0.1637436166 res=0.005892601295
+[constraint] MIX_RESET SUPPRESSED at SCF iteration 57 (ABA_CONSTRAINT_INNER_NO_RESET experiment)
+[constraint] inner step 9 after SCF iteration 58 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.0005515867064 max_residual=0.003286985111 total_charge=6.352181013 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.352181013 t=6.355467998 mu=-0.1678093109 res=-0.003286985111
+[constraint] MIX_RESET SUPPRESSED at SCF iteration 58 (ABA_CONSTRAINT_INNER_NO_RESET experiment)
+[constraint] inner step 10 after SCF iteration 59 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.004035880557 max_residual=0.01852942163 total_charge=6.336938577 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.336938577 t=6.355467998 mu=-0.2178093109 res=-0.01852942163
+[constraint] MIX_RESET SUPPRESSED at SCF iteration 59 (ABA_CONSTRAINT_INNER_NO_RESET experiment)
+[constraint] inner step 11 after SCF iteration 65 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.003850010976 max_residual=0.01447118975 total_charge=6.340996809 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.340996809 t=6.355467998 mu=-0.2660466101 res=-0.01447118975
+[constraint] MIX_RESET SUPPRESSED at SCF iteration 65 (ABA_CONSTRAINT_INNER_NO_RESET experiment)
+[constraint] inner step 12 after SCF iteration 75 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-0.01137559275 max_residual=0.04974465522 total_charge=6.405212654 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.405212654 t=6.355467998 mu=-0.2286796982 res=0.04974465522
+[constraint] MIX_RESET SUPPRESSED at SCF iteration 75 (ABA_CONSTRAINT_INNER_NO_RESET experiment)
+[constraint] inner step 13 after SCF iteration 76 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-0.00439304182 max_residual=0.02209584878 total_charge=6.377563847 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.377563847 t=6.355467998 mu=-0.1988175183 res=0.02209584878
+[constraint] MIX_RESET SUPPRESSED at SCF iteration 76 (ABA_CONSTRAINT_INNER_NO_RESET experiment)
+[constraint] inner step 14 after SCF iteration 77 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-0.002656931909 max_residual=0.01785362328 total_charge=6.373321622 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.373321622 t=6.355467998 mu=-0.1488175183 res=0.01785362328
+[constraint] MIX_RESET SUPPRESSED at SCF iteration 77 (ABA_CONSTRAINT_INNER_NO_RESET experiment)
+[constraint] inner step 15 after SCF iteration 87 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.002677962654 max_residual=0.01556034862 total_charge=6.33990765 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.33990765 t=6.355467998 mu=-0.1721017131 res=-0.01556034862
+[constraint] MIX_RESET SUPPRESSED at SCF iteration 87 (ABA_CONSTRAINT_INNER_NO_RESET experiment)
+[constraint] inner step 16 after SCF iteration 88 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-0.0005721217723 max_residual=0.00340712591 total_charge=6.358875124 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.358875124 t=6.355467998 mu=-0.1679191751 res=0.00340712591
+[constraint] MIX_RESET SUPPRESSED at SCF iteration 88 (ABA_CONSTRAINT_INNER_NO_RESET experiment)
+[constraint] inner step 17 after SCF iteration 89 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.0002449035613 max_residual=0.00144770802 total_charge=6.35402029 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.35402029 t=6.355467998 mu=-0.169166405 res=-0.00144770802
+[constraint] MIX_RESET SUPPRESSED at SCF iteration 89 (ABA_CONSTRAINT_INNER_NO_RESET experiment)
+[constraint] inner step 18 after SCF iteration 90 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-0.002637991301 max_residual=0.01570004209 total_charge=6.371168041 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.371168041 t=6.355467998 mu=-0.1680244732 res=0.01570004209
+[constraint] MIX_RESET SUPPRESSED at SCF iteration 90 (ABA_CONSTRAINT_INNER_NO_RESET experiment)
+[constraint] inner step 19 after SCF iteration 91 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-0.002221833174 max_residual=0.01882519036 total_charge=6.374293189 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.374293189 t=6.355467998 mu=-0.1180244732 res=0.01882519036
+[constraint] MIX_RESET SUPPRESSED at SCF iteration 91 (ABA_CONSTRAINT_INNER_NO_RESET experiment)
+[constraint] inner step 20 after SCF iteration 101 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.004783510155 max_residual=0.03199598254 total_charge=6.323472016 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.323472016 t=6.355467998 mu=-0.1495034618 res=-0.03199598254
+[constraint] MIX_RESET SUPPRESSED at SCF iteration 101 (ABA_CONSTRAINT_INNER_NO_RESET experiment)
+[constraint] inner step 21 after SCF iteration 102 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-0.001618245633 max_residual=0.01146052547 total_charge=6.366928524 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.366928524 t=6.355467998 mu=-0.1412016961 res=0.01146052547
+[constraint] MIX_RESET SUPPRESSED at SCF iteration 102 (ABA_CONSTRAINT_INNER_NO_RESET experiment)
+[constraint] inner step 22 after SCF iteration 108 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.0001313089188 max_residual=0.0009258697015 total_charge=6.354542129 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.354542129 t=6.355467998 mu=-0.1418222441 res=-0.0009258697015
+[constraint] MIX_RESET SUPPRESSED at SCF iteration 108 (ABA_CONSTRAINT_INNER_NO_RESET experiment)
+[constraint] inner step 23 after SCF iteration 109 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-0.0001639776606 max_residual=0.001159038908 total_charge=6.356627037 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.356627037 t=6.355467998 mu=-0.1414772701 res=0.001159038908
+[constraint] MIX_RESET SUPPRESSED at SCF iteration 109 (ABA_CONSTRAINT_INNER_NO_RESET experiment)
+[constraint] inner step 24 after SCF iteration 110 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.002790591833 max_residual=0.0195890498 total_charge=6.335878949 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.335878949 t=6.355467998 mu=-0.1424567226 res=-0.0195890498
+[constraint] MIX_RESET SUPPRESSED at SCF iteration 110 (ABA_CONSTRAINT_INNER_NO_RESET experiment)
+[constraint] inner step 25 after SCF iteration 111 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.00378181561 max_residual=0.01965021309 total_charge=6.335817785 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.335817785 t=6.355467998 mu=-0.1924567226 res=-0.01965021309
+[constraint] MIX_RESET SUPPRESSED at SCF iteration 111 (ABA_CONSTRAINT_INNER_NO_RESET experiment)
+[constraint] inner step 26 after SCF iteration 114 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.001809801396 max_residual=0.008230429542 total_charge=6.347237569 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.347237569 t=6.355467998 mu=-0.2198914877 res=-0.008230429542
+[constraint] MIX_RESET SUPPRESSED at SCF iteration 114 (ABA_CONSTRAINT_INNER_NO_RESET experiment)
+[constraint] inner step 27 after SCF iteration 121 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-0.0005724893288 max_residual=0.002685962738 total_charge=6.358153961 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.358153961 t=6.355467998 mu=-0.2131412029 res=0.002685962738
+[constraint] MIX_RESET SUPPRESSED at SCF iteration 121 (ABA_CONSTRAINT_INNER_NO_RESET experiment)
+[constraint] inner step 28 after SCF iteration 122 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-0.001454832628 max_residual=0.007769804648 total_charge=6.363237803 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.363237803 t=6.355467998 mu=-0.1872418541 res=0.007769804648
+[constraint] MIX_RESET SUPPRESSED at SCF iteration 122 (ABA_CONSTRAINT_INNER_NO_RESET experiment)
+[constraint] inner step 29 after SCF iteration 123 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-0.001074877202 max_residual=0.006490541092 total_charge=6.36195854 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.36195854 t=6.355467998 mu=-0.1656067171 res=0.006490541092
+[constraint] MIX_RESET SUPPRESSED at SCF iteration 123 (ABA_CONSTRAINT_INNER_NO_RESET experiment)
+[constraint] inner step 30 after SCF iteration 124 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-0.0004033028803 max_residual=0.002568046541 total_charge=6.358036045 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.358036045 t=6.355467998 mu=-0.157046562 res=0.002568046541
+[constraint] MIX_RESET SUPPRESSED at SCF iteration 124 (ABA_CONSTRAINT_INNER_NO_RESET experiment)
+[constraint] inner step 31 after SCF iteration 125 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-0.0002753405731 max_residual=0.001823845149 total_charge=6.357291844 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.357291844 t=6.355467998 mu=-0.1509670781 res=0.001823845149
+[constraint] MIX_RESET SUPPRESSED at SCF iteration 125 (ABA_CONSTRAINT_INNER_NO_RESET experiment)
+[constraint] inner step 32 after SCF iteration 126 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-0.000312378537 max_residual=0.002173489743 total_charge=6.357641488 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.357641488 t=6.355467998 mu=-0.1437221123 res=0.002173489743
+[constraint] MIX_RESET SUPPRESSED at SCF iteration 126 (ABA_CONSTRAINT_INNER_NO_RESET experiment)
+[constraint] inner step 33 after SCF iteration 127 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-6.6412332e-05 max_residual=0.0004671498409 total_charge=6.355935148 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.355935148 t=6.355467998 mu=-0.1421649462 res=0.0004671498409
+[constraint] MIX_RESET SUPPRESSED at SCF iteration 127 (ABA_CONSTRAINT_INNER_NO_RESET experiment)
+[constraint] inner step 34 after SCF iteration 128 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.0001397303224 max_residual=0.0009756482317 total_charge=6.35449235 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.35449235 t=6.355467998 mu=-0.1432179323 res=-0.0009756482317
+[constraint] MIX_RESET SUPPRESSED at SCF iteration 128 (ABA_CONSTRAINT_INNER_NO_RESET experiment)
+[constraint] inner step 35 after SCF iteration 129 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.0001254893694 max_residual=0.000859037344 total_charge=6.354608961 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.354608961 t=6.355467998 mu=-0.1460813902 res=-0.000859037344
+[constraint] MIX_RESET SUPPRESSED at SCF iteration 129 (ABA_CONSTRAINT_INNER_NO_RESET experiment)
+[constraint] inner step 36 after SCF iteration 130 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=9.745774551e-05 max_residual=0.0006572887246 total_charge=6.35481071 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.35481071 t=6.355467998 mu=-0.1482723526 res=-0.0006572887246
+[constraint] MIX_RESET SUPPRESSED at SCF iteration 130 (ABA_CONSTRAINT_INNER_NO_RESET experiment)
+[constraint] inner step 37 after SCF iteration 131 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.0003479345041 max_residual=0.002234356783 total_charge=6.353233642 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.353233642 t=6.355467998 mu=-0.1557202085 res=-0.002234356783
+[constraint] MIX_RESET SUPPRESSED at SCF iteration 131 (ABA_CONSTRAINT_INNER_NO_RESET experiment)
+[constraint] inner step 38 after SCF iteration 132 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.0007993312195 max_residual=0.004666903888 total_charge=6.350801095 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.350801095 t=6.355467998 mu=-0.1712765548 res=-0.004666903888
+[constraint] MIX_RESET SUPPRESSED at SCF iteration 132 (ABA_CONSTRAINT_INNER_NO_RESET experiment)
+[constraint] inner step 39 after SCF iteration 133 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.0006681100155 max_residual=0.003642546757 total_charge=6.351825452 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.351825452 t=6.355467998 mu=-0.1834183773 res=-0.003642546757
+[constraint] MIX_RESET SUPPRESSED at SCF iteration 133 (ABA_CONSTRAINT_INNER_NO_RESET experiment)
+[constraint] inner step 40 after SCF iteration 134 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.000337657377 max_residual=0.001783130293 total_charge=6.353684868 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.353684868 t=6.355467998 mu=-0.189362145 res=-0.001783130293
+[constraint] MIX_RESET SUPPRESSED at SCF iteration 134 (ABA_CONSTRAINT_INNER_NO_RESET experiment)
+[constraint] INNER schedule degraded to OUTER (constraint_inner_nmax exhausted): the in-SCF mu updates stop, the outer secant loop takes over at SCF convergence
+[constraint] outer step 2 after SCF iteration 144 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-0.001308020368 max_residual=0.007085183569 total_charge=6.362553182 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.362553182 t=6.355467998 mu=-0.1846134762 res=0.007085183569
+[constraint] outer step 3 after SCF iteration 148 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-0.0007769008751 max_residual=0.004392577439 total_charge=6.359860576 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.359860576 t=6.355467998 mu=-0.1768667453 res=0.004392577439
+[constraint] outer step 4 after SCF iteration 158 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-3.406618896e-05 max_residual=0.000192997833 total_charge=6.355660996 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.355660996 t=6.355467998 mu=-0.1765107329 res=0.000192997833
+[constraint] outer step 5 after SCF iteration 159 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=2.325823454e-05 max_residual=0.0001316589985 total_charge=6.355336339 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.355336339 t=6.355467998 mu=-0.1766551076 res=-0.0001316589985
+[constraint] outer step 6 after SCF iteration 161 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=3.163385413e-08 max_residual=1.79071268e-07 total_charge=6.355467819 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.355467819 t=6.355467998 mu=-0.1766551076 res=-1.79071268e-07
+[constraint] final status: CONVERGED (targets reached within 0.0001 e)
+CONSTRAINT_AUDIT nconstraint=1 e_con=3.163385413e-08 max_residual=1.79071268e-07 total_charge=6.355467819 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.355467819 t=6.355467998 mu=-0.1766551076 res=-1.79071268e-07
+ !FINAL_ETOT_IS -441.97083379245 eV

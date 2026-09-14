@@ -133,7 +133,7 @@
 | C-27 | PW 无 target 时 `targets[iat]` 对空 vector 越界读（UB，实际按 0 约束 γ→0） | **Fixed (R3 08-01：`deltap_init` 显式把空 target 填 0 向量，行为不变)** |
 | C-28 | PW 无 MPI λ 同步 + 打印无 rank 守卫（S-09：多 rank 时 λ/escon 不一致、重复输出） | **Fixed (R4 08-01：backend `sync_lambda` Bcast + `s_lambda` 全 rank 刷新；init/report 打印 rank0 守卫)** |
 | B16 | Branch unwrapping inconsistent across λ | Fixed (P0 Hungarian matching)（注：match 文件 MPI 写竞争 C-10 削弱其跨 run 可靠性） |
-| C-29 | **约束 LCAO 非收敛路径堆破坏**：MgO δ=−2.0 e 在外步 56 约束 SCF 于 `scf_nmax=800` 内不收敛后，四 rank 报 `corrupted size vs. prev_size` / `free(): invalid next size` 并 abort，信号处理器打印后不退 → 进程空转挂死。父提交二进制 `ee7ac0b4c` 逐位复现 ⇒ 预存在，与 on-site 仪器无关 | **Open（2026-09-11 发现，未定位）**：非收敛收尾路径，四 rank 同中指向集合/全局缓冲或收尾代码；定位手段 = 崩溃密度热启动 + ASAN（首次非法写即报含栈）或 gdb 捕获 free 调用栈 |
+| C-29 | **约束 LCAO 堆破坏**（范围已于 2026-09-14 扩展）：MgO δ=−2.0 e 在外步 56 约束 SCF 于 `scf_nmax=800` 内不收敛后，四 rank 报 `corrupted size vs. prev_size` / `free(): invalid next size` 并 abort，信号处理器打印后不退 → 进程空转挂死。父提交二进制 `ee7ac0b4c` 逐位复现 ⇒ 预存在，与 on-site 仪器无关 | **Open（2026-09-11 发现，未定位；2026-09-14 扩范围）**：① 非收敛收尾路径（MgO δ=−2.0 e）；② **收敛后收尾路径**（MgO δ=+0.5 e，OUTER 与 INNER 皆中，父提交二进制复现）。四 rank 同中指向集合/全局缓冲或收尾代码；定位手段 = 崩溃密度热启动 + ASAN（首次非法写即报含栈）或 gdb 捕获 free 调用栈。影响：MgO 类长跑必须 `timeout`，且只信崩溃前已落盘的 `CONVERGED`/审计行 |
 
 ## Closed Bugs
 
@@ -150,6 +150,7 @@
 | M5 | Wrong S^{-1/2} diagnostic checks | replaced with correct identity | R-3 |
 | C3 | psi-lambda inconsistency | downgraded to Medium | R-0 |
 | H5 | fmod loses accumulated phase | downgraded to Low | R-0 |
+| C-30 | INNER 调度 settle 反弹分支只 `settle_armed_=false; ++settle_fail_`，**未把 `status_` 从 `CONVERGED` 撤回** → 判决已撤、run 继续跑，但对外仍报 CONVERGED（判决/状态不一致的静默错误面） | Fixed (2026-09-14：Branch S2 增 `status_=MuStatus::RUNNING`；由 `loop::InnerSettleCheck` 红灯暴露) | 双迭代 Q0 |
 | Z01 | unkOverlap_lcao 性能瓶颈 | 07-20 快速 O_kpair 路径上线（~30000×），07-29 核实 | R-6 |
 
 ---
@@ -171,6 +172,10 @@
 | `esolver_ks_pw.cpp` | PW esolver 接线（R3 起：init 20 行 → `deltap_init` 6 行） | 2026-08-01 |
 | `deltap_scf.h/.cpp`（新增） | DeltapScfSolver 状态机（basis-independent 控制流，LCAO + PW 均已接入；含 unwrap_branch_2pi / gamma_report） | 2026-08-01 |
 | `source_esolver/test/deltap_common_test.cpp`（新增） | deltap_common 纯函数单测（10 用例） | 2026-08-01 |
+| `source/source_estate/module_constraint/`（M1–M8） | 统一实空间权重约束框架（权重网格/读数/注入/秒差求解/记账/力/总控） | 2026-09-14 |
+| `constraint_loop.cpp` | M8 总控状态机 + **双迭代调度（`on_iteration`/`take_inner_step`/settle Branch S）** | 2026-09-14 |
+| `constraint_io.{h,cpp}` | M7 配置 + 语义守卫（含 `constraint_mu_schedule`/`inner_thr`/`inner_nmax` 三条新守卫） | 2026-09-14 |
+| `esolver_ks_pw.cpp` / `esolver_ks_lcao.cpp` | 约束钩子接线（`observe → set_scf_energy → [on_iteration+mix_reset] → on_scf_converged`） | 2026-09-14 |
 
 ---
 
@@ -194,6 +199,7 @@
 | 2026-09-11 | `2026-09-11-online-branch-guard.md` | **在线能量分支守卫落地（`constraint_branch_tol`，默认 0=关）：能量判据 `E_tot<E_ref−tol` → 第四态 `MuStatus::BRANCH_FLIP` 熔断不静默；单测 12→18、4 发 sabotage 全恰中；H₂O 端到端无假触发（能升 +0.0087 Ry ≫ tol 1e-3）；FeO 换态点外步 2 即熔断（−0.643 eV），旧流程要到外步 6 才误报 CONVERGED** |
 | 2026-09-11 | `2026-09-11-onsite-moment-audit.md` | **审计行 on-site 投影矩（DFT+U 迹差，无对角化，与 `atomic mag` 同量到 1e-8）：FeO δ=+0.1 μB 良态点 q 与 d 矩同向但仅 74% 幅值，与 II-1b 塌陷点反向脱钩合起来给出"同向跟随 → 反向脱钩"图景；单测 18→19 / 4→5，无 DFT+U 输出逐位不变；半径敏感性(4b)顺延** |
 | 2026-09-11 | `2026-09-11-capability-boundary-decoupling.md` | **能力边界表补 L14（Becke 矩 ≠ on-site d 局域矩，附反向脱钩/74% 跟随两实测点）+ L15（在线分支守卫两条盲区：只抓能量向下换态、只在收敛点判）+ F9/F10 诊断项 + §5 适用域"自旋约束观测量缺口"** |
+| 2026-09-14 | `2026-09-14-dual-iteration-inner-schedule.md` | **双迭代调度 Q0–Q4 全落地：`constraint_mu_schedule=outer|inner` + `inner_thr`(1e-3) + `inner_nmax`(20)；SCF 内 μ 更新 + `mix_reset` + settle 检查；单测 loop 19→25，sabotage 3 发恰中且 OUTER 回归三发全绿；OUTER 211 对照二进制逐位一致；**Q1–Q3 实测：μ* 差 ≤0.17% / E_tot 差 ≤8.5e-7 eV 全部命中，成本 211 +14% / 212 +4.8% / 213 −46% / MgO −75%，mixing 不复位则 2.2× 慢或不收敛（`mix_reset` 是刚需），settle 抓到 3 次假收敛；决策表入手册 §5.9**；顺带修 C-30、扩 C-29 范围（收敛后收尾路径）、记录 OMP 线程数导致算例不可复现** |
 | 2026-09-11 | `2026-09-11-i1-mgo-farside-fuse-attempt.md` | **I-1 继续：Mg³⁺ 远侧熔断用例尝试 BLOCKED——δ=−2.0 e 在外步 55（q=10.2651 / μ=2.75 Ry）后约束 SCF 不收敛，非收敛收尾路径触发四 rank 堆破坏（`free(): invalid next size`）并挂死；父提交二进制逐位复现 ⇒ 预存在 bug C-29；κ 随位移变硬，约束先崩于 SCF 而非 μ 顶限 ⇒ 计划设想的顶限熔断在本体系不可达；设计文档 §1.4 写回 + S1 判据改判完成** |
 | 2026-07-12 | `2026-07-12-deltap-risk-points-and-solutions.md` | 18 项风险点 + 解决方案 |
 | 2026-07-12 | `2026-07-12-deltap-root-cause-analysis.md` | B14+B15 found+fixed |
@@ -205,6 +211,14 @@
 ## Next Steps (Priority)
 
 > 2026-07-29 起以 `2026-07-29-deltap-risk-assessment-review.md` §9 的 P0/P1/P2 清单为准。以下旧条目保留备查。
+
+**当前主线（统一实空间权重约束框架，2026-09-14）**：
+  1. **C-29 定位（最高优先级）**——约束 LCAO 堆破坏，范围已扩为"非收敛收尾 + 收敛后
+     收尾"两条路径（MgO δ=−2.0 e 与 δ=+0.5 e）；ASAN 或 gdb 捕获 free 栈；未修前
+     所有 MgO 类长跑必须 `timeout` 包裹且只信已落盘输出。
+  2. 双迭代调度 Q0–Q4 **已完成**（决策表入用户手册 §5.9）；遗留可选项：`inner_thr`
+     vs `scf_thr` 三档扫描、FeO 双稳体系对照（待 II-1b 锚定收口 + 用户放行 S4/S5）。
+  3. 能力边界文档（`2026-08-13-deltap-capability-boundaries.md`）持续补条目。
 
 0. **R0 esolver 重构（R1/R2/R3/R4 全部完成）** — 按 `2026-07-31-deltap-esolver-refactor-design.md` 4 轮迁移：~~R1 删死代码~~ → ~~R2 LCAO 抽 `DeltapScfSolver`~~ → ~~R3 PW 接入同一状态机~~ → ~~R4 MPI rank0+Bcast（C-23）、PW λ 同步（C-28）、打印/WARNING 收口、deltap_common 单测~~；设计文档状态已改"已实施"
 1. ~~**Fix Z01**~~ — 07-20 快速 O_kpair 路径已上线（本文档此前状态滞后，07-29 核实）
@@ -4757,3 +4771,104 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   现场立即入库、归因先用父提交二进制。预存在未修三项测试目标与上轮同。
 - 下一轮：C-29 专项定位轮（ASAN/gdb）→ 修后重跑 F1/F2/F3；II-1 重锚定 (a)+(c) 与
   4b 半径敏感性合批；FeO S4/S5 仍暂缓。
+
+## 2026-09-14 (34): 双迭代调度 Q0——INNER（SCF 内环 μ 更新）+ 守卫 + OUTER 逐位回归
+
+- 动机：计划 `2026-09-11-dual-iteration-strategy.md` §2。把 μ 更新调度做成显式
+  二值开关，为"内环 λ 是否改善难收敛 SCF"的定量对照（§3）提供可证伪载体；同时
+  保证默认 OUTER 零回归。
+- 落地（M7/M8 + 两个 esolver + 3 个 INPUT）：
+  ① **输入**：`constraint_mu_schedule`（`outer` 默认 / `inner`）、
+  `constraint_inner_thr`（1e-3，drho 门控）、`constraint_inner_nmax`（20，预算）；
+  守卫：未知 schedule / `inner`+thr≤0 / `inner`+nmax≤0 → WARNING_QUIT（不静默回退）。
+  ② **M8**：新钩子 `on_iteration(iter, drho)`（门控**严格** `<`，返回真=μ 真变）；
+  `take_inner_step()` 复用同一 M4 秒差求解器（只改调度不改求解器）；预算耗尽
+  `degrade_to_outer("constraint_inner_nmax exhausted")`；**Settle check**（Branch S）：
+  冻结 μ + 密度松弛后复核 `|Q−t|`，通过→CONVERGED，反弹→撤回重入内环，二次反弹
+  →降级 OUTER；`print_audit → print_audit_line(label)` 重构（`outer` 文本逐位不变）。
+  ③ **esolver**（PW/LCAO 对称）：在 `on_scf_converged` **前**接线
+  `if (cloop.on_iteration(iter, this->drho)) this->p_chgmix->mix_reset();`
+  （DeltaP `mix_reset` 先例；日志 `MIX_RESET` + `mixing recovered after K …` 作
+  复位代价读数）。
+- 验证：
+  - `ctest -R constraint` **11/11**；loop 测试 **19→25**（+`InnerScheduleGating`/
+    `InnerMixResetOnUpdate`/`InnerSettleCheck`/`InnerAntiFakeConvergence`/
+    `OuterLegacyBitIdentical`/`InnerGuards`）；
+  - **sabotage 3 发**（门控 `≤` / 恒真 / 恒假）：分别恰中 1 / 3 / 5 个 INNER 测试，
+    `OuterLegacyBitIdentical` **三发全绿**；
+  - **OUTER 逐位回归**：改动前源码重建对照二进制，`np=4` + `OMP_NUM_THREADS=1`
+    跑 211 PW 电荷：前/后均 `-441.9708337535537 eV`、外步 7、7 条审计行迭代号全等；
+    LCAO 212 NAO `-466.2533233603508 eV`（差参考 9.8e-12）连跑两次一致。
+- 归因/新发现：
+  - **修 C-30**（真实缺陷，本轮唯一代码 bug）：settle 反弹未撤回 `status_` →
+    继续运行的 run 对外仍报 CONVERGED。由新单测红灯暴露并修复。
+  - **工程发现（非本任务引入）**：不设 `OMP_NUM_THREADS` 时 211 连跑两次不可复现
+    （ETOT 差 ~6e-8 eV、外步 7 vs 6，OpenMP 归约次序）；固定 `OMP_NUM_THREADS=1`
+    后逐位可复现。`Autotest.sh` 阈值 1e-7 eV 与该噪声同量级 ⇒ 约束算例复跑建议
+    显式固定线程数（改动前后皆然，非回归）。
+- 文件：`constraint_io.{h,cpp}`、`constraint_loop.{h,cpp}`、
+  `esolver_ks_pw.cpp`/`esolver_ks_lcao.cpp`、`input_parameter.h`/
+  `read_input_item_other.cpp`、`test/constraint_loop_test.cpp`；
+  文档 `docs/constraint_user_manual.md`（§2 三行 + §4 审计行 + §5.9 + §7）、
+  `docs/constraint_developer_guide.md`（§3.4 + §4 表 + §5 sabotage 账）；
+  spec `docs/superpowers/specs/2026-09-14-dual-iteration-inner-schedule.md`。
+- Bug/fix list：**新增 Closed Bug C-30**（settle 状态撤回，已修）；Active Bug C-29
+  （约束非收敛路径堆破坏）仍 Open；预存在未修三项测试目标与上轮同。
+- **Q1–Q3 定量对照（同轮完成）**（证据 `tests/deltap_dual_iteration/`，`np=4` +
+  `OMP_NUM_THREADS=1`）：
+
+| 体系 | OUTER 迭代（外步） | INNER 迭代（内步/复位） | settle | 变化 |
+|---|---|---|---|---|
+| 211 PW 电荷 δ=+0.1 e | 63（7） | 72（28/26） | 反弹×2→降级 | +14% |
+| 212 PW 自旋 δ=+0.1 μB | 42（3） | 44（27/26） | 通过×1 | +4.8% |
+| 213 PW 混合 | 117（15） | 63（28/26） | 反弹×1→通过×1 | **−46%** |
+| MgO 体相电荷 δ=+0.5 e | 381（23） | 94（31/30） | 通过×1 | **−75%** |
+
+  正确性等价全部命中（μ* 相对差 ≤0.17% < 1%；`E_tot` 差 ≤8.5e-7 eV < 1e-6）；
+  规律 = **INNER 收益 ≈ 省掉的"每外步一次 SCF 重收敛"**，交叉点在外步 ~10。
+  **Q3 mixing 对照**（`ABA_CONSTRAINT_INNER_NO_RESET=1` 诊断开关，新增）：
+  不复位时 211 迭代 72→161、213 用满 `scf_nmax` 仍不收敛、MgO 145 内步后 settle
+  连败降级 ⇒ **mixing 历史腐败是真机制，`mix_reset` 是刚需**；复位代价本身
+  仅 1–2 SCF 迭代（日志 `mixing recovered after K`）。**settle 检查实测抓到 3 次
+  假收敛**（内环 CONVERGED 后密度一松弛靶点即破：211 残差 1.4e-3 / 1.65e-4 ≫ thr）。
+  **Q4**：决策表已回填用户手册 §5.9 + 开发者文档 §3.4。
+- **C-29 范围扩展（重要）**：MgO δ=+0.5 的 OUTER **与** INNER 长跑都在写完
+  `!FINAL_ETOT_IS` 后于收尾阶段堆破坏（`free(): invalid next size` /
+  `corrupted size vs. prev_size`，四 rank 同中）；**父提交二进制跑同一输入逐位复现**
+  ⇒ 与双迭代改动无关。C-29 的已知范围由"非收敛路径"扩展为
+  **"MgO 电荷约束 LCAO 的收敛后收尾路径"**；崩溃前 μ*/`E_tot`/审计行完整，故
+  Q2 结论可用。未修前 MgO 类长跑必须 `timeout` 且只信已落盘输出。
+- 下一轮：**C-29 定位（ASAN/gdb）升为最高优先级**（它同时阻塞 MgO 长跑收尾与远侧扫描）；
+  其余留待：FeO 双稳体系 OUTER/INNER 对照（用户令 S4/S5 暂缓 + II-1b 锚定未收口）、
+  `inner_thr` vs `scf_thr` 三档扫描（低成本、价值中等）。
+
+## 2026-09-14 (2): 双迭代策略严格评审——通过，批准提交（无代码改动）
+
+- 核实：ctest 亲测 11/11（loop 19→25）；OUTER 对照二进制 211 逐位一致；
+  证据链算术一致性全部成立（"内步−复位=CONVERGED 步数"契约四组全对：
+  28−26=2↔settle_fail=2、27−26=1↔pass、31−30=1↔pass）；复位代价实测
+  K=1–2 迭代；C-30（settle 反弹不撤 status）修复正确。
+- 两关切问题证据评价：①INNER 收益边界清晰（MgO −75%、213 −46%、
+  211/212 +14%/+4.8%，交叉点≈外步 10，机制=省外步重收敛 vs 复位重启）；
+  ②mixing 腐败证实为真（不复位：211 慢 2.2×、213 用满 scf_nmax 不收敛），
+  mix_reset 刚需且廉价——用户担心点的最好结局（机制真实、对策内建）。
+  settle 抓 3 次假收敛，硬设计非过度。
+- 提交批复：2 个 commit（feat 代码+单测 / test 证据+文档）；入库前裁剪
+  证据目录中的大型运行产物。
+- 后续排序：C-29 定位（最高优先；新事实=崩溃在 !FINAL_ETOT_IS 之后，
+  范围收窄到决算后清理路径）→ inner_thr 标定 → FeO 继续暂缓；
+  OMP=1 可复现性纪律入 SOP（autotest 1e-7 阈值与该噪声同量级）。
+- 文件：`2026-09-14-dual-iteration-review.md`。
+
+
+## 2026-09-14 (3): OMP 可复现性纪律入 SOP（纯文档，无代码改动）
+
+- 依据：本轮发现不设 `OMP_NUM_THREADS` 时 211 连跑两次不可复现（ETOT 差 ~6e-8 eV、
+  外步 7 vs 6）；而约束验收的两条判据都贴着阈值——OUTER 逐位 bit-identical 回归、
+  autotest `1e-7 eV` 能量阈值——与 OpenMP 归约次序噪声同量级（`E_tot` 差 8.5e-7 eV）。
+- 落点：`docs/constraint_developer_guide.md` 新增 **§3.5 可复现性纪律**：
+  ①对照/验收跑一律 `OMP_NUM_THREADS=1`；②性能测量可多线程但须记录线程数、不得与
+  单线程数值混判；③任何"贴阈值通过/失败"先单线程复跑排除线程噪声；④证据目录审计行
+  均为单线程产出。
+- 文件：`docs/constraint_developer_guide.md`（§3.5 新增；§3.4 实测表沿用）。
+- 下一轮：C-29 定位（最高优先）。

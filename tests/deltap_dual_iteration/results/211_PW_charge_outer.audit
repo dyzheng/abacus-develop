@@ -1,0 +1,25 @@
+[constraint] outer step 1 after SCF iteration 14 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.005 max_residual=0.1 total_charge=6.255467998 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.255467998 t=6.355467998 mu=-0.05 res=-0.1
+[constraint] outer step 2 after SCF iteration 30 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.007109669995 max_residual=0.07109669995 total_charge=6.284371298 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.284371298 t=6.355467998 mu=-0.1 res=-0.07109669995
+[constraint] outer step 3 after SCF iteration 40 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.006407057975 max_residual=0.04271371983 total_charge=6.312754279 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.312754279 t=6.355467998 mu=-0.15 res=-0.04271371983
+[constraint] outer step 4 after SCF iteration 50 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.002582856419 max_residual=0.01466376728 total_charge=6.340804231 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.340804231 t=6.355467998 mu=-0.1761386668 res=-0.01466376728
+[constraint] outer step 5 after SCF iteration 60 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=3.635155941e-05 max_residual=0.0002059450085 total_charge=6.355262053 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.355262053 t=6.355467998 mu=-0.1765110001 res=-0.0002059450085
+[constraint] outer step 6 after SCF iteration 61 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-2.357478685e-05 max_residual=0.0001336708538 total_charge=6.355601669 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.355601669 t=6.355467998 mu=-0.1763644518 res=0.0001336708538
+[constraint] outer step 7 after SCF iteration 63 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-8.505721032e-07 max_residual=4.822809213e-06 total_charge=6.355472821 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.355472821 t=6.355467998 mu=-0.1763644518 res=4.822809213e-06
+[constraint] final status: CONVERGED (targets reached within 0.0001 e)
+CONSTRAINT_AUDIT nconstraint=1 e_con=-8.505721032e-07 max_residual=4.822809213e-06 total_charge=6.355472821 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.355472821 t=6.355467998 mu=-0.1763644518 res=4.822809213e-06
+ !FINAL_ETOT_IS -441.9708337535537 eV

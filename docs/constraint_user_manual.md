@@ -13,6 +13,15 @@
 > 运行下每条约束的审计行新增 `onsite=`（该片段原子的 DFT+U 关联轨道占据迹差，
 > 即日志 `atomic mag` 的同一个量），与 Becke 加权 `q` 并排可读；无 DFT+U 时
 > 该 token 不出现，历史输出逐位不变。
+>
+> 2026-09-14 增补（第四件）：**双迭代调度**——§2 新增
+> `constraint_mu_schedule`（`outer` 默认 / `inner`）、`constraint_inner_thr`、
+> `constraint_inner_nmax` 三个 INPUT。`outer` 是此前唯一且默认的行为，
+> 老输入**逐位不变**（已用对照二进制在 211 PW 算例上验证）；
+> `inner` 是新增的 SCF 内环 μ 更新（DeltaSpin `lambda_loop` 血统）+ settle 检查。
+> §4 增补 `inner step`/`settle` 审计行与 `MIX_RESET` 日志行，§5.9 给出使用与
+> 边界说明；**"何时用哪个"的定量决策表在 §5.9 标注为待实测填表**
+> （对照研究 Q1–Q3 完成后回填）。设计/验证：见 §7。
 
 ## 1. 功能概述
 
@@ -39,6 +48,9 @@ Q_α = ∫ w_α(r) d_α(r) dr 施加 Lagrange 约束，约束势 V_con = Σ_α �
 | `constraint_thr` | 1e-4 | 约束收敛容差（每分量 \|Q−t\|，单位 e 或 μB） |
 | `constraint_step_max` | 0.05 | 外环**每步** \|Δμ\| 上限（Ry）。外步数 ≈ \|μ\*\|/该值，故调小时 `scf_nmax` 要相应放大 |
 | `constraint_step_probe` | 0.0 | **仅首步**（该分量尚无历史读数、还没有割线斜率时）的 \|Δμ\| 上限（Ry）。`0` = 沿用 `constraint_step_max`（旧行为）。必须满足 `0 ≤ probe ≤ step_max`，越界 → WARNING_QUIT |
+| `constraint_mu_schedule` | outer | μ 更新的调度：`outer`（现状，**默认**）= SCF 完整收敛 → 一次 M4 秒差步；`inner`（新增）= SCF **迭代内** drho 越过 `constraint_inner_thr` 即更新 μ → 清 mixing 历史（`mix_reset`）→ 继续 SCF，并在判决前做 settle 检查。取值只有这两个，其他 → WARNING_QUIT（不静默回退到 outer）。**`outer` 为默认即零回归**（211 算例逐位对照通过） |
+| `constraint_inner_thr` | 1e-3 | **仅 `inner` 生效**的 drho 门控：只有 SCF 迭代的密度残差 drho 小于该值才更新 μ（密度还在漂时读出的是 mixing 噪声，不是 Q(μ)）。`inner` 模式下必须 `> 0`，否则 WARNING_QUIT；`outer` 模式下该值被完全忽略 |
+| `constraint_inner_nmax` | 20 | **仅 `inner` 生效**的安全预算：一次 run 内最多做多少次 SCF 内 μ 更新；用尽即打印告警并**降级回 `outer`**（绝不无限空转）。需要 N 个外步的扫描通常也需 ~N 次内更新，故扫描应调大。`inner` 模式下必须 `> 0`，否则 WARNING_QUIT |
 | `constraint_branch_tol` | 0.0 | **在线能量分支守卫**容差（Ry，`0` = 关）。>0 时：每个 SCF 收敛点比较约束态总能量 `E_tot = E_KS + Σ_α μ_α(Q_α−t_α)` 与同一 run 的参考能量 `E_ref`（μ=0 参考相）；若 `E_tot` 比 `E_ref` 低超过该容差，判定 SCF 换了自洽解 → **熔断并报 `BRANCH_FLIP`**（不再静默当 CONVERGED）。必须 `≥ 0`，负数 → WARNING_QUIT |
 
 **为什么有"首步"专用上限**：外环用割线法推进 μ，需要两次读数才能得到斜率
@@ -105,6 +117,28 @@ CONSTRAINT_AUDIT c[1] kind=spin q=0.09993 t=0.10001 mu=-0.0815 res=-7.9e-05
 [constraint] final status: CONVERGED (targets reached within 0.0001 e)
 ```
 
+`inner` 调度下，同一审计发射器把标签换成 `inner` / `settle`（`outer step` 的
+文本在 `outer` 模式逐位不变）：
+
+```
+[constraint] inner step 3 after SCF iteration 27 (phase=constrained)   # SCF 迭代内的 μ 更新
+[constraint] MIX_RESET at SCF iteration 27 (mu update)                 # 与上一次更新一一配对
+[constraint] mixing recovered after 4 SCF iteration(s) (reset cost)    # 复位代价（间距）
+[constraint] settle check PASSED: residual 2.1e-05 < 0.0001 on the settled density (INNER schedule CONVERGED)
+[constraint] settle check FAILED (x1): residual 3.4e-04 >= 0.0001 on the settled density (...)
+[constraint] INNER schedule degraded to OUTER (settle check failed twice): ...
+```
+
+- `inner step N`：第 N 次 **SCF 迭代内** μ 更新（对应一次 `mix_reset`）；
+- `MIX_RESET`：Broyden/DIIS 历史被清空（不动点映射随 μ 改变），与 μ 更新一一对应；
+- `mixing recovered after K SCF iteration(s)`：两次复位之间隔了多少迭代——这就是
+  `mix_reset` 的**复位代价**（mixing 破坏的定量读数，供 §5.9 决策表使用）；
+- `settle check PASSED/FAILED`：内环宣告 CONVERGED 后的**临时**判决核验
+  （冻结 μ、等密度松弛后重读 `|Q−t|`）；FAILED 计一次 `settle_fail`，连续两次
+  → 降级 `outer`；
+- `degraded to OUTER (<reason>)`：`inner` 因预算用尽（`constraint_inner_nmax`）
+  或 settle 连续反弹而降级——**降级一定打印原因**，绝不静默。
+
 - `c[i] kind=...`：逐约束通道标签（charge/spin；A4 起生产审计恒带）；
 - `q/t/mu/res`：逐约束读数/靶点/乘子（Ry）/残差；
 - `onsite=...`（**仅 DFT+U 运行时出现**）：该约束片段内原子的 **on-site 投影矩**
@@ -169,6 +203,40 @@ CONSTRAINT_AUDIT c[1] kind=spin q=0.09993 t=0.10001 mu=-0.0815 res=-7.9e-05
    脱钩（`q` −1.28 μB vs `onsite` −0.20 μB），而良态的 δ=+0.1 μB 点两者同向
    （+0.100 vs +0.074 μB）。多解体系上还需配合 §5.7 的事后能量核对。
 
+9. **双迭代调度（`constraint_mu_schedule`）**：`outer`（默认）与 `inner`
+   两种 μ 更新调度的**实现**已落地并验证（OUTER 逐位零回归；INNER 由 6 个单测
+   + 3 发门控 sabotage 覆盖，见 §7 的 spec）。使用边界：
+   - **`outer` 是默认且零回归**：不设该参数 = 旧行为；单测里把 drho 置 0
+     （任意门控都满足）也**绝不**触发内环（`OuterLegacyBitIdentical`）；
+   - **`inner` 的三道守卫**：`inner_thr`（drho 门控，严格 `<`）、`inner_nmax`
+     （预算，用尽降级）、settle check（内环 CONVERGED 需经松弛复核）；
+     任一守卫触发都会**打印原因**，不会静默；
+   - **`inner` 的已知代价**：每次 μ 更新都清 mixing 历史（`mix_reset`），
+     重启一段 Broyden 收敛；代价大小可在日志里用
+     `mixing recovered after K SCF iteration(s)` 读到；
+   - **INNER 仍保留 OUTER 秒差步作安全网**：只有当门控配置自相矛盾
+     （`constraint_inner_thr ≤ scf_thr`，收敛时门控反而关闭）或已降级时，
+     外步才接管——因此不会"因调度而停在未达标的点"；
+   - **`inner_thr` 默认 1e-3 是沿用 DeltaSpin 口径的未标定值**，建议保持
+     `inner_thr ≫ scf_thr`（否则门控在 SCF 收敛时形同关闭）；
+   - ✅ **"何时用哪个"决策表（2026-09-14 实测回填）**：
+
+| 场景 | 推荐 | 实测依据（SCF 迭代数，证据 `tests/deltap_dual_iteration/`） |
+|---|---|---|
+| OUTER 外步 **≲7** 即收敛（易体系、小扰动） | **`outer`（默认）** | H₂O 电荷 +14%（63→72，且 settle 反弹 2 次后降级）、H₂O 自旋 +4.8%（42→44） |
+| OUTER 外步 **≳15**（多约束/大扰动/体相） | **`inner`** | H₂O 混合 **−46%**（117→63）、MgO 体相电荷 **−75%**（381→94） |
+| 任何 `inner` 使用 | **保留 `mix_reset`**（默认即开） | 关掉复位：211 迭代 72→161、213 用满 `scf_nmax` 仍不收敛、MgO 内更新 145 次后 settle 连败降级 ⇒ mixing 历史腐败是真实代价 |
+| 任何 `inner` 使用 | **保留 settle 检查**（默认即开） | 实测抓到 **3 次**"内环宣告 CONVERGED、密度一松弛靶点即破"（否则直接误报 CONVERGED） |
+
+   - **正确性等价（实测 4 体系全部命中）**：两策略收敛后的 μ* 相对差 ≤ 0.17%
+     （判据 <1%）、`E_tot` 差 ≤ 8.5e-7 eV（判据 <1e-6 eV）；即策略只改**代价**，
+     不改**答案**。
+   - 一句话经验：**外步越少越该用 `outer`；外步很多时 `inner` 把"每外步一次 SCF
+     重收敛"省掉，收益 = 省掉的收敛次数**。
+   - ⚠️ MgO 体相长跑目前会在收尾阶段触发**预存在堆破坏 C-29**（OUTER/INNER 都中，
+     父提交二进制复现），崩溃前的 μ*/`E_tot`/审计行仍可信；未修前请用 `timeout`
+     包裹并只信已落盘输出。
+
 ## 6. 示例用例（已注册测试套件）
 
 - `tests/01_PW/211_PW_constraint_h2o/`：PW 电荷约束（delta=+0.1 e on O）
@@ -185,3 +253,6 @@ CONSTRAINT_AUDIT c[1] kind=spin q=0.09993 t=0.10001 mu=-0.0815 res=-7.9e-05
 （一期闭合+二期 2.1–2.5）、`docs/superpowers/specs/2026-09-09-stageA-progress-summary.md`
 （阶段 A：混合 charge+spin 数据流/测试/μ 耦合实测）；
 术语表：`docs/superpowers/specs/deltap-constraint-glossary.md`。
+双迭代调度：`docs/superpowers/plans/2026-09-11-dual-iteration-strategy.md`（设计）、
+`docs/superpowers/specs/2026-09-14-dual-iteration-inner-schedule.md`（Q0 落地与
+逐位回归证据；Q1–Q3 对照研究待续）。

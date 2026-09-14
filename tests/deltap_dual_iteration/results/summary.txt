@@ -1,0 +1,142 @@
+211_PW_charge_outer
+  status      = CONVERGED
+  etot        = -441.9708337535537
+  last_iter   = 63
+  outer       = 7
+  inner       = 0
+  reset       = 0
+  suppressed  = 0
+  settle_pass = 0
+  settle_fail = 0
+  degrade     = 0
+  final_audit = q=6.355472821 t=6.355467998 mu=-0.1763644518 res=4.822809213e-06
+
+211_PW_charge_inner
+  status      = CONVERGED
+  etot        = -441.9708338634222
+  last_iter   = 72
+  outer       = 5
+  inner       = 28
+  reset       = 26
+  suppressed  = 0
+  settle_pass = 0
+  settle_fail = 2
+  degrade     = 1
+  final_audit = q=6.355434829 t=6.355467998 mu=-0.1764676765 res=-3.316970576e-05
+
+211_PW_charge_inner_noreset
+  status      = CONVERGED
+  etot        = -441.97083379245
+  last_iter   = 161
+  outer       = 6
+  inner       = 40
+  reset       = 0
+  suppressed  = 40
+  settle_pass = 0
+  settle_fail = 0
+  degrade     = 1
+  final_audit = q=6.355467819 t=6.355467998 mu=-0.1766551076 res=-1.79071268e-07
+
+212_PW_spin_outer
+  status      = CONVERGED
+  etot        = -442.0408674948372
+  last_iter   = 42
+  outer       = 3
+  inner       = 0
+  reset       = 0
+  suppressed  = 0
+  settle_pass = 0
+  settle_fail = 0
+  degrade     = 0
+  final_audit = q=0.09998265851 t=0.1000059449 mu=-0.07233854468 res=-2.328640461e-05
+
+212_PW_spin_inner
+  status      = CONVERGED
+  etot        = -442.0408670948165
+  last_iter   = 44
+  outer       = 1
+  inner       = 27
+  reset       = 26
+  suppressed  = 0
+  settle_pass = 1
+  settle_fail = 0
+  degrade     = 0
+  final_audit = q=0.1000323538 t=0.1000059449 mu=-0.07245849357 res=2.640887435e-05
+
+213_PW_mixed_outer
+  status      = CONVERGED
+  etot        = -441.9159885528531
+  last_iter   = 117
+  outer       = 15
+  inner       = 0
+  reset       = 0
+  suppressed  = 0
+  settle_pass = 0
+  settle_fail = 0
+  degrade     = 0
+  final_audit = q=0.09994794914 t=0.1000059449 mu=-0.08155649998 res=-5.799577097e-05
+
+213_PW_mixed_inner
+  status      = CONVERGED
+  etot        = -441.915988601339
+  last_iter   = 63
+  outer       = 1
+  inner       = 28
+  reset       = 26
+  suppressed  = 0
+  settle_pass = 1
+  settle_fail = 1
+  degrade     = 0
+  final_audit = q=0.100102694 t=0.1000059449 mu=-0.08165906454 res=9.674912101e-05
+
+213_PW_mixed_inner_noreset
+  status      = RUNNING
+  etot        = -441.8378744696595
+  last_iter   = 200
+  outer       = 1
+  inner       = 51
+  reset       = 0
+  suppressed  = 51
+  settle_pass = 0
+  settle_fail = 0
+  degrade     = 0
+  final_audit = q=0.1550256075 t=0.1000059449 mu=-0.1620233425 res=0.05501966263
+
+MgO_dp0.5_outer
+  status      = CONVERGED
+  etot        = -7659.260116348592
+  last_iter   = 381
+  outer       = 23
+  inner       = 0
+  reset       = 0
+  suppressed  = 0
+  settle_pass = 0
+  settle_fail = 0
+  degrade     = 0
+  final_audit = q=5.05734011 t=5.057340586 mu=-1.049024275 res=-4.760947618e-07
+
+MgO_dp0.5_inner
+  status      = CONVERGED
+  etot        = -7659.26011634944
+  last_iter   = 94
+  outer       = 1
+  inner       = 31
+  reset       = 30
+  suppressed  = 0
+  settle_pass = 1
+  settle_fail = 0
+  degrade     = 0
+  final_audit = q=5.057349164 t=5.057340586 mu=-1.049044143 res=8.578562355e-06
+
+MgO_dp0.5_inner_noreset
+  status      = CONVERGED
+  etot        = -7659.260116348596
+  last_iter   = 600
+  outer       = 4
+  inner       = 145
+  reset       = 0
+  suppressed  = 143
+  settle_pass = 0
+  settle_fail = 2
+  degrade     = 1
+  final_audit = q=5.057340646 t=5.057340586 mu=-1.049025317 res=6.015487486e-08
