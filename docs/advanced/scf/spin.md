@@ -119,14 +119,15 @@ Set `sc 0` for unconstrained components. For example, to constrain only the dire
 |-----------|------|---------|-------------|
 | `sc_mag_switch` | Boolean | False | Enable DeltaSpin |
 | `sc_thr` | Real | 1.0e-6 | Convergence criterion for lambda loop (RMS, in $\mu_B$) |
-| `nsc` | Integer | 100 | Maximum number of lambda iterations |
+| `nsc` | Integer | 5 | Maximum number of lambda iterations |
 | `nsc_min` | Integer | 2 | Minimum number of lambda iterations |
-| `sc_scf_nmin` | Integer | 2 | Minimum outer SCF iterations before starting lambda loop |
 | `alpha_trial` | Real | 0.01 | Initial trial step size for lambda (eV/$\mu_B^2$) |
 | `sccut` | Real | 3.0 | Maximum step size for lambda (eV/$\mu_B$) |
-| `sc_drop_thr` | Real | 1.0e-2 | Convergence ratio threshold for adaptive lambda loop |
-| `sc_scf_thr` | Real | 1.0e-4 | Density error threshold for entering lambda loop |
+| `sc_drop_thr` | Real | 1.0e-3 | Convergence ratio threshold for adaptive lambda loop |
+| `sc_scf_thr` | Real | 10 | Density error threshold for entering the lambda loop. Only used when `sc_scf_thr_mode = threshold` |
+| `sc_scf_thr_mode` | String | immediate | When the lambda loop activates: `immediate` (from iter >= 2), `threshold` (when `drho < sc_scf_thr`), or `off` (never — lambda is kept constant from STRU) |
 | `sc_direction_only` | Boolean | False | Constrain only the direction, not the magnitude |
+| `sc_dir_phase1_steps` | Integer | 5 | Phase-1 length of the `direction_only` two-phase strategy (collinear, `nspin = 2`) |
 | `sc_lambda_strategy` | String | bfgs | Lambda update strategy (see below) |
 | `decay_grad_switch` | Boolean | False | Enable gradient-based early exit |
 
@@ -138,11 +139,7 @@ The `sc_lambda_strategy` parameter controls how the Lagrange multipliers $\lambd
 
 - **`bfgs`** (default): BFGS quasi-Newton method with line search. Robust and well-tested for both PW and LCAO. Uses `alpha_trial` and `sccut` to control step size.
 
-- **`linear_response`**: Linear response method (Scheme B). Estimates the magnetic susceptibility $\chi$ from the history of $(\lambda, M)$ pairs and performs a one-step Newton-like update: $\Delta\lambda = \beta (M_{\text{target}} - M) / \chi$, where $\beta$ is a mixing parameter.
-
-- **`augmented_lagrangian`**: Augmented Lagrangian method (Scheme C). Uses a penalty parameter $\mu$ that grows over iterations: $\lambda_{\text{new}} = \lambda + \mu (M - M_{\text{target}})$. The penalty increases until convergence is achieved.
-
-- **`hybrid_delayed`**: Hybrid delayed update (Scheme D). Two-phase approach: in the early phase (SCF not yet converged), lambda updates are gentle; in the late phase (SCF nearly converged), augmented Lagrangian updates are applied.
+- **`linear_scan`**: diagnostic mode for measuring the magnetic-moment response $M(\lambda)$: lambda is swept linearly instead of being optimized, between `sc_scan_lambda_start` (default 0.0) and `sc_scan_lambda_end` (default 1.0) in `sc_scan_steps` (default 20) steps. No lambda convergence check is performed in this mode.
 
 ### Direction-Only Mode
 
@@ -175,7 +172,6 @@ orbital_corr        -1 2
 hubbard_u           0.0 4.0
 sc_mag_switch       1
 sc_thr              1.0e-6
-sc_scf_thr          1.0e-4
 sc_lambda_strategy  bfgs
 ```
 
