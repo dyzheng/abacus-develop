@@ -46,7 +46,7 @@ F_ana 补偿前后双值入档。
 | 二进制 | `build/abacus_basic_para`（A5/A6 后，2026-09-09 22:17） |
 | 并行 | np4，MAXJOBS=2 |
 | 工作目录 | /tmp/cfd_pw_<id> |
-| 开始/结束 | 待填 |
+| 开始/结束 | 2026-09-10 10:39:51 → 11:03:33（**23 min 42 s**） |
 
 ## 3. 结果（Results）
 
@@ -138,14 +138,65 @@ nspin/constraint_type 由测试例 INPUT 数据驱动，无硬编码分支。
   都是 6.19，说明该项本身不是平移不变量，其非零部分由 SCC 项配平）——故该项记录为
   诊断量，不作判据；判据看补偿前净力。
 
-### 3.3 冒烟：O-z 两腿 + 判据
+### 3.3 冒烟：O-z 两腿 + 判据（2026-09-10，PASS）
 
-待填。
+| 项 | 值 |
+|---|---|
+| 命令 | `CASE=tests/01_PW/212_PW_constraint_h2o_spin TEST_FORCE=1 ONLY=0_2 bash run_constraint_fd.sh pw 0.005 4 2` |
+| 二进制 | `build/abacus_basic_para`（Debug） |
+| F_FD (O-z) | **−0.72247438 eV/Å** |
+| F_ana (O-z) | **−0.72594423 eV/Å** |
+| \|d\| | **0.0034698 eV/Å < 0.0128555**（判据），**3.7× 富余 → PASS** |
+| 净力标准检查 | Σ 补偿前总力 z = +0.0154 eV/Å ≈ 0（电荷通道修复后参考 +0.0089；修复前 +11.62 ⇒ 自旋通道**无 μw-Pulay 缺失特征**） |
+| 一致性自证 | max\|pre − compen − printed\| = 1.75e-07 eV/Å |
+
+**判定**：单自旋通道（`constraint_type spin`，nspin=2）解析力在 O-z 轴与能量导数一致，
+G-V1 的 9/9 轴判决完成 1/9 轴（最强的 ∂m/∂R 方向）。
+
+### 3.4 18 腿重跑（2026-09-14，**未完成**）
+
+用户批复"并行补完 V1"后重启：同载体（PW `212_PW_constraint_h2o_spin`）、同协议
+（frozen t* + μ 重收敛 + raw-E）、只把二进制换成 **release**（`build_rel/abacus_basic_para`），
+np4 / MAXJOBS=3 / OMP_NUM_THREADS=1。
+
+**base（R0）结果（已完成）**：
+
+| 项 | Debug（2026-09-10） | Release（2026-09-14） |
+|---|---|---|
+| t\* (μB) | 0.09999858905 | 同（首条 audit） |
+| μ\* (Ry) | −0.07188979607 | **−0.07188979603** |
+| E0 (eV) | −466.9021000194886710 | 同量级 |
+| F_ana(O-z) (eV/Å) | −0.7259442 | **−0.72595136860**（差 7.2e-6） |
+| Σ compen z (eV/Å) | +0.005131 | +0.005127 |
+| max\|pre−compen−printed\| | 1.75e-07 | **1.750e-07** |
+| base 墙钟 | 1422 s | **1247 s** |
+
+- **跨二进制一致性**：μ\* 一致到 **4e-11 Ry**、F_ana(O-z) 到 **7.2e-6 eV/Å**、
+  std-check 逐位复现 —— release 重构没有改动自旋通道的物理。
+- **release 提速只有 1.14×**（1422 s → 1247 s），远低于 `2026-09-09-fd-cost-analysis.md`
+  里"3–10×"的预期（那是按对角化密集的 LCAO 载体估的）。⇒ **"release 即可把 18 腿压到
+  1–2 h"在本 PW/ecut=100 载体上不成立**；真正省时的是换 LCAO 载体或 fixed-μ 腿。
+- 18 腿 14:54 起跑，**未跑完**；产物目录是 `mktemp -d /tmp/cfd_pw_XXXX`，随会话环境
+  清理**全部丢失**（仓库内无归档）⇒ 本轮无 leg 级结果，需重跑。
 
 ## 4. 分析（Analysis）
 
-待填。
+- **G-V1 的状态**：O-z 轴 PASS（自旋通道解析力 = 能量导数，3.7× 富余），但其余 8 轴
+  仍缺；两次 18 腿起跑（09-10 / 09-14）都**没有留下归档结果**，所以力相关物理
+  （约束 relax/MD）目前仍不能解锁——这与评审给出的"闸门 1"判断一致。
+- **可复现性**：base 两次（debug/release）逐位级一致（μ\* 4e-11 Ry），说明 base 本身
+  可复现；问题纯粹是**跑批持久化**。
+- **根因（流程，不是物理）**：`tests/constraint_fd_force/tools/run_constraint_fd.sh:70`
+  用 `mktemp -d /tmp/cfd_${BASIS}_XXXX` 作工作目录，且**不像新脚本**
+  （`run_inner_thr_scan.sh`/`run_ct_scan.sh`）那样把每条腿的 audit 归档进 `results/`。
+  ⇒ 长跑一旦中断/环境清理，18 腿的计算全部作废。这是 09-10 那次"无归档结果"的同一个坑。
+- **成本画像（实测）**：base ~21 min（release），其中含自由相 + 约束外环；18 腿
+  /MAXJOBS=3 的实测未完成，但按 base 量级估计 ≥1 h。若换 LCAO 载体（2.6 的 charge
+  通道已在该载体上 18 腿 PASS）应显著更省，且能与既有 pair 直接对照。
 
 ## 5. 下一步（Next steps）
 
-待填。
+1. **先修跑批持久化**（1 行级）：给 V1 runner 加 `RESDIR`（或 `WORKROOT` 覆盖 + 归档），
+   leg 级 audit / 力分量 / 时间 一律落到仓库内（对齐 `run_ct_scan.sh` 的写法）；
+2. 重跑 18 腿（建议 LCAO 载体，PW 作对照 base 已有），补齐 9/9 轴；
+3. 之后才能对"约束 relax/MD"类力相关物理解锁；TM d 矩解读仍需 II-1b/4b 先收口。
