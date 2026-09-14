@@ -1,0 +1,60 @@
+=================================================================
+==737751==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x5340000a07f0 at pc 0x585782eeb778 bp 0x7ffd71695ff0 sp 0x7ffd71695fe0
+WRITE of size 16 at 0x5340000a07f0 thread T0
+    #0 0x585782eeb777 in ModuleIO::read_rhog(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, ModulePW::PW_Basis const*, std::complex<double>**) /root/abacus-develop/source/source_io/module_chgpot/rhog_io.cpp:166
+    #1 0x5857834d645b in Charge::init_rho(UnitCell const&, Parallel_Grid const&, ModuleBase::ComplexMatrix const&, ModuleSymmetry::Symmetry&, void const*, void const*) /root/abacus-develop/source/source_estate/module_charge/charge_init.cpp:51
+    #2 0x5857838e6de8 in ModuleESolver::ESolver_KS::before_all_runners(UnitCell&, Input_para const&) /root/abacus-develop/source/source_esolver/esolver_ks.cpp:73
+    #3 0x585783990a6b in ModuleESolver::ESolver_KS_LCAO<std::complex<double>, double>::before_all_runners(UnitCell&, Input_para const&) /root/abacus-develop/source/source_esolver/esolver_ks_lcao.cpp:66
+    #4 0x5857833029ae in Driver::driver_run() /root/abacus-develop/source/source_main/driver_run.cpp:67
+    #5 0x585783301a14 in Driver::atomic_world() /root/abacus-develop/source/source_main/driver.cpp:177
+    #6 0x585783301f92 in Driver::init() /root/abacus-develop/source/source_main/driver.cpp:33
+    #7 0x585782801cee in main /root/abacus-develop/source/source_main/main.cpp:43
+    #8 0x7dd3ea22a1c9 in __libc_start_call_main ../sysdeps/nptl/libc_start_call_main.h:58
+    #9 0x7dd3ea22a28a in __libc_start_main_impl ../csu/libc-start.c:360
+    #10 0x585782861114 in _start (/root/abacus-develop/build_asan/abacus_basic_para+0x2fe114) (BuildId: 50e3011bfd551019880eb081c4728985b65151c3)
+
+0x5340000a07f0 is located 16 bytes before 125904-byte region [0x5340000a0800,0x5340000bf3d0)
+allocated by thread T0 here:
+    #0 0x7dd3edcfe6c8 in operator new[](unsigned long) ../../../../src/libsanitizer/asan/asan_new_delete.cpp:98
+    #1 0x5857834c427e in Charge::allocate(int const&, bool) /root/abacus-develop/source/source_estate/module_charge/charge.cpp:126
+    #2 0x5857838ea419 in ModuleESolver::ESolver_FP::before_all_runners(UnitCell&, Input_para const&) /root/abacus-develop/source/source_esolver/esolver_fp.cpp:92
+    #3 0x5857838e69e2 in ModuleESolver::ESolver_KS::before_all_runners(UnitCell&, Input_para const&) /root/abacus-develop/source/source_esolver/esolver_ks.cpp:45
+    #4 0x585783990a6b in ModuleESolver::ESolver_KS_LCAO<std::complex<double>, double>::before_all_runners(UnitCell&, Input_para const&) /root/abacus-develop/source/source_esolver/esolver_ks_lcao.cpp:66
+    #5 0x5857833029ae in Driver::driver_run() /root/abacus-develop/source/source_main/driver_run.cpp:67
+    #6 0x585783301a14 in Driver::atomic_world() /root/abacus-develop/source/source_main/driver.cpp:177
+    #7 0x585783301f92 in Driver::init() /root/abacus-develop/source/source_main/driver.cpp:33
+    #8 0x585782801cee in main /root/abacus-develop/source/source_main/main.cpp:43
+
+SUMMARY: AddressSanitizer: heap-buffer-overflow /root/abacus-develop/source/source_io/module_chgpot/rhog_io.cpp:166 in ModuleIO::read_rhog(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, ModulePW::PW_Basis const*, std::complex<double>**)
+Shadow bytes around the buggy address:
+  0x5340000a0500: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x5340000a0580: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x5340000a0600: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x5340000a0680: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x5340000a0700: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+=>0x5340000a0780: fa fa fa fa fa fa fa fa fa fa fa fa fa fa[fa]fa
+  0x5340000a0800: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x5340000a0880: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x5340000a0900: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x5340000a0980: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x5340000a0a00: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07 
+  Heap left redzone:       fa
+  Freed heap region:       fd
+  Stack left redzone:      f1
+  Stack mid redzone:       f2
+  Stack right redzone:     f3
+  Stack after return:      f5
+  Stack use after scope:   f8
+  Global redzone:          f9
+  Global init order:       f6
+  Poisoned by user:        f7
+  Container overflow:      fc
+  Array cookie:            ac
+  Intra object redzone:    bb
+  ASan internal:           fe
+  Left alloca redzone:     ca
+  Right alloca redzone:    cb
+==737751==ABORTING

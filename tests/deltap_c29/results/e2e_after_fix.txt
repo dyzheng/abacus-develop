@@ -1,0 +1,11 @@
+# End-to-end proof on the ORIGINAL crashing case, after the fix (non-ASAN debug
+# build, np=4, OMP_NUM_THREADS=1).
+# Input: MgO bulk LCAO delta=+0.5 e, INNER schedule, restart from the 160/640
+#        charge file -- the exact run that aborted with
+#        'free(): invalid next size (normal)' on 4 ranks before the fix.
+
+rc=0 (mpirun; no abort)
+corruption lines: 0
+FINISH Time  : Mon Sep 14 08:41:09 2026
+ TOTAL  Time  : 93
+[constraint] final status: CONVERGED (targets reached within 0.0001 e)

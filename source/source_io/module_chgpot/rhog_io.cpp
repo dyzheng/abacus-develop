@@ -163,6 +163,23 @@ bool ModuleIO::read_rhog(const std::string& filename, const ModulePW::PW_Basis* 
             {
                 int fftixyz = iz + nz * fftixy;
                 int ig = fftixyz2ig[fftixyz];
+                // Guard (C-29): the file may have been written with a larger
+                // plane-wave basis (for example a larger ecutwfc on the same
+                // cell).  fftixyz2ig carries -1 for every Miller index that is
+                // inside the current FFT box but outside the current basis
+                // set; writing rhog[is][-1] lands 16 bytes before the buffer
+                // and corrupts the heap header there.  Without this guard the
+                // corruption is silent and only surfaces much later, when the
+                // damaged chunk is freed (Charge::destroy at teardown).
+                // Branch A: the plane wave is not representable on the current
+                // basis -> skip it (rank 0 has already warned that some plane
+                // waves in the file are not used).
+                if (ig < 0)
+                {
+                    continue;
+                }
+                // Branch B: the plane wave belongs to the current basis -> copy
+                // its coefficient into the charge-density buffer.
                 rhog[is][ig] = rhog_in[i];
             }
         }

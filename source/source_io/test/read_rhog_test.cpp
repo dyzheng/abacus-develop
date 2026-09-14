@@ -137,6 +137,65 @@ TEST_F(ReadRhogTest, SomePWMissing)
     std::remove("test_read_rhog.txt");
 }
 
+// Regression test for C-29: a charge-density file written with a LARGER
+// plane-wave basis (here ecutwfc = 120 Ry, npwtot = 1471) must not write
+// outside the rhog buffer when it is read into a smaller basis.
+//
+// Inside the FFT box but outside the current basis set the map fftixyz2ig
+// carries -1, and the unguarded code wrote rhog[is][-1] -- 16 bytes before
+// the buffer, i.e. into the heap chunk header sitting there.  The damage is
+// silent: glibc only notices much later, when that chunk is freed
+// (Charge::destroy at teardown, "free(): invalid next size (normal)").
+// The canary slot in front of the buffer makes the out-of-bounds write
+// deterministic without ASAN.
+TEST_F(ReadRhogTest, LargerBasisInFileDoesNotWriteBeforeBuffer)
+{
+    const std::string filename = "./support/charge-density.dat";
+    PARAM.input.nspin = 1;
+
+#ifdef __MPI
+    rhopw->initmpi(GlobalV::NPROC_IN_POOL, GlobalV::RANK_IN_POOL, MPI_COMM_WORLD);
+#endif
+    // Same cell and same FFT box (ecutrho = 120) as the file, but a much
+    // smaller plane-wave sphere (ecutwfc = 30): most of the 1471 Miller
+    // indices stored in the file are then inside the box yet outside the
+    // basis set, which is exactly the C-29 trigger.
+    rhopw->initgrids(6.5, ModuleBase::Matrix3(-0.5, 0.0, 0.5, 0.0, 0.5, 0.5, -0.5, 0.5, 0.0), 120);
+    rhopw->initparameters(false, 30);
+    rhopw->setuptransform();
+    rhopw->collect_local_pw();
+    ASSERT_GT(rhopw->npw, 0);
+    ASSERT_LT(rhopw->npw, 1471); // the file must be the larger basis
+
+    // Canary slot immediately in front of the buffer the reader fills.
+    std::vector<std::complex<double>> guarded(rhopw->npw + 1);
+    const std::complex<double> canary(3.25, -1.5);
+    guarded[0] = canary;
+    std::complex<double>* const fixture_buffer = rhog[0];
+    rhog[0] = guarded.data() + 1;
+
+    GlobalV::ofs_warning.open("test_read_rhog.txt");
+    const bool result = ModuleIO::read_rhog(filename, rhopw, rhog);
+    GlobalV::ofs_warning.close();
+
+    rhog[0] = fixture_buffer; // restore the fixture allocation for TearDown
+
+    // The scenario itself must be a larger-basis file, otherwise the test
+    // would not exercise the guard.
+    std::ifstream ifs_warning("test_read_rhog.txt");
+    std::stringstream ss;
+    ss << ifs_warning.rdbuf();
+    ifs_warning.close();
+    std::remove("test_read_rhog.txt");
+
+    EXPECT_TRUE(result);
+    EXPECT_THAT(ss.str(), ::testing::HasSubstr("some planewaves in file are not used"));
+    // Branch check: the canary next to the buffer must be untouched, i.e. the
+    // reader must not have written at ig == -1.
+    EXPECT_EQ(guarded[0].real(), canary.real());
+    EXPECT_EQ(guarded[0].imag(), canary.imag());
+}
+
 int main(int argc, char** argv)
 {
 #ifdef __MPI

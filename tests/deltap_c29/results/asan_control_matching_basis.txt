@@ -1,0 +1,5 @@
+# Control: restart file written on the SAME grid/basis (60/240 -> 60/240), ASAN build.
+# No overflow is reported and the run completes.
+
+TOTAL  Time  : 86
+ASAN reports in the run: 0

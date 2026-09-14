@@ -1,0 +1,23 @@
+# C-29 minimal reproduction (non-ASAN debug build, np=4, OMP_NUM_THREADS=1)
+
+# System: MgO rocksalt 8-atom cell, LCAO, ecutwfc 60 / ecutrho 240, symmetry 0,
+#         constraint charge delta=+0.1 e on atom 4, Broyden mixing, scf_nmax 800.
+# The ONLY difference between the two runs is where init_chg=file reads from.
+
+## (1) NO restart (fresh atomic superposition) -- clean
+
+rc=0
+TOTAL  Time  : 177
+corruption lines: 0
+
+## (2) restart from a charge file written at ecutwfc 160 / ecutrho 640 (larger basis) -- heap corruption
+
+rc=1 (mpirun), aborted
+Read electron density from file: /tmp/mgo_scan/S3_O_+0p3/OUT.autotest/autotest-CHARGE-DENSITY.restart
+#SCF IS CONVERGED#   <- physics completed and is correct
+[constraint] final status: CONVERGED (targets reached within 0.0001 e)
+145:corrupted size vs. prev_size
+149:corrupted size vs. prev_size
+153:free(): invalid next size (normal)
+157:free(): invalid next size (normal)
+

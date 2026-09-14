@@ -1,0 +1,10 @@
+# ASAN build (ENABLE_ASAN=ON) AFTER the rhog_io.cpp guard, SAME input that
+# produced asan_mismatch_constraint_on.report (mismatched-basis restart).
+# Number of ASAN reports produced: 0
+
+START  Time  : Mon Sep 14 08:32:45 2026
+ FINISH Time  : Mon Sep 14 08:34:08 2026
+ TOTAL  Time  : 83
+
+ASAN reports in the run: 0
+heap-corruption lines: 0

@@ -133,7 +133,7 @@
 | C-27 | PW 无 target 时 `targets[iat]` 对空 vector 越界读（UB，实际按 0 约束 γ→0） | **Fixed (R3 08-01：`deltap_init` 显式把空 target 填 0 向量，行为不变)** |
 | C-28 | PW 无 MPI λ 同步 + 打印无 rank 守卫（S-09：多 rank 时 λ/escon 不一致、重复输出） | **Fixed (R4 08-01：backend `sync_lambda` Bcast + `s_lambda` 全 rank 刷新；init/report 打印 rank0 守卫)** |
 | B16 | Branch unwrapping inconsistent across λ | Fixed (P0 Hungarian matching)（注：match 文件 MPI 写竞争 C-10 削弱其跨 run 可靠性） |
-| C-29 | **约束 LCAO 堆破坏**（范围已于 2026-09-14 扩展）：MgO δ=−2.0 e 在外步 56 约束 SCF 于 `scf_nmax=800` 内不收敛后，四 rank 报 `corrupted size vs. prev_size` / `free(): invalid next size` 并 abort，信号处理器打印后不退 → 进程空转挂死。父提交二进制 `ee7ac0b4c` 逐位复现 ⇒ 预存在，与 on-site 仪器无关 | **Open（2026-09-11 发现，未定位；2026-09-14 扩范围）**：① 非收敛收尾路径（MgO δ=−2.0 e）；② **收敛后收尾路径**（MgO δ=+0.5 e，OUTER 与 INNER 皆中，父提交二进制复现）。四 rank 同中指向集合/全局缓冲或收尾代码；定位手段 = 崩溃密度热启动 + ASAN（首次非法写即报含栈）或 gdb 捕获 free 调用栈。影响：MgO 类长跑必须 `timeout`，且只信崩溃前已落盘的 `CONVERGED`/审计行 |
+| C-29 | **约束 LCAO 堆破坏**（范围已于 2026-09-14 扩展）：MgO δ=−2.0 e 在外步 56 约束 SCF 于 `scf_nmax=800` 内不收敛后，四 rank 报 `corrupted size vs. prev_size` / `free(): invalid next size` 并 abort，信号处理器打印后不退 → 进程空转挂死。父提交二进制 `ee7ac0b4c` 逐位复现 ⇒ 预存在，与 on-site 仪器无关 | **Fixed（2026-09-14 定位 + 修复，工作区待提交）**：根因 = `ModuleIO::read_rhog`（`rhog_io.cpp:166`）缺 `ig < 0` 守卫——当重启文件是用**更大的平面波基组**写的，文件里"在 FFT 盒内、但在当前球外"的平面波映射为 `fftixyz2ig == -1`，`rhog[is][-1]` 把 16 字节写进 malloc chunk 头 ⇒ 直到收尾 `Charge::destroy` 释放相邻数组才报 `free(): invalid next size` / `corrupted size vs. prev_size`。ASAN 首报仅 2.6 s（`WRITE of size 16 at 16 bytes before` a 125904-byte region，栈顶 `read_rhog`）；**关掉 `constraint` 同样复现 ⇒ 与约束框架无关**，此前"MgO/约束专属"只是跨基组热启动的巧合。修复 = `if (ig < 0) continue;` + 哨兵回归单测；详见 `2026-09-14-c29-localization.md` |
 
 ## Closed Bugs
 
@@ -176,6 +176,8 @@
 | `constraint_loop.cpp` | M8 总控状态机 + **双迭代调度（`on_iteration`/`take_inner_step`/settle Branch S）** | 2026-09-14 |
 | `constraint_io.{h,cpp}` | M7 配置 + 语义守卫（含 `constraint_mu_schedule`/`inner_thr`/`inner_nmax` 三条新守卫） | 2026-09-14 |
 | `esolver_ks_pw.cpp` / `esolver_ks_lcao.cpp` | 约束钩子接线（`observe → set_scf_energy → [on_iteration+mix_reset] → on_scf_converged`） | 2026-09-14 |
+| `source_io/module_chgpot/rhog_io.cpp` | 重启电荷读取（C-29 修复：补 `ig < 0` 守卫，防跨基组重启越界写） | 2026-09-14 |
+| `source_io/test/read_rhog_test.cpp` | 新增 `ReadRhogTest.LargerBasisInFileDoesNotWriteBeforeBuffer`（C-29 哨兵回归） | 2026-09-14 |
 
 ---
 
@@ -200,6 +202,7 @@
 | 2026-09-11 | `2026-09-11-onsite-moment-audit.md` | **审计行 on-site 投影矩（DFT+U 迹差，无对角化，与 `atomic mag` 同量到 1e-8）：FeO δ=+0.1 μB 良态点 q 与 d 矩同向但仅 74% 幅值，与 II-1b 塌陷点反向脱钩合起来给出"同向跟随 → 反向脱钩"图景；单测 18→19 / 4→5，无 DFT+U 输出逐位不变；半径敏感性(4b)顺延** |
 | 2026-09-11 | `2026-09-11-capability-boundary-decoupling.md` | **能力边界表补 L14（Becke 矩 ≠ on-site d 局域矩，附反向脱钩/74% 跟随两实测点）+ L15（在线分支守卫两条盲区：只抓能量向下换态、只在收敛点判）+ F9/F10 诊断项 + §5 适用域"自旋约束观测量缺口"** |
 | 2026-09-14 | `2026-09-14-dual-iteration-inner-schedule.md` | **双迭代调度 Q0–Q4 全落地：`constraint_mu_schedule=outer|inner` + `inner_thr`(1e-3) + `inner_nmax`(20)；SCF 内 μ 更新 + `mix_reset` + settle 检查；单测 loop 19→25，sabotage 3 发恰中且 OUTER 回归三发全绿；OUTER 211 对照二进制逐位一致；**Q1–Q3 实测：μ* 差 ≤0.17% / E_tot 差 ≤8.5e-7 eV 全部命中，成本 211 +14% / 212 +4.8% / 213 −46% / MgO −75%，mixing 不复位则 2.2× 慢或不收敛（`mix_reset` 是刚需），settle 抓到 3 次假收敛；决策表入手册 §5.9**；顺带修 C-30、扩 C-29 范围（收敛后收尾路径）、记录 OMP 线程数导致算例不可复现** |
+| 2026-09-14 | `2026-09-14-c29-localization.md` | **C-29 定位完成（**非**约束 bug）：`ModuleIO::read_rhog` 缺 `ig<0` 守卫——读取"更大平面波基组"写的 `-CHARGE-DENSITY.restart` 时，盒内/球外平面波映射为 −1，`rhog[is][-1]` 写坏 malloc chunk 头（ASAN 2.6 s 首报；关 constraint 同样复现）；收尾 `Charge::destroy` 只是**检测点**（写入发生在 run 开头的 `before_all_runners`）；修复 = `if (ig<0) continue;` + 哨兵回归单测 `ReadRhogTest.LargerBasisInFileDoesNotWriteBeforeBuffer`（拆守卫必红）** |
 | 2026-09-11 | `2026-09-11-i1-mgo-farside-fuse-attempt.md` | **I-1 继续：Mg³⁺ 远侧熔断用例尝试 BLOCKED——δ=−2.0 e 在外步 55（q=10.2651 / μ=2.75 Ry）后约束 SCF 不收敛，非收敛收尾路径触发四 rank 堆破坏（`free(): invalid next size`）并挂死；父提交二进制逐位复现 ⇒ 预存在 bug C-29；κ 随位移变硬，约束先崩于 SCF 而非 μ 顶限 ⇒ 计划设想的顶限熔断在本体系不可达；设计文档 §1.4 写回 + S1 判据改判完成** |
 | 2026-07-12 | `2026-07-12-deltap-risk-points-and-solutions.md` | 18 项风险点 + 解决方案 |
 | 2026-07-12 | `2026-07-12-deltap-root-cause-analysis.md` | B14+B15 found+fixed |
@@ -4860,6 +4863,19 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   OMP=1 可复现性纪律入 SOP（autotest 1e-7 阈值与该噪声同量级）。
 - 文件：`2026-09-14-dual-iteration-review.md`。
 
+## 2026-09-14 (3): 双迭代提交 + C-29 定位修复 严格评审（无代码改动）
+
+- 两 commit 入库合规（证据裁剪、OMP=1 纪律入指南 §3.5）。
+- C-29 根因亲验：rhog_io.cpp 的 fftixyz2ig=−1（FFT 盒内基组外平面波）越界
+  写 rhog[is][−1]（缓冲区前 16 字节 malloc 头）；**评审者"决算后清理路径"
+  框架被更正并接受**——破坏在 run 开头（读大基组电荷文件重启）、检测在退出
+  （free 触发），解释了收尾崩溃+父提交复现+数据完整三现象。修复
+  （ig<0 continue + 金丝雀回归测试）最小且语义正确；ASAN 清零+端到端验证在案。
+- 3 项 MODULE_IO 失败亲验为陈旧 sc_scf_thr_mode 期望值（threshold vs
+  immediate，无关遗留）——登记新待办：更新三目标期望值（测试卫生）。
+- 批复：commit 3（fix(io)）落地 → 优先级 2（inner_thr 三档扫描）。
+- 文件：`2026-09-14-c29-fix-review.md`。
+
 
 ## 2026-09-14 (3): OMP 可复现性纪律入 SOP（纯文档，无代码改动）
 
@@ -4872,3 +4888,43 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   均为单线程产出。
 - 文件：`docs/constraint_developer_guide.md`（§3.5 新增；§3.4 实测表沿用）。
 - 下一轮：C-29 定位（最高优先）。
+
+## 2026-09-14 (4): C-29 定位完成——重启电荷文件的平面波基组不匹配（非约束 bug）+ 修复 + 回归测试
+
+- 用户令：后续优先级第 1 项「C-29 定位（最高优先）」，新事实把范围指向"`!FINAL_ETOT_IS`
+  之后的清理路径"。本轮结论**修正**该方向：那是**检测点**，写入点在 run 开头。
+- 手段：`build/` 调试构建 + gdb（检测点栈）→ `ENABLE_ASAN=ON` 新构建（首次非法写即报）
+  → 对照实验（无热启动 / 同基组热启动 / 更大基组热启动 / 关 constraint）。
+- 定位结果：
+  - **检测点**：`Charge::destroy`（`charge.cpp:79-80`，`delete[] rhog_core` /
+    `delete[] _space_rho`），在 `!FINAL_ETOT_IS` 之后、`ESolver_KS_LCAO` 析构里 abort；
+  - **写入点**：`ModuleIO::read_rhog`（`rhog_io.cpp:166`）`rhog[is][ig] = rhog_in[i]`，
+    `ig = fftixyz2ig[fftixyz] == -1`（文件 Miller 下标在 FFT 盒内、但在当前平面波球外）；
+    ASAN：`heap-buffer-overflow WRITE of size 16 at 16 bytes before` 一个 125904 字节区域
+    （= `Charge::allocate` 的 `_space_rhog`，`charge.cpp:126`），即 `rhog[is][-1]`；
+  - **触发条件**：重启文件用**更大的 `ecutwfc`/基组**写（本 campaign 里 `read_file_dir`
+    指向 9-11 的 160/640 旧扫描，运行却在 60/240）；文件对 `npwtot_in > npwtot` 只发
+    WARNING，故静默继续；
+  - **与约束无关**：关掉 `constraint` 同一输入同样复现（ASAN 报告完全相同）；
+    9-11 那批 160/640 扫描内部互相热启动（基组一致）从不崩 → 之前误读为"MgO/约束特性"。
+- 最小复现（δ=+0.1 e，只改 `read_file_dir`）：无热启动 `rc=0`/`TOTAL 177`/0 条破坏；
+  160/640 热启动 → SCF 收敛、`CONVERGED`，随后四 rank 堆破坏 abort；60/240 同基组热启动
+  → ASAN 干净正常结束。
+- 修复（**工作区，未提交**）：`rhog_io.cpp` 加 `if (ig < 0) { continue; }`（基组外平面波
+  本就用不上）；ASAN 复跑原崩溃输入 = **0 报告 / 0 破坏 / `TOTAL Time 83`**，收敛与
+  `settle check PASSED` 正常。
+- 回归测试：`ReadRhogTest.LargerBasisInFileDoesNotWriteBeforeBuffer`（缓冲区前留哨兵槽，
+  不依赖 ASAN 判红/绿）。有守卫 PASS；`git stash` 拆守卫重建 → **FAIL**，哨兵 imag 被写成
+  `-2.6e-14`（正是 `ig == -1` 那个文件系数）→ 证明越界写的就是它。
+- 验证：`ctest -R read_rhog` 1/1；`ctest -R "MODULE_IO|constraint"` 56 项中 53 通过。
+- Bug/fix list：**C-29 由 Open 转 Fixed（定位 + 修复 + 回归测试，待入库）**；C-30 已修。
+  新记录（**预存在、与本轮无关**，不修）：`MODULE_IO_input_test_para` /
+  `MODULE_IO_input_test_para_4` / `MODULE_IO_read_item_serial` 因
+  `read_input_ptest.cpp` 期望 `sc_scf_thr=1e-3`/`sc_scf_thr_mode="threshold"` 而
+  `input_parameter.h` 默认已是 `10`/`"immediate"`（另一 deltaspin 提交的遗留不同步）而红；
+  加上此前的 `MODULE_ESTATE_{charge_test,elecstate_energy,elecstate_print}` 三个构建失败项。
+- 文件：`source/source_io/module_chgpot/rhog_io.cpp`、
+  `source/source_io/test/read_rhog_test.cpp`；spec `2026-09-14-c29-localization.md`；
+  证据 `tests/deltap_c29/`（README + results/*.report/*.txt）。
+- 下一轮：等用户批复后把修复作为第 3 个 commit（`fix(io)`）入库；随后回到用户优先级
+  第 2 项 `inner_thr` 三档标定（212/213）；FeO 对照继续暂缓。

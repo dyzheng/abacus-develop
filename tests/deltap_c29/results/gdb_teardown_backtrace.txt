@@ -1,0 +1,69 @@
+# C-29: delayed abort at teardown (non-ASAN debug build, np=4, OMP_NUM_THREADS=1)
+# Case: MgO bulk, LCAO, delta=+0.5 e on O, INNER schedule, restart from a
+#       charge file written with a LARGER plane-wave basis (ecutwfc 160/ecutrho 640
+#       -> run at 60/240).  Physical data (mu*, E_tot, CONVERGED audit lines) are
+#       complete before the abort.
+#
+# The stack shows the *detection* site, not the corruption site: glibc notices the
+# damaged chunk header only when Charge::~Charge frees the neighbouring arrays.
+
+corrupted size vs. prev_size
+corrupted size vs. prev_size
+free(): invalid next size (normal)
+free(): invalid next size (normal)
+#0  __pthread_kill_implementation (no_tid=0, signo=6, threadid=<optimized out>) at ./nptl/pthread_kill.c:44
+#1  __pthread_kill_internal (signo=6, threadid=<optimized out>) at ./nptl/pthread_kill.c:78
+#2  __GI___pthread_kill (threadid=<optimized out>, signo=signo@entry=6) at ./nptl/pthread_kill.c:89
+#3  0x00007ffff484527e in __GI_raise (sig=sig@entry=6) at ../sysdeps/posix/raise.c:26
+#4  0x00007ffff48288ff in __GI_abort () at ./stdlib/abort.c:79
+#5  0x00007ffff48297b6 in __libc_message_impl (fmt=fmt@entry=0x7ffff49cf8f0 "%s\n") at ../sysdeps/posix/libc_fatal.c:134
+#6  0x00007ffff48a90d5 in malloc_printerr (str=str@entry=0x7ffff49d2b28 "free(): invalid next size (normal)") at ./malloc/malloc.c:5775
+#7  0x00007ffff48ab1b4 in _int_free_merge_chunk (av=0x7ffff4a04ac0 <main_arena>, p=0x555556af70c0, size=128016) at ./malloc/malloc.c:4684
+#0  __pthread_kill_implementation (no_tid=0, signo=6, threadid=<optimized out>) at ./nptl/pthread_kill.c:44
+#1  __pthread_kill_internal (signo=6, threadid=<optimized out>) at ./nptl/pthread_kill.c:78
+#2  __GI___pthread_kill (threadid=<optimized out>, signo=signo@entry=6) at ./nptl/pthread_kill.c:89
+#0  __pthread_kill_implementation (no_tid=0, signo=6, threadid=<optimized out>) at ./nptl/pthread_kill.c:44
+#1  __pthread_kill_internal (signo=6, threadid=<optimized out>) at ./nptl/pthread_kill.c:78
+#0  __pthread_kill_implementation (no_tid=0, signo=6, threadid=<optimized out>) at ./nptl/pthread_kill.c:44
+#1  __pthread_kill_internal (signo=6, threadid=<optimized out>) at ./nptl/pthread_kill.c:78
+#2  __GI___pthread_kill (threadid=<optimized out>, signo=signo@entry=6) at ./nptl/pthread_kill.c:89
+#2  __GI___pthread_kill (threadid=<optimized out>, signo=signo@entry=6) at ./nptl/pthread_kill.c:89
+#3  0x00007ffff484527e in __GI_raise (sig=sig@entry=6) at ../sysdeps/posix/raise.c:26
+#4  0x00007ffff48288ff in __GI_abort () at ./stdlib/abort.c:79
+#3  0x00007ffff484527e in __GI_raise (sig=sig@entry=6) at ../sysdeps/posix/raise.c:26
+#4  0x00007ffff48288ff in __GI_abort () at ./stdlib/abort.c:79
+#3  0x00007ffff484527e in __GI_raise (sig=sig@entry=6) at ../sysdeps/posix/raise.c:26
+#4  0x00007ffff48288ff in __GI_abort () at ./stdlib/abort.c:79
+#5  0x00007ffff48297b6 in __libc_message_impl (fmt=fmt@entry=0x7ffff49cf8f0 "%s\n") at ../sysdeps/posix/libc_fatal.c:134
+#6  0x00007ffff48a90d5 in malloc_printerr (str=str@entry=0x7ffff49cd5e8 "corrupted size vs. prev_size") at ./malloc/malloc.c:5775
+#7  0x00007ffff48a9c76 in unlink_chunk (p=p@entry=0x555556af4650, av=0x7ffff4a04ac0 <main_arena>) at ./malloc/malloc.c:1611
+#8  0x00007ffff48ab1c3 in _int_free_create_chunk (nextsize=128016, nextchunk=0x555556af4650, size=<optimized out>, p=0x555556ad29b0, av=0x7ffff4a04ac0 <main_arena>) at ./malloc/malloc.c:4721
+#5  0x00007ffff48297b6 in __libc_message_impl (fmt=fmt@entry=0x7ffff49cf8f0 "%s\n") at ../sysdeps/posix/libc_fatal.c:134
+#9  _int_free_merge_chunk (av=0x7ffff4a04ac0 <main_arena>, p=0x555556ad29b0, size=<optimized out>) at ./malloc/malloc.c:4700
+#6  0x00007ffff48a90d5 in malloc_printerr (str=str@entry=0x7ffff49d2b28 "free(): invalid next size (normal)") at ./malloc/malloc.c:5775
+#7  0x00007ffff48ab1b4 in _int_free_merge_chunk (av=0x7ffff4a04ac0 <main_arena>, p=0x555556af3ae0, size=128016) at ./malloc/malloc.c:4684
+#5  0x00007ffff48297b6 in __libc_message_impl (fmt=fmt@entry=0x7ffff49cf8f0 "%s\n") at ../sysdeps/posix/libc_fatal.c:134
+#6  0x00007ffff48a90d5 in malloc_printerr (str=str@entry=0x7ffff49cd5e8 "corrupted size vs. prev_size") at ./malloc/malloc.c:5775
+#7  0x00007ffff48a9c76 in unlink_chunk (p=p@entry=0x555556bf8110, av=0x7ffff4a04ac0 <main_arena>) at ./malloc/malloc.c:1611
+#8  0x00007ffff48ab1c3 in _int_free_create_chunk (nextsize=128016, nextchunk=0x555556bf8110, size=<optimized out>, p=0x555556bd6470, av=0x7ffff4a04ac0 <main_arena>) at ./malloc/malloc.c:4721
+#9  _int_free_merge_chunk (av=0x7ffff4a04ac0 <main_arena>, p=0x555556bd6470, size=<optimized out>) at ./malloc/malloc.c:4700
+#8  0x00007ffff48ab51a in _int_free (av=0x7ffff4a04ac0 <main_arena>, p=<optimized out>, have_lock=<optimized out>) at ./malloc/malloc.c:4646
+#9  0x00007ffff48adeae in __GI___libc_free (mem=0x555556af70d0) at ./malloc/malloc.c:3398
+#8  0x00007ffff48ab51a in _int_free (av=0x7ffff4a04ac0 <main_arena>, p=<optimized out>, have_lock=<optimized out>) at ./malloc/malloc.c:4646
+#9  0x00007ffff48adeae in __GI___libc_free (mem=0x555556af3af0) at ./malloc/malloc.c:3398
+#10 0x00007ffff48ab51a in _int_free (av=0x7ffff4a04ac0 <main_arena>, p=<optimized out>, have_lock=<optimized out>) at ./malloc/malloc.c:4646
+#11 0x00007ffff48adeae in __GI___libc_free (mem=0x555556ad5250) at ./malloc/malloc.c:3398
+#10 0x00007ffff48ab51a in _int_free (av=0x7ffff4a04ac0 <main_arena>, p=<optimized out>, have_lock=<optimized out>) at ./malloc/malloc.c:4646
+#11 0x00007ffff48adeae in __GI___libc_free (mem=0x555556bd8d10) at ./malloc/malloc.c:3398
+#10 0x0000555555c43366 in Charge::destroy (this=0x5555569d1340) at /root/abacus-develop/source/source_estate/module_charge/charge.cpp:80
+#10 0x0000555555c43366 in Charge::destroy (this=0x5555569d0e80) at /root/abacus-develop/source/source_estate/module_charge/charge.cpp:80
+#12 0x0000555555c43349 in Charge::destroy (this=0x555556a08900) at /root/abacus-develop/source/source_estate/module_charge/charge.cpp:79
+#12 0x0000555555c43349 in Charge::destroy (this=0x5555569d1900) at /root/abacus-develop/source/source_estate/module_charge/charge.cpp:79
+#11 0x0000555555c43184 in Charge::~Charge (this=0x5555569d0e80, __in_chrg=<optimized out>) at /root/abacus-develop/source/source_estate/module_charge/charge.cpp:44
+#13 0x0000555555c43184 in Charge::~Charge (this=0x555556a08900, __in_chrg=<optimized out>) at /root/abacus-develop/source/source_estate/module_charge/charge.cpp:44
+#11 0x0000555555c43184 in Charge::~Charge (this=0x5555569d1340, __in_chrg=<optimized out>) at /root/abacus-develop/source/source_estate/module_charge/charge.cpp:44
+#13 0x0000555555c43184 in Charge::~Charge (this=0x5555569d1900, __in_chrg=<optimized out>) at /root/abacus-develop/source/source_estate/module_charge/charge.cpp:44
+#14 0x0000555555db71f5 in ModuleESolver::ESolver_FP::~ESolver_FP (this=0x5555569d16f0, __in_chrg=<optimized out>) at /root/abacus-develop/source/source_esolver/esolver_fp.cpp:38
+#15 0x0000555555db5283 in ModuleESolver::ESolver_KS::~ESolver_KS (this=0x5555569d16f0, __in_chrg=<optimized out>) at /root/abacus-develop/source/source_esolver/esolver_ks.cpp:37
+#12 0x0000555555db71f5 in ModuleESolver::ESolver_FP::~ESolver_FP (this=0x5555569d1130, __in_chrg=<optimized out>) at /root/abacus-develop/source/source_esolver/esolver_fp.cpp:38
+#13 0x0000555555db5283 in ModuleESolver::ESolver_KS::~ESolver_KS (this=0x5555569d1130, __in_chrg=<optimized out>) at /root/abacus-develop/source/source_esolver/esolver_ks.cpp:37
