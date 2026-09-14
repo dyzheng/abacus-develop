@@ -580,8 +580,8 @@ void ESolver_KS_LCAO<TK, TR>::hamilt2rho_single(UnitCell& ucell, int istep, int 
     //     Therefore direction_only MUST be disabled during Phase 1 BFGS.
     //
     // sc_scf_thr_mode parameter:
-    //   - "threshold" (default): lambda loop activates when drho < sc_scf_thr
-    //   - "immediate": lambda loop activates from iter>=2 (for PW basis)
+    //   - "immediate" (default): lambda loop activates from iter>=2 (for PW basis)
+    //   - "threshold": lambda loop activates when drho < sc_scf_thr
     //   - "off": lambda loop never activates (lambda used as constant constraint)
     //   - For "threshold" mode, sc_scf_thr should be 10-100x larger than scf_thr
     //   - mixing_restart is auto-set based on sc_scf_thr_mode

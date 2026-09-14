@@ -44,13 +44,13 @@
  * @par Convergence Criteria
  * - RMS error: sqrt(mean(delta_spin^2)) < sc_thr (adaptive threshold)
  * - Gradient decay: max(dM/dlambda) per atom type < decay_grad[itype]
- * - Maximum steps: nsc (default 50), minimum steps: nsc_min
+ * - Maximum steps: nsc (default 5), minimum steps: nsc_min
  *
  * @par Parameter Recommendations
- * - sc_scf_thr: Density error threshold for activating lambda loop. Default: 1e-3.
+ * - sc_scf_thr: Density error threshold for activating lambda loop. Default: 10.
  *   Should be 10-100x larger than scf_thr. Only used when sc_scf_thr_mode="threshold".
- * - sc_scf_thr_mode: "threshold" (default, activate when drho<sc_scf_thr),
- *   "immediate" (activate from iter>=2, for PW basis), or
+ * - sc_scf_thr_mode: "immediate" (default, activate from iter>=2, for PW basis),
+ *   "threshold" (activate when drho<sc_scf_thr), or
  *   "off" (never activate, lambda used as constant constraint).
  * - mixing_restart: Auto-set based on sc_scf_thr_mode. See read_input_item_elec_stru.cpp.
  * - sc_dir_phase1_steps: Phase 1 duration for collinear direction_only. Default: 5.

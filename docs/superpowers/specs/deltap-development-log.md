@@ -179,6 +179,7 @@
 | `source_io/module_chgpot/rhog_io.cpp` | 重启电荷读取（C-29 修复：补 `ig < 0` 守卫，防跨基组重启越界写） | 2026-09-14 |
 | `source_io/test/read_rhog_test.cpp` | 新增 `ReadRhogTest.LargerBasisInFileDoesNotWriteBeforeBuffer`（C-29 哨兵回归） | 2026-09-14 |
 | `source_io/test/read_input_ptest.cpp`、`source_io/test_serial/read_input_item_test.cpp` | 同步陈旧 `sc_scf_thr`/`sc_scf_thr_mode` 默认期望（`10`/`"immediate"`，测试卫生） | 2026-09-14 |
+| `source_io/module_parameter/read_input_item_other.cpp`、`spin_constrain.h`、`esolver_ks_lcao.cpp` | spin-constrain **元数据/注释**默认值同步到结构体真值（`10`/`"immediate"`/`1e-3`，无逻辑改动） | 2026-09-14 |
 
 ---
 
@@ -206,6 +207,7 @@
 | 2026-09-14 | `2026-09-14-c29-localization.md` | **C-29 定位完成（**非**约束 bug）：`ModuleIO::read_rhog` 缺 `ig<0` 守卫——读取"更大平面波基组"写的 `-CHARGE-DENSITY.restart` 时，盒内/球外平面波映射为 −1，`rhog[is][-1]` 写坏 malloc chunk 头（ASAN 2.6 s 首报；关 constraint 同样复现）；收尾 `Charge::destroy` 只是**检测点**（写入发生在 run 开头的 `before_all_runners`）；修复 = `if (ig<0) continue;` + 哨兵回归单测 `ReadRhogTest.LargerBasisInFileDoesNotWriteBeforeBuffer`（拆守卫必红）** |
 | 2026-09-14 | `2026-09-14-inner-thr-calibration.md` | **`constraint_inner_thr` 三档标定（212/213，补充 MgO）：门控是**纯成本旋钮**（三体系 μ* 散布 ≤0.34%、|ΔE_tot| ≤4.2e-7 eV）；成本效应**符号随体系翻转**——212 +4.8%→−9.5%、213 −46%→−47%（平）、MgO −75%→−72%→−66%（收紧变差）⇒ **默认保持 1e-3**，定位为逐体系旋钮；settle 检查在三档下都仍在触发，非松门控产物** |
 | 2026-09-14 | `2026-09-14-moduleio-test-hygiene.md` | **MODULE_IO 测试卫生：3 个长期红灯目标（`sc_scf_thr=1e-3`/`"threshold"`）同步为结构体默认 `10`/`"immediate"`（`5735ea673` 遗留不同步）⇒ 3/3 转绿、`MODULE_IO|constraint` 56/56；零行为改动；发现未改的文档元数据同族漂移（`item.default_value` + `input-main.md`）** |
+| 2026-09-14 | `2026-09-14-spinconstrain-metadata-sync.md` | **spin-constrain 元数据/注释同步：`sc_scf_thr` `1.0e-3`→`10`、`sc_scf_thr_mode` `threshold`→`immediate`（含描述默认标注与 `spin_constrain.h`/`esolver_ks_lcao.cpp` 注释，并顺带修正 `sc_drop_thr` `1.0e-2`→`1e-3`）；`--help` 实证前后对比、单测 56/56 不变；**生成文档链路待裁定**：`docs/parameters.yaml` 自 2026-05 起未重建，重建将首次公开 48 个参数（28 `deltap_*` + 12 `constraint_*`）** |
 | 2026-09-11 | `2026-09-11-i1-mgo-farside-fuse-attempt.md` | **I-1 继续：Mg³⁺ 远侧熔断用例尝试 BLOCKED——δ=−2.0 e 在外步 55（q=10.2651 / μ=2.75 Ry）后约束 SCF 不收敛，非收敛收尾路径触发四 rank 堆破坏（`free(): invalid next size`）并挂死；父提交二进制逐位复现 ⇒ 预存在 bug C-29；κ 随位移变硬，约束先崩于 SCF 而非 μ 顶限 ⇒ 计划设想的顶限熔断在本体系不可达；设计文档 §1.4 写回 + S1 判据改判完成** |
 | 2026-07-12 | `2026-07-12-deltap-risk-points-and-solutions.md` | 18 项风险点 + 解决方案 |
 | 2026-07-12 | `2026-07-12-deltap-root-cause-analysis.md` | B14+B15 found+fixed |
@@ -225,8 +227,11 @@
   2. **开放项**：4b 半径敏感性（待锚点）、II-1 重锚定（(a)+(c)）、**阶段 B 立项评审**
      （输入数据已齐：A6 μ 耦合表、47/15 步收敛数据、INNER 收益曲线与交叉点、
      inner_thr 标定结论）；FeO 双稳体系对照**维持暂缓**（用户批复）。
-  3. （可选小件）同步 `sc_scf_thr`/`sc_scf_thr_mode`/`sc_drop_thr` 的文档元数据并重新生成
-     `input-main.md`（`2026-09-14-moduleio-test-hygiene.md` §4）。
+  3. **待裁定（文档面）**：① 是否重建 `docs/parameters.yaml` + `input-main.md`
+     （会**首次公开 48 个参数**：28 `deltap_*` + 12 `constraint_*` + `sc_strategy`/
+     `sc_acceleration_*` 等，属发布范围决定）；② 刷新手写指南
+     `docs/advanced/scf/spin.md`（≥6 处陈旧行，含已删除的 `sc_scf_nmin` 与失效的
+     `sc_lambda_strategy` 选项）。元数据/注释面**已完成**（`2026-09-14-spinconstrain-metadata-sync.md`）。
   4. 能力边界文档（`2026-08-13-deltap-capability-boundaries.md`）持续补条目。
 
 0. **R0 esolver 重构（R1/R2/R3/R4 全部完成）** — 按 `2026-07-31-deltap-esolver-refactor-design.md` 4 轮迁移：~~R1 删死代码~~ → ~~R2 LCAO 抽 `DeltapScfSolver`~~ → ~~R3 PW 接入同一状态机~~ → ~~R4 MPI rank0+Bcast（C-23）、PW λ 同步（C-28）、打印/WARNING 收口、deltap_common 单测~~；设计文档状态已改"已实施"
@@ -4895,6 +4900,18 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   II-1 重锚定/阶段 B 立项评审（数据已齐）。
 - 文件：`2026-09-14-c29commit-innerthr-review.md`。
 
+## 2026-09-14 (5): MODULE_IO 测试卫生评审 + 元数据漂移新发现批复（无代码改动）
+
+- 两 item 通过：39146832e/0625f8a87 在案；ctest 亲测 56/56（前 53/56）；
+  item 2 仅 3 断言、零运行时行为变化、根因链属实（5735ea673 改默认值未
+  同步断言）。
+- 新发现批准修复（独立小 commit `fix(input)`）：sc_scf_thr/sc_scf_thr_mode
+  的 metadata default_value 与描述文本陈旧（--help 与生成文档持续打印错误
+  默认值=用户可见错误文档，非纯注释）；spin_constrain.h 注释块、sc_drop_thr
+  metadata 同族一并修。
+- 开放队列：4b/II-1 重锚定/阶段 B 评审（输入齐）；FeO 暂缓。
+- 文件：`2026-09-14-moduleio-hygiene-review.md`。
+
 
 ## 2026-09-14 (3): OMP 可复现性纪律入 SOP（纯文档，无代码改动）
 
@@ -5001,3 +5018,34 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   spec `docs/superpowers/specs/2026-09-14-moduleio-test-hygiene.md`。
 - Bug/fix list：无新增 bug；测试卫生项**登记转闭合**（C-29/C-30 状态不变）。
 - 下一轮：开放项回到 4b 半径敏感性 / II-1 重锚定 / 阶段 B 立项评审；FeO 对照仍暂缓。
+
+## 2026-09-14 (7): spin-constrain 元数据/注释默认值同步（`fix(input)` 小件，用户批复）
+
+- 用户令：批复上一轮发现项（元数据漂移）——"批准修复，独立小 commit"，
+  消息 `fix(input): sync spin-constrain metadata defaults with struct defaults`；
+  "只动 metadata/注释/生成文档，零运行时行为变化"。
+- 亲验：四处漂移全部属实（`read_input_item_other.cpp:174/193`、`spin_constrain.h:47-53`、
+  `sc_drop_thr` metadata），另排查追加 `esolver_ks_lcao.cpp:583` 同一 "(default)" 陈述。
+  根因 = `5735ea673` 只同步了 `nsc` 的元数据/注释，漏了 `sc_scf_thr`/`sc_scf_thr_mode`。
+- 改动（3 文件，纯元数据/注释）：`sc_drop_thr` `"1.0e-2"`→`"1.0e-3"`；`sc_scf_thr`
+  `"1.0e-3"`→`"10"`；`sc_scf_thr_mode` `"threshold"`→`"immediate"`（描述里的默认标注同步
+  移到 immediate）；`spin_constrain.h` 注释块（含 `nsc (default 50)`→`5`）；
+  `esolver_ks_lcao.cpp` 注释块。
+- 验证：`--help` 前后对比（1.0e-3→10 / threshold→immediate / 1.0e-2→1.0e-3）；
+  元数据扫描 spin-constrain 块 0 条真漂移；`ctest -R "MODULE_IO|constraint"` 56/56 不变
+  （零行为改动）。
+- **未动 `parameters.yaml`/`input-main.md`（本轮关键裁定点）**：修正链路是
+  `abacus --generate-parameters-yaml` → `generate_input_main.py`，而 `docs/parameters.yaml`
+  自 2026-05 起未重建；用当前 HEAD 重建是**纯增量、但会首次公开 48 个参数**（28 `deltap_*`
+  + 12 `constraint_*` + `sc_strategy`/`sc_acceleration_*` 等），其中 `constraint_*` 仍在开发中
+  ⇒ 属"发布哪些未公开参数"的项目级决定，不并入本小件；该文件头部亦声明
+  "Do not edit manually"，不能手工局部改。重建结果留在 `/tmp` 备查，待用户裁定。
+- 另一发现（上报未改）：手写指南 `docs/advanced/scf/spin.md` 参数表 ≥6 处陈旧
+  （`nsc`=100、已删除的 `sc_scf_nmin`、`sc_scf_thr`=1.0e-4、`sc_drop_thr`=1.0e-2、
+  `sc_lambda_strategy` 失效选项），需独立刷新。
+- 文件：`source/source_io/module_parameter/read_input_item_other.cpp`、
+  `source/source_lcao/module_deltaspin/spin_constrain.h`、`source/source_esolver/esolver_ks_lcao.cpp`；
+  spec `docs/superpowers/specs/2026-09-14-spinconstrain-metadata-sync.md`。
+- Bug/fix list：无新增 bug；本轮为文档面修复（C-29/C-30 状态不变）。
+- 下一轮：等用户裁定文档面两项（生成文档重建 / `spin.md` 刷新）；开放队列回到
+  4b 半径敏感性、II-1 重锚定、阶段 B 立项评审；FeO 继续暂缓。
