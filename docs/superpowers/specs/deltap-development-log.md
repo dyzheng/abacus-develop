@@ -206,6 +206,7 @@
 | 2026-09-11 | `2026-09-11-capability-boundary-decoupling.md` | **能力边界表补 L14（Becke 矩 ≠ on-site d 局域矩，附反向脱钩/74% 跟随两实测点）+ L15（在线分支守卫两条盲区：只抓能量向下换态、只在收敛点判）+ F9/F10 诊断项 + §5 适用域"自旋约束观测量缺口"** |
 | 2026-09-10 | `2026-09-10-taskV1-spin-force-fd.md` | **V1 单自旋通道力 FD（PW `212_PW_constraint_h2o_spin` 载体）：O-z 轴 PASS（F_FD −0.72247438 vs F_ana −0.72594423 eV/Å，\|d\|=0.00347 < 判据 0.0128555，3.7× 富余），无 μw-Pulay 缺失特征（Σ 补偿前 z ≈ +0.015 vs 修复前电荷通道 +11.62 eV/Å）；09-14 release 重跑：base 与 debug 逐位一致（μ* 一致到 4e-11 Ry）、**release 仅提速 1.14×**、18 腿未跑完且产物随 `/tmp` 清理丢失 ⇒ **G-V1 仅完成 1/9 轴，力相关物理仍锁定**；根因 = runner 不归档（流程，非物理）** |
 | 2026-09-14 | `2026-09-14-completed-tests-and-results-summary.md` | **已闭合测试与结果总览（阶段 B 立项 / merge-readiness 输入基线）：14 组测试逐条给判据+实测+证据；**已验收包络** = charge 约束（PW 9/9 + LCAO 双轴力 FD、力矩 54× 富余）、混合 charge+spin（μ 耦合 Δμ_c −0.004819 / Δμ_s −0.009206）、双迭代调度（μ* ≤0.17% / E_tot ≤8.5e-7 eV）、在线分支守卫、C-29、III-1；**三道闸门** = V1 自旋力 FD（1/9 轴）、II-1b 脱钩/4b 半径、V6 Au:Si；阶段 B 四类立项数据齐备；附 4 条流程纪律（归档/OMP/raw-E 口径/元数据=契约）** |
+| 2026-09-14 | `2026-09-14-summary-and-v1-review.md` | **评审：总览/V1 对账三项改动获批入库（`74eff461b`）；核实 V1 仅 O-z 1/9 轴、18 腿随 /tmp 丢失、base 跨二进制可复现；**更正评审链成本估计**——release 实测仅 1.14×（BLAS/FFT 厂商库与 -O0/-O3 无关），修订杠杆排序 LCAO 载体 > 求解器 > fixed-μ > 网格 > 构建类型；V1 补跑（fixed-μ + LCAO 全轴 + PW 冒烟）入近期队列** |
 | 2026-09-14 | `2026-09-14-dual-iteration-inner-schedule.md` | **双迭代调度 Q0–Q4 全落地：`constraint_mu_schedule=outer|inner` + `inner_thr`(1e-3) + `inner_nmax`(20)；SCF 内 μ 更新 + `mix_reset` + settle 检查；单测 loop 19→25，sabotage 3 发恰中且 OUTER 回归三发全绿；OUTER 211 对照二进制逐位一致；**Q1–Q3 实测：μ* 差 ≤0.17% / E_tot 差 ≤8.5e-7 eV 全部命中，成本 211 +14% / 212 +4.8% / 213 −46% / MgO −75%，mixing 不复位则 2.2× 慢或不收敛（`mix_reset` 是刚需），settle 抓到 3 次假收敛；决策表入手册 §5.9**；顺带修 C-30、扩 C-29 范围（收敛后收尾路径）、记录 OMP 线程数导致算例不可复现** |
 | 2026-09-14 | `2026-09-14-c29-localization.md` | **C-29 定位完成（**非**约束 bug）：`ModuleIO::read_rhog` 缺 `ig<0` 守卫——读取"更大平面波基组"写的 `-CHARGE-DENSITY.restart` 时，盒内/球外平面波映射为 −1，`rhog[is][-1]` 写坏 malloc chunk 头（ASAN 2.6 s 首报；关 constraint 同样复现）；收尾 `Charge::destroy` 只是**检测点**（写入发生在 run 开头的 `before_all_runners`）；修复 = `if (ig<0) continue;` + 哨兵回归单测 `ReadRhogTest.LargerBasisInFileDoesNotWriteBeforeBuffer`（拆守卫必红）** |
 | 2026-09-14 | `2026-09-14-inner-thr-calibration.md` | **`constraint_inner_thr` 三档标定（212/213，补充 MgO）：门控是**纯成本旋钮**（三体系 μ* 散布 ≤0.34%、|ΔE_tot| ≤4.2e-7 eV）；成本效应**符号随体系翻转**——212 +4.8%→−9.5%、213 −46%→−47%（平）、MgO −75%→−72%→−66%（收紧变差）⇒ **默认保持 1e-3**，定位为逐体系旋钮；settle 检查在三档下都仍在触发，非松门控产物** |
@@ -228,15 +229,16 @@
   1. **已闭合**：C-29（定位 + 修复 + 哨兵回归，入库 `098091b4d`；非约束 bug）、双迭代调度
      Q0–Q4（入库 `afb97690d`/`a95014bd9`，决策表入用户手册 §5.9）、`inner_thr` 三档标定
      （入库 `39146832e`，默认保持 1e-3）、MODULE_IO 测试卫生（本轮，3 目标转绿）。
-  2. **开放项**：**V1 自旋力 FD**（O-z PASS，18 腿待重跑；**先修 runner 归档**）、4b 半径敏感性（待锚点）、II-1 重锚定（(a)+(c)）、**阶段 B 立项评审**
+  2. **近期队列第 1 项（力相关物理唯一闸门）：V1 补跑**——处方 = **fixed-μ + LCAO 载体全轴 + PW 冒烟**（用户 2026-09-14 批复）；**前置** = 给 `run_constraint_fd.sh` 加 `RESDIR` 归档。
+  3. **开放项**：4b 半径敏感性（待锚点）、II-1 重锚定（(a)+(c)）、**阶段 B 立项评审**
      （输入数据已齐：A6 μ 耦合表、47/15 步收敛数据、INNER 收益曲线与交叉点、
      inner_thr 标定结论）；FeO 双稳体系对照**维持暂缓**（用户批复）。
-  3. **待裁定（文档面）**：① 是否重建 `docs/parameters.yaml` + `input-main.md`
+  4. **待裁定（文档面）**：① 是否重建 `docs/parameters.yaml` + `input-main.md`
      （会**首次公开 48 个参数**：28 `deltap_*` + 12 `constraint_*` + `sc_strategy`/
      `sc_acceleration_*` 等，属发布范围决定）；② 刷新手写指南
      `docs/advanced/scf/spin.md`（≥6 处陈旧行，含已删除的 `sc_scf_nmin` 与失效的
      `sc_lambda_strategy` 选项）。元数据/注释面**已完成**（`2026-09-14-spinconstrain-metadata-sync.md`）。
-  4. 能力边界文档（`2026-08-13-deltap-capability-boundaries.md`）持续补条目。
+  5. 能力边界文档（`2026-08-13-deltap-capability-boundaries.md`）持续补条目。
 
 0. **R0 esolver 重构（R1/R2/R3/R4 全部完成）** — 按 `2026-07-31-deltap-esolver-refactor-design.md` 4 轮迁移：~~R1 删死代码~~ → ~~R2 LCAO 抽 `DeltapScfSolver`~~ → ~~R3 PW 接入同一状态机~~ → ~~R4 MPI rank0+Bcast（C-23）、PW λ 同步（C-28）、打印/WARNING 收口、deltap_common 单测~~；设计文档状态已改"已实施"
 1. ~~**Fix Z01**~~ — 07-20 快速 O_kpair 路径已上线（本文档此前状态滞后，07-29 核实）
@@ -5147,3 +5149,31 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - Bug/fix list：无新增物理 bug；新增**流程项**（V1 runner 无归档）；C-29/C-30 状态不变。
 - 下一轮：① V1 runner 加 `RESDIR` 归档；② 重跑 18 腿（建议 LCAO 载体，PW base 已有）；
   ③ III-1 δ≈0 加密；④ 阶段 B 立项评审（输入数据已齐）。
+
+## 2026-09-14 (10): 总览/V1 对账入库 + 成本分析更正注记 + V1 补跑入近期队列
+
+- 用户批复（评审件 `2026-09-14-summary-and-v1-review.md`）三项：
+  1. 三项改动入库 → **`74eff461b docs(constraint): summarize completed tests and results`**；
+  2. 成本分析更正注记（小件，并入后续 docs commit）；
+  3. **V1 补跑**（重设计处方：fixed-μ + LCAO 载体全轴 + PW 冒烟）列入近期队列——
+     它是"力相关物理测试"的**唯一闸门**。
+- 评审核实（与我的总览口径一致）：状态表覆盖 09-07…09-14 全部已归档轮；抽查数据
+  （μ 耦合 Δμ_c −0.004819/Δμ_s −0.009206、双迭代数值、C-29、力 FD 判据）与历轮记录一致；
+  V1 有效结果只剩 O-z 1/9 轴；base 跨二进制对账证明 base 可复现；4 条流程纪律与评审链一致。
+- **成本分析更正**（`2026-09-09-fd-cost-analysis.md`：文首指针 + 新增 §5）：
+  - V1 对账实测 release vs debug 同 base = **1422 s → 1247 s（1.14×）**，
+    §2 因素 A 的"3–10×"预测被**否决**；
+  - 根因：DiagoCG 耗时主体在 **BLAS/FFT 厂商库**（-O0/-O3 都是优化编译），
+    `-O0` 只影响占比很小的非库代码 ⇒ "debug 构建是最大成本因素"的判断不成立；
+  - 修订杠杆排序（实测/半实测）：**LCAO 载体（~10–20×）> 求解器（`dav_subspace`）>
+    fixed-μ（2×）> 网格标定（3–4×）> 构建类型（1.14×）**；
+    §4 建议行动改为 "V1 补跑 = fixed-μ + LCAO 全轴 + PW 冒烟"。
+- **队列更新**：V1 补跑升为**近期队列第 1 项**；前置 = 给 `run_constraint_fd.sh` 加 `RESDIR`
+  归档（否则重蹈 `/tmp` 丢失）；4b/II-1/阶段 B 顺延。
+- 文件：`docs/superpowers/specs/2026-09-09-fd-cost-analysis.md`（§5 + 文首指针）、
+  本文档（Spec Index 行 + 队列重排 + 本条）；入库 `docs(review): fold summary/V1 review + cost-analysis correction`。
+- 同轮（V1 补跑前置）：runner 归档修复 + LCAO spin 载体，入库
+  `test(constraint): archive V1 FD leg results + LCAO spin carrier + basis-agnostic std checks`。
+- Bug/fix list：无新增物理 bug；C-29/C-30 状态不变。
+- 下一轮：① V1 runner 加 `RESDIR`；② V1 补跑（fixed-μ + LCAO 全轴 + PW 冒烟）；
+  ③ III-1 δ≈0 加密；④ II-1 重锚定 + 4b；⑤ 阶段 B 立项评审。
