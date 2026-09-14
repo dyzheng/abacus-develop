@@ -1,0 +1,29 @@
+# Supplementary cross-check: MgO bulk / LCAO, inner_thr = 1e-4 and 1e-5
+# Case: tests/deltap_mgo_scan S3 delta=+0.5 e on O (LCAO, ecutwfc 60/ecutrho 240),
+#       INNER schedule, inner_nmax 200, restart from the 160/640 charge file
+#       (the cross-basis pattern that used to corrupt the heap before C-29 was fixed).
+# Binary: build_rel/abacus_basic_para (Release, current HEAD, read_rhog guard in place)
+# np=4, OMP_NUM_THREADS=1.  thr=1e-3 baseline is the committed run
+# tests/deltap_dual_iteration/results/summary.txt (MgO_dp0.5_inner).
+
+thr        SCF   inn   MIX  wall   sP   sF deg status     E_tot/eV               mu             corrupt
+1e-4       107    22    21    60    1    0   0 CONVERGED  -7659.260116373662     -1.048937014   0
+1e-5       129    22    21    72    1    0   0 CONVERGED  -7659.260116351556     -1.049058318   0
+1e-3        94    31    30     ?    1    0   0 CONVERGED  -7659.26011634944      -1.049044143   0
+
+OUTER baseline (committed): 381 SCF iterations, 23 outer steps.
+INNER vs OUTER: -75% (1e-3) / -72% (1e-4) / -66% (1e-5).
+Correctness across the three gates: mu* spread 0.0115% (< 1%),
+|dE_tot| <= 2.4e-8 eV (< 1e-6 eV).
+=> on MgO a stricter gate is strictly worse; 1e-3 stays the best of the three.
+
+# Raw audit excerpt (thr = 1e-4):
+[constraint] outer step 1 after SCF iteration 11 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.025 max_residual=0.5 total_charge=4.557340586 nelec=64 maxdev=6.661338148e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=4.557340586 t=5.057340586 mu=-0.05 res=-0.5
+[constraint] inner step 1 after SCF iteration 21 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=1 e_con=0.04750358718 max_residual=0.4750358718 total_charge=4.582304714 nelec=64 maxdev=6.661338148e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=4.582304714 t=5.057340586 mu=-0.1 res=-0.4750358718
+[constraint] MIX_RESET at SCF iteration 21 (mu update)
+[constraint] mixing recovered after 4 SCF iteration(s) (reset cost)
+...

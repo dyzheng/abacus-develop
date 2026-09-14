@@ -1,0 +1,65 @@
+inner_thr three-point scan (priority-2 calibration)
+============================================================
+Cases : tests/01_PW/212_PW_constraint_h2o_spin (spin), 213_PW_constraint_h2o_mixed
+Binary: build_rel/abacus_basic_para (Release, current HEAD); np=4; OMP_NUM_THREADS=1
+Grid/target/initial guess identical to the committed Q1-Q3 comparison
+(tests/deltap_dual_iteration); only constraint_inner_thr varies.
+Runner: run_inner_thr_scan.sh   Extractor: tools/extract_scan.py
+
+case   thr        SCF   out   inn   MIX   sP   sF deg status     E_tot/eV
+212    1e-3        44     1    27    26    1    0   0 CONVERGED  -442.0408670948
+212    1e-4        38     1    11    10    1    0   0 CONVERGED  -442.0408671902
+212    1e-5        39     1    10     8    1    1   0 CONVERGED  -442.0408675125
+
+213    1e-3        63     1    28    26    1    1   0 CONVERGED  -441.9159886013
+213    1e-4        62     1    25    23    1    1   0 CONVERGED  -441.9159886531
+213    1e-5        64     1    24    22    1    1   0 CONVERGED  -441.9159886378
+
+OUTER baselines (same binary/grid/target/guess, committed evidence):
+  212 (spin delta=+0.1 uB): OUTER SCF=42   outer=3   | INNER thr=1e-3 SCF=44   inner=27  reset=26 
+  213 (mixed charge+spin delta=+0.1 e / +0.1 uB): OUTER SCF=117  outer=15  | INNER thr=1e-3 SCF=63   inner=28  reset=26 
+
+Cost vs OUTER baseline and correctness vs the thr=1e-3 INNER reference:
+case   thr          dSCF    dSCF% max|dmu|/|mu| max|dE_tot|/eV
+212    1e-3            2     4.8%     0.000%    0.000e+00
+212    1e-4           -4    -9.5%     0.337%    9.536e-08
+212    1e-5           -3    -7.1%     0.023%    4.177e-07
+
+213    1e-3          -54   -46.2%     0.000%    0.000e+00
+213    1e-4          -55   -47.0%     0.158%    5.179e-08
+213    1e-5          -53   -45.3%     0.155%    3.651e-08
+
+Supplementary cross-check: MgO bulk / LCAO (the case with the largest OUTER
+penalty).  Same binary/grid/target/restart as the committed MgO INNER evidence;
+thr=1e-3 row is that committed run (tests/deltap_dual_iteration/results/summary.txt).
+
+case   thr        SCF   out   inn   MIX   sP   sF deg status     E_tot/eV
+MgO    1e-3        94     1    31    30    1    0   0 CONVERGED  -7659.2601163494
+MgO    1e-4       107     1    22    21    1    0   0 CONVERGED  -7659.2601163737
+MgO    1e-5       129     1    22    21    1    0   0 CONVERGED  -7659.2601163516
+
+MgO: OUTER baseline = 381 SCF iterations (committed evidence) -> INNER wins
+      -75% / -72% / -66% at 1e-3 / 1e-4 / 1e-5, i.e. here a STRICTER gate is
+      worse: the cost grows 94 -> 107 (+14%) -> 129 (+37%) relative to 1e-3.
+
+Conclusion (calibration):
+1. Correctness: the gate is a pure cost knob.  Across all three systems the mu*
+   spread is <= 0.34% and |dE_tot| <= 4.2e-7 eV between gate values, inside the
+   equivalence criteria (< 1% / < 1e-6 eV).  No correctness reason to change the
+   default.
+2. Cost: the sign of the gate effect is SYSTEM-DEPENDENT -- 212 improves
+   (+4.8% -> -9.5% vs OUTER), 213 is flat (-46% / -47% / -45%), MgO degrades
+   (-75% -> -72% -> -66%).  A stricter gate always means fewer in-SCF mu updates
+   (212: 27/11/10, 213: 28/25/24, MgO: 31/22/22), so what changes is whether the
+   saved mixing churn outweighs the longer approach phase -- that balance is
+   system-specific.
+3. Recommendation: KEEP the default 1e-3 (DeltaSpin convention).  Treat
+   constraint_inner_thr as a per-system knob: if INNER loses to OUTER on a system,
+   a 2-3 point scan (1e-3 / 1e-4 / 1e-5) can recover the deficit (as on 212) but
+   can also hurt (as on MgO) -- never tune it blindly.
+4. The settle check fires at every gate value (1-2 bounces per point, MgO 0), so
+   it is not an artifact of a loose gate; keep it on unconditionally.
+
+C-29 note: the MgO points hot-start from a 160/640 charge file read by a 60/240
+run -- the exact cross-basis pattern that used to corrupt the heap.  With the
+read_rhog guard they finish with rc=0 and 0 corruption lines (Release binary).

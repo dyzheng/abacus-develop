@@ -264,6 +264,19 @@ mixing 历史（不动点映射 G(ρ) 已改变，缓存失效）。
 ≳15 时大赚。mixing 复位是刚需（`ABA_CONSTRAINT_INNER_NO_RESET=1` 对照下
 211 迭代 72→161、213 用满 `scf_nmax` 仍不收敛）；settle 检查实测抓到 3 次假收敛。
 
+**门控 `constraint_inner_thr` 三档标定（2026-09-14，证据 `tests/deltap_inner_thr/`）**：
+
+| 体系 | OUTER | 1e-3 | 1e-4 | 1e-5 |
+|---|---|---|---|---|
+| 212 PW 自旋 | 42 | 44 (+4.8%) | **38 (−9.5%)** | 39 (−7.1%) |
+| 213 PW 混合 | 117 | 63 (−46%) | 62 (−47%) | 64 (−45%) |
+| MgO 体相电荷 | 381 | **94 (−75%)** | 107 (−72%) | 129 (−66%) |
+
+三档下 μ* 相对差 ≤ 0.34%、`E_tot` 差 ≤ 4.2e-7 eV ⇒ 门控**只改代价**；其效应
+**符号随体系翻转**（20 Ry 小 PW 收紧变好、LCAO 大位移收紧变差），故默认保持
+1e-3，`inner_thr` 按体系标定（2–3 点扫描即可）。settle 检查在三档下**都仍在
+触发**，不是松门控的补丁。
+
 详见 `docs/superpowers/specs/2026-09-14-dual-iteration-inner-schedule.md` 与
 `tests/deltap_dual_iteration/README.md`。
 

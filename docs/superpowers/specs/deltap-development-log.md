@@ -203,6 +203,7 @@
 | 2026-09-11 | `2026-09-11-capability-boundary-decoupling.md` | **能力边界表补 L14（Becke 矩 ≠ on-site d 局域矩，附反向脱钩/74% 跟随两实测点）+ L15（在线分支守卫两条盲区：只抓能量向下换态、只在收敛点判）+ F9/F10 诊断项 + §5 适用域"自旋约束观测量缺口"** |
 | 2026-09-14 | `2026-09-14-dual-iteration-inner-schedule.md` | **双迭代调度 Q0–Q4 全落地：`constraint_mu_schedule=outer|inner` + `inner_thr`(1e-3) + `inner_nmax`(20)；SCF 内 μ 更新 + `mix_reset` + settle 检查；单测 loop 19→25，sabotage 3 发恰中且 OUTER 回归三发全绿；OUTER 211 对照二进制逐位一致；**Q1–Q3 实测：μ* 差 ≤0.17% / E_tot 差 ≤8.5e-7 eV 全部命中，成本 211 +14% / 212 +4.8% / 213 −46% / MgO −75%，mixing 不复位则 2.2× 慢或不收敛（`mix_reset` 是刚需），settle 抓到 3 次假收敛；决策表入手册 §5.9**；顺带修 C-30、扩 C-29 范围（收敛后收尾路径）、记录 OMP 线程数导致算例不可复现** |
 | 2026-09-14 | `2026-09-14-c29-localization.md` | **C-29 定位完成（**非**约束 bug）：`ModuleIO::read_rhog` 缺 `ig<0` 守卫——读取"更大平面波基组"写的 `-CHARGE-DENSITY.restart` 时，盒内/球外平面波映射为 −1，`rhog[is][-1]` 写坏 malloc chunk 头（ASAN 2.6 s 首报；关 constraint 同样复现）；收尾 `Charge::destroy` 只是**检测点**（写入发生在 run 开头的 `before_all_runners`）；修复 = `if (ig<0) continue;` + 哨兵回归单测 `ReadRhogTest.LargerBasisInFileDoesNotWriteBeforeBuffer`（拆守卫必红）** |
+| 2026-09-14 | `2026-09-14-inner-thr-calibration.md` | **`constraint_inner_thr` 三档标定（212/213，补充 MgO）：门控是**纯成本旋钮**（三体系 μ* 散布 ≤0.34%、|ΔE_tot| ≤4.2e-7 eV）；成本效应**符号随体系翻转**——212 +4.8%→−9.5%、213 −46%→−47%（平）、MgO −75%→−72%→−66%（收紧变差）⇒ **默认保持 1e-3**，定位为逐体系旋钮；settle 检查在三档下都仍在触发，非松门控产物** |
 | 2026-09-11 | `2026-09-11-i1-mgo-farside-fuse-attempt.md` | **I-1 继续：Mg³⁺ 远侧熔断用例尝试 BLOCKED——δ=−2.0 e 在外步 55（q=10.2651 / μ=2.75 Ry）后约束 SCF 不收敛，非收敛收尾路径触发四 rank 堆破坏（`free(): invalid next size`）并挂死；父提交二进制逐位复现 ⇒ 预存在 bug C-29；κ 随位移变硬，约束先崩于 SCF 而非 μ 顶限 ⇒ 计划设想的顶限熔断在本体系不可达；设计文档 §1.4 写回 + S1 判据改判完成** |
 | 2026-07-12 | `2026-07-12-deltap-risk-points-and-solutions.md` | 18 项风险点 + 解决方案 |
 | 2026-07-12 | `2026-07-12-deltap-root-cause-analysis.md` | B14+B15 found+fixed |
@@ -4876,6 +4877,19 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - 批复：commit 3（fix(io)）落地 → 优先级 2（inner_thr 三档扫描）。
 - 文件：`2026-09-14-c29-fix-review.md`。
 
+## 2026-09-14 (4): commit 3 + inner_thr 三档标定 严格评审（无代码改动）
+
+- commit 3（098091b4d C-29 修复）在案合规。
+- inner_thr 扫描核实：数据表逐项一致；正确性等价（μ* 0.34%、E 4.2e-7）
+  →门控是纯成本旋钮；"1e-4 甜点"被 MgO 实测证伪（1e-3=94/1e-4=107/
+  1e-5=129，收紧变差）→如实降级为按体系调参（测量驱动纪律样板）；
+  MgO 三点全部走跨基组热启动且 corrupt=0——C-29 修复二次独立确认。
+- 批复：test(constraint) 提交（证据 120 KB 合规+文档写回）；MODULE_IO
+  陈旧 sc_scf_thr_mode 期望值建议**单独小 commit**（域不同便于回溯）。
+- 开放项刷新：MODULE_IO 测试卫生（已批）/FeO 暂缓/4b 半径敏感性/
+  II-1 重锚定/阶段 B 立项评审（数据已齐）。
+- 文件：`2026-09-14-c29commit-innerthr-review.md`。
+
 
 ## 2026-09-14 (3): OMP 可复现性纪律入 SOP（纯文档，无代码改动）
 
@@ -4928,3 +4942,34 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   证据 `tests/deltap_c29/`（README + results/*.report/*.txt）。
 - 下一轮：等用户批复后把修复作为第 3 个 commit（`fix(io)`）入库；随后回到用户优先级
   第 2 项 `inner_thr` 三档标定（212/213）；FeO 对照继续暂缓。
+
+## 2026-09-14 (5): `constraint_inner_thr` 三档标定（优先级 2）——门控效应符号体系相关，默认保持 1e-3
+
+- 用户令：优先级 2「inner_thr 三档扫描（1e-3/1e-4/1e-5 on 212/213）」。本轮完成，
+  并加做 MgO 体相/LCAO 的 1e-4、1e-5 两点作补充对照（该体系是 INNER 收益最大处，
+  单靠两个 20 Ry 小 PW 体系不足以支撑"改默认值"的判断）。
+- 口径：同二进制（Release `build_rel`，当前 HEAD）、同网格/靶点/初猜，只变门控；
+  `np=4` + `OMP_NUM_THREADS=1`。**`thr=1e-3` 复现已入库 Q1–Q3 数字精确一致**
+  （212：44 SCF / inn 27 / MIX 26；213：63 / 28 / 26）——顺带验证了单线程可复现纪律。
+- 结果（SCF 迭代数，括号为相对 OUTER）：
+  - 212 PW 自旋：OUTER 42 → 1e-3: **44 (+4.8%)**、1e-4: **38 (−9.5%)**、1e-5: 39 (−7.1%)；
+  - 213 PW 混合：OUTER 117 → 63 (−46.2%)、62 (−47.0%)、64 (−45.3%)；
+  - MgO 体相电荷：OUTER 381 → **94 (−75%)**、107 (−72%)、129 (−66%)。
+- 正确性：全部 CONVERGED；以各体系 1e-3 为参照 μ* 相对差 ≤ 0.34%（判据 <1%）、
+  `|ΔE_tot|` ≤ 4.2e-7 eV（判据 <1e-6 eV）⇒ **门控是纯成本旋钮**。
+- 机制：门控收紧 ⇒ 内环 μ 更新单调减少（27→11→10 / 28→25→24 / 31→22→22）、MIX_RESET
+  同降；"省 mixing churn" vs "拉长逼近段"孰大孰小**体系相关**（小 PW 省、LCAO 大位移亏）。
+- settle 检查在**三档门控下都仍在触发**（212 1e-5 抓 1 次反弹、213 三档各 1 次）⇒
+  它不是"门控太松"的补丁，应无条件保留。
+- 决策：**默认保持 1e-3**；`constraint_inner_thr` 定位为逐体系旋钮（"INNER 打不过
+  OUTER 时先试 1e-4"是启发式，必须实测——MgO 上收紧反而更差）。
+- 顺带：MgO 补充点热启动的正是原 C-29 跨基组模式，含守卫的 Release 二进制
+  `rc=0`、0 条堆破坏、CONVERGED ⇒ C-29 修复在 Release 上二次确认。
+- 文件：新增 `tests/deltap_inner_thr/{README.md,run_inner_thr_scan.sh,tools/{extract_scan.py,
+  summarize.py},results/{2{12,13}_thr1e{3,4,5}.audit,summary.txt,mgo_crosscheck.txt}}`；
+  spec `docs/superpowers/specs/2026-09-14-inner-thr-calibration.md`。
+- Bug/fix list：无新增 bug（C-29 Fixed、C-30 Fixed 不变）；预存在测试卫生项
+  （`MODULE_IO_input_test_para{,_4}`/`read_item_serial` 陈旧 `sc_scf_thr_mode` 期望）
+  仍待修，已登记。
+- 下一轮：① 把三档结论回填用户手册 §5.9 决策表 + 开发者文档 §3.4 成本画像；
+  ② 登记项的测试卫生修复（可并入任一 docs/test commit）；③ FeO 对照仍暂缓。
