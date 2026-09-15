@@ -49,6 +49,17 @@
 #                    once per new channel (charge has it; spin/mixed do not).
 #   KS_SOLVER=<s>    write "ks_solver <s>" into the INPUT (e.g. dav_subspace);
 #                    unset keeps the code default (zero change for old cases).
+#   SCF_NMAX=<n>     per-run SCF iteration cap (default 300; the mixed
+#                    charge+spin channel needs more -- the outer loop re-runs
+#                    the SCF once per mu step, so the cap must cover all steps).
+#   ECUTWFC/ECUTRHO/SCF_THR override the R7 grid if the caller asks.
+#
+# Multi-constraint (v2 list) cases: when the case target file carries a
+# "constraints" array (mixed charge+spin on one atom), the base freezes EVERY
+# component's t* and the legs write them back as absolute targets, keeping the
+# per-constraint atom lists.  ABA_CONSTRAINT_FIXED_MU is a scalar env switch, so
+# it cannot freeze a per-component mu -- for v2 cases the legs therefore use the
+# legacy re-optimization (FIXED_MU is forced to 0, with a printed notice).
 set -uo pipefail
 
 BASIS="${1:-lcao}"
@@ -60,6 +71,10 @@ ABACUS="${ABACUS:-/root/abacus-develop/build/abacus_basic_para}"
 ECUTWFC="${ECUTWFC:-100}"
 ECUTRHO="${ECUTRHO:-400}"
 SCF_THR="${SCF_THR:-1e-8}"
+# Outer-loop convergence cost differs per channel: the mixed (charge+spin) case
+# needs a much larger SCF budget than charge/spin alone (default 300 keeps the
+# historical INPUT byte-identical).
+SCF_NMAX="${SCF_NMAX:-300}"
 SRCDIR="$(cd "$(dirname "$0")/../.." && pwd)/01_PW"
 if [ "$BASIS" = "lcao" ]; then
   SRCDIR="$(cd "$(dirname "$0")/../.." && pwd)/02_NAO_Gamma"
@@ -168,7 +183,7 @@ write_input() { # out_dir suffix mode target_file read_from
         echo "ecutwfc     ${ECUTWFC}"
         echo "ecutrho     ${ECUTRHO}"
         echo "scf_thr     ${SCF_THR}"
-        echo "scf_nmax    300"
+        echo "scf_nmax    ${SCF_NMAX}"
         echo "nbands      8"
         echo "symmetry    0"
         echo "init_wfc    atomic"
@@ -240,15 +255,42 @@ print('\n'.join(f'{x:.10e}' for x in rows))
 PYEOF
 }
 
-# First CONSTRAINT_AUDIT detail line: q = Q_ref, t = frozen target t*.
-extract_tstar() {
+# The FIRST audit block's detail lines give one q/t pair per constraint
+# component (c[0], c[1], ... in JSON order); print every t, first block only.
+extract_tstars() {
     python3 - "$1" <<'PYEOF'
 import sys, re
+seen = []
 for l in open(sys.argv[1]):
-    if 'CONSTRAINT_AUDIT' in l and ' c[' in l:
-        mm = re.search(r'\bt=(-?[0-9.eE+-]+)', l)
-        if mm: print(mm.group(1)); sys.exit(0)
-sys.exit(1)
+    if 'CONSTRAINT_AUDIT' not in l or ' c[' not in l:
+        continue
+    idx = int(re.search(r'c\[(\d+)\]', l).group(1))
+    if idx == 0 and seen:      # second block reached -> stop
+        break
+    mm = re.search(r'\bt=(-?[0-9.eE+-]+)', l)
+    if mm:
+        seen.append(mm.group(1))
+if not seen:
+    sys.exit(1)
+print('\n'.join(seen))
+PYEOF
+}
+
+# Last audit block's mu, one per constraint component (same order as the JSON).
+extract_mus() {
+    python3 - "$1" <<'PYEOF'
+import sys, re
+last = {}
+for l in open(sys.argv[1]):
+    if 'CONSTRAINT_AUDIT' not in l or ' c[' not in l or 'mu=' not in l:
+        continue
+    idx = int(re.search(r'c\[(\d+)\]', l).group(1))
+    mm = re.search(r'\bmu=(-?[0-9.eE+-]+)', l)
+    if mm:
+        last[idx] = mm.group(1)
+if not last:
+    sys.exit(1)
+print('\n'.join(last[k] for k in sorted(last)))
 PYEOF
 }
 
@@ -361,9 +403,21 @@ write_input "${WORK}/base/INPUT" base delta constraint_target.json /dev/null
 
 E0=$(run_scf "${WORK}/base" base)
 if [ -z "$E0" ]; then echo "  [base] FAILED"; tail -5 "${WORK}/base/run.log"; exit 1; fi
-TSTAR=$(extract_tstar "${WORK}/base/OUT.base"/running_*.log) || { echo "  !! t* extraction failed"; exit 1; }
-echo "  [base] E0=${E0} eV; frozen absolute target t*=${TSTAR} e"
-MU0=$(extract_mu "${WORK}/base/OUT.base"/running_*.log 2>/dev/null || echo NA)
+# Branch: v2 list (mixed charge+spin) vs v1 single target -- decided by the case
+# target file itself, so a case is never silently treated as the wrong schema.
+TGTFMT=$(python3 -c "import json;print('v2' if 'constraints' in json.load(open('${TESTCASE}/constraint_target.json')) else 'v1')")
+mapfile -t TSTARS < <(extract_tstars "${WORK}/base/OUT.base"/running_*.log) || { echo "  !! t* extraction failed"; exit 1; }
+[ "${#TSTARS[@]}" -ge 1 ] || { echo "  !! no t* parsed"; exit 1; }
+TSTAR="${TSTARS[*]}"
+echo "  [base] E0=${E0} eV; frozen absolute target t*=${TSTAR} e (schema=${TGTFMT}, nconstraint=${#TSTARS[@]})"
+mapfile -t MUS0 < <(extract_mus "${WORK}/base/OUT.base"/running_*.log 2>/dev/null || true)
+MU0="${MUS0[0]:-NA}"
+# Branch: a scalar fixed-mu switch cannot freeze a per-component mu, so v2 cases
+# must keep the (validated) re-optimization protocol; say so loudly.
+if [ "$TGTFMT" = "v2" ] && [ "$FIXED_MU" = "1" ]; then
+    echo "  [notice] v2 multi-constraint: forcing FIXED_MU=0 (ABA_CONSTRAINT_FIXED_MU is scalar)"
+    FIXED_MU=0
+fi
 F0LOG=$(ls "${WORK}"/base/OUT.base/running_*.log | head -1)
 mapfile -t F0 < <(extract_force "$F0LOG" "$NAT") || { echo "  !! force extraction failed"; exit 1; }
 if [ "$TEST_FORCE" = "1" ]; then
@@ -383,11 +437,13 @@ archive_run "${WORK}/base" base base
   echo "basis=${BASIS} delta_bohr=${DELTA_BOHR} nproc=${NPROC} maxjobs=${MAXJOBS}"
   echo "binary=${ABACUS}"
   echo "ks_solver=${KS_SOLVER:-<default>}"
+  # Branch: report the protocol actually used (v2 forces re-optimization).
   echo "leg_protocol=$( [ "$FIXED_MU" = "1" ] && echo "fixed-mu=${MU0}" || echo "reoptimize-mu" )"
   echo "criterion_eV_per_A=${CRIT}"
   echo "E0_eV=${E0}"
+  echo "target_schema=${TGTFMT} nconstraint=${#TSTARS[@]}"
   echo "t_star=${TSTAR}"
-  echo "mu_star_Ry=${MU0}"
+  echo "mu_star_Ry=${MUS0[*]:-NA}"
   echo "# base analytic forces (eV/A)"
   for i in $(seq 0 $((NAT-1))); do
     printf 'atom %d: %s %s %s\n' "$i" "${F0[$((i*3))]}" "${F0[$((i*3+1))]}" "${F0[$((i*3+2))]}"
@@ -422,8 +478,25 @@ run_leg() { # leg -> "iat axis sign E mu"
     local step="${WORK}/disp_s_${leg}"
     mkdir -p "$step"
     cp "${TESTCASE}/KPT" "$step/"
-    # Frozen target: absolute mode with t* (same number for plus and minus).
-    printf '{"targets": [%s], "atoms": [[0]]}\n' "$TSTAR" > "$step/constraint_target.json"
+    # Frozen target(s): absolute mode with t* (same numbers for plus and minus).
+    # Branch v1: single target/atom list (charge or spin channel).
+    # Branch v2: rewrite every component's target to its frozen t* while keeping
+    # kind/atoms, so the displaced run constrains exactly the same observables.
+    if [ "$TGTFMT" = "v2" ]; then
+        python3 - "${TESTCASE}/constraint_target.json" "$step/constraint_target.json" "${TSTARS[@]}" <<'PYEOF'
+import json, sys
+src, dst, ts = sys.argv[1], sys.argv[2], [float(x) for x in sys.argv[3:]]
+d = json.load(open(src))
+cons = d['constraints']
+if len(cons) != len(ts):
+    sys.exit('component count mismatch: %d constraints vs %d frozen t*' % (len(cons), len(ts)))
+for c, t in zip(cons, ts):
+    c['target'] = t
+json.dump({'constraints': cons}, open(dst, 'w'))
+PYEOF
+    else
+        printf '{"targets": [%s], "atoms": [[0]]}\n' "$TSTAR" > "$step/constraint_target.json"
+    fi
     local SD
     if [ "$sign" = plus ]; then SD="$DELTA_A"; else SD="-$DELTA_A"; fi
     displace_stru "${TESTCASE}/STRU" "$step/STRU" "$iat" "$axis" "$SD" "$MODE"
@@ -438,7 +511,13 @@ run_leg() { # leg -> "iat axis sign E mu"
     else
         E=$(run_scf "$step" s)
     fi
-    MU=$(extract_mu "$step/OUT.s"/running_*.log 2>/dev/null || echo NA)
+    # Record every component's final mu (v2 -> "mu_c/mu_s"), not just c[0].
+    mapfile -t MUS < <(extract_mus "$step/OUT.s"/running_*.log 2>/dev/null || true)
+    if [ "${#MUS[@]}" -ge 1 ]; then
+        MU=$(IFS=/; echo "${MUS[*]}")
+    else
+        MU=NA
+    fi
     archive_run "$step" s "leg_${leg}"
     printf '%s\n' "${iat} ${axis} ${sign} ${E:-NA} ${MU}" >> "${RESDIR}/legs.tsv"
     echo "${iat} ${axis} ${sign} ${E:-NA} ${MU}"

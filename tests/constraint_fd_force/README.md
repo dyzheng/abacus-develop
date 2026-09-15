@@ -9,9 +9,16 @@ carries the `t*dmu/dR` envelope pseudo-term; see the 2026-09-07 attribution).
 - Grid (R7): `ecutwfc=100`, `ecutrho=400`, `scf_thr=1e-8`; `delta = 0.005 Bohr`.
 - Base: constrained SCF at R0 in delta mode; its converged density is reused as
   the restart for every leg, and its `t*` (first audit `t`) is frozen.
-- Channels: `charge` (PW `211_PW_constraint_h2o`, LCAO `212_NAO_constraint_h2o`)
-  and `spin` (PW `tests/01_PW/212_PW_constraint_h2o_spin`, LCAO carrier
-  `cases/212_NAO_constraint_h2o_spin`).
+- Channels: `charge` (PW `211_PW_constraint_h2o`, LCAO `212_NAO_constraint_h2o`),
+  `spin` (PW `tests/01_PW/212_PW_constraint_h2o_spin`, LCAO carrier
+  `cases/212_NAO_constraint_h2o_spin`) and `mixed` charge+spin on one atom (PW
+  `tests/01_PW/213_PW_constraint_h2o_mixed`, LCAO carrier
+  `cases/213_NAO_constraint_h2o_mixed`, v2 `constraints` list).
+- Multi-constraint (v2) cases: the base freezes **every** component's `t*`, and
+  the legs rewrite all targets to those frozen values while keeping kind/atoms.
+  `ABA_CONSTRAINT_FIXED_MU` is a scalar, so it cannot freeze a per-component
+  `mu`; v2 runs therefore force `FIXED_MU=0` (re-optimization, the protocol the
+  charge channel was originally validated with) and print a notice.
 
 ## Run
 
@@ -35,7 +42,11 @@ Switches: `ONLY=iat_axis` (one axis), `CASE=` (carrier dir), `TEST_FORCE=1`
 (per-term force dump, needed by the standard checks), `FIXED_MU=1|0`
 (default 1: legs freeze `mu` at the base `mu*` via `ABA_CONSTRAINT_FIXED_MU`;
 0 restores the legacy in-leg re-optimization), `KS_SOLVER=` (pin a solver),
-`ECUTWFC`/`ECUTRHO`/`SCF_THR`, `RESDIR`/`TAG`/`WORKROOT`.
+`ECUTWFC`/`ECUTRHO`/`SCF_THR`/`SCF_NMAX`, `RESDIR`/`TAG`/`WORKROOT`.
+
+The mixed channel needs a bigger SCF budget than charge/spin (the outer loop
+re-runs the SCF once per `mu` step): `SCF_NMAX=1200` was used for the LCAO mixed
+sweep, where the default 300 stopped the base at `RUNNING`.
 
 ## Archiving (mandatory for long runs)
 
