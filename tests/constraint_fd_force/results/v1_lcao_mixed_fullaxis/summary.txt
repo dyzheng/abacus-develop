@@ -1,0 +1,15 @@
+# Constraint FD archive (base)
+case=/root/abacus-develop/tests/constraint_fd_force/cases/213_NAO_constraint_h2o_mixed
+basis=lcao delta_bohr=0.005 nproc=4 maxjobs=2
+binary=/root/abacus-develop/build_rel/abacus_basic_para
+ks_solver=<default>
+leg_protocol=reoptimize-mu
+criterion_eV_per_A=0.012855516752941864
+E0_eV=-466.1435161607209920
+target_schema=v2 nconstraint=2
+t_star=6.505555755 0.1
+mu_star_Ry=-0.2256411084 -0.0936213988
+# base analytic forces (eV/A)
+atom 0: -4.5940400000e-05 -4.5232000000e-05 -2.8065575071e+00
+atom 1: -2.3210530686e+00 2.2616100000e-05 1.4032787493e+00
+atom 2: 2.3210990089e+00 2.2615900000e-05 1.4032787579e+00

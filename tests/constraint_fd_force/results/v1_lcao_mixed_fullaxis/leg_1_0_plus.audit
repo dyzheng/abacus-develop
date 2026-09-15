@@ -1,0 +1,40 @@
+[constraint] outer step 1 after SCF iteration 36 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=2 e_con=0.01005861219 max_residual=0.1011722437 total_charge=6.404383511 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.404383511 t=6.505555755 mu=-0.05 res=-0.1011722437
+CONSTRAINT_AUDIT c[1] kind=spin q=1.414713128e-12 t=0.1 mu=-0.05 res=-0.1
+[constraint] outer step 2 after SCF iteration 86 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=2 e_con=0.01134416041 max_residual=0.07870641408 total_charge=6.485856703 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.426849341 t=6.505555755 mu=-0.1 res=-0.07870641408
+CONSTRAINT_AUDIT c[1] kind=spin q=0.05900736163 t=0.1 mu=-0.08473519001 res=-0.04099263837
+[constraint] outer step 3 after SCF iteration 131 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=2 e_con=0.008842467671 max_residual=0.05725002478 total_charge=6.545388409 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.44830573 t=6.505555755 mu=-0.15 res=-0.05725002478
+CONSTRAINT_AUDIT c[1] kind=spin q=0.09708267852 t=0.1 mu=-0.08739659178 res=-0.002917321479
+[constraint] outer step 4 after SCF iteration 178 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=2 e_con=0.007201382174 max_residual=0.03469805017 total_charge=6.568143467 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.470857705 t=6.505555755 mu=-0.2 res=-0.03469805017
+CONSTRAINT_AUDIT c[1] kind=spin q=0.09728576171 t=0.1 mu=-0.09644405276 res=-0.002714238291
+[constraint] outer step 5 after SCF iteration 226 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=2 e_con=0.00256064765 max_residual=0.01285601399 total_charge=6.596977678 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.492699741 t=6.505555755 mu=-0.2294295227 res=-0.01285601399
+CONSTRAINT_AUDIT c[1] kind=spin q=0.104277937 t=0.1 mu=-0.09090865546 res=0.004277937042
+[constraint] outer step 6 after SCF iteration 272 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=2 e_con=0.0002047397468 max_residual=0.003348855694 total_charge=6.602679079 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.506027935 t=6.505555755 mu=-0.2283869182 res=0.0004721801048
+CONSTRAINT_AUDIT c[1] kind=spin q=0.09665114431 t=0.1 mu=-0.09333919834 res=-0.003348855694
+[constraint] outer step 7 after SCF iteration 313 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=2 e_con=9.529726757e-05 max_residual=0.0007116478775 total_charge=6.604719849 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.505431497 t=6.505555755 mu=-0.2286041275 res=-0.0001242579048
+CONSTRAINT_AUDIT c[1] kind=spin q=0.09928835212 t=0.1 mu=-0.09399507789 res=-0.0007116478775
+[constraint] outer step 8 after SCF iteration 352 (phase=constrained)
+CONSTRAINT_AUDIT nconstraint=2 e_con=1.785980382e-05 max_residual=6.645590951e-05 total_charge=6.605460918 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.505489299 t=6.505555755 mu=-0.2286041275 res=-6.645590951e-05
+CONSTRAINT_AUDIT c[1] kind=spin q=0.09997161864 t=0.1 mu=-0.09399507789 res=-2.838136494e-05
+[constraint] M3b runtime audit: max |Tr[W.DM] - int w rho| = 6.40551767997 e
+[constraint] final status: CONVERGED (targets reached within 0.0001 e)
+CONSTRAINT_AUDIT nconstraint=2 e_con=1.785980382e-05 max_residual=6.645590951e-05 total_charge=6.605460918 nelec=8 maxdev=2.220446049e-16
+CONSTRAINT_AUDIT c[0] kind=charge q=6.505489299 t=6.505555755 mu=-0.2286041275 res=-6.645590951e-05
+CONSTRAINT_AUDIT c[1] kind=spin q=0.09997161864 t=0.1 mu=-0.09399507789 res=-2.838136494e-05
+ !FINAL_ETOT_IS -466.1372040324118302 eV
+ FINISH Time  : Mon Sep 14 22:42:41 2026
+ TOTAL  Time  : 3954
