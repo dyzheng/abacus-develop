@@ -206,6 +206,7 @@
 | 2026-09-11 | `2026-09-11-capability-boundary-decoupling.md` | **能力边界表补 L14（Becke 矩 ≠ on-site d 局域矩，附反向脱钩/74% 跟随两实测点）+ L15（在线分支守卫两条盲区：只抓能量向下换态、只在收敛点判）+ F9/F10 诊断项 + §5 适用域"自旋约束观测量缺口"** |
 | 2026-09-10 | `2026-09-10-taskV1-spin-force-fd.md` | **V1 单自旋通道力 FD：G-V1 闭合（2026-09-14 补跑）**——LCAO 全 9 轴 PASS（max \|d\|=1.781e-4 = 判据 1/72）+ PW 冒烟 2 轴 PASS（O-z 3.1× / H1-x 107×，净力指纹无异常）；fixed-μ vs 重优化等价性在自旋通道成立（F_FD 差 2.35e-4 eV/Å，成本 1.9× 省）；前置归档修复（`RESDIR`）+ LCAO spin 载体入库 `62819bd46`，41 个证据文件；**成本更正**：dav_subspace 在本载体上约 1.2× 慢（'2–5×'未获实测），真杠杆 = LCAO 载体（全 18 腿 27m36s）** |
 | 2026-09-14 | `2026-09-14-completed-tests-and-results-summary.md` | **已闭合测试与结果总览（阶段 B 立项 / merge-readiness 输入基线）：14 组测试逐条给判据+实测+证据；**已验收包络** = charge 约束（PW 9/9 + LCAO 双轴力 FD、力矩 54× 富余）、混合 charge+spin（μ 耦合 Δμ_c −0.004819 / Δμ_s −0.009206）、双迭代调度（μ* ≤0.17% / E_tot ≤8.5e-7 eV）、在线分支守卫、C-29、III-1；**三道闸门** = V1 自旋力 FD（1/9 轴）、II-1b 脱钩/4b 半径、V6 Au:Si；阶段 B 四类立项数据齐备；附 4 条流程纪律（归档/OMP/raw-E 口径/元数据=契约）** |
+| 2026-09-15 | `2026-09-15-mixed-channel-force-fd.md` | **混合通道（charge+spin 同原子）力 FD，LCAO 全轴：进行中 6/9 轴**——已测 6 轴全 PASS（max \|d\|=1.554e-3 O-z / 8.3×；H1-z 8776×），base Σ 补偿前 = −0.0016 eV/Å ≈ 0（无 μw-Pulay 特征）；**协议限制**：`ABA_CONSTRAINT_FIXED_MU` 是标量 ⇒ v2 强制重优化 μ（每腿 16–27 min，全轴 ~3 h）；runner v2 多约束支持 + `SCF_NMAX`（入库 `1fd4fe35b`）；**本地停止，交接另一台机器续跑 3 轴（§5 交接清单）** |
 | 2026-09-14 | `2026-09-14-summary-and-v1-review.md` | **评审：总览/V1 对账三项改动获批入库（`74eff461b`）；核实 V1 仅 O-z 1/9 轴、18 腿随 /tmp 丢失、base 跨二进制可复现；**更正评审链成本估计**——release 实测仅 1.14×（BLAS/FFT 厂商库与 -O0/-O3 无关），修订杠杆排序 LCAO 载体 > 求解器 > fixed-μ > 网格 > 构建类型；V1 补跑（fixed-μ + LCAO 全轴 + PW 冒烟）入近期队列** |
 | 2026-09-14 | `2026-09-14-dual-iteration-inner-schedule.md` | **双迭代调度 Q0–Q4 全落地：`constraint_mu_schedule=outer|inner` + `inner_thr`(1e-3) + `inner_nmax`(20)；SCF 内 μ 更新 + `mix_reset` + settle 检查；单测 loop 19→25，sabotage 3 发恰中且 OUTER 回归三发全绿；OUTER 211 对照二进制逐位一致；**Q1–Q3 实测：μ* 差 ≤0.17% / E_tot 差 ≤8.5e-7 eV 全部命中，成本 211 +14% / 212 +4.8% / 213 −46% / MgO −75%，mixing 不复位则 2.2× 慢或不收敛（`mix_reset` 是刚需），settle 抓到 3 次假收敛；决策表入手册 §5.9**；顺带修 C-30、扩 C-29 范围（收敛后收尾路径）、记录 OMP 线程数导致算例不可复现** |
 | 2026-09-14 | `2026-09-14-c29-localization.md` | **C-29 定位完成（**非**约束 bug）：`ModuleIO::read_rhog` 缺 `ig<0` 守卫——读取"更大平面波基组"写的 `-CHARGE-DENSITY.restart` 时，盒内/球外平面波映射为 −1，`rhog[is][-1]` 写坏 malloc chunk 头（ASAN 2.6 s 首报；关 constraint 同样复现）；收尾 `Charge::destroy` 只是**检测点**（写入发生在 run 开头的 `before_all_runners`）；修复 = `if (ig<0) continue;` + 哨兵回归单测 `ReadRhogTest.LargerBasisInFileDoesNotWriteBeforeBuffer`（拆守卫必红）** |
@@ -230,7 +231,7 @@
      Q0–Q4（入库 `afb97690d`/`a95014bd9`，决策表入用户手册 §5.9）、`inner_thr` 三档标定
      （入库 `39146832e`，默认保持 1e-3）、MODULE_IO 测试卫生（本轮，3 目标转绿）。
   2. **V1 补跑 ✅ 闭合（2026-09-14）**：LCAO 全轴 9/9 + PW 冒烟 2/2 PASS，G-V1 过闸门（归档修复 + LCAO spin 载体入库 `62819bd46`；证据 `tests/constraint_fd_force/results/`）。
-     **下一项（力 FD 同族最后一环）：混合通道（charge+spin 同原子）力 FD** —— LCAO 全轴 + PW 冒烟，213 几何，协议复用本轮；随后做约束 relax 单步冒烟（跨离子步 λ/μ 生命周期）。
+     **下一项（力 FD 同族最后一环）：混合通道（charge+spin 同原子）力 FD** —— **进行中：LCAO 全轴 6/9 轴已 PASS（`2026-09-15-mixed-channel-force-fd.md`），本机停止、另一台机器续跑剩余 3 轴**；随后 PW 混合冒烟 2 轴 → 约束 relax 单步冒烟。
   3. **开放项**：4b 半径敏感性（待锚点）、II-1 重锚定（(a)+(c)）、**阶段 B 立项评审**
      （输入数据已齐：A6 μ 耦合表、47/15 步收敛数据、INNER 收益曲线与交叉点、
      inner_thr 标定结论）；FeO 双稳体系对照**维持暂缓**（用户批复）。
@@ -5208,3 +5209,29 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - Bug/fix list：无新增 bug；**流程项闭合**（V1 runner 归档已修并生效）。
 - 下一轮：① **混合通道力 FD**（LCAO 全轴 + PW 冒烟，213 几何）；② 约束 relax 单步冒烟；
   ③ III-1 δ≈0 加密；④ 4b + II-1 重锚定；⑤ 阶段 B 立项评审。
+
+## 2026-09-15 (12): 混合通道力 FD 首轮（LCAO 全轴，6/9 轴 PASS）+ 交接另一台机器
+
+- 用户令："继续测试" → 开混合通道（charge+spin 同原子）力 FD；随后"记录当前测试任务与已有结果、
+  commit + push 到 dyzheng 仓库，另一台机器续跑"。
+- **runner 扩展（入库 `1fd4fe35b`）**：
+  1. **v2 多约束支持**——base 逐分量取 `t*`；腿把每个分量 target 改写为冻结值（absolute），
+     保留 kind/atoms；`legs.tsv` 记 `mu_c/mu_s`；v1 路径逐字不变（base INPUT 逐字节回归通过）；
+  2. `SCF_NMAX`（默认 300 = 历史逐字节不变）——混合通道外环每步重跑 SCF，默认 300 会让 base
+     以 `RUNNING (SCF ended before the outer loop converged)` 收尾（本轮实测，必须放大到 1200）；
+  3. **`ABA_CONSTRAINT_FIXED_MU` 是标量** ⇒ v2 强制 `FIXED_MU=0`（重优化 μ）并打印 notice；
+  4. 新载体 `cases/213_NAO_constraint_h2o_mixed`（213 几何 + v2 charge/spin 列表）。
+- **结果（部分：12/18 腿 = 6/9 轴，全 PASS）**：base `E0=−466.1435161607209920 eV`、
+  `t*=6.505555755 / 0.1`、`μ*=−0.2256411084 / −0.0936213988 Ry`；Σ 补偿前 z = −0.001633 eV/Å ≈ 0
+  （无 μw-Pulay 特征），一致自证 2.154e-06。已测轴：O-x 404× / O-y 402× / **O-z 8.3×（max |d| 1.554e-3）**/
+  **H1-x 11.3×** / H1-y 566× / H1-z **8776×**；未跑：H2-x / H2-y / H2-z。
+- **分析**：混合通道残差（~1.5e-3）比自旋通道（1.8e-4）大一个量级，但仍留 8–11× 富余；
+  与"腿内重优化 μ + 腿收敛噪声"一致，非力核缺陷。**成本**：每腿 16–27 min，全 18 腿 ~3 h
+  （重设计 §3 的"1–1.5 h"基于 fixed-μ，对混合通道不适用）⇒ 真杠杆仍是载体/协议。
+- **交接**（本机已停止，产物归档 `tests/constraint_fd_force/results/v1_lcao_mixed_fullaxis/`
+  + `STATUS.md`）：§5 给出续跑两条路径（整轮重跑 TAG 覆盖 ~3 h / 补 3 轴 `ONLY=2_0/2_1/2_2`）
+  与 PW 混合冒烟命令。
+- 文件：`docs/superpowers/specs/2026-09-15-mixed-channel-force-fd.md`（新建）；
+  `tests/constraint_fd_force/{README.md,tools/run_constraint_fd.sh,cases/213_*,results/v1_lcao_mixed_fullaxis/*}`。
+- Bug/fix list：无新增 bug；工具限制登记（fixed-μ 标量 → v2 不可用）。
+- 下一轮（另一台机器）：① 补 3 轴 → 混合通道 9/9；② PW 混合冒烟 2 轴；③ 约束 relax 单步冒烟。
