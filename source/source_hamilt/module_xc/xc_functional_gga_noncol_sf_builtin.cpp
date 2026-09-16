@@ -88,7 +88,8 @@ std::tuple<double, double, ModuleBase::matrix> v_xc_ncgga_sf_builtin(
 
     for (int ir = 0; ir < nrxx; ++ir)
     {
-        const double arho = std::abs(chr->rho[0][ir] + chr->rho_core[ir]);
+        const double rhox = chr->rho[0][ir] + chr->rho_core[ir];
+        const double arho = std::abs(rhox);
         if (arho <= vanishing)
             continue;
 
@@ -111,7 +112,7 @@ std::tuple<double, double, ModuleBase::matrix> v_xc_ncgga_sf_builtin(
                 vtxc += v(mu, ir) * chr->rho[mu][ir];
             }
         }
-        etxc += e2 * exc * arho;
+        etxc += e2 * exc * rhox;
     }
 
     if (is_gga)
