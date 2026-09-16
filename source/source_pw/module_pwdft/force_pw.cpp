@@ -14,6 +14,7 @@
 #include "source_base/timer.h"
 #include "source_base/tool_threading.h"
 #include "source_base/tool_quit.h"
+#include "source_cell/module_symmetry/symmetry.h"
 #include "source_estate/module_pot/efield.h"
 #include "source_estate/module_pot/gatefield.h"
 #include "source_hamilt/module_ewald/h_ewald_pw.h"
@@ -34,7 +35,7 @@ void Forces<FPTYPE, Device>::cal_force(UnitCell& ucell,
                                        ModuleSymmetry::Symmetry* p_symm,
                                        Structure_Factor* p_sf,
                                        surchem& solvent,
-                                       const Plus_U *p_dftu, //mohan add 2025-11-06
+                                       const Plus_U_Base* p_dftu,
                                        const pseudopot_cell_vl* locpp,
                                        const pseudopot_cell_vnl* p_nlpp,
                                        K_Vectors* pkv,
@@ -134,20 +135,18 @@ void Forces<FPTYPE, Device>::cal_force(UnitCell& ucell,
     if (PARAM.inp.imp_sol)
     {
         forcesol.create(this->nat, 3);
-        solvent.cal_force_sol(ucell, rho_basis, locpp->vloc, forcesol);
+        solvent.cal_force_sol(ucell, rho_basis, locpp->vloc, PARAM.inp.nspin, forcesol);
         if (PARAM.inp.test_force)
         {
             ModuleIO::print_force(GlobalV::ofs_running, ucell, "IMP_SOL      FORCE (Ry/Bohr)", forcesol);
         }
     }
 
-    // impose total force = 0
+    // sum all force terms into the total force
     int iat = 0;
     for (int ipol = 0; ipol < 3; ipol++)
     {
-        double sum = 0.0;
         iat = 0;
-
         for (int it = 0; it < ucell.ntype; it++)
         {
             for (int ia = 0; ia < ucell.atoms[it].na; ia++)
@@ -180,18 +179,7 @@ void Forces<FPTYPE, Device>::cal_force(UnitCell& ucell,
                     force(iat, ipol) += forceonsite(iat, ipol);
                 }
 
-                sum += force(iat, ipol);
-
                 iat++;
-            }
-        }
-
-        if (!(PARAM.inp.gate_flag || PARAM.inp.efield_flag))
-        {
-            double compen = sum / this->nat;
-            for (int iat = 0; iat < this->nat; ++iat)
-            {
-                force(iat, ipol) = force(iat, ipol) - compen;
             }
         }
     }
@@ -200,54 +188,14 @@ void Forces<FPTYPE, Device>::cal_force(UnitCell& ucell,
     {
         GlobalV::ofs_running << "Atomic forces are not shifted if gate_flag or efield_flag == true!" << std::endl;
     }
+    else
+    {
+        ModuleBase::remove_net_force(this->nat, force);
+    }
 
     if (ModuleSymmetry::Symmetry::symm_flag == 1)
     {
-        double d1 = 0.0, d2 = 0.0, d3 = 0.0;
-        for (int iat = 0; iat < this->nat; iat++)
-        {
-            ModuleBase::Mathzone::Cartesian_to_Direct(force(iat, 0),
-                                                      force(iat, 1),
-                                                      force(iat, 2),
-                                                      ucell.a1.x,
-                                                      ucell.a1.y,
-                                                      ucell.a1.z,
-                                                      ucell.a2.x,
-                                                      ucell.a2.y,
-                                                      ucell.a2.z,
-                                                      ucell.a3.x,
-                                                      ucell.a3.y,
-                                                      ucell.a3.z,
-                                                      d1,
-                                                      d2,
-                                                      d3);
-
-            force(iat, 0) = d1;
-            force(iat, 1) = d2;
-            force(iat, 2) = d3;
-        }
-        p_symm->symmetrize_vec3_nat(force.c);
-        for (int iat = 0; iat < this->nat; iat++)
-        {
-            ModuleBase::Mathzone::Direct_to_Cartesian(force(iat, 0),
-                                                      force(iat, 1),
-                                                      force(iat, 2),
-                                                      ucell.a1.x,
-                                                      ucell.a1.y,
-                                                      ucell.a1.z,
-                                                      ucell.a2.x,
-                                                      ucell.a2.y,
-                                                      ucell.a2.z,
-                                                      ucell.a3.x,
-                                                      ucell.a3.y,
-                                                      ucell.a3.z,
-                                                      d1,
-                                                      d2,
-                                                      d3);
-            force(iat, 0) = d1;
-            force(iat, 1) = d2;
-            force(iat, 2) = d3;
-        }
+        ModuleSymmetry::symmetrize_force_cartesian(p_symm, this->nat, ucell.a1, ucell.a2, ucell.a3, force);
     }
 
     GlobalV::ofs_running << std::setiosflags(std::ios::fixed) << std::setprecision(6) << std::endl;
@@ -686,7 +634,7 @@ void Forces<FPTYPE, Device>::cal_force_ew(const UnitCell& ucell,
                     {
                         ModuleBase::Vector3<double> d_tau
                             = ucell.atoms[T1].tau[I1] - ucell.atoms[T2].tau[I2];
-                        H_Ewald_pw::rgen(d_tau, rmax, irr.data(), ucell.latvec, ucell.G, r.data(), r2.data(), mxr, nrm);
+                        H_Ewald_pw::rgen(d_tau, rmax, irr.data(), ucell.latvec, ucell.G, r.data(), r2.data(), mxr, nrm, PARAM.inp.test_energy);
 
                         for (int n = 0; n < nrm; n++)
                         {

@@ -7,6 +7,7 @@
 #include "source_lcao/rho_tau_lcao.h" // use dm2rho
 #include "source_lcao/hamilt_lcao.h" // use HamiltLCAO for init_chg_hr
 #include "source_hsolver/hsolver_lcao.h" // use HSolverLCAO for init_chg_hr
+#include "source_pw/module_pwdft/dftu_base.h" // use Plus_U_Base for the DFT+U init
 
 template <typename TK>
 void LCAO_domain::set_psi_occ_dm_chg(
@@ -27,7 +28,7 @@ void LCAO_domain::set_psi_occ_dm_chg(
     {
         if (!ModuleIO::read_wfc_nao(PARAM.globalv.global_readin_dir,
              pv, *psi, pelec->ekb, pelec->wg, kv.ik2iktot,
-             kv.get_nkstot(), inp.nspin))
+             kv.get_nkstot(), inp.nspin, inp.init_wfc_file_format == "binary"))
         {
             ModuleBase::WARNING_QUIT("set_psi_occ_dm_chg", "read electronic wave functions failed");
         }
@@ -52,22 +53,24 @@ void LCAO_domain::set_psi_occ_dm_chg(
 template <typename TK>
 void LCAO_domain::set_pot(
         UnitCell &ucell, // not const because of dftu
-		K_Vectors &kv, // not const due to exx 
-	    Structure_Factor& sf, // will be modified in potential	
-		const ModulePW::PW_Basis &pw_rho, 
-		const ModulePW::PW_Basis &pw_rhod, 
+		K_Vectors &kv, // not const due to exx
+	    Structure_Factor& sf, // will be modified in potential
+		const ModulePW::PW_Basis &pw_rho,
+		const ModulePW::PW_Basis &pw_rhod,
 		elecstate::ElecState* pelec,
 		const LCAO_Orbitals& orb,
-		Parallel_Orbitals &pv, // not const due to deepks 
-		pseudopot_cell_vl &locpp, 
-        Plus_U &dftu,
+		Parallel_Orbitals &pv, // not const due to deepks
+		pseudopot_cell_vl &locpp,
+        Plus_U_Base &dftu,
         surchem& solvent,
         Exx_NAO<TK> &exx_nao,
         Setup_DeePKS<TK> &deepks,
-        const Input_para &inp)
+        const Input_para &inp,
+        Exx_Info& exx_info)
 {
     //! 1) init local pseudopotentials
     locpp.init_vloc(ucell, &pw_rho);
+    locpp.print_vloc(ucell, &pw_rho, inp.out_element_info, PARAM.globalv.global_out_dir);
 
     //! 2) init potentials
     if (pelec->pot == nullptr)
@@ -80,24 +83,33 @@ void LCAO_domain::set_pot(
 
     if (inp.dft_plus_u)
     {
-        dftu.init(ucell, &pv,
-                  PARAM.globalv.npol,
-                  inp.nspin, inp.orbital_corr, inp.yukawa_potential, inp.yukawa_lambda,
-                  PARAM.globalv.global_readin_dir,
-                  PARAM.globalv.global_out_dir,
-                  inp.init_chg,
-                  pv.get_global_row_size(),
-                  PARAM.globalv.gamma_only_local,
-                  inp.ks_solver,
-                  inp.cal_force,
-                  inp.cal_stress,
-                  inp.device,
-                  inp.kpar,
-                  &orb);
+        // init_base does not see paraV; validate the square-matrix invariant
+        // of the LCAO parallel distribution here.
+        const int global_rows = pv.get_global_row_size();
+        const int global_cols = pv.get_global_col_size();
+        if (global_rows != global_cols)
+        {
+            ModuleBase::WARNING_QUIT("LCAO_domain::set_pot",
+                                     "Global row and column dimensions do not match");
+        }
+        dftu.init_base(ucell,
+                       PARAM.globalv.npol,
+                       inp.nspin,
+                       inp.l_channel,
+                       inp.yukawa_potential,
+                       inp.yukawa_lambda,
+                       PARAM.globalv.global_readin_dir,
+                       PARAM.globalv.global_out_dir,
+                       inp.init_chg,
+                       inp.device,
+                       PARAM.globalv.hubbard_u,
+                       PARAM.globalv.uramping,
+                       inp.occ_mat_ctrl,
+                       inp.mixing_dftu);
     }
 
     //! 4) init exact exchange calculations
-    exx_nao.before_runner(ucell, kv, orb, pv, inp);
+    exx_nao.before_runner(ucell, kv, orb, pv, inp, exx_info);
 
     //! 5) init deepks
     deepks.before_runner(ucell, kv.get_nks(), orb, pv, inp);
@@ -125,7 +137,8 @@ void LCAO_domain::init_dm_from_file(
             dm_container,
             dmfile,
             PARAM.globalv.nlocal,
-            &ucell
+            &ucell,
+            GlobalV::MY_RANK
         );
         reader_dm.read();
     }
@@ -178,7 +191,7 @@ void LCAO_domain::init_hr_from_file(
     test_file.close();
 
     hmat->set_zero();
-    hamilt::Read_HContainer<TR> reader_hr(hmat, hrfile, PARAM.globalv.nlocal, &ucell);
+    hamilt::Read_HContainer<TR> reader_hr(hmat, hrfile, PARAM.globalv.nlocal, &ucell, GlobalV::MY_RANK);
     reader_hr.read();
     return;
 }
@@ -236,7 +249,9 @@ void LCAO_domain::init_chg_hr(
                                               PARAM.globalv.nlocal,
                                               PARAM.inp.nbands,
                                               PARAM.inp.nelec,
-                                              PARAM.inp.device == "gpu");
+                                              PARAM.inp.device == "gpu",
+                                              GlobalV::NPROC,
+                                              GlobalV::MY_RANK);
     hsolver_lcao_obj.solve(p_hamilt, psi, pelec, dm, chr, nspin, 0);
 }
 
@@ -262,35 +277,37 @@ template void LCAO_domain::set_psi_occ_dm_chg<std::complex<double>>(
 
 template void LCAO_domain::set_pot<double>(
         UnitCell &ucell,
-		K_Vectors &kv, 
-	    Structure_Factor& sf,	
-		const ModulePW::PW_Basis &pw_rho, 
-		const ModulePW::PW_Basis &pw_rhod, 
+		K_Vectors &kv,
+	    Structure_Factor& sf,
+		const ModulePW::PW_Basis &pw_rho,
+		const ModulePW::PW_Basis &pw_rhod,
 		elecstate::ElecState* pelec,
 		const LCAO_Orbitals& orb,
-		Parallel_Orbitals &pv, 
-		pseudopot_cell_vl &locpp, 
-        Plus_U &dftu,
+		Parallel_Orbitals &pv,
+		pseudopot_cell_vl &locpp,
+        Plus_U_Base &dftu,
         surchem& solvent,
         Exx_NAO<double> &exx_nao,
         Setup_DeePKS<double> &deepks,
-        const Input_para &inp);
+        const Input_para &inp,
+        Exx_Info& exx_info);
 
 template void LCAO_domain::set_pot<std::complex<double>>(
         UnitCell &ucell,
-	    K_Vectors &kv, 
-	    Structure_Factor& sf,	
-		const ModulePW::PW_Basis &pw_rho, 
-		const ModulePW::PW_Basis &pw_rhod, 
+	    K_Vectors &kv,
+	    Structure_Factor& sf,
+		const ModulePW::PW_Basis &pw_rho,
+		const ModulePW::PW_Basis &pw_rhod,
 		elecstate::ElecState* pelec,
 		const LCAO_Orbitals& orb,
-		Parallel_Orbitals &pv, 
-		pseudopot_cell_vl &locpp, 
-        Plus_U &dftu,
+		Parallel_Orbitals &pv,
+		pseudopot_cell_vl &locpp,
+        Plus_U_Base &dftu,
         surchem& solvent,
         Exx_NAO<std::complex<double>> &exx_nao,
         Setup_DeePKS<std::complex<double>> &deepks,
-        const Input_para &inp);
+        const Input_para &inp,
+        Exx_Info& exx_info);
 
 template void LCAO_domain::init_dm_from_file<double>(
     const std::string& readin_dir,

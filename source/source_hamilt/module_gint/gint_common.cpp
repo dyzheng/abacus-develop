@@ -1,8 +1,8 @@
 #include "gint_common.h"
 #include "source_hamilt/module_hcontainer/hcontainer.h"
 #include "source_hamilt/module_hcontainer/hcontainer_funcs.h"
-#include "source_io/module_parameter/parameter.h"
 #include "source_base/tool_quit.h"
+#include <cassert>
 #include <type_traits>
 
 #ifdef __MPI
@@ -178,7 +178,7 @@ void merge_hr_part_to_hR(const std::vector<hamilt::HContainer<double>>& hr_gint_
     std::vector<int> clx_i = {1, 0, 0, -1};
     std::vector<int> clx_j = {0, -1, 1, 0};
     for (int is = 0; is < 4; is++){
-        if(!PARAM.globalv.domag && (is==1 || is==2)) continue;
+        if(!gint_info.get_domag() && (is==1 || is==2)) continue;
         hR_tmp->set_zero();
         hamilt::HContainer<std::complex<double>>* hRGint_tmpCd = new hamilt::HContainer<std::complex<double>>(ucell_in->nat);
         hRGint_tmpCd->insert_ijrs( &(gint_info.get_ijr_info()), *(ucell_in));
@@ -310,9 +310,9 @@ void dm_2d_to_gint(
     ModuleBase::TITLE("Gint", "dm_2d_to_gint");
     ModuleBase::timer::start("Gint", "dm_2d_to_gint");
 
-    if (PARAM.inp.nspin != 4)
+    if (gint_info.get_nspin() != 4)
     {
-        // dm_gint.size() usually equals to PARAM.inp.nspin,
+        // dm_gint.size() usually equals to the configured nspin,
         // but there is exception within source_lcao/module_lr
         for (int is = 0; is < dm_gint.size(); is++)
         {
@@ -403,12 +403,14 @@ void wfc_2d_to_gint(const T* wfc_2d,
     ModuleBase::TITLE("Gint", "wfc_2d_to_gint");
     ModuleBase::timer::start("Gint", "wfc_2d_to_gint");
 
+    const int requested_nbands = nbands;
 #ifdef __MPI
     // dimension related
     nlocal = pv.desc_wfc[2];
     nbands = pv.desc_wfc[3];
 
     const std::vector<int>& trace_lo = gint_info.get_trace_lo();
+    const int lgd = gint_info.get_lgd();
 
     // MPI and memory related
     const int mem_stride = 1;
@@ -457,7 +459,7 @@ void wfc_2d_to_gint(const T* wfc_2d,
             for (int j = 0; j < naroc[1]; ++j)
             {
                 int igcol = globalIndex(j, nb, dim1, ipcol);
-                if (igcol >= PARAM.inp.nbands)
+                if (igcol >= requested_nbands)
                 {
                     continue;
                 }
@@ -467,7 +469,8 @@ void wfc_2d_to_gint(const T* wfc_2d,
                     int mu_local = trace_lo[igrow];
                     if (wfc_gint && mu_local >= 0)
                     {
-                        wfc_gint[igcol * nlocal + mu_local] = wfc_block[j * naroc[0] + i];
+                        assert(mu_local < lgd);
+                        wfc_gint[igcol * lgd + mu_local] = wfc_block[j * naroc[0] + i];
                     }
                 }
             }

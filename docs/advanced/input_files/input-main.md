@@ -8,7 +8,9 @@
   - [System variables](#system-variables)
     - [suffix](#suffix)
     - [ntype](#ntype)
+    - [cell\_replica](#cell_replica)
     - [calculation](#calculation)
+    - [socket\_driver](#socket_driver)
     - [esolver\_type](#esolver_type)
     - [symmetry](#symmetry)
     - [symmetry\_prec](#symmetry_prec)
@@ -356,6 +358,8 @@
     - [md\_restart](#md_restart)
     - [md\_restartfreq](#md_restartfreq)
     - [md\_dumpfreq](#md_dumpfreq)
+    - [md\_neighbor\_skin](#md_neighbor_skin)
+    - [md\_out\_force](#md_out_force)
     - [dump\_force](#dump_force)
     - [dump\_vel](#dump_vel)
     - [dump\_virial](#dump_virial)
@@ -431,6 +435,8 @@
     - [vdw\_cutoff\_type](#vdw_cutoff_type)
     - [vdw\_cutoff\_radius](#vdw_cutoff_radius)
     - [vdw\_radius\_unit](#vdw_radius_unit)
+    - [vdw\_cutoff\_width2](#vdw_cutoff_width2)
+    - [vdw\_cutoff\_width3](#vdw_cutoff_width3)
     - [vdw\_cutoff\_period](#vdw_cutoff_period)
     - [vdw\_cn\_thr](#vdw_cn_thr)
     - [vdw\_cn\_thr\_unit](#vdw_cn_thr_unit)
@@ -584,6 +590,14 @@
   - [Reduced Density Matrix Functional Theory](#reduced-density-matrix-functional-theory)
     - [rdmft](#rdmft)
     - [rdmft\_power\_alpha](#rdmft_power_alpha)
+  - [Density functional perturbation theory](#density-functional-perturbation-theory)
+    - [dfpt\_qmesh](#dfpt_qmesh)
+    - [dfpt\_qfile](#dfpt_qfile)
+    - [dfpt\_compute\_q0](#dfpt_compute_q0)
+    - [dfpt\_loto](#dfpt_loto)
+    - [dfpt\_conv\_thr](#dfpt_conv_thr)
+    - [dfpt\_max\_iter](#dfpt_max_iter)
+    - [dfpt\_mix\_beta](#dfpt_mix_beta)
 
 ## System variables
 
@@ -598,6 +612,12 @@
 - **Type**: Integer
 - **Description**: Number of different atom species in the calculation.
 - **Default**: 0
+
+### cell_replica
+
+- **Type**: Three Integers
+- **Description**: Replicate the input STRU by Na, Nb, and Nc along its lattice vectors for distributed MDCell workflows. This parameter is only used for classical potentials or machine-learned interatomic potentials. The default is 1 1 1, which preserves the input structure.
+- **Default**: 1 1 1
 
 ### calculation
 
@@ -618,6 +638,20 @@
   - test_neighbour: obtain information of neighboring atoms (for LCAO basis only), please specify a positive search_radius manually
 - **Default**: scf
 
+### socket_driver
+
+- **Type**: Boolean
+- **Description**: If set to True, ABACUS keeps the calculation type as scf and receives atomic positions from an external driver through the i-PI socket protocol.
+
+  > Note: Use calculation = scf with socket_driver = True. ABACUS connects to the external i-PI server selected by ABACUS_SOCKET_ADDRESS. If ABACUS_SOCKET_ADDRESS is unset, ABACUS uses localhost:31415. The value can use one of two forms:
+
+  - host:port, for example localhost:31415 or 127.0.0.1:31415, opens a TCP connection to that host and port. Use this when the i-PI server listens on a TCP port.
+  - path:UNIX, for example /tmp/ipi_abacus_si:UNIX, opens a Unix-domain socket at the given filesystem path. The :UNIX suffix tells ABACUS that the preceding value is a local socket path rather than a TCP host name. This form only works on the same machine.
+  When using the ASE AbacusSocketIO interface, this environment variable is set automatically from the port or unixsocket calculator argument.
+
+  Socket mode always computes energy. Force and stress extraction follows cal_force and cal_stress independently; disabled properties are sent as protocol padding and marked absent in the ABACUS i-PI extras metadata, not reported as physical zero values. This metadata extension is required for safe optional-property handling: a legacy response with empty extras is accepted only for energy-only use, while a generic client that ignores extras cannot distinguish padding from a computed zero. A non-converged SCF step is returned with scf_converged=false metadata so an external driver can choose its policy.
+- **Default**: False
+
 ### esolver_type
 
 - **Type**: String
@@ -632,6 +666,7 @@
   - nep: Neuroevolution Potential
   - ks-lr: Kohn-Sham density functional theory + LR-TDDFT (Under Development Feature)
   - lr: LR-TDDFT with given KS orbitals (Under Development Feature)
+  - dfpt: density functional perturbation theory (Under Development Feature)
 - **Default**: ksdft
 
 ### symmetry
@@ -666,18 +701,28 @@
 
 - **Type**: Boolean
 - **Description**: If set to True, calculate the force at the end of the electronic iteration.
+  In socket_driver mode, this flag controls whether the returned frame advertises forces; it is not forced on by the socket protocol.
 - **Default**: False
 
 ### kpar
 
 - **Type**: Integer
-- **Description**: Divide all processors into kpar groups, and k points will be distributed among each group. The value taken should be less than or equal to the number of k points as well as the number of MPI processes.
+- **Description**: Controls k-point parallelism. The value must be positive and should not exceed either the number of k-points or the number of MPI processes.
+  - For PW calculations, divide all MPI processes into persistent k-point pools. Each pool stores and processes a subset of the k-points.
+  - For LCAO calculations with lapack, genelpa, elpa, or scalapack_gvx, divide the diagonalization work into temporary k-point pools. After diagonalization, the eigenvalues and distributed wavefunctions are restored for all k-points before occupations, density matrices, and output are evaluated.
+  - Multi-process LCAO cusolver uses its own active-GPU distribution and does not use this value to define its k-point layout. Other LCAO eigensolvers do not use the temporary k-point-pool implementation.
 - **Default**: 1
 
 ### bndpar
 
 - **Type**: Integer
-- **Description**: Divide all processors into bndpar groups for SDFT or the BPCG solver. bndpar must be positive, no greater than the number of MPI processes, and kpar * bndpar must divide the number of MPI processes exactly.
+- **Availability**: *([`basis_type`](#basis_type)==pw and [`esolver_type`](#esolver_type)==sdft) or ([`basis_type`](#basis_type)==pw and [`esolver_type`](#esolver_type)==ksdft and [`ks_solver`](#ks_solver)==bpcg)*
+- **Description**: Controls band-group parallelism for PW SDFT and PW KSDFT calculations using the BPCG eigensolver.
+  - Within each k-point pool, divide the MPI processes into bndpar band groups. Each group contains NPROC / (kpar * bndpar) processes when bndpar is greater than 1.
+  - With BPCG, distribute contiguous ranges of global Kohn-Sham bands among the band groups. nbands does not need to be divisible by bndpar, but bndpar cannot exceed a positive nbands. Groups with lower indices receive one additional band when necessary.
+  - In SDFT, distribute stochastic orbitals among the band groups. When the deterministic Kohn-Sham eigensolver is not BPCG, band group 0 calculates the deterministic orbitals and broadcasts them to the other groups.
+  - bndpar must be positive and no greater than the number of MPI processes. When bndpar is greater than 1, kpar * bndpar must divide the number of MPI processes exactly.
+  > Note: For PW calculations on GPU, if the input kpar * bndpar differs from the number of MPI processes, ABACUS automatically sets the effective kpar to NPROC / bndpar.
 - **Default**: 1
 
 ### latname
@@ -719,19 +764,28 @@
 
 ### init_wfc
 
-- **Type**: String
-- **Description**: The type of the starting wave functions.
+- **Type**: Vector of string
+- **Description**: The method used to initialize wavefunction coefficients. The available options and behavior depend on `basis_type`.
 
-  Available options are:
+  For `basis_type=pw`, the available options are:
 
-  - atomic: from atomic pseudo wave functions. If they are not enough, other wave functions are initialized with random numbers.
-  - atomic+random: add small random numbers on atomic pseudo-wavefunctions
-  - file: from binary files wf*.dat, which are output by setting out_wfc_pw to 2.
-  - random: random numbers
-  - nao: from numerical atomic orbitals. If they are not enough, other wave functions are initialized with random numbers.
-  - nao+random: add small random numbers on numerical atomic orbitals
+  - `atomic`: Use atomic pseudo wavefunctions from `PP_PSWFC`. If no `PP_PSWFC` states are available, all bands are initialized randomly. If the number of atomic states is smaller than `nbands`, the remaining bands are initialized randomly.
+  - `atomic+random`: If there are at least `nbands` atomic states, apply an approximately 5% multiplicative random perturbation to the atomic initialization. If there are fewer atomic states than `nbands`, use the atomic states and initialize the remaining bands randomly, as for `atomic`.
+  - `random`: Initialize all bands with random coefficients.
+  - `nao`: Use numerical atomic orbitals. If the number of NAO states is smaller than `nbands`, the remaining bands are initialized randomly.
+  - `nao+random`: Apply an approximately 5% multiplicative random perturbation to the NAO initialization; any bands not covered by NAO states are first initialized randomly.
+  - `file binary`: Read binary `wf*_pw.dat` files generated with `out_wfc_pw=2` from `read_file_dir`. The files must match the current k points, `nbands`, plane-wave layout, and lattice. The `txt` format is not supported for PW wavefunctions.
 
-  > Note: Only the file option is useful for the lcao basis set, which is mostly used when calculation is set to get_wf and get_pchg.
+  For `basis_type=lcao`, the file options are:
+
+  - `file txt`: Read text `wf*_nao.txt` files generated with `out_wfc_lcao=1` from `read_file_dir`.
+  - `file binary`: Read binary `wf*_nao.dat` files generated with `out_wfc_lcao=2` from `read_file_dir`.
+
+  The selected format is required; ABACUS does not automatically detect or fall back to the other format. The files must use a compatible NAO basis, match the current k-point and spin setup, and contain enough bands. File initialization matches independent files without geometry-step indices. Files accumulated with `out_app_flag` or files under `WFC/` with a `g*` geometry-step index are not supported.
+
+  For `basis_type=lcao_in_pw`, `init_wfc` is automatically set to `nao`.
+
+  > Note: For `calculation=get_wf` or `calculation=get_pchg`, non-file initialization choices are automatically changed to the file option appropriate for the selected basis. An explicitly selected file format is preserved. If `basis_type=lcao_in_pw` is also used, the final value is `nao`.
 - **Default**: atomic
 
 ### init_chg
@@ -768,6 +822,7 @@
 
 - **Type**: Boolean
 - **Description**: If set to True, calculate the stress at the end of the electronic iteration.
+  In socket_driver mode, this flag independently controls whether the returned frame advertises stress/virial.
 - **Default**: False
 
 ### diago_proc
@@ -866,7 +921,12 @@
 ### chg_extrap
 
 - **Type**: String
-- **Description**: Charge extrapolation method for MD and relaxation calculations.
+- **Description**: Charge extrapolation method for MD, relaxation, and socket-driven calculations.
+
+  When set to default, ABACUS chooses second-order for md, first-order for
+  relax/cell-relax and socket_driver calculations, and atomic for other calculations. Socket-driven
+  molecular dynamics can explicitly set second-order if the external driver
+  updates structures smoothly enough for second-order extrapolation.
 - **Default**: default
 
 ### nb2d
@@ -1006,6 +1066,7 @@
 ### diag_subspace
 
 - **Type**: Integer
+- **Availability**: *[`basis_type`](#basis_type)==pw and [`ks_solver`](#ks_solver)==dav_subspace*
 - **Description**: The method to diagonalize subspace in dav_subspace method.
   - 0: by LAPACK
   - 1: by GenELPA
@@ -1925,19 +1986,22 @@
 ### out_wfc_pw
 
 - **Type**: Integer
-- **Availability**: *[`basis_type`](#basis_type)==pw or ([`basis_type`](#basis_type)==lcao and [`calculation`](#calculation)==get_wf)*
-- **Description**: Whether to output the electronic wavefunction coefficients into files and store them in the folder OUT.${suffix}. The files are named as wf{k}{k-point index}{s}{spin index}{g}{geometry index}{e}{electronic iteration index}{_pw} + {".txt"/".dat"}. Here, the s index refers to spin but the label will not show up for non-spin-polarized calculations, where s1 means spin up channel while s2 means spin down channel, and s4 refers to spinor wave functions that contains both spin channels with spin-orbital coupling or noncollinear calculations enabled. For scf or nscf calculations, g index will not appear, but the g index appears for geometry relaxation and molecular dynamics, where one can use the out_freq_ion command to control. To print out the electroinc wave functions every few SCF iterations, use the out_freq_elec command and the e index will appear in the file name.
-  - 0: no output
-  - 1: (txt format)
-   - non-gamma-only with nspin=1: wfk1_pw.txt, wfk2_pw.txt, ...;
-   - non-gamma-only with nspin=2: wfk1s1_pw.txt, wfk1s2_pw.txt, wfk2s1_pw.txt, wfk2s2_pw.txt, ...;
-   - non-gamma-only with nspin=4: wfk1s4_pw.txt, wfk2s4_pw.txt, ...;
-  - 2: (binary format)
-   - non-gamma-only with nspin=1: wfk1_pw.dat, wfk2_pw.dat, ...;
-   - non-gamma-only with nspin=2: wfk1s1_pw.dat, wfk1s2_pw.dat, wfk2s1_pw.dat, wfk2s2_pw.dat, ...;
-   - non-gamma-only with nspin=4: wfk1s4_pw.dat, wfk2s4_pw.dat, ...;
+- **Availability**: *[`basis_type`](#basis_type)==pw and [`esolver_type`](#esolver_type)==ksdft*
+- **Description**: Controls whether plane-wave Kohn-Sham wavefunction coefficients are written to `OUT.${suffix}/`.
 
-  > Note: In the 3.10-LTS version, the file names are WAVEFUNC1.dat, WAVEFUNC2.dat, etc.
+  Available values are:
+
+  - `0`: Do not write wavefunction coefficients.
+  - `1`: Write text files with the `.txt` suffix.
+  - `2`: Write binary files with the `.dat` suffix.
+
+  The file-name pattern is `wfk{k}[s{spin}][g{geometry step}][e{electronic iteration}]_pw.txt` for `out_wfc_pw=1` and `wfk{k}[s{spin}][g{geometry step}][e{electronic iteration}]_pw.dat` for `out_wfc_pw=2`. All PW output files include a `k*` label, including Gamma-only calculations. Without geometry-step or electronic-iteration indices, representative names are `wfk1_pw.txt` or `wfk1_pw.dat` for `nspin=1`, `wfk1s1_pw.txt` and `wfk1s2_pw.txt` or their `.dat` equivalents for `nspin=2`, and `wfk1s4_pw.txt` or `wfk1s4_pw.dat` for `nspin=4`.
+
+  With `out_freq_ion=0`, files are written only when the electronic calculation converges or reaches `scf_nmax`; no `g*` or `e*` index is added. During structural relaxation or molecular dynamics, later ionic steps overwrite the same unindexed files. With `out_freq_ion` &gt; 0, output is restricted to the ionic steps selected by `out_freq_ion` and is written when the electronic iteration is a multiple of `out_freq_elec`, when the calculation converges, or when it reaches `scf_nmax`. Both `g*` and `e*` indices are then added, including for a static `calculation=scf` or `calculation=nscf` run.
+
+  With `init_wfc file binary`, ABACUS reads only unindexed binary `wf*_pw.dat` files from `read_file_dir`. Such directly reusable files are normally generated with `out_wfc_pw=2` and `out_freq_ion=0`. Text `wf*_pw.txt` files and files containing `g*` or `e*` indices are not matched automatically.
+
+  > Note: In the 3.10-LTS version, the binary files are named `WAVEFUNC1.dat`, `WAVEFUNC2.dat`, etc.
 - **Default**: 0
 
 ### out_wfc_lcao
@@ -2367,34 +2431,44 @@
 - **Type**: String
 - **Availability**: *[`basis_type`](#basis_type)==lcao*
 - **Description**: The directory to save files for LibRPA.
-- **Default**: "./OUT.librpa/"
+- **Default**: "OUT.librpa"
 
 ### out_pchg
 
 - **Type**: String
 - **Availability**: *[`basis_type`](#basis_type)==pw or ([`basis_type`](#basis_type)==lcao and [`calculation`](#calculation)==get_pchg)*
-- **Description**: Specifies the electronic states to calculate the charge densities with state index for, using a space-separated string of 0s and 1s. Each digit in the string corresponds to a state, starting from the first state. A 1 indicates that the charge density should be calculated for that state, while a 0 means the state will be ignored. The parameter allows a compact and flexible notation (similar to ocp_set), for example the syntax 1 4*0 5*1 0 is used to denote the selection of states: 1 means calculate for the first state, 4*0 skips the next four states, 5*1 means calculate for the following five states, and the final 0 skips the next state. It's essential that the total count of states does not exceed the total number of states (nbands); otherwise, it results in an error, and the process exits. The input string must contain only numbers and the asterisk (*) for repetition, ensuring correct format and intention of state selection. The outputs comprise multiple .cube files following the naming convention pchgi[state]s[spin]k[kpoint].cube.
+- **Description**: Selects electronic states for partial (band-decomposed) charge-density output using a space-separated string of `0`s and `1`s, where `1` selects a state and `0` skips it. Repetition follows the `ocp_set` syntax, for example `1 4*0 5*1 0`; the expanded list must not exceed `nbands`. Each output represents a complete one-particle state. The spin degeneracy is 2 for `nspin=1` and 1 for `nspin=2` or `nspin=4`. For `nspin=1`, `s1` contains the charge density. For `nspin=2`, `s1` and `s2` contain the spin-up and spin-down charge densities, respectively. For `nspin=4`, `s1`, `s2`, `s3`, and `s4` respectively contain $\rho_0$, $m_x$, $m_y$, and $m_z$. With `if_separate_k=true`, files are named `pchgi[state]s[component]k[kpoint].cube`; otherwise, the weighted k-point sum is named `pchgi[state]s[component].cube`.
+
+  For PW calculations with ultrasoft pseudopotentials (USPP), the single-state valence density includes the augmentation contribution:
+
+  $$
+  \rho_{n\boldsymbol{k}}(\boldsymbol{r})=\left\vert\tilde{\psi}_{n\boldsymbol{k}}(\boldsymbol{r})\right\vert^2+\sum_{Iij}Q_{ij}^{I}(\boldsymbol{r})\Braket{\tilde{\psi}_{n\boldsymbol{k}} | \beta_i^I}\Braket{\beta_j^I | \tilde{\psi}_{n\boldsymbol{k}}}.
+  $$
+
+  Here $\tilde{\psi}$ is the pseudo-wavefunction, $\beta_i^I$ are the atomic projectors, and $Q_{ij}^I$ are the augmentation functions. Each separate-k output has a cell integral equal to the spin degeneracy. The merged output uses k-point weights including spin degeneracy, and its integral equals their sum for the corresponding spin channel.
+
+  > Note: Enabling symmetry may produce unintended partial charge densities because of reduced k-point weights and real-space symmetry operations. If the desired symmetry treatment is uncertain, set `symmetry = -1`. Use the same symmetry setting as in the SCF calculation.
 - **Default**: none
 
 ### out_wfc_norm
 
 - **Type**: String
 - **Availability**: *[`basis_type`](#basis_type)==pw or ([`basis_type`](#basis_type)==lcao and [`calculation`](#calculation)==get_wf)*
-- **Description**: Specifies the electronic states to calculate the real-space wave function modulus (norm, or known as the envelope function) with state index. The syntax and state selection rules are identical to out_pchg, but the output is the norm of the wave function. The outputs comprise multiple .cube files following the naming convention wfi[state]s[spin]k[kpoint].cube.
+- **Description**: Selects electronic states for real-space wavefunction-modulus output using the selection syntax of `out_pchg`. Each output contains single-particle wavefunction amplitudes. In PW calculations, norm-conserving pseudo-wavefunctions satisfy $\Braket{\psi_{n\boldsymbol{k}} | \psi_{n\boldsymbol{k}}}=1$, while USPP pseudo-wavefunctions satisfy $\Braket{\tilde{\psi}_{n\boldsymbol{k}} | \hat{S} | \tilde{\psi}_{n\boldsymbol{k}}}=1$, where $\hat{S}=1+\sum_{Iij}q_{ij}^I\Ket{\beta_i^I}\Bra{\beta_j^I}$ is the USPP overlap operator, $q_{ij}^I=\int Q_{ij}^I(\boldsymbol{r})\,\mathrm{d}\boldsymbol{r}$, and $\beta_i^I$ are the atomic projectors. For `nspin=1`, `s1` contains the wavefunction modulus. For `nspin=2`, `s1` and `s2` contain the spin-up and spin-down wavefunction moduli, respectively. For `nspin=4`, `s1` contains the total spinor modulus. Files are named `wfi[state]s[spin]k[kpoint].cube`.
 - **Default**: none
 
 ### out_wfc_re_im
 
 - **Type**: String
 - **Availability**: *[`basis_type`](#basis_type)==pw or ([`basis_type`](#basis_type)==lcao and [`calculation`](#calculation)==get_wf)*
-- **Description**: Specifies the electronic states to calculate the real and imaginary parts of the wave function with state index. The syntax and state selection rules are identical to out_pchg, but the output contains both the real and imaginary components of the wave function. The outputs comprise multiple .cube files following the naming convention wfi[state]s[spin]k[kpoint][re/im].cube.
+- **Description**: Selects electronic states for real-space wavefunction real- and imaginary-part output using the selection syntax of `out_pchg`. Each output contains single-particle wavefunction amplitudes. In PW calculations, norm-conserving pseudo-wavefunctions satisfy $\Braket{\psi_{n\boldsymbol{k}} | \psi_{n\boldsymbol{k}}}=1$, while USPP pseudo-wavefunctions satisfy $\Braket{\tilde{\psi}_{n\boldsymbol{k}} | \hat{S} | \tilde{\psi}_{n\boldsymbol{k}}}=1$, where $\hat{S}=1+\sum_{Iij}q_{ij}^I\Ket{\beta_i^I}\Bra{\beta_j^I}$ is the USPP overlap operator, $q_{ij}^I=\int Q_{ij}^I(\boldsymbol{r})\,\mathrm{d}\boldsymbol{r}$, and $\beta_i^I$ are the atomic projectors. For `nspin=1`, `s1` contains the wavefunction. For `nspin=2`, `s1` and `s2` contain the spin-up and spin-down wavefunctions, respectively. For `nspin=4`, `s1` and `s2` contain the upper and lower spinor components, respectively. Files are named `wfi[state]s[spin]k[kpoint][re/im].cube`.
 - **Default**: none
 
 ### if_separate_k
 
 - **Type**: Boolean
 - **Availability**: *([`basis_type`](#basis_type)==pw and [`out_pchg`](#out_pchg)!=none) or ([`basis_type`](#basis_type)==lcao and [`calculation`](#calculation)==get_pchg and [`gamma_only`](#gamma_only)==0)*
-- **Description**: Specifies whether to write the partial charge densities for all k-points to individual files or merge them. Warning: Enabling symmetry may produce unwanted results due to reduced k-point weights and symmetry operations in real space. Therefore when calculating partial charge densities, if you are not sure what you want exactly, it is strongly recommended to set symmetry = -1. It is noteworthy that your symmetry setting should remain the same as that in the SCF procedure.
+- **Description**: Specifies whether to write partial charge densities for individual k-points or merge them.
 - **Default**: false
 
 ### out_elf
@@ -3345,6 +3419,7 @@
 - **Availability**: *[`symmetry`](#symmetry)==1 and ([`dft_functional`](#dft_functional) in [hse, hf, pbe0, scan0] or ([`basis_type`](#basis_type)==lcao and [`rpa`](#rpa)==true))*
 - **Description**: - False: only rotate k-space density matrix D(k) from irreducible k-points to accelerate diagonalization
   - True: rotate both D(k) and Hexx(R) to accelerate both diagonalization and EXX calculation
+  For multi-k calculations, D(k) is averaged over the unitary little group of each irreducible k point before star expansion, for either setting.
 - **Default**: True
 
 ### out_ri_cv
@@ -3483,14 +3558,27 @@
 ### md_restartfreq
 
 - **Type**: Integer
-- **Description**: The output frequency of OUT.{suffix}/STRIU/, which are used to restart molecular dynamics calculations, see md_restart in detail.
+- **Description**: The output frequency of OUT.{suffix}/STRU_MD_*, which are used to restart molecular dynamics calculations, see md_restart in detail. Set to 0 to disable MD restart output.
 - **Default**: 5
 
 ### md_dumpfreq
 
 - **Type**: Integer
-- **Description**: The output frequency of OUT.${suffix}/MD_dump in molecular dynamics calculations, which including the information of lattices and atoms.
+- **Description**: The output frequency of OUT.${suffix}/MD_dump in molecular dynamics calculations, which includes lattice and atomic information. Set to 0 to disable MD_dump output.
 - **Default**: 1
+
+### md_neighbor_skin
+
+- **Type**: Real
+- **Description**: The extra neighbor-list radius in Angstrom for MDCell molecular dynamics. This parameter is only used for classical potentials or machine-learned interatomic potentials. A positive value reuses the cutoff-plus-skin candidate list until an atom has moved by half this distance; 0 rebuilds the list every force evaluation.
+- **Default**: 0.0
+- **Unit**: Angstrom
+
+### md_out_force
+
+- **Type**: Boolean
+- **Description**: Whether to output the TOTAL-FORCE table in OUT.${suffix}/running_md.log for MDCell molecular dynamics. This does not affect force calculation or molecular dynamics integration.
+- **Default**: True
 
 ### dump_force
 
@@ -3514,8 +3602,8 @@
 
 - **Type**: Integer
 - **Description**: The random seed to initialize random numbers used in molecular dynamics calculations.
-  - &lt; 0: No srand() function is called.
-  - &gt;= 0: The function srand(md_seed) is called.
+  - &lt; 0: Each MPI rank uses the default seed 1 plus its rank.
+  - &gt;= 0: Each MPI rank uses md_seed plus its rank.
 - **Default**: -1
 
 ### md_tfreq
@@ -3936,7 +4024,7 @@
   - d4: Grimme's DFT-D4 dispersion correction method using the external DFT-D4 library
   - none: no vdW correction
 
-  > Note: ABACUS supports automatic setting of DFT-D3 parameters for common functionals. To benefit from this feature, please specify the parameter dft_functional explicitly, otherwise the autoset procedure will crash. If not satisfied with the built-in parameters, any manual setting on vdw_s6, vdw_s8, vdw_a1 and vdw_a2 will overwrite the automatic values.
+  > Note: ABACUS automatically loads DFT-D3 parameters for supported functionals according to dft_functional setting. Individual user values overwrite the corresponding tabulated values. Setting all four of vdw_s6, vdw_s8, vdw_a1 and vdw_a2 defines a fully custom set and bypasses functional lookup.
 - **Default**: none
 
 ### vdw_d4_xc
@@ -3962,25 +4050,25 @@
 
 - **Type**: String
 - **Availability**: *[`vdw_method`](#vdw_method) in [d2, d3_0, d3_bj]*
-- **Description**: This scale factor is used to optimize the interaction energy deviations in van der Waals (vdW) corrected calculations. The recommended values of this parameter are dependent on the chosen vdW correction method and the DFT functional being used. For DFT-D2, the recommended values are 0.75 (PBE), 1.2 (BLYP), 1.05 (B-P86), 1.0 (TPSS), and 1.05 (B3LYP). If not set, will use values of PBE functional. For DFT-D3, recommended values with different DFT functionals can be found on the here. If not set, will search in ABACUS built-in dataset based on the dft_functional keywords. User set value will overwrite the searched value.
+- **Description**: Scale factor s6, which is used to optimize the interaction energy deviations in van der Waals (vdW) corrected calculations. The recommended values of this parameter are dependent on the chosen vdW correction method and the DFT functional being used. For DFT-D2, the recommended values are 0.75 (PBE), 1.2 (BLYP), 1.05 (B-P86), 1.0 (TPSS), and 1.05 (B3LYP); if not set, will use values of PBE functional by default. For DFT-D3, ABACUS will search in built-in dataset based on the dft_functional setting by default; user set value will overwrite the searched value.
 
 ### vdw_s8
 
 - **Type**: String
 - **Availability**: *[`vdw_method`](#vdw_method) in [d3_0, d3_bj]*
-- **Description**: This scale factor is relevant for D3(0) and D3(BJ) van der Waals (vdW) correction methods. The recommended values of this parameter with different DFT functionals can be found on the webpage. If not set, will search in ABACUS built-in dataset based on the dft_functional keywords. User set value will overwrite the searched value.
+- **Description**: Scale factor s8 for D3(0) and D3(BJ). By default, ABACUS will search in built-in dataset based on the dft_functional setting. User set value will overwrite the searched value.
 
 ### vdw_a1
 
 - **Type**: String
 - **Availability**: *[`vdw_method`](#vdw_method) in [d3_0, d3_bj]*
-- **Description**: This damping function parameter is relevant for D3(0) and D3(BJ) van der Waals (vdW) correction methods. The recommended values of this parameter with different DFT functionals can be found on the webpage. If not set, will search in ABACUS built-in dataset based on the dft_functional keywords. User set value will overwrite the searched value.
+- **Description**: Damping parameter rs6 for D3(0), or a1 for D3(BJ). If not set, ABACUS loads the s-dftd3 value for dft_functional. A user value overwrites the tabulated value.
 
 ### vdw_a2
 
 - **Type**: String
 - **Availability**: *[`vdw_method`](#vdw_method) in [d3_0, d3_bj]*
-- **Description**: This damping function parameter is only relevant for D3(0) and D3(BJ) van der Waals (vdW) correction methods. The recommended values of this parameter with different DFT functionals can be found on the webpage. If not set, will search in ABACUS built-in dataset based on the dft_functional keywords. User set value will overwrite the searched value.
+- **Description**: Damping parameter rs8 for D3(0), or a2 for D3(BJ). If not set, ABACUS loads the s-dftd3 value for dft_functional. A user value overwrites the tabulated value.
 
 ### vdw_d
 
@@ -4043,7 +4131,7 @@
 - **Type**: String
 - **Description**: Determines the method used for specifying the cutoff radius in periodic systems when applying Van der Waals correction. Available options are:
   - radius: The supercell is selected within a sphere centered at the origin with a radius defined by vdw_cutoff_radius.
-  - period: The extent of the supercell is explicitly specified using the vdw_cutoff_period keyword.
+  - period: The extent of the D2 supercell is explicitly specified using the vdw_cutoff_period keyword. DFT-D3 and DFT-D4 require radius.
 - **Default**: radius
 
 ### vdw_cutoff_radius
@@ -4061,6 +4149,24 @@
   - A(Angstrom)
   - Bohr
 - **Default**: Bohr
+
+### vdw_cutoff_width2
+
+- **Type**: Real
+- **Availability**: *[`vdw_method`](#vdw_method) in [d3_0, d3_bj, d4]*
+- **Description**: Width of the smooth switching region for the two-body pairwise dispersion real-space cutoff.
+  A value of zero disables smoothing for the two-body contribution.
+- **Default**: 0.05
+- **Unit**: Bohr
+
+### vdw_cutoff_width3
+
+- **Type**: Real
+- **Availability**: *[`vdw_method`](#vdw_method) in [d3_0, d3_bj, d4]*
+- **Description**: Width of the smooth switching region for the three-body Axilrod-Teller-Muto (ATM) dispersion real-space cutoff.
+  A value of zero disables smoothing for the three-body contribution.
+- **Default**: 0.0
+- **Unit**: Bohr
 
 ### vdw_cutoff_period
 
@@ -4491,9 +4597,9 @@
 ### ocp_set
 
 - **Type**: String
-- **Description**: Fixed occupation weights used when ocp is true. Values are assigned band by band for each k-point, following k-point order. In LCAO RT-TDDFT, the initial ground-state SCF uses its normally determined occupations, and this array is applied only during subsequent real-time propagation steps. The repetition syntax N*x expands to N copies of x.
+- **Description**: Fixed occupation weights used when ocp is true. Values are assigned in band order for each k-point, following k-point order. In LCAO RT-TDDFT, the initial ground-state SCF uses its normally determined occupations, and this array is applied only during subsequent real-time propagation steps. The repetition syntax N*x expands to N copies of x.
   - Example: 1 10*1 0 1 expands to 13 values, with the 12th value equal to 0 and all other values equal to 1.
-  - After expansion, the array length must equal nks * nbands.
+  - After expansion, provide one block of nbands values for each k-point. If nspin is 2, provide all k-point blocks for spin up followed by all k-point blocks for spin down; otherwise, provide one block per k-point.
   - The sum of all weights must equal nelec; otherwise the calculation terminates with an error.
 - **Default**: None
 
@@ -5093,13 +5199,13 @@
 ### bse_q_approx_mode
 
 - **Type**: Integer
-- **Description**: q-to-k-pair mapping mode: 0 uses exact mapping, 1 uses the coarse q-grid approximation, and 2 uses exact for Γ-close q-points and coarse for other q-points.
+- **Description**: q-to-k-pair mapping mode for W: 0=exact, 1=coarse q grid, 2=mixed, 3=truncate pairs with |q|&gt;threshold (W elements dropped)
 - **Default**: 0
 
 ### bse_q_approx_threshold
 
 - **Type**: Real
-- **Description**: Threshold radius in Bohr^-1 for exact q-to-k-pair mapping when bse_q_approx_mode is 2.
+- **Description**: Threshold radius in unit of 2*pi/lat0 (same unit system as kvec_c) for exact q-to-k-pair mapping when bse_q_approx_mode is 2; in mode 3 pairs with larger |q| are dropped entirely.
 - **Default**: 0.1
 
 ### out_bse_ab
@@ -5129,5 +5235,51 @@
 - **Type**: Real
 - **Description**: The alpha parameter of power-functional(or other exx-type/hybrid functionals) which used in RDMFT, g(occ_number) = occ_number^alpha
 - **Default**: 0.656
+
+[back to top](#full-list-of-input-keywords)
+
+## Density functional perturbation theory
+
+### dfpt_qmesh
+
+- **Type**: Vector of Int (1 or 3 values)
+- **Description**: Set the Monkhorst-Pack q mesh (gamma-centered) for DFPT phonon calculations. The q mesh must be commensurate with the ground-state k mesh: k + q must be a point of the k list (modulo a reciprocal lattice vector). For example, a 4x4x4 KPT mesh is commensurate with dfpt_qmesh values of 1, 2, or 4 along each direction. This parameter is ignored when dfpt_qfile is set.
+- **Default**: 1 1 1
+
+### dfpt_qfile
+
+- **Type**: String
+- **Description**: Set the file containing the q points for DFPT, in the same format as the KPT file (Q_POINTS card: Gamma/Monkhorst-Pack mesh, or an explicit Direct/Cartesian list; symmetry reduction is not applied to file q lists). When set, it overrides dfpt_qmesh. Each q point must still be commensurate with the ground-state k mesh.
+- **Default**: ""
+
+### dfpt_compute_q0
+
+- **Type**: Boolean
+- **Description**: Whether to compute the macroscopic dielectric tensor (epsilon_inf) and the Born effective charges at q = 0 within the same DFPT run. Requires a q point at Gamma (the default dfpt_qmesh 1 1 1).
+- **Default**: false
+
+### dfpt_loto
+
+- **Type**: Boolean
+- **Description**: Whether to apply the Lyddane-Sachs-Teller non-analytic correction to the Gamma-point dynamical matrix, which splits the longitudinal and transverse optical modes. Requires dfpt_compute_q0 to be true, since the correction is built from epsilon_inf and the Born effective charges.
+- **Default**: false
+
+### dfpt_conv_thr
+
+- **Type**: Real
+- **Description**: Set the convergence threshold of the self-consistent DFPT cycle: the iteration stops when the relative residual of the first-order density ||drho_out - drho_in|| / ||drho_out|| drops below this value for every displacement.
+- **Default**: 1.0e-8
+
+### dfpt_max_iter
+
+- **Type**: Integer
+- **Description**: Set the maximum number of self-consistent DFPT iterations for each atomic displacement.
+- **Default**: 100
+
+### dfpt_mix_beta
+
+- **Type**: Real
+- **Description**: Set the plain-mixing coefficient of the first-order density in the self-consistent DFPT cycle. The response Jacobian has strongly negative eigenvalues on the smallest-G shells (Coulomb stiffness), so beta must stay below 2 / (1 + |lambda_min|); the default 0.4 keeps margin up to |lambda_min| ~ 3. A larger value accelerates convergence for weakly screened systems but may diverge.
+- **Default**: 0.4
 
 [back to top](#full-list-of-input-keywords)

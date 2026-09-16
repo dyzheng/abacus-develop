@@ -2,6 +2,7 @@
 
 #include "source_base/kernels/math_kernel_op.h"
 #include "source_base/para_gemm.h"
+#include "source_base/parallel_comm.h"
 #include "source_base/parallel_reduce.h"
 #include "source_base/timer.h"
 #include "source_base/tool_quit.h"
@@ -41,9 +42,9 @@ void Stochastic_Iter<T, Device>::init(K_Vectors* pkv_in,
                                       StoChe<Real, Device>& stoche,
                                       hamilt::HamiltSdftPW<T, Device>* p_hamilt_sto)
 {
-    p_che = stoche.p_che;
-    spolyv = stoche.spolyv;
-    spolyv_cpu = stoche.spolyv_cpu;
+    p_che = stoche.p_che.get();
+    spolyv = stoche.spolyv.get();
+    spolyv_cpu = stoche.spolyv_cpu.data();
     nchip = stowf.nchip;
     targetne = PARAM.inp.nelec;
     this->pkv = pkv_in;

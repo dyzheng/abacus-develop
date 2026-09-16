@@ -21,6 +21,16 @@ class Parallel_Grid
         const int &nczp, const int &nrxx, const int &nbz, const int &bz,
         const int nprocgroup);
 
+    /**
+     * @brief Sum a distributed real-space grid across k-point pools.
+     *
+     * Uses a direct local-slab reduction for equal-sized pools. For uneven
+     * pools, reconstructs a common global layout before the cross-pool sum.
+     *
+     * @param data Local real-space grid data ordered as [x][y][z].
+     */
+    void reduce_across_pools(double* data) const;
+
 #ifdef __MPI
     /// @brief  Broadcast data from root to all processors. The index order is [x][y][z].
     void bcast(const double* const data_global, double* data_local, const int& rank, const bool is_sdft) const;
@@ -31,14 +41,14 @@ class Parallel_Grid
     int get_nx() const { return ncx; }
     int get_ny() const { return ncy; }
     int get_nz() const { return ncz; }
+    int get_nrxx() const { return nrxx; }
 
     private:
 
     void z_distribution(void);
 
 #ifdef __MPI
-    void zpiece_to_all(double* zpiece, const int& iz, double* rho) const;
-    void zpiece_to_stogroup(double* zpiece, const int& iz, double* rho) const; //qainrui add for sto-dft 2021-7-21
+    void zpiece_distribute(double* zpiece, const int& iz, double* rho, const bool is_sdft) const;
 #endif
 
     std::vector<int> nproc_in_pool;

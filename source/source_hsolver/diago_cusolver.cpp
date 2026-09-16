@@ -2,7 +2,6 @@
 
 #include "source_base/module_external/blas_connector.h"
 #include "source_base/module_external/blacs_connector.h"
-#include "source_base/global_variable.h"
 #include "source_base/module_external/scalapack_connector.h"
 #include "source_base/tool_title.h"
 #include "source_base/timer.h"
@@ -33,8 +32,8 @@ DiagoCusolver<T>::~DiagoCusolver()
 // Diagonalization function
 template <typename T>
 void DiagoCusolver<T>::diag(
-    hamilt::MatrixBlock<T>& h_mat,
-    hamilt::MatrixBlock<T>& s_mat,
+    ModuleBase::MatrixBlock<T>& h_mat,
+    ModuleBase::MatrixBlock<T>& s_mat,
     psi::Psi<T>& psi,
     Real* eigenvalue_in)
 {

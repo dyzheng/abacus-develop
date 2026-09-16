@@ -9,6 +9,44 @@
 
 namespace ModuleIO
 {
+namespace
+{
+void parse_init_wfc(const std::vector<std::string>& values, Input_para& input)
+{
+    if (values.empty() || values.size() > 2)
+    {
+        ModuleBase::WARNING_QUIT("ReadInput", "init_wfc accepts one or two values");
+    }
+
+    const std::vector<std::string> valid_methods
+        = {"atomic", "atomic+random", "random", "nao", "nao+random", "file"};
+    if (std::find(valid_methods.begin(), valid_methods.end(), values[0]) == valid_methods.end())
+    {
+        ModuleBase::WARNING_QUIT("ReadInput", nofound_str(valid_methods, "init_wfc"));
+    }
+
+    input.init_wfc = values[0];
+    input.init_wfc_file_format.clear();
+    if (input.init_wfc != "file")
+    {
+        if (values.size() == 2)
+        {
+            ModuleBase::WARNING_QUIT("ReadInput", "only init_wfc file accepts a second value");
+        }
+        return;
+    }
+
+    if (values.size() == 2)
+    {
+        if (values[1] != "txt" && values[1] != "binary")
+        {
+            ModuleBase::WARNING_QUIT("ReadInput", "the init_wfc file format must be txt or binary");
+        }
+        input.init_wfc_file_format = values[1];
+    }
+}
+} // namespace
+
 // There are some examples:
 // Generallly:
 // {
@@ -71,6 +109,38 @@ void ReadInput::item_system()
         item.default_value = "0";
         // check of ntype is done in check_ntype
         read_sync_int(input.ntype);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("cell_replica");
+        item.annotation = "replicate the input structure along the three lattice vectors";
+        item.category = "System variables";
+        item.type = "Three Integers";
+        item.description = "Replicate the input STRU by Na, Nb, and Nc along its lattice vectors for "
+                           "distributed MDCell workflows. This parameter is only used for classical potentials "
+                           "or machine-learned interatomic potentials. The default is 1 1 1, which preserves "
+                           "the input structure.";
+        item.default_value = "1 1 1";
+        item.read_value = [](const Input_Item& item, Parameter& para) {
+            if (item.str_values.size() != 3)
+            {
+                ModuleBase::WARNING_QUIT("ReadInput", "cell_replica requires exactly three integers.");
+            }
+            for (int i = 0; i < 3; ++i)
+            {
+                para.input.cell_replica[static_cast<std::size_t>(i)] = std::stoi(item.str_values[static_cast<std::size_t>(i)]);
+            }
+        };
+        item.check_value = [](const Input_Item&, const Parameter& para) {
+            for (int i = 0; i < 3; ++i)
+            {
+                if (para.input.cell_replica[static_cast<std::size_t>(i)] <= 0)
+                {
+                    ModuleBase::WARNING_QUIT("ReadInput", "cell_replica values must all be positive.");
+                }
+            }
+        };
+        sync_intvec(input.cell_replica, 3, 1);
         this->add_item(item);
     }
     {
@@ -137,8 +207,32 @@ void ReadInput::item_system()
         this->add_item(item);
     }
     {
+        Input_Item item("socket_driver");
+        item.annotation = "run as a socket client for external drivers using the i-PI protocol";
+        item.category = "System variables";
+        item.type = "Boolean";
+        item.description = R"(If set to True, ABACUS keeps the calculation type as scf and receives atomic positions from an external driver through the i-PI socket protocol.
+
+[NOTE] Use calculation = scf with socket_driver = True. ABACUS connects to the external i-PI server selected by ABACUS_SOCKET_ADDRESS. If ABACUS_SOCKET_ADDRESS is unset, ABACUS uses localhost:31415. The value can use one of two forms:
+* host:port, for example localhost:31415 or 127.0.0.1:31415, opens a TCP connection to that host and port. Use this when the i-PI server listens on a TCP port.
+* path:UNIX, for example /tmp/ipi_abacus_si:UNIX, opens a Unix-domain socket at the given filesystem path. The :UNIX suffix tells ABACUS that the preceding value is a local socket path rather than a TCP host name. This form only works on the same machine.
+When using the ASE AbacusSocketIO interface, this environment variable is set automatically from the port or unixsocket calculator argument.)";
+        item.description += R"(
+
+Socket mode always computes energy. Force and stress extraction follows cal_force and cal_stress independently; disabled properties are sent as protocol padding and marked absent in the ABACUS i-PI extras metadata, not reported as physical zero values. This metadata extension is required for safe optional-property handling: a legacy response with empty extras is accepted only for energy-only use, while a generic client that ignores extras cannot distinguish padding from a computed zero. A non-converged SCF step is returned with scf_converged=false metadata so an external driver can choose its policy.)";
+        item.default_value = "False";
+        read_sync_bool(input.socket_driver);
+        item.check_value = [](const Input_Item& item, const Parameter& para) {
+            if (para.input.socket_driver && para.input.calculation != "scf")
+            {
+                ModuleBase::WARNING_QUIT("ReadInput", "socket_driver is only supported with calculation = scf.");
+            }
+        };
+        this->add_item(item);
+    }
+    {
         Input_Item item("esolver_type");
-        item.annotation = "the energy solver: ksdft, sdft, ofdft, tdofdft, tddft, lj, dp, ks-lr, lr";
+        item.annotation = "the energy solver: ksdft, sdft, ofdft, tdofdft, tddft, lj, dp, ks-lr, lr, dfpt";
         item.category = "System variables";
         item.type = "String";
         item.description = R"(Choose the energy solver.
@@ -151,11 +245,12 @@ void ReadInput::item_system()
 * dp: DeeP potential
 * nep: Neuroevolution Potential
 * ks-lr: Kohn-Sham density functional theory + LR-TDDFT (Under Development Feature)
-* lr: LR-TDDFT with given KS orbitals (Under Development Feature))";
+* lr: LR-TDDFT with given KS orbitals (Under Development Feature)
+* dfpt: density functional perturbation theory (Under Development Feature))";
         item.default_value = "ksdft";
         read_sync_string(input.esolver_type);
         item.check_value = [](const Input_Item& item, const Parameter& para) {
-            const std::vector<std::string> esolver_types = { "ksdft", "sdft", "ofdft", "tdofdft", "tddft", "lj", "dp", "nep", "lr", "ks-lr" };
+            const std::vector<std::string> esolver_types = { "ksdft", "sdft", "ofdft", "tdofdft", "tddft", "lj", "dp", "nep", "lr", "ks-lr", "dfpt" };
             if (std::find(esolver_types.begin(), esolver_types.end(), para.input.esolver_type) == esolver_types.end())
             {
                 const std::string warningstr = nofound_str(esolver_types, "esolver_type");
@@ -269,7 +364,8 @@ void ReadInput::item_system()
         item.annotation = "if calculate the force at the end of the electronic iteration";
         item.category = "System variables";
         item.type = "Boolean";
-        item.description = "If set to True, calculate the force at the end of the electronic iteration.";
+        item.description = R"(If set to True, calculate the force at the end of the electronic iteration.
+In socket_driver mode, this flag controls whether the returned frame advertises forces; it is not forced on by the socket protocol.)";
         item.default_value = "False";
         item.reset_value = [](const Input_Item& item, Parameter& para) {
             std::vector<std::string> use_force = {"cell-relax", "relax", "md"};
@@ -300,9 +396,12 @@ void ReadInput::item_system()
                           "will be distributed among";
         item.category = "System variables";
         item.type = "Integer";
-        item.description = "Divide all processors into kpar groups, and k points will be distributed among each group. "
-                          "The value taken should be less than or equal to the number of k points as well as the number of MPI processes.";
+        item.description = R"(Controls k-point parallelism. The value must be positive and should not exceed either the number of k-points or the number of MPI processes.
+* For PW calculations, divide all MPI processes into persistent k-point pools. Each pool stores and processes a subset of the k-points.
+* For LCAO calculations with lapack, genelpa, elpa, or scalapack_gvx, divide the diagonalization work into temporary k-point pools. After diagonalization, the eigenvalues and distributed wavefunctions are restored for all k-points before occupations, density matrices, and output are evaluated.
+* Multi-process LCAO cusolver uses its own active-GPU distribution and does not use this value to define its k-point layout. Other LCAO eigensolvers do not use the temporary k-point-pool implementation.)";
         item.default_value = "1";
+        item.unit = "";
         read_sync_int(input.kpar);
         item.reset_value = [](const Input_Item& item, Parameter& para) {
 #ifdef __LCAO
@@ -326,25 +425,24 @@ void ReadInput::item_system()
             }
 #endif
         };
-        item.check_value = [](const Input_Item& item, const Parameter& para) {
-            if (para.input.basis_type == "lcao" && para.input.kpar > 1)
-            {
-                ModuleBase::WARNING("ReadInput", "kpar > 1 has not been supported for lcao calculation.");
-            }
-        };
         this->add_item(item);
         add_int_bcast(sys.kpar_lcao);
     }
     {
         Input_Item item("bndpar");
-        item.annotation = "devide all processors into bndpar groups and bands "
-                          "will be distributed among each group";
+        item.annotation = "divide each k-point pool into band-parallel groups";
         item.category = "System variables";
         item.type = "Integer";
-        item.description = "Divide all processors into bndpar groups for SDFT or the BPCG solver. bndpar must be "
-                           "positive, no greater than the number of MPI processes, and kpar * bndpar must divide "
-                           "the number of MPI processes exactly.";
+        item.description = R"(Controls band-group parallelism for PW SDFT and PW KSDFT calculations using the BPCG eigensolver.
+* Within each k-point pool, divide the MPI processes into bndpar band groups. Each group contains NPROC / (kpar * bndpar) processes when bndpar is greater than 1.
+* With BPCG, distribute contiguous ranges of global Kohn-Sham bands among the band groups. nbands does not need to be divisible by bndpar, but bndpar cannot exceed a positive nbands. Groups with lower indices receive one additional band when necessary.
+* In SDFT, distribute stochastic orbitals among the band groups. When the deterministic Kohn-Sham eigensolver is not BPCG, band group 0 calculates the deterministic orbitals and broadcasts them to the other groups.
+* bndpar must be positive and no greater than the number of MPI processes. When bndpar is greater than 1, kpar * bndpar must divide the number of MPI processes exactly.
+[NOTE] For PW calculations on GPU, if the input kpar * bndpar differs from the number of MPI processes, ABACUS automatically sets the effective kpar to NPROC / bndpar.)";
         item.default_value = "1";
+        item.unit = "";
+        item.set_availability("(basis_type==pw and esolver_type==sdft) or "
+                              "(basis_type==pw and esolver_type==ksdft and ks_solver==bpcg)");
         read_sync_int(input.bndpar);
         item.check_value = [](const Input_Item& item, const Parameter& para) {
             if (para.input.bndpar <= 0)
@@ -437,26 +535,39 @@ Theory: G. Makov and M. C. Payne, Phys. Rev. B 51, 4014 (1995).)";
     }
     {
         Input_Item item("init_wfc");
-        item.annotation = "start wave functions are from 'atomic', "
-                          "'atomic+random', 'random' or";
+        item.annotation = "atomic; atomic+random; random; nao; nao+random; file txt; file binary";
         item.category = "System variables";
-        item.type = "String";
-        item.description = R"(The type of the starting wave functions.
+        item.type = "Vector of string";
+        item.description = R"(The method used to initialize wavefunction coefficients. The available options and behavior depend on `basis_type`.
 
-Available options are:
-* atomic: from atomic pseudo wave functions. If they are not enough, other wave functions are initialized with random numbers.
-* atomic+random: add small random numbers on atomic pseudo-wavefunctions
-* file: from binary files wf*.dat, which are output by setting out_wfc_pw to 2.
-* random: random numbers
-* nao: from numerical atomic orbitals. If they are not enough, other wave functions are initialized with random numbers.
-* nao+random: add small random numbers on numerical atomic orbitals
+For `basis_type=pw`, the available options are:
+* `atomic`: Use atomic pseudo wavefunctions from `PP_PSWFC`. If no `PP_PSWFC` states are available, all bands are initialized randomly. If the number of atomic states is smaller than `nbands`, the remaining bands are initialized randomly.
+* `atomic+random`: If there are at least `nbands` atomic states, apply an approximately 5% multiplicative random perturbation to the atomic initialization. If there are fewer atomic states than `nbands`, use the atomic states and initialize the remaining bands randomly, as for `atomic`.
+* `random`: Initialize all bands with random coefficients.
+* `nao`: Use numerical atomic orbitals. If the number of NAO states is smaller than `nbands`, the remaining bands are initialized randomly.
+* `nao+random`: Apply an approximately 5% multiplicative random perturbation to the NAO initialization; any bands not covered by NAO states are first initialized randomly.
+* `file binary`: Read binary `wf*_pw.dat` files generated with `out_wfc_pw=2` from `read_file_dir`. The files must match the current k points, `nbands`, plane-wave layout, and lattice. The `txt` format is not supported for PW wavefunctions.
 
-[NOTE] Only the file option is useful for the lcao basis set, which is mostly used when calculation is set to get_wf and get_pchg.)";
+For `basis_type=lcao`, the file options are:
+* `file txt`: Read text `wf*_nao.txt` files generated with `out_wfc_lcao=1` from `read_file_dir`.
+* `file binary`: Read binary `wf*_nao.dat` files generated with `out_wfc_lcao=2` from `read_file_dir`.
+
+The selected format is required; ABACUS does not automatically detect or fall back to the other format. The files must use a compatible NAO basis, match the current k-point and spin setup, and contain enough bands. File initialization matches independent files without geometry-step indices. Files accumulated with `out_app_flag` or files under `WFC/` with a `g*` geometry-step index are not supported.
+
+For `basis_type=lcao_in_pw`, `init_wfc` is automatically set to `nao`.
+
+[NOTE] For `calculation=get_wf` or `calculation=get_pchg`, non-file initialization choices are automatically changed to the file option appropriate for the selected basis. An explicitly selected file format is preserved. If `basis_type=lcao_in_pw` is also used, the final value is `nao`.)";
         item.default_value = "atomic";
+        item.unit = "";
+        item.read_value = [](const Input_Item& item, Parameter& para) {
+            parse_init_wfc(item.str_values, para.input);
+        };
         item.reset_value = [](const Input_Item& item, Parameter& para) {
-            if (para.input.calculation == "get_pchg" || para.input.calculation == "get_wf")
+            if ((para.input.calculation == "get_pchg" || para.input.calculation == "get_wf")
+                && para.input.init_wfc != "file")
             {
                 para.input.init_wfc = "file";
+                para.input.init_wfc_file_format.clear();
             }
             if (para.input.basis_type == "lcao_in_pw")
             {
@@ -467,9 +578,41 @@ Available options are:
                                             "basis_type is lcao_in_pw"
                                          << std::endl;
                 }
+                para.input.init_wfc_file_format.clear();
+            }
+            else if (para.input.init_wfc == "file" && para.input.init_wfc_file_format.empty())
+            {
+                para.input.init_wfc_file_format = para.input.basis_type == "lcao" ? "txt" : "binary";
             }
         };
-        read_sync_string(input.init_wfc);
+        item.get_final_value = [](Input_Item& item, const Parameter& para) {
+            item.final_value << para.input.init_wfc;
+            if (para.input.init_wfc == "file")
+            {
+                item.final_value << " " << para.input.init_wfc_file_format;
+            }
+        };
+        add_string_bcast(input.init_wfc);
+        add_string_bcast(input.init_wfc_file_format);
+        item.check_value = [](const Input_Item& item, const Parameter& para) {
+            const std::vector<std::string> valid_methods
+                = {"atomic", "atomic+random", "random", "nao", "nao+random", "file"};
+            if (std::find(valid_methods.begin(), valid_methods.end(), para.input.init_wfc) == valid_methods.end())
+            {
+                ModuleBase::WARNING_QUIT("ReadInput", nofound_str(valid_methods, "init_wfc"));
+            }
+            if (para.input.init_wfc == "file"
+                && para.input.init_wfc_file_format != "txt"
+                && para.input.init_wfc_file_format != "binary")
+            {
+                ModuleBase::WARNING_QUIT("ReadInput", "the init_wfc file format must be txt or binary");
+            }
+            if (para.input.init_wfc == "file" && para.input.basis_type == "pw"
+                && para.input.init_wfc_file_format == "txt")
+            {
+                ModuleBase::WARNING_QUIT("ReadInput", "init_wfc file txt is not supported for basis_type=pw");
+            }
+        };
         this->add_item(item);
     }
     {
@@ -566,7 +709,8 @@ Available options are:
         item.annotation = "calculate the stress or not";
         item.category = "System variables";
         item.type = "Boolean";
-        item.description = "If set to True, calculate the stress at the end of the electronic iteration.";
+        item.description = R"(If set to True, calculate the stress at the end of the electronic iteration.
+In socket_driver mode, this flag independently controls whether the returned frame advertises stress/virial.)";
         item.default_value = "False";
         item.reset_value = [](const Input_Item& item, Parameter& para) {
             if (para.input.calculation == "md")
@@ -898,7 +1042,12 @@ Available options are:
         item.annotation = "atomic; first-order; second-order; dm:coefficients of SIA";
         item.category = "System variables";
         item.type = "String";
-        item.description = "Charge extrapolation method for MD and relaxation calculations.";
+        item.description = R"(Charge extrapolation method for MD, relaxation, and socket-driven calculations.
+
+When set to default, ABACUS chooses second-order for md, first-order for
+relax/cell-relax and socket_driver calculations, and atomic for other calculations. Socket-driven
+molecular dynamics can explicitly set second-order if the external driver
+updates structures smoothly enough for second-order extrapolation.)";
         item.default_value = "default";
         read_sync_string(input.chg_extrap);
         item.reset_value = [](const Input_Item& item, Parameter& para) {
@@ -907,7 +1056,7 @@ Available options are:
                 para.input.chg_extrap = "second-order";
             }
             else if (para.input.chg_extrap == "default"
-                     && (para.input.calculation == "relax" || para.input.calculation == "cell-relax"))
+                     && (para.input.calculation == "relax" || para.input.calculation == "cell-relax" || para.input.socket_driver))
             {
                 para.input.chg_extrap = "first-order";
             }
@@ -1137,7 +1286,7 @@ Available options are:
         item.default_value = "0";
         read_sync_int(input.ndz);
         item.reset_value = [](const Input_Item& item, Parameter& para) {
-            if (para.input.ndy > para.input.ny)
+            if (para.input.ndz > para.input.nz)
             {
                 para.sys.double_grid = true;
             }
@@ -1178,6 +1327,7 @@ Available options are:
 * 1: by GenELPA
 * 2: by ScaLAPACK)";
         item.default_value = "0";
+        item.set_availability("basis_type==pw and ks_solver==dav_subspace");
         read_sync_int(input.diag_subspace);
         this->add_item(item);
     }

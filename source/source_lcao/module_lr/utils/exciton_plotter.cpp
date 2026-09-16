@@ -636,11 +636,11 @@ std::vector<std::vector<std::complex<double>>> ExcitonPlotter<T>::build_conditio
             for (int iv = 0; iv < nvirt; ++iv)
             {
                 const Complex fixed_wfc = this->orb_eval_.template eval_wfc_bloch<T>(r_fix,
-                                                                            ik,
-                                                                            nocc + iv,
-                                                                            this->psi_ks_vec[0],
-                                                                            this->ucell,
-                                                                            this->kv.kvec_d[ik]);
+                                                                                      ik,
+                                                                                      nocc + iv,
+                                                                                      this->psi_ks_vec[0],
+                                                                                      this->ucell,
+                                                                                      this->kv.kvec_d[ik]);
                 for (int io = 0; io < nocc; ++io)
                 {
                     mixing[ik][io] += this->X[offset_b + x_start + iv + io * nvirt] * fixed_wfc;

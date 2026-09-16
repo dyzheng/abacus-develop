@@ -248,22 +248,34 @@ In molecular dynamics calculations, the output frequency is controlled by out_fr
         item.annotation = "output wave functions";
         item.category = "Output information";
         item.type = "Integer";
-        item.description = R"(Whether to output the electronic wavefunction coefficients into files and store them in the folder OUT.${suffix}. The files are named as wf{k}{k-point index}{s}{spin index}{g}{geometry index}{e}{electronic iteration index}{_pw} + {".txt"/".dat"}. Here, the s index refers to spin but the label will not show up for non-spin-polarized calculations, where s1 means spin up channel while s2 means spin down channel, and s4 refers to spinor wave functions that contains both spin channels with spin-orbital coupling or noncollinear calculations enabled. For scf or nscf calculations, g index will not appear, but the g index appears for geometry relaxation and molecular dynamics, where one can use the out_freq_ion command to control. To print out the electroinc wave functions every few SCF iterations, use the out_freq_elec command and the e index will appear in the file name.
-* 0: no output
-* 1: (txt format)
- * non-gamma-only with nspin=1: wfk1_pw.txt, wfk2_pw.txt, ...;
- * non-gamma-only with nspin=2: wfk1s1_pw.txt, wfk1s2_pw.txt, wfk2s1_pw.txt, wfk2s2_pw.txt, ...;
- * non-gamma-only with nspin=4: wfk1s4_pw.txt, wfk2s4_pw.txt, ...;
-* 2: (binary format)
- * non-gamma-only with nspin=1: wfk1_pw.dat, wfk2_pw.dat, ...;
- * non-gamma-only with nspin=2: wfk1s1_pw.dat, wfk1s2_pw.dat, wfk2s1_pw.dat, wfk2s2_pw.dat, ...;
- * non-gamma-only with nspin=4: wfk1s4_pw.dat, wfk2s4_pw.dat, ...;
+        item.description = R"(Controls whether plane-wave Kohn-Sham wavefunction coefficients are written to `OUT.${suffix}/`.
 
-[NOTE] In the 3.10-LTS version, the file names are WAVEFUNC1.dat, WAVEFUNC2.dat, etc.)";
+Available values are:
+* `0`: Do not write wavefunction coefficients.
+* `1`: Write text files with the `.txt` suffix.
+* `2`: Write binary files with the `.dat` suffix.
+
+The file-name pattern is `wfk{k}[s{spin}][g{geometry step}][e{electronic iteration}]_pw.txt` for `out_wfc_pw=1` and `wfk{k}[s{spin}][g{geometry step}][e{electronic iteration}]_pw.dat` for `out_wfc_pw=2`. All PW output files include a `k*` label, including Gamma-only calculations. Without geometry-step or electronic-iteration indices, representative names are `wfk1_pw.txt` or `wfk1_pw.dat` for `nspin=1`, `wfk1s1_pw.txt` and `wfk1s2_pw.txt` or their `.dat` equivalents for `nspin=2`, and `wfk1s4_pw.txt` or `wfk1s4_pw.dat` for `nspin=4`.
+
+With `out_freq_ion=0`, files are written only when the electronic calculation converges or reaches `scf_nmax`; no `g*` or `e*` index is added. During structural relaxation or molecular dynamics, later ionic steps overwrite the same unindexed files. With `out_freq_ion` > 0, output is restricted to the ionic steps selected by `out_freq_ion` and is written when the electronic iteration is a multiple of `out_freq_elec`, when the calculation converges, or when it reaches `scf_nmax`. Both `g*` and `e*` indices are then added, including for a static `calculation=scf` or `calculation=nscf` run.
+
+With `init_wfc file binary`, ABACUS reads only unindexed binary `wf*_pw.dat` files from `read_file_dir`. Such directly reusable files are normally generated with `out_wfc_pw=2` and `out_freq_ion=0`. Text `wf*_pw.txt` files and files containing `g*` or `e*` indices are not matched automatically.
+
+[NOTE] In the 3.10-LTS version, the binary files are named `WAVEFUNC1.dat`, `WAVEFUNC2.dat`, etc.)";
         item.default_value = "0";
         item.unit = "";
-        item.set_availability("basis_type==pw or (basis_type==lcao and calculation==get_wf)");
+        item.set_availability("basis_type==pw and esolver_type==ksdft");
         read_sync_int(input.out_wfc_pw);
+        item.check_value = [](const Input_Item& item, const Parameter& para) {
+            if (para.input.out_wfc_pw < 0 || para.input.out_wfc_pw > 2)
+            {
+                ModuleBase::WARNING_QUIT("ReadInput", "out_wfc_pw should be 0, 1, or 2");
+            }
+            if (para.input.basis_type != "pw" && para.input.out_wfc_pw != 0)
+            {
+                ModuleBase::WARNING_QUIT("ReadInput", "out_wfc_pw is only available for basis_type = pw");
+            }
+        };
         this->add_item(item);
     }
     {
@@ -1481,7 +1493,7 @@ If EXX(exact exchange) is calculated (i.e. dft_fuctional==hse/hf/pbe0/scan0 or r
         item.category = "Output information";
         item.type = "String";
         item.description = "The directory to save files for LibRPA.";
-        item.default_value = "\"./OUT.librpa/\"";
+        item.default_value = "\"OUT.librpa\"";
         item.unit = "";
         item.set_availability("basis_type==lcao");
         read_sync_string(input.rpa_outdir);
@@ -1495,12 +1507,31 @@ If EXX(exact exchange) is calculated (i.e. dft_fuctional==hse/hf/pbe0/scan0 or r
         item.annotation = "specify the bands to be calculated for the partial (band-decomposed) charge densities";
         item.category = "Output information";
         item.type = "String";
-        item.description = R"(Specifies the electronic states to calculate the charge densities with state index for, using a space-separated string of 0s and 1s. Each digit in the string corresponds to a state, starting from the first state. A 1 indicates that the charge density should be calculated for that state, while a 0 means the state will be ignored. The parameter allows a compact and flexible notation (similar to ocp_set), for example the syntax 1 4*0 5*1 0 is used to denote the selection of states: 1 means calculate for the first state, 4*0 skips the next four states, 5*1 means calculate for the following five states, and the final 0 skips the next state. It's essential that the total count of states does not exceed the total number of states (nbands); otherwise, it results in an error, and the process exits. The input string must contain only numbers and the asterisk (*) for repetition, ensuring correct format and intention of state selection. The outputs comprise multiple .cube files following the naming convention pchgi[state]s[spin]k[kpoint].cube.)";
+        item.description = R"(Selects electronic states for partial (band-decomposed) charge-density output using a space-separated string of `0`s and `1`s, where `1` selects a state and `0` skips it. Repetition follows the `ocp_set` syntax, for example `1 4*0 5*1 0`; the expanded list must not exceed `nbands`. Each output represents a complete one-particle state. The spin degeneracy is 2 for `nspin=1` and 1 for `nspin=2` or `nspin=4`. For `nspin=1`, `s1` contains the charge density. For `nspin=2`, `s1` and `s2` contain the spin-up and spin-down charge densities, respectively. For `nspin=4`, `s1`, `s2`, `s3`, and `s4` respectively contain $\rho_0$, $m_x$, $m_y$, and $m_z$. With `if_separate_k=true`, files are named `pchgi[state]s[component]k[kpoint].cube`; otherwise, the weighted k-point sum is named `pchgi[state]s[component].cube`.
+
+For PW calculations with ultrasoft pseudopotentials (USPP), the single-state valence density includes the augmentation contribution:
+
+$$
+\rho_{n\boldsymbol{k}}(\boldsymbol{r})=\left\vert\tilde{\psi}_{n\boldsymbol{k}}(\boldsymbol{r})\right\vert^2+\sum_{Iij}Q_{ij}^{I}(\boldsymbol{r})\Braket{\tilde{\psi}_{n\boldsymbol{k}} | \beta_i^I}\Braket{\beta_j^I | \tilde{\psi}_{n\boldsymbol{k}}}.
+$$
+
+Here $\tilde{\psi}$ is the pseudo-wavefunction, $\beta_i^I$ are the atomic projectors, and $Q_{ij}^I$ are the augmentation functions. Each separate-k output has a cell integral equal to the spin degeneracy. The merged output uses k-point weights including spin degeneracy, and its integral equals their sum for the corresponding spin channel.
+
+[NOTE] Enabling symmetry may produce unintended partial charge densities because of reduced k-point weights and real-space symmetry operations. If the desired symmetry treatment is uncertain, set `symmetry = -1`. Use the same symmetry setting as in the SCF calculation.)";
         item.default_value = "none";
         item.unit = "";
         item.set_availability("basis_type==pw or (basis_type==lcao and calculation==get_pchg)");
         item.read_value
             = [](const Input_Item& item, Parameter& para) { parse_expression(item.str_values, para.input.out_pchg); };
+        item.check_value = [](const Input_Item& item, const Parameter& para) {
+            if (para.input.basis_type == "pw" && para.input.calculation == "nscf" && para.input.mem_saver == 1
+                && !para.input.out_pchg.empty())
+            {
+                ModuleBase::WARNING_QUIT("ReadInput",
+                                        "out_pchg is incompatible with mem_saver=1 in PW NSCF calculations: "
+                                        "wavefunctions are overwritten between k points. Set mem_saver=0 for this output.");
+            }
+        };
         item.get_final_value = [](Input_Item& item, const Parameter& para) {
             if (item.is_read())
             {
@@ -1515,12 +1546,21 @@ If EXX(exact exchange) is calculated (i.e. dft_fuctional==hse/hf/pbe0/scan0 or r
         item.annotation = "specify the bands to be calculated for the norm of wavefunctions";
         item.category = "Output information";
         item.type = "String";
-        item.description = "Specifies the electronic states to calculate the real-space wave function modulus (norm, or known as the envelope function) with state index. The syntax and state selection rules are identical to out_pchg, but the output is the norm of the wave function. The outputs comprise multiple .cube files following the naming convention wfi[state]s[spin]k[kpoint].cube.";
+        item.description = R"(Selects electronic states for real-space wavefunction-modulus output using the selection syntax of `out_pchg`. Each output contains single-particle wavefunction amplitudes. In PW calculations, norm-conserving pseudo-wavefunctions satisfy $\Braket{\psi_{n\boldsymbol{k}} | \psi_{n\boldsymbol{k}}}=1$, while USPP pseudo-wavefunctions satisfy $\Braket{\tilde{\psi}_{n\boldsymbol{k}} | \hat{S} | \tilde{\psi}_{n\boldsymbol{k}}}=1$, where $\hat{S}=1+\sum_{Iij}q_{ij}^I\Ket{\beta_i^I}\Bra{\beta_j^I}$ is the USPP overlap operator, $q_{ij}^I=\int Q_{ij}^I(\boldsymbol{r})\,\mathrm{d}\boldsymbol{r}$, and $\beta_i^I$ are the atomic projectors. For `nspin=1`, `s1` contains the wavefunction modulus. For `nspin=2`, `s1` and `s2` contain the spin-up and spin-down wavefunction moduli, respectively. For `nspin=4`, `s1` contains the total spinor modulus. Files are named `wfi[state]s[spin]k[kpoint].cube`.)";
         item.default_value = "none";
         item.unit = "";
         item.set_availability("basis_type==pw or (basis_type==lcao and calculation==get_wf)");
         item.read_value = [](const Input_Item& item, Parameter& para) {
             parse_expression(item.str_values, para.input.out_wfc_norm);
+        };
+        item.check_value = [](const Input_Item& item, const Parameter& para) {
+            if (para.input.basis_type == "pw" && para.input.calculation == "nscf" && para.input.mem_saver == 1
+                && !para.input.out_wfc_norm.empty())
+            {
+                ModuleBase::WARNING_QUIT("ReadInput",
+                                        "out_wfc_norm is incompatible with mem_saver=1 in PW NSCF calculations: "
+                                        "wavefunctions are overwritten between k points. Set mem_saver=0 for this output.");
+            }
         };
         item.get_final_value = [](Input_Item& item, const Parameter& para) {
             if (item.is_read())
@@ -1536,12 +1576,21 @@ If EXX(exact exchange) is calculated (i.e. dft_fuctional==hse/hf/pbe0/scan0 or r
         item.annotation = "specify the bands to be calculated for the real and imaginary parts of wavefunctions";
         item.category = "Output information";
         item.type = "String";
-        item.description = "Specifies the electronic states to calculate the real and imaginary parts of the wave function with state index. The syntax and state selection rules are identical to out_pchg, but the output contains both the real and imaginary components of the wave function. The outputs comprise multiple .cube files following the naming convention wfi[state]s[spin]k[kpoint][re/im].cube.";
+        item.description = R"(Selects electronic states for real-space wavefunction real- and imaginary-part output using the selection syntax of `out_pchg`. Each output contains single-particle wavefunction amplitudes. In PW calculations, norm-conserving pseudo-wavefunctions satisfy $\Braket{\psi_{n\boldsymbol{k}} | \psi_{n\boldsymbol{k}}}=1$, while USPP pseudo-wavefunctions satisfy $\Braket{\tilde{\psi}_{n\boldsymbol{k}} | \hat{S} | \tilde{\psi}_{n\boldsymbol{k}}}=1$, where $\hat{S}=1+\sum_{Iij}q_{ij}^I\Ket{\beta_i^I}\Bra{\beta_j^I}$ is the USPP overlap operator, $q_{ij}^I=\int Q_{ij}^I(\boldsymbol{r})\,\mathrm{d}\boldsymbol{r}$, and $\beta_i^I$ are the atomic projectors. For `nspin=1`, `s1` contains the wavefunction. For `nspin=2`, `s1` and `s2` contain the spin-up and spin-down wavefunctions, respectively. For `nspin=4`, `s1` and `s2` contain the upper and lower spinor components, respectively. Files are named `wfi[state]s[spin]k[kpoint][re/im].cube`.)";
         item.default_value = "none";
         item.unit = "";
         item.set_availability("basis_type==pw or (basis_type==lcao and calculation==get_wf)");
         item.read_value = [](const Input_Item& item, Parameter& para) {
             parse_expression(item.str_values, para.input.out_wfc_re_im);
+        };
+        item.check_value = [](const Input_Item& item, const Parameter& para) {
+            if (para.input.basis_type == "pw" && para.input.calculation == "nscf" && para.input.mem_saver == 1
+                && !para.input.out_wfc_re_im.empty())
+            {
+                ModuleBase::WARNING_QUIT("ReadInput",
+                                        "out_wfc_re_im is incompatible with mem_saver=1 in PW NSCF calculations: "
+                                        "wavefunctions are overwritten between k points. Set mem_saver=0 for this output.");
+            }
         };
         item.get_final_value = [](Input_Item& item, const Parameter& para) {
             if (item.is_read())
@@ -1558,7 +1607,8 @@ If EXX(exact exchange) is calculated (i.e. dft_fuctional==hse/hf/pbe0/scan0 or r
                           "or merge them";
         item.category = "Output information";
         item.type = "Boolean";
-        item.description = "Specifies whether to write the partial charge densities for all k-points to individual files or merge them. Warning: Enabling symmetry may produce unwanted results due to reduced k-point weights and symmetry operations in real space. Therefore when calculating partial charge densities, if you are not sure what you want exactly, it is strongly recommended to set symmetry = -1. It is noteworthy that your symmetry setting should remain the same as that in the SCF procedure.";
+        item.description
+            = "Specifies whether to write partial charge densities for individual k-points or merge them.";
         item.default_value = "false";
         item.unit = "";
         item.set_availability("(basis_type==pw and out_pchg!=none) or (basis_type==lcao and calculation==get_pchg and gamma_only==0)");

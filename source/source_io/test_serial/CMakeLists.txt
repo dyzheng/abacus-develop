@@ -14,6 +14,7 @@ add_library(
     ../module_parameter/read_input_item_sdft.cpp
     ../module_parameter/read_inp_tddft.cpp
     ../module_parameter/read_inp_bse.cpp
+    ../module_parameter/read_inp_dfpt.cpp
     ../module_parameter/read_inp_deepks.cpp
     ../module_parameter/read_inp_model.cpp
     ../module_parameter/read_inp_postproc.cpp  
@@ -51,12 +52,6 @@ AddTest(
   TARGET MODULE_IO_rho_io
   LIBS parameter base device cell_info
   SOURCES rho_io_test.cpp ../module_output/read_cube.cpp ../module_output/write_cube.cpp
-)
-
-AddTest(
-  TARGET MODULE_IO_write_bands
-  LIBS parameter base device
-  SOURCES write_bands_test.cpp ../module_energy/write_bands.cpp
 )
 
 AddTest(

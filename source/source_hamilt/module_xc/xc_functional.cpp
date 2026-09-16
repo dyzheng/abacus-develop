@@ -1,5 +1,4 @@
 #include "xc_functional.h"
-#include "source_io/module_parameter/parameter.h"
 #include "source_base/global_function.h"
 #include "source_base/tool_title.h"
 #include "source_base/constants.h"
@@ -20,6 +19,7 @@ bool XC_Functional::need_laplacian = false;
 bool XC_Functional::use_libxc = true;
 double XC_Functional::hybrid_alpha = 0.25;
 double XC_Functional::hse_omega = 0.0;
+XCFunctionalParameters XC_Functional::runtime_parameters;
 std::map<int, double> XC_Functional::scaling_factor_xc = { {1, 1.0} }; // added by jghan, 2024-10-10
 
 void XC_Functional::set_hybrid_alpha(const double alpha_in)
@@ -30,6 +30,11 @@ void XC_Functional::set_hybrid_alpha(const double alpha_in)
 void XC_Functional::set_hse_omega(const double omega_in)
 {
     hse_omega = omega_in;
+}
+
+void XC_Functional::set_runtime_parameters(const XCFunctionalParameters& parameters)
+{
+    runtime_parameters = parameters;
 }
 
 void XC_Functional::set_xc_first_loop(const UnitCell& ucell)
@@ -70,7 +75,7 @@ void XC_Functional::set_xc_type(const std::string xc_func_in)
 {
     ModuleBase::TITLE("XC_Functional", "set_xc_type");
     //Note : due to the separation of gcx_spin and gcc_spin,
-    //when you are adding new GGA functionals,
+    //when you are adding GGA functionals,
     //please put exchange first, followed by correlation,
     //such as for PBE we have:
     //        func_id.push_back(XC_GGA_X_PBE);
@@ -347,7 +352,7 @@ void XC_Functional::set_xc_type(const std::string xc_func_in)
 
     // if((func_type == 4 || func_type == 5) && basis_type == "pw")
     // {
-    //     ModuleBase::WARNING_QUIT("set_xc_type","hybrid functional not realized for planewave yet");
+    //     ModuleBase::WARNING_QUIT("set_xc_type","hybrid functional not realized for plane-wave yet");
     // }
 
     // Hybrid functional is now supported for both PW and LCAO basis
