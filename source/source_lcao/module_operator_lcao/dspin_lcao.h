@@ -103,6 +103,13 @@ class DeltaSpin<OperatorLCAO<TK, TR>> : public OperatorLCAO<TK, TR>
                     const int nbands_global,
                     std::vector<std::vector<std::complex<double>>>& PI_sub) const;
 
+    /// @brief Get the pre-computed real-space projector HContainer for atom iat
+    /// pre_hr[iat](mu,nu;R) = sum_lm <phi_mu(0)|alpha_lm(I)><alpha_lm(I)|phi_nu(R)>
+    const hamilt::HContainer<TR>* get_pre_hr(int iat) const { return pre_hr[iat]; }
+
+    /// @brief Get the constraint atom list (true for constrained atoms)
+    const std::vector<bool>& get_constraint_atom_list() const { return constraint_atom_list; }
+
   private:
     const UnitCell* ucell = nullptr;
 

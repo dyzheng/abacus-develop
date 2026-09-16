@@ -107,6 +107,15 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_loop(int out
 
     double inner_loop_duration = 0.0;
 
+    // Reset the LCAO subspace acceleration state: the cache is built from the
+    // Hamiltonian and wavefunctions of one SCF iteration and is stale after the
+    // charge density changes, so it must be rebuilt fresh each iteration.
+    this->acceleration_active_ = false;
+    this->subspace_just_activated_ = false;
+#ifdef __LCAO
+    this->free_lcao_subspace_cache();
+#endif
+
     print_header(*this, ofs_running);
 
     // =============================================================
@@ -250,6 +259,24 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_loop(int out
         }
 
         // =============================================================
+        // LCAO SUBSPACE ACCELERATION ACTIVATION
+        // =============================================================
+        // Once RMS < sc_acceleration_rms_thr, build the subspace cache at the
+        // current lambda (one full diagonalization) and use the accelerated
+        // solver for the remaining inner steps of this SCF iteration.
+        {
+            const bool accel_enabled = (this->state_.nspin_ == 2)
+                                       && (this->sc_acceleration_mode_ != "off")
+                                       && (this->sc_acceleration_rms_thr_ > 0.0)
+                                       && (rms_error < this->sc_acceleration_rms_thr_);
+            if (accel_enabled && !this->acceleration_active_)
+            {
+                this->acceleration_active_ = true;
+                this->cal_mw_from_lambda(-2, delta_lambda.data());
+            }
+        }
+
+        // =============================================================
         // CHECK CONVERGENCE
         // =============================================================
 #ifdef __MPI
@@ -310,10 +337,21 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_loop(int out
         // For i_step >= 2, compute conjugate direction
         if (i_step >= 2)
         {
-            // Polak-Ribiere beta = ||gradient_new||^2 / ||gradient_old||^2
-            beta = mean_error / mean_error_old;
-            // search = delta_spin + beta * search_old (conjugate direction)
-            add_scalar_multiply_2d(search, search_old, beta, search);
+            if (this->subspace_just_activated_)
+            {
+                // Subspace activation changes the Mi evaluation from full-space to
+                // subspace; reset the BFGS history so the two are not mixed.
+                this->subspace_just_activated_ = false;
+                mean_error_old = mean_error;
+                search = delta_spin;
+            }
+            else
+            {
+                // Polak-Ribiere beta = ||gradient_new||^2 / ||gradient_old||^2
+                beta = mean_error / mean_error_old;
+                // search = delta_spin + beta * search_old (conjugate direction)
+                add_scalar_multiply_2d(search, search_old, beta, search);
+            }
         }
 
         // Cap step size to prevent overshooting

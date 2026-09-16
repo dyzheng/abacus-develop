@@ -13,11 +13,31 @@
 #include "source_pw/module_pwdft/onsite_proj.h"
 #include "spin_constrain.h"
 
+#include <algorithm>
+#include <cstring>
+
 #ifdef __LCAO
 #include "source_estate/elecstate_lcao.h"
 #include "source_estate/module_dm/cal_dm_psi.h"
 #include "source_lcao/module_operator_lcao/dspin_lcao.h"
 #endif
+
+namespace spinconstrain
+{
+// Defined in lcao_subspace.cpp (LCAO subspace acceleration helpers)
+void gather_sub_matrix_to_all(const std::complex<double>* local_data,
+                              const Parallel_Orbitals* ParaV,
+                              std::complex<double>* full_data,
+                              int nbands);
+void scatter_sub_matrix_to_local(const std::complex<double>* full_data,
+                                 const Parallel_Orbitals* ParaV,
+                                 std::complex<double>* local_data,
+                                 int nbands);
+void extract_diagonal_from_local_block(const std::complex<double>* local_data,
+                                       const Parallel_Orbitals* ParaV,
+                                       double* diag,
+                                       int nbands);
+} // namespace spinconstrain
 
 /**
  * @file cal_mw_from_lambda.cpp
@@ -116,25 +136,245 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mw_from_lambda(
                                                              PARAM.inp.device == "gpu",
                                                              GlobalV::NPROC,
                                                              GlobalV::MY_RANK);
-        if (this->state_.nspin_ == 2)
+        // LCAO subspace acceleration (opt-in via sc_strategy/sc_acceleration_mode).
+        // Only nspin=2 (npol=1) is accelerated; nspin=4 always uses the full solver.
+        const bool accel_enabled = (this->state_.nspin_ == 2)
+                                   && (this->sc_acceleration_mode_ != "off")
+                                   && (this->sc_acceleration_rms_thr_ > 0.0)
+                                   && this->acceleration_active_;
+
+        if (i_step == -2 && accel_enabled)
         {
-            dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double>>*>(this->p_operator)
-                ->update_lambda();
+            // BRANCH 1: build the subspace cache at the current lambda (full diag)
+            if (this->state_.nspin_ == 2)
+            {
+                dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double>>*>(this->p_operator)
+                    ->update_lambda();
+            }
+            else if (this->state_.nspin_ == 4)
+            {
+                dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, std::complex<double>>>*>(
+                    this->p_operator)
+                    ->update_lambda();
+            }
+            const int nk = psi_t->get_nk();
+            const int nbands = psi_t->get_nbands();
+            hsolver_t.solve(hamilt_t, psi_t[0], this->pelec, *this->dm_, *this->pelec->charge, this->state_.nspin_, true);
+            elecstate::calculate_weights(this->pelec->ekb,
+                                         this->pelec->wg,
+                                         this->pelec->klist,
+                                         this->pelec->eferm,
+                                         this->pelec->f_en,
+                                         this->pelec->nelec_spin,
+                                         nbands,
+                                         this->pelec->skip_weights);
+            elecstate::calEBand(this->pelec->ekb, this->pelec->wg, this->pelec->f_en);
+
+            this->free_lcao_subspace_cache();
+            const int nlocal = this->ParaV->get_global_row_size();
+            const int nn = nbands * nbands;
+            this->lcao_sub_h_save = new std::complex<double>[nk * nn];
+            this->lcao_sub_s_save = new std::complex<double>[nk * nn];
+            this->lcao_PI_sub_save_.resize(nk);
+            this->lcao_PI_sub_diag_.resize(nk);
+            this->lcao_ekb_save_.resize(nk * nbands);
+
+            const int nloc_eij = this->ParaV->nrow * this->ParaV->ncol_bands;
+            const int nat = this->get_nat();
+            auto* dspin_op
+                = dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double>>*>(this->p_operator);
+
+            for (int ik = 0; ik < nk; ik++)
+            {
+                psi_t->fix_k(ik);
+                this->calculate_lcao_sub_hs(this->p_hamilt,
+                                            psi_t[0],
+                                            this->ParaV,
+                                            this->lcao_sub_h_save + ik * nn,
+                                            this->lcao_sub_s_save + ik * nn,
+                                            ik,
+                                            nbands,
+                                            nlocal);
+
+                for (int iat = 0; iat < nat; iat++)
+                {
+                    if (!dspin_op->get_constraint_atom_list()[iat])
+                    {
+                        continue;
+                    }
+                    this->lcao_PI_sub_save_[ik][iat].resize(nloc_eij, {0.0, 0.0});
+                    this->calculate_PI_sub_from_hr(dspin_op->get_pre_hr(iat),
+                                                   psi_t[0],
+                                                   this->ParaV,
+                                                   this->kv_.kvec_d[ik],
+                                                   this->lcao_PI_sub_save_[ik][iat].data(),
+                                                   nbands,
+                                                   nlocal);
+                    this->lcao_PI_sub_diag_[ik][iat].resize(nbands, 0.0);
+                    extract_diagonal_from_local_block(this->lcao_PI_sub_save_[ik][iat].data(),
+                                                      this->ParaV,
+                                                      this->lcao_PI_sub_diag_[ik][iat].data(),
+                                                      nbands);
+                }
+
+                for (int ib = 0; ib < nbands; ib++)
+                {
+                    this->lcao_ekb_save_[ik * nbands + ib] = this->pelec->ekb(ik, ib);
+                }
+            }
+            this->lcao_lambda_in_sub_ = this->state_.lambda_;
+            this->lcao_subspace_initialized_ = true;
+
+            // Reference Mi at lambda_ref with V = I, so subsequent subspace Mi
+            // values stay consistent with the full-space reference.
+            std::vector<std::vector<std::complex<double>>> vcc_identity(
+                nk, std::vector<std::complex<double>>(nn, {0.0, 0.0}));
+            for (int ik = 0; ik < nk; ik++)
+            {
+                for (int ib = 0; ib < nbands; ib++)
+                {
+                    vcc_identity[ik][ib + ib * nbands] = {1.0, 0.0};
+                }
+            }
+            this->cal_mi_lcao_subspace(vcc_identity, nbands, nk, this->get_npol());
+
+            this->subspace_just_activated_ = true;
         }
-        else if (this->state_.nspin_ == 4)
+        else if (accel_enabled && this->lcao_subspace_initialized_)
         {
-            dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, std::complex<double>>>*>(
-                this->p_operator)
-                ->update_lambda();
+            // BRANCH 2: accelerated solve in the cached subspace
+            const int nk = psi_t->get_nk();
+            const int nbands = psi_t->get_nbands();
+            const int nn = nbands * nbands;
+
+            if (this->sc_acceleration_mode_ == "first_order")
+            {
+                // Eigenvalue response only: de_ib = sum_I dlambda_I * diag(P_I)_ib
+                for (int ik = 0; ik < nk; ik++)
+                {
+                    const int spin_sign = this->get_spin_sign(ik);
+                    for (int ib = 0; ib < nbands; ib++)
+                    {
+                        double delta_epsilon = 0.0;
+                        for (const auto& [iat, diag] : this->lcao_PI_sub_diag_[ik])
+                        {
+                            delta_epsilon += (this->state_.lambda_[iat].z - this->lcao_lambda_in_sub_[iat].z)
+                                             * diag[ib];
+                        }
+                        this->pelec->ekb(ik, ib)
+                            = this->lcao_ekb_save_[ik * nbands + ib] - spin_sign * delta_epsilon;
+                    }
+                }
+
+                elecstate::calculate_weights(this->pelec->ekb,
+                                             this->pelec->wg,
+                                             this->pelec->klist,
+                                             this->pelec->eferm,
+                                             this->pelec->f_en,
+                                             this->pelec->nelec_spin,
+                                             nbands,
+                                             this->pelec->skip_weights);
+                elecstate::calEBand(this->pelec->ekb, this->pelec->wg, this->pelec->f_en);
+
+                elecstate::cal_dm_psi(this->ParaV, this->pelec->wg, *psi_t, *this->dm_);
+                this->dm_->cal_DMR();
+                this->cal_mi_lcao(i_step);
+            }
+            else // "subspace"
+            {
+                std::vector<std::vector<std::complex<double>>> vcc_all(nk);
+                const int nloc_eij = this->ParaV->nrow * this->ParaV->ncol_bands;
+
+                if (this->h_sub_local_buf_.size() != static_cast<std::size_t>(nloc_eij))
+                {
+                    this->h_sub_local_buf_.resize(nloc_eij, {0.0, 0.0});
+                    this->h_tmp_buf_.resize(nn);
+                    this->s_tmp_buf_.resize(nn);
+                    this->vcc_buf_.resize(nn);
+                    this->s_copy_buf_.resize(nn);
+                    this->eigenvalues_buf_.resize(nbands, 0.0);
+                }
+
+                for (int ik = 0; ik < nk; ik++)
+                {
+                    std::fill(this->h_sub_local_buf_.begin(),
+                              this->h_sub_local_buf_.end(),
+                              std::complex<double>(0.0, 0.0));
+                    scatter_sub_matrix_to_local(this->lcao_sub_h_save + ik * nn,
+                                                this->ParaV,
+                                                this->h_sub_local_buf_.data(),
+                                                nbands);
+
+                    this->calculate_delta_hcc_lcao(this->h_sub_local_buf_.data(),
+                                                   this->lcao_PI_sub_save_[ik],
+                                                   this->state_.lambda_.data(),
+                                                   nbands,
+                                                   ik,
+                                                   true,
+                                                   this->ParaV);
+
+                    gather_sub_matrix_to_all(this->h_sub_local_buf_.data(),
+                                             this->ParaV,
+                                             this->h_tmp_buf_.data(),
+                                             nbands);
+
+                    std::memcpy(this->s_tmp_buf_.data(),
+                                this->lcao_sub_s_save + ik * nn,
+                                sizeof(std::complex<double>) * nn);
+                    std::memcpy(this->s_copy_buf_.data(), this->s_tmp_buf_.data(), sizeof(std::complex<double>) * nn);
+
+                    hsolver::DiagoIterAssist<std::complex<double>>::diag_hegvd(nbands,
+                                                                               nbands,
+                                                                               this->h_tmp_buf_.data(),
+                                                                               this->s_copy_buf_.data(),
+                                                                               nbands,
+                                                                               this->eigenvalues_buf_.data(),
+                                                                               this->vcc_buf_.data());
+
+                    vcc_all[ik].assign(this->vcc_buf_.data(), this->vcc_buf_.data() + nn);
+                    for (int ib = 0; ib < nbands; ib++)
+                    {
+                        this->pelec->ekb(ik, ib) = this->eigenvalues_buf_[ib];
+                    }
+                }
+
+                elecstate::calculate_weights(this->pelec->ekb,
+                                             this->pelec->wg,
+                                             this->pelec->klist,
+                                             this->pelec->eferm,
+                                             this->pelec->f_en,
+                                             this->pelec->nelec_spin,
+                                             nbands,
+                                             this->pelec->skip_weights);
+                elecstate::calEBand(this->pelec->ekb, this->pelec->wg, this->pelec->f_en);
+
+                this->cal_mi_lcao_subspace(vcc_all, nbands, nk, this->get_npol());
+            }
         }
-        // Diagonalization without updating charge density (last param = true means skip charge update)
-        hsolver_t.solve(hamilt_t, psi_t[0], this->pelec, *this->dm_, *this->pelec->charge, this->state_.nspin_, true);
-        // Note: although update_lambda() modifies lambda in-place above,
-        // solve() unconditionally recomputes DM and DMR (via cal_dm_psi +
-        // cal_DMR) from the psi obtained by diagonalizing with the new
-        // lambda. Therefore the DMR used inside cal_mi_lcao() is consistent
-        // with the updated lambda and is NOT stale.
-        this->cal_mi_lcao(i_step);
+        else
+        {
+            // BRANCH 3: default full HSolverLCAO diagonalization
+            if (this->state_.nspin_ == 2)
+            {
+                dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double>>*>(this->p_operator)
+                    ->update_lambda();
+            }
+            else if (this->state_.nspin_ == 4)
+            {
+                dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, std::complex<double>>>*>(
+                    this->p_operator)
+                    ->update_lambda();
+            }
+            // Diagonalization without updating charge density (last param = true means skip charge update)
+            hsolver_t.solve(hamilt_t, psi_t[0], this->pelec, *this->dm_, *this->pelec->charge, this->state_.nspin_, true);
+            // Note: although update_lambda() modifies lambda in-place above,
+            // solve() unconditionally recomputes DM and DMR (via cal_dm_psi +
+            // cal_DMR) from the psi obtained by diagonalizing with the new
+            // lambda. Therefore the DMR used inside cal_mi_lcao() is consistent
+            // with the updated lambda and is NOT stale.
+            this->cal_mi_lcao(i_step);
+        }
+
     }
     else
 #endif

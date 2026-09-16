@@ -74,6 +74,35 @@ void init_deltaspin_lcao(const UnitCell& ucell,
                inp.nspin, kv, p_hamilt, psi,
                static_cast<elecstate::ElecState*>(pelec));
 #endif
+
+    // Derive the LCAO subspace acceleration parameters from sc_strategy unless
+    // the user set sc_acceleration_mode / sc_acceleration_rms_thr explicitly.
+    std::string accel_mode = inp.sc_acceleration_mode;
+    double accel_rms_thr = inp.sc_acceleration_rms_thr;
+    const bool user_set_mode = (inp.sc_acceleration_mode != "off");
+    const bool user_set_thr = (inp.sc_acceleration_rms_thr > 0.0);
+    if (!user_set_mode || !user_set_thr)
+    {
+        if (inp.sc_strategy == "fast")
+        {
+            accel_mode = "subspace";
+            accel_rms_thr = 1e10;
+        }
+        else if (inp.sc_strategy == "accuracy")
+        {
+            accel_mode = "off";
+            accel_rms_thr = -1.0;
+        }
+        else // "normal"
+        {
+            accel_mode = "subspace";
+            if (!user_set_thr)
+            {
+                accel_rms_thr = 1e-2;
+            }
+        }
+    }
+    sc.set_sc_acceleration(accel_mode, accel_rms_thr);
 }
 
 /**

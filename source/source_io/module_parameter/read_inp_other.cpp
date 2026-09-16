@@ -240,6 +240,64 @@ When false (default), both the direction and magnitude of the magnetic moment ar
         read_sync_int(input.sc_scan_steps);
         this->add_item(item);
     }
+    {
+        Input_Item item("sc_strategy");
+        item.annotation = "DeltaSpin execution strategy for LCAO basis";
+        item.category = "Spin-Constrained DFT";
+        item.type = "String";
+        item.description = R"(Execution strategy controlling how DeltaSpin solves the lambda loop:
+* normal (default): start from full diagonalization and switch to subspace acceleration once RMS < sc_acceleration_rms_thr (default threshold: 1e-2 uB).
+* fast: use subspace diagonalization from the first lambda step after the reference is built.
+* accuracy: always use full HSolverLCAO diagonalization (no acceleration).
+
+This parameter automatically sets sc_acceleration_mode and sc_acceleration_rms_thr. For fine-grained control, keep sc_strategy=normal and set sc_acceleration_mode/sc_acceleration_rms_thr explicitly.)";
+        item.default_value = "normal";
+        item.unit = "";
+        item.set_availability("sc_mag_switch==true");
+        read_sync_string(input.sc_strategy);
+        item.check_value = [](const Input_Item& item, const Parameter& para) {
+            const std::string& strategy = para.input.sc_strategy;
+            if (strategy != "normal" && strategy != "fast" && strategy != "accuracy") {
+                ModuleBase::WARNING_QUIT("ReadInput", "sc_strategy must be normal, fast, or accuracy");
+            }
+        };
+        this->add_item(item);
+    }
+    {
+        Input_Item item("sc_acceleration_mode");
+        item.annotation = "acceleration mode for spin-constrained DFT (LCAO)";
+        item.category = "Spin-Constrained DFT";
+        item.type = "String";
+        item.description = R"(Acceleration mode for the converged lambda loop (usually set automatically by sc_strategy):
+* off: no acceleration, always use full HSolverLCAO diagonalization.
+* first_order: first-order eigenvalue response (fastest, requires RMS < sc_acceleration_rms_thr).
+* subspace: subspace diagonalization with wavefunction rotation (requires RMS < sc_acceleration_rms_thr).
+
+sc_strategy=normal sets this to subspace with the default threshold; fast sets subspace with a large threshold; accuracy sets off. An explicit sc_acceleration_mode takes precedence over sc_strategy.)";
+        item.default_value = "off";
+        item.unit = "";
+        item.set_availability("sc_mag_switch==true and basis_type==lcao");
+        read_sync_string(input.sc_acceleration_mode);
+        item.check_value = [](const Input_Item& item, const Parameter& para) {
+            const std::string& mode = para.input.sc_acceleration_mode;
+            if (mode != "off" && mode != "first_order" && mode != "subspace") {
+                ModuleBase::WARNING_QUIT("ReadInput", "sc_acceleration_mode must be off, first_order, or subspace");
+            }
+        };
+        this->add_item(item);
+    }
+    {
+        Input_Item item("sc_acceleration_rms_thr");
+        item.annotation = "RMS threshold for acceleration activation";
+        item.category = "Spin-Constrained DFT";
+        item.type = "Real";
+        item.description = "RMS threshold (uB) at which the lambda loop switches to the accelerated solver. Must be > 0 to enable. Defaults to 1e-2 uB for sc_strategy=normal and a large value for sc_strategy=fast; an explicit value overrides the sc_strategy default.";
+        item.default_value = "-1.0";
+        item.unit = "uB";
+        item.set_availability("sc_mag_switch==true and basis_type==lcao and sc_acceleration_mode!=off");
+        read_sync_double(input.sc_acceleration_rms_thr);
+        this->add_item(item);
+    }
 
     // Quasiatomic Orbital analysis
     {

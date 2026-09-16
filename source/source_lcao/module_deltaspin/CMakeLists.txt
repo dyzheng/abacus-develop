@@ -12,6 +12,7 @@ list(APPEND objects
     deltaspin_state.cpp
     deltaspin_pw_mi.cpp
     mi_tools.cpp
+    lcao_subspace.cpp
 )
 
 add_library(

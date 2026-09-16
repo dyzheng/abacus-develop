@@ -667,6 +667,9 @@ struct Input_para
     double sc_scan_lambda_start = 0.0; ///< start value for lambda scan (eV/uB)
     double sc_scan_lambda_end = 1.0;   ///< end value for lambda scan (eV/uB)
     int sc_scan_steps = 20;            ///< number of steps in lambda scan
+    std::string sc_strategy = "normal"; ///< DeltaSpin execution strategy: "normal" (threshold-triggered subspace), "fast" (subspace from the start), "accuracy" (always full diagonalization)
+    std::string sc_acceleration_mode = "off"; ///< acceleration mode: "off", "first_order" (eigenvalue response), "subspace" (subspace diagonalization)
+    double sc_acceleration_rms_thr = -1.0;    ///< RMS threshold (uB) below which acceleration activates; <0 disables
 
     // ==============   #Parameters (18.Quasiatomic Orbital analysis) =========
     ///<==========================================================

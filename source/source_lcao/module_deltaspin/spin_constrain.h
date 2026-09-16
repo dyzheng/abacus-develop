@@ -248,6 +248,78 @@ public:
   /// @brief Reset DeltaSpin operator initialization state when constraints change
   void reset_dspin_operator();
 
+  // ===========================================================================
+  // LCAO subspace acceleration (sc_strategy / sc_acceleration_mode)
+  //
+  // When the lambda loop is close to convergence the lambda changes are small,
+  // so the response can be evaluated in the nbands x nbands subspace instead of
+  // a full O(NLOCAL^3) diagonalization. Only enabled for nspin=2 (npol=1).
+  // ===========================================================================
+  /// @brief Build H0_sub = C^dag H C and S_sub = C^dag S C at the current psi
+  void calculate_lcao_sub_hs(void* hamilt,
+                             psi::Psi<std::complex<double>>& psi,
+                             const Parallel_Orbitals* ParaV,
+                             std::complex<double>* h_sub,
+                             std::complex<double>* s_sub,
+                             int ik, int nbands, int nlocal);
+
+  /// @brief Build P_I_sub = C^dag P_I C from the real-space projector pre_hr_iat
+  void calculate_PI_sub_from_hr(const hamilt::HContainer<double>* pre_hr_iat,
+                                psi::Psi<std::complex<double>>& psi,
+                                const Parallel_Orbitals* ParaV,
+                                const ModuleBase::Vector3<double>& kvec_d,
+                                std::complex<double>* PI_sub_local_out,
+                                int nbands, int nlocal);
+
+  /// @brief Add sum_I dlambda_I * P_I_sub to a distributed subspace matrix
+  void calculate_delta_hcc_lcao(std::complex<double>* h_sub_local,
+                                const std::map<int, std::vector<std::complex<double>>>& PI_sub_local,
+                                const ModuleBase::Vector3<double>* lambda,
+                                int nbands, int ik, bool full_update,
+                                const Parallel_Orbitals* ParaV);
+
+  /// @brief Add sum_I dlambda_I * P_I_sub to a full (gathered) subspace matrix
+  void calculate_delta_hcc_lcao(std::complex<double>* h_sub,
+                                const std::vector<std::vector<std::complex<double>>>& PI_sub,
+                                const ModuleBase::Vector3<double>* lambda,
+                                int nbands, int ik, bool full_update);
+
+  /// @brief Rotate psi by the subspace eigenvectors V for all k-points
+  void rotate_psi_subspace_lcao(psi::Psi<std::complex<double>>& psi,
+                                const Parallel_Orbitals* ParaV,
+                                const std::vector<std::vector<std::complex<double>>>& vcc_all,
+                                int nbands, int nlocal, int nk);
+
+  /// @brief Compute Mi after rotating psi by vcc_all, then restore psi
+  void cal_mi_lcao_subspace(const std::vector<std::vector<std::complex<double>>>& vcc_all,
+                            int nbands, int nk, int npol);
+
+  /// @brief Free all LCAO subspace acceleration caches
+  void free_lcao_subspace_cache();
+
+  /// @brief Get the acceleration mode string ("off"/"first_order"/"subspace")
+  const std::string& get_sc_acceleration_mode() const { return sc_acceleration_mode_; }
+  /// @brief Get the RMS threshold at which acceleration activates
+  double get_sc_acceleration_rms_thr() const { return sc_acceleration_rms_thr_; }
+  /// @brief Set the acceleration parameters
+  void set_sc_acceleration(const std::string& mode, double rms_thr)
+  {
+      sc_acceleration_mode_ = mode;
+      sc_acceleration_rms_thr_ = rms_thr;
+  }
+  /// @brief Whether the LCAO subspace cache has been built for this SCF iteration
+  bool lcao_subspace_built() const { return lcao_subspace_initialized_; }
+  /// @brief Set the LCAO subspace cache built flag (used by the lambda loop)
+  void set_lcao_subspace_built(bool built) { lcao_subspace_initialized_ = built; }
+  /// @brief Set the acceleration-active flag (used by the lambda loop)
+  void set_acceleration_active(bool active) { acceleration_active_ = active; }
+  /// @brief Get the acceleration-active flag
+  bool acceleration_active() const { return acceleration_active_; }
+  /// @brief Signal that the subspace was just activated (BFGS history reset)
+  void set_subspace_just_activated(bool just) { subspace_just_activated_ = just; }
+  /// @brief Get the subspace-just-activated flag
+  bool subspace_just_activated() const { return subspace_just_activated_; }
+
   /**
    * @brief Update wavefunctions and charge density after lambda optimization.
    *
@@ -467,6 +539,31 @@ public:
     pw::SubspaceCache pw_cache_;
 
   private:
+    // =======================================================================
+    // LCAO subspace acceleration state (sc_strategy / sc_acceleration_mode)
+    // =======================================================================
+    std::string sc_acceleration_mode_ = "off"; ///< "off", "first_order", "subspace"
+    double sc_acceleration_rms_thr_ = -1.0;    ///< RMS threshold (uB) to activate acceleration, <0 disables
+    bool acceleration_active_ = false;          ///< Acceleration activated in the current SCF iteration
+    bool subspace_just_activated_ = false;      ///< Subspace cache was built on the previous inner step
+    bool lcao_subspace_initialized_ = false;    ///< LCAO subspace cache is valid
+
+    /// Cached H0_sub(k) / S_sub(k) for all k-points, layout [nk * nbands^2]
+    std::complex<double>* lcao_sub_h_save = nullptr;
+    std::complex<double>* lcao_sub_s_save = nullptr;
+    /// Cached P_I_sub per k-point and atom, plus its diagonal (for first_order)
+    std::vector<std::map<int, std::vector<std::complex<double>>>> lcao_PI_sub_save_;
+    std::vector<std::map<int, std::vector<double>>> lcao_PI_sub_diag_;
+    /// Reusable temporary buffers for the subspace solve
+    std::vector<std::complex<double>> h_sub_local_buf_;
+    std::vector<std::complex<double>> h_tmp_buf_;
+    std::vector<std::complex<double>> s_tmp_buf_;
+    std::vector<std::complex<double>> vcc_buf_;
+    std::vector<std::complex<double>> s_copy_buf_;
+    std::vector<double> eigenvalues_buf_;
+    std::vector<double> lcao_ekb_save_; ///< Cached eigenvalues [nk * nbands]
+    std::vector<ModuleBase::Vector3<double>> lcao_lambda_in_sub_; ///< Lambda at which the subspace was built
+
     /// RMS error of the most recent lambda optimization loop; -1.0 if no loop has run.
     /// Used by ESolver to pass the current DeltaSpin RMS into the SCF iteration table.
     double last_rms_error_ = -1.0;
