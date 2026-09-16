@@ -36,9 +36,10 @@ void print_orb_chg(
     for(int iat=0; iat<ucell->nat; iat++)
     {
         const int it = ucell->iat2it[iat];
+        std::string atom_label = atom_labels[it];
         int ia = ucell->iat2ia[iat];
-        atom_labels_iat[iat] = atom_labels[it] + std::to_string(ia+1);
-        GlobalV::ofs_running << FmtCore::format("%-20s", atom_labels_iat[iat]) << std::endl;
+        atom_labels_iat[iat] = atom_label + std::to_string(ia+1);
+        GlobalV::ofs_running << FmtCore::format("%-20s", atom_label+std::to_string(ia+1)) << std::endl;
         std::vector<double> sum(4, 0.0);
         int current_l = 1;
         std::vector<double> charge_mag(4, 0.0);

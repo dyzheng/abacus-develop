@@ -143,7 +143,8 @@ void projectors::OnsiteProjector<T, Device>::overlap_proj_psi(
 template<typename T, typename Device>
 void projectors::OnsiteProjector<T, Device>::cal_occupations(
         const psi::Psi<std::complex<T>, Device>* psi_in,
-        const ModuleBase::matrix& wg_in)
+        const ModuleBase::matrix& wg_in,
+        const int nspin_in)
 {
     ModuleBase::timer::start("OnsiteProj", "cal_occupation");
     this->tabulate_atomic(0);
@@ -187,11 +188,11 @@ void projectors::OnsiteProjector<T, Device>::cal_occupations(
                     {
                         const int index = ib * nkb + begin_ih + ih;
                         const double occ = weight * (conj(becp_p[index]) * becp_p[index]).real();
-                        if (PARAM.inp.nspin == 2 && this->isk_ && this->isk_[ik] == 1)
+                        if (nspin_in == 2 && this->isk_ && this->isk_[ik] == 1)
                         {
                             occs[occ_index + 3] += occ;
                         }
-                        else if (PARAM.inp.nspin == 1)
+                        else if (nspin_in == 1)
                         {
                             occs[occ_index] += 0.5 * occ;
                             occs[occ_index + 3] += 0.5 * occ;
@@ -238,7 +239,8 @@ void projectors::OnsiteProjector<double, base_device::DEVICE_CPU>::overlap_proj_
 template
 void projectors::OnsiteProjector<double, base_device::DEVICE_CPU>::cal_occupations(
     const psi::Psi<std::complex<double>, base_device::DEVICE_CPU>*,
-    const ModuleBase::matrix&);
+    const ModuleBase::matrix&,
+    const int);
 
 #if ((defined __CUDA) || (defined __ROCM))
 template
@@ -252,5 +254,6 @@ void projectors::OnsiteProjector<double, base_device::DEVICE_GPU>::overlap_proj_
 template
 void projectors::OnsiteProjector<double, base_device::DEVICE_GPU>::cal_occupations(
     const psi::Psi<std::complex<double>, base_device::DEVICE_GPU>*,
-    const ModuleBase::matrix&);
+    const ModuleBase::matrix&,
+    const int);
 #endif
