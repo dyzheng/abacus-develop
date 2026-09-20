@@ -110,14 +110,13 @@ void DensityMatrix_Tools::cal_DMR(
                 for(int ik = 0; ik < dm._nk; ++ik)
                 {
                     if(ik_in >= 0 && ik_in != ik) { continue; }
-                    // Inverse Fourier transform: D(R) = sum_k D(k) * exp(-i*k*R)
-                    // k-point weights are embedded in DMK, so there is no 1/Nk
-                    // prefactor.
+                    // cal k_phase
+                    // if TK==std::complex<double>, kphase is e^{ikR}
                     const ModuleBase::Vector3<double> dR(R_index[0], R_index[1], R_index[2]);
                     const double arg = (dm._kvec_d[ik] * dR) * ModuleBase::TWO_PI;
                     double sinp, cosp;
                     ModuleBase::libm::sincos(arg, &sinp, &cosp);
-                    kphase_vec[ik][iR] = TK(cosp, -sinp);
+                    kphase_vec[ik][iR] = TK(cosp, sinp);
                 }
             }
 
@@ -268,14 +267,13 @@ void DensityMatrix_Tools::cal_DMR_td(
                 for(int ik = 0; ik < dm._nk; ++ik)
                 {
                     if(ik_in >= 0 && ik_in != ik) { continue; }
-                    // Inverse Fourier transform: D(R) = sum_k D(k) * exp(-i*k*R)
-                    // k-point weights are embedded in DMK, so there is no 1/Nk
-                    // prefactor.
+                    // cal k_phase
+                    // if TK==std::complex<double>, kphase is e^{ikR}
                     const ModuleBase::Vector3<double> dR(R_index[0], R_index[1], R_index[2]);
                     const double arg = (dm._kvec_d[ik] * dR) * ModuleBase::TWO_PI;
                     double sinp, cosp;
                     ModuleBase::libm::sincos(arg, &sinp, &cosp);
-                    kphase_vec[ik][iR] = TK(cosp, -sinp);
+                    kphase_vec[ik][iR] = TK(cosp, sinp);
                     if(PARAM.inp.td_stype==2)
                     {
                         //phase for hybrid gauge tddft
@@ -428,14 +426,13 @@ void DensityMatrix_Tools::cal_DMR_full(
             for(int ik = 0; ik < dm._nk; ++ik)
             {
                 if(ik_in >= 0 && ik_in != ik) { continue; }
-                // Inverse Fourier transform: D(R) = sum_k D(k) * exp(-i*k*R)
-                // Phase factor: exp(-i*k*R) = cos(k·R) - i*sin(k·R)
-                // k-point weights are embedded in DMK, so there is no 1/Nk prefactor.
+                // cal k_phase
+                // if TK==std::complex<double>, kphase is e^{ikR}
                 const ModuleBase::Vector3<double> dR(R_index[0], R_index[1], R_index[2]);
                 const double arg = (dm._kvec_d[ik] * dR) * ModuleBase::TWO_PI;
                 double sinp, cosp;
                 ModuleBase::libm::sincos(arg, &sinp, &cosp);
-                kphase_vec[ik][iR] = TK(cosp, -sinp);
+                kphase_vec[ik][iR] = TK(cosp, sinp);
             }
         }
 

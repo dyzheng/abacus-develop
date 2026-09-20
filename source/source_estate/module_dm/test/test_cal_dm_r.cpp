@@ -388,10 +388,13 @@ TEST_F(DMTest, cal_DMR_blas_complex)
     delete kv;
 }
 
-// T1: Fourier round-trip consistency between cal_DMR (e^{-ikR}) and
-// folding_HR (e^{+ikR}). This is the test that locks the Fourier sign of the
-// inverse transform: with the k-phase flipped (density_matrix.cpp: -sinp ->
-// +sinp), D~(k) = DMK(-k) = DMK(k)† and the assertions below turn red.
+// T1: Fourier round-trip consistency between cal_DMR (e^{+ikR}) and
+// folding_HR (e^{+ikR}). cal_dm_psi builds DMK = D_std^T = D_std*, so the
+// inverse transform that recovers the physical D_std is e^{+ikR}; folding the
+// resulting DMR back gives nR * DMK(-k), not nR * DMK(k). This is the test
+// that locks the Fourier sign of the inverse transform: with the k-phase
+// flipped (density_matrix.cpp: +sinp -> -sinp), folding returns nR * DMK(k)
+// and the assertions below turn red.
 TEST_F(DMTest, T1_fourier_round_trip)
 {
     // k-grid {0, 1/4, 1/2, 3/4} along x: contains non-Gamma k-points and k and
@@ -457,7 +460,8 @@ TEST_F(DMTest, T1_fourier_round_trip)
                     // folding_HR has no weight normalization: on a complete
                     // R-representative set D~(k) = nR * DMK(k) (in production
                     // the k weights are embedded in DMK).
-                    const std::complex<double> expect = double(nR) * M[ik][i * nw + j];
+                    // e^{+ikR} inverse transform: folding the DMR returns nR*DMK(-k).
+                    const std::complex<double> expect = double(nR) * M[(nk - ik) % nk][i * nw + j];
                     EXPECT_NEAR(hk[i * paraV->ncol + j].real(), expect.real(), 1e-10)
                         << "real DMR path, ik=" << ik << " mu=" << i << " nu=" << j;
                     EXPECT_NEAR(hk[i * paraV->ncol + j].imag(), expect.imag(), 1e-10)
@@ -496,7 +500,8 @@ TEST_F(DMTest, T1_fourier_round_trip)
             {
                 for (int j = 0; j < nw; ++j)
                 {
-                    const std::complex<double> expect = double(nR) * M[ik][i * nw + j];
+                    // e^{+ikR} inverse transform: folding the DMR returns nR*DMK(-k).
+                    const std::complex<double> expect = double(nR) * M[(nk - ik) % nk][i * nw + j];
                     EXPECT_NEAR(hk[i * paraV->ncol + j].real(), expect.real(), 1e-10)
                         << "complex DMR path, ik=" << ik << " mu=" << i << " nu=" << j;
                     EXPECT_NEAR(hk[i * paraV->ncol + j].imag(), expect.imag(), 1e-10)
@@ -644,8 +649,8 @@ TEST_F(DMTest, T8_full_direction_pairing_guard)
     // synthetic full symmetric neighbor list (as produced by Record_adj::cal_adj)
     const int nat = test_size;
     Record_adj ra;
-    ra.na_each = new int[nat];
-    ra.info = new int**[nat];
+    ra.na_each.assign(nat, 0);
+    ra.info_offset.assign(nat, 0);
     const std::vector<ModuleBase::Vector3<int>> r_list = {
         ModuleBase::Vector3<int>(0, 0, 0),
         ModuleBase::Vector3<int>(1, 0, 0),
@@ -664,17 +669,19 @@ TEST_F(DMTest, T8_full_direction_pairing_guard)
             }
         }
     }
+    int total = 0;
     for (int iat = 0; iat < nat; ++iat)
     {
         ra.na_each[iat] = lists[iat].size();
-        ra.info[iat] = new int*[ra.na_each[iat]];
+        ra.info_offset[iat] = total;
+        total += ra.na_each[iat];
+    }
+    ra.info.resize(total);
+    for (int iat = 0; iat < nat; ++iat)
+    {
         for (int ad = 0; ad < ra.na_each[iat]; ++ad)
         {
-            ra.info[iat][ad] = new int[5];
-            for (int k = 0; k < 5; ++k)
-            {
-                ra.info[iat][ad][k] = lists[iat][ad][k];
-            }
+            ra.info[ra.info_offset[iat] + ad] = lists[iat][ad];
         }
     }
 
@@ -696,16 +703,6 @@ TEST_F(DMTest, T8_full_direction_pairing_guard)
         }
     }
 
-    for (int iat = 0; iat < nat; ++iat)
-    {
-        for (int ad = 0; ad < ra.na_each[iat]; ++ad)
-        {
-            delete[] ra.info[iat][ad];
-        }
-        delete[] ra.info[iat];
-    }
-    delete[] ra.info;
-    delete[] ra.na_each;
 }
 
 int main(int argc, char** argv)
