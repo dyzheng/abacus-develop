@@ -3,6 +3,8 @@ add_library(
     OBJECT
     xc_functional.cpp
     xc_functional_gga_noncol_sf_builtin.cpp
+    xc_functional_ncgga_lca.cpp
+    xc_ncgga_radial.cpp
     xc_pot.cpp
     xc_grad.cpp
     xc_lda_wrap.cpp

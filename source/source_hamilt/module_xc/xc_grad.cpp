@@ -9,6 +9,7 @@
 //  and gives the spin up and spin down components of the charge.
 
 #include "xc_functional.h"
+#include "xc_functional_ncgga_lca.h"
 #include "source_base/timer.h"
 #include "source_basis/module_pw/pw_basis_k.h"
 #include "source_io/module_parameter/parameter.h"
@@ -36,6 +37,7 @@ void XC_Functional::gradcorr(
     const int nspin,
     const bool domag,
     const bool domag_z,
+    const int gga_grad,
     const double hybrid_alpha_in,
     const double hse_omega_in)
 {
@@ -48,6 +50,12 @@ void XC_Functional::gradcorr(
 
     if(func_type == 0 || func_type == 1)
     {
+        return;
+    }
+
+    if (is_stress && !use_libxc && nspin == 4 && (domag || domag_z) && gga_grad == 2)
+    {
+        ModuleXC::NCGGA_LCA_Builtin::gradcorr_ncgga_lca_builtin(chr, rhopw, ucell->tpiba, stress_gga);
         return;
     }
 
@@ -204,7 +212,8 @@ void XC_Functional::gradcorr(
                 vgg[is] = new double[rhopw->nrxx];
             }
         }
-        noncolin_rho(rhotmp1, rhotmp2, neg, chr->rho, rhopw->nrxx, ucell->magnet.ux_, ucell->magnet.lsign_);
+        const bool use_global_axis = ucell->magnet.lsign_ && gga_grad != 1;
+        noncolin_rho(rhotmp1, rhotmp2, neg, chr->rho, rhopw->nrxx, ucell->magnet.ux_, use_global_axis);
         rhopw->real2recip(rhotmp1, rhogsum1);
         rhopw->real2recip(rhotmp2, rhogsum2);
 #ifdef _OPENMP

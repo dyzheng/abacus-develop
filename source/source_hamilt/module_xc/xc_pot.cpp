@@ -10,6 +10,7 @@
 #include "xc_functional.h"
 
 #include "xc_functional_gga_noncol_sf_builtin.h"
+#include "xc_functional_ncgga_lca.h"
 
 #ifdef __LIBXC
 #include "libxc_abacus.h"
@@ -28,6 +29,7 @@ std::tuple<double, double, ModuleBase::matrix> XC_Functional::v_xc(
     const int nspin,
     const bool domag,
     const bool domag_z,
+    const int gga_grad,
     const double hybrid_alpha,
     const double hse_omega)
 {
@@ -52,7 +54,12 @@ std::tuple<double, double, ModuleBase::matrix> XC_Functional::v_xc(
 #endif
     }
 
-    if (PARAM.inp.nspin == 4 && (PARAM.globalv.domag || PARAM.globalv.domag_z) && PARAM.inp.gga_grad == 3)
+    if (nspin == 4 && (domag || domag_z) && gga_grad == 2)
+    {
+        return ModuleXC::NCGGA_LCA_Builtin::v_xc_ncgga_lca_builtin(nrxx, ucell->omega, ucell->tpiba, chr);
+    }
+
+    if (nspin == 4 && (domag || domag_z) && gga_grad == 3)
     {
         return ModuleXC::NCGGA_SF_Builtin::v_xc_ncgga_sf_builtin(nrxx, ucell->omega, ucell->tpiba, chr);
     }
@@ -193,7 +200,7 @@ std::tuple<double, double, ModuleBase::matrix> XC_Functional::v_xc(
     // the dummy variable dum contains gradient correction to stress
     // which is not used here
     std::vector<double> dum;
-    gradcorr(etxc, vtxc, v, chr, chr->rhopw, ucell, dum, false, nspin, domag, domag_z, hybrid_alpha, hse_omega);
+    gradcorr(etxc, vtxc, v, chr, chr->rhopw, ucell, dum, false, nspin, domag, domag_z, gga_grad, hybrid_alpha, hse_omega);
 
     // parallel code : collect vtxc,etxc
     // mohan add 2008-06-01
