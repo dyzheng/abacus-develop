@@ -28,8 +28,8 @@
  * - lambda ≈ 0: system naturally has the target moment
  * - lambda large: system resists the constraint (may indicate unrealistic target)
  */
-template <>
-void spinconstrain::SpinConstrain<std::complex<double>>::print_termination()
+template <typename TK>
+void spinconstrain::SpinConstrain<TK>::print_termination()
 {
     print_2d("after-optimization spin (uB): (print in the inner loop): ", this->Mi_, this->nspin_);
     print_2d("after-optimization lambda (eV/uB): (print in the inner loop): ", this->lambda_, this->nspin_, ModuleBase::Ry_to_eV);
@@ -57,8 +57,8 @@ void spinconstrain::SpinConstrain<std::complex<double>>::print_termination()
  * @param duration Time for this step
  * @param total_duration Cumulative time for inner loop
  */
-template <>
-bool spinconstrain::SpinConstrain<std::complex<double>>::check_rms_stop(int outer_step,
+template <typename TK>
+bool spinconstrain::SpinConstrain<TK>::check_rms_stop(int outer_step,
                                                                                   int i_step,
                                                                                   double rms_error,
                                                                                   double duration,
@@ -85,8 +85,8 @@ bool spinconstrain::SpinConstrain<std::complex<double>>::check_rms_stop(int oute
 }
 
 /// @brief Print header at start of lambda optimization loop
-template <>
-void spinconstrain::SpinConstrain<std::complex<double>>::print_header()
+template <typename TK>
+void spinconstrain::SpinConstrain<TK>::print_header()
 {
     std::cout << "===============================================================================" << std::endl;
     std::cout << "Inner optimization for lambda begins ..." << std::endl;
@@ -109,8 +109,8 @@ void spinconstrain::SpinConstrain<std::complex<double>>::print_header()
  * @param search Current search direction
  * @param alpha_trial Trial step size (modified in place if capped)
  */
-template <>
-void spinconstrain::SpinConstrain<std::complex<double>>::check_restriction(
+template <typename TK>
+void spinconstrain::SpinConstrain<TK>::check_restriction(
     const std::vector<ModuleBase::Vector3<double>>& search,
     double& alpha_trial)
 {
@@ -151,8 +151,8 @@ void spinconstrain::SpinConstrain<std::complex<double>>::check_restriction(
  * @param alpha_trial Current trial step size
  * @return Optimal step size alpha_opt
  */
-template <>
-double spinconstrain::SpinConstrain<std::complex<double>>::cal_alpha_opt(
+template <typename TK>
+double spinconstrain::SpinConstrain<TK>::cal_alpha_opt(
     std::vector<ModuleBase::Vector3<double>> spin,
     std::vector<ModuleBase::Vector3<double>> spin_plus,
     const double alpha_trial)
@@ -242,8 +242,8 @@ double spinconstrain::SpinConstrain<std::complex<double>>::cal_alpha_opt(
  * @param print Whether to print detailed gradient info
  * @return true if gradient decayed below threshold (should terminate), false otherwise
  */
-template <>
-bool spinconstrain::SpinConstrain<std::complex<double>>::check_gradient_decay(
+template <typename TK>
+bool spinconstrain::SpinConstrain<TK>::check_gradient_decay(
     std::vector<ModuleBase::Vector3<double>> new_spin,
     std::vector<ModuleBase::Vector3<double>> spin,
     std::vector<ModuleBase::Vector3<double>> delta_lambda,
@@ -348,3 +348,9 @@ bool spinconstrain::SpinConstrain<std::complex<double>>::check_gradient_decay(
     }
     return false;
 }
+
+// Explicit instantiation for nspin=4 (double precision).
+// NOTE: float instantiation (std::complex<float>) will be added once the
+// upstream onsite-projection data (pseudopotential vkb, radial table, gcar)
+// is made single-precision capable.
+template class spinconstrain::SpinConstrain<std::complex<double>>;

@@ -163,7 +163,7 @@ int SpinConstrain<TK>::get_spin_sign(int ik) const
  * @param nh_iat Array of projector counts per atom: nh_iat[iat] = nproj for atom iat
  */
 template <typename TK>
-void SpinConstrain<TK>::accumulate_Mi_from_becp(const std::complex<double>* becp,
+void SpinConstrain<TK>::accumulate_Mi_from_becp(const SpinScalar<TK>* becp,
                                                   int nkb,
                                                   int nbands,
                                                   int npol,
@@ -179,7 +179,7 @@ void SpinConstrain<TK>::accumulate_Mi_from_becp(const std::complex<double>* becp
             int begin_ih = 0;
             for (int iat = 0; iat < static_cast<int>(this->Mi_.size()); iat++)
             {
-                std::complex<double> occ[4] = {ModuleBase::ZERO, ModuleBase::ZERO, ModuleBase::ZERO, ModuleBase::ZERO};
+                SpinScalar<TK> occ[4] = {ModuleBase::ZERO, ModuleBase::ZERO, ModuleBase::ZERO, ModuleBase::ZERO};
                 const int nh = nh_iat[iat];
                 for (int ih = 0; ih < nh; ih++)
                 {
@@ -918,7 +918,7 @@ void SpinConstrain<TK>::reset_dspin_operator()
     }
     if (this->nspin_ == 4)
     {
-        auto* dspin = dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, std::complex<double>>>*>(this->p_operator);
+        auto* dspin = dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<SpinScalar<TK>, SpinScalar<TK>>>*>(this->p_operator);
         if (dspin)
         {
             dspin->reset_initialized();
@@ -926,7 +926,7 @@ void SpinConstrain<TK>::reset_dspin_operator()
     }
     else if (this->nspin_ == 2)
     {
-        auto* dspin = dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double>>*>(this->p_operator);
+        auto* dspin = dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<SpinScalar<TK>, double>>*>(this->p_operator);
         if (dspin)
         {
             dspin->reset_initialized();

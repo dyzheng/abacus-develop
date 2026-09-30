@@ -63,6 +63,7 @@
 #include <map>
 #include <memory>
 #include <type_traits>
+#include "source_base/macros.h"
 #include <vector>
 
 #include "source_base/constants.h"
@@ -89,6 +90,9 @@
 namespace spinconstrain
 {
 
+template <typename TK>
+using SpinScalar = std::complex<typename GetTypeReal<TK>::type>;
+
 /**
  * @brief Convert spinor occupation matrix to magnetic moment vector using Pauli matrices.
  *
@@ -105,7 +109,8 @@ namespace spinconstrain
  * @param weight k-point weight for integration
  * @return 3D magnetic moment vector (Mx, My, Mz) in Bohr magnetons
  */
-inline ModuleBase::Vector3<double> pauli_to_moment(const std::complex<double> occ[4], double weight)
+template <typename ScalarT>
+inline ModuleBase::Vector3<double> pauli_to_moment(const ScalarT occ[4], double weight)
 {
     return ModuleBase::Vector3<double>(
         weight * (occ[1] + occ[2]).real(),
@@ -117,15 +122,18 @@ inline ModuleBase::Vector3<double> pauli_to_moment(const std::complex<double> oc
 struct ScAtomData;
 
 // Forward declarations for diagonalization engine classes
+template <typename TK>
 class FullSpaceDiagonalizer;
+template <typename TK>
 class SubspaceDiagonalizer;
+template <typename TK>
 class FirstOrderResponseEngine;
 
 /**
  * @brief Singleton class implementing spin-constrained DFT (DeltaSpin).
  *
  * @par Template parameter TK
- * - std::complex<double>: Used for nspin=4 (non-collinear) and internally for nspin=2
+ * - SpinScalar<TK>: Used for nspin=4 (non-collinear) and internally for nspin=2
  * - double: Stub specialization for nspin=2 collinear (all methods are no-ops)
  *
  * @par Design rationale
@@ -158,9 +166,9 @@ template <typename TK>
 class SpinConstrain
 {
     // Diagonalization engine classes need access to private members
-    friend class FullSpaceDiagonalizer;
-    friend class SubspaceDiagonalizer;
-    friend class FirstOrderResponseEngine;
+    friend class FullSpaceDiagonalizer<TK>;
+    friend class SubspaceDiagonalizer<TK>;
+    friend class FirstOrderResponseEngine<TK>;
 
 public:
     /**
@@ -361,7 +369,7 @@ public:
         if (PARAM.inp.basis_type != "lcao")
         {
             static std::unique_ptr<DiagonalizationEngine> dummy_fs;
-            if (!dummy_fs) dummy_fs.reset(new FullSpaceDiagonalizer(*this));
+            if (!dummy_fs) dummy_fs.reset(new FullSpaceDiagonalizer<TK>(*this));
             return *dummy_fs;
         }
 
@@ -392,12 +400,12 @@ public:
         {
             if (sc_acceleration_mode_ == "first_order")
             {
-                diagonalization_engine_.reset(new FirstOrderResponseEngine(*this));
+                diagonalization_engine_.reset(new FirstOrderResponseEngine<TK>(*this));
                 current_strategy_ = DiagonalizationStrategy::FirstOrder;
             }
             else if (sc_acceleration_mode_ == "subspace")
             {
-                diagonalization_engine_.reset(new SubspaceDiagonalizer(*this));
+                diagonalization_engine_.reset(new SubspaceDiagonalizer<TK>(*this));
                 current_strategy_ = DiagonalizationStrategy::Subspace;
             }
 
@@ -414,14 +422,14 @@ public:
 
         if (!diagonalization_engine_)
         {
-            diagonalization_engine_.reset(new FullSpaceDiagonalizer(*this));
+            diagonalization_engine_.reset(new FullSpaceDiagonalizer<TK>(*this));
             current_strategy_ = DiagonalizationStrategy::FullSpace;
         }
         return *diagonalization_engine_;
 #else
         (void)rms_error;
         static std::unique_ptr<DiagonalizationEngine> dummy;
-        if (!dummy) dummy.reset(new FullSpaceDiagonalizer(*this));
+        if (!dummy) dummy.reset(new FullSpaceDiagonalizer<TK>(*this));
         return *dummy;
 #endif
     }
@@ -505,8 +513,8 @@ public:
    * @param ik K-point index
    * @param full_update If true, compute delta = lambda_current - lambda_at_save
    */
-  void calculate_delta_hcc(std::complex<double>* h_tmp,
-		  const std::complex<double>* becp_k,
+  void calculate_delta_hcc(SpinScalar<TK>* h_tmp,
+		  const SpinScalar<TK>* becp_k,
 		  const ModuleBase::Vector3<double>* delta_lambda,
 		  const int nbands, const int nkb, const int* nh_iat, const int ik,
 		  bool full_update = false);
@@ -529,10 +537,10 @@ public:
      * @param nlocal Global basis size (NLOCAL)
      */
     void calculate_lcao_sub_hs(void* hamilt,
-                                psi::Psi<std::complex<double>>& psi,
+                                psi::Psi<SpinScalar<TK>>& psi,
                                 const Parallel_Orbitals* ParaV,
-                                std::complex<double>* h_sub,
-                                std::complex<double>* s_sub,
+                                SpinScalar<TK>* h_sub,
+                                SpinScalar<TK>* s_sub,
                                 int ik, int nbands, int nlocal);
 
     /**
@@ -554,18 +562,18 @@ public:
      */
     void calculate_PI_sub_from_hr(
         const hamilt::HContainer<double>* pre_hr_iat,
-        psi::Psi<std::complex<double>>& psi,
+        psi::Psi<SpinScalar<TK>>& psi,
         const Parallel_Orbitals* ParaV,
         const ModuleBase::Vector3<double>& kvec_d,
-        std::complex<double>* PI_sub_local,
+        SpinScalar<TK>* PI_sub_local,
         int nbands, int nlocal);
 
     void calculate_PI_sub_from_hr(
-        const hamilt::HContainer<std::complex<double>>* pre_hr_iat,
-        psi::Psi<std::complex<double>>& psi,
+        const hamilt::HContainer<SpinScalar<TK>>* pre_hr_iat,
+        psi::Psi<SpinScalar<TK>>& psi,
         const Parallel_Orbitals* ParaV,
         const ModuleBase::Vector3<double>& kvec_d,
-        std::complex<double>* PI_sub_local,
+        SpinScalar<TK>* PI_sub_local,
         int nbands, int nlocal);
 
     /**
@@ -585,8 +593,8 @@ public:
      * @param full_update If true, compute delta = lambda - lcao_lambda_in_sub_
      * @param ParaV Parallel orbitals distribution info
      */
-    void calculate_delta_hcc_lcao(std::complex<double>* h_sub_local,
-                                   const std::map<int, std::vector<std::complex<double>>>& PI_sub_local,
+    void calculate_delta_hcc_lcao(SpinScalar<TK>* h_sub_local,
+                                   const std::map<int, std::vector<SpinScalar<TK>>>& PI_sub_local,
                                     const ModuleBase::Vector3<double>* lambda,
                                     int nbands, int ik, bool full_update,
                                     const Parallel_Orbitals* ParaV);
@@ -596,8 +604,8 @@ public:
      * @details Used by diagnostic functions and DiagonalizationEngine which
      * operate on full nbands×nbands matrices (not memory-optimized).
      */
-    void calculate_delta_hcc_lcao(std::complex<double>* h_sub,
-                                   const std::vector<std::vector<std::complex<double>>>& PI_sub,
+    void calculate_delta_hcc_lcao(SpinScalar<TK>* h_sub,
+                                   const std::vector<std::vector<SpinScalar<TK>>>& PI_sub,
                                    const ModuleBase::Vector3<double>* lambda,
                                    int nbands, int ik, bool full_update);
 
@@ -622,7 +630,7 @@ public:
      * @param kv K-point vector list (for weights)
      */
     void cal_mi_lcao_subspace(
-        const std::vector<std::vector<std::complex<double>>>& vcc_all,
+        const std::vector<std::vector<SpinScalar<TK>>>& vcc_all,
         int nbands, int nk, int npol);
 
     /**
@@ -644,9 +652,9 @@ public:
      * @param nlocal Global basis size
      * @param nk Number of k-points
      */
-    void rotate_psi_subspace_lcao(psi::Psi<std::complex<double>>& psi,
+    void rotate_psi_subspace_lcao(psi::Psi<SpinScalar<TK>>& psi,
                                    const Parallel_Orbitals* ParaV,
-                                   const std::vector<std::vector<std::complex<double>>>& vcc_all,
+                                   const std::vector<std::vector<SpinScalar<TK>>>& vcc_all,
                                    int nbands, int nlocal, int nk);
 #endif
 
@@ -956,7 +964,7 @@ public:
      * @param wg_ik Band weights for this k-point
      * @param nh_iat Number of projectors per atom
      */
-    void accumulate_Mi_from_becp(const std::complex<double>* becp,
+    void accumulate_Mi_from_becp(const SpinScalar<TK>* becp,
                                  int nkb,
                                  int nbands,
                                  int npol,
@@ -1032,13 +1040,13 @@ public:
     /// Per-k-point, per-constrained-atom projector overlap in subspace.
     /// Stored as LOCAL 2D block-cyclic blocks (NOT gathered full matrices).
     /// Key = constrained atom index; Value = local block vector.
-    std::vector<std::map<int, std::vector<std::complex<double>>>> lcao_PI_sub_save_;
+    std::vector<std::map<int, std::vector<SpinScalar<TK>>>> lcao_PI_sub_save_;
     std::vector<std::map<int, std::vector<double>>> lcao_PI_sub_diag_;
-    std::vector<std::complex<double>> h_sub_local_buf_;
-    std::vector<std::complex<double>> h_tmp_buf_;
-    std::vector<std::complex<double>> s_tmp_buf_;
-    std::vector<std::complex<double>> vcc_buf_;
-    std::vector<std::complex<double>> s_copy_buf_;
+    std::vector<SpinScalar<TK>> h_sub_local_buf_;
+    std::vector<SpinScalar<TK>> h_tmp_buf_;
+    std::vector<SpinScalar<TK>> s_tmp_buf_;
+    std::vector<SpinScalar<TK>> vcc_buf_;
+    std::vector<SpinScalar<TK>> s_copy_buf_;
     std::vector<double> eigenvalues_buf_;
     std::vector<double> lcao_ekb_save_; ///< Cached eigenvalues [nk * nbands]
     /// Lambda values when subspace data was saved (for incremental H correction)

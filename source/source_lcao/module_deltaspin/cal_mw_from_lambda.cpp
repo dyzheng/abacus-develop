@@ -54,17 +54,20 @@
  */
 
 namespace spinconstrain {
-extern void gather_sub_matrix_to_all(const std::complex<double>* local_data,
+template <typename Scalar>
+extern void gather_sub_matrix_to_all(const Scalar* local_data,
                                      const Parallel_Orbitals* ParaV,
-                                     std::complex<double>* full_data,
+                                     Scalar* full_data,
                                      int nbands);
 
-extern void scatter_sub_matrix_to_local(const std::complex<double>* full_data,
+template <typename Scalar>
+extern void scatter_sub_matrix_to_local(const Scalar* full_data,
                                         const Parallel_Orbitals* ParaV,
-                                        std::complex<double>* local_data,
+                                        Scalar* local_data,
                                         int nbands);
 
-extern void extract_diagonal_from_local_block(const std::complex<double>* local_data,
+template <typename Scalar>
+extern void extract_diagonal_from_local_block(const Scalar* local_data,
                                               const Parallel_Orbitals* ParaV,
                                               double* diag,
                                               int nbands);
@@ -100,8 +103,8 @@ extern void extract_diagonal_from_local_block(const std::complex<double>* local_
  * @param ik K-point index (for spin_sign lookup in collinear mode)
  * @param full_update If true, compute delta = lambda_current - lambda_at_save
  */
-template <>
-void spinconstrain::SpinConstrain<std::complex<double>>::calculate_delta_hcc(std::complex<double>* h_tmp, const std::complex<double>* becp_k, const ModuleBase::Vector3<double>* delta_lambda, const int nbands, const int nkb, const int* nh_iat, const int ik, bool full_update)
+template <typename TK>
+void spinconstrain::SpinConstrain<TK>::calculate_delta_hcc(SpinScalar<TK>* h_tmp, const SpinScalar<TK>* becp_k, const ModuleBase::Vector3<double>* delta_lambda, const int nbands, const int nkb, const int* nh_iat, const int ik, bool full_update)
 {
     ModuleBase::TITLE("spinconstrain::SpinConstrain", "calculate_delta_hcc");
     ModuleBase::timer::start("spinconstrain::SpinConstrain", "calculate_delta_hcc");
@@ -123,23 +126,23 @@ void spinconstrain::SpinConstrain<std::complex<double>>::calculate_delta_hcc(std
 
     int sum = 0; // Running sum of projectors across atoms
     int size_ps = nkb * this->npol_ * nbands; // Total size of ps array
-    std::complex<double>* becp_cpu = nullptr;
+    SpinScalar<TK>* becp_cpu = nullptr;
 
     // Handle GPU/CPU memory for becp
     if(PARAM.inp.device == "gpu")
     {
 #if ((defined __CUDA) || (defined __ROCM))
-        base_device::memory::resize_memory_op<std::complex<double>, base_device::DEVICE_CPU>()(becp_cpu, size_ps);
-        base_device::memory::synchronize_memory_op<std::complex<double>, base_device::DEVICE_CPU, base_device::DEVICE_GPU>()(becp_cpu, becp_k, size_ps);
+        base_device::memory::resize_memory_op<SpinScalar<TK>, base_device::DEVICE_CPU>()(becp_cpu, size_ps);
+        base_device::memory::synchronize_memory_op<SpinScalar<TK>, base_device::DEVICE_CPU, base_device::DEVICE_GPU>()(becp_cpu, becp_k, size_ps);
 #endif
     }
     else if (PARAM.inp.device == "cpu")
     {
-        becp_cpu = const_cast<std::complex<double>*>(becp_k);
+        becp_cpu = const_cast<SpinScalar<TK>*>(becp_k);
     }
 
     // Compute modified projector coefficients: ps = delta_lambda * becp
-    std::vector<std::complex<double>> ps(size_ps, 0.0);
+    std::vector<SpinScalar<TK>> ps(size_ps, 0.0);
     if(this->npol_ == 2)
     {
         // =============================================================
@@ -157,17 +160,17 @@ void spinconstrain::SpinConstrain<std::complex<double>>::calculate_delta_hcc(std
         for (int iat = 0; iat < this->Mi_.size(); iat++)
         {
             const int nproj = nh_iat[iat];
-            const std::complex<double> coefficients0(effective_lambda[iat][2], 0.0);
-            const std::complex<double> coefficients1(effective_lambda[iat][0] , effective_lambda[iat][1]);
-            const std::complex<double> coefficients2(effective_lambda[iat][0] , -1 * effective_lambda[iat][1]);
-            const std::complex<double> coefficients3(-1 * effective_lambda[iat][2], 0.0);
+            const SpinScalar<TK> coefficients0(effective_lambda[iat][2], 0.0);
+            const SpinScalar<TK> coefficients1(effective_lambda[iat][0] , effective_lambda[iat][1]);
+            const SpinScalar<TK> coefficients2(effective_lambda[iat][0] , -1 * effective_lambda[iat][1]);
+            const SpinScalar<TK> coefficients3(-1 * effective_lambda[iat][2], 0.0);
             for (int ib = 0; ib < nbands * this->npol_; ib += this->npol_)
             {
                 for (int ip = 0; ip < nproj; ip++)
                 {
                     const int becpind = ib * nkb + sum + ip;
-                    const std::complex<double> becp1 = becp_cpu[becpind];
-                    const std::complex<double> becp2 = becp_cpu[becpind + nkb];
+                    const SpinScalar<TK> becp1 = becp_cpu[becpind];
+                    const SpinScalar<TK> becp2 = becp_cpu[becpind + nkb];
                     ps[becpind] += coefficients0 * becp1
                                     + coefficients2 * becp2;
                     ps[becpind + nkb] += coefficients1 * becp1
@@ -207,7 +210,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::calculate_delta_hcc(std
                 for (int ip = 0; ip < nproj; ip++)
                 {
                     const int becpind = ib * nkb + sum + ip;
-                    const std::complex<double> becp1 = becp_cpu[becpind];
+                    const SpinScalar<TK> becp1 = becp_cpu[becpind];
                     ps[becpind] += coefficients0 * becp1;
                 }
             }
@@ -216,12 +219,12 @@ void spinconstrain::SpinConstrain<std::complex<double>>::calculate_delta_hcc(std
     }
 
     // Copy ps to GPU if needed
-    std::complex<double>* ps_pointer = nullptr;
+    SpinScalar<TK>* ps_pointer = nullptr;
     if(PARAM.inp.device == "gpu")
     {
 #if ((defined __CUDA) || (defined __ROCM))
-        base_device::memory::resize_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(ps_pointer, size_ps);
-        base_device::memory::synchronize_memory_op<std::complex<double>, base_device::DEVICE_GPU, base_device::DEVICE_CPU>()(ps_pointer, ps.data(), size_ps);
+        base_device::memory::resize_memory_op<SpinScalar<TK>, base_device::DEVICE_GPU>()(ps_pointer, size_ps);
+        base_device::memory::synchronize_memory_op<SpinScalar<TK>, base_device::DEVICE_GPU, base_device::DEVICE_CPU>()(ps_pointer, ps.data(), size_ps);
 #endif
     }
     else if (PARAM.inp.device == "cpu")
@@ -239,7 +242,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::calculate_delta_hcc(std
     if (PARAM.inp.device == "gpu")
     {
 #if ((defined __CUDA) || (defined __ROCM))
-        ModuleBase::gemm_op<std::complex<double>, base_device::DEVICE_GPU>()(
+        ModuleBase::gemm_op<SpinScalar<TK>, base_device::DEVICE_GPU>()(
             transa,
             transb,
             nbands,
@@ -254,14 +257,14 @@ void spinconstrain::SpinConstrain<std::complex<double>>::calculate_delta_hcc(std
             h_tmp,
             nbands
         );
-        base_device::memory::delete_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(ps_pointer);
-        base_device::memory::delete_memory_op<std::complex<double>, base_device::DEVICE_CPU>()(becp_cpu);
+        base_device::memory::delete_memory_op<SpinScalar<TK>, base_device::DEVICE_GPU>()(ps_pointer);
+        base_device::memory::delete_memory_op<SpinScalar<TK>, base_device::DEVICE_CPU>()(becp_cpu);
 #endif
 
     }
     else if (PARAM.inp.device == "cpu")
     {
-        ModuleBase::gemm_op<std::complex<double>, base_device::DEVICE_CPU>()(
+        ModuleBase::gemm_op<SpinScalar<TK>, base_device::DEVICE_CPU>()(
             transa,
             transb,
             nbands,
@@ -304,15 +307,15 @@ void spinconstrain::SpinConstrain<std::complex<double>>::calculate_delta_hcc(std
  * @param pw_solve If true, run full PW solver; if false, just update weights
  * @param full_update If true, apply full lambda (not delta) to H correction
  */
-template <>
-void spinconstrain::SpinConstrain<std::complex<double>>::update_psi_charge_pw_cpu(const ModuleBase::Vector3<double>* delta_lambda, bool pw_solve, bool full_update)
+template <typename TK>
+void spinconstrain::SpinConstrain<TK>::update_psi_charge_pw_cpu(const ModuleBase::Vector3<double>* delta_lambda, bool pw_solve, bool full_update)
 {
     ModuleBase::TITLE("spinconstrain::SpinConstrain", "update_psi_charge_pw_cpu");
     ModuleBase::timer::start("spinconstrain::SpinConstrain", "update_psi_charge_pw_cpu");
 
-    psi::Psi<std::complex<double>>* psi_t = static_cast<psi::Psi<std::complex<double>>*>(this->psi);
-    hamilt::Hamilt<std::complex<double>, base_device::DEVICE_CPU>* hamilt_t = static_cast<hamilt::Hamilt<std::complex<double>, base_device::DEVICE_CPU>*>(this->p_hamilt);
-    auto* onsite_p = projectors::OnsiteProjector<double, base_device::DEVICE_CPU>::get_instance();
+    psi::Psi<SpinScalar<TK>>* psi_t = static_cast<psi::Psi<SpinScalar<TK>>*>(this->psi);
+    hamilt::Hamilt<SpinScalar<TK>, base_device::DEVICE_CPU>* hamilt_t = static_cast<hamilt::Hamilt<SpinScalar<TK>, base_device::DEVICE_CPU>*>(this->p_hamilt);
+    auto* onsite_p = projectors::OnsiteProjector<typename GetTypeReal<TK>::type, base_device::DEVICE_CPU>::get_instance();
 
     int nbands = psi_t->get_nbands();
     int npol = psi_t->get_npol();
@@ -321,7 +324,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::update_psi_charge_pw_cp
     int size_becp = nbands * nkb * npol;
     const int* nh_iat = &onsite_p->get_nh(0);
 
-    std::vector<std::complex<double>> h_tmp(nbands * nbands), s_tmp(nbands * nbands);
+    std::vector<SpinScalar<TK>> h_tmp(nbands * nbands), s_tmp(nbands * nbands);
 
     // CRITICAL: subspace data must have been saved by cal_mw_from_lambda()
     assert(this->sub_h_save != nullptr);
@@ -341,21 +344,21 @@ void spinconstrain::SpinConstrain<std::complex<double>>::update_psi_charge_pw_cp
     // =============================================================
     for (int ik = 0; ik < nk; ++ik)
     {
-        std::complex<double>* h_k = this->sub_h_save + ik * nbands * nbands;
-        std::complex<double>* s_k = this->sub_s_save + ik * nbands * nbands;
-        std::complex<double>* becp_k = this->becp_save + ik * size_becp;
+        SpinScalar<TK>* h_k = this->sub_h_save + ik * nbands * nbands;
+        SpinScalar<TK>* s_k = this->sub_s_save + ik * nbands * nbands;
+        SpinScalar<TK>* becp_k = this->becp_save + ik * size_becp;
 
         psi_t->fix_k(ik);
 
         // Copy saved subspace matrices to temp
-        memcpy(h_tmp.data(), h_k, sizeof(std::complex<double>) * nbands * nbands);
-        memcpy(s_tmp.data(), s_k, sizeof(std::complex<double>) * nbands * nbands);
+        memcpy(h_tmp.data(), h_k, sizeof(SpinScalar<TK>) * nbands * nbands);
+        memcpy(s_tmp.data(), s_k, sizeof(SpinScalar<TK>) * nbands * nbands);
 
         // Apply DeltaSpin correction: H += becp^† * lambda * becp
         this->calculate_delta_hcc(h_tmp.data(), becp_k, lambda_for_hcc, nbands, nkb, nh_iat, ik, full_update);
 
         // Diagonalize in subspace to update wavefunction coefficients and eigenvalues
-        hsolver::DiagoIterAssist<std::complex<double>>::diag_subspace_psi(h_tmp.data(),
+        hsolver::DiagoIterAssist<SpinScalar<TK>>::diag_subspace_psi(h_tmp.data(),
                                                                         s_tmp.data(),
                                                                         nbands,
                                                                         psi_t[0],
@@ -377,17 +380,17 @@ void spinconstrain::SpinConstrain<std::complex<double>>::update_psi_charge_pw_cp
     {
         // Full PW diagonalization: subspace rotation provides a good initial guess,
         // then HSolverPW iteratively refines psi in the full plane-wave space and calls psiToRho.
-        hsolver::HSolverPW<std::complex<double>, base_device::DEVICE_CPU> hsolver_pw_obj(
+        hsolver::HSolverPW<SpinScalar<TK>, base_device::DEVICE_CPU> hsolver_pw_obj(
             this->pw_wfc_,
             PARAM.inp.calculation,
             this->basis_type_,
             this->ks_solver_,
             PARAM.globalv.use_uspp,
             this->nspin_,
-            hsolver::DiagoIterAssist<std::complex<double>>::SCF_ITER,
-            hsolver::DiagoIterAssist<std::complex<double>>::PW_DIAG_NMAX,
-            hsolver::DiagoIterAssist<std::complex<double>>::PW_DIAG_THR,
-            hsolver::DiagoIterAssist<std::complex<double>>::need_subspace,
+            hsolver::DiagoIterAssist<SpinScalar<TK>>::SCF_ITER,
+            hsolver::DiagoIterAssist<SpinScalar<TK>>::PW_DIAG_NMAX,
+            hsolver::DiagoIterAssist<SpinScalar<TK>>::PW_DIAG_THR,
+            hsolver::DiagoIterAssist<SpinScalar<TK>>::need_subspace,
             PARAM.inp.use_k_continuity);
 
         hsolver_pw_obj.solve(hamilt_t, psi_t[0], this->pelec, this->pelec->ekb.c,
@@ -404,7 +407,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::update_psi_charge_pw_cp
                                      this->pelec->nelec_spin,
                                      this->pelec->skip_weights);
         elecstate::calEBand(this->pelec->ekb, this->pelec->wg, this->pelec->f_en);
-        reinterpret_cast<elecstate::ElecStatePW<std::complex<double>, base_device::DEVICE_CPU>*>(this->pelec)->psiToRho(*psi_t);
+        reinterpret_cast<elecstate::ElecStatePW<SpinScalar<TK>, base_device::DEVICE_CPU>*>(this->pelec)->psiToRho(*psi_t);
     }
     ModuleBase::timer::end("spinconstrain::SpinConstrain", "update_psi_charge_pw_cpu");
 }
@@ -416,15 +419,15 @@ void spinconstrain::SpinConstrain<std::complex<double>>::update_psi_charge_pw_cp
  * @details Same algorithm as update_psi_charge_pw_cpu(), but with GPU memory
  * management (device allocation, host-device synchronization).
  */
-template <>
-void spinconstrain::SpinConstrain<std::complex<double>>::update_psi_charge_pw_gpu(const ModuleBase::Vector3<double>* delta_lambda, bool pw_solve, bool full_update)
+template <typename TK>
+void spinconstrain::SpinConstrain<TK>::update_psi_charge_pw_gpu(const ModuleBase::Vector3<double>* delta_lambda, bool pw_solve, bool full_update)
 {
     ModuleBase::TITLE("spinconstrain::SpinConstrain", "update_psi_charge_pw_gpu");
     ModuleBase::timer::start("spinconstrain::SpinConstrain", "update_psi_charge_pw_gpu");
 
-    psi::Psi<std::complex<double>, base_device::DEVICE_GPU>* psi_t = static_cast<psi::Psi<std::complex<double>, base_device::DEVICE_GPU>*>(this->psi);
-    hamilt::Hamilt<std::complex<double>, base_device::DEVICE_GPU>* hamilt_t = static_cast<hamilt::Hamilt<std::complex<double>, base_device::DEVICE_GPU>*>(this->p_hamilt);
-    auto* onsite_p = projectors::OnsiteProjector<double, base_device::DEVICE_GPU>::get_instance();
+    psi::Psi<SpinScalar<TK>, base_device::DEVICE_GPU>* psi_t = static_cast<psi::Psi<SpinScalar<TK>, base_device::DEVICE_GPU>*>(this->psi);
+    hamilt::Hamilt<SpinScalar<TK>, base_device::DEVICE_GPU>* hamilt_t = static_cast<hamilt::Hamilt<SpinScalar<TK>, base_device::DEVICE_GPU>*>(this->p_hamilt);
+    auto* onsite_p = projectors::OnsiteProjector<typename GetTypeReal<TK>::type, base_device::DEVICE_GPU>::get_instance();
 
     int nbands = psi_t->get_nbands();
     int npol = psi_t->get_npol();
@@ -433,10 +436,10 @@ void spinconstrain::SpinConstrain<std::complex<double>>::update_psi_charge_pw_gp
     int size_becp = nbands * nkb * npol;
     const int* nh_iat = &onsite_p->get_nh(0);
 
-    std::complex<double>* h_tmp = nullptr;
-    std::complex<double>* s_tmp = nullptr;
-    base_device::memory::resize_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(h_tmp, nbands * nbands);
-    base_device::memory::resize_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(s_tmp, nbands * nbands);
+    SpinScalar<TK>* h_tmp = nullptr;
+    SpinScalar<TK>* s_tmp = nullptr;
+    base_device::memory::resize_memory_op<SpinScalar<TK>, base_device::DEVICE_GPU>()(h_tmp, nbands * nbands);
+    base_device::memory::resize_memory_op<SpinScalar<TK>, base_device::DEVICE_GPU>()(s_tmp, nbands * nbands);
 
     assert(this->sub_h_save != nullptr);
     assert(this->sub_s_save != nullptr);
@@ -452,19 +455,19 @@ void spinconstrain::SpinConstrain<std::complex<double>>::update_psi_charge_pw_gp
     // STAGE 1: Subspace diagonalization for each k-point (GPU)
     for (int ik = 0; ik < nk; ++ik)
     {
-        std::complex<double>* h_k = this->sub_h_save + ik * nbands * nbands;
-        std::complex<double>* s_k = this->sub_s_save + ik * nbands * nbands;
-        std::complex<double>* becp_k = this->becp_save + ik * size_becp;
+        SpinScalar<TK>* h_k = this->sub_h_save + ik * nbands * nbands;
+        SpinScalar<TK>* s_k = this->sub_s_save + ik * nbands * nbands;
+        SpinScalar<TK>* becp_k = this->becp_save + ik * size_becp;
 
         psi_t->load_k_to_gpu(ik);
         psi_t->fix_k(ik);
 
-        base_device::memory::synchronize_memory_op<std::complex<double>, base_device::DEVICE_GPU, base_device::DEVICE_GPU>()(h_tmp, h_k, nbands * nbands);
-        base_device::memory::synchronize_memory_op<std::complex<double>, base_device::DEVICE_GPU, base_device::DEVICE_GPU>()(s_tmp, s_k, nbands * nbands);
+        base_device::memory::synchronize_memory_op<SpinScalar<TK>, base_device::DEVICE_GPU, base_device::DEVICE_GPU>()(h_tmp, h_k, nbands * nbands);
+        base_device::memory::synchronize_memory_op<SpinScalar<TK>, base_device::DEVICE_GPU, base_device::DEVICE_GPU>()(s_tmp, s_k, nbands * nbands);
 
         this->calculate_delta_hcc(h_tmp, becp_k, lambda_for_hcc, nbands, nkb, nh_iat, ik, full_update);
 
-        hsolver::DiagoIterAssist<std::complex<double>, base_device::DEVICE_GPU>::diag_subspace_psi(h_tmp,
+        hsolver::DiagoIterAssist<SpinScalar<TK>, base_device::DEVICE_GPU>::diag_subspace_psi(h_tmp,
                                                                                 s_tmp,
                                                                                 nbands,
                                                                                 psi_t[0],
@@ -474,9 +477,9 @@ void spinconstrain::SpinConstrain<std::complex<double>>::update_psi_charge_pw_gp
     }
 
     // Free GPU memory for saved subspace data
-    base_device::memory::delete_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(sub_h_save);
-    base_device::memory::delete_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(sub_s_save);
-    base_device::memory::delete_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(becp_save);
+    base_device::memory::delete_memory_op<SpinScalar<TK>, base_device::DEVICE_GPU>()(sub_h_save);
+    base_device::memory::delete_memory_op<SpinScalar<TK>, base_device::DEVICE_GPU>()(sub_s_save);
+    base_device::memory::delete_memory_op<SpinScalar<TK>, base_device::DEVICE_GPU>()(becp_save);
     this->sub_h_save = nullptr;
     this->sub_s_save = nullptr;
     this->becp_save = nullptr;
@@ -484,17 +487,17 @@ void spinconstrain::SpinConstrain<std::complex<double>>::update_psi_charge_pw_gp
     // STAGE 2: Full-space update (GPU)
     if (pw_solve)
     {
-        hsolver::HSolverPW<std::complex<double>, base_device::DEVICE_GPU> hsolver_pw_obj(
+        hsolver::HSolverPW<SpinScalar<TK>, base_device::DEVICE_GPU> hsolver_pw_obj(
             this->pw_wfc_,
             PARAM.inp.calculation,
             this->basis_type_,
             this->ks_solver_,
             PARAM.globalv.use_uspp,
             this->nspin_,
-            hsolver::DiagoIterAssist<std::complex<double>, base_device::DEVICE_GPU>::SCF_ITER,
-            hsolver::DiagoIterAssist<std::complex<double>, base_device::DEVICE_GPU>::PW_DIAG_NMAX,
-            hsolver::DiagoIterAssist<std::complex<double>, base_device::DEVICE_GPU>::PW_DIAG_THR,
-            hsolver::DiagoIterAssist<std::complex<double>, base_device::DEVICE_GPU>::need_subspace,
+            hsolver::DiagoIterAssist<SpinScalar<TK>, base_device::DEVICE_GPU>::SCF_ITER,
+            hsolver::DiagoIterAssist<SpinScalar<TK>, base_device::DEVICE_GPU>::PW_DIAG_NMAX,
+            hsolver::DiagoIterAssist<SpinScalar<TK>, base_device::DEVICE_GPU>::PW_DIAG_THR,
+            hsolver::DiagoIterAssist<SpinScalar<TK>, base_device::DEVICE_GPU>::need_subspace,
             PARAM.inp.use_k_continuity);
 
         hsolver_pw_obj.solve(hamilt_t, psi_t[0], this->pelec, this->pelec->ekb.c,
@@ -510,7 +513,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::update_psi_charge_pw_gp
                                      this->pelec->nelec_spin,
                                      this->pelec->skip_weights);
         elecstate::calEBand(this->pelec->ekb, this->pelec->wg, this->pelec->f_en);
-        reinterpret_cast<elecstate::ElecStatePW<std::complex<double>, base_device::DEVICE_GPU>*>(this->pelec)->psiToRho(*psi_t);
+        reinterpret_cast<elecstate::ElecStatePW<SpinScalar<TK>, base_device::DEVICE_GPU>*>(this->pelec)->psiToRho(*psi_t);
     }
     ModuleBase::timer::end("spinconstrain::SpinConstrain", "update_psi_charge_pw_gpu");
 }
@@ -539,8 +542,8 @@ void spinconstrain::SpinConstrain<std::complex<double>>::update_psi_charge_pw_gp
  * @param delta_lambda Change in lambda from previous step (unused in this function,
  *                     the full lambda_ is used for H correction)
  */
-template <>
-void spinconstrain::SpinConstrain<std::complex<double>>::cal_mw_from_lambda(
+template <typename TK>
+void spinconstrain::SpinConstrain<TK>::cal_mw_from_lambda(
 		int i_step,
 		const ModuleBase::Vector3<double>* delta_lambda)
 {
@@ -575,8 +578,8 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mw_from_lambda(
         // This ensures the original correctness is preserved. The accelerated
         // paths are opt-in and only activate once RMS drops below the threshold.
         // =============================================================
-        psi::Psi<std::complex<double>>* psi_t = static_cast<psi::Psi<std::complex<double>>*>(this->psi);
-        hamilt::Hamilt<std::complex<double>>* hamilt_t = static_cast<hamilt::Hamilt<std::complex<double>>*>(this->p_hamilt);
+        psi::Psi<SpinScalar<TK>>* psi_t = static_cast<psi::Psi<SpinScalar<TK>>*>(this->psi);
+        hamilt::Hamilt<SpinScalar<TK>>* hamilt_t = static_cast<hamilt::Hamilt<SpinScalar<TK>>*>(this->p_hamilt);
 
         // Check if acceleration is configured (user must set sc_acceleration_mode != "off"
         // and sc_acceleration_rms_thr > 0 in the input file).
@@ -609,19 +612,19 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mw_from_lambda(
             // Step 1: Update DeltaSpin operator with current lambda
             if (this->nspin_ == 2)
             {
-                dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double>>*>(this->p_operator)
+                dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<SpinScalar<TK>, double>>*>(this->p_operator)
                     ->update_lambda();
             }
             else if (this->nspin_ == 4)
             {
-                dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, std::complex<double>>>* >(
+                dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<SpinScalar<TK>, SpinScalar<TK>>>* >(
                     this->p_operator)
                     ->update_lambda();
             }
 
             // Step 2: Full diagonalization (same as default path)
             // Must use full solver to get correct wavefunctions at this lambda
-            hsolver::HSolverLCAO<std::complex<double>> hsolver_t(this->ParaV, this->ks_solver_);
+            hsolver::HSolverLCAO<SpinScalar<TK>> hsolver_t(this->ParaV, this->ks_solver_);
             hsolver_t.solve(hamilt_t, psi_t[0], this->pelec, *this->dm_, *this->pelec->charge, this->nspin_, true);
             elecstate::calculate_weights(this->pelec->ekb,
                                          this->pelec->wg,
@@ -642,8 +645,8 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mw_from_lambda(
             this->lcao_nk_ = nk;
             this->lcao_nlocal_ = nlocal;
 
-            this->lcao_sub_h_save = new std::complex<double>[nk * nn];
-            this->lcao_sub_s_save = new std::complex<double>[nk * nn];
+            this->lcao_sub_h_save = new SpinScalar<TK>[nk * nn];
+            this->lcao_sub_s_save = new SpinScalar<TK>[nk * nn];
             this->lcao_PI_sub_save_.resize(nk);
             this->lcao_PI_sub_diag_.resize(nk);
             this->lcao_ekb_save_.resize(nk * nbands);
@@ -663,7 +666,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mw_from_lambda(
 
                 if (this->nspin_ == 2)
                 {
-                    auto* dspin_op = dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double>>*>(
+                    auto* dspin_op = dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<SpinScalar<TK>, double>>*>(
                         this->p_operator);
                     for (int iat = 0; iat < nat; iat++)
                     {
@@ -689,7 +692,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mw_from_lambda(
                 }
                 else if (this->nspin_ == 4)
                 {
-                    auto* dspin_op = dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, std::complex<double>>>* >(
+                    auto* dspin_op = dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<SpinScalar<TK>, SpinScalar<TK>>>* >(
                         this->p_operator);
                     for (int iat = 0; iat < nat; iat++)
                     {
@@ -726,8 +729,8 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mw_from_lambda(
             // This ensures subsequent subspace Mi values are consistent with
             // the reference, avoiding mixed full/subspace gradient artifacts.
             {
-                std::vector<std::vector<std::complex<double>>> vcc_identity(nk,
-                    std::vector<std::complex<double>>(nn, {0.0, 0.0}));
+                std::vector<std::vector<SpinScalar<TK>>> vcc_identity(nk,
+                    std::vector<SpinScalar<TK>>(nn, {0.0, 0.0}));
                 for (int ik = 0; ik < nk; ik++)
                     for (int ib = 0; ib < nbands; ib++)
                         vcc_identity[ik][ib + ib * nbands] = {1.0, 0.0};
@@ -843,7 +846,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mw_from_lambda(
                 // 3. Gather h_sub_local back to full matrix for diagonalization
                 // 4. Same for S_sub (unchanged, just copy)
                 // ---------------------------------------------------------
-                std::vector<std::vector<std::complex<double>>> vcc_all(nk);
+                std::vector<std::vector<SpinScalar<TK>>> vcc_all(nk);
                 const int nloc_eij = this->ParaV->nrow * this->ParaV->ncol_bands;
 
                 if (this->h_sub_local_buf_.size() != static_cast<std::size_t>(nloc_eij))
@@ -858,7 +861,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mw_from_lambda(
 
                 for (int ik = 0; ik < nk; ik++)
                 {
-                    std::fill(this->h_sub_local_buf_.begin(), this->h_sub_local_buf_.end(), std::complex<double>(0.0, 0.0));
+                    std::fill(this->h_sub_local_buf_.begin(), this->h_sub_local_buf_.end(), SpinScalar<TK>(0.0, 0.0));
                     scatter_sub_matrix_to_local(this->lcao_sub_h_save + ik * nn, this->ParaV,
                                                 this->h_sub_local_buf_.data(), nbands);
 
@@ -867,11 +870,11 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mw_from_lambda(
 
                     gather_sub_matrix_to_all(this->h_sub_local_buf_.data(), this->ParaV, this->h_tmp_buf_.data(), nbands);
 
-                    std::memcpy(this->s_tmp_buf_.data(), this->lcao_sub_s_save + ik * nn, sizeof(std::complex<double>) * nn);
+                    std::memcpy(this->s_tmp_buf_.data(), this->lcao_sub_s_save + ik * nn, sizeof(SpinScalar<TK>) * nn);
 
-                    std::memcpy(this->s_copy_buf_.data(), this->s_tmp_buf_.data(), sizeof(std::complex<double>) * nn);
+                    std::memcpy(this->s_copy_buf_.data(), this->s_tmp_buf_.data(), sizeof(SpinScalar<TK>) * nn);
 
-                    hsolver::DiagoIterAssist<std::complex<double>>::diag_hegvd(
+                    hsolver::DiagoIterAssist<SpinScalar<TK>>::diag_hegvd(
                         nbands, nbands, this->h_tmp_buf_.data(), this->s_copy_buf_.data(), nbands,
                         this->eigenvalues_buf_.data(), this->vcc_buf_.data());
 
@@ -915,15 +918,15 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mw_from_lambda(
         // =================================================================
         else
         {
-            hsolver::HSolverLCAO<std::complex<double>> hsolver_t(this->ParaV, this->ks_solver_);
+            hsolver::HSolverLCAO<SpinScalar<TK>> hsolver_t(this->ParaV, this->ks_solver_);
             if (this->nspin_ == 2)
             {
-                dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double>>*>(this->p_operator)
+                dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<SpinScalar<TK>, double>>*>(this->p_operator)
                     ->update_lambda();
             }
             else if (this->nspin_ == 4)
             {
-                dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, std::complex<double>>>* >(
+                dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<SpinScalar<TK>, SpinScalar<TK>>>* >(
                     this->p_operator)
                     ->update_lambda();
             }
@@ -948,7 +951,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mw_from_lambda(
         {
             this->zero_Mi();
             int size_becp = 0;
-            std::vector<std::complex<double>> becp_tmp;
+            std::vector<SpinScalar<TK>> becp_tmp;
             int nk = 0;
             int nkb = 0;
             int nbands = 0;
@@ -959,9 +962,9 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mw_from_lambda(
                 // =============================================================
                 // PW PATH (CPU): Subspace diagonalization + Mi from becp
                 // =============================================================
-                psi::Psi<std::complex<double>>* psi_t = static_cast<psi::Psi<std::complex<double>>*>(this->psi);
-                hamilt::Hamilt<std::complex<double>, base_device::DEVICE_CPU>* hamilt_t = static_cast<hamilt::Hamilt<std::complex<double>, base_device::DEVICE_CPU>*>(this->p_hamilt);
-                auto* onsite_p = projectors::OnsiteProjector<double, base_device::DEVICE_CPU>::get_instance();
+                psi::Psi<SpinScalar<TK>>* psi_t = static_cast<psi::Psi<SpinScalar<TK>>*>(this->psi);
+                hamilt::Hamilt<SpinScalar<TK>, base_device::DEVICE_CPU>* hamilt_t = static_cast<hamilt::Hamilt<SpinScalar<TK>, base_device::DEVICE_CPU>*>(this->p_hamilt);
+                auto* onsite_p = projectors::OnsiteProjector<typename GetTypeReal<TK>::type, base_device::DEVICE_CPU>::get_instance();
                 nbands = psi_t->get_nbands();
                 npol = psi_t->get_npol();
                 nkb = onsite_p->get_tot_nproj();
@@ -969,15 +972,15 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mw_from_lambda(
                 nh_iat = &onsite_p->get_nh(0);
                 size_becp = nbands * nkb * npol;
                 becp_tmp.resize(size_becp * nk);
-                std::vector<std::complex<double>> h_tmp(nbands * nbands), s_tmp(nbands * nbands);
+                std::vector<SpinScalar<TK>> h_tmp(nbands * nbands), s_tmp(nbands * nbands);
                 int initial_hs = 0;
                 if(this->sub_h_save == nullptr)
                 {
                     // FIRST CALL: save subspace data for reuse across lambda steps
                     initial_hs = 1;
-                    this->sub_h_save = new std::complex<double>[nbands * nbands * nk];
-                    this->sub_s_save = new std::complex<double>[nbands * nbands * nk];
-                    this->becp_save = new std::complex<double>[size_becp * nk];
+                    this->sub_h_save = new SpinScalar<TK>[nbands * nbands * nk];
+                    this->sub_s_save = new SpinScalar<TK>[nbands * nbands * nk];
+                    this->becp_save = new SpinScalar<TK>[size_becp * nk];
                     this->lambda_in_sub_ = this->lambda_;
                 }
                 for (int ik = 0; ik < nk; ++ik)
@@ -985,23 +988,23 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mw_from_lambda(
 
                     psi_t->fix_k(ik);
 
-                    std::complex<double>* h_k = this->sub_h_save + ik * nbands * nbands;
-                    std::complex<double>* s_k = this->sub_s_save + ik * nbands * nbands;
-                    std::complex<double>* becp_k = this->becp_save + ik * size_becp;
+                    SpinScalar<TK>* h_k = this->sub_h_save + ik * nbands * nbands;
+                    SpinScalar<TK>* s_k = this->sub_s_save + ik * nbands * nbands;
+                    SpinScalar<TK>* becp_k = this->becp_save + ik * size_becp;
                     if(initial_hs)
                     {
                         /// Compute H(k) and extract subspace matrices for this k-point
                         hamilt_t->updateHk(ik);
-                        hsolver::DiagoIterAssist<std::complex<double>>::cal_hs_subspace(hamilt_t, psi_t[0], h_k, s_k);
-                        memcpy(becp_k, onsite_p->get_becp(), sizeof(std::complex<double>) * size_becp);
+                        hsolver::DiagoIterAssist<SpinScalar<TK>>::cal_hs_subspace(hamilt_t, psi_t[0], h_k, s_k);
+                        memcpy(becp_k, onsite_p->get_becp(), sizeof(SpinScalar<TK>) * size_becp);
                     }
-                    memcpy(h_tmp.data(), h_k, sizeof(std::complex<double>) * nbands * nbands);
-                    memcpy(s_tmp.data(), s_k, sizeof(std::complex<double>) * nbands * nbands);
+                    memcpy(h_tmp.data(), h_k, sizeof(SpinScalar<TK>) * nbands * nbands);
+                    memcpy(s_tmp.data(), s_k, sizeof(SpinScalar<TK>) * nbands * nbands);
                     // Apply DeltaSpin correction (skip for initialization step i_step=-1)
                     if (i_step != -1) this->calculate_delta_hcc(h_tmp.data(), becp_k, this->lambda_.data(), nbands, nkb, nh_iat, ik, true);
 
                     // Diagonalize in subspace, update becp (response wavefunctions)
-                    hsolver::DiagoIterAssist<std::complex<double>>::diag_responce(h_tmp.data(),
+                    hsolver::DiagoIterAssist<SpinScalar<TK>>::diag_responce(h_tmp.data(),
                                                                                   s_tmp.data(),
                                                                                   nbands,
                                                                                   becp_k,
@@ -1016,9 +1019,9 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mw_from_lambda(
                 // =============================================================
                 // PW PATH (GPU): Same as CPU but with GPU memory management
                 // =============================================================
-                psi::Psi<std::complex<double>, base_device::DEVICE_GPU>* psi_t = static_cast<psi::Psi<std::complex<double>, base_device::DEVICE_GPU>*>(this->psi);
-                hamilt::Hamilt<std::complex<double>, base_device::DEVICE_GPU>* hamilt_t = static_cast<hamilt::Hamilt<std::complex<double>, base_device::DEVICE_GPU>*>(this->p_hamilt);
-                auto* onsite_p = projectors::OnsiteProjector<double, base_device::DEVICE_GPU>::get_instance();
+                psi::Psi<SpinScalar<TK>, base_device::DEVICE_GPU>* psi_t = static_cast<psi::Psi<SpinScalar<TK>, base_device::DEVICE_GPU>*>(this->psi);
+                hamilt::Hamilt<SpinScalar<TK>, base_device::DEVICE_GPU>* hamilt_t = static_cast<hamilt::Hamilt<SpinScalar<TK>, base_device::DEVICE_GPU>*>(this->p_hamilt);
+                auto* onsite_p = projectors::OnsiteProjector<typename GetTypeReal<TK>::type, base_device::DEVICE_GPU>::get_instance();
                 nbands = psi_t->get_nbands();
                 npol = psi_t->get_npol();
                 nkb = onsite_p->get_tot_nproj();
@@ -1026,54 +1029,54 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mw_from_lambda(
                 nh_iat = &onsite_p->get_nh(0);
                 size_becp = nbands * nkb * npol;
                 becp_tmp.resize(size_becp * nk);
-                std::complex<double>* h_tmp = nullptr;
-                std::complex<double>* s_tmp = nullptr;
-                base_device::memory::resize_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(h_tmp, nbands * nbands);
-                base_device::memory::resize_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(s_tmp, nbands * nbands);
+                SpinScalar<TK>* h_tmp = nullptr;
+                SpinScalar<TK>* s_tmp = nullptr;
+                base_device::memory::resize_memory_op<SpinScalar<TK>, base_device::DEVICE_GPU>()(h_tmp, nbands * nbands);
+                base_device::memory::resize_memory_op<SpinScalar<TK>, base_device::DEVICE_GPU>()(s_tmp, nbands * nbands);
                 int initial_hs = 0;
                 if(this->sub_h_save == nullptr)
                 {
                     initial_hs = 1;
-                    base_device::memory::resize_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(this->sub_h_save, nbands * nbands * nk);
-                    base_device::memory::resize_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(this->sub_s_save, nbands * nbands * nk);
-                    base_device::memory::resize_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(this->becp_save, size_becp * nk);
+                    base_device::memory::resize_memory_op<SpinScalar<TK>, base_device::DEVICE_GPU>()(this->sub_h_save, nbands * nbands * nk);
+                    base_device::memory::resize_memory_op<SpinScalar<TK>, base_device::DEVICE_GPU>()(this->sub_s_save, nbands * nbands * nk);
+                    base_device::memory::resize_memory_op<SpinScalar<TK>, base_device::DEVICE_GPU>()(this->becp_save, size_becp * nk);
                     this->lambda_in_sub_ = this->lambda_;
                 }
-                std::complex<double>* becp_pointer = nullptr;
-                base_device::memory::resize_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(becp_pointer, size_becp);
+                SpinScalar<TK>* becp_pointer = nullptr;
+                base_device::memory::resize_memory_op<SpinScalar<TK>, base_device::DEVICE_GPU>()(becp_pointer, size_becp);
                 for (int ik = 0; ik < nk; ++ik)
                 {
                     psi_t->load_k_to_gpu(ik);
                     psi_t->fix_k(ik);
 
-                    std::complex<double>* h_k = this->sub_h_save + ik * nbands * nbands;
-                    std::complex<double>* s_k = this->sub_s_save + ik * nbands * nbands;
-                    std::complex<double>* becp_k = this->becp_save + ik * size_becp;
+                    SpinScalar<TK>* h_k = this->sub_h_save + ik * nbands * nbands;
+                    SpinScalar<TK>* s_k = this->sub_s_save + ik * nbands * nbands;
+                    SpinScalar<TK>* becp_k = this->becp_save + ik * size_becp;
                     if(initial_hs)
                     {
                         hamilt_t->updateHk(ik);
-                        hsolver::DiagoIterAssist<std::complex<double>, base_device::DEVICE_GPU>::cal_hs_subspace(hamilt_t, psi_t[0], h_k, s_k);
-                        base_device::memory::synchronize_memory_op<std::complex<double>, base_device::DEVICE_GPU, base_device::DEVICE_GPU>()(becp_k, onsite_p->get_becp(), size_becp);
+                        hsolver::DiagoIterAssist<SpinScalar<TK>, base_device::DEVICE_GPU>::cal_hs_subspace(hamilt_t, psi_t[0], h_k, s_k);
+                        base_device::memory::synchronize_memory_op<SpinScalar<TK>, base_device::DEVICE_GPU, base_device::DEVICE_GPU>()(becp_k, onsite_p->get_becp(), size_becp);
                     }
-                    base_device::memory::synchronize_memory_op<std::complex<double>, base_device::DEVICE_GPU, base_device::DEVICE_GPU>()(h_tmp, h_k, nbands * nbands);
-                    base_device::memory::synchronize_memory_op<std::complex<double>, base_device::DEVICE_GPU, base_device::DEVICE_GPU>()(s_tmp, s_k, nbands * nbands);
+                    base_device::memory::synchronize_memory_op<SpinScalar<TK>, base_device::DEVICE_GPU, base_device::DEVICE_GPU>()(h_tmp, h_k, nbands * nbands);
+                    base_device::memory::synchronize_memory_op<SpinScalar<TK>, base_device::DEVICE_GPU, base_device::DEVICE_GPU>()(s_tmp, s_k, nbands * nbands);
                     if (i_step != -1) this->calculate_delta_hcc(h_tmp, becp_k, this->lambda_.data(), nbands, nkb, nh_iat, ik, true);
 
-                    hsolver::DiagoIterAssist<std::complex<double>, base_device::DEVICE_GPU>::diag_responce(h_tmp,
+                    hsolver::DiagoIterAssist<SpinScalar<TK>, base_device::DEVICE_GPU>::diag_responce(h_tmp,
                                                                                   s_tmp,
                                                                                   nbands,
                                                                                   becp_k,
                                                                                   becp_pointer,
                                                                                   nkb * npol,
                                                                                   &this->pelec->ekb(ik, 0));
-                    base_device::memory::synchronize_memory_op<std::complex<double>, base_device::DEVICE_CPU, base_device::DEVICE_GPU>()(&becp_tmp[ik * size_becp], becp_pointer, size_becp);
+                    base_device::memory::synchronize_memory_op<SpinScalar<TK>, base_device::DEVICE_CPU, base_device::DEVICE_GPU>()(&becp_tmp[ik * size_becp], becp_pointer, size_becp);
 
                     psi_t->store_k_from_gpu(ik);
                 }
 
-                base_device::memory::delete_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(becp_pointer);
-                base_device::memory::delete_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(h_tmp);
-                base_device::memory::delete_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(s_tmp);
+                base_device::memory::delete_memory_op<SpinScalar<TK>, base_device::DEVICE_GPU>()(becp_pointer);
+                base_device::memory::delete_memory_op<SpinScalar<TK>, base_device::DEVICE_GPU>()(h_tmp);
+                base_device::memory::delete_memory_op<SpinScalar<TK>, base_device::DEVICE_GPU>()(s_tmp);
             }
 #endif
 
@@ -1088,7 +1091,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mw_from_lambda(
             // Calculate Mi from becp coefficients for each k-point
             for (int ik = 0; ik < nk; ik++)
             {
-                const std::complex<double>* becp = &becp_tmp[ik * size_becp];
+                const SpinScalar<TK>* becp = &becp_tmp[ik * size_becp];
                 this->accumulate_Mi_from_becp(becp, nkb, nbands, this->npol_, ik,
                     &this->pelec->wg(ik, 0), nh_iat);
             }
@@ -1110,8 +1113,8 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mw_from_lambda(
  * For PW: calls update_psi_charge_pw_cpu or update_psi_charge_pw_gpu
  * which perform subspace diagonalization and optional full-space refinement.
  */
-template <>
-void spinconstrain::SpinConstrain<std::complex<double>>::update_psi_charge(const ModuleBase::Vector3<double>* delta_lambda, bool pw_solve, bool full_update)
+template <typename TK>
+void spinconstrain::SpinConstrain<TK>::update_psi_charge(const ModuleBase::Vector3<double>* delta_lambda, bool pw_solve, bool full_update)
 {
     ModuleBase::TITLE("spinconstrain::SpinConstrain", "update_psi_charge");
     ModuleBase::timer::start("spinconstrain::SpinConstrain", "update_psi_charge");
@@ -1128,26 +1131,26 @@ void spinconstrain::SpinConstrain<std::complex<double>>::update_psi_charge(const
         // subspace diagonalization + optional full solve). The DMR inside
         // cal_mi_lcao() itself is fresh (see comment above), but the
         // charge density fed back into the next SCF iteration is stale.
-        psi::Psi<std::complex<double>>* psi_t = static_cast<psi::Psi<std::complex<double>>*>(this->psi);
+        psi::Psi<SpinScalar<TK>>* psi_t = static_cast<psi::Psi<SpinScalar<TK>>*>(this->psi);
 
         // If subspace acceleration was active, psi is still at the reference lambda,
         // not at the converged lambda. Must do a final full diag to get correct psi
         // for charge density construction.
         if (this->acceleration_active_ && this->acceleration_subspace_built_)
         {
-            hamilt::Hamilt<std::complex<double>>* hamilt_t
-                = static_cast<hamilt::Hamilt<std::complex<double>>*>(this->p_hamilt);
+            hamilt::Hamilt<SpinScalar<TK>>* hamilt_t
+                = static_cast<hamilt::Hamilt<SpinScalar<TK>>*>(this->p_hamilt);
             if (this->nspin_ == 2)
             {
-                dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double>>*>(
+                dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<SpinScalar<TK>, double>>*>(
                     this->p_operator)->update_lambda();
             }
             else if (this->nspin_ == 4)
             {
-                dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, std::complex<double>>>* >(
+                dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<SpinScalar<TK>, SpinScalar<TK>>>* >(
                     this->p_operator)->update_lambda();
             }
-            hsolver::HSolverLCAO<std::complex<double>> hsolver_t(this->ParaV, this->ks_solver_);
+            hsolver::HSolverLCAO<SpinScalar<TK>> hsolver_t(this->ParaV, this->ks_solver_);
             hsolver_t.solve(hamilt_t, psi_t[0], this->pelec, *this->dm_,
                             *this->pelec->charge, this->nspin_, true);
             elecstate::calculate_weights(this->pelec->ekb, this->pelec->wg,
@@ -1175,3 +1178,9 @@ void spinconstrain::SpinConstrain<std::complex<double>>::update_psi_charge(const
     }
     ModuleBase::timer::end("spinconstrain::SpinConstrain", "update_psi_charge");
 }
+
+// Explicit instantiation for nspin=4 (double precision).
+// NOTE: float instantiation (std::complex<float>) will be added once the
+// upstream onsite-projection data (pseudopotential vkb, radial table, gcar)
+// is made single-precision capable.
+template class spinconstrain::SpinConstrain<std::complex<double>>;

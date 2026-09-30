@@ -40,15 +40,17 @@ namespace spinconstrain
 // SubspaceCache implementation
 // ===================================================================
 
-SubspaceCache::SubspaceCache() = default;
+template <typename TK>
+SubspaceCache<TK>::SubspaceCache() = default;
 
-void SubspaceCache::build(
+template <typename TK>
+void SubspaceCache<TK>::build(
     int nk,
     int nbands,
     int nat,
-    const std::complex<double>* H0_sub_raw,
-    const std::complex<double>* S_sub_raw,
-    std::vector<std::vector<std::vector<std::complex<double>>>> P_I_sub_all,
+    const std::complex<typename GetTypeReal<TK>::type>* H0_sub_raw,
+    const std::complex<typename GetTypeReal<TK>::type>* S_sub_raw,
+    std::vector<std::vector<std::vector<std::complex<typename GetTypeReal<TK>::type>>>> P_I_sub_all,
     const std::vector<double>& ekb_ref_all,
     const std::vector<ModuleBase::Vector3<double>>& lambda_ref)
 {
@@ -74,7 +76,8 @@ void SubspaceCache::build(
     valid_ = true;
 }
 
-void SubspaceCache::clear()
+template <typename TK>
+void SubspaceCache<TK>::clear()
 {
     nk_ = 0;
     nbands_ = 0;
@@ -88,32 +91,37 @@ void SubspaceCache::clear()
     lambda_ref_.clear();
 }
 
-const std::complex<double>* SubspaceCache::H0_sub(int ik) const
+template <typename TK>
+const std::complex<typename GetTypeReal<TK>::type>* SubspaceCache<TK>::H0_sub(int ik) const
 {
     if (!valid_ || ik < 0 || ik >= nk_) return nullptr;
     return H0_sub_.data() + ik * nbands_ * nbands_;
 }
 
-const std::complex<double>* SubspaceCache::S_sub(int ik) const
+template <typename TK>
+const std::complex<typename GetTypeReal<TK>::type>* SubspaceCache<TK>::S_sub(int ik) const
 {
     if (!valid_ || ik < 0 || ik >= nk_) return nullptr;
     return S_sub_.data() + ik * nbands_ * nbands_;
 }
 
-const std::complex<double>* SubspaceCache::P_I_sub(int ik, int iat) const
+template <typename TK>
+const std::complex<typename GetTypeReal<TK>::type>* SubspaceCache<TK>::P_I_sub(int ik, int iat) const
 {
     if (!valid_ || ik < 0 || ik >= nk_ || iat < 0 || iat >= nat_) return nullptr;
     if (P_I_sub_[ik][iat].empty()) return nullptr;
     return P_I_sub_[ik][iat].data();
 }
 
-const double* SubspaceCache::ekb_ref(int ik) const
+template <typename TK>
+const double* SubspaceCache<TK>::ekb_ref(int ik) const
 {
     if (!valid_ || ik < 0 || ik >= nk_) return nullptr;
     return ekb_ref_.data() + ik * nbands_;
 }
 
-const std::vector<ModuleBase::Vector3<double>>& SubspaceCache::lambda_ref() const
+template <typename TK>
+const std::vector<ModuleBase::Vector3<double>>& SubspaceCache<TK>::lambda_ref() const
 {
     return lambda_ref_;
 }
@@ -122,12 +130,14 @@ const std::vector<ModuleBase::Vector3<double>>& SubspaceCache::lambda_ref() cons
 // FullSpaceDiagonalizer implementation
 // ===================================================================
 
-FullSpaceDiagonalizer::FullSpaceDiagonalizer(SpinConstrain<std::complex<double>>& sc)
+template <typename TK>
+FullSpaceDiagonalizer<TK>::FullSpaceDiagonalizer(SpinConstrain<TK>& sc)
     : sc_(sc)
 {
 }
 
-DiagonalizationResult FullSpaceDiagonalizer::solve(int i_step)
+template <typename TK>
+DiagonalizationResult FullSpaceDiagonalizer<TK>::solve(int i_step)
 {
     ModuleBase::timer::start("FullSpaceDiagonalizer", "solve");
 
@@ -142,27 +152,27 @@ DiagonalizationResult FullSpaceDiagonalizer::solve(int i_step)
         return result;
     }
 
-    psi::Psi<std::complex<double>>* psi_t
-        = static_cast<psi::Psi<std::complex<double>>*>(sc_.psi);
-    hamilt::Hamilt<std::complex<double>>* hamilt_t
-        = static_cast<hamilt::Hamilt<std::complex<double>>*>(sc_.p_hamilt);
+    psi::Psi<std::complex<typename GetTypeReal<TK>::type>>* psi_t
+        = static_cast<psi::Psi<std::complex<typename GetTypeReal<TK>::type>>*>(sc_.psi);
+    hamilt::Hamilt<std::complex<typename GetTypeReal<TK>::type>>* hamilt_t
+        = static_cast<hamilt::Hamilt<std::complex<typename GetTypeReal<TK>::type>>*>(sc_.p_hamilt);
 
     // Update DeltaSpin operator with current lambda
     if (sc_.get_nspin() == 2)
     {
-        dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double>>*>(
+        dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<typename GetTypeReal<TK>::type>, double>>*>(
             sc_.p_operator)
             ->update_lambda();
     }
     else if (sc_.get_nspin() == 4)
     {
-        dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, std::complex<double>>>* >(
+        dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<typename GetTypeReal<TK>::type>, std::complex<typename GetTypeReal<TK>::type>>>* >(
             sc_.p_operator)
             ->update_lambda();
     }
 
     // Full diagonalization without charge update (last param = true)
-    hsolver::HSolverLCAO<std::complex<double>> hsolver_t(sc_.ParaV, sc_.get_ks_solver());
+    hsolver::HSolverLCAO<std::complex<typename GetTypeReal<TK>::type>> hsolver_t(sc_.ParaV, sc_.get_ks_solver());
     hsolver_t.solve(hamilt_t, *psi_t, sc_.pelec, *sc_.dm_, *sc_.pelec->charge,
                     sc_.get_nspin(), true);
 
@@ -187,7 +197,8 @@ DiagonalizationResult FullSpaceDiagonalizer::solve(int i_step)
     return result;
 }
 
-bool FullSpaceDiagonalizer::build_subspace(
+template <typename TK>
+bool FullSpaceDiagonalizer<TK>::build_subspace(
     const std::vector<ModuleBase::Vector3<double>>& lambda_ref)
 {
     // FullSpaceDiagonalizer does not use subspace cache
@@ -195,12 +206,14 @@ bool FullSpaceDiagonalizer::build_subspace(
     return false;
 }
 
-bool FullSpaceDiagonalizer::has_subspace() const
+template <typename TK>
+bool FullSpaceDiagonalizer<TK>::has_subspace() const
 {
     return false;
 }
 
-void FullSpaceDiagonalizer::clear_subspace()
+template <typename TK>
+void FullSpaceDiagonalizer<TK>::clear_subspace()
 {
     // No-op: FullSpaceDiagonalizer has no subspace cache
 }
@@ -209,12 +222,14 @@ void FullSpaceDiagonalizer::clear_subspace()
 // SubspaceDiagonalizer implementation
 // ===================================================================
 
-SubspaceDiagonalizer::SubspaceDiagonalizer(SpinConstrain<std::complex<double>>& sc)
+template <typename TK>
+SubspaceDiagonalizer<TK>::SubspaceDiagonalizer(SpinConstrain<TK>& sc)
     : sc_(sc)
 {
 }
 
-DiagonalizationResult SubspaceDiagonalizer::solve(int i_step)
+template <typename TK>
+DiagonalizationResult SubspaceDiagonalizer<TK>::solve(int i_step)
 {
     ModuleBase::timer::start("SubspaceDiagonalizer", "solve");
 
@@ -253,32 +268,32 @@ DiagonalizationResult SubspaceDiagonalizer::solve(int i_step)
     // Update DeltaSpin operator with current lambda
     if (sc_.get_nspin() == 2)
     {
-        dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double>>*>(
+        dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<typename GetTypeReal<TK>::type>, double>>*>(
             sc_.p_operator)
             ->update_lambda();
     }
     else if (sc_.get_nspin() == 4)
     {
-        dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, std::complex<double>>>* >(
+        dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<typename GetTypeReal<TK>::type>, std::complex<typename GetTypeReal<TK>::type>>>* >(
             sc_.p_operator)
             ->update_lambda();
     }
 
     // Storage for eigenvectors per k-point
-    std::vector<std::vector<std::complex<double>>> vcc_all(nk);
+    std::vector<std::vector<std::complex<typename GetTypeReal<TK>::type>>> vcc_all(nk);
 
     double max_eig_change = 0.0;
 
     for (int ik = 0; ik < nk; ik++)
     {
         // Copy H0_sub from cache to temporary
-        std::memcpy(h_tmp_.data(), cache_.H0_sub(ik), sizeof(std::complex<double>) * nn);
+        std::memcpy(h_tmp_.data(), cache_.H0_sub(ik), sizeof(std::complex<typename GetTypeReal<TK>::type>) * nn);
 
         // Build PI_sub for this k-point from cache
-        std::vector<std::vector<std::complex<double>>> PI_sub_for_ik(nat);
+        std::vector<std::vector<std::complex<typename GetTypeReal<TK>::type>>> PI_sub_for_ik(nat);
         for (int iat = 0; iat < nat; iat++)
         {
-            const std::complex<double>* p = cache_.P_I_sub(ik, iat);
+            const std::complex<typename GetTypeReal<TK>::type>* p = cache_.P_I_sub(ik, iat);
             if (p != nullptr)
             {
                 PI_sub_for_ik[iat].assign(p, p + nn);
@@ -289,10 +304,10 @@ DiagonalizationResult SubspaceDiagonalizer::solve(int i_step)
                                      sc_.get_sc_lambda().data(), nbands, ik, true);
 
         // Copy S_sub for diag_hegvd (it modifies S in place)
-        std::memcpy(s_copy_.data(), cache_.S_sub(ik), sizeof(std::complex<double>) * nn);
+        std::memcpy(s_copy_.data(), cache_.S_sub(ik), sizeof(std::complex<typename GetTypeReal<TK>::type>) * nn);
 
         // Diagonalize: H_sub * V = S_sub * V * eps
-        hsolver::DiagoIterAssist<std::complex<double>>::diag_hegvd(
+        hsolver::DiagoIterAssist<std::complex<typename GetTypeReal<TK>::type>>::diag_hegvd(
             nbands, nbands, h_tmp_.data(), s_copy_.data(), nbands,
             eigenvalues_.data(), eigenvectors_.data());
 
@@ -331,7 +346,8 @@ DiagonalizationResult SubspaceDiagonalizer::solve(int i_step)
     return result;
 }
 
-bool SubspaceDiagonalizer::build_subspace(
+template <typename TK>
+bool SubspaceDiagonalizer<TK>::build_subspace(
     const std::vector<ModuleBase::Vector3<double>>& lambda_ref)
 {
 #ifdef __LCAO
@@ -343,10 +359,10 @@ bool SubspaceDiagonalizer::build_subspace(
     const int nlocal = sc_.ParaV->nrow;
     const int nn = nbands * nbands;
 
-    psi::Psi<std::complex<double>>* psi_t
-        = static_cast<psi::Psi<std::complex<double>>*>(sc_.psi);
-    hamilt::Hamilt<std::complex<double>>* hamilt_t
-        = static_cast<hamilt::Hamilt<std::complex<double>>*>(sc_.p_hamilt);
+    psi::Psi<std::complex<typename GetTypeReal<TK>::type>>* psi_t
+        = static_cast<psi::Psi<std::complex<typename GetTypeReal<TK>::type>>*>(sc_.psi);
+    hamilt::Hamilt<std::complex<typename GetTypeReal<TK>::type>>* hamilt_t
+        = static_cast<hamilt::Hamilt<std::complex<typename GetTypeReal<TK>::type>>*>(sc_.p_hamilt);
 
     // CRITICAL: Run full HSolverLCAO diagonalization BEFORE building subspace.
     // This updates psi to be the eigenvectors of H(lambda_ref). The subspace
@@ -357,16 +373,16 @@ bool SubspaceDiagonalizer::build_subspace(
     {
         if (sc_.get_nspin() == 2)
         {
-            dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double> > *>(
+            dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<typename GetTypeReal<TK>::type>, double> > *>(
                 sc_.p_operator)->update_lambda();
         }
         else if (sc_.get_nspin() == 4)
         {
-            dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, std::complex<double> > > *>(
+            dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<typename GetTypeReal<TK>::type>, std::complex<typename GetTypeReal<TK>::type> > > *>(
                 sc_.p_operator)->update_lambda();
         }
 
-        hsolver::HSolverLCAO<std::complex<double>> hsolver_t(sc_.ParaV, sc_.get_ks_solver());
+        hsolver::HSolverLCAO<std::complex<typename GetTypeReal<TK>::type>> hsolver_t(sc_.ParaV, sc_.get_ks_solver());
         hsolver_t.solve(hamilt_t, *psi_t, sc_.pelec, *sc_.dm_, *sc_.pelec->charge,
                         sc_.get_nspin(), true);
 
@@ -380,9 +396,9 @@ bool SubspaceDiagonalizer::build_subspace(
     cache_.clear();
 
     // Allocate raw arrays for building
-    std::vector<std::complex<double>> H0_sub_raw(nk * nn);
-    std::vector<std::complex<double>> S_sub_raw(nk * nn);
-    std::vector<std::vector<std::vector<std::complex<double>>>> P_I_sub_all(nk);
+    std::vector<std::complex<typename GetTypeReal<TK>::type>> H0_sub_raw(nk * nn);
+    std::vector<std::complex<typename GetTypeReal<TK>::type>> S_sub_raw(nk * nn);
+    std::vector<std::vector<std::vector<std::complex<typename GetTypeReal<TK>::type>>>> P_I_sub_all(nk);
 
     // Compute H0_sub, S_sub, P_I_sub for each k-point
     for (int ik = 0; ik < nk; ik++)
@@ -400,7 +416,7 @@ bool SubspaceDiagonalizer::build_subspace(
         // P_I_sub = C^dag D_I C for each constrained atom
         if (sc_.get_nspin() == 2)
         {
-            auto* dspin_op = dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double> > *>(
+            auto* dspin_op = dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<typename GetTypeReal<TK>::type>, double> > *>(
                 sc_.p_operator);
             dspin_op->cal_PI_sub(
                 sc_.kv_.kvec_d[ik],
@@ -410,7 +426,7 @@ bool SubspaceDiagonalizer::build_subspace(
         }
         else if (sc_.get_nspin() == 4)
         {
-            auto* dspin_op = dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, std::complex<double>> > *>(
+            auto* dspin_op = dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<typename GetTypeReal<TK>::type>, std::complex<typename GetTypeReal<TK>::type>> > *>(
                 sc_.p_operator);
             dspin_op->cal_PI_sub(
                 sc_.kv_.kvec_d[ik],
@@ -453,12 +469,14 @@ bool SubspaceDiagonalizer::build_subspace(
 #endif
 }
 
-bool SubspaceDiagonalizer::has_subspace() const
+template <typename TK>
+bool SubspaceDiagonalizer<TK>::has_subspace() const
 {
     return cache_.is_valid();
 }
 
-void SubspaceDiagonalizer::clear_subspace()
+template <typename TK>
+void SubspaceDiagonalizer<TK>::clear_subspace()
 {
     cache_.clear();
 }
@@ -467,12 +485,14 @@ void SubspaceDiagonalizer::clear_subspace()
 // FirstOrderResponseEngine implementation
 // ===================================================================
 
-FirstOrderResponseEngine::FirstOrderResponseEngine(SpinConstrain<std::complex<double>>& sc)
+template <typename TK>
+FirstOrderResponseEngine<TK>::FirstOrderResponseEngine(SpinConstrain<TK>& sc)
     : sc_(sc)
 {
 }
 
-DiagonalizationResult FirstOrderResponseEngine::solve(int i_step)
+template <typename TK>
+DiagonalizationResult FirstOrderResponseEngine<TK>::solve(int i_step)
 {
     ModuleBase::timer::start("FirstOrderResponseEngine", "solve");
 
@@ -514,7 +534,7 @@ DiagonalizationResult FirstOrderResponseEngine::solve(int i_step)
 
             for (int iat = 0; iat < nat; iat++)
             {
-                const std::complex<double>* p = cache_.P_I_sub(ik, iat);
+                const std::complex<typename GetTypeReal<TK>::type>* p = cache_.P_I_sub(ik, iat);
                 if (p == nullptr) continue;
 
                 double p_diag = p[ib + ib * nbands].real();
@@ -540,8 +560,8 @@ DiagonalizationResult FirstOrderResponseEngine::solve(int i_step)
     // Compute Mi from subspace: first-order uses V = I (no rotation), so
     // psi unchanged, DMK/DMR computed from current weights.
     // Use cal_mi_lcao_subspace with identity eigenvectors.
-    std::vector<std::vector<std::complex<double>>> vcc_identity(nk,
-        std::vector<std::complex<double>>(nn, {0.0, 0.0}));
+    std::vector<std::vector<std::complex<typename GetTypeReal<TK>::type>>> vcc_identity(nk,
+        std::vector<std::complex<typename GetTypeReal<TK>::type>>(nn, {0.0, 0.0}));
     for (int ik = 0; ik < nk; ik++)
     {
         for (int ib = 0; ib < nbands; ib++)
@@ -565,7 +585,8 @@ DiagonalizationResult FirstOrderResponseEngine::solve(int i_step)
     return result;
 }
 
-bool FirstOrderResponseEngine::build_subspace(
+template <typename TK>
+bool FirstOrderResponseEngine<TK>::build_subspace(
     const std::vector<ModuleBase::Vector3<double>>& lambda_ref)
 {
 #ifdef __LCAO
@@ -577,26 +598,26 @@ bool FirstOrderResponseEngine::build_subspace(
     const int nlocal = sc_.ParaV->nrow;
     const int nn = nbands * nbands;
 
-    psi::Psi<std::complex<double>>* psi_t
-        = static_cast<psi::Psi<std::complex<double>>*>(sc_.psi);
+    psi::Psi<std::complex<typename GetTypeReal<TK>::type>>* psi_t
+        = static_cast<psi::Psi<std::complex<typename GetTypeReal<TK>::type>>*>(sc_.psi);
 
     // CRITICAL: Same as SubspaceDiagonalizer - must run full diagonalization
     // first to update psi to eigenvectors of H(lambda_ref).
     {
         if (sc_.get_nspin() == 2)
         {
-            dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double> > *>(
+            dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<typename GetTypeReal<TK>::type>, double> > *>(
                 sc_.p_operator)->update_lambda();
         }
         else if (sc_.get_nspin() == 4)
         {
-            dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, std::complex<double> > > *>(
+            dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<typename GetTypeReal<TK>::type>, std::complex<typename GetTypeReal<TK>::type> > > *>(
                 sc_.p_operator)->update_lambda();
         }
 
-        hamilt::Hamilt<std::complex<double>>* hamilt_t
-            = static_cast<hamilt::Hamilt<std::complex<double>>*>(sc_.p_hamilt);
-        hsolver::HSolverLCAO<std::complex<double>> hsolver_t(sc_.ParaV, sc_.get_ks_solver());
+        hamilt::Hamilt<std::complex<typename GetTypeReal<TK>::type>>* hamilt_t
+            = static_cast<hamilt::Hamilt<std::complex<typename GetTypeReal<TK>::type>>*>(sc_.p_hamilt);
+        hsolver::HSolverLCAO<std::complex<typename GetTypeReal<TK>::type>> hsolver_t(sc_.ParaV, sc_.get_ks_solver());
         hsolver_t.solve(hamilt_t, *psi_t, sc_.pelec, *sc_.dm_, *sc_.pelec->charge,
                         sc_.get_nspin(), true);
 
@@ -608,9 +629,9 @@ bool FirstOrderResponseEngine::build_subspace(
 
     cache_.clear();
 
-    std::vector<std::complex<double>> H0_sub_raw(nk * nn);
-    std::vector<std::complex<double>> S_sub_raw(nk * nn);
-    std::vector<std::vector<std::vector<std::complex<double>>>> P_I_sub_all(nk);
+    std::vector<std::complex<typename GetTypeReal<TK>::type>> H0_sub_raw(nk * nn);
+    std::vector<std::complex<typename GetTypeReal<TK>::type>> S_sub_raw(nk * nn);
+    std::vector<std::vector<std::vector<std::complex<typename GetTypeReal<TK>::type>>>> P_I_sub_all(nk);
 
     for (int ik = 0; ik < nk; ik++)
     {
@@ -624,7 +645,7 @@ bool FirstOrderResponseEngine::build_subspace(
 
         if (sc_.get_nspin() == 2)
         {
-            auto* dspin_op = dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double> > *>(
+            auto* dspin_op = dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<typename GetTypeReal<TK>::type>, double> > *>(
                 sc_.p_operator);
             dspin_op->cal_PI_sub(
                 sc_.kv_.kvec_d[ik],
@@ -634,7 +655,7 @@ bool FirstOrderResponseEngine::build_subspace(
         }
         else if (sc_.get_nspin() == 4)
         {
-            auto* dspin_op = dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, std::complex<double>> > *>(
+            auto* dspin_op = dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<typename GetTypeReal<TK>::type>, std::complex<typename GetTypeReal<TK>::type>> > *>(
                 sc_.p_operator);
             dspin_op->cal_PI_sub(
                 sc_.kv_.kvec_d[ik],
@@ -669,12 +690,14 @@ bool FirstOrderResponseEngine::build_subspace(
 #endif
 }
 
-bool FirstOrderResponseEngine::has_subspace() const
+template <typename TK>
+bool FirstOrderResponseEngine<TK>::has_subspace() const
 {
     return cache_.is_valid();
 }
 
-void FirstOrderResponseEngine::clear_subspace()
+template <typename TK>
+void FirstOrderResponseEngine<TK>::clear_subspace()
 {
     cache_.clear();
 }
@@ -683,33 +706,34 @@ void FirstOrderResponseEngine::clear_subspace()
 // Factory function
 // ===================================================================
 
+template <typename TK>
 std::unique_ptr<DiagonalizationEngine> create_diagonalization_engine(
     DiagonalizationStrategy strategy,
-    SpinConstrain<std::complex<double>>& sc)
+    SpinConstrain<TK>& sc)
 {
     switch (strategy)
     {
         case DiagonalizationStrategy::FullSpace:
         {
-            std::unique_ptr<DiagonalizationEngine> ptr(new FullSpaceDiagonalizer(sc));
+            std::unique_ptr<DiagonalizationEngine> ptr(new FullSpaceDiagonalizer<TK>(sc));
             return ptr;
         }
 
         case DiagonalizationStrategy::Subspace:
         {
-            std::unique_ptr<DiagonalizationEngine> ptr(new SubspaceDiagonalizer(sc));
+            std::unique_ptr<DiagonalizationEngine> ptr(new SubspaceDiagonalizer<TK>(sc));
             return ptr;
         }
 
         case DiagonalizationStrategy::FirstOrder:
         {
-            std::unique_ptr<DiagonalizationEngine> ptr(new FirstOrderResponseEngine(sc));
+            std::unique_ptr<DiagonalizationEngine> ptr(new FirstOrderResponseEngine<TK>(sc));
             return ptr;
         }
 
         default:
         {
-            std::unique_ptr<DiagonalizationEngine> ptr(new FullSpaceDiagonalizer(sc));
+            std::unique_ptr<DiagonalizationEngine> ptr(new FullSpaceDiagonalizer<TK>(sc));
             return ptr;
         }
     }
@@ -742,3 +766,11 @@ std::string strategy_to_string(DiagonalizationStrategy s)
 }
 
 } // namespace spinconstrain
+
+// Explicit instantiation (double precision)
+template class spinconstrain::SubspaceCache<std::complex<double>>;
+template class spinconstrain::FullSpaceDiagonalizer<std::complex<double>>;
+template class spinconstrain::SubspaceDiagonalizer<std::complex<double>>;
+template class spinconstrain::FirstOrderResponseEngine<std::complex<double>>;
+template std::unique_ptr<spinconstrain::DiagonalizationEngine> spinconstrain::create_diagonalization_engine<std::complex<double>>(
+    DiagonalizationStrategy, SpinConstrain<std::complex<double>>&);

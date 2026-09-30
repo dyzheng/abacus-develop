@@ -47,8 +47,8 @@
 namespace spinconstrain
 {
 
-template <>
-void SpinConstrain<std::complex<double>>::free_lcao_subspace_cache()
+template <typename TK>
+void SpinConstrain<TK>::free_lcao_subspace_cache()
 {
     delete[] lcao_sub_h_save;
     delete[] lcao_sub_s_save;
@@ -67,17 +67,18 @@ void SpinConstrain<std::complex<double>>::free_lcao_subspace_cache()
     lcao_subspace_initialized_ = false;
 }
 
+template <typename Scalar>
 void gather_sub_matrix_to_all(
-    const std::complex<double>* local_data,
+    const Scalar* local_data,
     const Parallel_Orbitals* ParaV,
-    std::complex<double>* full_data,
+    Scalar* full_data,
     int nbands)
 {
 #ifdef __MPI
     int nrow = ParaV->nrow;
     int ncol_bands = ParaV->ncol_bands;
 
-    std::fill(full_data, full_data + nbands * nbands, std::complex<double>(0.0, 0.0));
+    std::fill(full_data, full_data + nbands * nbands, Scalar(0.0, 0.0));
 
     for (int j_local = 0; j_local < ncol_bands; j_local++)
     {
@@ -93,21 +94,22 @@ void gather_sub_matrix_to_all(
 
     Parallel_Reduce::reduce_pool(full_data, nbands * nbands);
 #else
-    std::memcpy(full_data, local_data, sizeof(std::complex<double>) * nbands * nbands);
+    std::memcpy(full_data, local_data, sizeof(Scalar) * nbands * nbands);
 #endif
 }
 
+template <typename Scalar>
 void scatter_sub_matrix_to_local(
-    const std::complex<double>* full_data,
+    const Scalar* full_data,
     const Parallel_Orbitals* ParaV,
-    std::complex<double>* local_data,
+    Scalar* local_data,
     int nbands)
 {
 #ifdef __MPI
     int nrow = ParaV->nrow;
     int ncol_bands = ParaV->ncol_bands;
 
-    std::fill(local_data, local_data + nrow * ncol_bands, std::complex<double>(0.0, 0.0));
+    std::fill(local_data, local_data + nrow * ncol_bands, Scalar(0.0, 0.0));
 
     for (int j_local = 0; j_local < ncol_bands; j_local++)
     {
@@ -121,12 +123,13 @@ void scatter_sub_matrix_to_local(
         }
     }
 #else
-    std::memcpy(local_data, full_data, sizeof(std::complex<double>) * nbands * nbands);
+    std::memcpy(local_data, full_data, sizeof(Scalar) * nbands * nbands);
 #endif
 }
 
+template <typename Scalar>
 void extract_diagonal_from_local_block(
-    const std::complex<double>* local_data,
+    const Scalar* local_data,
     const Parallel_Orbitals* ParaV,
     double* diag,
     int nbands)
@@ -157,7 +160,8 @@ void extract_diagonal_from_local_block(
 #endif
 }
 
-static void cast_down_to_float(const std::complex<double>* src, std::complex<float>* dst, std::size_t n)
+template <typename Scalar>
+static void cast_down_to_float(const Scalar* src, std::complex<float>* dst, std::size_t n)
 {
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static, 4096)
@@ -168,30 +172,33 @@ static void cast_down_to_float(const std::complex<double>* src, std::complex<flo
     }
 }
 
-static void cast_up_to_double(const std::complex<float>* src, std::complex<double>* dst, std::size_t n)
+template <typename Scalar>
+static void cast_up_to_double(const std::complex<float>* src, Scalar* dst, std::size_t n)
 {
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static, 4096)
 #endif
     for (std::size_t i = 0; i < n; ++i)
     {
-        dst[i] = static_cast<std::complex<double>>(src[i]);
+        dst[i] = static_cast<Scalar>(src[i]);
     }
 }
 
+template <typename Scalar>
 static void gather_sub_matrix_to_all_float(
     const std::complex<float>* local_data,
     const Parallel_Orbitals* ParaV,
-    std::complex<double>* full_data,
+    Scalar* full_data,
     int nbands)
 {
-    std::vector<std::complex<double>> local_db(ParaV->nrow * ParaV->ncol_bands);
+    std::vector<Scalar> local_db(ParaV->nrow * ParaV->ncol_bands);
     cast_up_to_double(local_data, local_db.data(), local_db.size());
     gather_sub_matrix_to_all(local_db.data(), ParaV, full_data, nbands);
 }
 
+template <typename Scalar>
 static void scatter_sub_matrix_to_local_float(
-    const std::complex<double>* full_data,
+    const Scalar* full_data,
     const Parallel_Orbitals* ParaV,
     std::complex<float>* local_data,
     int nbands)
@@ -200,38 +207,38 @@ static void scatter_sub_matrix_to_local_float(
     int ncol_bands = ParaV->ncol_bands;
     int nloc_eij_local = nrow * ncol_bands;
 #ifdef __MPI
-    std::vector<std::complex<double>> local_db(nloc_eij_local, {0.0, 0.0});
+    std::vector<Scalar> local_db(nloc_eij_local, {0.0, 0.0});
     scatter_sub_matrix_to_local(full_data, ParaV, local_db.data(), nbands);
     cast_down_to_float(local_db.data(), local_data, nloc_eij_local);
 #else
-    std::vector<std::complex<double>> tmp(nbands * nbands);
+    std::vector<Scalar> tmp(nbands * nbands);
     scatter_sub_matrix_to_local(full_data, ParaV, tmp.data(), nbands);
     cast_down_to_float(tmp.data(), local_data, nbands * nbands);
 #endif
 }
 
-template <>
-void SpinConstrain<std::complex<double>>::calculate_lcao_sub_hs(
+template <typename TK>
+void SpinConstrain<TK>::calculate_lcao_sub_hs(
     void* hamilt,
-    psi::Psi<std::complex<double>>& psi,
+    psi::Psi<SpinScalar<TK>>& psi,
     const Parallel_Orbitals* ParaV,
-    std::complex<double>* h_sub,
-    std::complex<double>* s_sub,
+    SpinScalar<TK>* h_sub,
+    SpinScalar<TK>* s_sub,
     int ik, int nbands, int nlocal)
 {
     ModuleBase::TITLE("SpinConstrain", "calculate_lcao_sub_hs");
     ModuleBase::timer::start("SpinConstrain", "calculate_lcao_sub_hs");
 
-    hamilt::Hamilt<std::complex<double>>* hamilt_t
-        = static_cast<hamilt::Hamilt<std::complex<double>>*>(hamilt);
+    hamilt::Hamilt<SpinScalar<TK>>* hamilt_t
+        = static_cast<hamilt::Hamilt<SpinScalar<TK>>*>(hamilt);
 
     hamilt_t->updateHk(ik);
 
-    hamilt::MatrixBlock<std::complex<double>> h_mat, s_mat;
+    hamilt::MatrixBlock<SpinScalar<TK>> h_mat, s_mat;
     hamilt_t->matrix(h_mat, s_mat);
 
     psi.fix_k(ik);
-    std::complex<double>* psi_ptr = psi.get_pointer();
+    SpinScalar<TK>* psi_ptr = psi.get_pointer();
 
     const bool use_fp32 = (subspace_exec_precision_ == ModuleGint::GintPrecision::fp32);
 
@@ -282,8 +289,8 @@ void SpinConstrain<std::complex<double>>::calculate_lcao_sub_hs(
 
         gather_sub_matrix_to_all_float(s_sub_local_f.data(), ParaV, s_sub, nbands);
 #else
-        const std::complex<double> one_d = {1.0, 0.0};
-        const std::complex<double> zero_d = {0.0, 0.0};
+        const SpinScalar<TK> one_d = {1.0, 0.0};
+        const SpinScalar<TK> zero_d = {0.0, 0.0};
 
         std::vector<std::complex<float>> h_f(nlocal * nlocal);
         cast_down_to_float(h_mat.p, h_f.data(), nlocal * nlocal);
@@ -314,12 +321,12 @@ void SpinConstrain<std::complex<double>>::calculate_lcao_sub_hs(
     }
     else
     {
-        const std::complex<double> one = {1.0, 0.0};
-        const std::complex<double> zero = {0.0, 0.0};
+        const SpinScalar<TK> one = {1.0, 0.0};
+        const SpinScalar<TK> zero = {0.0, 0.0};
 
 #ifdef __MPI
         int nloc_wfc = ParaV->nloc_wfc;
-        std::vector<std::complex<double>> temp(nloc_wfc, zero);
+        std::vector<SpinScalar<TK>> temp(nloc_wfc, zero);
 
         ScalapackConnector::gemm('N', 'N', nlocal, nbands, nlocal,
             one, h_mat.p, 1, 1, ParaV->desc,
@@ -330,7 +337,7 @@ void SpinConstrain<std::complex<double>>::calculate_lcao_sub_hs(
         int ncol_bands = ParaV->ncol_bands;
         int nloc_eij_local = lld_Eij * ncol_bands;
 
-        std::vector<std::complex<double>> h_sub_local(nloc_eij_local, zero);
+        std::vector<SpinScalar<TK>> h_sub_local(nloc_eij_local, zero);
 
         ScalapackConnector::gemm('C', 'N', nbands, nbands, nlocal,
             one, psi_ptr, 1, 1, ParaV->desc_wfc,
@@ -339,14 +346,14 @@ void SpinConstrain<std::complex<double>>::calculate_lcao_sub_hs(
 
         gather_sub_matrix_to_all(h_sub_local.data(), ParaV, h_sub, nbands);
 
-        std::vector<std::complex<double>> temp_s(nloc_wfc, zero);
+        std::vector<SpinScalar<TK>> temp_s(nloc_wfc, zero);
 
         ScalapackConnector::gemm('N', 'N', nlocal, nbands, nlocal,
             one, s_mat.p, 1, 1, ParaV->desc,
             psi_ptr, 1, 1, ParaV->desc_wfc,
             zero, temp_s.data(), 1, 1, ParaV->desc_wfc);
 
-        std::vector<std::complex<double>> s_sub_local(nloc_eij_local, zero);
+        std::vector<SpinScalar<TK>> s_sub_local(nloc_eij_local, zero);
 
         ScalapackConnector::gemm('C', 'N', nbands, nbands, nlocal,
             one, psi_ptr, 1, 1, ParaV->desc_wfc,
@@ -355,14 +362,14 @@ void SpinConstrain<std::complex<double>>::calculate_lcao_sub_hs(
 
         gather_sub_matrix_to_all(s_sub_local.data(), ParaV, s_sub, nbands);
 #else
-        std::vector<std::complex<double>> temp(nlocal * nbands, zero);
+        std::vector<SpinScalar<TK>> temp(nlocal * nbands, zero);
         zgemm_("N", "N", &nlocal, &nbands, &nlocal,
             &one, h_mat.p, &nlocal, psi_ptr, &nlocal, &zero, temp.data(), &nlocal);
 
         zgemm_("C", "N", &nbands, &nbands, &nlocal,
             &one, psi_ptr, &nlocal, temp.data(), &nlocal, &zero, h_sub, &nbands);
 
-        std::vector<std::complex<double>> temp_s(nlocal * nbands, zero);
+        std::vector<SpinScalar<TK>> temp_s(nlocal * nbands, zero);
         zgemm_("N", "N", &nlocal, &nbands, &nlocal,
             &one, s_mat.p, &nlocal, psi_ptr, &nlocal, &zero, temp_s.data(), &nlocal);
 
@@ -374,25 +381,25 @@ void SpinConstrain<std::complex<double>>::calculate_lcao_sub_hs(
     ModuleBase::timer::end("SpinConstrain", "calculate_lcao_sub_hs");
 }
 
-template <>
-void SpinConstrain<std::complex<double>>::calculate_PI_sub_from_hr(
+template <typename TK>
+void SpinConstrain<TK>::calculate_PI_sub_from_hr(
     const hamilt::HContainer<double>* pre_hr_iat,
-    psi::Psi<std::complex<double>>& psi,
+    psi::Psi<SpinScalar<TK>>& psi,
     const Parallel_Orbitals* ParaV,
     const ModuleBase::Vector3<double>& kvec_d,
-    std::complex<double>* PI_sub_local_out,
+    SpinScalar<TK>* PI_sub_local_out,
     int nbands, int nlocal)
 {
     ModuleBase::TITLE("SpinConstrain", "calculate_PI_sub_from_hr");
     ModuleBase::timer::start("SpinConstrain", "calculate_PI_sub_from_hr");
 
-    std::complex<double>* psi_ptr = psi.get_pointer();
+    SpinScalar<TK>* psi_ptr = psi.get_pointer();
 
     const bool use_fp32 = (subspace_exec_precision_ == ModuleGint::GintPrecision::fp32);
 
 #ifdef __MPI
     int nloc = ParaV->nloc;
-    std::vector<std::complex<double>> PI_k_local(nloc, {0.0, 0.0});
+    std::vector<SpinScalar<TK>> PI_k_local(nloc, {0.0, 0.0});
     hamilt::folding_HR(*pre_hr_iat, PI_k_local.data(), kvec_d, ParaV->nrow, 1);
 
     if (use_fp32)
@@ -428,12 +435,12 @@ void SpinConstrain<std::complex<double>>::calculate_PI_sub_from_hr(
     else
 #endif
     {
-        const std::complex<double> one = {1.0, 0.0};
-        const std::complex<double> zero = {0.0, 0.0};
+        const SpinScalar<TK> one = {1.0, 0.0};
+        const SpinScalar<TK> zero = {0.0, 0.0};
 
 #ifdef __MPI
         int nloc_wfc = ParaV->nloc_wfc;
-        std::vector<std::complex<double>> temp(nloc_wfc, zero);
+        std::vector<SpinScalar<TK>> temp(nloc_wfc, zero);
 
         ScalapackConnector::gemm('N', 'N', nlocal, nbands, nlocal,
             one, PI_k_local.data(), 1, 1, ParaV->desc,
@@ -443,19 +450,19 @@ void SpinConstrain<std::complex<double>>::calculate_PI_sub_from_hr(
         int lld_Eij = ParaV->nrow;
         int ncol_bands = ParaV->ncol_bands;
         int nloc_eij_local = lld_Eij * ncol_bands;
-        std::vector<std::complex<double>> PI_sub_local(nloc_eij_local, zero);
+        std::vector<SpinScalar<TK>> PI_sub_local(nloc_eij_local, zero);
 
         ScalapackConnector::gemm('C', 'N', nbands, nbands, nlocal,
             one, psi_ptr, 1, 1, ParaV->desc_wfc,
             temp.data(), 1, 1, ParaV->desc_wfc,
             zero, PI_sub_local.data(), 1, 1, ParaV->desc_Eij);
 
-        std::memcpy(PI_sub_local_out, PI_sub_local.data(), sizeof(std::complex<double>) * nloc_eij_local);
+        std::memcpy(PI_sub_local_out, PI_sub_local.data(), sizeof(SpinScalar<TK>) * nloc_eij_local);
 #else
-        std::vector<std::complex<double>> PI_k(nlocal * nlocal, {0.0, 0.0});
+        std::vector<SpinScalar<TK>> PI_k(nlocal * nlocal, {0.0, 0.0});
         hamilt::folding_HR(*pre_hr_iat, PI_k.data(), kvec_d, nlocal, 1);
 
-        std::vector<std::complex<double>> temp(nlocal * nbands, zero);
+        std::vector<SpinScalar<TK>> temp(nlocal * nbands, zero);
         zgemm_("N", "N", &nlocal, &nbands, &nlocal,
             &one, PI_k.data(), &nlocal, psi_ptr, &nlocal, &zero, temp.data(), &nlocal);
 
@@ -467,25 +474,25 @@ void SpinConstrain<std::complex<double>>::calculate_PI_sub_from_hr(
     ModuleBase::timer::end("SpinConstrain", "calculate_PI_sub_from_hr");
 }
 
-template <>
-void SpinConstrain<std::complex<double>>::calculate_PI_sub_from_hr(
-    const hamilt::HContainer<std::complex<double>>* pre_hr_iat,
-    psi::Psi<std::complex<double>>& psi,
+template <typename TK>
+void SpinConstrain<TK>::calculate_PI_sub_from_hr(
+    const hamilt::HContainer<SpinScalar<TK>>* pre_hr_iat,
+    psi::Psi<SpinScalar<TK>>& psi,
     const Parallel_Orbitals* ParaV,
     const ModuleBase::Vector3<double>& kvec_d,
-    std::complex<double>* PI_sub_local_out,
+    SpinScalar<TK>* PI_sub_local_out,
     int nbands, int nlocal)
 {
     ModuleBase::TITLE("SpinConstrain", "calculate_PI_sub_from_hr");
     ModuleBase::timer::start("SpinConstrain", "calculate_PI_sub_from_hr");
 
-    std::complex<double>* psi_ptr = psi.get_pointer();
+    SpinScalar<TK>* psi_ptr = psi.get_pointer();
 
     const bool use_fp32 = (subspace_exec_precision_ == ModuleGint::GintPrecision::fp32);
 
 #ifdef __MPI
     int nloc = ParaV->nloc;
-    std::vector<std::complex<double>> PI_k_local(nloc, {0.0, 0.0});
+    std::vector<SpinScalar<TK>> PI_k_local(nloc, {0.0, 0.0});
     hamilt::folding_HR(*pre_hr_iat, PI_k_local.data(), kvec_d, ParaV->nrow, 1);
 
     if (use_fp32)
@@ -521,12 +528,12 @@ void SpinConstrain<std::complex<double>>::calculate_PI_sub_from_hr(
     else
 #endif
     {
-        const std::complex<double> one = {1.0, 0.0};
-        const std::complex<double> zero = {0.0, 0.0};
+        const SpinScalar<TK> one = {1.0, 0.0};
+        const SpinScalar<TK> zero = {0.0, 0.0};
 
 #ifdef __MPI
         int nloc_wfc = ParaV->nloc_wfc;
-        std::vector<std::complex<double>> temp(nloc_wfc, zero);
+        std::vector<SpinScalar<TK>> temp(nloc_wfc, zero);
 
         ScalapackConnector::gemm('N', 'N', nlocal, nbands, nlocal,
             one, PI_k_local.data(), 1, 1, ParaV->desc,
@@ -536,19 +543,19 @@ void SpinConstrain<std::complex<double>>::calculate_PI_sub_from_hr(
         int lld_Eij = ParaV->nrow;
         int ncol_bands = ParaV->ncol_bands;
         int nloc_eij_local = lld_Eij * ncol_bands;
-        std::vector<std::complex<double>> PI_sub_local(nloc_eij_local, zero);
+        std::vector<SpinScalar<TK>> PI_sub_local(nloc_eij_local, zero);
 
         ScalapackConnector::gemm('C', 'N', nbands, nbands, nlocal,
             one, psi_ptr, 1, 1, ParaV->desc_wfc,
             temp.data(), 1, 1, ParaV->desc_wfc,
             zero, PI_sub_local.data(), 1, 1, ParaV->desc_Eij);
 
-        std::memcpy(PI_sub_local_out, PI_sub_local.data(), sizeof(std::complex<double>) * nloc_eij_local);
+        std::memcpy(PI_sub_local_out, PI_sub_local.data(), sizeof(SpinScalar<TK>) * nloc_eij_local);
 #else
-        std::vector<std::complex<double>> PI_k(nlocal * nlocal, {0.0, 0.0});
+        std::vector<SpinScalar<TK>> PI_k(nlocal * nlocal, {0.0, 0.0});
         hamilt::folding_HR(*pre_hr_iat, PI_k.data(), kvec_d, nlocal, 1);
 
-        std::vector<std::complex<double>> temp(nlocal * nbands, zero);
+        std::vector<SpinScalar<TK>> temp(nlocal * nbands, zero);
         zgemm_("N", "N", &nlocal, &nbands, &nlocal,
             &one, PI_k.data(), &nlocal, psi_ptr, &nlocal, &zero, temp.data(), &nlocal);
 
@@ -560,10 +567,10 @@ void SpinConstrain<std::complex<double>>::calculate_PI_sub_from_hr(
     ModuleBase::timer::end("SpinConstrain", "calculate_PI_sub_from_hr");
 }
 
-template <>
-void SpinConstrain<std::complex<double>>::calculate_delta_hcc_lcao(
-    std::complex<double>* h_sub_local,
-    const std::map<int, std::vector<std::complex<double>>>& PI_sub_local,
+template <typename TK>
+void SpinConstrain<TK>::calculate_delta_hcc_lcao(
+    SpinScalar<TK>* h_sub_local,
+    const std::map<int, std::vector<SpinScalar<TK>>>& PI_sub_local,
     const ModuleBase::Vector3<double>* lambda,
     int nbands, int ik, bool full_update,
     const Parallel_Orbitals* ParaV)
@@ -595,12 +602,12 @@ void SpinConstrain<std::complex<double>>::calculate_delta_hcc_lcao(
 
         for (const auto& [iat, pi_local] : PI_sub_local)
         {
-            const std::complex<double> coeff0(effective_lambda[iat][2], 0.0);
-            const std::complex<double> coeff1(effective_lambda[iat][0], -effective_lambda[iat][1]);
-            const std::complex<double> coeff2(effective_lambda[iat][0], effective_lambda[iat][1]);
-            const std::complex<double> coeff3(-effective_lambda[iat][2], 0.0);
+            const SpinScalar<TK> coeff0(effective_lambda[iat][2], 0.0);
+            const SpinScalar<TK> coeff1(effective_lambda[iat][0], -effective_lambda[iat][1]);
+            const SpinScalar<TK> coeff2(effective_lambda[iat][0], effective_lambda[iat][1]);
+            const SpinScalar<TK> coeff3(-effective_lambda[iat][2], 0.0);
 
-            const std::complex<double>* pi_ptr = pi_local.data();
+            const SpinScalar<TK>* pi_ptr = pi_local.data();
             for (int j_local = 0; j_local < ncol_bands; j_local++)
             {
                 for (int i_local = 0; i_local < nrow; i_local++)
@@ -643,8 +650,8 @@ void SpinConstrain<std::complex<double>>::calculate_delta_hcc_lcao(
 
         for (const auto& [iat, pi_local] : PI_sub_local)
         {
-            const std::complex<double> coeff(effective_lambda[iat][2] * spin_sign, 0.0);
-            const std::complex<double>* pi_ptr = pi_local.data();
+            const SpinScalar<TK> coeff(effective_lambda[iat][2] * spin_sign, 0.0);
+            const SpinScalar<TK>* pi_ptr = pi_local.data();
             for (int ij = 0; ij < nloc_eij; ij++)
             {
                 h_sub_local[ij] += coeff * pi_ptr[ij];
@@ -655,10 +662,10 @@ void SpinConstrain<std::complex<double>>::calculate_delta_hcc_lcao(
     ModuleBase::timer::end("SpinConstrain", "calculate_delta_hcc_lcao");
 }
 
-template <>
-void SpinConstrain<std::complex<double>>::calculate_delta_hcc_lcao(
-    std::complex<double>* h_sub,
-    const std::vector<std::vector<std::complex<double>>>& PI_sub,
+template <typename TK>
+void SpinConstrain<TK>::calculate_delta_hcc_lcao(
+    SpinScalar<TK>* h_sub,
+    const std::vector<std::vector<SpinScalar<TK>>>& PI_sub,
     const ModuleBase::Vector3<double>* lambda,
     int nbands, int ik, bool full_update)
 {
@@ -687,8 +694,8 @@ void SpinConstrain<std::complex<double>>::calculate_delta_hcc_lcao(
         {
             if (PI_sub[iat].empty()) continue;
 
-            const std::complex<double> coeff0(effective_lambda[iat][2], 0.0);
-            const std::complex<double>* pi_ptr = PI_sub[iat].data();
+            const SpinScalar<TK> coeff0(effective_lambda[iat][2], 0.0);
+            const SpinScalar<TK>* pi_ptr = PI_sub[iat].data();
             for (int ij = 0; ij < nn; ij++)
             {
                 h_sub[ij] += coeff0 * pi_ptr[ij];
@@ -703,8 +710,8 @@ void SpinConstrain<std::complex<double>>::calculate_delta_hcc_lcao(
         {
             if (PI_sub[iat].empty()) continue;
 
-            const std::complex<double> coeff(effective_lambda[iat][2] * spin_sign, 0.0);
-            const std::complex<double>* pi_ptr = PI_sub[iat].data();
+            const SpinScalar<TK> coeff(effective_lambda[iat][2] * spin_sign, 0.0);
+            const SpinScalar<TK>* pi_ptr = PI_sub[iat].data();
             for (int ij = 0; ij < nn; ij++)
             {
                 h_sub[ij] += coeff * pi_ptr[ij];
@@ -715,11 +722,11 @@ void SpinConstrain<std::complex<double>>::calculate_delta_hcc_lcao(
     ModuleBase::timer::end("SpinConstrain", "calculate_delta_hcc_lcao");
 }
 
-template <>
-void SpinConstrain<std::complex<double>>::rotate_psi_subspace_lcao(
-    psi::Psi<std::complex<double>>& psi,
+template <typename TK>
+void SpinConstrain<TK>::rotate_psi_subspace_lcao(
+    psi::Psi<SpinScalar<TK>>& psi,
     const Parallel_Orbitals* ParaV,
-    const std::vector<std::vector<std::complex<double>>>& vcc_all,
+    const std::vector<std::vector<SpinScalar<TK>>>& vcc_all,
     int nbands, int nlocal, int nk)
 {
     ModuleBase::TITLE("SpinConstrain", "rotate_psi_subspace_lcao");
@@ -736,7 +743,7 @@ void SpinConstrain<std::complex<double>>::rotate_psi_subspace_lcao(
         for (int ik = 0; ik < nk; ik++)
         {
             psi.fix_k(ik);
-            std::complex<double>* psi_ptr = psi.get_pointer();
+            SpinScalar<TK>* psi_ptr = psi.get_pointer();
 
 #ifdef __MPI
             int nloc_wfc = ParaV->nloc_wfc;
@@ -775,13 +782,13 @@ void SpinConstrain<std::complex<double>>::rotate_psi_subspace_lcao(
     }
     else
     {
-        const std::complex<double> one = {1.0, 0.0};
-        const std::complex<double> zero = {0.0, 0.0};
+        const SpinScalar<TK> one = {1.0, 0.0};
+        const SpinScalar<TK> zero = {0.0, 0.0};
 
         for (int ik = 0; ik < nk; ik++)
         {
             psi.fix_k(ik);
-            std::complex<double>* psi_ptr = psi.get_pointer();
+            SpinScalar<TK>* psi_ptr = psi.get_pointer();
 
 #ifdef __MPI
             int nloc_wfc = ParaV->nloc_wfc;
@@ -789,24 +796,24 @@ void SpinConstrain<std::complex<double>>::rotate_psi_subspace_lcao(
             int ncol_bands = ParaV->ncol_bands;
             int nloc_eij_local = lld_Eij * ncol_bands;
 
-            std::vector<std::complex<double>> v_local(nloc_eij_local, zero);
+            std::vector<SpinScalar<TK>> v_local(nloc_eij_local, zero);
             scatter_sub_matrix_to_local(vcc_all[ik].data(), ParaV, v_local.data(), nbands);
 
-            std::vector<std::complex<double>> temp(nloc_wfc, zero);
+            std::vector<SpinScalar<TK>> temp(nloc_wfc, zero);
 
             ScalapackConnector::gemm('N', 'N', nlocal, nbands, nbands,
                 one, psi_ptr, 1, 1, ParaV->desc_wfc,
                 v_local.data(), 1, 1, ParaV->desc_Eij,
                 zero, temp.data(), 1, 1, ParaV->desc_wfc);
 
-            std::memcpy(psi_ptr, temp.data(), sizeof(std::complex<double>) * nloc_wfc);
+            std::memcpy(psi_ptr, temp.data(), sizeof(SpinScalar<TK>) * nloc_wfc);
 #else
-            std::vector<std::complex<double>> temp(nlocal * nbands);
+            std::vector<SpinScalar<TK>> temp(nlocal * nbands);
             zgemm_("N", "N", &nlocal, &nbands, &nbands,
                 &one, psi_ptr, &nlocal,
                 vcc_all[ik].data(), &nbands,
                 &zero, temp.data(), &nlocal);
-            std::memcpy(psi_ptr, temp.data(), sizeof(std::complex<double>) * nlocal * nbands);
+            std::memcpy(psi_ptr, temp.data(), sizeof(SpinScalar<TK>) * nlocal * nbands);
 #endif
         }
     }
@@ -814,27 +821,27 @@ void SpinConstrain<std::complex<double>>::rotate_psi_subspace_lcao(
     ModuleBase::timer::end("SpinConstrain", "rotate_psi_subspace_lcao");
 }
 
-template <>
-void SpinConstrain<std::complex<double>>::cal_mi_lcao_subspace(
-    const std::vector<std::vector<std::complex<double>>>& vcc_all,
+template <typename TK>
+void SpinConstrain<TK>::cal_mi_lcao_subspace(
+    const std::vector<std::vector<SpinScalar<TK>>>& vcc_all,
     int nbands, int nk, int npol)
 {
     ModuleBase::TITLE("SpinConstrain", "cal_mi_lcao_subspace");
     ModuleBase::timer::start("SpinConstrain", "cal_mi_lcao_subspace");
 
 #ifdef __LCAO
-    psi::Psi<std::complex<double>>* psi_t
-        = static_cast<psi::Psi<std::complex<double>>*>(this->psi);
+    psi::Psi<SpinScalar<TK>>* psi_t
+        = static_cast<psi::Psi<SpinScalar<TK>>*>(this->psi);
 
     const int nrow = this->ParaV->nrow;
     const int nlocal = this->ParaV->get_global_row_size();
     const int nloc_wfc = this->ParaV->nloc_wfc;
 
-    std::vector<std::vector<std::complex<double>>> psi_save(nk);
+    std::vector<std::vector<SpinScalar<TK>>> psi_save(nk);
     for (int ik = 0; ik < nk; ik++)
     {
         psi_t->fix_k(ik);
-        std::complex<double>* ptr = psi_t->get_pointer();
+        SpinScalar<TK>* ptr = psi_t->get_pointer();
         psi_save[ik].assign(ptr, ptr + nloc_wfc);
     }
 
@@ -855,8 +862,8 @@ void SpinConstrain<std::complex<double>>::cal_mi_lcao_subspace(
     for (int ik = 0; ik < nk; ik++)
     {
         psi_t->fix_k(ik);
-        std::complex<double>* ptr = psi_t->get_pointer();
-        std::memcpy(ptr, psi_save[ik].data(), sizeof(std::complex<double>) * nloc_wfc);
+        SpinScalar<TK>* ptr = psi_t->get_pointer();
+        std::memcpy(ptr, psi_save[ik].data(), sizeof(SpinScalar<TK>) * nloc_wfc);
     }
 #else
     this->zero_Mi();
@@ -872,3 +879,20 @@ void SpinConstrain<std::complex<double>>::cal_mi_lcao_subspace(
 } // namespace spinconstrain
 
 #endif // __LCAO
+
+// Explicit instantiation for nspin=4 (double precision).
+// NOTE: float instantiation (std::complex<float>) will be added once the
+// upstream onsite-projection data (pseudopotential vkb, radial table, gcar)
+// is made single-precision capable.
+template class spinconstrain::SpinConstrain<std::complex<double>>;
+
+// Explicit instantiation of the subspace free helpers (double precision).
+#if defined(__LCAO)
+template void spinconstrain::gather_sub_matrix_to_all<std::complex<double>>(const std::complex<double>*, const Parallel_Orbitals*, std::complex<double>*, int);
+template void spinconstrain::scatter_sub_matrix_to_local<std::complex<double>>(const std::complex<double>*, const Parallel_Orbitals*, std::complex<double>*, int);
+template void spinconstrain::extract_diagonal_from_local_block<std::complex<double>>(const std::complex<double>*, const Parallel_Orbitals*, double*, int);
+template void spinconstrain::cast_down_to_float<std::complex<double>>(const std::complex<double>*, std::complex<float>*, std::size_t);
+template void spinconstrain::cast_up_to_double<std::complex<double>>(const std::complex<float>*, std::complex<double>*, std::size_t);
+template void spinconstrain::gather_sub_matrix_to_all_float<std::complex<double>>(const std::complex<float>*, const Parallel_Orbitals*, std::complex<double>*, int);
+template void spinconstrain::scatter_sub_matrix_to_local_float<std::complex<double>>(const std::complex<double>*, const Parallel_Orbitals*, std::complex<float>*, int);
+#endif

@@ -64,8 +64,8 @@
  * @param step Current SCF iteration number (for logging)
  * @param print Whether to print moments (unused in this implementation)
  */
-template <>
-void spinconstrain::SpinConstrain<std::complex<double>>::cal_mi_lcao(const int& step, bool print)
+template <typename TK>
+void spinconstrain::SpinConstrain<TK>::cal_mi_lcao(const int& step, bool print)
 {
     ModuleBase::TITLE("module_deltaspin", "cal_mi_lcao");
     ModuleBase::timer::start("spinconstrain::SpinConstrain", "cal_mi_lcao");
@@ -87,7 +87,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mi_lcao(const int& 
         // For nspin=2, _DMR[0] now points to the spin-difference density.
         // Getting the pointer before switch_dmr would return stale data.
         const hamilt::HContainer<double>* dmr = this->dm_->get_DMR_pointer(1);
-        moments = static_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double>>*>(this->p_operator)->cal_moment(dmr, this->get_constrain());
+        moments = static_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<SpinScalar<TK>, double>>*>(this->p_operator)->cal_moment(dmr, this->get_constrain());
 
         // Restore _DMR[0] to point to the total density matrix (rho_up + rho_dn).
         // This must be done before any subsequent code uses the density matrix.
@@ -110,7 +110,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mi_lcao(const int& 
         // all magnetization information in its 2x2 block structure.
         // _DMR[0] (index 1 in get_DMR_pointer) is the full spinor DMR.
         const hamilt::HContainer<double>* dmr = this->dm_->get_DMR_pointer(1);
-        moments = static_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, std::complex<double>>>*>(this->p_operator)->cal_moment(dmr, this->get_constrain());
+        moments = static_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<SpinScalar<TK>, SpinScalar<TK>>>*>(this->p_operator)->cal_moment(dmr, this->get_constrain());
         // moments array layout: [Mx_0, My_0, Mz_0, Mx_1, My_1, Mz_1, ...]
         for(int iat=0;iat<this->Mi_.size();iat++)
         {
@@ -140,8 +140,8 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mi_lcao(const int& 
  * Finally, Mi is summed across all MPI k-pool ranks since each pool only
  * has a subset of k-points.
  */
-template <>
-void spinconstrain::SpinConstrain<std::complex<double>>::cal_mi_pw()
+template <typename TK>
+void spinconstrain::SpinConstrain<TK>::cal_mi_pw()
 {
     ModuleBase::TITLE("module_deltaspin", "cal_mi_pw");
     ModuleBase::timer::start("spinconstrain::SpinConstrain", "cal_mi_pw");
@@ -149,10 +149,10 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mi_pw()
     this->zero_Mi();
     if(PARAM.inp.device == "cpu")
     {
-        auto* onsite_p = projectors::OnsiteProjector<double, base_device::DEVICE_CPU>::get_instance();
+        auto* onsite_p = projectors::OnsiteProjector<typename GetTypeReal<TK>::type, base_device::DEVICE_CPU>::get_instance();
         // Loop over k-points to calculate Mi of sum_{k,i,l,m}<Psi_{k,i}|alpha_{l,m}><alpha_{l,m}|Psi_{k,i}>
-        std::complex<double>* psi_pointer = nullptr;
-        psi::Psi<std::complex<double>, base_device::DEVICE_CPU>* psi_t = static_cast<psi::Psi<std::complex<double>, base_device::DEVICE_CPU>*>(this->psi);
+        SpinScalar<TK>* psi_pointer = nullptr;
+        psi::Psi<SpinScalar<TK>, base_device::DEVICE_CPU>* psi_t = static_cast<psi::Psi<SpinScalar<TK>, base_device::DEVICE_CPU>*>(this->psi);
         const int nbands = psi_t->get_nbands();
         const int nks = psi_t->get_nk();
         const int npol = psi_t->get_npol();
@@ -162,7 +162,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mi_pw()
             psi_pointer = psi_t->get_pointer();
             onsite_p->tabulate_atomic(ik); // Set up atomic projectors for this k-point
             onsite_p->overlap_proj_psi(nbands * npol, psi_pointer); // Compute becp = <alpha|psi>
-            const std::complex<double>* becp = onsite_p->get_h_becp();
+            const SpinScalar<TK>* becp = onsite_p->get_h_becp();
             int nkb = onsite_p->get_tot_nproj();
             this->accumulate_Mi_from_becp(becp, nkb, nbands, npol, ik,
                 &this->pelec->wg(ik, 0), &onsite_p->get_nh(0));
@@ -171,9 +171,9 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mi_pw()
 #if ((defined __CUDA) || (defined __ROCM))
     else
     {
-        auto* onsite_p = projectors::OnsiteProjector<double, base_device::DEVICE_GPU>::get_instance();
-        std::complex<double>* psi_pointer = nullptr;
-        psi::Psi<std::complex<double>, base_device::DEVICE_GPU>* psi_t = static_cast<psi::Psi<std::complex<double>, base_device::DEVICE_GPU>*>(this->psi);
+        auto* onsite_p = projectors::OnsiteProjector<typename GetTypeReal<TK>::type, base_device::DEVICE_GPU>::get_instance();
+        SpinScalar<TK>* psi_pointer = nullptr;
+        psi::Psi<SpinScalar<TK>, base_device::DEVICE_GPU>* psi_t = static_cast<psi::Psi<SpinScalar<TK>, base_device::DEVICE_GPU>*>(this->psi);
         const int nbands = psi_t->get_nbands();
         const int nks = psi_t->get_nk();
         const int npol = psi_t->get_npol();
@@ -184,7 +184,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mi_pw()
             psi_pointer = psi_t->get_pointer();
             onsite_p->tabulate_atomic(ik);
             onsite_p->overlap_proj_psi(nbands * npol, psi_pointer);
-            const std::complex<double>* becp = onsite_p->get_h_becp();
+            const SpinScalar<TK>* becp = onsite_p->get_h_becp();
             int nkb = onsite_p->get_size_becp() / nbands / npol;
             this->accumulate_Mi_from_becp(becp, nkb, nbands, npol, ik,
                 &this->pelec->wg(ik, 0), &onsite_p->get_nh(0));
@@ -198,17 +198,15 @@ void spinconstrain::SpinConstrain<std::complex<double>>::cal_mi_pw()
 }
 
 /// @brief Set the DeltaSpin operator pointer for LCAO magnetic moment calculation
-template <>
-void spinconstrain::SpinConstrain<std::complex<double>>::set_operator(
-    hamilt::Operator<std::complex<double>>* op_in)
+template <typename TK>
+void spinconstrain::SpinConstrain<TK>::set_operator(
+    hamilt::Operator<TK>* op_in)
 {
     this->p_operator = op_in;
 }
 
-/// @brief Set the DeltaSpin operator pointer (double specialization)
-template <>
-void spinconstrain::SpinConstrain<double>::set_operator(
-    hamilt::Operator<double>* op_in)
-{
-    this->p_operator = op_in;
-}
+// Explicit instantiation for nspin=4 (double precision).
+// NOTE: float instantiation (std::complex<float>) will be added once the
+// upstream onsite-projection data (pseudopotential vkb, radial table, gcar)
+// is made single-precision capable.
+template class spinconstrain::SpinConstrain<std::complex<double>>;

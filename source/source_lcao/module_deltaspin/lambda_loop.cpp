@@ -94,8 +94,8 @@
  * @param lambda_ref_ry Reference lambda in Ry/uB (where subspace is built)
  * @param label Label for output file
  */
-template <>
-void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_local_diagnostic(
+template <typename TK>
+void spinconstrain::SpinConstrain<TK>::run_lambda_local_diagnostic(
     int outer_step, double lambda_ref_ry, const std::string& label)
 {
 #ifndef __LCAO
@@ -124,13 +124,13 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_local_diagno
         }
     }
 
-    psi::Psi<std::complex<double>>* psi_t = static_cast<psi::Psi<std::complex<double>>*>(this->psi);
-    hamilt::Hamilt<std::complex<double>>* hamilt_t = static_cast<hamilt::Hamilt<std::complex<double>>*>(this->p_hamilt);
+    psi::Psi<SpinScalar<TK>>* psi_t = static_cast<psi::Psi<SpinScalar<TK>>*>(this->psi);
+    hamilt::Hamilt<SpinScalar<TK>>* hamilt_t = static_cast<hamilt::Hamilt<SpinScalar<TK>>*>(this->p_hamilt);
 
-    dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double>>*>(this->p_operator)
+    dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<SpinScalar<TK>, double>>*>(this->p_operator)
         ->update_lambda();
 
-    hsolver::HSolverLCAO<std::complex<double>> hsolver_t(this->ParaV, this->ks_solver_);
+    hsolver::HSolverLCAO<SpinScalar<TK>> hsolver_t(this->ParaV, this->ks_solver_);
     hsolver_t.solve(hamilt_t, psi_t[0], this->pelec, *this->dm_, *this->pelec->charge, this->nspin_, true);
     elecstate::calculate_weights(this->pelec->ekb, this->pelec->wg, this->pelec->klist,
                                  this->pelec->eferm, this->pelec->f_en, this->pelec->nelec_spin,
@@ -148,13 +148,13 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_local_diagno
 
     delete[] this->lcao_sub_h_save;
     delete[] this->lcao_sub_s_save;
-    this->lcao_sub_h_save = new std::complex<double>[nk * nn];
-    this->lcao_sub_s_save = new std::complex<double>[nk * nn];
+    this->lcao_sub_h_save = new SpinScalar<TK>[nk * nn];
+    this->lcao_sub_s_save = new SpinScalar<TK>[nk * nn];
     this->lcao_PI_sub_save_.resize(nk);
     this->lcao_PI_sub_diag_.resize(nk);
     this->lcao_ekb_save_.resize(nk * nbands);
 
-    std::vector<std::vector<std::vector<std::complex<double>>>> PI_sub_full(nk);
+    std::vector<std::vector<std::vector<SpinScalar<TK>>>> PI_sub_full(nk);
     for (int ik = 0; ik < nk; ik++) {
         PI_sub_full[ik].resize(this->get_nat());
     }
@@ -167,7 +167,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_local_diagno
             this->lcao_sub_s_save + ik * nn,
             ik, nbands, nlocal);
 
-        auto* dspin_op = dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double>>*>(
+        auto* dspin_op = dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<SpinScalar<TK>, double>>*>(
             this->p_operator);
         dspin_op->cal_PI_sub(
             this->kv_.kvec_d[ik],
@@ -221,7 +221,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_local_diagno
     // Save original psi wavefunctions at lambda_ref for restoration in each method
     const int nrow = this->ParaV->nrow;
     const int nloc_wfc = this->ParaV->nloc_wfc;
-    std::vector<std::vector<std::complex<double>>> psi_save(nk);
+    std::vector<std::vector<SpinScalar<TK>>> psi_save(nk);
     for (int ik = 0; ik < nk; ik++) {
         psi_t->fix_k(ik);
         psi_save[ik].assign(psi_t->get_pointer(), psi_t->get_pointer() + nloc_wfc);
@@ -229,20 +229,20 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_local_diagno
 
     // Helper lambda: restore psi, optionally rotate with V, then compute Mi via full-space DMR
     auto compute_mi_full_dm = [this, psi_t, nk, nbands, nrow, nloc_wfc, &psi_save](
-        const std::vector<std::vector<std::complex<double>>>& vcc_list) -> std::vector<ModuleBase::Vector3<double>>
+        const std::vector<std::vector<SpinScalar<TK>>>& vcc_list) -> std::vector<ModuleBase::Vector3<double>>
     {
         // Restore psi to lambda_ref state
         for (int ik = 0; ik < nk; ik++) {
             psi_t->fix_k(ik);
-            std::complex<double>* psi_ptr = psi_t->get_pointer();
-            std::memcpy(psi_ptr, psi_save[ik].data(), sizeof(std::complex<double>) * nloc_wfc);
+            SpinScalar<TK>* psi_ptr = psi_t->get_pointer();
+            std::memcpy(psi_ptr, psi_save[ik].data(), sizeof(SpinScalar<TK>) * nloc_wfc);
         }
 
         // Rotate psi = C_old * V (no-op if V is identity)
         bool is_identity = true;
         for (int ik = 0; ik < nk && is_identity; ik++) {
             for (int ib = 0; ib < nbands; ib++) {
-                if (std::abs(vcc_list[ik][ib + ib * nbands] - std::complex<double>{1.0, 0.0}) > 1e-14) {
+                if (std::abs(vcc_list[ik][ib + ib * nbands] - SpinScalar<TK>{1.0, 0.0}) > 1e-14) {
                     is_identity = false;
                     break;
                 }
@@ -332,7 +332,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_local_diagno
 
         // Method A: first-order response does not change wavefunctions (V = identity)
         // Use full-space DMR approach: psi unchanged, cal_dm_psi → cal_DMR → cal_moment
-        std::vector<std::vector<std::complex<double>>> vcc_identity(nk);
+        std::vector<std::vector<SpinScalar<TK>>> vcc_identity(nk);
         for (int ik = 0; ik < nk; ik++) {
             vcc_identity[ik].assign(nbands * nbands, {0.0, 0.0});
             for (int ib = 0; ib < nbands; ib++)
@@ -342,21 +342,21 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_local_diagno
 
         // Method B: Full subspace diagonalization
         std::vector<std::vector<double>> ekb_B(nk);
-        std::vector<std::vector<std::complex<double>>> vcc_B(nk);
+        std::vector<std::vector<SpinScalar<TK>>> vcc_B(nk);
         for (int ik = 0; ik < nk; ik++) {
-            std::vector<std::complex<double>> h_tmp(nn), s_tmp(nn);
-            std::memcpy(h_tmp.data(), this->lcao_sub_h_save + ik * nn, sizeof(std::complex<double>) * nn);
-            std::memcpy(s_tmp.data(), this->lcao_sub_s_save + ik * nn, sizeof(std::complex<double>) * nn);
+            std::vector<SpinScalar<TK>> h_tmp(nn), s_tmp(nn);
+            std::memcpy(h_tmp.data(), this->lcao_sub_h_save + ik * nn, sizeof(SpinScalar<TK>) * nn);
+            std::memcpy(s_tmp.data(), this->lcao_sub_s_save + ik * nn, sizeof(SpinScalar<TK>) * nn);
 
             this->calculate_delta_hcc_lcao(h_tmp.data(), PI_sub_full[ik],
                                            this->lambda_.data(), nbands, ik, true);
 
-            std::vector<std::complex<double>> vcc(nn);
+            std::vector<SpinScalar<TK>> vcc(nn);
             std::vector<double> eigenvalues(nbands, 0.0);
-            std::vector<std::complex<double>> s_copy(nn);
-            std::memcpy(s_copy.data(), s_tmp.data(), sizeof(std::complex<double>) * nn);
+            std::vector<SpinScalar<TK>> s_copy(nn);
+            std::memcpy(s_copy.data(), s_tmp.data(), sizeof(SpinScalar<TK>) * nn);
 
-            hsolver::DiagoIterAssist<std::complex<double>>::diag_hegvd(
+            hsolver::DiagoIterAssist<SpinScalar<TK>>::diag_hegvd(
                 nbands, nbands, h_tmp.data(), s_copy.data(), nbands,
                 eigenvalues.data(), vcc.data());
 
@@ -376,7 +376,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_local_diagno
         std::vector<ModuleBase::Vector3<double>> Mi_B = compute_mi_full_dm(vcc_B);
 
         // Method C: Full HSolverLCAO diagonalization
-        dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double>>*>(this->p_operator)
+        dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<SpinScalar<TK>, double>>*>(this->p_operator)
             ->update_lambda();
         hsolver_t.solve(hamilt_t, psi_t[0], this->pelec, *this->dm_, *this->pelec->charge, this->nspin_, true);
         elecstate::calculate_weights(this->pelec->ekb, this->pelec->wg, this->pelec->klist,
@@ -449,8 +449,8 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_local_diagno
 #endif
 }
 
-template <>
-void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_loop(int outer_step, bool rerun)
+template <typename TK>
+void spinconstrain::SpinConstrain<TK>::run_lambda_loop(int outer_step, bool rerun)
 {
     int nat = this->get_nat();
     int ntype = this->get_ntype();
@@ -933,8 +933,8 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_loop(int out
   */
 
 
-template <>
-void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_linear_scan(int outer_step)
+template <typename TK>
+void spinconstrain::SpinConstrain<TK>::run_lambda_linear_scan(int outer_step)
 {
 #ifndef __LCAO
     return;
@@ -1198,13 +1198,13 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_linear_scan(
         this->free_lcao_subspace_cache();
         this->lambda_ = std::vector<ModuleBase::Vector3<double>>(nat, ModuleBase::Vector3<double>(0.0, 0.0, 0.0));
 
-        psi::Psi<std::complex<double>>* psi_t = static_cast<psi::Psi<std::complex<double>>*>(this->psi);
-        hamilt::Hamilt<std::complex<double>>* hamilt_t = static_cast<hamilt::Hamilt<std::complex<double>>*>(this->p_hamilt);
+        psi::Psi<SpinScalar<TK>>* psi_t = static_cast<psi::Psi<SpinScalar<TK>>*>(this->psi);
+        hamilt::Hamilt<SpinScalar<TK>>* hamilt_t = static_cast<hamilt::Hamilt<SpinScalar<TK>>*>(this->p_hamilt);
 
-        dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double>>*>(this->p_operator)
+        dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<SpinScalar<TK>, double>>*>(this->p_operator)
             ->update_lambda();
 
-        hsolver::HSolverLCAO<std::complex<double>> hsolver_t(this->ParaV, this->ks_solver_);
+        hsolver::HSolverLCAO<SpinScalar<TK>> hsolver_t(this->ParaV, this->ks_solver_);
         hsolver_t.solve(hamilt_t, psi_t[0], this->pelec, *this->dm_, *this->pelec->charge, this->nspin_, true);
         elecstate::calculate_weights(this->pelec->ekb, this->pelec->wg, this->pelec->klist,
                                      this->pelec->eferm, this->pelec->f_en, this->pelec->nelec_spin,
@@ -1222,13 +1222,13 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_linear_scan(
 
         delete[] this->lcao_sub_h_save;
         delete[] this->lcao_sub_s_save;
-        this->lcao_sub_h_save = new std::complex<double>[nk * nn];
-        this->lcao_sub_s_save = new std::complex<double>[nk * nn];
+        this->lcao_sub_h_save = new SpinScalar<TK>[nk * nn];
+        this->lcao_sub_s_save = new SpinScalar<TK>[nk * nn];
         this->lcao_PI_sub_save_.resize(nk);
         this->lcao_PI_sub_diag_.resize(nk);
         this->lcao_ekb_save_.resize(nk * nbands);
 
-        std::vector<std::vector<std::vector<std::complex<double>>>> PI_sub_full(nk);
+        std::vector<std::vector<std::vector<SpinScalar<TK>>>> PI_sub_full(nk);
         for (int ik = 0; ik < nk; ik++) {
             PI_sub_full[ik].resize(this->get_nat());
         }
@@ -1242,7 +1242,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_linear_scan(
                 this->lcao_sub_s_save + ik * nn,
                 ik, nbands, nlocal);
 
-            auto* dspin_op = dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double>>*>(
+            auto* dspin_op = dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<SpinScalar<TK>, double>>*>(
                 this->p_operator);
             dspin_op->cal_PI_sub(
                 this->kv_.kvec_d[ik],
@@ -1354,7 +1354,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_linear_scan(
                 }
             }
             // Compute Mi_A using trace formula with identity V
-            std::vector<std::vector<std::complex<double>>> vcc_identity(nk);
+            std::vector<std::vector<SpinScalar<TK>>> vcc_identity(nk);
             for (int ik = 0; ik < nk; ik++) {
                 vcc_identity[ik].assign(nbands * nbands, {0.0, 0.0});
                 for (int ib = 0; ib < nbands; ib++)
@@ -1367,21 +1367,21 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_linear_scan(
             // Method B: Full subspace diagonalization
             // ========================================================
             std::vector<std::vector<double>> ekb_B(nk);
-            std::vector<std::vector<std::complex<double>>> vcc_B(nk);
+            std::vector<std::vector<SpinScalar<TK>>> vcc_B(nk);
             for (int ik = 0; ik < nk; ik++) {
-                std::vector<std::complex<double>> h_tmp(nn), s_tmp(nn);
-                std::memcpy(h_tmp.data(), this->lcao_sub_h_save + ik * nn, sizeof(std::complex<double>) * nn);
-                std::memcpy(s_tmp.data(), this->lcao_sub_s_save + ik * nn, sizeof(std::complex<double>) * nn);
+                std::vector<SpinScalar<TK>> h_tmp(nn), s_tmp(nn);
+                std::memcpy(h_tmp.data(), this->lcao_sub_h_save + ik * nn, sizeof(SpinScalar<TK>) * nn);
+                std::memcpy(s_tmp.data(), this->lcao_sub_s_save + ik * nn, sizeof(SpinScalar<TK>) * nn);
 
                 this->calculate_delta_hcc_lcao(h_tmp.data(), PI_sub_full[ik],
                                                this->lambda_.data(), nbands, ik, true);
 
-                std::vector<std::complex<double>> vcc(nn);
+                std::vector<SpinScalar<TK>> vcc(nn);
                 std::vector<double> eigenvalues(nbands, 0.0);
-                std::vector<std::complex<double>> s_copy(nn);
-                std::memcpy(s_copy.data(), s_tmp.data(), sizeof(std::complex<double>) * nn);
+                std::vector<SpinScalar<TK>> s_copy(nn);
+                std::memcpy(s_copy.data(), s_tmp.data(), sizeof(SpinScalar<TK>) * nn);
 
-                hsolver::DiagoIterAssist<std::complex<double>>::diag_hegvd(
+                hsolver::DiagoIterAssist<SpinScalar<TK>>::diag_hegvd(
                     nbands, nbands, h_tmp.data(), s_copy.data(), nbands,
                     eigenvalues.data(), vcc.data());
 
@@ -1394,7 +1394,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_linear_scan(
             // ========================================================
             // Method C: Full HSolverLCAO diagonalization
             // ========================================================
-            dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double>>*>(this->p_operator)
+            dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<SpinScalar<TK>, double>>*>(this->p_operator)
                 ->update_lambda();
             hsolver_t.solve(hamilt_t, psi_t[0], this->pelec, *this->dm_, *this->pelec->charge, this->nspin_, true);
             elecstate::calculate_weights(this->pelec->ekb, this->pelec->wg, this->pelec->klist,
@@ -1479,8 +1479,8 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_linear_scan(
  *
  * Results written to subspace_vs_full_scan.dat
  */
-template <>
-void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_scan_diagnostic(int outer_step)
+template <typename TK>
+void spinconstrain::SpinConstrain<TK>::run_lambda_scan_diagnostic(int outer_step)
 {
 #ifndef __LCAO
     return;
@@ -1541,16 +1541,16 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_scan_diagnos
     this->free_lcao_subspace_cache();
 
     // Call cal_mw_from_lambda with i_step=-1 to do full diag and cache
-    psi::Psi<std::complex<double>>* psi_t = static_cast<psi::Psi<std::complex<double>>*>(this->psi);
-    hamilt::Hamilt<std::complex<double>>* hamilt_t = static_cast<hamilt::Hamilt<std::complex<double>>*>(this->p_hamilt);
+    psi::Psi<SpinScalar<TK>>* psi_t = static_cast<psi::Psi<SpinScalar<TK>>*>(this->psi);
+    hamilt::Hamilt<SpinScalar<TK>>* hamilt_t = static_cast<hamilt::Hamilt<SpinScalar<TK>>*>(this->p_hamilt);
 
     if (this->nspin_ == 2)
     {
-        dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double>>*>(this->p_operator)
+        dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<SpinScalar<TK>, double>>*>(this->p_operator)
             ->update_lambda();
     }
 
-    hsolver::HSolverLCAO<std::complex<double>> hsolver_t(this->ParaV, this->ks_solver_);
+    hsolver::HSolverLCAO<SpinScalar<TK>> hsolver_t(this->ParaV, this->ks_solver_);
     hsolver_t.solve(hamilt_t, psi_t[0], this->pelec, *this->dm_, *this->pelec->charge, this->nspin_, true);
     elecstate::calculate_weights(this->pelec->ekb, this->pelec->wg, this->pelec->klist,
                                  this->pelec->eferm, this->pelec->f_en, this->pelec->nelec_spin,
@@ -1568,13 +1568,13 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_scan_diagnos
 
     delete[] this->lcao_sub_h_save;
     delete[] this->lcao_sub_s_save;
-    this->lcao_sub_h_save = new std::complex<double>[nk * nn];
-    this->lcao_sub_s_save = new std::complex<double>[nk * nn];
+    this->lcao_sub_h_save = new SpinScalar<TK>[nk * nn];
+    this->lcao_sub_s_save = new SpinScalar<TK>[nk * nn];
     this->lcao_PI_sub_save_.resize(nk);
     this->lcao_PI_sub_diag_.resize(nk);
     this->lcao_ekb_save_.resize(nk * nbands);
 
-    std::vector<std::vector<std::vector<std::complex<double>>>> PI_sub_full(nk);
+    std::vector<std::vector<std::vector<SpinScalar<TK>>>> PI_sub_full(nk);
     for (int ik = 0; ik < nk; ik++) {
         PI_sub_full[ik].resize(this->get_nat());
     }
@@ -1590,7 +1590,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_scan_diagnos
 
         if (this->nspin_ == 2)
         {
-            auto* dspin_op = dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double>>*>(
+            auto* dspin_op = dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<SpinScalar<TK>, double>>*>(
                 this->p_operator);
             dspin_op->cal_PI_sub(
                 this->kv_.kvec_d[ik],
@@ -1676,24 +1676,24 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_scan_diagnos
 
         // --- Subspace Mi ---
         // Compute subspace Hamiltonian and diagonalize
-        std::vector<std::vector<std::complex<double>>> vcc_all(nk);
+        std::vector<std::vector<SpinScalar<TK>>> vcc_all(nk);
         std::vector<std::vector<double>> ekb_all(nk);
 
         for (int ik = 0; ik < nk; ik++)
         {
-            std::vector<std::complex<double>> h_tmp(nn), s_tmp(nn);
-            std::memcpy(h_tmp.data(), this->lcao_sub_h_save + ik * nn, sizeof(std::complex<double>) * nn);
-            std::memcpy(s_tmp.data(), this->lcao_sub_s_save + ik * nn, sizeof(std::complex<double>) * nn);
+            std::vector<SpinScalar<TK>> h_tmp(nn), s_tmp(nn);
+            std::memcpy(h_tmp.data(), this->lcao_sub_h_save + ik * nn, sizeof(SpinScalar<TK>) * nn);
+            std::memcpy(s_tmp.data(), this->lcao_sub_s_save + ik * nn, sizeof(SpinScalar<TK>) * nn);
 
             this->calculate_delta_hcc_lcao(h_tmp.data(), PI_sub_full[ik],
                                            this->lambda_.data(), nbands, ik, true);
 
-            std::vector<std::complex<double>> vcc(nn);
+            std::vector<SpinScalar<TK>> vcc(nn);
             std::vector<double> eigenvalues(nbands, 0.0);
-            std::vector<std::complex<double>> s_copy(nn);
-            std::memcpy(s_copy.data(), s_tmp.data(), sizeof(std::complex<double>) * nn);
+            std::vector<SpinScalar<TK>> s_copy(nn);
+            std::memcpy(s_copy.data(), s_tmp.data(), sizeof(SpinScalar<TK>) * nn);
 
-            hsolver::DiagoIterAssist<std::complex<double>>::diag_hegvd(
+            hsolver::DiagoIterAssist<SpinScalar<TK>>::diag_hegvd(
                 nbands, nbands, h_tmp.data(), s_copy.data(), nbands,
                 eigenvalues.data(), vcc.data());
 
@@ -1725,11 +1725,11 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_lambda_scan_diagnos
         // Full diagonalization
         if (this->nspin_ == 2)
         {
-            dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double>>*>(this->p_operator)
+            dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<SpinScalar<TK>, double>>*>(this->p_operator)
                 ->update_lambda();
         }
 
-        hsolver::HSolverLCAO<std::complex<double>> hsolver_full(this->ParaV, this->ks_solver_);
+        hsolver::HSolverLCAO<SpinScalar<TK>> hsolver_full(this->ParaV, this->ks_solver_);
         hsolver_full.solve(hamilt_t, psi_t[0], this->pelec, *this->dm_, *this->pelec->charge, this->nspin_, true);
         elecstate::calculate_weights(this->pelec->ekb, this->pelec->wg, this->pelec->klist,
                                      this->pelec->eferm, this->pelec->f_en, this->pelec->nelec_spin,
@@ -1804,8 +1804,8 @@ void spinconstrain::SpinConstrain<double>::run_lambda_local_diagnostic(
  * but may differ numerically. This test quantifies the differences to determine
  * whether the trace formula can replace the DMR path.
  */
-template <>
-void spinconstrain::SpinConstrain<std::complex<double>>::run_trace_vs_dmr_diagnostic(
+template <typename TK>
+void spinconstrain::SpinConstrain<TK>::run_trace_vs_dmr_diagnostic(
     int outer_step, double lambda_ref_ry)
 {
 #ifdef __LCAO
@@ -1822,13 +1822,13 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_trace_vs_dmr_diagno
         }
     }
 
-    psi::Psi<std::complex<double>>* psi_t = static_cast<psi::Psi<std::complex<double>>*>(this->psi);
-    hamilt::Hamilt<std::complex<double>>* hamilt_t = static_cast<hamilt::Hamilt<std::complex<double>>*>(this->p_hamilt);
+    psi::Psi<SpinScalar<TK>>* psi_t = static_cast<psi::Psi<SpinScalar<TK>>*>(this->psi);
+    hamilt::Hamilt<SpinScalar<TK>>* hamilt_t = static_cast<hamilt::Hamilt<SpinScalar<TK>>*>(this->p_hamilt);
 
-    dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double>>*>(this->p_operator)
+    dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<SpinScalar<TK>, double>>*>(this->p_operator)
         ->update_lambda();
 
-    hsolver::HSolverLCAO<std::complex<double>> hsolver_t(this->ParaV, this->ks_solver_);
+    hsolver::HSolverLCAO<SpinScalar<TK>> hsolver_t(this->ParaV, this->ks_solver_);
     hsolver_t.solve(hamilt_t, psi_t[0], this->pelec, *this->dm_, *this->pelec->charge, this->nspin_, true);
     elecstate::calculate_weights(this->pelec->ekb, this->pelec->wg, this->pelec->klist,
                                  this->pelec->eferm, this->pelec->f_en, this->pelec->nelec_spin,
@@ -1846,13 +1846,13 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_trace_vs_dmr_diagno
 
     delete[] this->lcao_sub_h_save;
     delete[] this->lcao_sub_s_save;
-    this->lcao_sub_h_save = new std::complex<double>[nk * nn];
-    this->lcao_sub_s_save = new std::complex<double>[nk * nn];
+    this->lcao_sub_h_save = new SpinScalar<TK>[nk * nn];
+    this->lcao_sub_s_save = new SpinScalar<TK>[nk * nn];
     this->lcao_PI_sub_save_.resize(nk);
     this->lcao_PI_sub_diag_.resize(nk);
     this->lcao_ekb_save_.resize(nk * nbands);
 
-    std::vector<std::vector<std::vector<std::complex<double>>>> PI_sub_full(nk);
+    std::vector<std::vector<std::vector<SpinScalar<TK>>>> PI_sub_full(nk);
     for (int ik = 0; ik < nk; ik++) {
         PI_sub_full[ik].resize(this->get_nat());
     }
@@ -1862,7 +1862,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_trace_vs_dmr_diagno
         this->calculate_lcao_sub_hs(this->p_hamilt, psi_t[0], this->ParaV,
             this->lcao_sub_h_save + ik * nn, this->lcao_sub_s_save + ik * nn,
             ik, nbands, nlocal);
-        auto* dspin_op = dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double>>*>(this->p_operator);
+        auto* dspin_op = dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<SpinScalar<TK>, double>>*>(this->p_operator);
         dspin_op->cal_PI_sub(this->kv_.kvec_d[ik], psi_t->get_pointer(), nbands, PI_sub_full[ik]);
 
         const int nloc_eij = this->ParaV->nrow * this->ParaV->ncol_bands;
@@ -1909,7 +1909,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_trace_vs_dmr_diagno
     this->lcao_subspace_initialized_ = true;
 
     // Save reference psi
-    std::vector<std::vector<std::complex<double>>> psi_ref(nk);
+    std::vector<std::vector<SpinScalar<TK>>> psi_ref(nk);
     for (int ik = 0; ik < nk; ik++) {
         psi_t->fix_k(ik);
         psi_ref[ik].assign(psi_t->get_pointer(), psi_t->get_pointer() + nloc_wfc);
@@ -1946,9 +1946,9 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_trace_vs_dmr_diagno
         // Restore psi to reference state first
         for (int ik = 0; ik < nk; ik++) {
             psi_t->fix_k(ik);
-            std::memcpy(psi_t->get_pointer(), psi_ref[ik].data(), sizeof(std::complex<double>) * nloc_wfc);
+            std::memcpy(psi_t->get_pointer(), psi_ref[ik].data(), sizeof(SpinScalar<TK>) * nloc_wfc);
         }
-        dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<std::complex<double>, double>>*>(this->p_operator)
+        dynamic_cast<hamilt::DeltaSpin<hamilt::OperatorLCAO<SpinScalar<TK>, double>>*>(this->p_operator)
             ->update_lambda();
         hsolver_t.solve(hamilt_t, psi_t[0], this->pelec, *this->dm_, *this->pelec->charge, this->nspin_, true);
         elecstate::calculate_weights(this->pelec->ekb, this->pelec->wg, this->pelec->klist,
@@ -1958,18 +1958,18 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_trace_vs_dmr_diagno
         std::vector<ModuleBase::Vector3<double>> Mi_A = this->Mi_;
 
         // --- Subspace: diagonalize H_sub(lambda) ---
-        std::vector<std::vector<std::complex<double>>> vcc_all(nk);
+        std::vector<std::vector<SpinScalar<TK>>> vcc_all(nk);
         for (int ik = 0; ik < nk; ik++) {
-            std::vector<std::complex<double>> h_tmp(nn), s_tmp(nn);
-            std::memcpy(h_tmp.data(), this->lcao_sub_h_save + ik * nn, sizeof(std::complex<double>) * nn);
-            std::memcpy(s_tmp.data(), this->lcao_sub_s_save + ik * nn, sizeof(std::complex<double>) * nn);
+            std::vector<SpinScalar<TK>> h_tmp(nn), s_tmp(nn);
+            std::memcpy(h_tmp.data(), this->lcao_sub_h_save + ik * nn, sizeof(SpinScalar<TK>) * nn);
+            std::memcpy(s_tmp.data(), this->lcao_sub_s_save + ik * nn, sizeof(SpinScalar<TK>) * nn);
             this->calculate_delta_hcc_lcao(h_tmp.data(), PI_sub_full[ik],
                                            this->lambda_.data(), nbands, ik, true);
-            std::vector<std::complex<double>> vcc(nn);
+            std::vector<SpinScalar<TK>> vcc(nn);
             std::vector<double> eigenvalues(nbands, 0.0);
-            std::vector<std::complex<double>> s_copy(nn);
-            std::memcpy(s_copy.data(), s_tmp.data(), sizeof(std::complex<double>) * nn);
-            hsolver::DiagoIterAssist<std::complex<double>>::diag_hegvd(
+            std::vector<SpinScalar<TK>> s_copy(nn);
+            std::memcpy(s_copy.data(), s_tmp.data(), sizeof(SpinScalar<TK>) * nn);
+            hsolver::DiagoIterAssist<SpinScalar<TK>>::diag_hegvd(
                 nbands, nbands, h_tmp.data(), s_copy.data(), nbands,
                 eigenvalues.data(), vcc.data());
             vcc_all[ik].assign(vcc.data(), vcc.data() + nn);
@@ -1984,7 +1984,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_trace_vs_dmr_diagno
         // Restore psi, rotate, build DMR, compute Mi, restore psi
         for (int ik = 0; ik < nk; ik++) {
             psi_t->fix_k(ik);
-            std::memcpy(psi_t->get_pointer(), psi_ref[ik].data(), sizeof(std::complex<double>) * nloc_wfc);
+            std::memcpy(psi_t->get_pointer(), psi_ref[ik].data(), sizeof(SpinScalar<TK>) * nloc_wfc);
         }
         this->rotate_psi_subspace_lcao(*psi_t, this->ParaV, vcc_all, nbands, nlocal, nk);
         elecstate::cal_dm_psi(this->ParaV, this->pelec->wg, *psi_t, *this->dm_);
@@ -1994,21 +1994,21 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_trace_vs_dmr_diagno
         // Restore psi
         for (int ik = 0; ik < nk; ik++) {
             psi_t->fix_k(ik);
-            std::memcpy(psi_t->get_pointer(), psi_ref[ik].data(), sizeof(std::complex<double>) * nloc_wfc);
+            std::memcpy(psi_t->get_pointer(), psi_ref[ik].data(), sizeof(SpinScalar<TK>) * nloc_wfc);
         }
 
         // --- Method C: Trace formula ---
         this->zero_Mi();
         for (int ik = 0; ik < nk; ik++) {
             const int spin_sign = this->get_spin_sign(ik);
-            const std::complex<double>* V = vcc_all[ik].data();
+            const SpinScalar<TK>* V = vcc_all[ik].data();
             for (int iat = 0; iat < nat; iat++) {
                 if (PI_sub_full[ik][iat].empty()) continue;
-                const std::complex<double>* P = PI_sub_full[ik][iat].data();
+                const SpinScalar<TK>* P = PI_sub_full[ik][iat].data();
                 // Q = P * V
-                std::vector<std::complex<double>> Q(nn, {0.0, 0.0});
+                std::vector<SpinScalar<TK>> Q(nn, {0.0, 0.0});
                 {
-                    const std::complex<double> one = {1.0, 0.0}, zero_c = {0.0, 0.0};
+                    const SpinScalar<TK> one = {1.0, 0.0}, zero_c = {0.0, 0.0};
                     int n = nbands;
                     zgemm_("N", "N", &n, &n, &n, &one, P, &n, V, &n, &zero_c, Q.data(), &n);
                 }
@@ -2042,7 +2042,7 @@ void spinconstrain::SpinConstrain<std::complex<double>>::run_trace_vs_dmr_diagno
     // Restore original psi
     for (int ik = 0; ik < nk; ik++) {
         psi_t->fix_k(ik);
-        std::memcpy(psi_t->get_pointer(), psi_ref[ik].data(), sizeof(std::complex<double>) * nloc_wfc);
+        std::memcpy(psi_t->get_pointer(), psi_ref[ik].data(), sizeof(SpinScalar<TK>) * nloc_wfc);
     }
 #endif
 }
@@ -2051,3 +2051,9 @@ template <>
 void spinconstrain::SpinConstrain<double>::run_trace_vs_dmr_diagnostic(int outer_step, double lambda_ref_ry)
 {
 }
+
+// Explicit instantiation for nspin=4 (double precision).
+// NOTE: float instantiation (std::complex<float>) will be added once the
+// upstream onsite-projection data (pseudopotential vkb, radial table, gcar)
+// is made single-precision capable.
+template class spinconstrain::SpinConstrain<std::complex<double>>;

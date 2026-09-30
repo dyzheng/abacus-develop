@@ -29,8 +29,8 @@
  * @param orbMulP Flat matrix of orbital contributions [nspin x ntotal_orbitals]
  * @return Nested vector [nspin][iat][iw]
  */
-template <>
-std::vector<std::vector<std::vector<double>>> spinconstrain::SpinConstrain<std::complex<double>>::convert(
+template <typename TK>
+std::vector<std::vector<std::vector<double>>> spinconstrain::SpinConstrain<TK>::convert(
     const ModuleBase::matrix& orbMulP)
 {
     std::vector<std::vector<std::vector<double>>> AorbMulP;
@@ -77,8 +77,8 @@ std::vector<std::vector<std::vector<double>>> spinconstrain::SpinConstrain<std::
  *
  * @param AorbMulP Nested vector [nspin][iat][iw] from convert()
  */
-template <>
-void spinconstrain::SpinConstrain<std::complex<double>>::calculate_MW(
+template <typename TK>
+void spinconstrain::SpinConstrain<TK>::calculate_MW(
     const std::vector<std::vector<std::vector<double>>>& AorbMulP)
 {
     size_t nw = this->get_nw();
@@ -168,8 +168,8 @@ void spinconstrain::SpinConstrain<std::complex<double>>::calculate_MW(
  * @param nw Total number of orbitals
  * @param isk Spin index (0 or 1 for nspin=2)
  */
-template <>
-void spinconstrain::SpinConstrain<std::complex<double>>::collect_MW(ModuleBase::matrix& MecMulP,
+template <typename TK>
+void spinconstrain::SpinConstrain<TK>::collect_MW(ModuleBase::matrix& MecMulP,
                                                       const ModuleBase::ComplexMatrix& mud,
                                                       int nw,
                                                       int isk)
@@ -233,3 +233,9 @@ void spinconstrain::SpinConstrain<std::complex<double>>::collect_MW(ModuleBase::
 }
 
 #endif
+
+// Explicit instantiation for nspin=4 (double precision).
+// NOTE: float instantiation (std::complex<float>) will be added once the
+// upstream onsite-projection data (pseudopotential vkb, radial table, gcar)
+// is made single-precision capable.
+template class spinconstrain::SpinConstrain<std::complex<double>>;

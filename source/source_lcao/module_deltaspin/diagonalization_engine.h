@@ -14,7 +14,7 @@
  * - Strategy pattern: interchangeable diagonalization algorithms via common interface
  * - RAII memory management: SubspaceCache uses std::vector instead of raw new[]/delete[]
  * - State isolation: each engine manages its own temporary variables
- * - Type-safe: template-specialized for std::complex<double>
+ * - Type-safe: template-specialized for std::complex<typename GetTypeReal<TK>::type>
  *
  * @par Integration
  * SpinConstrain holds a unique_ptr<DiagonalizationEngine> and calls solve()
@@ -25,6 +25,7 @@
 #define DIAGONALIZATION_ENGINE_H
 
 #include <complex>
+#include "source_base/macros.h"
 #include <memory>
 #include <string>
 #include <vector>
@@ -135,6 +136,7 @@ public:
  * All memory is managed via std::vector. No manual new[]/delete[] is needed.
  * The destructor automatically releases all memory when the cache goes out of scope.
  */
+template <typename TK>
 class SubspaceCache
 {
 public:
@@ -162,9 +164,9 @@ public:
     void build(int nk,
                int nbands,
                int nat,
-               const std::complex<double>* H0_sub_raw,
-               const std::complex<double>* S_sub_raw,
-               std::vector<std::vector<std::vector<std::complex<double>>>> P_I_sub_all,
+               const std::complex<typename GetTypeReal<TK>::type>* H0_sub_raw,
+               const std::complex<typename GetTypeReal<TK>::type>* S_sub_raw,
+               std::vector<std::vector<std::vector<std::complex<typename GetTypeReal<TK>::type>>>> P_I_sub_all,
                const std::vector<double>& ekb_ref_all,
                const std::vector<ModuleBase::Vector3<double>>& lambda_ref);
 
@@ -186,14 +188,14 @@ public:
     // Accessors (const references to prevent accidental modification)
 
     /// @brief H0_sub for k-point ik [nbands * nbands, column-major]
-    const std::complex<double>* H0_sub(int ik) const;
+    const std::complex<typename GetTypeReal<TK>::type>* H0_sub(int ik) const;
 
     /// @brief S_sub for k-point ik [nbands * nbands, column-major]
-    const std::complex<double>* S_sub(int ik) const;
+    const std::complex<typename GetTypeReal<TK>::type>* S_sub(int ik) const;
 
     /// @brief P_I_sub for k-point ik, atom iat [nbands * nbands, column-major]
     /// Returns nullptr if the atom is unconstrained (empty matrix).
-    const std::complex<double>* P_I_sub(int ik, int iat) const;
+    const std::complex<typename GetTypeReal<TK>::type>* P_I_sub(int ik, int iat) const;
 
     /// @brief Reference eigenvalues for k-point ik [nbands]
     const double* ekb_ref(int ik) const;
@@ -202,7 +204,7 @@ public:
     const std::vector<ModuleBase::Vector3<double>>& lambda_ref() const;
 
     /// @brief Full P_I_sub data [nk][nat][nbands^2] for cal_mi_lcao_subspace
-    const std::vector<std::vector<std::vector<std::complex<double>>>>& P_I_sub_all() const
+    const std::vector<std::vector<std::vector<std::complex<typename GetTypeReal<TK>::type>>>>& P_I_sub_all() const
     {
         return P_I_sub_;
     }
@@ -214,11 +216,11 @@ private:
     bool valid_ = false;
 
     // Flat arrays for H0_sub and S_sub (column-major, nk * nbands^2)
-    std::vector<std::complex<double>> H0_sub_;
-    std::vector<std::complex<double>> S_sub_;
+    std::vector<std::complex<typename GetTypeReal<TK>::type>> H0_sub_;
+    std::vector<std::complex<typename GetTypeReal<TK>::type>> S_sub_;
 
     // P_I_sub: [nk][nat][nbands^2], empty vectors for unconstrained atoms
-    std::vector<std::vector<std::vector<std::complex<double>>>> P_I_sub_;
+    std::vector<std::vector<std::vector<std::complex<typename GetTypeReal<TK>::type>>>> P_I_sub_;
 
     // Reference eigenvalues [nk * nbands]
     std::vector<double> ekb_ref_;
@@ -242,10 +244,11 @@ private:
  * - No subspace cache needed
  * - Works for both nspin=2 and nspin=4
  */
+template <typename TK>
 class FullSpaceDiagonalizer : public DiagonalizationEngine
 {
 public:
-    explicit FullSpaceDiagonalizer(SpinConstrain<std::complex<double>>& sc);
+    explicit FullSpaceDiagonalizer(SpinConstrain<TK>& sc);
 
     DiagonalizationResult solve(int i_step) override;
     bool build_subspace(const std::vector<ModuleBase::Vector3<double>>& lambda_ref) override;
@@ -255,7 +258,7 @@ public:
     DiagonalizationStrategy type() const override { return DiagonalizationStrategy::FullSpace; }
 
 private:
-    SpinConstrain<std::complex<double>>& sc_;
+    SpinConstrain<TK>& sc_;
 };
 
 /**
@@ -280,10 +283,11 @@ private:
  * - Requires subspace cache (build_subspace must be called first)
  * - Currently only supports nspin=2
  */
+template <typename TK>
 class SubspaceDiagonalizer : public DiagonalizationEngine
 {
 public:
-    explicit SubspaceDiagonalizer(SpinConstrain<std::complex<double>>& sc);
+    explicit SubspaceDiagonalizer(SpinConstrain<TK>& sc);
 
     DiagonalizationResult solve(int i_step) override;
     bool build_subspace(const std::vector<ModuleBase::Vector3<double>>& lambda_ref) override;
@@ -293,15 +297,15 @@ public:
     DiagonalizationStrategy type() const override { return DiagonalizationStrategy::Subspace; }
 
 private:
-    SpinConstrain<std::complex<double>>& sc_;
-    SubspaceCache cache_;
+    SpinConstrain<TK>& sc_;
+    SubspaceCache<TK> cache_;
 
     // Internal temporary buffers (reused across solve calls)
-    std::vector<std::complex<double>> h_tmp_;
-    std::vector<std::complex<double>> s_tmp_;
-    std::vector<std::complex<double>> s_copy_;
+    std::vector<std::complex<typename GetTypeReal<TK>::type>> h_tmp_;
+    std::vector<std::complex<typename GetTypeReal<TK>::type>> s_tmp_;
+    std::vector<std::complex<typename GetTypeReal<TK>::type>> s_copy_;
     std::vector<double> eigenvalues_;
-    std::vector<std::complex<double>> eigenvectors_;
+    std::vector<std::complex<typename GetTypeReal<TK>::type>> eigenvectors_;
 };
 
 /**
@@ -322,10 +326,11 @@ private:
  * - Wavefunction mixing is neglected
  * - Currently only supports nspin=2
  */
+template <typename TK>
 class FirstOrderResponseEngine : public DiagonalizationEngine
 {
 public:
-    explicit FirstOrderResponseEngine(SpinConstrain<std::complex<double>>& sc);
+    explicit FirstOrderResponseEngine(SpinConstrain<TK>& sc);
 
     DiagonalizationResult solve(int i_step) override;
     bool build_subspace(const std::vector<ModuleBase::Vector3<double>>& lambda_ref) override;
@@ -335,8 +340,8 @@ public:
     DiagonalizationStrategy type() const override { return DiagonalizationStrategy::FirstOrder; }
 
 private:
-    SpinConstrain<std::complex<double>>& sc_;
-    SubspaceCache cache_;
+    SpinConstrain<TK>& sc_;
+    SubspaceCache<TK> cache_;
 };
 
 /**
@@ -346,9 +351,10 @@ private:
  * @param sc Reference to the SpinConstrain instance
  * @return unique_ptr to the created engine
  */
+template <typename TK>
 std::unique_ptr<DiagonalizationEngine> create_diagonalization_engine(
     DiagonalizationStrategy strategy,
-    SpinConstrain<std::complex<double>>& sc);
+    SpinConstrain<TK>& sc);
 
 /**
  * @brief Convert string to DiagonalizationStrategy (case-insensitive).
