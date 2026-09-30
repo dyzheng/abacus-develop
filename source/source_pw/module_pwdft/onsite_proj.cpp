@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <map>
 #include <tuple>
+#include <type_traits>
 #include "source_pw/module_pwdft/onsite_proj.h"
 #include "source_pw/module_pwdft/onsite_proj_print.h"
 #include "source_lcao/module_dftu/dftu.h"
@@ -345,7 +346,7 @@ void projectors::OnsiteProjector<T, Device>::tabulate_atomic(const int ik, const
 template<typename T, typename Device>
 void projectors::OnsiteProjector<T, Device>::overlap_proj_psi( 
                     const int npm,
-                    const std::complex<double>* ppsi,
+                    const std::complex<T>* ppsi,
                     const int ld_psi)
 {
     ModuleBase::timer::start("OnsiteProj", "overlap");
@@ -551,7 +552,7 @@ void projectors::OnsiteProjector<T, Device>::cal_occupations(
         }
         // std::cout << __FILE__ << ":" << __LINE__ << " nbands = " << nbands << std::endl;
         this->overlap_proj_psi(nbands * npol, psi_in->get_pointer());
-        const std::complex<double>* becp_p = this->get_h_becp();
+        const std::complex<T>* becp_p = this->get_h_becp();
         // becp(nbands*npol , nkb)
         // mag = wg * \sum_{nh}becp * becp
         int nkb = this->tot_nproj;
@@ -622,10 +623,23 @@ void projectors::OnsiteProjector<T, Device>::cal_force_onsite_dftu(int ik, int n
                                                         const double* wg_ik) const
 {
     const int isk_val = this->isk_ ? this->isk_[ik] : 0;
-    const std::complex<double>* vu_ptr = dftu.get_eff_pot_pw_spin(isk_val);
+    const std::complex<double>* vu_double = dftu.get_eff_pot_pw_spin(isk_val);
     const int vu_size = dftu.get_size_eff_pot_pw_spin();
-    this->fs_tools->cal_force_dftu(ik, npm, force,
-        dftu.get_orbital_corr_data(), vu_ptr, vu_size, wg_ik);
+    if constexpr (std::is_same<T, double>::value)
+    {
+        this->fs_tools->cal_force_dftu(ik, npm, force,
+            dftu.get_orbital_corr_data(), vu_double, vu_size, wg_ik);
+    }
+    else
+    {
+        std::vector<std::complex<T>> vu_float(vu_size);
+        for (int i = 0; i < vu_size; ++i)
+        {
+            vu_float[i] = static_cast<std::complex<T>>(vu_double[i]);
+        }
+        this->fs_tools->cal_force_dftu(ik, npm, force,
+            dftu.get_orbital_corr_data(), vu_float.data(), vu_size, wg_ik);
+    }
 }
 
 template <typename T, typename Device>
@@ -634,10 +648,23 @@ double projectors::OnsiteProjector<T, Device>::cal_stress_onsite_dftu(int ik, in
                                                            const double* wg_ik) const
 {
     const int isk_val = this->isk_ ? this->isk_[ik] : 0;
-    const std::complex<double>* vu_ptr = dftu.get_eff_pot_pw_spin(isk_val);
+    const std::complex<double>* vu_double = dftu.get_eff_pot_pw_spin(isk_val);
     const int vu_size = dftu.get_size_eff_pot_pw_spin();
-    return this->fs_tools->cal_stress_dftu(ik, npm,
-        dftu.get_orbital_corr_data(), vu_ptr, vu_size, wg_ik);
+    if constexpr (std::is_same<T, double>::value)
+    {
+        return this->fs_tools->cal_stress_dftu(ik, npm,
+            dftu.get_orbital_corr_data(), vu_double, vu_size, wg_ik);
+    }
+    else
+    {
+        std::vector<std::complex<T>> vu_float(vu_size);
+        for (int i = 0; i < vu_size; ++i)
+        {
+            vu_float[i] = static_cast<std::complex<T>>(vu_double[i]);
+        }
+        return this->fs_tools->cal_stress_dftu(ik, npm,
+            dftu.get_orbital_corr_data(), vu_float.data(), vu_size, wg_ik);
+    }
 }
 
 template <typename T, typename Device>

@@ -383,7 +383,7 @@ void Onsite_Proj_tools<FPTYPE, Device>::cal_becp(int ik,
             // std::cout << std::endl;
 
             // prepare（-i）^l, size: nh
-            std::vector<std::complex<double>> pref = maths.cal_pref(it, h_atom_nh[it]);
+            std::vector<std::complex<FPTYPE>> pref = maths.cal_pref(it, h_atom_nh[it]);
             const int nh = pref.size();
             this->dvkb_indexes.resize(nh * 4);
             // print the value of nhtol
@@ -527,7 +527,7 @@ void Onsite_Proj_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, i
                          hd_vq_deri);
 
         // prepare（-i）^l, size: nh
-        std::vector<std::complex<double>> pref = maths.cal_pref(it, h_atom_nh[it]);
+        std::vector<std::complex<FPTYPE>> pref = maths.cal_pref(it, h_atom_nh[it]);
         int nh = pref.size();
         // prepare indexes for calculate vkb_deri
         this->dvkb_indexes.resize(nh * 4);
@@ -628,7 +628,9 @@ void Onsite_Proj_tools<FPTYPE, Device>::cal_dbecp_f(int ik, int npm, int ipol)
     // backup vkb values to vkb_save
     this->save_vkb(npw, ipol);
     // for x, the coef is -i, for y and z it is 1
-    const std::complex<double> coeff = ipol == 0 ? ModuleBase::NEG_IMAG_UNIT : ModuleBase::ONE;
+    const std::complex<FPTYPE> coeff
+        = ipol == 0 ? static_cast<std::complex<FPTYPE>>(ModuleBase::NEG_IMAG_UNIT)
+                    : static_cast<std::complex<FPTYPE>>(ModuleBase::ONE);
 
     const std::complex<FPTYPE>* vkb_ptr = this->ppcell_vkb;
     std::complex<FPTYPE>* vkb_deri_ptr = this->ppcell_vkb;

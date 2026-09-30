@@ -49,7 +49,7 @@ namespace projectors
         /// the Davidson/CG solver where psi stride varies per k-point)
         void overlap_proj_psi(
                     const int npm,
-                    const std::complex<double>* ppsi,
+                    const std::complex<T>* ppsi,
                     const int ld_psi = 0
                     );
         void read_abacus_orb(std::ifstream& ifs,
@@ -78,9 +78,9 @@ namespace projectors
         void cal_occupations(const psi::Psi<std::complex<T>, Device>* psi, const ModuleBase::matrix& wg_in);
 
         int get_size_becp() const { return size_becp; }
-        std::complex<double>* get_becp() const { return becp; }
-        std::complex<double>* get_h_becp() const { return h_becp; }
-        std::complex<double>* get_tab_atomic() const { return tab_atomic_; }
+        std::complex<T>* get_becp() const { return becp; }
+        std::complex<T>* get_h_becp() const { return h_becp; }
+        std::complex<T>* get_tab_atomic() const { return tab_atomic_; }
         int get_tot_nproj() const { return tot_nproj; }
         int get_npw() const { return npw_; }
         int get_npwx() const { return npwx_; }
@@ -122,10 +122,10 @@ namespace projectors
 
         hamilt::Onsite_Proj_tools<T, Device>* fs_tools = nullptr;
 
-        std::complex<double>* tab_atomic_ = nullptr;
-        std::complex<double>* becp = nullptr;  // nbands * nkb
+        std::complex<T>* tab_atomic_ = nullptr;
+        std::complex<T>* becp = nullptr;  // nbands * nkb
         // save becp in CPU memory, only used when Device is GPU
-        std::complex<double>* h_becp;
+        std::complex<T>* h_becp;
 
         int size_becp = 0;
         int size_vproj = 0;
