@@ -59,6 +59,8 @@ class Onsite_Proj_tools
 
     ~Onsite_Proj_tools();
 
+    int get_nbands() const { return nbands; }
+
     /**
      * @brief calculate the becp = <psi|beta> for all beta functions
      */
@@ -167,7 +169,7 @@ class Onsite_Proj_tools
     int gcar_zero_counts[3] = {0, 0, 0};
     std::complex<FPTYPE>* vkb_save = nullptr;
     /// @brief count zero gcar indexes and prepare zero_indexes, do gcar_y /= gcar_x, gcar_z /= gcar_y
-    void transfer_gcar(int npw, int npw_max, const FPTYPE* gcar_in);
+    void transfer_gcar(int npw, int npw_max, const double* gcar_in);
     /// @brief save the 0-value dvkbs for calculating the dbecp_i in the force calculation
     void save_vkb(int npw, int ipol);
     /// @brief revert the 0-value dvkbs for calculating the dbecp_i in the force calculation
@@ -178,6 +180,13 @@ class Onsite_Proj_tools
     const ModuleBase::realArray* tabtpr = nullptr;
     const ModuleBase::matrix* nhtol = nullptr;
     int lprojmax = -1;
+
+    /// single-precision copies of double-sourced read-only tables/weights.
+    /// For FPTYPE == double these are empty and the double sources are used
+    /// directly; for FPTYPE == float they hold the converted data.
+    std::vector<FPTYPE> h_tab_;
+    std::vector<FPTYPE> h_wg_;
+    std::vector<FPTYPE> h_ekb_;
 
     FPTYPE* d_wg = nullptr;
     FPTYPE* d_ekb = nullptr;

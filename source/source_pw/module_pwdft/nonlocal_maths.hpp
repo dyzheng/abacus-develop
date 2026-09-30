@@ -136,7 +136,10 @@ std::vector<FPTYPE> Nonlocal_maths<FPTYPE, Device>::cal_gk(int ik, const ModuleP
     for (int ig = 0; ig < npw; ++ig)
     {
         // written in memory block from 0 to 3*npw. This is like a matrix with npw rows and 3 columns
-        q = pw_basis->getgpluskcar(ik, ig);
+        const ModuleBase::Vector3<double> q_double = pw_basis->getgpluskcar(ik, ig);
+        q.x = static_cast<FPTYPE>(q_double.x);
+        q.y = static_cast<FPTYPE>(q_double.y);
+        q.z = static_cast<FPTYPE>(q_double.z);
         gk[ig * 3]     = q.x;
         gk[ig * 3 + 1] = q.y;
         gk[ig * 3 + 2] = q.z;
@@ -407,7 +410,7 @@ void Nonlocal_maths<FPTYPE, Device>::dylmr2(const int nylm,
     const FPTYPE delta = 1e-6;
     const FPTYPE small = 1e-15;
 
-    ModuleBase::matrix ylmaux;
+    std::vector<FPTYPE> ylmaux;
     // dg is the finite increment for numerical derivation:
     // dg = delta |G| = delta * sqrt(gg)
     // dgi= 1 /(delta * sqrt(gg))
@@ -418,10 +421,10 @@ void Nonlocal_maths<FPTYPE, Device>::dylmr2(const int nylm,
     std::vector<FPTYPE> dg(ngy);
     std::vector<FPTYPE> dgi(ngy);
 
-    ylmaux.create(nylm, ngy);
+    ylmaux.resize(nylm * ngy);
 
     ModuleBase::GlobalFunc::ZEROS(dylm, nylm * ngy);
-    ylmaux.zero_out();
+    std::fill(ylmaux.begin(), ylmaux.end(), FPTYPE(0.0));
 
 #ifdef _OPENMP
 #pragma omp parallel for
@@ -474,7 +477,7 @@ void Nonlocal_maths<FPTYPE, Device>::dylmr2(const int nylm,
     }
     //$OMP END PARALLEL DO
 
-    ModuleBase::YlmReal::Ylm_Real(cpu, nylm, ngy, gx.data(), ylmaux.c);
+    ModuleBase::YlmReal::Ylm_Real(cpu, nylm, ngy, gx.data(), ylmaux.data());
 
     //  zaxpy ( - 1.0, ylmaux, 1, dylm, 1);
 #ifdef _OPENMP
@@ -484,7 +487,7 @@ void Nonlocal_maths<FPTYPE, Device>::dylmr2(const int nylm,
     {
         for (int ig = 0; ig < ngy; ig++)
         {
-            dylm[lm * ngy + ig] -= ylmaux(lm, ig);
+            dylm[lm * ngy + ig] -= ylmaux[lm * ngy + ig];
             dylm[lm * ngy + ig] *= 0.5 * dgi[ig];
         }
     }

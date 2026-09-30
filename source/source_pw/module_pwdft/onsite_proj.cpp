@@ -595,10 +595,10 @@ void projectors::OnsiteProjector<T, Device>::cal_occupations(
                     else
                     {
                         const int index = ib * 2 * nkb + begin_ih + ih;
-                        occs[occ_index] += weight * conj(becp_p[index]) * becp_p[index];
-                        occs[occ_index + 1] += weight * conj(becp_p[index]) * becp_p[index + nkb];
-                        occs[occ_index + 2] += weight * conj(becp_p[index + nkb]) * becp_p[index];
-                        occs[occ_index + 3] += weight * conj(becp_p[index + nkb]) * becp_p[index + nkb];
+                        occs[occ_index] += weight * static_cast<std::complex<double>>(conj(becp_p[index]) * becp_p[index]);
+                        occs[occ_index + 1] += weight * static_cast<std::complex<double>>(conj(becp_p[index]) * becp_p[index + nkb]);
+                        occs[occ_index + 2] += weight * static_cast<std::complex<double>>(conj(becp_p[index + nkb]) * becp_p[index]);
+                        occs[occ_index + 3] += weight * static_cast<std::complex<double>>(conj(becp_p[index + nkb]) * becp_p[index + nkb]);
                     }
                 }
                 begin_ih += nh;
@@ -637,8 +637,11 @@ void projectors::OnsiteProjector<T, Device>::cal_force_onsite_dftu(int ik, int n
         {
             vu_float[i] = static_cast<std::complex<T>>(vu_double[i]);
         }
+        const int wg_size = this->fs_tools->get_nbands() * (ik + 1);
+        std::vector<T> wg_float(wg_size);
+        for (int i = 0; i < wg_size; ++i) wg_float[i] = static_cast<T>(wg_ik[i]);
         this->fs_tools->cal_force_dftu(ik, npm, force,
-            dftu.get_orbital_corr_data(), vu_float.data(), vu_size, wg_ik);
+            dftu.get_orbital_corr_data(), vu_float.data(), vu_size, wg_float.data());
     }
 }
 
@@ -662,8 +665,11 @@ double projectors::OnsiteProjector<T, Device>::cal_stress_onsite_dftu(int ik, in
         {
             vu_float[i] = static_cast<std::complex<T>>(vu_double[i]);
         }
+        const int wg_size = this->fs_tools->get_nbands() * (ik + 1);
+        std::vector<T> wg_float(wg_size);
+        for (int i = 0; i < wg_size; ++i) wg_float[i] = static_cast<T>(wg_ik[i]);
         return this->fs_tools->cal_stress_dftu(ik, npm,
-            dftu.get_orbital_corr_data(), vu_float.data(), vu_size, wg_ik);
+            dftu.get_orbital_corr_data(), vu_float.data(), vu_size, wg_float.data());
     }
 }
 
@@ -672,7 +678,17 @@ void projectors::OnsiteProjector<T, Device>::cal_force_onsite_dspin(int ik, int 
                                                          const ModuleBase::Vector3<double>* lambda,
                                                          const double* wg_ik) const
 {
-    this->fs_tools->cal_force_dspin(ik, npm, force, lambda, wg_ik);
+    if constexpr (std::is_same<T, double>::value)
+    {
+        this->fs_tools->cal_force_dspin(ik, npm, force, lambda, wg_ik);
+    }
+    else
+    {
+        const int wg_size = this->fs_tools->get_nbands() * (ik + 1);
+        std::vector<T> wg_float(wg_size);
+        for (int i = 0; i < wg_size; ++i) wg_float[i] = static_cast<T>(wg_ik[i]);
+        this->fs_tools->cal_force_dspin(ik, npm, force, lambda, wg_float.data());
+    }
 }
 
 template <typename T, typename Device>
@@ -680,10 +696,21 @@ double projectors::OnsiteProjector<T, Device>::cal_stress_onsite_dspin(int ik, i
                                                             const ModuleBase::Vector3<double>* lambda,
                                                             const double* wg_ik) const
 {
-    return this->fs_tools->cal_stress_dspin(ik, npm, lambda, wg_ik);
+    if constexpr (std::is_same<T, double>::value)
+    {
+        return this->fs_tools->cal_stress_dspin(ik, npm, lambda, wg_ik);
+    }
+    else
+    {
+        const int wg_size = this->fs_tools->get_nbands() * (ik + 1);
+        std::vector<T> wg_float(wg_size);
+        for (int i = 0; i < wg_size; ++i) wg_float[i] = static_cast<T>(wg_ik[i]);
+        return this->fs_tools->cal_stress_dspin(ik, npm, lambda, wg_float.data());
+    }
 }
 
 template class projectors::OnsiteProjector<double, base_device::DEVICE_CPU>;
+template class projectors::OnsiteProjector<float, base_device::DEVICE_CPU>;
 #if ((defined __CUDA) || (defined __ROCM))
 template class projectors::OnsiteProjector<double, base_device::DEVICE_GPU>;
 #endif
