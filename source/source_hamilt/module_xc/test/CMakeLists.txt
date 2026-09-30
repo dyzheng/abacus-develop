@@ -29,6 +29,7 @@ AddTest(
   TARGET MODULE_HAMILT_XCTest_GRADCORR
   LIBS parameter MPI::MPI_CXX Libxc::xc psi device container
   SOURCES test_xc3.cpp ../xc_grad.cpp ../xc_functional.cpp
+  ../xc_functional_ncgga_lca.cpp ../xc_ncgga_radial.cpp
   ../xc_lda_wrap.cpp ../xc_gga_wrap.cpp
   ../libxc_setup.cpp
   ../libxc_lda_wrap.cpp
@@ -38,6 +39,7 @@ AddTest(
   ../xc_lda_exch.cpp ../xc_hcth.cpp
   ../../../source_base/matrix.cpp
   ../../../source_base/memory_recorder.cpp
+  ../../../source_base/timer.cpp
   ../../../source_base/libm/branred.cpp
   ../../../source_base/libm/sincos.cpp
   ../../../source_base/module_external/blas_connector_base.cpp ../../../source_base/module_external/blas_connector_vector.cpp ../../../source_base/module_external/blas_connector_matrix.cpp
@@ -72,6 +74,8 @@ AddTest(
     ../xc_lda_exch.cpp ../xc_hcth.cpp
     ../xc_pot.cpp
     ../xc_functional_gga_noncol_sf_builtin.cpp
+    ../xc_functional_ncgga_lca.cpp
+    ../xc_ncgga_radial.cpp
     ../libxc_pot.cpp
     ../libxc_tools.cpp
     ../../../source_base/module_external/blas_connector_base.cpp ../../../source_base/module_external/blas_connector_vector.cpp ../../../source_base/module_external/blas_connector_matrix.cpp
