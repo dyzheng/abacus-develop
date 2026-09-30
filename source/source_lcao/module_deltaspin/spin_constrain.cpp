@@ -179,7 +179,7 @@ void SpinConstrain<TK>::accumulate_Mi_from_becp(const SpinScalar<TK>* becp,
             int begin_ih = 0;
             for (int iat = 0; iat < static_cast<int>(this->Mi_.size()); iat++)
             {
-                SpinScalar<TK> occ[4] = {ModuleBase::ZERO, ModuleBase::ZERO, ModuleBase::ZERO, ModuleBase::ZERO};
+                SpinScalar<TK> occ[4] = {SpinScalar<TK>(0.0, 0.0), SpinScalar<TK>(0.0, 0.0), SpinScalar<TK>(0.0, 0.0), SpinScalar<TK>(0.0, 0.0)};
                 const int nh = nh_iat[iat];
                 for (int ih = 0; ih < nh; ih++)
                 {
