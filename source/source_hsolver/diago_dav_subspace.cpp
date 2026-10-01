@@ -789,7 +789,7 @@ void Diago_DavSubspace<T, Device>::diag_zhegvx(const int& nbase,
             syncmem_d2h_op()(vcc_h, vcc, nband * this->nbase_x);
             for (int i = 0; i < nband; i++)
             {
-                MPI_Bcast(&vcc_h[i * this->nbase_x], nbase, MPI_DOUBLE_COMPLEX, 0, this->diag_comm.comm);
+                MPI_Bcast(&vcc_h[i * this->nbase_x], nbase, Parallel_Reduce::MPI_Type<T>::value, 0, this->diag_comm.comm);
             }
             syncmem_h2d_op()(vcc, vcc_h, nband * this->nbase_x);
             delmem_complex_h_op()(vcc_h);
@@ -798,10 +798,10 @@ void Diago_DavSubspace<T, Device>::diag_zhegvx(const int& nbase,
         {
             for (int i = 0; i < nband; i++)
             {
-                MPI_Bcast(&vcc[i * this->nbase_x], nbase, MPI_DOUBLE_COMPLEX, 0, this->diag_comm.comm);
+                MPI_Bcast(&vcc[i * this->nbase_x], nbase, Parallel_Reduce::MPI_Type<T>::value, 0, this->diag_comm.comm);
             }
         }
-        MPI_Bcast((*eigenvalue_iter).data(), nband, MPI_DOUBLE, 0, this->diag_comm.comm);
+        MPI_Bcast((*eigenvalue_iter).data(), nband, Parallel_Reduce::MPI_Type<Real>::value, 0, this->diag_comm.comm);
     }
 #endif
 
