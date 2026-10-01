@@ -4,6 +4,16 @@
 #include "source_hsolver/diago_iter_assist.h"
 #include "source_io/module_parameter/parameter.h"
 #include "spin_constrain.h"
+
+namespace
+{
+template <typename CT>
+inline const CT& c_one()
+{
+    static const CT v(1.0, 0.0);
+    return v;
+}
+}
 #include "source_pw/module_pwdft/onsite_proj.h"
 #include "source_base/parallel_reduce.h"
 #include "source_base/kernels/math_kernel_op.h"
@@ -204,7 +214,7 @@ void spinconstrain::SpinConstrain<TK>::calculate_delta_hcc(SpinScalar<TK>* h_tmp
         for (int iat = 0; iat < this->Mi_.size(); iat++)
         {
             const int nproj = nh_iat[iat];
-            double coefficients0 = effective_lambda[iat][2] * this->get_spin_sign(ik);
+            SpinScalar<TK> coefficients0(effective_lambda[iat][2] * this->get_spin_sign(ik), 0.0);
             for (int ib = 0; ib < nbands; ib++)
             {
                 for (int ip = 0; ip < nproj; ip++)
@@ -248,12 +258,12 @@ void spinconstrain::SpinConstrain<TK>::calculate_delta_hcc(SpinScalar<TK>* h_tmp
             nbands,
             nbands,
             npm,
-            &ModuleBase::ONE,
+            &c_one<SpinScalar<TK>>(),
             becp_k,
             npm,
             ps_pointer,
             npm,
-            &ModuleBase::ONE,
+            &c_one<SpinScalar<TK>>(),
             h_tmp,
             nbands
         );
@@ -270,12 +280,12 @@ void spinconstrain::SpinConstrain<TK>::calculate_delta_hcc(SpinScalar<TK>* h_tmp
             nbands,
             nbands,
             npm,
-            &ModuleBase::ONE,
+            &c_one<SpinScalar<TK>>(),
             becp_k,
             npm,
             ps_pointer,
             npm,
-            &ModuleBase::ONE,
+            &c_one<SpinScalar<TK>>(),
             h_tmp,
             nbands
         );
@@ -358,11 +368,13 @@ void spinconstrain::SpinConstrain<TK>::update_psi_charge_pw_cpu(const ModuleBase
         this->calculate_delta_hcc(h_tmp.data(), becp_k, lambda_for_hcc, nbands, nkb, nh_iat, ik, full_update);
 
         // Diagonalize in subspace to update wavefunction coefficients and eigenvalues
+        std::vector<typename GetTypeReal<SpinScalar<TK>>::type> en_tmp(nbands);
         hsolver::DiagoIterAssist<SpinScalar<TK>>::diag_subspace_psi(h_tmp.data(),
                                                                         s_tmp.data(),
                                                                         nbands,
                                                                         psi_t[0],
-                                                                        &this->pelec->ekb(ik, 0));
+                                                                        en_tmp.data());
+        for (int ib = 0; ib < nbands; ++ib) this->pelec->ekb(ik, ib) = static_cast<double>(en_tmp[ib]);
     }
 
     // Free saved subspace data (allocated in cal_mw_from_lambda)
@@ -551,6 +563,8 @@ void spinconstrain::SpinConstrain<TK>::cal_mw_from_lambda(
     ModuleBase::timer::start("spinconstrain::SpinConstrain", "cal_mw_from_lambda");
 
 #ifdef __LCAO
+    if constexpr (std::is_same<TK, std::complex<double>>::value)
+    {
     if (this->basis_type_ == "lcao")
     {
         // =============================================================
@@ -944,8 +958,9 @@ void spinconstrain::SpinConstrain<TK>::cal_mw_from_lambda(
 
             this->cal_mi_lcao(i_step);
         }
+        return;
     }
-    else
+    }
 #endif
     {
         {
@@ -1004,13 +1019,15 @@ void spinconstrain::SpinConstrain<TK>::cal_mw_from_lambda(
                     if (i_step != -1) this->calculate_delta_hcc(h_tmp.data(), becp_k, this->lambda_.data(), nbands, nkb, nh_iat, ik, true);
 
                     // Diagonalize in subspace, update becp (response wavefunctions)
+                    std::vector<typename GetTypeReal<SpinScalar<TK>>::type> en_tmp(nbands);
                     hsolver::DiagoIterAssist<SpinScalar<TK>>::diag_responce(h_tmp.data(),
                                                                                   s_tmp.data(),
                                                                                   nbands,
                                                                                   becp_k,
                                                                                   &becp_tmp[ik * size_becp],
                                                                                   nkb * npol,
-                                                                                  &this->pelec->ekb(ik, 0));
+                                                                                  en_tmp.data());
+                    for (int ib = 0; ib < nbands; ++ib) this->pelec->ekb(ik, ib) = static_cast<double>(en_tmp[ib]);
                 }
             }
 #if ((defined __CUDA) || (defined __ROCM))
@@ -1119,6 +1136,8 @@ void spinconstrain::SpinConstrain<TK>::update_psi_charge(const ModuleBase::Vecto
     ModuleBase::TITLE("spinconstrain::SpinConstrain", "update_psi_charge");
     ModuleBase::timer::start("spinconstrain::SpinConstrain", "update_psi_charge");
 #ifdef __LCAO
+    if constexpr (std::is_same<TK, std::complex<double>>::value)
+    {
     if (this->basis_type_ == "lcao")
     {
         // TODO: Known issue — the base-class psiToRho() is a no-op for
@@ -1161,8 +1180,9 @@ void spinconstrain::SpinConstrain<TK>::update_psi_charge(const ModuleBase::Vecto
         }
 
         this->pelec->psiToRho(*psi_t);
+        return;
     }
-    else
+    }
 #endif
     {
         if (PARAM.inp.device == "cpu")
@@ -1184,3 +1204,4 @@ void spinconstrain::SpinConstrain<TK>::update_psi_charge(const ModuleBase::Vecto
 // upstream onsite-projection data (pseudopotential vkb, radial table, gcar)
 // is made single-precision capable.
 template class spinconstrain::SpinConstrain<std::complex<double>>;
+template class spinconstrain::SpinConstrain<std::complex<float>>;

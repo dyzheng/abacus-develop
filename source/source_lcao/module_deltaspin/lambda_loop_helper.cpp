@@ -354,3 +354,4 @@ bool spinconstrain::SpinConstrain<TK>::check_gradient_decay(
 // upstream onsite-projection data (pseudopotential vkb, radial table, gcar)
 // is made single-precision capable.
 template class spinconstrain::SpinConstrain<std::complex<double>>;
+template class spinconstrain::SpinConstrain<std::complex<float>>;

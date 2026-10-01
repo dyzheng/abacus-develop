@@ -58,8 +58,8 @@ void Forces<FPTYPE, Device>::cal_force_onsite(ModuleBase::matrix& force_onsite,
         }
         if(PARAM.inp.sc_mag_switch)
         {
-            spinconstrain::SpinConstrain<std::complex<double>>& sc = 
-              spinconstrain::SpinConstrain<std::complex<double>>::getScInstance();
+            spinconstrain::SpinConstrain<std::complex<FPTYPE>>& sc = 
+              spinconstrain::SpinConstrain<std::complex<FPTYPE>>::getScInstance();
             onsite_p->cal_force_onsite_dspin(ik, npm, force, sc.get_sc_lambda().data(), wg.c);
         }
         

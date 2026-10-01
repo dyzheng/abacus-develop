@@ -67,6 +67,8 @@
 template <typename TK>
 void spinconstrain::SpinConstrain<TK>::cal_mi_lcao(const int& step, bool print)
 {
+    if constexpr (std::is_same<TK, std::complex<double>>::value)
+    {
     ModuleBase::TITLE("module_deltaspin", "cal_mi_lcao");
     ModuleBase::timer::start("spinconstrain::SpinConstrain", "cal_mi_lcao");
     // Reset Mi before calculation
@@ -121,6 +123,7 @@ void spinconstrain::SpinConstrain<TK>::cal_mi_lcao(const int& step, bool print)
     }
 
     ModuleBase::timer::end("spinconstrain::SpinConstrain", "cal_mi_lcao");
+    }
 }
 
 #endif
@@ -210,3 +213,4 @@ void spinconstrain::SpinConstrain<TK>::set_operator(
 // upstream onsite-projection data (pseudopotential vkb, radial table, gcar)
 // is made single-precision capable.
 template class spinconstrain::SpinConstrain<std::complex<double>>;
+template class spinconstrain::SpinConstrain<std::complex<float>>;

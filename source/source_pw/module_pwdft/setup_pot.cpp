@@ -72,7 +72,7 @@ void pw::setup_pot(const int istep,
     //----------------------------------------------------------
     if (PARAM.inp.onsite_radius > 0)
     {
-        auto* onsite_p = projectors::OnsiteProjector<double, Device>::get_instance();
+        auto* onsite_p = projectors::OnsiteProjector<typename GetTypeReal<T>::type, Device>::get_instance();
         onsite_p->init(PARAM.inp.orbital_dir,
                 &ucell,
                 *(kspw_psi),
@@ -91,8 +91,8 @@ void pw::setup_pot(const int istep,
     //----------------------------------------------------------
     if (PARAM.inp.sc_mag_switch)
     {
-        spinconstrain::SpinConstrain<std::complex<double>>& sc
-            = spinconstrain::SpinConstrain<std::complex<double>>::getScInstance();
+        spinconstrain::SpinConstrain<T>& sc
+            = spinconstrain::SpinConstrain<T>::getScInstance();
         sc.init_sc(PARAM.inp.sc_thr,
                    PARAM.inp.nsc,
                    PARAM.inp.nsc_min,

@@ -6,17 +6,18 @@
 namespace pw
 {
 
-bool run_deltaspin_lambda_loop(const int iter,
-                               const double drho,
-                               const Input_para& inp)
+namespace
+{
+
+template <typename TK>
+bool run_deltaspin_lambda_loop_impl(const int iter, const double drho, const Input_para& inp)
 {
     if (!inp.sc_mag_switch)
     {
         return false;
     }
 
-    spinconstrain::SpinConstrain<std::complex<double>>& sc
-        = spinconstrain::SpinConstrain<std::complex<double>>::getScInstance();
+    spinconstrain::SpinConstrain<TK>& sc = spinconstrain::SpinConstrain<TK>::getScInstance();
 
     if (inp.sc_lambda_strategy == "linear_scan")
     {
@@ -67,10 +68,11 @@ bool run_deltaspin_lambda_loop(const int iter,
     return false;
 }
 
-void check_deltaspin_oscillation(const int iter,
-                                 const double drho,
-                                 Charge_Mixing* p_chgmix,
-                                 const Input_para& inp)
+template <typename TK>
+void check_deltaspin_oscillation_impl(const int iter,
+                                      const double drho,
+                                      Charge_Mixing* p_chgmix,
+                                      const Input_para& inp)
 {
     /// Return if DeltaSpin is not enabled
     if (!inp.sc_mag_switch)
@@ -79,8 +81,7 @@ void check_deltaspin_oscillation(const int iter,
     }
 
     /// Get the singleton instance of SpinConstrain
-    spinconstrain::SpinConstrain<std::complex<double>>& sc
-        = spinconstrain::SpinConstrain<std::complex<double>>::getScInstance();
+    spinconstrain::SpinConstrain<TK>& sc = spinconstrain::SpinConstrain<TK>::getScInstance();
 
     /// Check if higher magnetization precision is needed
     if (!sc.higher_mag_prec)
@@ -94,6 +95,30 @@ void check_deltaspin_oscillation(const int iter,
             p_chgmix->mixing_restart_step = iter + 1;
         }
     }
+}
+
+} // namespace
+
+bool run_deltaspin_lambda_loop(const int iter, const double drho, const Input_para& inp)
+{
+    if (inp.precision == "single")
+    {
+        return run_deltaspin_lambda_loop_impl<std::complex<float>>(iter, drho, inp);
+    }
+    return run_deltaspin_lambda_loop_impl<std::complex<double>>(iter, drho, inp);
+}
+
+void check_deltaspin_oscillation(const int iter,
+                                 const double drho,
+                                 Charge_Mixing* p_chgmix,
+                                 const Input_para& inp)
+{
+    if (inp.precision == "single")
+    {
+        check_deltaspin_oscillation_impl<std::complex<float>>(iter, drho, p_chgmix, inp);
+        return;
+    }
+    check_deltaspin_oscillation_impl<std::complex<double>>(iter, drho, p_chgmix, inp);
 }
 
 }

@@ -936,6 +936,7 @@ void SpinConstrain<TK>::reset_dspin_operator()
 }
 
 template class SpinConstrain<std::complex<double>>;
+template class SpinConstrain<std::complex<float>>;
 template class SpinConstrain<double>;
 
 } // namespace spinconstrain

@@ -50,6 +50,8 @@ namespace spinconstrain
 template <typename TK>
 void SpinConstrain<TK>::free_lcao_subspace_cache()
 {
+    if constexpr (std::is_same<TK, std::complex<double>>::value)
+    {
     delete[] lcao_sub_h_save;
     delete[] lcao_sub_s_save;
     lcao_sub_h_save = nullptr;
@@ -65,6 +67,7 @@ void SpinConstrain<TK>::free_lcao_subspace_cache()
     lcao_ekb_save_.clear();
     lcao_lambda_in_sub_.clear();
     lcao_subspace_initialized_ = false;
+    }
 }
 
 template <typename Scalar>
@@ -226,6 +229,8 @@ void SpinConstrain<TK>::calculate_lcao_sub_hs(
     SpinScalar<TK>* s_sub,
     int ik, int nbands, int nlocal)
 {
+    if constexpr (std::is_same<TK, std::complex<double>>::value)
+    {
     ModuleBase::TITLE("SpinConstrain", "calculate_lcao_sub_hs");
     ModuleBase::timer::start("SpinConstrain", "calculate_lcao_sub_hs");
 
@@ -379,6 +384,7 @@ void SpinConstrain<TK>::calculate_lcao_sub_hs(
     }
 
     ModuleBase::timer::end("SpinConstrain", "calculate_lcao_sub_hs");
+    }
 }
 
 template <typename TK>
@@ -390,6 +396,8 @@ void SpinConstrain<TK>::calculate_PI_sub_from_hr(
     SpinScalar<TK>* PI_sub_local_out,
     int nbands, int nlocal)
 {
+    if constexpr (std::is_same<TK, std::complex<double>>::value)
+    {
     ModuleBase::TITLE("SpinConstrain", "calculate_PI_sub_from_hr");
     ModuleBase::timer::start("SpinConstrain", "calculate_PI_sub_from_hr");
 
@@ -472,6 +480,7 @@ void SpinConstrain<TK>::calculate_PI_sub_from_hr(
     }
 
     ModuleBase::timer::end("SpinConstrain", "calculate_PI_sub_from_hr");
+    }
 }
 
 template <typename TK>
@@ -483,6 +492,8 @@ void SpinConstrain<TK>::calculate_PI_sub_from_hr(
     SpinScalar<TK>* PI_sub_local_out,
     int nbands, int nlocal)
 {
+    if constexpr (std::is_same<TK, std::complex<double>>::value)
+    {
     ModuleBase::TITLE("SpinConstrain", "calculate_PI_sub_from_hr");
     ModuleBase::timer::start("SpinConstrain", "calculate_PI_sub_from_hr");
 
@@ -565,6 +576,7 @@ void SpinConstrain<TK>::calculate_PI_sub_from_hr(
     }
 
     ModuleBase::timer::end("SpinConstrain", "calculate_PI_sub_from_hr");
+    }
 }
 
 template <typename TK>
@@ -575,6 +587,8 @@ void SpinConstrain<TK>::calculate_delta_hcc_lcao(
     int nbands, int ik, bool full_update,
     const Parallel_Orbitals* ParaV)
 {
+    if constexpr (std::is_same<TK, std::complex<double>>::value)
+    {
     ModuleBase::TITLE("SpinConstrain", "calculate_delta_hcc_lcao");
     ModuleBase::timer::start("SpinConstrain", "calculate_delta_hcc_lcao");
 
@@ -660,6 +674,7 @@ void SpinConstrain<TK>::calculate_delta_hcc_lcao(
     }
 
     ModuleBase::timer::end("SpinConstrain", "calculate_delta_hcc_lcao");
+    }
 }
 
 template <typename TK>
@@ -669,6 +684,8 @@ void SpinConstrain<TK>::calculate_delta_hcc_lcao(
     const ModuleBase::Vector3<double>* lambda,
     int nbands, int ik, bool full_update)
 {
+    if constexpr (std::is_same<TK, std::complex<double>>::value)
+    {
     ModuleBase::TITLE("SpinConstrain", "calculate_delta_hcc_lcao");
     ModuleBase::timer::start("SpinConstrain", "calculate_delta_hcc_lcao");
 
@@ -720,6 +737,7 @@ void SpinConstrain<TK>::calculate_delta_hcc_lcao(
     }
 
     ModuleBase::timer::end("SpinConstrain", "calculate_delta_hcc_lcao");
+    }
 }
 
 template <typename TK>
@@ -729,6 +747,8 @@ void SpinConstrain<TK>::rotate_psi_subspace_lcao(
     const std::vector<std::vector<SpinScalar<TK>>>& vcc_all,
     int nbands, int nlocal, int nk)
 {
+    if constexpr (std::is_same<TK, std::complex<double>>::value)
+    {
     ModuleBase::TITLE("SpinConstrain", "rotate_psi_subspace_lcao");
     ModuleBase::timer::start("SpinConstrain", "rotate_psi_subspace_lcao");
 
@@ -819,6 +839,7 @@ void SpinConstrain<TK>::rotate_psi_subspace_lcao(
     }
 
     ModuleBase::timer::end("SpinConstrain", "rotate_psi_subspace_lcao");
+    }
 }
 
 template <typename TK>
@@ -826,6 +847,8 @@ void SpinConstrain<TK>::cal_mi_lcao_subspace(
     const std::vector<std::vector<SpinScalar<TK>>>& vcc_all,
     int nbands, int nk, int npol)
 {
+    if constexpr (std::is_same<TK, std::complex<double>>::value)
+    {
     ModuleBase::TITLE("SpinConstrain", "cal_mi_lcao_subspace");
     ModuleBase::timer::start("SpinConstrain", "cal_mi_lcao_subspace");
 
@@ -874,6 +897,7 @@ void SpinConstrain<TK>::cal_mi_lcao_subspace(
 #endif
 
     ModuleBase::timer::end("SpinConstrain", "cal_mi_lcao_subspace");
+    }
 }
 
 } // namespace spinconstrain
@@ -885,6 +909,7 @@ void SpinConstrain<TK>::cal_mi_lcao_subspace(
 // upstream onsite-projection data (pseudopotential vkb, radial table, gcar)
 // is made single-precision capable.
 template class spinconstrain::SpinConstrain<std::complex<double>>;
+template class spinconstrain::SpinConstrain<std::complex<float>>;
 
 // Explicit instantiation of the subspace free helpers (double precision).
 #if defined(__LCAO)

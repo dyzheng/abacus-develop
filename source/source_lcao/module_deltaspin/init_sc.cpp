@@ -128,4 +128,5 @@ void spinconstrain::SpinConstrain<TK>::init_sc(double sc_thr_in,
 
 // Explicit template instantiations for both spin types
 template class spinconstrain::SpinConstrain<std::complex<double>>;
+template class spinconstrain::SpinConstrain<std::complex<float>>;
 template class spinconstrain::SpinConstrain<double>;

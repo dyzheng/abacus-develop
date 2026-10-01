@@ -98,6 +98,8 @@ template <typename TK>
 void spinconstrain::SpinConstrain<TK>::run_lambda_local_diagnostic(
     int outer_step, double lambda_ref_ry, const std::string& label)
 {
+    if constexpr (std::is_same<TK, std::complex<double>>::value)
+    {
 #ifndef __LCAO
     return;
 #else
@@ -447,6 +449,7 @@ void spinconstrain::SpinConstrain<TK>::run_lambda_local_diagnostic(
     std::cout << "[DS-LOCAL] Results written to: " << fname << std::endl;
     std::cout << std::string(80, '-') << "\n" << std::endl;
 #endif
+    }
 }
 
 template <typename TK>
@@ -1162,6 +1165,8 @@ void spinconstrain::SpinConstrain<TK>::run_lambda_linear_scan(int outer_step)
     // Only runs once when charge density is near convergence (drho < 1e-3)
     // =============================================================
 #ifdef __LCAO
+    if constexpr (std::is_same<TK, std::complex<double>>::value)
+    {
     if (this->basis_type_ == "lcao" && this->nspin_ == 2
         && this->last_drho_ > 0 && this->last_drho_ < 1e-3
         && !this->local_diag_run_)
@@ -1179,6 +1184,7 @@ void spinconstrain::SpinConstrain<TK>::run_lambda_linear_scan(int outer_step)
         this->local_diag_run_ = true;
         std::cout << "[DS-DIAG] Local diagnostic complete.\n" << std::endl;
     }
+    }
 #endif
 
     // =============================================================
@@ -1186,6 +1192,8 @@ void spinconstrain::SpinConstrain<TK>::run_lambda_linear_scan(int outer_step)
     // Only runs when charge density is near convergence (drho < 1e-3)
     // =============================================================
 #ifdef __LCAO
+    if constexpr (std::is_same<TK, std::complex<double>>::value)
+    {
     if (this->basis_type_ == "lcao" && this->nspin_ == 2 && this->last_drho_ > 0 && this->last_drho_ < 1e-3)
     {
         std::cout << "\n" << std::string(80, '=') << std::endl;
@@ -1381,9 +1389,11 @@ void spinconstrain::SpinConstrain<TK>::run_lambda_linear_scan(int outer_step)
                 std::vector<SpinScalar<TK>> s_copy(nn);
                 std::memcpy(s_copy.data(), s_tmp.data(), sizeof(SpinScalar<TK>) * nn);
 
+                std::vector<typename GetTypeReal<SpinScalar<TK>>::type> eig_tmp(nbands);
                 hsolver::DiagoIterAssist<SpinScalar<TK>>::diag_hegvd(
                     nbands, nbands, h_tmp.data(), s_copy.data(), nbands,
-                    eigenvalues.data(), vcc.data());
+                    eig_tmp.data(), vcc.data());
+                for (int ib = 0; ib < nbands; ++ib) eigenvalues[ib] = static_cast<double>(eig_tmp[ib]);
 
                 vcc_B[ik].assign(vcc.data(), vcc.data() + nn);
                 ekb_B[ik].assign(eigenvalues.data(), eigenvalues.data() + nbands);
@@ -1458,6 +1468,7 @@ void spinconstrain::SpinConstrain<TK>::run_lambda_linear_scan(int outer_step)
         std::cout << "\n[DS-DIAG] Comparison written to: eigenvalue_mi_comparison.dat" << std::endl;
         std::cout << std::string(80, '=') << "\n" << std::endl;
     }
+    }
 #endif
 
     std::cout << std::string(80, '=') << std::endl;
@@ -1482,6 +1493,8 @@ void spinconstrain::SpinConstrain<TK>::run_lambda_linear_scan(int outer_step)
 template <typename TK>
 void spinconstrain::SpinConstrain<TK>::run_lambda_scan_diagnostic(int outer_step)
 {
+    if constexpr (std::is_same<TK, std::complex<double>>::value)
+    {
 #ifndef __LCAO
     return;
 #else
@@ -1777,6 +1790,7 @@ void spinconstrain::SpinConstrain<TK>::run_lambda_scan_diagnostic(int outer_step
     std::cout << "[DS-DIAG] Results written to: subspace_vs_full_scan.dat" << std::endl;
     std::cout << std::string(80, '=') << "\n" << std::endl;
 #endif
+    }
 }
 
 
@@ -1808,6 +1822,8 @@ template <typename TK>
 void spinconstrain::SpinConstrain<TK>::run_trace_vs_dmr_diagnostic(
     int outer_step, double lambda_ref_ry)
 {
+    if constexpr (std::is_same<TK, std::complex<double>>::value)
+    {
 #ifdef __LCAO
     if (this->basis_type_ != "lcao") return;
     if (this->nspin_ != 2) return;
@@ -2045,6 +2061,7 @@ void spinconstrain::SpinConstrain<TK>::run_trace_vs_dmr_diagnostic(
         std::memcpy(psi_t->get_pointer(), psi_ref[ik].data(), sizeof(SpinScalar<TK>) * nloc_wfc);
     }
 #endif
+    }
 }
 
 template <>
@@ -2057,3 +2074,4 @@ void spinconstrain::SpinConstrain<double>::run_trace_vs_dmr_diagnostic(int outer
 // upstream onsite-projection data (pseudopotential vkb, radial table, gcar)
 // is made single-precision capable.
 template class spinconstrain::SpinConstrain<std::complex<double>>;
+template class spinconstrain::SpinConstrain<std::complex<float>>;
