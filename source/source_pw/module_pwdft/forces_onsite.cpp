@@ -8,6 +8,52 @@
 #include "source_lcao/module_dftu/dftu.h"
 #include "source_lcao/module_deltaspin/spin_constrain.h"
 
+namespace
+{
+// The DeltaSpin/DFT+U onsite projector and SpinConstrain singletons are keyed by
+// the *main SCF* scalar type (float in single precision), whereas the PW force
+// driver (Forces<double>) always accumulates forces in double. Compute the onsite
+// contribution in the projector's own precision, then convert to double.
+template <typename OnsiteReal, typename Device>
+void cal_force_onsite_kernel(OnsiteReal* force,
+                             const ModuleBase::matrix& wg,
+                             const ModulePW::PW_Basis_K* wfc_basis,
+                             const UnitCell& ucell_in,
+                             const Plus_U& dftu,
+                             const int nks)
+{
+    auto* onsite_p = projectors::OnsiteProjector<OnsiteReal, Device>::get_instance();
+    for (int ik = 0; ik < nks; ik++)
+    {
+        int nbands_occ = wg.nc;
+        while (wg(ik, nbands_occ - 1) == 0.0)
+        {
+            nbands_occ--;
+            if (nbands_occ == 0)
+            {
+                break;
+            }
+        }
+        const int npm = nbands_occ;
+        onsite_p->get_fs_tools()->cal_becp(ik, npm);
+        for (int ipol = 0; ipol < 3; ipol++)
+        {
+            onsite_p->get_fs_tools()->cal_dbecp_f(ik, npm, ipol);
+        }
+        if (PARAM.inp.dft_plus_u)
+        {
+            onsite_p->cal_force_onsite_dftu(ik, npm, force, dftu, nks, wg.c);
+        }
+        if (PARAM.inp.sc_mag_switch)
+        {
+            spinconstrain::SpinConstrain<std::complex<OnsiteReal>>& sc
+                = spinconstrain::SpinConstrain<std::complex<OnsiteReal>>::getScInstance();
+            onsite_p->cal_force_onsite_dspin(ik, npm, force, sc.get_sc_lambda().data(), wg.c);
+        }
+    }
+}
+} // namespace
+
 template <typename FPTYPE, typename Device>
 void Forces<FPTYPE, Device>::cal_force_onsite(ModuleBase::matrix& force_onsite,
                                           const ModuleBase::matrix& wg,
@@ -27,42 +73,20 @@ void Forces<FPTYPE, Device>::cal_force_onsite(ModuleBase::matrix& force_onsite,
     resmem_var_op()(force, ucell_in.nat * 3);
     base_device::memory::set_memory_op<FPTYPE, Device>()(force, 0.0, ucell_in.nat * 3);
 
-    auto* onsite_p = projectors::OnsiteProjector<FPTYPE, Device>::get_instance();
-
     const int nks = wfc_basis->nks;
-    for (int ik = 0; ik < nks; ik++)
+
+    if (PARAM.globalv.has_float_data)
     {
-        // In PAGED_GPU mode only one k-point resides on the GPU; make sure the
-        // wavefunction of this k-point is loaded before the onsite projector
-        // reads psi_ (otherwise psi_(ik,0,0) returns a host pointer that the
-        // GPU gemm would dereference as a device pointer -> illegal access).
-        const_cast<psi::Psi<std::complex<FPTYPE>, Device>*>(psi_in)->ensure_k_on_gpu(ik);
-        int nbands_occ = wg.nc;
-        while (wg(ik, nbands_occ - 1) == 0.0)
+        std::vector<float> force_float(ucell_in.nat * 3, 0.0f);
+        cal_force_onsite_kernel<float, Device>(force_float.data(), wg, wfc_basis, ucell_in, dftu, nks);
+        for (int i = 0; i < ucell_in.nat * 3; i++)
         {
-            nbands_occ--;
-            if (nbands_occ == 0)
-            {
-                break;
-            }
+            force[i] += static_cast<double>(force_float[i]);
         }
-        const int npm = nbands_occ;
-        onsite_p->get_fs_tools()->cal_becp(ik, npm);
-        for (int ipol = 0; ipol < 3; ipol++)
-        {
-            onsite_p->get_fs_tools()->cal_dbecp_f(ik, npm, ipol);
-        }
-        if(PARAM.inp.dft_plus_u)
-        {
-            onsite_p->cal_force_onsite_dftu(ik, npm, force, dftu, nks, wg.c);
-        }
-        if(PARAM.inp.sc_mag_switch)
-        {
-            spinconstrain::SpinConstrain<std::complex<FPTYPE>>& sc = 
-              spinconstrain::SpinConstrain<std::complex<FPTYPE>>::getScInstance();
-            onsite_p->cal_force_onsite_dspin(ik, npm, force, sc.get_sc_lambda().data(), wg.c);
-        }
-        
+    }
+    else
+    {
+        cal_force_onsite_kernel<double, Device>(force, wg, wfc_basis, ucell_in, dftu, nks);
     }
 
     syncmem_var_d2h_op()(force_onsite.c, force, force_onsite.nr * force_onsite.nc);

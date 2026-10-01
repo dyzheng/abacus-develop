@@ -7,6 +7,65 @@
 #include "source_lcao/module_deltaspin/spin_constrain.h"
 #include "stress_func.h"
 
+namespace
+{
+// See forces_onsite.cpp: the onsite projector / SpinConstrain singletons follow
+// the main SCF scalar type, so dispatch on it and accumulate the (double) stress.
+template <typename OnsiteReal, typename Device>
+void stress_onsite_kernel(std::vector<double>& sigma_onsite,
+                          const ModuleBase::matrix& wg,
+                          const ModulePW::PW_Basis_K* wfc_basis,
+                          const UnitCell& ucell_in,
+                          const Plus_U& dftu,
+                          const int nks)
+{
+    auto* onsite_projector = projectors::OnsiteProjector<OnsiteReal, Device>::get_instance();
+    auto* fs_tools = onsite_projector->get_fs_tools();
+
+    for (int ik = 0; ik < nks; ik++)
+    {
+        int nbands_occ = wg.nc;
+        while (wg(ik, nbands_occ - 1) == 0.0)
+        {
+            nbands_occ--;
+            if (nbands_occ == 0)
+            {
+                break;
+            }
+        }
+        const int num_occupied_bands = nbands_occ;
+
+        fs_tools->cal_becp(ik, num_occupied_bands);
+
+        for (int ipol = 0; ipol < 3; ipol++)
+        {
+            for (int jpol = 0; jpol <= ipol; jpol++)
+            {
+                const int idx = ipol * 3 + jpol;
+
+                fs_tools->cal_dbecp_s(ik, num_occupied_bands, ipol, jpol);
+
+                if (PARAM.inp.dft_plus_u)
+                {
+                    double dftu_stress = onsite_projector->cal_stress_onsite_dftu(
+                        ik, num_occupied_bands, dftu, nks, wg.c);
+                    sigma_onsite[idx] += dftu_stress;
+                }
+
+                if (PARAM.inp.sc_mag_switch)
+                {
+                    spinconstrain::SpinConstrain<std::complex<OnsiteReal>>& spin_constrain
+                        = spinconstrain::SpinConstrain<std::complex<OnsiteReal>>::getScInstance();
+                    double dspin_stress = onsite_projector->cal_stress_onsite_dspin(
+                        ik, num_occupied_bands, spin_constrain.get_sc_lambda().data(), wg.c);
+                    sigma_onsite[idx] += dspin_stress;
+                }
+            }
+        }
+    }
+}
+} // namespace
+
 /**
  * @brief Calculate the nonlocal pseudopotential stress in PW basis
  * 
@@ -51,83 +110,15 @@ void Stress_Func<FPTYPE, Device>::stress_onsite(
     // Host memory for stress storage (CPU only)
     std::vector<double> sigma_onsite(9, 0.0);
 
-    // Get onsite projector instance
-    auto* onsite_projector = projectors::OnsiteProjector<FPTYPE, Device>::get_instance();
-    auto* fs_tools = onsite_projector->get_fs_tools();
-
     const int nks = wfc_basis->nks;
-    
-    // Loop over all k-points
-    for (int ik = 0; ik < nks; ik++)
+
+    if (PARAM.globalv.has_float_data)
     {
-        // In PAGED_GPU mode only one k-point resides on the GPU; load this
-        // k-point's wavefunction before the onsite projector reads psi_
-        // (otherwise psi_(ik,0,0) returns a host pointer used as a device
-        // pointer by the GPU gemm -> illegal memory access).
-        const_cast<psi::Psi<std::complex<FPTYPE>, Device>*>(
-            static_cast<const psi::Psi<std::complex<FPTYPE>, Device>*>(psi_in))->ensure_k_on_gpu(ik);
-        // Determine number of occupied bands (skip zero weights)
-        int nbands_occ = wg.nc;
-        
-        // Check if nbands_occ is valid
-        if (nbands_occ < 0)
-        {
-            ModuleBase::WARNING_QUIT("stress_onsite.cpp", "Number of bands is negative, cannot calculate stress");
-        }
-        
-        // Skip if no bands
-        if (nbands_occ == 0)
-        {
-            continue;
-        }
-        
-        // Find the highest occupied band with non-zero weight
-        while (wg(ik, nbands_occ - 1) == 0.0)
-        {
-            nbands_occ--;
-            if (nbands_occ == 0)
-            {
-                break;
-            }
-        }
-        const int num_occupied_bands = nbands_occ;
-
-        // Calculate becp = <psi|beta> for all beta functions
-        fs_tools->cal_becp(ik, num_occupied_bands);
-
-        // Calculate stress contributions for each tensor component
-        for (int ipol = 0; ipol < 3; ipol++)
-        {
-            for (int jpol = 0; jpol <= ipol; jpol++)
-            {
-                const int idx = ipol * 3 + jpol;
-
-                // Calculate dbecp_s = <psi|d(beta)/d(epsilon_ij)>
-                fs_tools->cal_dbecp_s(ik, num_occupied_bands, ipol, jpol);
-                
-                if (PARAM.inp.dft_plus_u)
-                {
-                    double dftu_stress = onsite_projector->cal_stress_onsite_dftu(
-                        ik, num_occupied_bands, dftu, nks, wg.c);
-                    
-                    sigma_onsite[idx] += dftu_stress;
-#ifdef __DEBUG
-		    std::cout << " idx=" << idx << " stress=" << sigma_onsite[idx] << std::endl;
-#endif
-                }
-                
-                if (PARAM.inp.sc_mag_switch)
-                {
-                    spinconstrain::SpinConstrain<std::complex<FPTYPE>>& spin_constrain = 
-                        spinconstrain::SpinConstrain<std::complex<FPTYPE>>::getScInstance();
-                    
-                    double dspin_stress = onsite_projector->cal_stress_onsite_dspin(
-                        ik, num_occupied_bands, spin_constrain.get_sc_lambda().data(), wg.c);
-                    
-                    sigma_onsite[idx] += dspin_stress;
-                }
-            }
-        }
+        stress_onsite_kernel<float, Device>(sigma_onsite, wg, wfc_basis, ucell_in, dftu, nks);
+    }
+    else
+    {
+        stress_onsite_kernel<double, Device>(sigma_onsite, wg, wfc_basis, ucell_in, dftu, nks);
     }
 
     // No device memory to clean up (using CPU only)
