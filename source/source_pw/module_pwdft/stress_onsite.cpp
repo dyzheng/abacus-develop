@@ -118,8 +118,8 @@ void Stress_Func<FPTYPE, Device>::stress_onsite(
                 
                 if (PARAM.inp.sc_mag_switch)
                 {
-                    spinconstrain::SpinConstrain<std::complex<double>>& spin_constrain = 
-                        spinconstrain::SpinConstrain<std::complex<double>>::getScInstance();
+                    spinconstrain::SpinConstrain<std::complex<FPTYPE>>& spin_constrain = 
+                        spinconstrain::SpinConstrain<std::complex<FPTYPE>>::getScInstance();
                     
                     double dspin_stress = onsite_projector->cal_stress_onsite_dspin(
                         ik, num_occupied_bands, spin_constrain.get_sc_lambda().data(), wg.c);

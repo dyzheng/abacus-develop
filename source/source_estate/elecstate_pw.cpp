@@ -66,8 +66,8 @@ ElecStatePW<T, Device>::~ElecStatePW()
 template<typename T, typename Device>
 double ElecStatePW<T, Device>::get_spin_constrain_energy()
 {
-    spinconstrain::SpinConstrain<std::complex<double>>& sc
-        = spinconstrain::SpinConstrain<std::complex<double>>::getScInstance();
+    spinconstrain::SpinConstrain<std::complex<typename GetTypeReal<T>::type>>& sc
+        = spinconstrain::SpinConstrain<std::complex<typename GetTypeReal<T>::type>>::getScInstance();
     return sc.cal_escon();
 }
 

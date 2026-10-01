@@ -154,9 +154,16 @@ void module_charge::chgmixing_ks_pw(const int iter, // scf iteration number
                 bool do_uramping = true;
                 if (inp.sc_mag_switch)
                 {
-                    spinconstrain::SpinConstrain<std::complex<double>>& sc
-                        = spinconstrain::SpinConstrain<std::complex<double>>::getScInstance();
-                    if (!sc.mag_converged()) // skip uramping if mag not converged
+                    bool mag_converged = true;
+                    if (inp.precision == "single")
+                    {
+                        mag_converged = spinconstrain::SpinConstrain<std::complex<float>>::getScInstance().mag_converged();
+                    }
+                    else
+                    {
+                        mag_converged = spinconstrain::SpinConstrain<std::complex<double>>::getScInstance().mag_converged();
+                    }
+                    if (!mag_converged) // skip uramping if mag not converged
                     {
 						do_uramping = false;
 					}

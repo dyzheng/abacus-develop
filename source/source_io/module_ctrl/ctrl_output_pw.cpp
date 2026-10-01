@@ -225,19 +225,30 @@ void ModuleIO::ctrl_scf_pw(const int istep,
     //------------------------------------------------------------------
     if (inp.sc_mag_switch)
     {
-        spinconstrain::SpinConstrain<std::complex<double>>& sc
-            = spinconstrain::SpinConstrain<std::complex<double>>::getScInstance();
-        sc.cal_mi_pw();
-        sc.print_Mag_Force(GlobalV::ofs_running);
+        if (inp.precision == "single")
+        {
+            spinconstrain::SpinConstrain<std::complex<float>>& sc
+                = spinconstrain::SpinConstrain<std::complex<float>>::getScInstance();
+            sc.cal_mi_pw();
+            sc.print_Mag_Force(GlobalV::ofs_running);
+        }
+        else
+        {
+            spinconstrain::SpinConstrain<std::complex<double>>& sc
+                = spinconstrain::SpinConstrain<std::complex<double>>::getScInstance();
+            sc.cal_mi_pw();
+            sc.print_Mag_Force(GlobalV::ofs_running);
+        }
     }
 
     //------------------------------------------------------------------
     // 9) write onsite occupations for charge and magnetizations
     //------------------------------------------------------------------
     if (inp.onsite_radius > 0)
-    { // float type has not been implemented
-        auto* onsite_p = projectors::OnsiteProjector<double, Device>::get_instance();
-        onsite_p->cal_occupations(reinterpret_cast<psi::Psi<std::complex<double>, Device>*>(stp.template get_psi_t<T, Device>()),
+    {
+        using FPTYPE = typename GetTypeReal<T>::type;
+        auto* onsite_p = projectors::OnsiteProjector<FPTYPE, Device>::get_instance();
+        onsite_p->cal_occupations(reinterpret_cast<psi::Psi<std::complex<FPTYPE>, Device>*>(stp.template get_psi_t<T, Device>()),
                                   pelec->wg);
     }
 
