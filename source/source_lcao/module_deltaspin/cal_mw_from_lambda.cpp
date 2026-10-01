@@ -1011,6 +1011,7 @@ void spinconstrain::SpinConstrain<TK>::cal_mw_from_lambda(
                         /// Compute H(k) and extract subspace matrices for this k-point
                         hamilt_t->updateHk(ik);
                         hsolver::DiagoIterAssist<SpinScalar<TK>>::cal_hs_subspace(hamilt_t, psi_t[0], h_k, s_k);
+                        onsite_p->overlap_proj_psi(nbands * npol, psi_t->get_pointer());
                         memcpy(becp_k, onsite_p->get_becp(), sizeof(SpinScalar<TK>) * size_becp);
                     }
                     memcpy(h_tmp.data(), h_k, sizeof(SpinScalar<TK>) * nbands * nbands);

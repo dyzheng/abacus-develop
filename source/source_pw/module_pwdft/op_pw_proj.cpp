@@ -54,7 +54,7 @@ void OnsiteProj<OperatorPW<T, Device>>::init(const int ik_in)
     ModuleBase::timer::start("OnsiteProj", "getvnl");
     this->ik = ik_in;
 
-    auto* onsite_p = projectors::OnsiteProjector<double, Device>::get_instance();
+    auto* onsite_p = projectors::OnsiteProjector<typename GetTypeReal<T>::type, Device>::get_instance();
     onsite_p->tabulate_atomic(ik_in);
     this->tnp = onsite_p->get_tot_nproj();
 
@@ -74,8 +74,8 @@ void OnsiteProj<OperatorPW<T, Device>>::add_onsite_proj(T *hpsi_in, const int np
 {
     ModuleBase::timer::start("OnsiteProj", "add_onsite_proj");
 
-    auto* onsite_p = projectors::OnsiteProjector<double, Device>::get_instance();
-    const std::complex<double>* tab_atomic = onsite_p->get_tab_atomic();
+    auto* onsite_p = projectors::OnsiteProjector<typename GetTypeReal<T>::type, Device>::get_instance();
+    const T* tab_atomic = onsite_p->get_tab_atomic();
     const int npw = onsite_p->get_npw();
     // npwx passed as parameter
     char transa = 'N';
@@ -102,7 +102,7 @@ void OnsiteProj<OperatorPW<T, Device>>::add_onsite_proj(T *hpsi_in, const int np
 template<typename T, typename Device>
 void OnsiteProj<OperatorPW<T, Device>>::update_becp(const T *psi_in, const int npol, const int m, const int npwx) const
 {
-    auto* onsite_p = projectors::OnsiteProjector<double, Device>::get_instance();
+    auto* onsite_p = projectors::OnsiteProjector<typename GetTypeReal<T>::type, Device>::get_instance();
     onsite_p->overlap_proj_psi(m, psi_in, npwx);
 }
 
@@ -111,10 +111,10 @@ void OnsiteProj<OperatorPW<T, Device>>::cal_ps_delta_spin(const int npol, const 
 {
     if(!this->has_delta_spin) return;
 
-    auto* onsite_p = projectors::OnsiteProjector<double, Device>::get_instance();
-    const std::complex<double>* becp = onsite_p->get_becp();
+    auto* onsite_p = projectors::OnsiteProjector<typename GetTypeReal<T>::type, Device>::get_instance();
+    const T* becp = onsite_p->get_becp();
 
-    spinconstrain::SpinConstrain<std::complex<double>>& sc = spinconstrain::SpinConstrain<std::complex<double>>::getScInstance();
+    spinconstrain::SpinConstrain<T>& sc = spinconstrain::SpinConstrain<T>::getScInstance();
     auto& constrain = sc.get_constrain();
     auto& lambda = sc.get_sc_lambda();
 
@@ -145,7 +145,7 @@ void OnsiteProj<OperatorPW<T, Device>>::cal_ps_delta_spin(const int npol, const 
     }
 
     // prepare array of nh_iat and lambda_array to pass to the onsite_ps_op operator
-    std::vector<std::complex<double>> tmp_lambda_coeff(this->ucell->nat * 4);
+    std::vector<T> tmp_lambda_coeff(this->ucell->nat * 4);
     if (npol == 1)
     {
         int spin_sign = 1;
@@ -155,17 +155,17 @@ void OnsiteProj<OperatorPW<T, Device>>::cal_ps_delta_spin(const int npol, const 
         }
         for(int iat=0;iat<this->ucell->nat;iat++)
         {
-            tmp_lambda_coeff[iat] = std::complex<double>(lambda[iat][2] * spin_sign, 0.0);
+            tmp_lambda_coeff[iat] = T(lambda[iat][2] * spin_sign, 0.0);
         }
     }
     else
     {
         for(int iat=0;iat<this->ucell->nat;iat++)
         {
-            tmp_lambda_coeff[iat * 4] = std::complex<double>(lambda[iat][2], 0.0);
-            tmp_lambda_coeff[iat * 4 + 1] = std::complex<double>(lambda[iat][0], lambda[iat][1]);
-            tmp_lambda_coeff[iat * 4 + 2] = std::complex<double>(lambda[iat][0], -lambda[iat][1]);
-            tmp_lambda_coeff[iat * 4 + 3] = std::complex<double>(-lambda[iat][2], 0.0);
+            tmp_lambda_coeff[iat * 4] = T(lambda[iat][2], 0.0);
+            tmp_lambda_coeff[iat * 4 + 1] = T(lambda[iat][0], lambda[iat][1]);
+            tmp_lambda_coeff[iat * 4 + 2] = T(lambda[iat][0], -lambda[iat][1]);
+            tmp_lambda_coeff[iat * 4 + 3] = T(-lambda[iat][2], 0.0);
         }
     }
     syncmem_complex_h2d_op()(this->lambda_coeff, tmp_lambda_coeff.data(), this->ucell->nat * 4);
@@ -204,7 +204,7 @@ template<typename T, typename Device>
 void OnsiteProj<OperatorPW<T, Device>>::setup_pw_dftu_indices() const
 {
     this->init_dftu = true;
-    auto* onsite_p = projectors::OnsiteProjector<double, Device>::get_instance();
+    auto* onsite_p = projectors::OnsiteProjector<typename GetTypeReal<T>::type, Device>::get_instance();
     const int npol = this->ucell->get_npol();
 
     resmem_int_op()(this->orb_l_iat, this->ucell->nat);
@@ -273,8 +273,8 @@ void OnsiteProj<OperatorPW<T, Device>>::cal_ps_dftu(
 		return;
 	}
 
-    auto* onsite_p = projectors::OnsiteProjector<double, Device>::get_instance();
-    const std::complex<double>* becp = onsite_p->get_becp();
+    auto* onsite_p = projectors::OnsiteProjector<typename GetTypeReal<T>::type, Device>::get_instance();
+    const T* becp = onsite_p->get_becp();
 
     if (this->nkb_m < m * tnp) {
         resmem_complex_op()(this->ps, tnp * m, "OnsiteProj<PW>::ps");
@@ -293,7 +293,9 @@ void OnsiteProj<OperatorPW<T, Device>>::cal_ps_dftu(
     const int isk_val = (PARAM.inp.nspin == 2) ? this->isk[this->ik] : 0;
     const std::complex<double>* vu_host = dftu->get_eff_pot_pw_spin(isk_val);
     const int vu_size = dftu->get_size_eff_pot_pw_spin();
-    syncmem_complex_h2d_op()(this->vu_device, vu_host, vu_size);
+    std::vector<T> vu_float(vu_size);
+    for (int i = 0; i < vu_size; ++i) vu_float[i] = static_cast<T>(vu_host[i]);
+    syncmem_complex_h2d_op()(this->vu_device, vu_float.data(), vu_size);
     hamilt::onsite_ps_op<Real, Device>()(
         this->ctx,
         m,
