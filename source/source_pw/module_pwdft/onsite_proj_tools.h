@@ -114,6 +114,12 @@ class Onsite_Proj_tools
 
     std::complex<FPTYPE>* get_becp() const { return becp; }
     std::complex<FPTYPE>* get_dbecp() const { return dbecp; }
+    // non-const psi accessor, used by the force/stress path to load the
+    // correct (main-precision) wavefunction to the GPU in PAGED_GPU mode.
+    psi::Psi<std::complex<FPTYPE>, Device>* get_psi() const
+    {
+        return const_cast<psi::Psi<std::complex<FPTYPE>, Device>*>(psi_);
+    }
 
   private:
     /**

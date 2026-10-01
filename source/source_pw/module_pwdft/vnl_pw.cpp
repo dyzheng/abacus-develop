@@ -161,11 +161,11 @@ void pseudopot_cell_vnl::init(const UnitCell& ucell,
                 resmem_cd_op()(c_deeq_nc, PARAM.inp.nspin * ucell.nat * this->nhm * this->nhm);
                 resmem_cd_op()(c_qq_so, ntype * 4 * this->nhm * this->nhm);
             }
-            if (PARAM.globalv.has_double_data)
-            {
-                resmem_zd_op()(z_deeq_nc, PARAM.inp.nspin * ucell.nat * this->nhm * this->nhm);
-                resmem_zd_op()(z_qq_so, ntype * 4 * this->nhm * this->nhm);
-            }
+            // The double-precision deeq_nc / qq_so GPU buffers are always required
+            // by the double-precision force/stress path (Forces<double, GPU> /
+            // Stress_PW<double, GPU>) even in single precision.
+            resmem_zd_op()(z_deeq_nc, PARAM.inp.nspin * ucell.nat * this->nhm * this->nhm);
+            resmem_zd_op()(z_qq_so, ntype * 4 * this->nhm * this->nhm);
             resmem_dd_op()(d_deeq, PARAM.inp.nspin * ucell.nat * this->nhm * this->nhm);
             resmem_dd_op()(d_indv, ntype * this->nhm);
             resmem_dd_op()(d_nhtol, ntype * this->nhm);
@@ -771,10 +771,8 @@ void pseudopot_cell_vnl::init_vnl(UnitCell& cell, const ModulePW::PW_Basis* rho_
             castmem_d2s_h2d_op()(this->s_qq_nt, this->qq_nt.ptr, this->qq_nt.getSize());
             castmem_z2c_h2d_op()(this->c_qq_so, this->qq_so.ptr, this->qq_so.getSize());
         }
-        if (PARAM.globalv.has_double_data)
-        {
-            syncmem_z2z_h2d_op()(this->z_qq_so, this->qq_so.ptr, this->qq_so.getSize());
-        }
+        // The double-precision qq_so is always required by the double force/stress path.
+        syncmem_z2z_h2d_op()(this->z_qq_so, this->qq_so.ptr, this->qq_so.getSize());
         // Even when the single precision flag is enabled,
         // these variables are utilized in the Force/Stress calculation as well.
         // modified by denghuilu at 2023-05-15
@@ -1386,12 +1384,10 @@ void pseudopot_cell_vnl::cal_effective_D(const ModuleBase::matrix& veff,
                                  this->deeq_nc.ptr,
                                  PARAM.inp.nspin * cell.nat * this->nhm * this->nhm);
         }
-        if (PARAM.globalv.has_double_data)
-        {
-            syncmem_z2z_h2d_op()(this->z_deeq_nc,
-                                 this->deeq_nc.ptr,
-                                 PARAM.inp.nspin * cell.nat * this->nhm * this->nhm);
-        }
+        // The double-precision deeq_nc is always required by the double force/stress path.
+        syncmem_z2z_h2d_op()(this->z_deeq_nc,
+                             this->deeq_nc.ptr,
+                             PARAM.inp.nspin * cell.nat * this->nhm * this->nhm);
         syncmem_d2d_h2d_op()(this->d_deeq,
                              this->deeq.ptr,
                              PARAM.inp.nspin * cell.nat * this->nhm * this->nhm);

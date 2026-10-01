@@ -24,6 +24,9 @@ void stress_onsite_kernel(std::vector<double>& sigma_onsite,
 
     for (int ik = 0; ik < nks; ik++)
     {
+        // In PAGED_GPU mode only one k-point resides on the GPU; load the main
+        // (single-precision) wavefunction before the onsite projector reads it.
+        fs_tools->get_psi()->ensure_k_on_gpu(ik);
         int nbands_occ = wg.nc;
         while (wg(ik, nbands_occ - 1) == 0.0)
         {
