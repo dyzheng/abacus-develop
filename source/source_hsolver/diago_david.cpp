@@ -740,9 +740,9 @@ void DiagoDavid<T, Device>::diag_zhegvx(const int& nbase,
         // vcc: nbase * nband
         for (int i = 0; i < nband; i++)
         {
-            MPI_Bcast(&vcc[i * nbase_x], nbase, MPI_DOUBLE_COMPLEX, 0, diag_comm.comm);
+            MPI_Bcast(&vcc[i * nbase_x], nbase, Parallel_Reduce::MPI_Type<T>::value, 0, diag_comm.comm);
         }
-        MPI_Bcast(this->eigenvalue, nband, MPI_DOUBLE, 0, diag_comm.comm);
+        MPI_Bcast(this->eigenvalue, nband, Parallel_Reduce::MPI_Type<Real>::value, 0, diag_comm.comm);
     }
 #endif
 
