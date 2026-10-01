@@ -309,63 +309,6 @@ void OnsiteProj<OperatorPW<T, Device>>::cal_ps_dftu(
         this->ps, becp);
 }
 
-template<>
-void OnsiteProj<OperatorPW<std::complex<float>, base_device::DEVICE_CPU>>::add_onsite_proj(
-		std::complex<float> *hpsi_in, 
-		const int npol, 
-		const int m,
-		const int npwx) const
-{}
-
-template<>
-void OnsiteProj<OperatorPW<std::complex<float>, base_device::DEVICE_CPU>>::update_becp(
-		const std::complex<float> *psi_in, 
-		const int npol, 
-		const int m,
-		const int npwx) const
-{}
-
-template<>
-void OnsiteProj<OperatorPW<std::complex<float>, base_device::DEVICE_CPU>>::cal_ps_delta_spin(
-		const int npol, 
-		const int m) const
-{}
-
-template<>
-void OnsiteProj<OperatorPW<std::complex<float>, base_device::DEVICE_CPU>>::cal_ps_dftu(
-		const int npol, 
-		const int m) const
-{}
-
-#if ((defined __CUDA) || (defined __ROCM))
-template<>
-void OnsiteProj<OperatorPW<std::complex<float>, base_device::DEVICE_GPU>>::add_onsite_proj(
-		std::complex<float> *hpsi_in, 
-		const int npol, 
-		const int m,
-		const int npwx) const
-{}
-
-template<>
-void OnsiteProj<OperatorPW<std::complex<float>, base_device::DEVICE_GPU>>::update_becp(
-		const std::complex<float> *psi_in, 
-		const int npol, 
-		const int m,
-		const int npwx) const
-{}
-
-template<>
-void OnsiteProj<OperatorPW<std::complex<float>, base_device::DEVICE_GPU>>::cal_ps_delta_spin(
-		const int npol, 
-		const int m) const
-{}
-
-template<>
-void OnsiteProj<OperatorPW<std::complex<float>, base_device::DEVICE_GPU>>::cal_ps_dftu(
-		const int npol, 
-		const int m) const
-{}
-#endif
 
 // OnsiteProj::act — apply DFT+U and/or DeltaSpin Hamiltonian correction
 //
