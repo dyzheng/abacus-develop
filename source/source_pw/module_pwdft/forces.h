@@ -2,22 +2,26 @@
 #define FORCES_H
 
 #include "source_base/global_function.h"
+#include "source_base/kernels/math_kernel_op.h"
 #include "source_base/matrix.h"
 #include "source_base/module_device/memory_op.h"
 #include "source_basis/module_pw/pw_basis_k.h"
 #include "source_cell/klist.h"
 #include "source_cell/module_symmetry/symmetry.h"
 #include "source_estate/elecstate.h"
-#include "source_pw/module_pwdft/vl_pw.h"
-#include "source_base/kernels/math_kernel_op.h"
-#include "source_psi/psi.h"
-#include "structure_factor.h"
 #include "source_lcao/module_dftu/dftu.h" // mohan add 2025-11-06
+#include "source_psi/psi.h"
+#include "source_pw/module_pwdft/vl_pw.h"
+#include "structure_factor.h"
 
 class pseudopot_cell_vnl;
 
 // forward declaration so that the dH module (out_mat_dh_vl) can reuse cal_force_loc
-namespace hamilt { template <class T> class Veff; }
+namespace hamilt
+{
+template <class T>
+class Veff;
+}
 
 template <typename FPTYPE, typename Device = base_device::DEVICE_CPU>
 class Forces
@@ -46,9 +50,9 @@ class Forces
                    const ModulePW::PW_Basis* const rho_basis,
                    ModuleSymmetry::Symmetry* p_symm,
                    Structure_Factor* p_sf,
-				   surchem& solvent,
-				   const Plus_U *p_dftu, //mohan add 2025-11-06
-				   const pseudopot_cell_vl* locpp,
+                   surchem& solvent,
+                   const Plus_U* p_dftu, // mohan add 2025-11-06
+                   const pseudopot_cell_vl* locpp,
                    const pseudopot_cell_vnl* nlpp = nullptr,
                    K_Vectors* pkv = nullptr,
                    ModulePW::PW_Basis_K* psi_basis = nullptr,
@@ -64,8 +68,8 @@ class Forces
                        const ModuleBase::matrix& vloc,
                        const Charge* const chr);
     void cal_force_ew(const UnitCell& ucell,
-                      ModuleBase::matrix& forceion, 
-                      const ModulePW::PW_Basis* const rho_basis, 
+                      ModuleBase::matrix& forceion,
+                      const ModulePW::PW_Basis* const rho_basis,
                       const Structure_Factor* p_sf);
     void cal_force_cc(ModuleBase::matrix& forcecc,
                       const ModulePW::PW_Basis* const rho_basis,
@@ -98,11 +102,11 @@ class Forces
     /// @param ucell_in , the unit cell
     /// @param psi_in , the wave function
     void cal_force_onsite(ModuleBase::matrix& force_onsite,
-                      const ModuleBase::matrix& wg,
-                      const ModulePW::PW_Basis_K* wfc_basis,
-                      const UnitCell& ucell_in,
-					  const Plus_U &dftu, // mohan add 2025-11-06
-					  const psi::Psi <std::complex<FPTYPE>, Device>* psi_in = nullptr);
+                          const ModuleBase::matrix& wg,
+                          const ModulePW::PW_Basis_K* wfc_basis,
+                          const UnitCell& ucell_in,
+                          const Plus_U& dftu, // mohan add 2025-11-06
+                          const psi::Psi<std::complex<FPTYPE>, Device>* psi_in = nullptr);
 
     void cal_force_scc(ModuleBase::matrix& forcescc,
                        const ModulePW::PW_Basis* const rho_basis,
@@ -126,17 +130,18 @@ class Forces
                      int type,
                      const UnitCell& ucell_in); // used in nonlinear core correction stress
     void deriv_drhoc_scc(const bool& numeric,
-                     const int mesh,
-                     const FPTYPE* r,
-                     const FPTYPE* rab,
-                     const FPTYPE* rhoc,
-                     FPTYPE* drhocg,
-                     const ModulePW::PW_Basis* const rho_basis,
-                     const UnitCell& ucell_in); // used in nonlinear core correction stress
+                         const int mesh,
+                         const FPTYPE* r,
+                         const FPTYPE* rab,
+                         const FPTYPE* rhoc,
+                         FPTYPE* drhocg,
+                         const ModulePW::PW_Basis* const rho_basis,
+                         const UnitCell& ucell_in); // used in nonlinear core correction stress
   protected:
     Device* ctx = {};
     base_device::DEVICE_CPU* cpu_ctx = {};
     base_device::AbacusDevice_t device = {};
+
   private:
     using gemm_op = ModuleBase::gemm_op<std::complex<FPTYPE>, Device>;
 
@@ -153,6 +158,8 @@ class Forces
     using delmem_var_op = base_device::memory::delete_memory_op<FPTYPE, Device>;
     using syncmem_var_h2d_op = base_device::memory::synchronize_memory_op<FPTYPE, Device, base_device::DEVICE_CPU>;
     using syncmem_var_d2h_op = base_device::memory::synchronize_memory_op<FPTYPE, base_device::DEVICE_CPU, Device>;
+    // cast FPTYPE (device) -> double (host), used to accumulate forces into double matrices
+    using castmem_var_d2h_op = base_device::memory::cast_memory_op<double, FPTYPE, base_device::DEVICE_CPU, Device>;
 
     using resmem_int_op = base_device::memory::resize_memory_op<int, Device>;
     using delmem_int_op = base_device::memory::delete_memory_op<int, Device>;

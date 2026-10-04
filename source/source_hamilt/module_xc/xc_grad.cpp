@@ -8,11 +8,12 @@
 // 5. noncolin_rho, which diagonalizes the spin density matrix
 //  and gives the spin up and spin down components of the charge.
 
-#include "xc_functional.h"
-#include "xc_functional_ncgga_lca.h"
 #include "source_base/timer.h"
 #include "source_basis/module_pw/pw_basis_k.h"
 #include "source_io/module_parameter/parameter.h"
+#include "xc_functional.h"
+#include "xc_functional_ncgga_lca.h"
+
 #include <ATen/core/tensor.h>
 #include <ATen/core/tensor_map.h>
 #include <ATen/core/tensor_types.h>
@@ -25,30 +26,29 @@
 #endif
 #endif
 
-void XC_Functional::gradcorr(
-    double &etxc,
-    double &vtxc,
-    ModuleBase::matrix &v,
-    const Charge* const chr,
-    ModulePW::PW_Basis* rhopw,
-    const UnitCell *ucell,
-    std::vector<double> &stress_gga,
-    const bool is_stress,
-    const int nspin,
-    const bool domag,
-    const bool domag_z,
-    const int gga_grad,
-    const double hybrid_alpha_in,
-    const double hse_omega_in)
+void XC_Functional::gradcorr(double& etxc,
+                             double& vtxc,
+                             ModuleBase::matrix& v,
+                             const Charge* const chr,
+                             ModulePW::PW_Basis* rhopw,
+                             const UnitCell* ucell,
+                             std::vector<double>& stress_gga,
+                             const bool is_stress,
+                             const int nspin,
+                             const bool domag,
+                             const bool domag_z,
+                             const int gga_grad,
+                             const double hybrid_alpha_in,
+                             const double hse_omega_in)
 {
-    ModuleBase::TITLE("XC_Functional","gradcorr");
+    ModuleBase::TITLE("XC_Functional", "gradcorr");
 
-    if((func_type == 3 || func_type == 5) && nspin==4)
+    if ((func_type == 3 || func_type == 5) && nspin == 4)
     {
-        ModuleBase::WARNING_QUIT("gradcorr","meta-GGA has not been implemented for nspin = 4 yet");
+        ModuleBase::WARNING_QUIT("gradcorr", "meta-GGA has not been implemented for nspin = 4 yet");
     }
 
-    if(func_type == 0 || func_type == 1)
+    if (func_type == 0 || func_type == 1)
     {
         return;
     }
@@ -60,28 +60,28 @@ void XC_Functional::gradcorr(
     }
 
     bool igcc_is_lyp = false;
-    if( func_id[1] == XC_GGA_C_LYP)
+    if (func_id[1] == XC_GGA_C_LYP)
     {
         igcc_is_lyp = true;
     }
 
     int nspin0 = nspin;
-    if(nspin==4)
+    if (nspin == 4)
     {
-        nspin0 =1;
+        nspin0 = 1;
     }
-    if(nspin==4&&(domag||domag_z))
+    if (nspin == 4 && (domag || domag_z))
     {
         nspin0 = 2;
     }
 
-    assert(nspin0>0);
-    const double fac = 1.0/ nspin0;
+    assert(nspin0 > 0);
+    const double fac = 1.0 / nspin0;
 
-    if(is_stress)
+    if (is_stress)
     {
         stress_gga.resize(9);
-        for(int i=0;i<9;i++)
+        for (int i = 0; i < 9; i++)
         {
             stress_gga[i] = 0.0;
         }
@@ -89,7 +89,7 @@ void XC_Functional::gradcorr(
 
     // doing FFT to get rho in G space: rhog1
     rhopw->real2recip(chr->rho[0], chr->rhog[0]);
-    if(nspin==2)
+    if (nspin == 2)
     {
         rhopw->real2recip(chr->rho[1], chr->rhog[1]);
     }
@@ -116,65 +116,65 @@ void XC_Functional::gradcorr(
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static, 1024)
 #endif
-    for(int ir=0; ir<rhopw->nrxx; ir++)
+    for (int ir = 0; ir < rhopw->nrxx; ir++)
     {
         rhotmp1[ir] = chr->rho[0][ir] + fac * chr->rho_core[ir];
     }
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static, 1024)
 #endif
-    for(int ig=0; ig<rhopw->npw; ig++)
+    for (int ig = 0; ig < rhopw->npw; ig++)
     {
         rhogsum1[ig] = chr->rhog[0][ig] + fac * chr->rhog_core[ig];
     }
 
     gdr1 = new ModuleBase::Vector3<double>[rhopw->nrxx];
-    if(!is_stress)
+    if (!is_stress)
     {
         h1 = new ModuleBase::Vector3<double>[rhopw->nrxx];
     }
 
-    XC_Functional::grad_rho( rhogsum1 , gdr1, rhopw, ucell->tpiba);
+    XC_Functional::grad_rho(rhogsum1, gdr1, rhopw, ucell->tpiba);
 
     // for spin polarized case;
     // calculate the gradient of (rho_core+rho) in reciprocal space.
-    if(nspin==2)
+    if (nspin == 2)
     {
         rhotmp2 = new double[rhopw->nrxx];
         rhogsum2 = new std::complex<double>[rhopw->npw];
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static, 1024)
 #endif
-        for(int ir=0; ir<rhopw->nrxx; ir++)
+        for (int ir = 0; ir < rhopw->nrxx; ir++)
         {
             rhotmp2[ir] = chr->rho[1][ir] + fac * chr->rho_core[ir];
         }
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static, 1024)
 #endif
-        for(int ig=0; ig<rhopw->npw; ig++)
+        for (int ig = 0; ig < rhopw->npw; ig++)
         {
             rhogsum2[ig] = chr->rhog[1][ig] + fac * chr->rhog_core[ig];
         }
 
         gdr2 = new ModuleBase::Vector3<double>[rhopw->nrxx];
-        if(!is_stress)
+        if (!is_stress)
         {
             h2 = new ModuleBase::Vector3<double>[rhopw->nrxx];
         }
 
-        XC_Functional::grad_rho( rhogsum2 , gdr2, rhopw, ucell->tpiba);
+        XC_Functional::grad_rho(rhogsum2, gdr2, rhopw, ucell->tpiba);
     }
 
-    if(nspin == 4&&(domag||domag_z))
+    if (nspin == 4 && (domag || domag_z))
     {
         rhotmp2 = new double[rhopw->nrxx];
         rhogsum2 = new std::complex<double>[rhopw->npw];
-        neg = new double [rhopw->nrxx];
+        neg = new double[rhopw->nrxx];
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static, 1024)
 #endif
-        for(int ir=0; ir<rhopw->nrxx; ir++)
+        for (int ir = 0; ir < rhopw->nrxx; ir++)
         {
             rhotmp1[ir] = 0.0;
             rhotmp2[ir] = 0.0;
@@ -183,31 +183,31 @@ void XC_Functional::gradcorr(
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static, 1024)
 #endif
-        for(int ig=0; ig<rhopw->npw; ig++)
+        for (int ig = 0; ig < rhopw->npw; ig++)
         {
             rhogsum1[ig] = 0.0;
             rhogsum2[ig] = 0.0;
         }
-        if(!is_stress)
+        if (!is_stress)
         {
-            vsave = new double* [nspin];
-            for(int is = 0;is<nspin;is++)
+            vsave = new double*[nspin];
+            for (int is = 0; is < nspin; is++)
             {
-                vsave[is]= new double [rhopw->nrxx];
+                vsave[is] = new double[rhopw->nrxx];
             }
 #ifdef _OPENMP
 #pragma omp parallel for collapse(2) schedule(static, 1024)
 #endif
-            for(int is = 0;is<nspin;is++)
+            for (int is = 0; is < nspin; is++)
             {
-                for(int ir =0;ir<rhopw->nrxx;ir++)
+                for (int ir = 0; ir < rhopw->nrxx; ir++)
                 {
-                    vsave[is][ir] = v(is,ir);
-                    v(is,ir) = 0;
+                    vsave[is][ir] = v(is, ir);
+                    v(is, ir) = 0;
                 }
             }
-            vgg = new double* [nspin0];
-            for(int is = 0;is<nspin0;is++)
+            vgg = new double*[nspin0];
+            for (int is = 0; is < nspin0; is++)
             {
                 vgg[is] = new double[rhopw->nrxx];
             }
@@ -219,7 +219,7 @@ void XC_Functional::gradcorr(
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static, 1024)
 #endif
-        for(int ir=0; ir<rhopw->nrxx; ir++)
+        for (int ir = 0; ir < rhopw->nrxx; ir++)
         {
             rhotmp2[ir] += fac * chr->rho_core[ir];
             rhotmp1[ir] += fac * chr->rho_core[ir];
@@ -227,20 +227,20 @@ void XC_Functional::gradcorr(
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static, 1024)
 #endif
-        for(int ig=0; ig<rhopw->npw; ig++)
+        for (int ig = 0; ig < rhopw->npw; ig++)
         {
             rhogsum2[ig] += fac * chr->rhog_core[ig];
             rhogsum1[ig] += fac * chr->rhog_core[ig];
         }
 
         gdr2 = new ModuleBase::Vector3<double>[rhopw->nrxx];
-        if(!is_stress)
+        if (!is_stress)
         {
             h2 = new ModuleBase::Vector3<double>[rhopw->nrxx];
         }
 
-        XC_Functional::grad_rho( rhogsum1 , gdr1, rhopw, ucell->tpiba);
-        XC_Functional::grad_rho( rhogsum2 , gdr2, rhopw, ucell->tpiba);
+        XC_Functional::grad_rho(rhogsum1, gdr1, rhopw, ucell->tpiba);
+        XC_Functional::grad_rho(rhogsum2, gdr2, rhopw, ucell->tpiba);
     }
 
     const double epsr = 1.0e-6;
@@ -256,18 +256,18 @@ void XC_Functional::gradcorr(
         double local_vtxcgc = 0.0;
         double local_etxcgc = 0.0;
 
-        if(is_stress)
+        if (is_stress)
         {
             local_stress_gga.resize(9);
-            for(int i=0;i<9;i++)
+            for (int i = 0; i < 9; i++)
             {
                 local_stress_gga[i] = 0.0;
             }
         }
 #else
-    std::vector<double> &local_stress_gga = stress_gga;
-    double &local_vtxcgc = vtxcgc;
-    double &local_etxcgc = etxcgc;
+    std::vector<double>& local_stress_gga = stress_gga;
+    double& local_vtxcgc = vtxcgc;
+    double& local_etxcgc = etxcgc;
 #endif
 
         double grho2a = 0.0;
@@ -276,28 +276,28 @@ void XC_Functional::gradcorr(
         double v1xc = 0.0;
         double v2xc = 0.0;
 
-        if(nspin0==1)
+        if (nspin0 == 1)
         {
             double segno = 0.0;
 #ifdef _OPENMP
 #pragma omp for
 #endif
-            for(int ir=0; ir<rhopw->nrxx; ir++)
+            for (int ir = 0; ir < rhopw->nrxx; ir++)
             {
-                const double arho = std::abs( rhotmp1[ir] );
-                if(!is_stress)
+                const double arho = std::abs(rhotmp1[ir]);
+                if (!is_stress)
                 {
                     h1[ir].x = 0.0;
                     h1[ir].y = 0.0;
                     h1[ir].z = 0.0;
                 }
 
-                if(arho > epsr)
+                if (arho > epsr)
                 {
                     grho2a = gdr1[ir].norm2();
 
-                    //normally values in rhotmp can either be >= 0 or < 0.
-                    if( rhotmp1[ir] >= 0.0 )
+                    // normally values in rhotmp can either be >= 0 or < 0.
+                    if (rhotmp1[ir] >= 0.0)
                     {
                         segno = 1.0;
                     }
@@ -308,33 +308,49 @@ void XC_Functional::gradcorr(
                     if (use_libxc && is_stress)
                     {
 #ifdef __LIBXC
-                        if(func_type == 3 || func_type == 5)
+                        if (func_type == 3 || func_type == 5)
                         {
                             double v3xc = 0.0;
-                            double atau = chr->kin_r[0][ir]/2.0;
-                            XC_Functional_Libxc::tau_xc( func_id, arho, grho2a, atau, sxc, v1xc, v2xc, v3xc, hybrid_alpha_in, hse_omega_in);
+                            double atau = chr->kin_r[0][ir] / 2.0;
+                            XC_Functional_Libxc::tau_xc(func_id,
+                                                        arho,
+                                                        grho2a,
+                                                        atau,
+                                                        sxc,
+                                                        v1xc,
+                                                        v2xc,
+                                                        v3xc,
+                                                        hybrid_alpha_in,
+                                                        hse_omega_in);
                         }
                         else
                         {
-                            XC_Functional_Libxc::gcxc_libxc( func_id, arho, grho2a, sxc, v1xc, v2xc, hybrid_alpha_in, hse_omega_in);
+                            XC_Functional_Libxc::gcxc_libxc(func_id,
+                                                            arho,
+                                                            grho2a,
+                                                            sxc,
+                                                            v1xc,
+                                                            v2xc,
+                                                            hybrid_alpha_in,
+                                                            hse_omega_in);
                         }
 #endif
                     }
                     else
                     {
-                        XC_Functional::gcxc( arho, grho2a, sxc, v1xc, v2xc);
+                        XC_Functional::gcxc(arho, grho2a, sxc, v1xc, v2xc);
                     }
-                    if(is_stress)
+                    if (is_stress)
                     {
                         double tt[3];
                         tt[0] = gdr1[ir].x;
                         tt[1] = gdr1[ir].y;
                         tt[2] = gdr1[ir].z;
-                        for(int l = 0;l< 3;l++)
+                        for (int l = 0; l < 3; l++)
                         {
-                            for(int m = 0;m< l+1;m++)
+                            for (int m = 0; m < l + 1; m++)
                             {
-                                int ind = l*3 + m;
+                                int ind = l * 3 + m;
                                 local_stress_gga[ind] += tt[l] * tt[m] * ModuleBase::e2 * v2xc;
                             }
                         }
@@ -349,8 +365,8 @@ void XC_Functional::gradcorr(
                         // D(rho*Exc) / D(|grad rho|) * (grad rho) / |grad rho|
                         h1[ir] = ModuleBase::e2 * v2xc * gdr1[ir];
 
-                        local_vtxcgc += ModuleBase::e2* v1xc * ( rhotmp1[ir] - chr->rho_core[ir] );
-                        local_etxcgc += ModuleBase::e2* sxc  * segno;
+                        local_vtxcgc += ModuleBase::e2 * v1xc * (rhotmp1[ir] - chr->rho_core[ir]);
+                        local_etxcgc += ModuleBase::e2 * sxc * segno;
                     }
                 }
             }
@@ -360,9 +376,9 @@ void XC_Functional::gradcorr(
 #ifdef _OPENMP
 #pragma omp for
 #endif
-            for(int ir=0; ir<rhopw->nrxx; ir++)
+            for (int ir = 0; ir < rhopw->nrxx; ir++)
             {
-                if(use_libxc)
+                if (use_libxc)
                 {
 #ifdef __LIBXC
                     double sxc = 0.0;
@@ -371,28 +387,49 @@ void XC_Functional::gradcorr(
                     double v2xcup = 0.0;
                     double v2xcdw = 0.0;
                     double v2xcud = 0.0;
-                    if(func_type == 3 || func_type == 5)
+                    if (func_type == 3 || func_type == 5)
                     {
                         double v3xcup = 0.0;
                         double v3xcdw = 0.0;
-                        double atau1 = chr->kin_r[0][ir]/2.0;
-                        double atau2 = chr->kin_r[1][ir]/2.0;
-                        XC_Functional_Libxc::tau_xc_spin(
-                            func_id,
-                            rhotmp1[ir], rhotmp2[ir], gdr1[ir], gdr2[ir],
-                            atau1, atau2, sxc, v1xcup, v1xcdw, v2xcup, v2xcdw, v2xcud, v3xcup, v3xcdw, hybrid_alpha_in, hse_omega_in);
+                        double atau1 = chr->kin_r[0][ir] / 2.0;
+                        double atau2 = chr->kin_r[1][ir] / 2.0;
+                        XC_Functional_Libxc::tau_xc_spin(func_id,
+                                                         rhotmp1[ir],
+                                                         rhotmp2[ir],
+                                                         gdr1[ir],
+                                                         gdr2[ir],
+                                                         atau1,
+                                                         atau2,
+                                                         sxc,
+                                                         v1xcup,
+                                                         v1xcdw,
+                                                         v2xcup,
+                                                         v2xcdw,
+                                                         v2xcud,
+                                                         v3xcup,
+                                                         v3xcdw,
+                                                         hybrid_alpha_in,
+                                                         hse_omega_in);
                     }
                     else
                     {
-                        XC_Functional_Libxc::gcxc_spin_libxc(
-                            func_id,
-                            rhotmp1[ir], rhotmp2[ir], gdr1[ir], gdr2[ir],
-                            sxc, v1xcup, v1xcdw, v2xcup, v2xcdw, v2xcud,
-                            hybrid_alpha_in, hse_omega_in);
+                        XC_Functional_Libxc::gcxc_spin_libxc(func_id,
+                                                             rhotmp1[ir],
+                                                             rhotmp2[ir],
+                                                             gdr1[ir],
+                                                             gdr2[ir],
+                                                             sxc,
+                                                             v1xcup,
+                                                             v1xcdw,
+                                                             v2xcup,
+                                                             v2xcdw,
+                                                             v2xcud,
+                                                             hybrid_alpha_in,
+                                                             hse_omega_in);
                     }
-                    if(is_stress)
+                    if (is_stress)
                     {
-                        double tt1[3],tt2[3];
+                        double tt1[3], tt2[3];
                         {
                             tt1[0] = gdr1[ir].x;
                             tt1[1] = gdr1[ir].y;
@@ -401,29 +438,29 @@ void XC_Functional::gradcorr(
                             tt2[1] = gdr2[ir].y;
                             tt2[2] = gdr2[ir].z;
                         }
-                        for(int l = 0;l< 3;l++)
+                        for (int l = 0; l < 3; l++)
                         {
-                            for(int m = 0;m< l+1;m++)
+                            for (int m = 0; m < l + 1; m++)
                             {
-                                int ind = l*3 + m;
-                                local_stress_gga [ind] += ( tt1[l] * tt1[m] * v2xcup +
-                                    tt2[l] * tt2[m] * v2xcdw +
-                                    (tt1[l] * tt2[m] + tt2[l] * tt1[m] ) * v2xcud ) * ModuleBase::e2;
+                                int ind = l * 3 + m;
+                                local_stress_gga[ind] += (tt1[l] * tt1[m] * v2xcup + tt2[l] * tt2[m] * v2xcdw
+                                                          + (tt1[l] * tt2[m] + tt2[l] * tt1[m]) * v2xcud)
+                                                         * ModuleBase::e2;
                             }
                         }
                     }
                     else
                     {
                         // first term of the gradient correction : D(rho*Exc)/D(rho)
-                        v(0,ir) += ModuleBase::e2 * v1xcup;
-                        v(1,ir) += ModuleBase::e2 * v1xcdw;
+                        v(0, ir) += ModuleBase::e2 * v1xcup;
+                        v(1, ir) += ModuleBase::e2 * v1xcdw;
 
                         // h contains D(rho*Exc)/D(|grad rho|) * (grad rho) / |grad rho|
-                        h1[ir] += ModuleBase::e2 * ( v2xcup * gdr1[ir] + v2xcud * gdr2[ir] );
-                        h2[ir] += ModuleBase::e2 * ( v2xcdw * gdr2[ir] + v2xcud * gdr1[ir] );
+                        h1[ir] += ModuleBase::e2 * (v2xcup * gdr1[ir] + v2xcud * gdr2[ir]);
+                        h2[ir] += ModuleBase::e2 * (v2xcdw * gdr2[ir] + v2xcud * gdr1[ir]);
 
-                        local_vtxcgc = local_vtxcgc + ModuleBase::e2 * v1xcup * ( rhotmp1[ir] - chr->rho_core[ir] * fac );
-                        local_vtxcgc = local_vtxcgc + ModuleBase::e2 * v1xcdw * ( rhotmp2[ir] - chr->rho_core[ir] * fac );
+                        local_vtxcgc = local_vtxcgc + ModuleBase::e2 * v1xcup * (rhotmp1[ir] - chr->rho_core[ir] * fac);
+                        local_vtxcgc = local_vtxcgc + ModuleBase::e2 * v1xcdw * (rhotmp2[ir] - chr->rho_core[ir] * fac);
                         local_etxcgc = local_etxcgc + ModuleBase::e2 * sxc;
                     }
 #endif
@@ -445,23 +482,22 @@ void XC_Functional::gradcorr(
                     double rh = rhotmp1[ir] + rhotmp2[ir];
                     grho2a = gdr1[ir].norm2();
                     grho2b = gdr2[ir].norm2();
-                    XC_Functional::gcx_spin(rhotmp1[ir], rhotmp2[ir], grho2a, grho2b,
-                        sx, v1xup, v1xdw, v2xup, v2xdw);
+                    XC_Functional::gcx_spin(rhotmp1[ir], rhotmp2[ir], grho2a, grho2b, sx, v1xup, v1xdw, v2xup, v2xdw);
 
-                    if(rh > epsr)
+                    if (rh > epsr)
                     {
-                        if(igcc_is_lyp)
+                        if (igcc_is_lyp)
                         {
-                            ModuleBase::WARNING_QUIT("XC_Functional","igcc_is_lyp is not available now.");
+                            ModuleBase::WARNING_QUIT("XC_Functional", "igcc_is_lyp is not available now.");
                         }
                         else
                         {
-                            double zeta = ( rhotmp1[ir] - rhotmp2[ir] ) / rh;
-                            if(nspin==4&&(domag||domag_z))
+                            double zeta = (rhotmp1[ir] - rhotmp2[ir]) / rh;
+                            if (nspin == 4 && (domag || domag_z))
                             {
                                 zeta = fabs(zeta) * neg[ir];
                             }
-                            const double grh2 = (gdr1[ir]+gdr2[ir]).norm2();
+                            const double grh2 = (gdr1[ir] + gdr2[ir]).norm2();
                             XC_Functional::gcc_spin(rh, zeta, grh2, sc, v1cup, v1cdw, v2c);
                             v2cup = v2c;
                             v2cdw = v2c;
@@ -479,9 +515,9 @@ void XC_Functional::gradcorr(
                         v2cud = 0.0;
                     }
 
-                    if(is_stress)
+                    if (is_stress)
                     {
-                        double tt1[3],tt2[3];
+                        double tt1[3], tt2[3];
                         {
                             tt1[0] = gdr1[ir].x;
                             tt1[1] = gdr1[ir].y;
@@ -490,76 +526,78 @@ void XC_Functional::gradcorr(
                             tt2[1] = gdr2[ir].y;
                             tt2[2] = gdr2[ir].z;
                         }
-                        for(int l = 0;l< 3;l++)
+                        for (int l = 0; l < 3; l++)
                         {
-                            for(int m = 0;m< l+1;m++)
+                            for (int m = 0; m < l + 1; m++)
                             {
-                                int ind = l*3 + m;
+                                int ind = l * 3 + m;
                                 // exchange
-                                local_stress_gga [ind] += tt1[l] * tt1[m] * ModuleBase::e2 * v2xup +
-                                    tt2[l] * tt2[m] * ModuleBase::e2 * v2xdw;
+                                local_stress_gga[ind] += tt1[l] * tt1[m] * ModuleBase::e2 * v2xup
+                                                         + tt2[l] * tt2[m] * ModuleBase::e2 * v2xdw;
                                 // correlation
-                                local_stress_gga [ind] += ( tt1[l] * tt1[m] * v2cup +
-                                    tt2[l] * tt2[m] * v2cdw +
-                                    (tt1[l] * tt2[m] + tt2[l] * tt1[m] ) * v2cud ) * ModuleBase::e2;
+                                local_stress_gga[ind] += (tt1[l] * tt1[m] * v2cup + tt2[l] * tt2[m] * v2cdw
+                                                          + (tt1[l] * tt2[m] + tt2[l] * tt1[m]) * v2cud)
+                                                         * ModuleBase::e2;
                             }
                         }
                     }
                     else
                     {
                         // first term of the gradient correction : D(rho*Exc)/D(rho)
-                        v(0,ir) = v(0,ir) + ModuleBase::e2 * ( v1xup + v1cup );
-                        v(1,ir) = v(1,ir) + ModuleBase::e2 * ( v1xdw + v1cdw );
+                        v(0, ir) = v(0, ir) + ModuleBase::e2 * (v1xup + v1cup);
+                        v(1, ir) = v(1, ir) + ModuleBase::e2 * (v1xdw + v1cdw);
 
                         // h contains D(rho*Exc)/D(|grad rho|) * (grad rho) / |grad rho|
-                        h1[ir] = ModuleBase::e2 * ( ( v2xup + v2cup ) * gdr1[ir] + v2cud * gdr2[ir] );
-                        h2[ir] = ModuleBase::e2 * ( ( v2xdw + v2cdw ) * gdr2[ir] + v2cud * gdr1[ir] );
+                        h1[ir] = ModuleBase::e2 * ((v2xup + v2cup) * gdr1[ir] + v2cud * gdr2[ir]);
+                        h2[ir] = ModuleBase::e2 * ((v2xdw + v2cdw) * gdr2[ir] + v2cud * gdr1[ir]);
 
-                        local_vtxcgc = local_vtxcgc + ModuleBase::e2 * ( v1xup + v1cup ) * ( rhotmp1[ir] - chr->rho_core[ir] * fac );
-                        local_vtxcgc = local_vtxcgc + ModuleBase::e2 * ( v1xdw + v1cdw ) * ( rhotmp2[ir] - chr->rho_core[ir] * fac );
-                        local_etxcgc = local_etxcgc + ModuleBase::e2 * ( sx + sc );
+                        local_vtxcgc
+                            = local_vtxcgc + ModuleBase::e2 * (v1xup + v1cup) * (rhotmp1[ir] - chr->rho_core[ir] * fac);
+                        local_vtxcgc
+                            = local_vtxcgc + ModuleBase::e2 * (v1xdw + v1cdw) * (rhotmp2[ir] - chr->rho_core[ir] * fac);
+                        local_etxcgc = local_etxcgc + ModuleBase::e2 * (sx + sc);
                     }
                 }
             }
         }
 #ifdef _OPENMP
-    #pragma omp critical(xc_grad_reduce)
-    {
-        if(is_stress)
+#pragma omp critical(xc_grad_reduce)
         {
-            for(int l = 0;l< 3;l++)
+            if (is_stress)
             {
-                for(int m = 0;m< l+1;m++)
+                for (int l = 0; l < 3; l++)
                 {
-                    int ind = l*3 + m;
-                    stress_gga [ind] += local_stress_gga [ind];
+                    for (int m = 0; m < l + 1; m++)
+                    {
+                        int ind = l * 3 + m;
+                        stress_gga[ind] += local_stress_gga[ind];
+                    }
                 }
             }
-        }
-        else
-        {
-            vtxcgc += local_vtxcgc;
-            etxcgc += local_etxcgc;
+            else
+            {
+                vtxcgc += local_vtxcgc;
+                etxcgc += local_etxcgc;
+            }
         }
     }
-}
 #endif
 
-    if(!is_stress)
+    if (!is_stress)
     {
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static, 1024)
 #endif
-        for(int ir=0; ir<rhopw->nrxx; ir++)
+        for (int ir = 0; ir < rhopw->nrxx; ir++)
         {
             rhotmp1[ir] -= fac * chr->rho_core[ir];
         }
-        if(nspin0==2)
+        if (nspin0 == 2)
         {
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static, 1024)
 #endif
-            for(int ir=0; ir<rhopw->nrxx; ir++)
+            for (int ir = 0; ir < rhopw->nrxx; ir++)
             {
                 rhotmp2[ir] -= fac * chr->rho_core[ir];
             }
@@ -571,41 +609,41 @@ void XC_Functional::gradcorr(
         // dh is in real sapce.
         double* dh = new double[rhopw->nrxx];
 
-        for(int is=0; is<nspin0; is++)
+        for (int is = 0; is < nspin0; is++)
         {
-            if(is==0)
+            if (is == 0)
             {
-                XC_Functional::grad_dot(h1,dh,rhopw,ucell->tpiba);
+                XC_Functional::grad_dot(h1, dh, rhopw, ucell->tpiba);
             }
-            if(is==1)
+            if (is == 1)
             {
-                XC_Functional::grad_dot(h2,dh,rhopw,ucell->tpiba);
+                XC_Functional::grad_dot(h2, dh, rhopw, ucell->tpiba);
             }
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static, 1024)
 #endif
-            for(int ir=0; ir<rhopw->nrxx; ir++)
+            for (int ir = 0; ir < rhopw->nrxx; ir++)
             {
                 v(is, ir) -= dh[ir];
             }
 
             double sum = 0.0;
-            if(is==0)
+            if (is == 0)
             {
 #ifdef _OPENMP
-#pragma omp parallel for reduction(+:sum) schedule(static, 256)
+#pragma omp parallel for reduction(+ : sum) schedule(static, 256)
 #endif
-                for(int ir=0; ir<rhopw->nrxx; ir++)
+                for (int ir = 0; ir < rhopw->nrxx; ir++)
                 {
                     sum += dh[ir] * rhotmp1[ir];
                 }
             }
-            else if(is==1)
+            else if (is == 1)
             {
 #ifdef _OPENMP
-#pragma omp parallel for reduction(+:sum) schedule(static, 256)
+#pragma omp parallel for reduction(+ : sum) schedule(static, 256)
 #endif
-                for(int ir=0; ir<rhopw->nrxx; ir++)
+                for (int ir = 0; ir < rhopw->nrxx; ir++)
                 {
                     sum += dh[ir] * rhotmp2[ir];
                 }
@@ -618,34 +656,34 @@ void XC_Functional::gradcorr(
         vtxc += vtxcgc;
         etxc += etxcgc;
 
-        if(nspin == 4 && (domag||domag_z))
+        if (nspin == 4 && (domag || domag_z))
         {
 #ifdef _OPENMP
 #pragma omp parallel for collapse(2) schedule(static, 1024)
 #endif
-            for(int is=0;is<nspin;is++)
+            for (int is = 0; is < nspin; is++)
             {
-                for(int ir=0;ir<rhopw->nrxx;ir++)
+                for (int ir = 0; ir < rhopw->nrxx; ir++)
                 {
-                    if(is<nspin0)
+                    if (is < nspin0)
                     {
-                        vgg[is][ir] = v(is,ir);
+                        vgg[is][ir] = v(is, ir);
                     }
-                    v(is,ir) = vsave[is][ir];
+                    v(is, ir) = vsave[is][ir];
                 }
             }
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static, 1024)
 #endif
-            for(int ir=0;ir<rhopw->nrxx;ir++)
+            for (int ir = 0; ir < rhopw->nrxx; ir++)
             {
-                v(0,ir) += 0.5 * (vgg[0][ir] + vgg[1][ir]);
-                double amag = sqrt(pow(chr->rho[1][ir],2)+pow(chr->rho[2][ir],2)+pow(chr->rho[3][ir],2));
-                if(amag>1e-12)
+                v(0, ir) += 0.5 * (vgg[0][ir] + vgg[1][ir]);
+                double amag = sqrt(pow(chr->rho[1][ir], 2) + pow(chr->rho[2][ir], 2) + pow(chr->rho[3][ir], 2));
+                if (amag > 1e-12)
                 {
-                    for(int i=1;i<4;i++)
+                    for (int i = 1; i < 4; i++)
                     {
-                        v(i,ir)+= neg[ir] * 0.5 *(vgg[0][ir]-vgg[1][ir])*chr->rho[i][ir]/amag;
+                        v(i, ir) += neg[ir] * 0.5 * (vgg[0][ir] - vgg[1][ir]) * chr->rho[i][ir] / amag;
                     }
                 }
             }
@@ -655,32 +693,32 @@ void XC_Functional::gradcorr(
     delete[] rhotmp1;
     delete[] rhogsum1;
     delete[] gdr1;
-    if(!is_stress)
+    if (!is_stress)
     {
         delete[] h1;
     }
 
-    if(nspin==2)
+    if (nspin == 2)
     {
         delete[] rhotmp2;
         delete[] rhogsum2;
         delete[] gdr2;
-        if(!is_stress)
+        if (!is_stress)
         {
             delete[] h2;
         }
     }
-    if(nspin == 4 && (domag||domag_z))
+    if (nspin == 4 && (domag || domag_z))
     {
         delete[] neg;
-        if(!is_stress)
+        if (!is_stress)
         {
-            for(int i=0; i<nspin0; i++)
+            for (int i = 0; i < nspin0; i++)
             {
                 delete[] vgg[i];
             }
             delete[] vgg;
-            for(int i=0; i<nspin; i++)
+            for (int i = 0; i < nspin; i++)
             {
                 delete[] vsave[i];
             }
@@ -696,62 +734,65 @@ void XC_Functional::gradcorr(
 }
 
 template <typename T, typename Device, typename Real>
-void XC_Functional::grad_wfc(
-    const int ik,
-    const Real tpiba,
-    const ModulePW::PW_Basis_K* wfc_basis,
-    const T* rhog,
-    T* grad)
+void XC_Functional::grad_wfc(const int ik,
+                             const Real tpiba,
+                             const ModulePW::PW_Basis_K* wfc_basis,
+                             const T* rhog,
+                             T* grad)
 {
     using ct_Device = typename ct::PsiToContainer<Device>::type;
     const int npw_k = wfc_basis->npwk[ik];
 
-    auto porter = std::move(ct::Tensor(
-        ct::DataTypeToEnum<T>::value, ct::DeviceTypeToEnum<ct_Device>::value, {wfc_basis->nmaxgr}));
-    auto gcar = ct::TensorMap(
-        &wfc_basis->gcar[0][0], ct::DataType::DT_DOUBLE, ct::DeviceType::CpuDevice, {wfc_basis->nks * wfc_basis->npwk_max, 3}).to_device<ct_Device>();
-    auto kvec_c = ct::TensorMap(
-        &wfc_basis->kvec_c[0][0],ct::DataType::DT_DOUBLE, ct::DeviceType::CpuDevice, {wfc_basis->nks, 3}).to_device<ct_Device>();
+    auto porter = std::move(
+        ct::Tensor(ct::DataTypeToEnum<T>::value, ct::DeviceTypeToEnum<ct_Device>::value, {wfc_basis->nmaxgr}));
+    auto gcar = ct::TensorMap(&wfc_basis->gcar[0][0],
+                              ct::DataType::DT_DOUBLE,
+                              ct::DeviceType::CpuDevice,
+                              {wfc_basis->nks * wfc_basis->npwk_max, 3})
+                    .to_device<ct_Device>();
+    auto kvec_c = ct::TensorMap(&wfc_basis->kvec_c[0][0],
+                                ct::DataType::DT_DOUBLE,
+                                ct::DeviceType::CpuDevice,
+                                {wfc_basis->nks, 3})
+                      .to_device<ct_Device>();
 
-    auto xc_functional_grad_wfc_solver
-        = hamilt::xc_functional_grad_wfc_op<T, Device>();
+    auto xc_functional_grad_wfc_solver = hamilt::xc_functional_grad_wfc_op<T, Device>();
 
-    for(int ipol=0; ipol<3; ipol++)
+    for (int ipol = 0; ipol < 3; ipol++)
     {
-        xc_functional_grad_wfc_solver(
-            ik, ipol, npw_k, wfc_basis->npwk_max,
-            tpiba,
-            gcar.template data<Real>(),
-            kvec_c.template data<Real>(),
-            rhog, porter.data<T>());
+        xc_functional_grad_wfc_solver(ik,
+                                      ipol,
+                                      npw_k,
+                                      wfc_basis->npwk_max,
+                                      tpiba,
+                                      gcar.template data<Real>(),
+                                      kvec_c.template data<Real>(),
+                                      rhog,
+                                      porter.data<T>());
 
         // bring the gdr from G --> R
-        Device * ctx = nullptr;
+        Device* ctx = nullptr;
         wfc_basis->recip_to_real(ctx, porter.data<T>(), porter.data<T>(), ik);
 
-        xc_functional_grad_wfc_solver(
-            ipol, wfc_basis->nrxx,
-            porter.data<T>(), grad);
+        xc_functional_grad_wfc_solver(ipol, wfc_basis->nrxx, porter.data<T>(), grad);
     }
 }
 
-
-void XC_Functional::grad_rho(
-    const std::complex<double>* rhog,
-    ModuleBase::Vector3<double>* gdr,
-    const ModulePW::PW_Basis* rho_basis,
-    const double tpiba)
+void XC_Functional::grad_rho(const std::complex<double>* rhog,
+                             ModuleBase::Vector3<double>* gdr,
+                             const ModulePW::PW_Basis* rho_basis,
+                             const double tpiba)
 {
-    std::complex<double> *gdrtmp = new std::complex<double>[rho_basis->nmaxgr];
+    std::complex<double>* gdrtmp = new std::complex<double>[rho_basis->nmaxgr];
 
     // the formula is : rho(r)^prime = int iG * rho(G)e^{iGr} dG
-    for(int i = 0 ; i < 3 ; ++i)
+    for (int i = 0; i < 3; ++i)
     {
         // calculate the charge density gradient in reciprocal space.
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static, 1024)
 #endif
-        for(int ig=0; ig<rho_basis->npw; ig++)
+        for (int ig = 0; ig < rho_basis->npw; ig++)
         {
             gdrtmp[ig] = ModuleBase::IMAG_UNIT * rhog[ig] * rho_basis->gcar[ig][i];
         }
@@ -763,7 +804,7 @@ void XC_Functional::grad_rho(
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static, 1024)
 #endif
-        for(int ir=0; ir<rho_basis->nrxx; ir++)
+        for (int ir = 0; ir < rho_basis->nrxx; ir++)
         {
             gdr[ir][i] = gdrtmp[ir].real() * tpiba;
         }
@@ -773,36 +814,34 @@ void XC_Functional::grad_rho(
     return;
 }
 
-
-void XC_Functional::grad_dot(
-    const ModuleBase::Vector3<double>* h,
-    double* dh,
-    const ModulePW::PW_Basis* rho_basis,
-    const double tpiba)
+void XC_Functional::grad_dot(const ModuleBase::Vector3<double>* h,
+                             double* dh,
+                             const ModulePW::PW_Basis* rho_basis,
+                             const double tpiba)
 {
-    std::complex<double> *aux = new std::complex<double>[rho_basis->nmaxgr];
-    std::complex<double> *gaux = new std::complex<double>[rho_basis->npw];
+    std::complex<double>* aux = new std::complex<double>[rho_basis->nmaxgr];
+    std::complex<double>* gaux = new std::complex<double>[rho_basis->npw];
 
-    for(int i = 0 ; i < 3 ; ++i)
+    for (int i = 0; i < 3; ++i)
     {
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static, 1024)
 #endif
-        for(int ir = 0; ir < rho_basis->nrxx; ++ir)
+        for (int ir = 0; ir < rho_basis->nrxx; ++ir)
         {
-            aux[ir] = std::complex<double>( h[ir][i], 0.0);
+            aux[ir] = std::complex<double>(h[ir][i], 0.0);
         }
 
         // bring to G space.
-        rho_basis->real2recip(aux,aux);
+        rho_basis->real2recip(aux, aux);
         if (i == 0)
         {
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static, 1024)
 #endif
-            for(int ig = 0; ig < rho_basis->npw; ++ig)
+            for (int ig = 0; ig < rho_basis->npw; ++ig)
             {
-                gaux[ig] =  ModuleBase::IMAG_UNIT * aux[ig] * rho_basis->gcar[ig][i];
+                gaux[ig] = ModuleBase::IMAG_UNIT * aux[ig] * rho_basis->gcar[ig][i];
             }
         }
         else
@@ -810,20 +849,20 @@ void XC_Functional::grad_dot(
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static, 1024)
 #endif
-            for(int ig = 0; ig < rho_basis->npw; ++ig)
+            for (int ig = 0; ig < rho_basis->npw; ++ig)
             {
-                gaux[ig] +=  ModuleBase::IMAG_UNIT * aux[ig] * rho_basis->gcar[ig][i];
+                gaux[ig] += ModuleBase::IMAG_UNIT * aux[ig] * rho_basis->gcar[ig][i];
             }
         }
     }
 
     // bring back to R space
-    rho_basis->recip2real(gaux,aux);
+    rho_basis->recip2real(gaux, aux);
 
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static, 1024)
 #endif
-    for(int ir=0; ir<rho_basis->nrxx; ir++)
+    for (int ir = 0; ir < rho_basis->nrxx; ir++)
     {
         dh[ir] = aux[ir].real() * tpiba;
     }
@@ -833,34 +872,33 @@ void XC_Functional::grad_dot(
     return;
 }
 
-void XC_Functional::noncolin_rho(
-    double *rhoout1,
-    double *rhoout2,
-    double *neg,
-    const double*const*const rho,
-    const int nrxx,
-    const double* ux_,
-    const bool lsign_)
+void XC_Functional::noncolin_rho(double* rhoout1,
+                                 double* rhoout2,
+                                 double* neg,
+                                 const double* const* const rho,
+                                 const int nrxx,
+                                 const double* ux_,
+                                 const bool lsign_)
 {
-    //this function diagonalizes the spin density matrix and gives as output the
-    //spin up and spin down components of the charge.
-    //If lsign is true up and dw are with respect to the fixed quantization axis
-    //ux, otherwise rho + |m| is always rhoup and rho-|m| is always rhodw.
+    // this function diagonalizes the spin density matrix and gives as output the
+    // spin up and spin down components of the charge.
+    // If lsign is true up and dw are with respect to the fixed quantization axis
+    // ux, otherwise rho + |m| is always rhoup and rho-|m| is always rhodw.
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static, 1024)
 #endif
-    for(int ir = 0;ir<nrxx;ir++)
+    for (int ir = 0; ir < nrxx; ir++)
     {
         neg[ir] = 1.0;
     }
-    if(lsign_)
+    if (lsign_)
     {
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static, 1024)
 #endif
-        for(int ir = 0;ir<nrxx;ir++)
+        for (int ir = 0; ir < nrxx; ir++)
         {
-            if(rho[1][ir]*ux_[0] + rho[2][ir]*ux_[1] + rho[3][ir]*ux_[2]>0)
+            if (rho[1][ir] * ux_[0] + rho[2][ir] * ux_[1] + rho[3][ir] * ux_[2] > 0)
             {
                 neg[ir] = 1.0;
             }
@@ -873,9 +911,9 @@ void XC_Functional::noncolin_rho(
 #ifdef _OPENMP
 #pragma omp parallel for
 #endif
-    for(int ir = 0;ir<nrxx;ir++)
+    for (int ir = 0; ir < nrxx; ir++)
     {
-        double amag = sqrt(pow(rho[1][ir],2)+pow(rho[2][ir],2)+pow(rho[3][ir],2));
+        double amag = sqrt(pow(rho[1][ir], 2) + pow(rho[2][ir], 2) + pow(rho[3][ir], 2));
         rhoout1[ir] = 0.5 * (rho[0][ir] + neg[ir] * amag);
         rhoout2[ir] = 0.5 * (rho[0][ir] - neg[ir] * amag);
     }
@@ -888,6 +926,12 @@ template void XC_Functional::grad_wfc<std::complex<double>, base_device::DEVICE_
     const ModulePW::PW_Basis_K* wfc_basis,
     const std::complex<double>* rhog,
     std::complex<double>* grad);
+template void XC_Functional::grad_wfc<std::complex<float>, base_device::DEVICE_CPU, float>(
+    const int ik,
+    const float tpiba,
+    const ModulePW::PW_Basis_K* wfc_basis,
+    const std::complex<float>* rhog,
+    std::complex<float>* grad);
 #if __CUDA || __ROCM
 template void XC_Functional::grad_wfc<std::complex<double>, base_device::DEVICE_GPU, double>(
     const int ik,

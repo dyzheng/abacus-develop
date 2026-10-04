@@ -1,17 +1,17 @@
 #include "source_base/module_device/device.h"
 #include "source_base/parallel_reduce.h"
 #include "source_base/timer.h"
-#include "source_pw/module_pwdft/onsite_proj.h"
 #include "source_io/module_parameter/parameter.h"
-#include "source_lcao/module_dftu/dftu.h"
 #include "source_lcao/module_deltaspin/spin_constrain.h"
+#include "source_lcao/module_dftu/dftu.h"
+#include "source_pw/module_pwdft/onsite_proj.h"
 #include "stress_func.h"
 
 namespace
 {
 // See forces_onsite.cpp: the onsite projector / SpinConstrain singletons follow
-// the main SCF scalar type, so dispatch on it and accumulate the (double) stress.
-template <typename OnsiteReal, typename Device>
+// the main SCF scalar type (Forces<FPTYPE> / Stress_PW<FPTYPE>).
+template <typename FPTYPE, typename Device>
 void stress_onsite_kernel(std::vector<double>& sigma_onsite,
                           const ModuleBase::matrix& wg,
                           const ModulePW::PW_Basis_K* wfc_basis,
@@ -19,7 +19,7 @@ void stress_onsite_kernel(std::vector<double>& sigma_onsite,
                           const Plus_U& dftu,
                           const int nks)
 {
-    auto* onsite_projector = projectors::OnsiteProjector<OnsiteReal, Device>::get_instance();
+    auto* onsite_projector = projectors::OnsiteProjector<FPTYPE, Device>::get_instance();
     auto* fs_tools = onsite_projector->get_fs_tools();
 
     for (int ik = 0; ik < nks; ik++)
@@ -50,17 +50,20 @@ void stress_onsite_kernel(std::vector<double>& sigma_onsite,
 
                 if (PARAM.inp.dft_plus_u)
                 {
-                    double dftu_stress = onsite_projector->cal_stress_onsite_dftu(
-                        ik, num_occupied_bands, dftu, nks, wg.c);
+                    double dftu_stress
+                        = onsite_projector->cal_stress_onsite_dftu(ik, num_occupied_bands, dftu, nks, wg.c);
                     sigma_onsite[idx] += dftu_stress;
                 }
 
                 if (PARAM.inp.sc_mag_switch)
                 {
-                    spinconstrain::SpinConstrain<std::complex<OnsiteReal>>& spin_constrain
-                        = spinconstrain::SpinConstrain<std::complex<OnsiteReal>>::getScInstance();
-                    double dspin_stress = onsite_projector->cal_stress_onsite_dspin(
-                        ik, num_occupied_bands, spin_constrain.get_sc_lambda().data(), wg.c);
+                    spinconstrain::SpinConstrain<std::complex<FPTYPE>>& spin_constrain
+                        = spinconstrain::SpinConstrain<std::complex<FPTYPE>>::getScInstance();
+                    double dspin_stress
+                        = onsite_projector->cal_stress_onsite_dspin(ik,
+                                                                    num_occupied_bands,
+                                                                    spin_constrain.get_sc_lambda().data(),
+                                                                    wg.c);
                     sigma_onsite[idx] += dspin_stress;
                 }
             }
@@ -71,10 +74,10 @@ void stress_onsite_kernel(std::vector<double>& sigma_onsite,
 
 /**
  * @brief Calculate the nonlocal pseudopotential stress in PW basis
- * 
+ *
  * This function computes the onsite contribution to the stress tensor
  * including DFT+U and spin constraint effects.
- * 
+ *
  * @param sigma Stress tensor to be updated
  * @param wg Weight matrix for k-points
  * @param wfc_basis Plane wave basis for wavefunctions
@@ -84,30 +87,28 @@ void stress_onsite_kernel(std::vector<double>& sigma_onsite,
  * @param p_symm Symmetry object for stress symmetrization
  */
 template <typename FPTYPE, typename Device>
-void Stress_Func<FPTYPE, Device>::stress_onsite(
-    ModuleBase::matrix& sigma,
-    const ModuleBase::matrix& wg,
-    const ModulePW::PW_Basis_K* wfc_basis,
-    const UnitCell& ucell_in,
-    const Plus_U &dftu, // mohan add 2025-11-06
-    const void* psi_in,
-    ModuleSymmetry::Symmetry* p_symm
-)
+void Stress_Func<FPTYPE, Device>::stress_onsite(ModuleBase::matrix& sigma,
+                                                const ModuleBase::matrix& wg,
+                                                const ModulePW::PW_Basis_K* wfc_basis,
+                                                const UnitCell& ucell_in,
+                                                const Plus_U& dftu, // mohan add 2025-11-06
+                                                const void* psi_in,
+                                                ModuleSymmetry::Symmetry* p_symm)
 {
     ModuleBase::TITLE("Stress", "stress_onsite");
-    
+
     // Early return if required pointers are null
     if (psi_in == nullptr || wfc_basis == nullptr)
     {
         return;
     }
-    
+
     // Check if cell volume is valid (non-zero)
     if (ucell_in.omega <= 0.0)
     {
         ModuleBase::WARNING_QUIT("stress_onsite.cpp", "Cell volume is zero or negative, cannot calculate stress");
     }
-    
+
     ModuleBase::timer::start("Stress", "stress_onsite");
 
     // Host memory for stress storage (CPU only)
@@ -115,14 +116,7 @@ void Stress_Func<FPTYPE, Device>::stress_onsite(
 
     const int nks = wfc_basis->nks;
 
-    if (PARAM.globalv.has_float_data)
-    {
-        stress_onsite_kernel<float, Device>(sigma_onsite, wg, wfc_basis, ucell_in, dftu, nks);
-    }
-    else
-    {
-        stress_onsite_kernel<double, Device>(sigma_onsite, wg, wfc_basis, ucell_in, dftu, nks);
-    }
+    stress_onsite_kernel<FPTYPE, Device>(sigma_onsite, wg, wfc_basis, ucell_in, dftu, nks);
 
     // No device memory to clean up (using CPU only)
 
@@ -132,9 +126,9 @@ void Stress_Func<FPTYPE, Device>::stress_onsite(
         for (int j = 0; j < 3; j++)
         {
             const int idx = i * 3 + j;
-            if(j>i)
+            if (j > i)
             {
-                sigma_onsite[idx]=sigma_onsite[j*3+i];
+                sigma_onsite[idx] = sigma_onsite[j * 3 + i];
             }
             Parallel_Reduce::reduce_all(sigma_onsite[idx]); // qianrui fix a bug for kpar > 1
         }
@@ -155,7 +149,7 @@ void Stress_Func<FPTYPE, Device>::stress_onsite(
     // Add to total stress
     for (int idx = 0; idx < 9; idx++)
     {
-	    std::cout << " idx=" << idx << " stress=" << sigma_onsite[idx] << std::endl;
+        std::cout << " idx=" << idx << " stress=" << sigma_onsite[idx] << std::endl;
     }
 #endif
 
@@ -178,7 +172,9 @@ void Stress_Func<FPTYPE, Device>::stress_onsite(
     ModuleBase::timer::end("Stress", "stress_onsite");
 }
 
+template class Stress_Func<float, base_device::DEVICE_CPU>;
 template class Stress_Func<double, base_device::DEVICE_CPU>;
 #if ((defined __CUDA) || (defined __ROCM))
+template class Stress_Func<float, base_device::DEVICE_GPU>;
 template class Stress_Func<double, base_device::DEVICE_GPU>;
 #endif

@@ -3,18 +3,18 @@
 
 #include "source_base/complexmatrix.h"
 #include "source_base/global_function.h"
+#include "source_base/kernels/math_kernel_op.h"
 #include "source_base/matrix.h"
 #include "source_base/realarray.h"
 #include "source_base/vector3.h"
 #include "source_basis/module_pw/pw_basis_k.h"
 #include "source_cell/klist.h"
 #include "source_estate/module_charge/charge.h"
-#include "source_pw/module_pwdft/vnl_pw.h"
+#include "source_lcao/module_dftu/dftu.h" // mohan add 2025-11-06
+#include "source_psi/psi.h"
 #include "source_pw/module_pwdft/kernels/stress_op.h"
 #include "source_pw/module_pwdft/structure_factor.h"
-#include "source_base/kernels/math_kernel_op.h"
-#include "source_psi/psi.h"
-#include "source_lcao/module_dftu/dftu.h" // mohan add 2025-11-06
+#include "source_pw/module_pwdft/vnl_pw.h"
 
 //-------------------------------------------------------------------
 // mohan reconstruction note: 2021-02-07
@@ -66,7 +66,8 @@ class Stress_Func
                     K_Vectors* p_kv,
                     ModulePW::PW_Basis_K* wfc_basis,
                     const UnitCell& ucell_in,
-                    const psi::Psi <std::complex<FPTYPE>, Device>* psi_in = nullptr); // electron kinetic part in PW basis
+                    const psi::Psi<std::complex<FPTYPE>, Device>* psi_in
+                    = nullptr); // electron kinetic part in PW basis
 
     // 2) the stress from the Hartree term
     void stress_har(const UnitCell& ucell,
@@ -116,7 +117,7 @@ class Stress_Func
                    UnitCell& ucell,
                    const Structure_Factor* p_sf,
                    const bool is_pw,
-                   const bool *numeric,
+                   const bool* numeric,
                    const Charge* const chr); // nonlinear core correction stress in PW or LCAO basis
 
     void deriv_drhoc(const bool& numeric,
@@ -129,7 +130,7 @@ class Stress_Func
                      FPTYPE* drhocg,
                      ModulePW::PW_Basis* rho_basis,
                      int type); // used in nonlinear core correction stress
-                     
+
     // 6) the stress from the exchange-correlation functional term
     void stress_gga(const UnitCell& ucell,
                     ModuleBase::matrix& sigma,
@@ -142,7 +143,7 @@ class Stress_Func
                      const Charge* const chr,
                      K_Vectors* p_kv,
                      ModulePW::PW_Basis_K* wfc_basis,
-                     const psi::Psi <std::complex<FPTYPE>, Device>* psi_in); // gga part in PW basis
+                     const psi::Psi<std::complex<FPTYPE>, Device>* psi_in); // gga part in PW basis
 
     // 7) the stress from the non-local pseudopotentials
     /**
@@ -161,7 +162,7 @@ class Stress_Func
                    K_Vectors* p_kv,
                    ModuleSymmetry::Symmetry* p_symm,
                    ModulePW::PW_Basis_K* wfc_basis,
-                   const psi::Psi <std::complex<FPTYPE>, Device>* psi_in,
+                   const psi::Psi<std::complex<FPTYPE>, Device>* psi_in,
                    const pseudopot_cell_vnl& nlpp_in,
                    const UnitCell& ucell_in); // nonlocal part in PW basis
     // 8) the stress from the DFT+U and DeltaSpin calculations
@@ -178,9 +179,9 @@ class Stress_Func
     void stress_onsite(ModuleBase::matrix& sigma,
                        const ModuleBase::matrix& wg,
                        const ModulePW::PW_Basis_K* wfc_basis,
-		               const UnitCell& ucell_in,
-		               const Plus_U &dftu, // mohan add 2025-11-06
-		               const void* psi_in,
+                       const UnitCell& ucell_in,
+                       const Plus_U& dftu, // mohan add 2025-11-06
+                       const void* psi_in,
                        ModuleSymmetry::Symmetry* p_symm); // nonlocal part in PW basis
 
     void get_dvnl1(ModuleBase::ComplexMatrix& vkb,
@@ -234,12 +235,13 @@ class Stress_Func
                 const FPTYPE& tpiba,
                 const ModuleBase::matrix& ylmk0,
                 const ModuleBase::matrix& dylmk0,
-                std::complex<FPTYPE>* dqg);
+                std::complex<double>* dqg);
 
   protected:
     Device* ctx = {};
     base_device::DEVICE_CPU* cpu_ctx = {};
     base_device::AbacusDevice_t device = {};
+
   private:
     using gemm_op = ModuleBase::gemm_op<std::complex<FPTYPE>, Device>;
     using cal_stress_nl_op = hamilt::cal_stress_nl_op<FPTYPE, Device>;

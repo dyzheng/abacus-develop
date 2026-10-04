@@ -1,16 +1,16 @@
 #include "stress_pw.h"
 
-#include "source_base/timer.h"
 #include "source_base/global_variable.h" // use GlobalC
+#include "source_base/timer.h"
 #include "source_hamilt/module_vdw/vdw.h"
-#include "source_io/module_output/output_log.h"
-#include "source_hamilt/module_xc/xc_functional.h"
 #include "source_hamilt/module_xc/exx_info.h" // use GlobalC::exx_info
+#include "source_hamilt/module_xc/xc_functional.h"
+#include "source_io/module_output/output_log.h"
 
 template <typename FPTYPE, typename Device>
 void Stress_PW<FPTYPE, Device>::cal_stress(ModuleBase::matrix& sigmatot,
                                            UnitCell& ucell,
-                                           Plus_U &dftu, // mhan add 2025-11-07 
+                                           Plus_U& dftu, // mhan add 2025-11-07
                                            const pseudopot_cell_vl& locpp,
                                            const pseudopot_cell_vnl& nlpp,
                                            ModulePW::PW_Basis* rho_basis,
@@ -18,7 +18,7 @@ void Stress_PW<FPTYPE, Device>::cal_stress(ModuleBase::matrix& sigmatot,
                                            Structure_Factor* p_sf,
                                            K_Vectors* p_kv,
                                            ModulePW::PW_Basis_K* wfc_basis,
-                                           const psi::Psi <std::complex<FPTYPE>, Device>* d_psi_in)
+                                           const psi::Psi<std::complex<FPTYPE>, Device>* d_psi_in)
 {
     ModuleBase::TITLE("Stress_PW", "cal_stress");
     ModuleBase::timer::start("Stress_PW", "cal_stress");
@@ -131,9 +131,16 @@ void Stress_PW<FPTYPE, Device>::cal_stress(ModuleBase::matrix& sigmatot,
     auto coulomb_param = GlobalC::exx_info.info_global.coulomb_param;
     if (cal_exx)
     {
-        this->stress_exx(sigmaexx, this->pelec->wg, rho_basis, wfc_basis, p_kv, d_psi_in, ucell, hybrid_alpha, coulomb_param);
+        this->stress_exx(sigmaexx,
+                         this->pelec->wg,
+                         rho_basis,
+                         wfc_basis,
+                         p_kv,
+                         d_psi_in,
+                         ucell,
+                         hybrid_alpha,
+                         coulomb_param);
     }
-
 
     for (int ipol = 0; ipol < 3; ipol++)
     {
@@ -193,7 +200,9 @@ void Stress_PW<FPTYPE, Device>::stress_vdw(ModuleBase::matrix& sigma, UnitCell& 
     return;
 }
 
+template class Stress_PW<float, base_device::DEVICE_CPU>;
 template class Stress_PW<double, base_device::DEVICE_CPU>;
 #if ((defined __CUDA) || (defined __ROCM))
+template class Stress_PW<float, base_device::DEVICE_GPU>;
 template class Stress_PW<double, base_device::DEVICE_GPU>;
 #endif

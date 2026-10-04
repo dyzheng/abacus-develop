@@ -1,11 +1,11 @@
 #include "forces.h"
-#include "source_base/parallel_reduce.h"
-#include "source_pw/module_pwdft/vnl_pw.h"
 #include "source_base/libm/libm.h"
-#include "source_io/module_parameter/parameter.h"
 #include "source_base/math_ylmreal.h"
+#include "source_base/parallel_reduce.h"
 #include "source_base/timer.h"
 #include "source_estate/elecstate_pw.h"
+#include "source_io/module_parameter/parameter.h"
+#include "source_pw/module_pwdft/vnl_pw.h"
 
 // This routine computes the contribution to atomic forces due
 // to the dependence of the Q function on the atomic position.
@@ -29,7 +29,7 @@ void Forces<FPTYPE, Device>::cal_force_us(ModuleBase::matrix& forcenl,
     const int nh_tot = nlpp.nhm * (nlpp.nhm + 1) / 2;
     const std::complex<double> fac = ModuleBase::NEG_IMAG_UNIT * ucell.tpiba;
     const std::complex<double> ci_tpi = ModuleBase::IMAG_UNIT * ModuleBase::TWO_PI;
-    double* becsum = static_cast<const elecstate::ElecStatePW<std::complex<FPTYPE>, Device>&>(elec).becsum;
+    FPTYPE* becsum = static_cast<const elecstate::ElecStatePW<std::complex<FPTYPE>, Device>&>(elec).becsum;
 
     ModuleBase::matrix forceq(ucell.nat, 3);
 
@@ -101,18 +101,18 @@ void Forces<FPTYPE, Device>::cal_force_us(ModuleBase::matrix& forcenl,
                 for (int ipol = 0; ipol < 3; ipol++)
                 {
                     BlasConnector::gemm(transb,
-                           transa,
-                           atom->na,
-                           nij,
-                           dim,
-                           ucell.omega,
-                           &aux1_data[ipol * dim * atom->na],
-                           dim,
-                           qgm_data,
-                           dim,
-                           zero,
-                           &ddeeq(is, ipol, 0, 0),
-                           nij);
+                                        transa,
+                                        atom->na,
+                                        nij,
+                                        dim,
+                                        ucell.omega,
+                                        &aux1_data[ipol * dim * atom->na],
+                                        dim,
+                                        qgm_data,
+                                        dim,
+                                        zero,
+                                        &ddeeq(is, ipol, 0, 0),
+                                        nij);
                 }
             }
 
@@ -142,7 +142,9 @@ void Forces<FPTYPE, Device>::cal_force_us(ModuleBase::matrix& forcenl,
     ModuleBase::timer::end("Forces", "cal_force_us");
 }
 
+template class Forces<float, base_device::DEVICE_CPU>;
 template class Forces<double, base_device::DEVICE_CPU>;
 #if ((defined __CUDA) || (defined __ROCM))
+template class Forces<float, base_device::DEVICE_GPU>;
 template class Forces<double, base_device::DEVICE_GPU>;
 #endif

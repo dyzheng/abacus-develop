@@ -3,8 +3,8 @@
 #include "source_base/module_device/device.h"
 #include "source_basis/module_pw/pw_basis_k.h"
 #include "source_cell/klist.h"
-#include "source_cell/unitcell.h"
 #include "source_cell/module_symmetry/symmetry.h"
+#include "source_cell/unitcell.h"
 #include "source_pw/module_pwdft/kernels/stress_op.h"
 
 #include <complex>
@@ -28,7 +28,7 @@ class FS_Kin_tools
     /**
      * @brief calculate stress tensor for kinetic energy
      *        stress = \sum_{G,k,i}  wk(k) * gk_l(G) * gk_m(G) * d_kfac(G) * occ_i*|ppsi_i(G)|^2
-     * 
+     *
      * @param ik k-point index
      * @param npm number of bands
      * @param occ if use the occupation of the bands
@@ -53,10 +53,11 @@ class FS_Kin_tools
     FPTYPE* d_kfac = nullptr;
     const FPTYPE* wg = nullptr;
     const FPTYPE* wk = nullptr;
+    std::vector<FPTYPE> h_wg_;
+    std::vector<FPTYPE> h_wk_;
     const ModulePW::PW_Basis_K* wfc_basis_ = nullptr;
     const UnitCell& ucell_;
     const int nksbands_;
-
 
   private:
     using resmem_var_op = base_device::memory::resize_memory_op<FPTYPE, Device>;

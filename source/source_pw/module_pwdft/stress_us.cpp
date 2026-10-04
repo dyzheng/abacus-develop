@@ -1,10 +1,10 @@
 #include "source_base/libm/libm.h"
-#include "source_base/parallel_reduce.h"
-#include "source_io/module_parameter/parameter.h"
 #include "source_base/math_polyint.h"
 #include "source_base/math_ylmreal.h"
+#include "source_base/parallel_reduce.h"
 #include "source_base/timer.h"
 #include "source_estate/elecstate_pw.h"
+#include "source_io/module_parameter/parameter.h"
 #include "source_pw/module_pwdft/nonlocal_maths.hpp"
 #include "stress_pw.h"
 
@@ -23,7 +23,7 @@ void Stress_PW<FPTYPE, Device>::stress_us(ModuleBase::matrix& sigma,
     const int nh_tot = nlpp.nhm * (nlpp.nhm + 1) / 2;
     const std::complex<double> fac = ModuleBase::NEG_IMAG_UNIT * ucell.tpiba;
     const std::complex<double> ci_tpi = ModuleBase::IMAG_UNIT * ModuleBase::TWO_PI;
-    double* becsum = static_cast<const elecstate::ElecStatePW<std::complex<FPTYPE>, Device>*>(this->pelec)->becsum;
+    FPTYPE* becsum = static_cast<const elecstate::ElecStatePW<std::complex<FPTYPE>, Device>*>(this->pelec)->becsum;
 
     ModuleBase::matrix stressus(3, 3);
 
@@ -39,11 +39,11 @@ void Stress_PW<FPTYPE, Device>::stress_us(ModuleBase::matrix& sigma,
     ModuleBase::YlmReal::Ylm_Real(nlpp.lmaxq * nlpp.lmaxq, npw, rho_basis->gcar, ylmk0);
 
     // double* qnorm = new double[npw];
-    std::vector<double> qnorm_vec(npw);
-    double* qnorm = qnorm_vec.data();
+    std::vector<FPTYPE> qnorm_vec(npw);
+    FPTYPE* qnorm = qnorm_vec.data();
     for (int ig = 0; ig < npw; ig++)
     {
-        qnorm[ig] = rho_basis->gcar[ig].norm() * ucell.tpiba;
+        qnorm[ig] = static_cast<FPTYPE>(rho_basis->gcar[ig].norm() * ucell.tpiba);
     }
 
     // here we compute the integral Q*V for each atom,
@@ -53,11 +53,7 @@ void Stress_PW<FPTYPE, Device>::stress_us(ModuleBase::matrix& sigma,
     for (int ipol = 0; ipol < 3; ipol++)
     {
         double* gcar_ptr = reinterpret_cast<double*>(rho_basis->gcar);
-        hamilt::Nonlocal_maths<FPTYPE, Device>::dylmr2(nlpp.lmaxq * nlpp.lmaxq,
-                                                       npw,
-                                                       gcar_ptr,
-                                                       dylmk0.c,
-                                                       ipol);
+        hamilt::Nonlocal_maths<double, Device>::dylmr2(nlpp.lmaxq * nlpp.lmaxq, npw, gcar_ptr, dylmk0.c, ipol);
         for (int it = 0; it < ucell.ntype; it++)
         {
             Atom* atom = &ucell.atoms[it];
@@ -76,13 +72,20 @@ void Stress_PW<FPTYPE, Device>::stress_us(ModuleBase::matrix& sigma,
                 {
                     for (int jh = ih; jh < atom->ncpp.nh; jh++)
                     {
+                        std::vector<ModuleBase::Vector3<FPTYPE>> g_f(npw);
+                        for (int ig = 0; ig < npw; ++ig)
+                        {
+                            g_f[ig] = {static_cast<FPTYPE>(rho_basis->gcar[ig].x),
+                                       static_cast<FPTYPE>(rho_basis->gcar[ig].y),
+                                       static_cast<FPTYPE>(rho_basis->gcar[ig].z)};
+                        }
                         this->dqvan2(nlpp,
                                      ih,
                                      jh,
                                      it,
                                      ipol,
                                      npw,
-                                     rho_basis->gcar,
+                                     g_f.data(),
                                      qnorm,
                                      ucell.tpiba,
                                      ylmk0,
@@ -113,18 +116,18 @@ void Stress_PW<FPTYPE, Device>::stress_us(ModuleBase::matrix& sigma,
                     const double one = 1;
                     const double zero = 0;
                     BlasConnector::gemm(transb,
-                           transa,
-                           PARAM.inp.nspin,
-                           dim,
-                           nij,
-                           one,
-                           tbecsum.c,
-                           nij,
-                           qgm_data,
-                           dim,
-                           zero,
-                           aux2_data,
-                           dim);
+                                        transa,
+                                        PARAM.inp.nspin,
+                                        dim,
+                                        nij,
+                                        one,
+                                        tbecsum.c,
+                                        nij,
+                                        qgm_data,
+                                        dim,
+                                        zero,
+                                        aux2_data,
+                                        dim);
 
                     for (int is = 0; is < PARAM.inp.nspin; is++)
                     {
@@ -150,18 +153,18 @@ void Stress_PW<FPTYPE, Device>::stress_us(ModuleBase::matrix& sigma,
                     const char transc = 'T';
                     const int three = 3;
                     BlasConnector::gemm_cm(transc,
-                           transb,
-                           three,
-                           PARAM.inp.nspin,
-                           dim,
-                           one,
-                           aux1_data,
-                           dim,
-                           aux2_data,
-                           dim,
-                           zero,
-                           fac.c,
-                           three);
+                                           transb,
+                                           three,
+                                           PARAM.inp.nspin,
+                                           dim,
+                                           one,
+                                           aux1_data,
+                                           dim,
+                                           aux2_data,
+                                           dim,
+                                           zero,
+                                           fac.c,
+                                           three);
 
                     for (int is = 0; is < PARAM.inp.nspin; is++)
                     {
@@ -201,12 +204,12 @@ void Stress_Func<FPTYPE, Device>::dqvan2(const pseudopot_cell_vnl& nlpp,
                                          const FPTYPE& tpiba,
                                          const ModuleBase::matrix& ylmk0,
                                          const ModuleBase::matrix& dylmk0,
-                                         std::complex<FPTYPE>* dqg)
+                                         std::complex<double>* dqg)
 {
-	if (PARAM.inp.test_pp) 
-	{
-		ModuleBase::TITLE("Stress", "dqvan2");
-	}
+    if (PARAM.inp.test_pp)
+    {
+        ModuleBase::TITLE("Stress", "dqvan2");
+    }
 
     // computes the indices which correspond to ih,jh
     const int nb = nlpp.indv(itype, ih);
@@ -284,16 +287,19 @@ void Stress_Func<FPTYPE, Device>::dqvan2(const pseudopot_cell_vnl& nlpp,
                 work1 = this->Polynomial_Interpolation_nl(nlpp.qrad, itype, l, ijv, PARAM.globalv.dq, qnorm[ig]);
                 qm1 = qnorm[ig];
             }
-            dqg[ig] += pref * work * dylmk0(lp, ig) / tpiba;
+            dqg[ig] += pref * work * dylmk0(lp, ig) / static_cast<double>(tpiba);
             if (qnorm[ig] > 1e-9)
             {
-                dqg[ig] += pref * work1 * ylmk0(lp, ig) * tpiba * g[ig][ipol] / qnorm[ig];
+                dqg[ig] += pref * static_cast<double>(work1) * ylmk0(lp, ig) * static_cast<double>(tpiba)
+                           * static_cast<double>(g[ig][ipol]) / static_cast<double>(qnorm[ig]);
             }
         }
     }
 }
 
+template class Stress_PW<float, base_device::DEVICE_CPU>;
 template class Stress_PW<double, base_device::DEVICE_CPU>;
 #if ((defined __CUDA) || (defined __ROCM))
+template class Stress_PW<float, base_device::DEVICE_GPU>;
 template class Stress_PW<double, base_device::DEVICE_GPU>;
 #endif

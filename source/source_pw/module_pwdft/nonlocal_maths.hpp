@@ -2,6 +2,7 @@
 #define HAMILTPW_NONLOCAL_MATHS_H
 
 #include "source_base/module_device/device.h"
+#include "source_base/math_ylmreal.h"
 #include "source_basis/module_pw/pw_basis_k.h"
 #include "source_cell/klist.h"
 #include "source_cell/unitcell.h"

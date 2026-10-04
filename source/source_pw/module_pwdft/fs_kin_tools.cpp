@@ -8,10 +8,19 @@ FS_Kin_tools<FPTYPE, Device>::FS_Kin_tools(const UnitCell& ucell_in,
                                            const K_Vectors* p_kv,
                                            const ModulePW::PW_Basis_K* wfc_basis_in,
                                            const ModuleBase::matrix& wg)
-    : ucell_(ucell_in), nksbands_(wg.nc), wg(wg.c), wk(p_kv->wk.data())
+    : ucell_(ucell_in), nksbands_(wg.nc), wg(nullptr), wk(nullptr)
 {
     this->device = base_device::get_device_type(this->ctx);
     this->wfc_basis_ = wfc_basis_in;
+    this->h_wg_.resize(wg.nr * wg.nc);
+    for (int i = 0; i < wg.nr * wg.nc; ++i)
+        this->h_wg_[i] = static_cast<FPTYPE>(wg.c[i]);
+    const int nks_wk = p_kv->get_nks();
+    this->h_wk_.resize(nks_wk);
+    for (int i = 0; i < nks_wk; ++i)
+        this->h_wk_[i] = static_cast<FPTYPE>(p_kv->wk[i]);
+    this->wg = this->h_wg_.data();
+    this->wk = this->h_wk_.data();
     const int npwk_max = this->wfc_basis_->npwk_max;
     const int nks = this->wfc_basis_->nks;
     const int npol = ucell_in.get_npol();
@@ -152,8 +161,10 @@ void FS_Kin_tools<FPTYPE, Device>::symmetrize_stress(ModuleSymmetry::Symmetry* p
     }
 }
 
+template class FS_Kin_tools<float, base_device::DEVICE_CPU>;
 template class FS_Kin_tools<double, base_device::DEVICE_CPU>;
 #if ((defined __CUDA) || (defined __ROCM))
+template class FS_Kin_tools<float, base_device::DEVICE_GPU>;
 template class FS_Kin_tools<double, base_device::DEVICE_GPU>;
 #endif
 

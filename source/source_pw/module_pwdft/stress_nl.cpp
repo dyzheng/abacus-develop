@@ -1,9 +1,9 @@
 #include "source_base/math_polyint.h"
-#include "source_base/parallel_reduce.h"
-#include "source_io/module_parameter/parameter.h"
 #include "source_base/math_ylmreal.h"
 #include "source_base/module_device/device.h"
+#include "source_base/parallel_reduce.h"
 #include "source_base/timer.h"
+#include "source_io/module_parameter/parameter.h"
 #include "source_pw/module_pwdft/fs_nonlocal_tools.h"
 #include "source_pw/module_pwdft/nonlocal_maths.hpp"
 #include "stress_func.h"
@@ -16,7 +16,7 @@ void Stress_Func<FPTYPE, Device>::stress_nl(ModuleBase::matrix& sigma,
                                             K_Vectors* p_kv,
                                             ModuleSymmetry::Symmetry* p_symm,
                                             ModulePW::PW_Basis_K* wfc_basis,
-                                            const psi::Psi <std::complex<FPTYPE>, Device>* psi_in,
+                                            const psi::Psi<std::complex<FPTYPE>, Device>* psi_in,
                                             const pseudopot_cell_vnl& nlpp_in,
                                             const UnitCell& ucell_in)
 {
@@ -56,7 +56,7 @@ void Stress_Func<FPTYPE, Device>::stress_nl(ModuleBase::matrix& sigma,
 
         nl_tools.cal_vkb(ik, max_nbands);
         // calculate becp = <psi|beta> for all beta functions
-        nl_tools.cal_becp(ik, npm, &psi_in[0](ik,0,0));
+        nl_tools.cal_becp(ik, npm, &psi_in[0](ik, 0, 0));
         nl_tools.reduce_pool_becp(max_nbands);
         // calculate dbecp = <psi|d(beta)/dR> for all beta functions
         // calculate stress = \sum <psi|d(beta_j)/dR> * <psi|beta_i> * D_{ij}
@@ -65,7 +65,7 @@ void Stress_Func<FPTYPE, Device>::stress_nl(ModuleBase::matrix& sigma,
             for (int jpol = 0; jpol <= ipol; jpol++)
             {
                 nl_tools.cal_vkb_deri_s(ik, max_nbands, ipol, jpol);
-                nl_tools.cal_dbecp_s(ik, npm, &psi_in[0](ik,0,0));
+                nl_tools.cal_dbecp_s(ik, npm, &psi_in[0](ik, 0, 0));
                 nl_tools.cal_stress(ik, npm, true, ipol, jpol, stress_device);
             }
         }
@@ -110,10 +110,10 @@ void Stress_Func<FPTYPE, Device>::get_dvnl1(ModuleBase::ComplexMatrix& vkb,
                                             Structure_Factor* p_sf,
                                             ModulePW::PW_Basis_K* wfc_basis)
 {
-	if (PARAM.inp.test_pp) 
-	{
-		ModuleBase::TITLE("Stress", "get_dvnl1");
-	}
+    if (PARAM.inp.test_pp)
+    {
+        ModuleBase::TITLE("Stress", "get_dvnl1");
+    }
 
     const int npw = wfc_basis->npwk[ik];
     const int lmaxkb = nlpp->lmaxkb;
@@ -124,15 +124,15 @@ void Stress_Func<FPTYPE, Device>::get_dvnl1(ModuleBase::ComplexMatrix& vkb,
 
     const int nhm = nlpp->nhm;
 
-    assert(npw>0);
+    assert(npw > 0);
 
     ModuleBase::matrix vkb1(nhm, npw);
     vkb1.zero_out();
-    FPTYPE* vq = new FPTYPE[npw];
+    double* vq = new double[npw];
     const int x1 = (lmaxkb + 1) * (lmaxkb + 1);
 
     ModuleBase::matrix dylm(x1, npw);
-    ModuleBase::Vector3<FPTYPE>* gk = new ModuleBase::Vector3<FPTYPE>[npw];
+    ModuleBase::Vector3<double>* gk = new ModuleBase::Vector3<double>[npw];
 #ifdef _OPENMP
 #pragma omp parallel for
 #endif
@@ -141,39 +141,39 @@ void Stress_Func<FPTYPE, Device>::get_dvnl1(ModuleBase::ComplexMatrix& vkb,
         gk[ig] = wfc_basis->getgpluskcar(ik, ig);
     }
 
-    hamilt::Nonlocal_maths<FPTYPE, Device>::dylmr2(x1, npw, reinterpret_cast<double*>(gk), dylm.c, ipol);
+    hamilt::Nonlocal_maths<double, Device>::dylmr2(x1, npw, reinterpret_cast<double*>(gk), dylm.c, ipol);
 
     const int imag_pow_period = 4;
     // result table of pow(0-1i, int)
-    static const std::complex<FPTYPE> pref_tab[imag_pow_period] = {{1, 0}, {0, -1}, {-1, 0}, {0, 1}};
+    static const std::complex<double> pref_tab[imag_pow_period] = {{1, 0}, {0, -1}, {-1, 0}, {0, 1}};
     int jkb = 0;
     for (int it = 0; it < this->ucell->ntype; it++)
     {
-		if (PARAM.inp.test_pp > 1) 
-		{
-			ModuleBase::GlobalFunc::OUT("it", it);
-		}
-		// calculate beta in G-space using an interpolation table
+        if (PARAM.inp.test_pp > 1)
+        {
+            ModuleBase::GlobalFunc::OUT("it", it);
+        }
+        // calculate beta in G-space using an interpolation table
         const int nbeta = this->ucell->atoms[it].ncpp.nbeta;
         const int nh = this->ucell->atoms[it].ncpp.nh;
 
-		if (PARAM.inp.test_pp > 1) 
-		{
-			ModuleBase::GlobalFunc::OUT("nbeta", nbeta);
-		}
+        if (PARAM.inp.test_pp > 1)
+        {
+            ModuleBase::GlobalFunc::OUT("nbeta", nbeta);
+        }
 
         for (int nb = 0; nb < nbeta; nb++)
         {
-			if (PARAM.inp.test_pp > 1) 
-			{
-				ModuleBase::GlobalFunc::OUT("ib", nb);
-			}
+            if (PARAM.inp.test_pp > 1)
+            {
+                ModuleBase::GlobalFunc::OUT("ib", nb);
+            }
 #ifdef _OPENMP
 #pragma omp parallel for
 #endif
             for (int ig = 0; ig < npw; ig++)
             {
-                const FPTYPE gnorm = gk[ig].norm() * this->ucell->tpiba;
+                const double gnorm = gk[ig].norm() * this->ucell->tpiba;
 
                 vq[ig] = ModuleBase::PolyInt::Polynomial_Interpolation(nlpp->tab,
                                                                        it,
@@ -181,7 +181,6 @@ void Stress_Func<FPTYPE, Device>::get_dvnl1(ModuleBase::ComplexMatrix& vkb,
                                                                        PARAM.globalv.nqx,
                                                                        PARAM.globalv.dq,
                                                                        gnorm);
-
             }
 
             // add spherical harmonic part
@@ -207,7 +206,7 @@ void Stress_Func<FPTYPE, Device>::get_dvnl1(ModuleBase::ComplexMatrix& vkb,
         // now add the structure factor and factor (-i)^l
         for (int ia = 0; ia < this->ucell->atoms[it].na; ia++)
         {
-            std::complex<FPTYPE>* sk = p_sf->get_sk(ik, it, ia, wfc_basis);
+            std::complex<double>* sk = p_sf->get_sk(ik, it, ia, wfc_basis);
 #ifdef _OPENMP
 #pragma omp parallel for collapse(2)
 #endif
@@ -215,7 +214,7 @@ void Stress_Func<FPTYPE, Device>::get_dvnl1(ModuleBase::ComplexMatrix& vkb,
             {
                 for (int ig = 0; ig < npw; ig++)
                 {
-                    std::complex<FPTYPE> pref = pref_tab[int(nlpp->nhtol(it, ih)) % imag_pow_period];
+                    std::complex<double> pref = pref_tab[int(nlpp->nhtol(it, ih)) % imag_pow_period];
                     vkb(jkb + ih, ig) = vkb1(ih, ig) * sk[ig] * pref;
                 }
 
@@ -223,12 +222,11 @@ void Stress_Func<FPTYPE, Device>::get_dvnl1(ModuleBase::ComplexMatrix& vkb,
             jkb += nh;
             delete[] sk;
         } // end ia
-    }     // enddo
+    } // enddo
     delete[] gk;
     delete[] vq;
     return;
 } // end get_dvnl1
-
 
 template <typename FPTYPE, typename Device>
 void Stress_Func<FPTYPE, Device>::get_dvnl2(ModuleBase::ComplexMatrix& vkb,
@@ -236,10 +234,10 @@ void Stress_Func<FPTYPE, Device>::get_dvnl2(ModuleBase::ComplexMatrix& vkb,
                                             Structure_Factor* p_sf,
                                             ModulePW::PW_Basis_K* wfc_basis)
 {
-	if (PARAM.inp.test_pp) 
-	{
-		ModuleBase::TITLE("Stress", "get_dvnl2");
-	}
+    if (PARAM.inp.test_pp)
+    {
+        ModuleBase::TITLE("Stress", "get_dvnl2");
+    }
     //	ModuleBase::timer::start("Stress","get_dvnl2");
     const int npw = wfc_basis->npwk[ik];
     const int lmaxkb = nlpp->lmaxkb;
@@ -250,14 +248,14 @@ void Stress_Func<FPTYPE, Device>::get_dvnl2(ModuleBase::ComplexMatrix& vkb,
 
     const int nhm = nlpp->nhm;
 
-    assert(npw>0);
+    assert(npw > 0);
 
     ModuleBase::matrix vkb1(nhm, npw);
-    FPTYPE* vq = new FPTYPE[npw];
+    double* vq = new double[npw];
     const int x1 = (lmaxkb + 1) * (lmaxkb + 1);
 
     ModuleBase::matrix ylm(x1, npw);
-    ModuleBase::Vector3<FPTYPE>* gk = new ModuleBase::Vector3<FPTYPE>[npw];
+    ModuleBase::Vector3<double>* gk = new ModuleBase::Vector3<double>[npw];
 #ifdef _OPENMP
 #pragma omp parallel for
 #endif
@@ -269,36 +267,36 @@ void Stress_Func<FPTYPE, Device>::get_dvnl2(ModuleBase::ComplexMatrix& vkb,
 
     const int imag_pow_period = 4;
     // result table of pow(0-1i, int)
-    static const std::complex<FPTYPE> pref_tab[imag_pow_period] = {{1, 0}, {0, -1}, {-1, 0}, {0, 1}};
+    static const std::complex<double> pref_tab[imag_pow_period] = {{1, 0}, {0, -1}, {-1, 0}, {0, 1}};
     int jkb = 0;
     for (int it = 0; it < this->ucell->ntype; it++)
     {
-        if (PARAM.inp.test_pp > 1) 
-		{
-			ModuleBase::GlobalFunc::OUT("it", it);
-		}
+        if (PARAM.inp.test_pp > 1)
+        {
+            ModuleBase::GlobalFunc::OUT("it", it);
+        }
         // calculate beta in G-space using an interpolation table
         const int nbeta = this->ucell->atoms[it].ncpp.nbeta;
         const int nh = this->ucell->atoms[it].ncpp.nh;
 
-		if (PARAM.inp.test_pp > 1) 
-		{
-			ModuleBase::GlobalFunc::OUT("nbeta", nbeta);
-		}
+        if (PARAM.inp.test_pp > 1)
+        {
+            ModuleBase::GlobalFunc::OUT("nbeta", nbeta);
+        }
 
         for (int nb = 0; nb < nbeta; nb++)
         {
-			if (PARAM.inp.test_pp > 1) 
-			{
-				ModuleBase::GlobalFunc::OUT("ib", nb);
-			}
+            if (PARAM.inp.test_pp > 1)
+            {
+                ModuleBase::GlobalFunc::OUT("ib", nb);
+            }
 #ifdef _OPENMP
 #pragma omp parallel for
 #endif
             for (int ig = 0; ig < npw; ig++)
             {
-                const FPTYPE gnorm = gk[ig].norm() * this->ucell->tpiba;
-                vq[ig] = hamilt::Nonlocal_maths<FPTYPE, Device>::Polynomial_Interpolation_nl(nlpp->tab,
+                const double gnorm = gk[ig].norm() * this->ucell->tpiba;
+                vq[ig] = hamilt::Nonlocal_maths<double, Device>::Polynomial_Interpolation_nl(nlpp->tab,
                                                                                              it,
                                                                                              nb,
                                                                                              PARAM.globalv.dq,
@@ -327,7 +325,7 @@ void Stress_Func<FPTYPE, Device>::get_dvnl2(ModuleBase::ComplexMatrix& vkb,
         // now add the structure factor and factor (-i)^l
         for (int ia = 0; ia < this->ucell->atoms[it].na; ia++)
         {
-            std::complex<FPTYPE>* sk = p_sf->get_sk(ik, it, ia, wfc_basis);
+            std::complex<double>* sk = p_sf->get_sk(ik, it, ia, wfc_basis);
 #ifdef _OPENMP
 #pragma omp parallel for collapse(2)
 #endif
@@ -335,7 +333,7 @@ void Stress_Func<FPTYPE, Device>::get_dvnl2(ModuleBase::ComplexMatrix& vkb,
             {
                 for (int ig = 0; ig < npw; ig++)
                 {
-                    std::complex<FPTYPE> pref = pref_tab[int(nlpp->nhtol(it, ih)) % imag_pow_period]; //?
+                    std::complex<double> pref = pref_tab[int(nlpp->nhtol(it, ih)) % imag_pow_period]; //?
                     vkb(jkb + ih, ig) = vkb1(ih, ig) * sk[ig] * pref;
                 }
 
@@ -378,7 +376,9 @@ FPTYPE Stress_Func<FPTYPE, Device>::Polynomial_Interpolation_nl(const ModuleBase
     return y;
 }
 
+template class Stress_Func<float, base_device::DEVICE_CPU>;
 template class Stress_Func<double, base_device::DEVICE_CPU>;
 #if ((defined __CUDA) || (defined __ROCM))
+template class Stress_Func<float, base_device::DEVICE_GPU>;
 template class Stress_Func<double, base_device::DEVICE_GPU>;
 #endif

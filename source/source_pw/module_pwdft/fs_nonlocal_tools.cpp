@@ -1,18 +1,33 @@
 #include "fs_nonlocal_tools.h"
 
+#include "nonlocal_maths.hpp"
 #include "source_base/math_polyint.h"
 #include "source_base/math_ylmreal.h"
+#include "source_base/parallel_comm.h" // different MPI worlds (POOL_WORLD)
 #include "source_base/parallel_device.h"
 #include "source_base/timer.h"
 #include "source_base/tool_title.h"
-#include "source_pw/module_pwdft/kernels/force_op.h"
 #include "source_io/module_parameter/parameter.h"
-#include "nonlocal_maths.hpp"
-
-#include "source_base/parallel_comm.h" // different MPI worlds (POOL_WORLD)
+#include "source_pw/module_pwdft/kernels/force_op.h"
 
 namespace hamilt
 {
+
+namespace
+{
+template <typename FPTYPE>
+inline const std::complex<FPTYPE>& fp_one()
+{
+    static const std::complex<FPTYPE> v(1.0, 0.0);
+    return v;
+}
+template <typename FPTYPE>
+inline const std::complex<FPTYPE>& fp_zero()
+{
+    static const std::complex<FPTYPE> v(0.0, 0.0);
+    return v;
+}
+} // namespace
 
 template <typename FPTYPE, typename Device>
 FS_Nonlocal_tools<FPTYPE, Device>::FS_Nonlocal_tools(const pseudopot_cell_vnl* nlpp_in,
@@ -83,17 +98,38 @@ void FS_Nonlocal_tools<FPTYPE, Device>::allocate_memory(const ModuleBase::matrix
     resmem_var_op()(this->hd_ylm, (_lmax + 1) * (_lmax + 1) * max_npw);
     resmem_var_op()(this->hd_ylm_deri, 3 * (_lmax + 1) * (_lmax + 1) * max_npw);
     const int nks = this->kv_->get_nks();
-    resmem_var_op()(d_wk, nks);
-    syncmem_var_h2d_op()(d_wk, this->kv_->wk.data(), nks);
+
+    // Convert double-precision wg/ekb/wk to FPTYPE (float in single precision)
+    // for the force/stress kernels.
+    this->h_wg_.resize(wg.nr * wg.nc);
+    for (int i = 0; i < wg.nr * wg.nc; ++i)
+    {
+        this->h_wg_[i] = static_cast<FPTYPE>(wg.c[i]);
+    }
+    if (p_ekb != nullptr)
+    {
+        this->h_ekb_.resize(p_ekb->nr * p_ekb->nc);
+        for (int i = 0; i < p_ekb->nr * p_ekb->nc; ++i)
+        {
+            this->h_ekb_[i] = static_cast<FPTYPE>(p_ekb->c[i]);
+        }
+    }
+    this->h_wk_.resize(nks);
+    for (int i = 0; i < nks; ++i)
+    {
+        this->h_wk_[i] = static_cast<FPTYPE>(this->kv_->wk[i]);
+    }
 
     if (this->device == base_device::GpuDevice)
     {
+        resmem_var_op()(d_wk, nks);
+        syncmem_var_h2d_op()(d_wk, this->h_wk_.data(), nks);
         resmem_var_op()(d_wg, wg.nr * wg.nc);
-        syncmem_var_h2d_op()(d_wg, wg.c, wg.nr * wg.nc);
+        syncmem_var_h2d_op()(d_wg, this->h_wg_.data(), wg.nr * wg.nc);
         if (p_ekb != nullptr)
         {
             resmem_var_op()(d_ekb, p_ekb->nr * p_ekb->nc);
-            syncmem_var_h2d_op()(d_ekb, p_ekb->c, p_ekb->nr * p_ekb->nc);
+            syncmem_var_h2d_op()(d_ekb, this->h_ekb_.data(), p_ekb->nr * p_ekb->nc);
         }
         resmem_int_op()(atom_nh, this->ntype);
         resmem_int_op()(atom_na, this->ntype);
@@ -109,14 +145,15 @@ void FS_Nonlocal_tools<FPTYPE, Device>::allocate_memory(const ModuleBase::matrix
     }
     else
     {
-        this->d_wg = wg.c;
+        this->d_wk = this->h_wk_.data();
+        this->d_wg = this->h_wg_.data();
         if (p_ekb != nullptr)
         {
-            this->d_ekb = p_ekb->c;
+            this->d_ekb = this->h_ekb_.data();
         }
         this->atom_nh = h_atom_nh.data();
         this->atom_na = h_atom_na.data();
-        this->ppcell_vkb = this->nlpp_->vkb.c;
+        this->ppcell_vkb = this->nlpp_->template get_vkb_data<FPTYPE>();
     }
 }
 
@@ -129,11 +166,11 @@ void FS_Nonlocal_tools<FPTYPE, Device>::delete_memory()
     delmem_var_op()(hd_vq_deri);
     delmem_var_op()(hd_ylm);
     delmem_var_op()(hd_ylm_deri);
-    delmem_var_op()(d_wk);
 
     // delete memory on GPU
     if (this->device == base_device::GpuDevice)
     {
+        delmem_var_op()(d_wk);
         delmem_var_op()(d_wg);
         delmem_var_op()(d_ekb);
         delmem_int_op()(atom_nh);
@@ -182,7 +219,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_vkb(const int& ik, const int& nbdall
 
     // calculate G+K
     this->g_plus_k = maths.cal_gk(ik, this->wfc_basis_);
-    FPTYPE *gk = g_plus_k.data(), *vq_tb = this->nlpp_->tab.ptr;
+    FPTYPE *gk = g_plus_k.data(), *vq_tb = this->nlpp_->template get_tab_data<FPTYPE>();
     // calculate sk
     resmem_complex_op()(hd_sk, this->ucell_->nat * npw);
     this->sf_->get_sk(ctx, ik, this->wfc_basis_, hd_sk);
@@ -193,9 +230,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_vkb(const int& ik, const int& nbdall
     if (this->device == base_device::GpuDevice)
     {
         syncmem_var_h2d_op()(d_g_plus_k, g_plus_k.data(), g_plus_k.size());
-        syncmem_var_h2d_op()(d_vq_tab, this->nlpp_->tab.ptr, this->nlpp_->tab.getSize());
         gk = d_g_plus_k;
-        vq_tb = d_vq_tab;
     }
     for (int it = 0; it < this->ucell_->ntype; it++) // loop all elements
     {
@@ -218,7 +253,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_vkb(const int& ik, const int& nbdall
 
         // prepare（-i）^l, size: nh
         const int nh = this->ucell_->atoms[it].ncpp.nh;
-        std::vector<std::complex<double>> pref = maths.cal_pref(it, nh);
+        std::vector<std::complex<FPTYPE>> pref = maths.cal_pref(it, nh);
         this->dvkb_indexes.resize(nh * 4);
         maths.cal_dvkb_index(this->ucell_->atoms[it].ncpp.nbeta,
                              this->nlpp_->nhtol.c,
@@ -275,12 +310,12 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(const int& ik,
               this->nkb,
               npm_npol,
               npw,
-              &ModuleBase::ONE,
+              &fp_one<FPTYPE>(),
               this->ppcell_vkb,
               npw,
               ppsi,
               this->max_npw,
-              &ModuleBase::ZERO,
+              &fp_zero<FPTYPE>(),
               this->becp + index0,
               this->nkb);
 }
@@ -330,12 +365,11 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_vkb_deri_s(const int& ik,
         maths.cal_ylm_deri(lmax_, npw, g_plus_k.data(), hd_ylm_deri);
         this->pre_ik_s = ik;
     }
-    FPTYPE *gk = g_plus_k.data(), *vq_tb = this->nlpp_->tab.ptr;
+    FPTYPE *gk = g_plus_k.data(), *vq_tb = this->nlpp_->template get_tab_data<FPTYPE>();
     std::complex<FPTYPE>* d_sk = this->hd_sk;
     if (this->device == base_device::GpuDevice)
     {
         gk = d_g_plus_k;
-        vq_tb = d_vq_tab;
     }
 
     for (int it = 0; it < this->ucell_->ntype; it++) // loop all elements
@@ -369,7 +403,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_vkb_deri_s(const int& ik,
 
         // prepare（-i）^l, size: nh
         const int nh = this->ucell_->atoms[it].ncpp.nh;
-        std::vector<std::complex<double>> pref = maths.cal_pref(it, nh);
+        std::vector<std::complex<FPTYPE>> pref = maths.cal_pref(it, nh);
         // prepare indexes for calculate vkb_deri
         this->dvkb_indexes.resize(nh * 4);
         maths.cal_dvkb_index(this->ucell_->atoms[it].ncpp.nbeta,
@@ -437,12 +471,12 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_s(const int& ik,
               this->nkb,
               npm_npol,
               npw,
-              &ModuleBase::ONE,
+              &fp_one<FPTYPE>(),
               this->ppcell_vkb,
               npw,
               ppsi,
               this->max_npw,
-              &ModuleBase::ZERO,
+              &fp_zero<FPTYPE>(),
               dbecp_ptr,
               this->nkb);
 }
@@ -553,16 +587,15 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_vkb_deri_f(const int& ik, const int&
     {
         this->transfer_gcar(npw,
                             this->wfc_basis_->npwk_max,
-                            &(this->wfc_basis_->gcar[ik * this->wfc_basis_->npwk_max].x));
+                            this->wfc_basis_->template get_gcar_data<FPTYPE>() + ik * this->wfc_basis_->npwk_max * 3);
     }
 
     this->save_vkb(ik, ipol);
 
-    const std::complex<double> coeff = ipol == 0 ? ModuleBase::NEG_IMAG_UNIT : ModuleBase::ONE;
+    const std::complex<FPTYPE> coeff = ipol == 0 ? std::complex<FPTYPE>(0.0, -1.0) : fp_one<FPTYPE>();
 
     // calculate the vkb_deri for ipol with the memory of ppcell_vkb
     cal_vkb1_nl_op<FPTYPE, Device>()(this->ctx, nkb, npw, npw, npw, ipol, coeff, vkb_ptr, gcar, vkb_deri_ptr);
-
 }
 
 template <typename FPTYPE, typename Device>
@@ -590,12 +623,12 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_dbecp_f(const int& ik,
               this->nkb,
               npm_npol,
               npw,
-              &ModuleBase::ONE,
+              &fp_one<FPTYPE>(),
               vkb_deri_ptr,
               npw,
               ppsi,
               this->max_npw,
-              &ModuleBase::ZERO,
+              &fp_zero<FPTYPE>(),
               dbecp_ptr,
               this->nkb);
 }
@@ -642,7 +675,7 @@ template <typename FPTYPE, typename Device>
 void FS_Nonlocal_tools<FPTYPE, Device>::revert_vkb(const int& ik, const int& ipol)
 {
     const int npw = this->wfc_basis_->npwk[ik];
-    const std::complex<FPTYPE> coeff = ipol == 0 ? ModuleBase::NEG_IMAG_UNIT : ModuleBase::ONE;
+    const std::complex<FPTYPE> coeff = ipol == 0 ? std::complex<FPTYPE>(0.0, -1.0) : fp_one<FPTYPE>();
     if (this->device == base_device::CpuDevice)
     {
         const int gcar_zero_count = this->gcar_zero_indexes[ipol * this->wfc_basis_->npwk_max];
@@ -759,7 +792,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_force(const int& ik,
         {
             d_wg_ik = d_wg + this->nbands * ik;
         }
-        
+
         cal_force_nl_op<FPTYPE, Device>()(this->ctx,
                                           nondiagonal,
                                           npm,
@@ -819,8 +852,10 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_force(const int& ik,
 }
 
 // template instantiation
+template class FS_Nonlocal_tools<float, base_device::DEVICE_CPU>;
 template class FS_Nonlocal_tools<double, base_device::DEVICE_CPU>;
 #if ((defined __CUDA) || (defined __ROCM))
+template class FS_Nonlocal_tools<float, base_device::DEVICE_GPU>;
 template class FS_Nonlocal_tools<double, base_device::DEVICE_GPU>;
 #endif
 
