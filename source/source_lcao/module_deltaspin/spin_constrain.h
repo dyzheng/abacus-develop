@@ -161,6 +161,32 @@ class FirstOrderResponseEngine;
  *   Solution: Ensure cal_mw_from_lambda() is called at least once per SCF step.
  * - "atomCounts is not set": init_sc() was not called or UnitCell data is missing.
  * - "nspin must be 2 or 4": Invalid spin configuration. nspin=1 is not supported.
+ *
+ * @par Parallelization sensitivity (not a bug)
+ * The constrained forces/stresses drift with the intra-pool process count
+ * (NPROC_IN_POOL), e.g. ~3e-3 eV/Angstrom for a non-collinear Fe spin
+ * constraint when going from 1-2 to 4-8 ranks per pool, while the total
+ * energy stays consistent to ~1e-12 eV. This is a numerical sensitivity of
+ * the constrained-DFT loop, not a memory/parallelization bug:
+ *   - Root: the Davidson diagonalization (and FFT) produce wavefunctions whose
+ *     per-element rounding (~1e-6) depends on the MPI reduction tree order, i.e.
+ *     on NPROC_IN_POOL. The total energy is a sum over all bands/G-vectors and
+ *     averages this out; a sensitive derivative such as the force exposes it.
+ *   - The unconstrained force already drifts ~1e-5 eV/Angstrom for the same
+ *     reason (verified by turning off the constraint).
+ *   - The constraint amplifies this by ~300x through two physical factors, NOT
+ *     through a coupling/accumulation between the SCF and lambda loops (the SCF
+ *     loop converges rather than accumulates, and the lambda loop's fixed-point
+ *     sensitivity is a susceptibility, not an instability):
+ *       1. 1/chi ~ 10: the lambda fixed point M(lambda) = M_target maps a small
+ *          magnetic-moment evaluation error dM onto a dM/chi-larger lambda error,
+ *          where chi = dM/dlambda ~ 0.1 uB^2/eV is the magnetic susceptibility.
+ *       2. dF/dlambda ~ 90 eV/Angstrom per eV/uB: the force includes the
+ *          constraint term lambda . (dM/dR), so a lambda error is multiplied by
+ *          the magnetostriction dM/dR.
+ *   The resulting lambda spread (~4e-5 eV/uB) is thus a physical consequence of
+ *   the susceptibility and magnetostriction, applied to the wavefunction
+ *   rounding; it is not a sign of a bug in the constraint implementation.
  */
 template <typename TK>
 class SpinConstrain
