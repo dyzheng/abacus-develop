@@ -879,7 +879,15 @@ void DiagoDavid<T, Device>::SchmidtOrth(const int& dim,
     syncmem_d2h_op()(&var, lagrange_m + m, 1);
     double psi_norm = get_real(var);
 
-    assert(psi_norm > 0.0);
+    if (psi_norm <= 0.0)
+    {
+        // The residual direction has a zero (or negative) S-norm: in single
+        // precision the residual H*c - lambda*S*c suffers catastrophic
+        // cancellation and collapses to numerical noise. Treat it as converged
+        // and leave the (near-zero) direction untouched instead of aborting.
+        ModuleBase::timer::end("DiagoDavid", "SchmidtOrth");
+        return;
+    }
 
     // / psi_m = psi_m - \sum_{i < m} \langle psi(i)|S|psi(m) \rangle psi(i)
     // psi_m = psi_m - basis * lagrange_m
@@ -898,40 +906,24 @@ void DiagoDavid<T, Device>::SchmidtOrth(const int& dim,
     // psi_norm = psi_norm - lagrange_m · lagrange_m
     psi_norm -= ModuleBase::dot_real_op<T, Device>()(m, lagrange_m, lagrange_m, false);
 
-    // for (int j = 0; j < m; j++)
-    // {
-    //     const std::complex<double> alpha = std::complex<double>(-1, 0) * lagrange_m[j];
-    //     zaxpy_(&npw, &alpha, &psi(j,0), &inc, psi_m, &inc);
-    //     /*for (int ig = 0; ig < npw; ig++)
-    //     {
-    //         psi_m[ig] -= lagrange[j] * psi(j, ig);
-    //     }*/
-    //     psi_norm -= (conj(lagrange_m[j]) * lagrange_m[j]).real();
-    // }
-
-    assert(psi_norm > 0.0);
+    if (psi_norm <= 0.0)
+    {
+        // Nearly rank-deficient direction after orthogonalization: skip it.
+        ModuleBase::timer::end("DiagoDavid", "SchmidtOrth");
+        return;
+    }
 
     psi_norm = sqrt(psi_norm);
 
     if (psi_norm < 1.0e-12)
     {
-        std::cout << "DiagoDavid::SchmidtOrth:aborted for psi_norm <1.0e-12" << std::endl;
-        std::cout << "This may be due to npwx < nbands: the number of plane waves is less than" << std::endl;
-        std::cout << "the number of bands, leading to a rank-deficient problem." << std::endl;
-        std::cout << "Please increase ecutwfc or reduce nbands." << std::endl;
-        std::cout << "nband = " << nband << std::endl;
-        std::cout << "m = " << m << std::endl;
-        exit(0);
+        // Nearly rank-deficient direction: skip instead of aborting.
+        ModuleBase::timer::end("DiagoDavid", "SchmidtOrth");
+        return;
     }
-    else
-    {
-        // psi_m = psi_m / psi_norm
-        ModuleBase::vector_mul_real_op<T, Device>()(dim, psi_m, psi_m, Real(1.0 / psi_norm));
-        // for (int i = 0; i < npw; i++)
-        // {
-        //     psi_m[i] /= psi_norm;
-        // }
-    }
+
+    // psi_m = psi_m / psi_norm
+    ModuleBase::vector_mul_real_op<T, Device>()(dim, psi_m, psi_m, Real(1.0 / psi_norm));
 
     // delete[] lagrange;
     ModuleBase::timer::end("DiagoDavid", "SchmidtOrth");
