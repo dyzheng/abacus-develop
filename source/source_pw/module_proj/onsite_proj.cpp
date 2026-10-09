@@ -38,6 +38,13 @@ OnsiteProjector<double, base_device::DEVICE_GPU>*
 OnsiteProjector<double, base_device::DEVICE_GPU>::get_instance();
 
 template
+OnsiteProjector<float, base_device::DEVICE_GPU>*
+OnsiteProjector<float, base_device::DEVICE_GPU>::get_instance();
+
+template
+OnsiteProjector<float, base_device::DEVICE_GPU>::~OnsiteProjector();
+
+template
 OnsiteProjector<double, base_device::DEVICE_GPU>::~OnsiteProjector();
 #endif
 
