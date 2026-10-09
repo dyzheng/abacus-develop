@@ -939,4 +939,10 @@ template void XC_Functional::grad_wfc<std::complex<double>, base_device::DEVICE_
     const ModulePW::PW_Basis_K* wfc_basis,
     const std::complex<double>* rhog,
     std::complex<double>* grad);
+template void XC_Functional::grad_wfc<std::complex<float>, base_device::DEVICE_GPU, float>(
+    const int ik,
+    const float tpiba,
+    const ModulePW::PW_Basis_K* wfc_basis,
+    const std::complex<float>* rhog,
+    std::complex<float>* grad);
 #endif

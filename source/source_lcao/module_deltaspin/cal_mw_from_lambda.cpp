@@ -479,11 +479,13 @@ void spinconstrain::SpinConstrain<TK>::update_psi_charge_pw_gpu(const ModuleBase
 
         this->calculate_delta_hcc(h_tmp, becp_k, lambda_for_hcc, nbands, nkb, nh_iat, ik, full_update);
 
+        std::vector<typename GetTypeReal<SpinScalar<TK>>::type> en_tmp(nbands);
         hsolver::DiagoIterAssist<SpinScalar<TK>, base_device::DEVICE_GPU>::diag_subspace_psi(h_tmp,
                                                                                 s_tmp,
                                                                                 nbands,
                                                                                 psi_t[0],
-                                                                                &this->pelec->ekb(ik, 0));
+                                                                                en_tmp.data());
+        for (int ib = 0; ib < nbands; ++ib) this->pelec->ekb(ik, ib) = static_cast<double>(en_tmp[ib]);
 
         psi_t->store_k_from_gpu(ik);
     }
@@ -1080,13 +1082,15 @@ void spinconstrain::SpinConstrain<TK>::cal_mw_from_lambda(
                     base_device::memory::synchronize_memory_op<SpinScalar<TK>, base_device::DEVICE_GPU, base_device::DEVICE_GPU>()(s_tmp, s_k, nbands * nbands);
                     if (i_step != -1) this->calculate_delta_hcc(h_tmp, becp_k, this->lambda_.data(), nbands, nkb, nh_iat, ik, true);
 
+                    std::vector<typename GetTypeReal<SpinScalar<TK>>::type> en_tmp(nbands);
                     hsolver::DiagoIterAssist<SpinScalar<TK>, base_device::DEVICE_GPU>::diag_responce(h_tmp,
                                                                                   s_tmp,
                                                                                   nbands,
                                                                                   becp_k,
                                                                                   becp_pointer,
                                                                                   nkb * npol,
-                                                                                  &this->pelec->ekb(ik, 0));
+                                                                                  en_tmp.data());
+                    for (int ib = 0; ib < nbands; ++ib) this->pelec->ekb(ik, ib) = static_cast<double>(en_tmp[ib]);
                     base_device::memory::synchronize_memory_op<SpinScalar<TK>, base_device::DEVICE_CPU, base_device::DEVICE_GPU>()(&becp_tmp[ik * size_becp], becp_pointer, size_becp);
 
                     psi_t->store_k_from_gpu(ik);
