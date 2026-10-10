@@ -11,6 +11,7 @@ class Plus_U;
 namespace pw
 {
 
+template <typename T, typename Device>
 void iter_init_dftu_pw(const int iter,
                        const int istep,
                        Plus_U& dftu,

@@ -163,6 +163,7 @@ class Plus_U
   public:
     /// interface for PW base
 	/// calculate the local occupation number matrix for PW based wave functions
+	template <typename T, typename Device>
 	void cal_occ_pw(const int iter,
 			const void* psi_in,
 			const ModuleBase::matrix& wg_in,

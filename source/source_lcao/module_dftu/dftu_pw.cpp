@@ -4,6 +4,8 @@
 #include "source_io/module_parameter/parameter.h"
 #include "source_base/timer.h"
 #include "source_base/parallel_global.h"
+#include "source_base/macros.h"
+#include "source_base/module_device/device.h"
 
 /// calculate occupation matrix for DFT+U (PW basis)
 ///
@@ -18,6 +20,7 @@
 /// nspin=4 (npol=2): spinor calculation;
 ///   locale has a single matrix of size (2*tlp1) x (2*tlp1) per atom
 ///   storing all 4 Pauli blocks contiguously.
+template <typename T, typename Device>
 void Plus_U::cal_occ_pw(const int iter, 
 		const void* psi_in, 
 		const ModuleBase::matrix& wg_in, 
@@ -31,10 +34,12 @@ void Plus_U::cal_occ_pw(const int iter,
     const int nspin = PARAM.inp.nspin;
     const int kpar = PARAM.inp.kpar;
 
+    using Real = typename GetTypeReal<T>::type;
+
     if(this->device == "cpu")
     {
-        auto* onsite_p = projectors::OnsiteProjector<double, base_device::DEVICE_CPU>::get_instance();
-        const psi::Psi<std::complex<double>>* psi_p = (const psi::Psi<std::complex<double>>*)psi_in;
+        auto* onsite_p = projectors::OnsiteProjector<Real, base_device::DEVICE_CPU>::get_instance();
+        const psi::Psi<T, base_device::DEVICE_CPU>* psi_p = static_cast<const psi::Psi<T, base_device::DEVICE_CPU>*>(psi_in);
         const int nbands = psi_p->get_nbands();
         const int npol = psi_p->get_npol();
         for(int ik = 0; ik < psi_p->get_nk(); ik++)
@@ -44,7 +49,7 @@ void Plus_U::cal_occ_pw(const int iter,
             onsite_p->tabulate_atomic(ik);
 
             onsite_p->overlap_proj_psi(nbands*npol, psi_p->get_pointer());
-            const std::complex<double>* becp = onsite_p->get_h_becp();
+            const std::complex<Real>* becp = onsite_p->get_h_becp();
             int nkb = onsite_p->get_size_becp() / nbands / npol;
 
             int begin_ih = 0;
@@ -65,7 +70,7 @@ void Plus_U::cal_occ_pw(const int iter,
                 {
                     for(int ib = 0;ib<nbands;ib++)
                     {
-                        const double weight = wg_in(ik, ib);
+                        const Real weight = static_cast<Real>(wg_in(ik, ib));
                         int ind_m1m2 = 0;
                         for(int m1 = 0; m1 < tlp1; m1++)
                         {
@@ -73,7 +78,7 @@ void Plus_U::cal_occ_pw(const int iter,
                             for(int m2 = 0; m2 < tlp1; m2++)
                             {
                                 const int index_m2 = ib*npol*nkb + begin_ih + m_begin + m2;
-                                std::complex<double> occ[4];
+                                std::complex<Real> occ[4];
                                 occ[0] = weight * conj(becp[index_m1]) * becp[index_m2];
                                 occ[1] = weight * conj(becp[index_m1]) * becp[index_m2 + nkb];
                                 occ[2] = weight * conj(becp[index_m1 + nkb]) * becp[index_m2];
@@ -91,7 +96,7 @@ void Plus_U::cal_occ_pw(const int iter,
                 {
                     for(int ib = 0;ib<nbands;ib++)
                     {
-                        const double weight = wg_in(ik, ib);
+                        const Real weight = static_cast<Real>(wg_in(ik, ib));
                         int ind_m1m2 = 0;
                         for(int m1 = 0; m1 < tlp1; m1++)
                         {
@@ -113,19 +118,19 @@ void Plus_U::cal_occ_pw(const int iter,
 #if defined(__CUDA) || defined(__ROCM)
     else
     {
-        auto* onsite_p = projectors::OnsiteProjector<double, base_device::DEVICE_GPU>::get_instance();
-        const psi::Psi<std::complex<double>, base_device::DEVICE_GPU>* psi_p = (const psi::Psi<std::complex<double>, base_device::DEVICE_GPU>*)psi_in;
+        auto* onsite_p = projectors::OnsiteProjector<Real, base_device::DEVICE_GPU>::get_instance();
+        const psi::Psi<T, base_device::DEVICE_GPU>* psi_p = static_cast<const psi::Psi<T, base_device::DEVICE_GPU>*>(psi_in);
         const int nbands = psi_p->get_nbands();
         const int npol = psi_p->get_npol();
         for(int ik = 0; ik < psi_p->get_nk(); ik++)
         {
             int is = (nspin == 2) ? isk[ik] : 0;
-            const_cast<psi::Psi<std::complex<double>, base_device::DEVICE_GPU>*>(psi_p)->load_k_to_gpu(ik);
+            const_cast<psi::Psi<T, base_device::DEVICE_GPU>*>(psi_p)->load_k_to_gpu(ik);
             psi_p->fix_k(ik);
             onsite_p->tabulate_atomic(ik);
 
             onsite_p->overlap_proj_psi(nbands*npol, psi_p->get_pointer());
-            const std::complex<double>* becp = onsite_p->get_h_becp();
+            const std::complex<Real>* becp = onsite_p->get_h_becp();
             int nkb = onsite_p->get_size_becp() / nbands / npol;
             int begin_ih = 0;
             for(int iat = 0; iat < cell.nat; iat++)
@@ -145,7 +150,7 @@ void Plus_U::cal_occ_pw(const int iter,
                 {
                     for(int ib = 0;ib<nbands;ib++)
                     {
-                        const double weight = wg_in(ik, ib);
+                        const Real weight = static_cast<Real>(wg_in(ik, ib));
                         int ind_m1m2 = 0;
                         for(int m1 = 0; m1 < tlp1; m1++)
                         {
@@ -153,7 +158,7 @@ void Plus_U::cal_occ_pw(const int iter,
                             for(int m2 = 0; m2 < tlp1; m2++)
                             {
                                 const int index_m2 = ib*npol*nkb + begin_ih + m_begin + m2;
-                                std::complex<double> occ[4];
+                                std::complex<Real> occ[4];
                                 occ[0] = weight * conj(becp[index_m1]) * becp[index_m2];
                                 occ[1] = weight * conj(becp[index_m1]) * becp[index_m2 + nkb];
                                 occ[2] = weight * conj(becp[index_m1 + nkb]) * becp[index_m2];
@@ -171,7 +176,7 @@ void Plus_U::cal_occ_pw(const int iter,
                 {
                     for(int ib = 0;ib<nbands;ib++)
                     {
-                        const double weight = wg_in(ik, ib);
+                        const Real weight = static_cast<Real>(wg_in(ik, ib));
                         int ind_m1m2 = 0;
                         for(int m1 = 0; m1 < tlp1; m1++)
                         {
@@ -350,5 +355,32 @@ void Plus_U::cal_occ_pw(const int iter,
 
     ModuleBase::timer::end("Plus_U", "cal_occ_pw");
 }
+
+template void Plus_U::cal_occ_pw<std::complex<double>, base_device::DEVICE_CPU>(const int iter,
+                                                                               const void* psi_in,
+                                                                               const ModuleBase::matrix& wg_in,
+                                                                               const UnitCell& cell,
+                                                                               Charge_Mixing* p_chgmix,
+                                                                               const int* isk);
+template void Plus_U::cal_occ_pw<std::complex<float>, base_device::DEVICE_CPU>(const int iter,
+                                                                              const void* psi_in,
+                                                                              const ModuleBase::matrix& wg_in,
+                                                                              const UnitCell& cell,
+                                                                              Charge_Mixing* p_chgmix,
+                                                                              const int* isk);
+#if defined(__CUDA) || defined(__ROCM)
+template void Plus_U::cal_occ_pw<std::complex<double>, base_device::DEVICE_GPU>(const int iter,
+                                                                               const void* psi_in,
+                                                                               const ModuleBase::matrix& wg_in,
+                                                                               const UnitCell& cell,
+                                                                               Charge_Mixing* p_chgmix,
+                                                                               const int* isk);
+template void Plus_U::cal_occ_pw<std::complex<float>, base_device::DEVICE_GPU>(const int iter,
+                                                                              const void* psi_in,
+                                                                              const ModuleBase::matrix& wg_in,
+                                                                              const UnitCell& cell,
+                                                                              Charge_Mixing* p_chgmix,
+                                                                              const int* isk);
+#endif
 
 
