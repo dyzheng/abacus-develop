@@ -454,7 +454,14 @@ std::tuple<double,double,ModuleBase::matrix,ModuleBase::matrix> XC_Functional_Li
         {
             for( int ir=0; ir< nrxx; ++ir )
             {
-                rvtxc += dh[is][ir] * rho[ir*nspin+is];
+                // Use the valence-only density (chr->rho), not the total
+                // density (rho, which includes the NLCC core charge). vtxc
+                // must be \int v_xc * rho_valence so that the stress
+                // decomposition -(etxc - vtxc)/omega + stress_cc stays
+                // consistent; weighting the vsigma term by the total density
+                // double-counts the core contribution and shifts the diagonal
+                // analytical stress of meta-GGA + NLCC calculations.
+                rvtxc += dh[is][ir] * chr->rho[is][ir];
                 v(is,ir) -= dh[is][ir];
             }
         }
