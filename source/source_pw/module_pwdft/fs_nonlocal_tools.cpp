@@ -714,7 +714,7 @@ template <typename FPTYPE, typename Device>
 void FS_Nonlocal_tools<FPTYPE, Device>::transfer_gcar(const int& npw, const int& npw_max, const FPTYPE* gcar_in)
 {
     std::vector<FPTYPE> gcar_tmp(3 * npw_max);
-    gcar_tmp.assign(gcar_in, gcar_in + 3 * npw_max);
+    syncmem_var_d2h_op()(gcar_tmp.data(), gcar_in, 3 * npw_max);
     std::vector<int> gcar_zero_indexes_tmp(3 * npw_max);
 
     int* gcar_zero_ptrs[3];
