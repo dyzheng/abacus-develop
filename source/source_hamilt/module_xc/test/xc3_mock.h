@@ -76,6 +76,27 @@ namespace ModulePW
         return x;
     }
 
+    template <>
+    float* PW_Basis_K::get_gcar_data() const
+    {
+        return nullptr;
+    }
+    template <>
+    double* PW_Basis_K::get_gcar_data() const
+    {
+        return nullptr;
+    }
+    template <>
+    float* PW_Basis_K::get_kvec_c_data() const
+    {
+        return nullptr;
+    }
+    template <>
+    double* PW_Basis_K::get_kvec_c_data() const
+    {
+        return nullptr;
+    }
+
 
     template <typename FPTYPE, typename Device>
     void PW_Basis_K::real_to_recip(const Device* ctx,
@@ -100,7 +121,7 @@ namespace ModulePW
     {
         for (int i = 0; i < nrxx; i++)
         {
-            out[i] = -ModuleBase::IMAG_UNIT * in[i];
+            out[i] = -std::complex<FPTYPE>(0.0, 1.0) * in[i];
         }
     }
 
@@ -116,6 +137,18 @@ namespace ModulePW
                                                                              const int ik,
                                                                              const bool add,
                                                                              const double factor) const;
+    template void PW_Basis_K::real_to_recip<float, base_device::DEVICE_CPU>(const base_device::DEVICE_CPU* ctx,
+                                                                            const std::complex<float>* in,
+                                                                            std::complex<float>* out,
+                                                                            const int ik,
+                                                                            const bool add,
+                                                                            const float factor) const;
+    template void PW_Basis_K::recip_to_real<float, base_device::DEVICE_CPU>(const base_device::DEVICE_CPU* ctx,
+                                                                            const std::complex<float>* in,
+                                                                            std::complex<float>* out,
+                                                                            const int ik,
+                                                                            const bool add,
+                                                                            const float factor) const;
 #if __CUDA || __ROCM
     template void PW_Basis_K::real_to_recip<double, base_device::DEVICE_GPU>(const base_device::DEVICE_GPU* ctx,
                                                                              const std::complex<double>* in,
@@ -130,6 +163,20 @@ namespace ModulePW
                                                                              const int ik,
                                                                              const bool add,
                                                                              const double factor) const;
+
+    template void PW_Basis_K::real_to_recip<float, base_device::DEVICE_GPU>(const base_device::DEVICE_GPU* ctx,
+                                                                            const std::complex<float>* in,
+                                                                            std::complex<float>* out,
+                                                                            const int ik,
+                                                                            const bool add,
+                                                                            const float factor) const;
+
+    template void PW_Basis_K::recip_to_real<float, base_device::DEVICE_GPU>(const base_device::DEVICE_GPU* ctx,
+                                                                            const std::complex<float>* in,
+                                                                            std::complex<float>* out,
+                                                                            const int ik,
+                                                                            const bool add,
+                                                                            const float factor) const;
 #endif
 
 
