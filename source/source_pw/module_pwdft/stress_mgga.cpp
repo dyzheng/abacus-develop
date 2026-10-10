@@ -46,6 +46,9 @@ void Stress_Func<FPTYPE, Device>::stress_mgga(const UnitCell& ucell,
     auto cal_stress_mgga_solver = hamilt::cal_stress_mgga_op<std::complex<FPTYPE>, Device>();
     for (int ik = 0; ik < p_kv->get_nks(); ik++)
     {
+        // Ensure k-point is loaded to GPU for PAGED_GPU mode
+        const_cast<psi::Psi<std::complex<FPTYPE>, Device>*>(psi_in)->ensure_k_on_gpu(ik);
+
         if (PARAM.inp.nspin == 2)
         {
             current_spin = p_kv->isk[ik];
