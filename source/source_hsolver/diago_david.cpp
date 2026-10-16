@@ -766,6 +766,7 @@ void DiagoDavid<T, Device>::refresh(const int& dim,
     nbase = nband;
 
     setmem_complex_op()(hcc, 0, nbase_x * nbase_x);
+    setmem_complex_op()(vcc, 0, nbase_x * nbase_x);
 
     if (this->device == base_device::GpuDevice)
     {
