@@ -1,4 +1,6 @@
 #include "diago_david.h"
+#include <type_traits>
+#include "source_io/module_parameter/parameter.h"
 
 #include "source_base/timer.h"                  // ModuleBase::timer::tick
 #include "source_base/tool_title.h"             // ModuleBase::TITLE
@@ -153,6 +155,21 @@ int DiagoDavid<T, Device>::diag_once(const HPsiFunc& hpsi_func,
     std::vector<int> pre_matrix_mv_m(nband, 1);
     this->planSchmidtOrth(nband, pre_matrix_mm_m, pre_matrix_mv_m);
 
+#if defined(__CUDA)
+    const bool block_qr = this->device == base_device::GpuDevice
+                          && std::is_same<Real, float>::value && !PARAM.globalv.use_uspp
+                          && diag_comm.nproc == 1;
+    if (block_qr)
+    {
+        for (int m = 0; m < nband; ++m)
+            syncmem_complex_op()(basis + dim*m, psi_in + m*ld_psi, dim);
+        // Form the basis without subtracting nearly equal norm estimates.
+        ct::kernels::lapack_geqrf_inplace<T, ct_Device>()(dim, nband, basis, dim);
+        spsi_func(basis, spsi, dim, nband);
+    }
+    else
+#endif
+    {
     for (int m = 0; m < nband; m++)
     {
         {
@@ -176,6 +193,8 @@ int DiagoDavid<T, Device>::diag_once(const HPsiFunc& hpsi_func,
             // phm_in->sPsi(basis + dim*m, &this->spsi[m * dim], dim, dim, 1);
             spsi_func(basis + dim*m, &this->spsi[m * dim], dim, 1);
         }
+    }
+
     }
 
     // end of SchmidtOrth and calculate H|psi>
@@ -545,6 +564,23 @@ void DiagoDavid<T, Device>::cal_grad(const HPsiFunc& hpsi_func,
         );
     }
 
+#if defined(__CUDA)
+    const bool block_qr = this->device == base_device::GpuDevice
+                          && std::is_same<Real, float>::value && !PARAM.globalv.use_uspp
+                          && diag_comm.nproc == 1;
+    if (block_qr)
+    {
+        // Project the new block once and orthogonalize its columns together.
+        ModuleBase::gemm_op<T, Device>()('N', 'N', dim, notconv, nbase,
+            this->neg_one, basis, dim, lagrange, nbase + notconv,
+            this->one, basis + dim*nbase, dim);
+        ct::kernels::lapack_geqrf_inplace<T, ct_Device>()(
+            dim, notconv, basis + dim*nbase, dim);
+        spsi_func(basis + dim*nbase, spsi + dim*nbase, dim, notconv);
+    }
+    else
+#endif
+    {
     for (int m = 0; m < notconv; m++)
     {
         this->SchmidtOrth(dim,
@@ -559,6 +595,8 @@ void DiagoDavid<T, Device>::cal_grad(const HPsiFunc& hpsi_func,
             spsi_func(basis + dim*(nbase + m), &spsi[(nbase + m) * dim], dim, 1);
         }
     }
+    }
+
     // calculate H|psi> for not convergence bands
     // hpsi_info dav_hpsi_in(&basis,
     //                       psi::Range(true, 0, nbase, nbase + notconv - 1),
