@@ -1,4 +1,5 @@
 #include "diago_david.h"
+#include <ATen/core/tensor_map.h>
 #include <type_traits>
 #include "source_io/module_parameter/parameter.h"
 
@@ -696,7 +697,23 @@ void DiagoDavid<T, Device>::diag_zhegvx(const int& nbase,
             syncmem_var_h2d_op()(eigenvalue_gpu, this->eigenvalue, nbase_x);
 
             // heevx_op<T, Device>()(this->ctx, nbase, nbase_x, hcc, nband, eigenvalue_gpu, vcc);
-            ct::kernels::lapack_heevx<T, ct_Device>()(nbase, nbase_x, hcc, nband, eigenvalue_gpu, vcc);
+            if (std::is_same<Real, float>::value && !PARAM.globalv.use_uspp)
+            {
+                // Use double only for this single reduced eigensolve.
+                auto h64 = ct::TensorMap(const_cast<T*>(hcc), ct::DataTypeToEnum<T>::value,
+                                        ct::DeviceType::GpuDevice, {nbase, nbase_x}).cast<std::complex<double>>();
+                ct::Tensor v64(ct::DataType::DT_COMPLEX_DOUBLE, ct::DeviceType::GpuDevice, {nbase, nbase_x});
+                ct::Tensor e64(ct::DataType::DT_DOUBLE, ct::DeviceType::GpuDevice, {nbase_x});
+                ct::kernels::lapack_heevx<std::complex<double>, ct_Device>()(
+                    nbase, nbase_x, h64.data<std::complex<double>>(), nband, e64.data<double>(), v64.data<std::complex<double>>());
+                base_device::memory::cast_memory_op<T, std::complex<double>, Device, Device>()(
+                    vcc, v64.data<std::complex<double>>(), static_cast<size_t>(nband) * nbase_x);
+                base_device::memory::cast_memory_op<Real, double, Device, Device>()(eigenvalue_gpu, e64.data<double>(), nband);
+            }
+            else
+            {
+                ct::kernels::lapack_heevx<T, ct_Device>()(nbase, nbase_x, hcc, nband, eigenvalue_gpu, vcc);
+            }
 
             syncmem_var_d2h_op()(this->eigenvalue, eigenvalue_gpu, nbase_x);
             delmem_var_op()(eigenvalue_gpu);
