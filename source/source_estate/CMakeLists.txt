@@ -52,6 +52,7 @@ list(APPEND objects
     module_constraint/constraint_accounting.cpp
     module_constraint/constraint_loop.cpp
     module_constraint/constraint_deriv.cpp
+    module_constraint/constraint_dipole.cpp
 )
 
 if(ENABLE_LCAO)

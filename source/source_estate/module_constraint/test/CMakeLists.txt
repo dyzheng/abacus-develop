@@ -83,10 +83,19 @@ AddTest(
     ../constraint_io.cpp
     ../constraint_inject_pw.cpp
     ../constraint_observe.cpp
+    ../constraint_dipole.cpp
     ../mu_solver.cpp
     ../weight_grid.cpp
     ../../../source_base/module_grid/radial.cpp
     ../../../source_base/module_grid/delley.cpp
+    ../../../source_io/module_output/output.cpp
+)
+
+AddTest(
+  TARGET MODULE_ESTATE_constraint_dipole
+  LIBS parameter ${math_libs} base device planewave_serial cell_info
+  SOURCES constraint_dipole_test.cpp
+    ../constraint_dipole.cpp
     ../../../source_io/module_output/output.cpp
 )
 
