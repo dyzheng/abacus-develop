@@ -59,7 +59,8 @@ class ConstraintLoop
               const ModulePW::PW_Basis* rho_basis,
               const ConstraintConfig& cfg,
               const std::vector<double>& radii,
-              const double nelec);
+              const double nelec,
+              const int istep = 0);
 
     // Stage-A entry: arm the loop from the fully validated per-constraint
     // list (M7).  The loop stores 'specs' verbatim: the weight-fragment map,
@@ -72,7 +73,8 @@ class ConstraintLoop
               const ConstraintConfig& cfg,
               const std::vector<ConstraintSpec>& specs,
               const std::vector<double>& radii,
-              const double nelec);
+              const double nelec,
+              const int istep = 0);
 
     // Inject the current mu-weighted potential into v_eff and veff_smooth
     // before the diagonalization of SCF iteration 'iter' (1-based).
@@ -157,6 +159,9 @@ class ConstraintLoop
     LoopPhase phase() const { return phase_; }
     MuStatus status() const { return status_; }
     int outer_steps() const { return outer_steps_; }
+    bool warm_started_last_init() const { return warm_started_last_init_; }
+    // Test-only diagnostic: the solver's retained slope of component i.
+    double solver_slope(const int i) const { return mu_solver_.slope(i); }
     // Energy branch guard (L10 lineage): armed iff constraint_branch_tol > 0.
     // reference_energy() is the constrained energy of the mu = 0 reference
     // SCF (valid once recorded); guard_energy() is the constrained energy
@@ -204,6 +209,19 @@ class ConstraintLoop
 
   private:
     ConstraintLoop() = default;
+    void build_geometry(const UnitCell& ucell,
+                        const ModulePW::PW_Basis* rho_basis,
+                        const std::vector<double>& radii,
+                        const std::vector<ConstraintSpec>& specs);
+    bool warm_start_eligible(const ConstraintConfig& cfg,
+                             const std::vector<ConstraintSpec>& specs,
+                             const int istep) const;
+    void warm_reinit(const UnitCell& ucell,
+                     const ModulePW::PW_Basis* rho_basis,
+                     const ConstraintConfig& cfg,
+                     const std::vector<ConstraintSpec>& specs,
+                     const std::vector<double>& radii,
+                     const double nelec);
     // Run one outer step from the current charges Q_ against targets_.
     void outer_step(const int iter, bool& conv_esolver);
     // One INNER-schedule mu update from the current observation.  Returns true
@@ -236,6 +254,10 @@ class ConstraintLoop
     LoopPhase phase_ = LoopPhase::IDLE;
     MuStatus status_ = MuStatus::RUNNING;
     int outer_steps_ = 0;
+    bool warm_started_last_init_ = false;
+    bool warm_pending_ = false;        // rebind (+ delta Q_ref) at next convergence
+    bool geometry_state_valid_ = false;
+    bool warm_guard_notice_done_ = false; // once-per-cold-geometry log
     ConstraintAudit audit_;
     std::string last_audit_line_;
     // Energy branch guard (L10 lineage) state.  scf_energy_ is the

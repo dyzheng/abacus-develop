@@ -271,7 +271,7 @@ void ESolver_KS_LCAO<TK, TR>::before_scf(UnitCell& ucell, const int istep)
             ModuleBase::WARNING_QUIT("ESolver_KS_LCAO::before_scf", error);
         }
         constraint::ConstraintLoop::instance().init(
-            ucell, this->pw_rhod, cfg, specs, radii, PARAM.inp.nelec);
+            ucell, this->pw_rhod, cfg, specs, radii, PARAM.inp.nelec, istep);
         constraint_audit_done_ = false;
     }
 

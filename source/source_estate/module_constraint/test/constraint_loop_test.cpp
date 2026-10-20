@@ -1564,3 +1564,41 @@ TEST_F(ConstraintLoopTest, SawQdipRequiresZSeparation)
     EXPECT_NEAR(loop.q_dip(qd_valid), 0.0, 1e-12);
     EXPECT_FALSE(qd_valid);
 }
+
+// Warm start: the second geometry rebuilds the weights but keeps mu, phase
+// and the solver history; a cold re-init resets everything.  Eligibility
+// requires the previous frame CONVERGED, so the loop is first driven to
+// convergence with the unit-stiffness mock (Q(mu) = Q_ref - mu, target
+// Q_ref + 0.1 -> mu* = -0.1 in ~3 iterations).
+TEST_F(ConstraintLoopTest, WarmStartKeepsMuAndPhase)
+{
+    PARAM.input.calculation = "relax";
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    constraint::ConstraintConfig cfg = make_cfg(0.1);
+    cfg.warm_start = true;
+    loop.init(*ucell, rhopw, cfg, radii, 10.0, /*istep=*/0);
+    std::vector<double> rho;
+    bool conv = false;
+    int iter = 0;
+    while (loop.status() == constraint::MuStatus::RUNNING && iter < 20)
+    {
+        ++iter;
+        mock_iteration(loop, rho, iter, loop.mu()[0], 1e-9, conv, true);
+    }
+    ASSERT_EQ(loop.status(), constraint::MuStatus::CONVERGED);
+    EXPECT_NEAR(loop.mu()[0], -0.1, 1e-12);
+    const double mu1 = loop.mu()[0];
+
+    // New geometry: move an atom so the rebuilt WeightGrid differs.
+    ucell->atoms[1].taud[0].x += 0.05;
+    loop.init(*ucell, rhopw, cfg, radii, 10.0, /*istep=*/1);
+    EXPECT_EQ(loop.phase(), constraint::LoopPhase::CONSTRAINED);
+    EXPECT_DOUBLE_EQ(loop.mu()[0], mu1);
+    EXPECT_TRUE(loop.warm_started_last_init());
+
+    // Cold path (switch off) must still return to the reference phase.
+    cfg.warm_start = false;
+    loop.init(*ucell, rhopw, cfg, radii, 10.0, /*istep=*/2);
+    EXPECT_EQ(loop.phase(), constraint::LoopPhase::REFERENCE);
+    EXPECT_DOUBLE_EQ(loop.mu()[0], 0.0);
+}

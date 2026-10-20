@@ -208,7 +208,7 @@ void ESolver_KS_PW<T, Device>::before_scf(UnitCell& ucell, const int istep)
             ModuleBase::WARNING_QUIT("ESolver_KS_PW::before_scf", error);
         }
         constraint::ConstraintLoop::instance().init(
-            ucell, this->pw_rhod, cfg, specs, radii, PARAM.inp.nelec);
+            ucell, this->pw_rhod, cfg, specs, radii, PARAM.inp.nelec, istep);
     }
 
     ModuleBase::timer::end("ESolver_KS_PW", "before_scf");

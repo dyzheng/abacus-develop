@@ -12,12 +12,21 @@
 #include "source_base/global_function.h"
 #include "source_base/global_variable.h"
 #include "source_base/tool_quit.h"
+#include "source_io/module_parameter/parameter.h"
 
 namespace constraint
 {
 
 namespace
 {
+// Warm start is a multi-geometry feature: single-point scf keeps the
+// historical reference-first semantics.
+bool warm_start_calculation()
+{
+    return PARAM.inp.calculation == "md" || PARAM.inp.calculation == "relax"
+           || PARAM.inp.calculation == "cell-relax";
+}
+
 // Diagnostic experiment switch (default off; the production behaviour always
 // resets).  ABA_CONSTRAINT_INNER_NO_RESET suppresses the charge-mixing reset
 // that normally follows every INNER mu update, so the mixing-damage question
@@ -57,6 +66,10 @@ void ConstraintLoop::reset()
     phase_ = LoopPhase::IDLE;
     status_ = MuStatus::RUNNING;
     outer_steps_ = 0;
+    warm_started_last_init_ = false;
+    warm_pending_ = false;
+    geometry_state_valid_ = false;
+    warm_guard_notice_done_ = false;
     audit_ = ConstraintAudit();
     last_audit_line_.clear();
     scf_energy_ = 0.0;
@@ -95,7 +108,8 @@ void ConstraintLoop::init(const UnitCell& ucell,
                           const ModulePW::PW_Basis* rho_basis,
                           const ConstraintConfig& cfg,
                           const std::vector<double>& radii,
-                          const double nelec)
+                          const double nelec,
+                          const int istep)
 {
     // Legacy entry (pre-A4 callers / unit tests): derive a homogeneous
     // per-constraint list from the single-type cfg so every consumer below
@@ -115,7 +129,7 @@ void ConstraintLoop::init(const UnitCell& ucell,
         spec.mu_max = cfg.mu_max;
         specs.push_back(spec);
     }
-    init(ucell, rho_basis, cfg, specs, radii, nelec);
+    init(ucell, rho_basis, cfg, specs, radii, nelec, istep);
 }
 
 void ConstraintLoop::init(const UnitCell& ucell,
@@ -123,8 +137,18 @@ void ConstraintLoop::init(const UnitCell& ucell,
                           const ConstraintConfig& cfg,
                           const std::vector<ConstraintSpec>& specs,
                           const std::vector<double>& radii,
-                          const double nelec)
+                          const double nelec,
+                          const int istep)
 {
+    // Branch: warm start (M2 C1) -- only MD/relax, only after a converged
+    // previous geometry, only with an unchanged constraint list.
+    if (warm_start_eligible(cfg, specs, istep))
+    {
+        warm_reinit(ucell, rho_basis, cfg, specs, radii, nelec);
+        return;
+    }
+    // Branch: cold start (first step / scf / warm_start=false / changed
+    // constraint list) -- the pre-M2 path.
     reset();
     cfg_ = cfg;
     specs_ = specs;
@@ -157,103 +181,7 @@ void ConstraintLoop::init(const UnitCell& ucell,
         channels_.push_back(spec.chan);
         mu_caps_.push_back(spec.mu_max);
     }
-    // Build the shared weight field (M1) once per geometry.  The fragment
-    // map comes from the per-constraint fragments of the spec list.
-    wg_.reset(new WeightGrid(ucell, rho_basis, radii, WeightType::Becke));
-    std::vector<std::vector<int>> atom_map;
-    for (const ConstraintSpec& spec : specs_)
-    {
-        atom_map.push_back(spec.atoms);
-    }
-    wg_->set_constraint_atoms(atom_map);
-    wg_->build();
-
-    // ---- Module A (M1) passive dipole reporter arming --------------------
-    // Must run before the fixed-mu early return below so FIXED_MU runs keep
-    // the report.  Pure observation: nothing here feeds the loop logic.
-    dipole_report_ = cfg_.dipole_report;
-    dipole_frame_ = cfg_.dipole_frame;
-    dipole_saw_pos_max_ = cfg_.dipole_saw_pos_max;
-    dipole_saw_pos_dec_ = cfg_.dipole_saw_pos_dec;
-    saw_resolved_ = false;
-    dipole_ref_valid_ = false;
-    delta_v_latest_ = 0.0;
-    ucell_ = &ucell; // per-geometry; the esolver outlives the loop usage
-    // Branch: reporter armed -> resolve the origin and the fragment pair.
-    if (dipole_report_)
-    {
-        // Origin for the molecular frame: ionic charge center of the whole
-        // cell (origin-independent for neutral cells, the printed convention
-        // for charged ones).
-        std::vector<int> all_atoms(ucell.nat);
-        std::iota(all_atoms.begin(), all_atoms.end(), 0);
-        dipole_origin_ = DipoleObserver::ionic_center(ucell, all_atoms);
-        // Fragment pair for q_dip: exactly one constraint -> that fragment
-        // vs the rest of the cell; exactly two -> the pair; anything else ->
-        // q_dip undefined (the report prints the dipole only).
-        frag_valid_ = false;
-        if (specs_.size() == 1 || specs_.size() == 2)
-        {
-            frag_a_ = DipoleObserver::ionic_center(ucell, specs_[0].atoms);
-            std::vector<int> other;
-            // Branch: two constraints -> the second fragment is the partner.
-            if (specs_.size() == 2)
-            {
-                other = specs_[1].atoms;
-            }
-            else
-            {
-                // Branch: complement of specs_[0] in the whole cell.
-                for (int i = 0; i < ucell.nat; ++i)
-                {
-                    if (std::find(specs_[0].atoms.begin(),
-                                  specs_[0].atoms.end(), i)
-                        == specs_[0].atoms.end())
-                    {
-                        other.push_back(i);
-                    }
-                }
-            }
-            // Guard: an empty complement (single fragment = whole cell)
-            // leaves q_dip undefined.
-            if (!other.empty())
-            {
-                frag_b_ = DipoleObserver::ionic_center(ucell, other);
-                // Branch: saw frame -> only the z component is physical.
-                // Project both fragment centers onto the z axis so a lateral
-                // offset can not dilute q_dip by (d_z/|d|)^2.
-                if (dipole_frame_ == "saw")
-                {
-                    frag_a_.x = 0.0;
-                    frag_a_.y = 0.0;
-                    frag_b_.x = 0.0;
-                    frag_b_.y = 0.0;
-                }
-                frag_valid_ = true;
-                // Guard: coincident z projections carry no charge-separation
-                // direction in the saw frame -> q_dip undefined.
-                if (dipole_frame_ == "saw"
-                    && std::abs(frag_a_.z - frag_b_.z) < 1e-6)
-                {
-                    frag_valid_ = false;
-                }
-            }
-        }
-        // Saw frame: warn when an atom sits in / near the decay window.
-        if (dipole_frame_ == "saw" && dipole_saw_pos_max_ >= 0.0)
-        {
-            const double d = DipoleObserver::min_atom_decay_distance(
-                ucell, dipole_saw_pos_max_, dipole_saw_pos_dec_);
-            // Branch: atom too close to the decay window -> warn.
-            if (d < 1.0)
-            {
-                ModuleBase::WARNING("ConstraintLoop::init",
-                    "an atom sits within 1 Bohr of the saw decay window; "
-                    "the saw-frame dipole is ill-defined there -- move "
-                    "constraint_dipole_saw_pos_max");
-            }
-        }
-    }
+    build_geometry(ucell, rho_basis, radii, specs_);
 
     // mu starts at zero: the first SCF is the unconstrained reference.
     mu_.assign(specs_.size(), 0.0);
@@ -316,6 +244,210 @@ void ConstraintLoop::init(const UnitCell& ucell,
     phase_ = LoopPhase::REFERENCE;
     status_ = MuStatus::RUNNING;
     outer_steps_ = 0;
+}
+
+void ConstraintLoop::build_geometry(
+    const UnitCell& ucell,
+    const ModulePW::PW_Basis* rho_basis,
+    const std::vector<double>& radii,
+    const std::vector<ConstraintSpec>& specs)
+{
+    // Build the shared weight field (M1) once per geometry.  The fragment
+    // map comes from the per-constraint fragments of the spec list.
+    wg_.reset(new WeightGrid(ucell, rho_basis, radii, WeightType::Becke));
+    std::vector<std::vector<int>> atom_map;
+    for (const ConstraintSpec& spec : specs)
+    {
+        atom_map.push_back(spec.atoms);
+    }
+    wg_->set_constraint_atoms(atom_map);
+    wg_->build();
+
+    // ---- Module A (M1) passive dipole reporter arming --------------------
+    // Must run before the fixed-mu early return in init() so FIXED_MU runs
+    // keep the report.  Pure observation: nothing here feeds the loop logic.
+    dipole_report_ = cfg_.dipole_report;
+    dipole_frame_ = cfg_.dipole_frame;
+    dipole_saw_pos_max_ = cfg_.dipole_saw_pos_max;
+    dipole_saw_pos_dec_ = cfg_.dipole_saw_pos_dec;
+    saw_resolved_ = false;
+    dipole_ref_valid_ = false;
+    delta_v_latest_ = 0.0;
+    ucell_ = &ucell; // per-geometry; the esolver outlives the loop usage
+    // Branch: reporter armed -> resolve the origin and the fragment pair.
+    if (dipole_report_)
+    {
+        // Origin for the molecular frame: ionic charge center of the whole
+        // cell (origin-independent for neutral cells, the printed convention
+        // for charged ones).
+        std::vector<int> all_atoms(ucell.nat);
+        std::iota(all_atoms.begin(), all_atoms.end(), 0);
+        dipole_origin_ = DipoleObserver::ionic_center(ucell, all_atoms);
+        // Fragment pair for q_dip: exactly one constraint -> that fragment
+        // vs the rest of the cell; exactly two -> the pair; anything else ->
+        // q_dip undefined (the report prints the dipole only).
+        frag_valid_ = false;
+        if (specs.size() == 1 || specs.size() == 2)
+        {
+            frag_a_ = DipoleObserver::ionic_center(ucell, specs[0].atoms);
+            std::vector<int> other;
+            // Branch: two constraints -> the second fragment is the partner.
+            if (specs.size() == 2)
+            {
+                other = specs[1].atoms;
+            }
+            else
+            {
+                // Branch: complement of specs[0] in the whole cell.
+                for (int i = 0; i < ucell.nat; ++i)
+                {
+                    if (std::find(specs[0].atoms.begin(),
+                                  specs[0].atoms.end(), i)
+                        == specs[0].atoms.end())
+                    {
+                        other.push_back(i);
+                    }
+                }
+            }
+            // Guard: an empty complement (single fragment = whole cell)
+            // leaves q_dip undefined.
+            if (!other.empty())
+            {
+                frag_b_ = DipoleObserver::ionic_center(ucell, other);
+                // Branch: saw frame -> only the z component is physical.
+                // Project both fragment centers onto the z axis so a lateral
+                // offset can not dilute q_dip by (d_z/|d|)^2.
+                if (dipole_frame_ == "saw")
+                {
+                    frag_a_.x = 0.0;
+                    frag_a_.y = 0.0;
+                    frag_b_.x = 0.0;
+                    frag_b_.y = 0.0;
+                }
+                frag_valid_ = true;
+                // Guard: coincident z projections carry no charge-separation
+                // direction in the saw frame -> q_dip undefined.
+                if (dipole_frame_ == "saw"
+                    && std::abs(frag_a_.z - frag_b_.z) < 1e-6)
+                {
+                    frag_valid_ = false;
+                }
+            }
+        }
+        // Saw frame: warn when an atom sits in / near the decay window.
+        if (dipole_frame_ == "saw" && dipole_saw_pos_max_ >= 0.0)
+        {
+            const double d = DipoleObserver::min_atom_decay_distance(
+                ucell, dipole_saw_pos_max_, dipole_saw_pos_dec_);
+            // Branch: atom too close to the decay window -> warn.
+            if (d < 1.0)
+            {
+                ModuleBase::WARNING("ConstraintLoop::init",
+                    "an atom sits within 1 Bohr of the saw decay window; "
+                    "the saw-frame dipole is ill-defined there -- move "
+                    "constraint_dipole_saw_pos_max");
+            }
+        }
+    }
+    geometry_state_valid_ = true;
+}
+
+bool ConstraintLoop::warm_start_eligible(
+    const ConstraintConfig& cfg,
+    const std::vector<ConstraintSpec>& specs,
+    const int istep) const
+{
+    // Guard: the feature is scoped to multi-geometry runs and needs a
+    // previous converged geometry state in this process.
+    if (!cfg.enabled || !cfg.warm_start || istep <= 0
+        || !geometry_state_valid_ || !warm_start_calculation())
+    {
+        return false;
+    }
+    // Guard: an unreachable / branch-flipped previous frame must not be
+    // recycled; the run needs a clean reference instead.
+    if (status_ != MuStatus::CONVERGED)
+    {
+        return false;
+    }
+    // Guard: an all-fixed list (v2 fixed_mu, M2 C4) never warm-starts --
+    // fixed frames are independent (no outer loop to carry), and this is
+    // what makes the fixed branch win over warm start.
+    bool all_fixed = !specs.empty();
+    for (const ConstraintSpec& s : specs)
+    {
+        all_fixed = all_fixed && s.fixed_mu;
+    }
+    if (all_fixed)
+    {
+        return false;
+    }
+    // Guard: warm start reuses the solver vectors; a changed list would
+    // silently pair mu with the wrong fragment.
+    if (specs.size() != specs_.size())
+    {
+        return false;
+    }
+    for (size_t a = 0; a < specs.size(); ++a)
+    {
+        if (specs[a].kind != specs_[a].kind
+            || specs[a].atoms != specs_[a].atoms)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+void ConstraintLoop::warm_reinit(
+    const UnitCell& ucell,
+    const ModulePW::PW_Basis* rho_basis,
+    const ConstraintConfig& cfg,
+    const std::vector<ConstraintSpec>& specs,
+    const std::vector<double>& radii,
+    const double nelec)
+{
+    warm_started_last_init_ = true;
+    cfg_ = cfg;
+    specs_ = specs;
+    nelec_ = nelec;
+    inner_schedule_ = (cfg_.mu_schedule == "inner");
+    inner_thr_ = cfg_.inner_thr;
+    inner_nmax_ = cfg_.inner_nmax;
+    kinds_.clear();
+    channels_.clear();
+    mu_caps_.clear();
+    kinds_.reserve(specs_.size());
+    channels_.reserve(specs_.size());
+    mu_caps_.reserve(specs_.size());
+    for (const ConstraintSpec& spec : specs_)
+    {
+        kinds_.push_back(spec.kind);
+        channels_.push_back(spec.chan);
+        mu_caps_.push_back(spec.mu_max);
+    }
+    build_geometry(ucell, rho_basis, radii, specs_);
+    // The first SCF of the new geometry is a probe at the carried mu: no
+    // inner updates may move mu before Q(mu_prev) is observed.
+    inner_active_ = false;
+    // warm_pending_ is true for BOTH target modes: the rebind is
+    // mode-independent; only the Q_ref re-derivation is delta-specific.
+    warm_pending_ = true;
+    status_ = MuStatus::RUNNING;
+    phase_ = LoopPhase::CONSTRAINED;
+    saw_resolved_ = false;
+    // M1 x M2: the reference dipole belongs to the previous geometry; a
+    // warm geometry has no free phase, so q_dip must go invalid (the raw
+    // dipole keeps printing) instead of silently diffing p against a stale
+    // p_ref from another ionic configuration.
+    dipole_ref_valid_ = false;
+    GlobalV::ofs_running
+        << "[constraint] WARM_START: geometry rebuilt, mu carried (|mu|="
+        << mu_norm() << " Ry), phase=constrained"
+        << (warm_pending_ ? "; delta Q_ref will be re-derived at the first "
+                            "converged SCF"
+                          : "")
+        << "\n";
 }
 
 void ConstraintLoop::inject_potential(const int iter,
@@ -689,7 +821,22 @@ void ConstraintLoop::on_scf_converged(const int iter, bool& conv_esolver)
     // meaningless, so the run is fused here (BRANCH_FLIP) instead of being
     // reported as CONVERGED (II-1a/II-1b: a flipped Q was once recorded as
     // CONVERGED by the residual test alone).
-    if (cfg_.branch_tol > 0.0)
+    // M2 (I4): the branch-guard reference e_ref_ belongs to the geometry
+    // that ran the mu = 0 reference SCF.  A warm-started geometry never runs
+    // one, so comparing the new geometry's energy against the old reference
+    // would be cross-geometry garbage (false BRANCH_FLIP or missed flips) --
+    // skip the guard here (once-per-cold-geometry notice).
+    if (warm_started_last_init_ && cfg_.branch_tol > 0.0
+        && !warm_guard_notice_done_)
+    {
+        GlobalV::ofs_running
+            << "[constraint] branch guard skipped for this warm-started "
+               "geometry (no mu = 0 reference energy; the guard covers "
+               "cold geometries only)\n";
+        warm_guard_notice_done_ = true;
+    }
+    // Branch: the guard is armed and this geometry owns a mu = 0 reference.
+    if (cfg_.branch_tol > 0.0 && !warm_started_last_init_)
     {
         // Wiring guard: the guard is only meaningful with an energy input;
         // fail loud rather than silently accepting an unguarded run.
