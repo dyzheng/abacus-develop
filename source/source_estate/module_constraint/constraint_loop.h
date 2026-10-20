@@ -180,6 +180,19 @@ class ConstraintLoop
     const std::vector<double>& mu() const { return mu_; }
     const std::vector<double>& targets() const { return targets_; }
     const std::vector<double>& charges() const { return Q_; }
+    // ---- Module A (M1) passive dipole report -----------------------------
+    // Pure observation: armed by cfg.dipole_report, refreshed by observe(),
+    // never read by the loop logic.  dipole_ref() is the REFERENCE-phase
+    // snapshot (the q_dip origin, delta semantics; valid only after the
+    // reference phase closes).  q_dip(valid) is the dipole-derived charge
+    // transfer of the constrained fragment vs the rest [e]; valid=false
+    // when the constraint list can not define a fragment pair (0 or >2
+    // constraints) or the report is off.
+    const ModuleBase::Vector3<double>& dipole() const { return dipole_latest_; }
+    const ModuleBase::Vector3<double>& dipole_ref() const { return dipole_ref_; }
+    bool dipole_ref_valid() const { return dipole_ref_valid_; }
+    double delta_v() const { return delta_v_latest_; } // saw frame, Hartree
+    double q_dip(bool& valid) const;
     // The shared weight field (M3b runtime audit / force kernel inputs).
     // Valid while enabled(): the grid is built in init().
     const WeightGrid& weight_grid() const { return *wg_; }
@@ -254,6 +267,24 @@ class ConstraintLoop
     bool settle_armed_ = false;
     bool inner_step_this_iter_ = false;
     int last_reset_iter_ = 0;
+    // Module A reporter state (see the public accessors above).
+    void update_dipole(const double* const* rho, const int nspin);
+    void print_dipole_report() const;
+    bool dipole_report_ = false;
+    std::string dipole_frame_ = "molecular";
+    double dipole_saw_pos_max_ = -1.0; // -1 = auto (lowest-density plane)
+    double dipole_saw_pos_dec_ = 0.1;
+    bool saw_resolved_ = false;        // auto frame resolved this geometry
+    double saw_pos_max_live_ = 0.5;    // resolved pos_max actually in use
+    const UnitCell* ucell_ = nullptr;  // per-geometry, set in init()
+    ModuleBase::Vector3<double> dipole_origin_{0.0, 0.0, 0.0};
+    ModuleBase::Vector3<double> dipole_latest_{0.0, 0.0, 0.0};
+    ModuleBase::Vector3<double> dipole_ref_{0.0, 0.0, 0.0};
+    bool dipole_ref_valid_ = false;
+    double delta_v_latest_ = 0.0;
+    ModuleBase::Vector3<double> frag_a_{0.0, 0.0, 0.0};
+    ModuleBase::Vector3<double> frag_b_{0.0, 0.0, 0.0};
+    bool frag_valid_ = false;
     // Experiment switch (default off): when ABA_CONSTRAINT_FIXED_MU is set,
     // the multiplier is frozen at the env value and the outer secant loop
     // is disabled (constraint potential acts as a fixed external potential).

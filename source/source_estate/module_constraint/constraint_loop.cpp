@@ -1,10 +1,12 @@
 #include "constraint_loop.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <numeric>
 
 #include "constraint_deriv.h"
+#include "constraint_dipole.h"
 #include "constraint_inject_pw.h"
 #include "source_base/constants.h"
 #include "source_base/global_function.h"
@@ -72,6 +74,21 @@ void ConstraintLoop::reset()
     settle_armed_ = false;
     inner_step_this_iter_ = false;
     last_reset_iter_ = 0;
+    dipole_report_ = false;
+    dipole_frame_ = "molecular";
+    dipole_saw_pos_max_ = -1.0;
+    dipole_saw_pos_dec_ = 0.1;
+    saw_resolved_ = false;
+    saw_pos_max_live_ = 0.5;
+    ucell_ = nullptr;
+    dipole_origin_ = ModuleBase::Vector3<double>(0.0, 0.0, 0.0);
+    dipole_latest_ = ModuleBase::Vector3<double>(0.0, 0.0, 0.0);
+    dipole_ref_ = ModuleBase::Vector3<double>(0.0, 0.0, 0.0);
+    dipole_ref_valid_ = false;
+    delta_v_latest_ = 0.0;
+    frag_a_ = ModuleBase::Vector3<double>(0.0, 0.0, 0.0);
+    frag_b_ = ModuleBase::Vector3<double>(0.0, 0.0, 0.0);
+    frag_valid_ = false;
 }
 
 void ConstraintLoop::init(const UnitCell& ucell,
@@ -150,6 +167,93 @@ void ConstraintLoop::init(const UnitCell& ucell,
     }
     wg_->set_constraint_atoms(atom_map);
     wg_->build();
+
+    // ---- Module A (M1) passive dipole reporter arming --------------------
+    // Must run before the fixed-mu early return below so FIXED_MU runs keep
+    // the report.  Pure observation: nothing here feeds the loop logic.
+    dipole_report_ = cfg_.dipole_report;
+    dipole_frame_ = cfg_.dipole_frame;
+    dipole_saw_pos_max_ = cfg_.dipole_saw_pos_max;
+    dipole_saw_pos_dec_ = cfg_.dipole_saw_pos_dec;
+    saw_resolved_ = false;
+    dipole_ref_valid_ = false;
+    delta_v_latest_ = 0.0;
+    ucell_ = &ucell; // per-geometry; the esolver outlives the loop usage
+    // Branch: reporter armed -> resolve the origin and the fragment pair.
+    if (dipole_report_)
+    {
+        // Origin for the molecular frame: ionic charge center of the whole
+        // cell (origin-independent for neutral cells, the printed convention
+        // for charged ones).
+        std::vector<int> all_atoms(ucell.nat);
+        std::iota(all_atoms.begin(), all_atoms.end(), 0);
+        dipole_origin_ = DipoleObserver::ionic_center(ucell, all_atoms);
+        // Fragment pair for q_dip: exactly one constraint -> that fragment
+        // vs the rest of the cell; exactly two -> the pair; anything else ->
+        // q_dip undefined (the report prints the dipole only).
+        frag_valid_ = false;
+        if (specs_.size() == 1 || specs_.size() == 2)
+        {
+            frag_a_ = DipoleObserver::ionic_center(ucell, specs_[0].atoms);
+            std::vector<int> other;
+            // Branch: two constraints -> the second fragment is the partner.
+            if (specs_.size() == 2)
+            {
+                other = specs_[1].atoms;
+            }
+            else
+            {
+                // Branch: complement of specs_[0] in the whole cell.
+                for (int i = 0; i < ucell.nat; ++i)
+                {
+                    if (std::find(specs_[0].atoms.begin(),
+                                  specs_[0].atoms.end(), i)
+                        == specs_[0].atoms.end())
+                    {
+                        other.push_back(i);
+                    }
+                }
+            }
+            // Guard: an empty complement (single fragment = whole cell)
+            // leaves q_dip undefined.
+            if (!other.empty())
+            {
+                frag_b_ = DipoleObserver::ionic_center(ucell, other);
+                // Branch: saw frame -> only the z component is physical.
+                // Project both fragment centers onto the z axis so a lateral
+                // offset can not dilute q_dip by (d_z/|d|)^2.
+                if (dipole_frame_ == "saw")
+                {
+                    frag_a_.x = 0.0;
+                    frag_a_.y = 0.0;
+                    frag_b_.x = 0.0;
+                    frag_b_.y = 0.0;
+                }
+                frag_valid_ = true;
+                // Guard: coincident z projections carry no charge-separation
+                // direction in the saw frame -> q_dip undefined.
+                if (dipole_frame_ == "saw"
+                    && std::abs(frag_a_.z - frag_b_.z) < 1e-6)
+                {
+                    frag_valid_ = false;
+                }
+            }
+        }
+        // Saw frame: warn when an atom sits in / near the decay window.
+        if (dipole_frame_ == "saw" && dipole_saw_pos_max_ >= 0.0)
+        {
+            const double d = DipoleObserver::min_atom_decay_distance(
+                ucell, dipole_saw_pos_max_, dipole_saw_pos_dec_);
+            // Branch: atom too close to the decay window -> warn.
+            if (d < 1.0)
+            {
+                ModuleBase::WARNING("ConstraintLoop::init",
+                    "an atom sits within 1 Bohr of the saw decay window; "
+                    "the saw-frame dipole is ill-defined there -- move "
+                    "constraint_dipole_saw_pos_max");
+            }
+        }
+    }
 
     // mu starts at zero: the first SCF is the unconstrained reference.
     mu_.assign(specs_.size(), 0.0);
@@ -300,7 +404,126 @@ void ConstraintLoop::observe(const int iter, const double* const* rho,
     // Stage-A reading: every alpha reads with its own channel signs, so a
     // mixed charge+spin list is observed in one integral (A2 core).
     ConstraintObserver::observe(*wg_, rho, nspin, channels_, Q_);
+    // Module A (M1): passive dipole observation; never feeds the loop.
+    if (dipole_report_)
+    {
+        update_dipole(rho, nspin);
+    }
     (void)iter;
+}
+
+void ConstraintLoop::update_dipole(const double* const* rho, const int nspin)
+{
+    // Branch: saw frame -> resolve the auto placement once per geometry on
+    // the first density the loop sees (init has no density yet).
+    if (dipole_frame_ == "saw")
+    {
+        if (!saw_resolved_)
+        {
+            // Branch: first density of this geometry -> resolve the frame
+            // once and log the effective placement.
+            saw_pos_max_live_
+                = (dipole_saw_pos_max_ >= 0.0)
+                      ? dipole_saw_pos_max_
+                      : DipoleObserver::lowest_density_plane(
+                            wg_->rho_basis(), rho, nspin);
+            saw_resolved_ = true;
+            GlobalV::ofs_running << "[constraint] dipole saw frame resolved:"
+                " pos_max = " << saw_pos_max_live_
+                << (dipole_saw_pos_max_ >= 0.0 ? " (input)" : " (auto)")
+                << ", pos_dec = " << dipole_saw_pos_dec_ << "\n";
+            // Branch: auto placement was derived from the density -> apply
+            // the same 1 Bohr decay-window guard the explicit input gets.
+            if (dipole_saw_pos_max_ < 0.0)
+            {
+                const double d = DipoleObserver::min_atom_decay_distance(
+                    *ucell_, saw_pos_max_live_, dipole_saw_pos_dec_);
+                if (d < 1.0)
+                {
+                    ModuleBase::WARNING("ConstraintLoop::update_dipole",
+                        "the auto-placed saw decay window is within 1 Bohr of "
+                        "an atom; set constraint_dipole_saw_pos_max manually");
+                }
+            }
+        }
+        const double p = DipoleObserver::saw_dipole(
+            *ucell_, wg_->rho_basis(), rho, nspin, saw_pos_max_live_,
+            dipole_saw_pos_dec_);
+        dipole_latest_ = ModuleBase::Vector3<double>(0.0, 0.0, p);
+        delta_v_latest_ = DipoleObserver::potential_drop(p, *ucell_);
+    }
+    // Branch: molecular frame (default).
+    else
+    {
+        dipole_latest_ = DipoleObserver::molecular(
+            *ucell_, wg_->rho_basis(), rho, nspin, dipole_origin_);
+        delta_v_latest_ = 0.0;
+    }
+}
+
+double ConstraintLoop::q_dip(bool& valid) const
+{
+    valid = dipole_report_ && dipole_ref_valid_ && frag_valid_;
+    // Guard: without a reference snapshot or a fragment pair the transfer
+    // is undefined (the report prints the raw dipole only).
+    if (!valid)
+    {
+        return 0.0;
+    }
+    return DipoleObserver::charge_transfer(dipole_latest_, dipole_ref_,
+                                           frag_a_, frag_b_);
+}
+
+void ConstraintLoop::print_dipole_report() const
+{
+    // Debye: 1 e*Bohr = 2.541746 D.
+    const double eBohr_to_debye = 2.541746;
+    GlobalV::ofs_running << "[constraint] dipole report (frame="
+                         << dipole_frame_;
+    // Branch: molecular frame prints its origin; the saw frame prints the
+    // resolved decay-plane parameters instead.
+    if (dipole_frame_ == "molecular")
+    {
+        GlobalV::ofs_running << ", origin=(" << dipole_origin_.x << ", "
+                             << dipole_origin_.y << ", " << dipole_origin_.z
+                             << ") Bohr";
+    }
+    else
+    {
+        GlobalV::ofs_running << ", pos_max=" << saw_pos_max_live_
+                             << ", pos_dec=" << dipole_saw_pos_dec_;
+    }
+    GlobalV::ofs_running << ")\n";
+    GlobalV::ofs_running << "  p      = (" << dipole_latest_.x << ", "
+                         << dipole_latest_.y << ", " << dipole_latest_.z
+                         << ") e*Bohr  (|p| = "
+                         << dipole_latest_.norm() * eBohr_to_debye
+                         << " Debye)\n";
+    // Branch: reference snapshot available -> print the q_dip origin.
+    if (dipole_ref_valid_)
+    {
+        GlobalV::ofs_running << "  p_ref  = (" << dipole_ref_.x << ", "
+                             << dipole_ref_.y << ", " << dipole_ref_.z
+                             << ") e*Bohr (reference phase)\n";
+    }
+    // Branch: saw frame adds the derived potential drop.
+    if (dipole_frame_ == "saw")
+    {
+        GlobalV::ofs_running
+            << "  deltaV = " << delta_v_latest_ * ModuleBase::Hartree_to_eV
+            << " V  (4*pi*p_saw/A; positive: potential higher at +z)\n";
+    }
+    bool qd_valid = false;
+    const double qd = q_dip(qd_valid);
+    // Branch: a fragment pair exists -> print the dipole-derived transfer.
+    if (qd_valid)
+    {
+        const ModuleBase::Vector3<double> d = frag_a_ - frag_b_;
+        GlobalV::ofs_running << "  q_dip  = " << qd
+                             << " e  (dipole-derived; fragment vs rest, R = "
+                             << d.norm() << " Bohr; Becke q above is the "
+                                "bookkeeping counterpart -- property-1 5.3)\n";
+    }
 }
 
 void ConstraintLoop::outer_step(const int iter, bool& conv_esolver)
@@ -320,6 +543,10 @@ void ConstraintLoop::outer_step(const int iter, bool& conv_esolver)
     {
         // Reference convergence: record Q_ref and build the targets.
         Q_ref_ = Q_;
+        // Module A: snapshot the reference dipole with the reference
+        // charges (the q_dip origin, delta semantics).
+        dipole_ref_ = dipole_latest_;
+        dipole_ref_valid_ = dipole_report_;
         targets_.resize(Q_.size());
         for (size_t a = 0; a < Q_.size(); ++a)
         {
@@ -775,6 +1002,12 @@ void ConstraintLoop::final_report()
                                 "converged — raise scf_nmax)\n";
     }
     GlobalV::ofs_running << last_audit_line_ << "\n";
+    // Module A (M1): the dipole block rides the final report; off by
+    // default, so the historical output is byte-identical when disabled.
+    if (dipole_report_)
+    {
+        print_dipole_report();
+    }
 }
 
 double ConstraintLoop::mu_norm() const

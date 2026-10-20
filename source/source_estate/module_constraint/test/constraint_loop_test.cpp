@@ -54,6 +54,32 @@ class ConstraintLoopTest : public ::testing::Test
     double dV = 0.0;
     constraint::WeightGrid* wg = nullptr; // single-constraint map {atom 0}
 
+    // Atomic-superposition Gaussian density on the rho grid (sigma = 1).
+    void fill_gaussian_rho(const std::vector<std::array<double, 3>>& centers,
+                           const std::vector<double>& nelec_atom,
+                           std::vector<double>& rho) const
+    {
+        const double sigma = 1.0;
+        rho.assign(rhopw->nrxx, 0.0);
+        for (int ir = 0; ir < rhopw->nrxx; ++ir)
+        {
+            const int i = ir / (rhopw->ny * rhopw->nplane);
+            const int j = ir / rhopw->nplane - i * rhopw->ny;
+            const int k = ir % rhopw->nplane + rhopw->startz_current;
+            const ModuleBase::Vector3<double> rfrac(
+                static_cast<double>(i) / rhopw->nx,
+                static_cast<double>(j) / rhopw->ny,
+                static_cast<double>(k) / rhopw->nz);
+            const ModuleBase::Vector3<double> rc
+                = rfrac * ucell->latvec * ucell->lat0;
+            const std::array<double, 3> r{rc.x, rc.y, rc.z};
+            for (size_t I = 0; I < centers.size(); ++I)
+            {
+                rho[ir] += nelec_atom[I] * gaussian(r, centers[I], sigma);
+            }
+        }
+    }
+
     void SetUp() override
     {
         Set_GlobalV_Default();
@@ -1357,4 +1383,184 @@ TEST_F(ConstraintLoopTest, InnerGuards)
                                conv, /*scf_conv_in=*/false));
     EXPECT_EQ(loop.inner_steps(), 1);
     EXPECT_NE(loop.mu()[0], mu_after_ref);
+}
+
+// M1 dipole reporting through the loop: init arms the reporter from cfg,
+// observe() refreshes the value, and the REFERENCE->CONSTRAINED transition
+// snapshots p_ref alongside Q_ref.
+TEST_F(ConstraintLoopTest, DipoleReportLifecycle)
+{
+    // The fixture does not read a pseudopotential: supply the ionic valence
+    // charges used by the dipole formulas (O 6, H 1).
+    ucell->atoms[0].ncpp.zv = 6.0;
+    ucell->atoms[1].ncpp.zv = 1.0;
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    constraint::ConstraintConfig cfg = make_cfg(0.1);
+    cfg.dipole_report = true;
+    cfg.dipole_frame = "molecular";
+    loop.init(*ucell, rhopw, cfg, radii, 10.0);
+    ASSERT_TRUE(loop.enabled());
+    ASSERT_EQ(loop.phase(), constraint::LoopPhase::REFERENCE);
+
+    // Density: neutral on-atom Gaussians (N_I = Z*_I = {6,1,1}) with the O
+    // cloud displaced +1 Bohr in z -> p = (0, 0, -6) e*Bohr.
+    std::vector<double> rho(rhopw->nrxx, 0.0);
+    {
+        const double sigma = 1.0;
+        std::vector<std::array<double, 3>> centers = pos;
+        centers[0][2] += 1.0;
+        const std::vector<double> ne = {6.0, 1.0, 1.0};
+        for (int ir = 0; ir < rhopw->nrxx; ++ir)
+        {
+            const int i = ir / (rhopw->ny * rhopw->nplane);
+            const int j = ir / rhopw->nplane - i * rhopw->ny;
+            const int k = ir % rhopw->nplane + rhopw->startz_current;
+            const ModuleBase::Vector3<double> rfrac(
+                static_cast<double>(i) / rhopw->nx,
+                static_cast<double>(j) / rhopw->ny,
+                static_cast<double>(k) / rhopw->nz);
+            const ModuleBase::Vector3<double> rc
+                = rfrac * ucell->latvec * ucell->lat0;
+            const std::array<double, 3> r{rc.x, rc.y, rc.z};
+            for (size_t I = 0; I < pos.size(); ++I)
+            {
+                rho[ir] += ne[I] * gaussian(r, centers[I], sigma);
+            }
+        }
+    }
+    const double* rp[1] = {rho.data()};
+    loop.observe(1, rp, 1);
+    EXPECT_NEAR(loop.dipole().z, -6.0, 1e-6);
+    EXPECT_FALSE(loop.dipole_ref_valid());
+
+    // Close the reference phase: the snapshot must carry the same dipole.
+    bool conv = true;
+    loop.on_scf_converged(2, conv);
+    EXPECT_EQ(loop.phase(), constraint::LoopPhase::CONSTRAINED);
+    ASSERT_TRUE(loop.dipole_ref_valid());
+    EXPECT_NEAR(loop.dipole_ref().z, -6.0, 1e-6);
+
+    // q_dip: single constraint {0} -> counter-fragment {1,2}; at the
+    // reference point p == p_ref, so q_dip = 0.
+    bool qd_valid = false;
+    const double qd = loop.q_dip(qd_valid);
+    ASSERT_TRUE(qd_valid);
+    EXPECT_NEAR(qd, 0.0, 1e-12);
+}
+
+// Default off: the reporter stays inert and dipole_ref never validates.
+TEST_F(ConstraintLoopTest, DipoleReportDefaultOff)
+{
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    loop.init(*ucell, rhopw, make_cfg(0.1), radii, 10.0);
+    const double* rp[1] = {rho_ref.data()};
+    loop.observe(1, rp, 1);
+    bool conv = true;
+    loop.on_scf_converged(2, conv);
+    EXPECT_FALSE(loop.dipole_ref_valid());
+    bool qd_valid = true;
+    EXPECT_NEAR(loop.q_dip(qd_valid), 0.0, 1e-12);
+    EXPECT_FALSE(qd_valid);
+}
+
+// Saw frame: only p_z is physical.  The fragment centers carry a lateral
+// offset (dx = -4, dz = -5 Bohr); init must project them onto the z axis so
+// q_dip = dp_z / d_z, not the diluted 3D value dp.d/|d|^2.
+TEST_F(ConstraintLoopTest, SawQdipProjectsLateralOffset)
+{
+    ucell->atoms[0].ncpp.zv = 6.0;
+    ucell->atoms[1].ncpp.zv = 1.0;
+    // Separate the two H (fragment {1,2}) from O in BOTH x and z:
+    // H -> (15.2,10,15), (12.8,10,15) Bohr; O stays at (10,10,10).
+    for (int ia = 0; ia < ucell->atoms[1].na; ++ia)
+    {
+        ucell->atoms[1].taud[ia].x += 0.2;  // +4 Bohr
+        ucell->atoms[1].taud[ia].z += 0.25; // +5 Bohr
+    }
+    const std::vector<std::array<double, 3>> pos2 = h2o_positions(*ucell);
+    const double dz = pos2[0][2] - 0.5 * (pos2[1][2] + pos2[2][2]);
+    const double dx = pos2[0][0] - 0.5 * (pos2[1][0] + pos2[2][0]);
+    ASSERT_NEAR(dx, -4.0, 1e-12);
+    ASSERT_NEAR(dz, -5.0, 1e-12);
+
+    constraint::ConstraintConfig cfg;
+    cfg.enabled = true;
+    cfg.type = "charge";
+    cfg.weight_type = "becke";
+    cfg.target_mode = "delta";
+    cfg.mu_max = 5.0;
+    cfg.thr = 1e-4;
+    constraint::ConstraintTarget ta;
+    ta.value = 0.1;
+    ta.atoms = {0};
+    constraint::ConstraintTarget tb;
+    tb.value = -0.1;
+    tb.atoms = {1, 2};
+    cfg.targets = {ta, tb};
+    cfg.dipole_report = true;
+    cfg.dipole_frame = "saw";
+
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    loop.init(*ucell, rhopw, cfg, radii, 10.0);
+    std::vector<double> rho;
+    fill_gaussian_rho(pos2, {6.0, 1.0, 1.0}, rho);
+    const double* rp[1] = {rho.data()};
+    loop.observe(1, rp, 1);
+    bool conv = true;
+    loop.on_scf_converged(2, conv);
+    ASSERT_TRUE(loop.dipole_ref_valid());
+
+    // Displace the O electron cloud by +1 Bohr in z: dp_z != 0.
+    std::vector<std::array<double, 3>> centers = pos2;
+    centers[0][2] += 1.0;
+    fill_gaussian_rho(centers, {6.0, 1.0, 1.0}, rho);
+    loop.observe(3, rp, 1);
+    const double dpz = loop.dipole().z - loop.dipole_ref().z;
+    ASSERT_GT(std::fabs(dpz), 1.0); // the toy signal is ~6 e*Bohr
+
+    bool qd_valid = false;
+    const double qd = loop.q_dip(qd_valid);
+    ASSERT_TRUE(qd_valid);
+    EXPECT_NEAR(qd, dpz / dz, 1e-10);
+    // The unprojected 3D formula would give dpz*dz/(dx^2+dz^2) = 25/41 of
+    // the projected result -- the regression this test pins down.
+    const double q3d = dpz * dz / (dx * dx + dz * dz);
+    EXPECT_GT(std::fabs(qd - q3d), 1e-2);
+}
+
+// Saw frame guard: fragment centers on the same z plane carry no physical
+// separation -> q_dip must be reported as invalid.
+TEST_F(ConstraintLoopTest, SawQdipRequiresZSeparation)
+{
+    ucell->atoms[0].ncpp.zv = 6.0;
+    ucell->atoms[1].ncpp.zv = 1.0;
+    constraint::ConstraintConfig cfg;
+    cfg.enabled = true;
+    cfg.type = "charge";
+    cfg.weight_type = "becke";
+    cfg.target_mode = "delta";
+    cfg.mu_max = 5.0;
+    cfg.thr = 1e-4;
+    constraint::ConstraintTarget ta;
+    ta.value = 0.1;
+    ta.atoms = {0};
+    constraint::ConstraintTarget tb;
+    tb.value = -0.1;
+    tb.atoms = {1, 2};
+    cfg.targets = {ta, tb};
+    cfg.dipole_report = true;
+    cfg.dipole_frame = "saw";
+
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    loop.init(*ucell, rhopw, cfg, radii, 10.0);
+    std::vector<double> rho;
+    fill_gaussian_rho(pos, {6.0, 1.0, 1.0}, rho);
+    const double* rp[1] = {rho.data()};
+    loop.observe(1, rp, 1);
+    bool conv = true;
+    loop.on_scf_converged(2, conv);
+    ASSERT_TRUE(loop.dipole_ref_valid());
+    bool qd_valid = true;
+    EXPECT_NEAR(loop.q_dip(qd_valid), 0.0, 1e-12);
+    EXPECT_FALSE(qd_valid);
 }
