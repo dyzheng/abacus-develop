@@ -470,6 +470,16 @@ void ConstraintLoop::warm_reinit(
         mu_caps_.push_back(spec.mu_max);
     }
     build_geometry(ucell, rho_basis, radii, specs_);
+    // A new geometry is a new fixed-point problem: drop the INNER-schedule
+    // state bound to the previous frame.  A stale settle_armed_ would
+    // otherwise re-adjudicate this geometry's first SCF against the old
+    // convergence claim (and count a bogus bounce) before any new inner
+    // step is allowed; the budget is per geometry by design.
+    inner_steps_ = 0;
+    settle_fail_ = 0;
+    settle_armed_ = false;
+    inner_step_this_iter_ = false;
+    last_reset_iter_ = 0;
     // The first SCF of the new geometry is a probe at the carried mu: no
     // inner updates may move mu before Q(mu_prev) is observed.
     inner_active_ = false;
@@ -487,9 +497,9 @@ void ConstraintLoop::warm_reinit(
     GlobalV::ofs_running
         << "[constraint] WARM_START: geometry rebuilt, mu carried (|mu|="
         << mu_norm() << " Ry), phase=constrained"
-        << (warm_pending_ ? "; delta Q_ref will be re-derived at the first "
-                            "converged SCF"
-                          : "")
+        << ((cfg_.target_mode == "delta")
+                ? "; delta Q_ref will be re-derived at the first converged SCF"
+                : "; secant history will be rebound at the first converged SCF")
         << "\n";
 }
 

@@ -1603,6 +1603,62 @@ TEST_F(ConstraintLoopTest, WarmStartKeepsMuAndPhase)
     EXPECT_DOUBLE_EQ(loop.mu()[0], 0.0);
 }
 
+// Warm start must drop the INNER-schedule state that belonged to the previous
+// geometry.  In particular a settle_armed_ left behind by the old frame would
+// otherwise re-adjudicate the first SCF of the new geometry against the old
+// convergence claim (and count a bogus settle bounce) before the new frame
+// has taken any inner step.
+TEST_F(ConstraintLoopTest, WarmStartClearsInnerSettleState)
+{
+    PARAM.input.calculation = "relax";
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    constraint::ConstraintConfig cfg = make_cfg(0.1, 5.0, 1e-10);
+    cfg.target_mode = "absolute";
+    cfg.targets[0].value = Q_of(rho_ref) + 0.1;
+    cfg.warm_start = true;
+    cfg.mu_schedule = "inner";
+    cfg.inner_thr = 1e-3;
+    cfg.inner_nmax = 10;
+    loop.init(*ucell, rhopw, cfg, radii, 10.0, /*istep=*/0);
+    std::vector<double> rho;
+    bool conv = false;
+    int iter = 0;
+    // Drive the first geometry through the INNER path to a CONVERGED state.
+    // The final settle check leaves settle_armed_ set (the claim PASSED, so
+    // the flag is not cleared on the success path).
+    while (loop.status() == constraint::MuStatus::RUNNING && iter < 20)
+    {
+        ++iter;
+        mock_iteration(loop, rho, iter, loop.mu()[0], 1e-9, conv, true);
+    }
+    ASSERT_EQ(loop.status(), constraint::MuStatus::CONVERGED);
+    ASSERT_GT(loop.inner_steps(), 0); // INNER path did the work
+    EXPECT_EQ(loop.settle_failures(), 0);
+
+    // New geometry: move the constrained atom so the rebuilt weight field
+    // shifts Q_ref well beyond the tight convergence threshold below.
+    ucell->atoms[0].taud[0].x += 0.2;
+    wg->build();
+    loop.init(*ucell, rhopw, cfg, radii, 10.0, /*istep=*/1);
+    ASSERT_TRUE(loop.warm_started_last_init());
+    EXPECT_EQ(loop.inner_steps(), 0);     // per-geometry budget
+    EXPECT_EQ(loop.settle_failures(), 0); // no stale bounce count
+
+    // Probe at the carried mu: absolute targets stay put, and the geometry
+    // shift leaves a residual above cfg.thr, so the loop continues.
+    mock_iteration(loop, rho, iter + 1, loop.mu()[0], 1e-9, conv, true);
+    ASSERT_EQ(loop.status(), constraint::MuStatus::RUNNING);
+    ASSERT_FALSE(loop.done());
+
+    // Next SCF convergence with the density gate closed (drho > inner_thr):
+    // no inner step is taken this iteration.  With a stale settle_armed_ the
+    // settle check would run on this deliberately off-target density and
+    // record a bounce; a clean per-geometry state leaves it untouched.
+    mock_iteration(loop, rho, iter + 2, loop.mu()[0] + 0.01, 1e-2, conv,
+                   true);
+    EXPECT_EQ(loop.settle_failures(), 0);
+}
+
 // Delta warm start: the first converged observation of the new geometry is
 // taken at the carried mu; Q_ref is re-derived as Q_obs - kappa*mu, and the
 // targets follow the new geometry instead of the old reference.
