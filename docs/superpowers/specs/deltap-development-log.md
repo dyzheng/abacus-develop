@@ -5323,3 +5323,59 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   设计文档、测试报告、本日志。
 - **下一步**：按 Task 粒度拆分 commit；随后开 M2 计划（μ 跨离子步热启动 +
   FIXED_MU 产品化，设计文档 §5.1/5.4）。
+
+## 2026-10-20 (16): M2 热启动 + 定 μ 实现与验证
+
+- **完成内容（plan `2026-10-20-m2-warmstart-fixedmu.md` Task 1-5）**：
+  1. INPUT 管道 + v2 `fixed_mu` schema（all-or-none、`|fixed_mu| <= mu_max`、
+     与 `branch_tol` 互斥）；`constraint_warm_start` 默认 true。
+  2. `MuSolver::rebind()/slope()`：跨几何把 secant 历史锚到新几何首收敛点，
+     保留上一几何 κ，清除陈旧 Q 历史与 fuse 状态。
+  3. `ConstraintLoop::init(..., istep)` 冷/热双路径：暖几何重建 `WeightGrid`/偶极，
+     保留 μ、clamp 后 κ 与 `CONSTRAINED` phase；首收敛点 rebind（absolute/delta
+     两模式）；delta 反推 `Q_ref = Q_obs - slope*mu_prev` 并重建 target。
+  4. 暖几何 `dipole_ref_valid_=false`，能量分支守卫跳过并每冷几何提示一次；
+     esolver 传入 `istep`。
+  5. v2 `fixed_mu` 产品模式：全 fixed 列表每帧一次 SCF，优先级高于暖启动与 env；
+     最终输出 `FIXED_MU (mu fixed by the v2 target file; targets are labels, not enforced)`；
+     env 旧字符串逐字节保留。
+- **提交**：`a52e1fe2f`（INPUT/schema）、`68ca41094`（MuSolver rebind/slope）、
+  `1869beb40`（冷/暖 init + istep）、`10278cae3`（delta Q_ref 反推）、
+  `548c8017f`（fixed_mu v2）、`e2a591316`（暖启动 INNER 状态清理 + 日志区分）。
+- **单元验证**：`ctest -j 32 -R constraint` **12/12 PASS**，45.71 s；
+  `MODULE_ESTATE_constraint_loop` 35 个用例全过；`abacus_basic_para` 构建成功。
+  全量 `cmake --build build` 仍被既有无关测试目标阻断（charge test/mixing/extra 链接、
+  `InfoNonlocal` 类型缺失）。
+- **absolute 冷/热对比**（h2o_dimer，0.001 e，CG，`scf_nmax 100`，np8）：
+  warm 第 2 帧 46 iter / `q=9.993850881` / `mu=-0.002530262458 Ry` / 176 s；
+  cold 77 iter / `q=9.993852985` / `mu=-0.002533935749 Ry` / 204 s。
+  迭代减少 **40.3%**、墙钟减少 **13.7%**，q 差 `2.1e-6 e`、μ 差 **0.145%**；
+  **计划判据 `warm <= cold/3` 未达到**（46 > 25.67），原因是几何变化后最优 μ
+  移动，warm 仍需 2 个外层步（cold 3 个），首个约束 SCF 本身约 20 步。
+- **delta 冒烟**：暖日志出现 `Q_ref re-derived`；target 从 `9.993852052` 更新为
+  `9.993386406`，carried μ 不变，首约束收敛点 residual 0；总墙钟 157 s。
+- **fixed_mu 冒烟**：`fixed_mu = ∓0.002533935749 Ry`（来源：cold 收敛 μ）；
+  两帧分别 30/19 个 SCF 迭代，`FIXED_MU`；第 2 帧 Q 与 cold 同 μ 值差 `4.66e-7 e`
+  （判据 1e-2），总墙钟 102 s。fixed audit 仍复用 `outer step 1` 标签，实际无外层迭代。
+- **100 步失败诊断**（按要求不提高上限）：
+  - 0.01 e / BFGS 第 2 帧：warm 末 res `-1.1128e-2 e`、cold `9.6146e-2 e`，均 RUNNING；
+    drho 呈锯齿（warm 40:6.45e-8 → 50:9.78e-3 → 100:2.73e-4；
+    cold 80:1.40e-7 → 90:1.89e-2 → 100:2.14e-3）。
+  - 0.05 e / BFGS 首帧：GE100 drho `1.5735e-2`，末 res `-2.1086e-2 e`，未收敛。
+  - 结论：瓶颈是每次 μ 更新后的约束相 SCF 重建（两层循环签名），不是热启动接线。
+- **Bug/fix list**：
+  1. v2 fixed 分支初版漏 `targets_.resize(specs_.size())`，fixed 帧审计/输出会越界
+     segfault；已在 `548c8017f` 修复。
+  2. 暖启动复用 INNER 状态：`settle_armed_`/`settle_fail_`/`inner_steps_`/
+     `inner_step_this_iter_`/`last_reset_iter_` 属于上一几何，若不清理会让新几何首个
+     SCF 被旧 settle 结论误判并记录伪 bounce。`warm_reinit()` 已清零；
+     新增 `WarmStartClearsInnerSettleState`，移除清理时稳定失败（`inner_steps=2`、
+     `settle_failures=1`），恢复后通过（`e2a591316`）。
+  3. 暖启动日志原按 `warm_pending_` 分支，absolute 模式不打印 rebind 信息；改为按
+     `target_mode` 区分 delta/absolute（同一提交）。
+- **文件**：`constraint_io.{h,cpp}`、`mu_solver.{h,cpp}`、`constraint_loop.{h,cpp}`、
+  `input_parameter.h`、`read_input_item_other.cpp`、esolver init 调用点、
+  `test/constraint_{io,mu_solver,loop}_test.cpp`；
+  `docs/superpowers/specs/2026-10-20-m2-warmstart-fixedmu-test.md`（新建）。
+- **下一步**：M2 关闭；开 M3 计划（设计 §5.2/§5.3 信赖域/自适应 SCF），
+  以本轮 drho 锯齿与 SCF 重建成本为目标；warm-start 状态持久化作为 M3/M4 基础。
