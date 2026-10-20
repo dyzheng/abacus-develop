@@ -5266,3 +5266,60 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   **不需要改 esolver**；p_ref 快照点 constraint_loop.cpp:322（Q_ref_ 同点）；
   fixed_mu 早退分支之前必须布防 dipole init；saw 语义镜像 efield.cpp:234-251。
 - 下一轮：执行 M1（subagent-driven 或 inline），完成后开 M2 计划。
+
+## 2026-10-20 (14): M1 偶极报告实现 + 单元/集成验证
+
+- **完成内容（plan `2026-10-20-m1-dipole-report.md` Task 1-6）**：
+  1. 新增 4 个 INPUT：`constraint_dipole_report/frame/saw_pos_max/saw_pos_dec`
+     及 `ConstraintConfig` 管道与守卫（未知 frame、saw 参数、非 z 正交晶胞、nspin=4）；
+  2. 新增 `constraint_dipole.{h,cpp}`：`DipoleObserver` 分子偶极、saw 偶极、ΔV、
+     q_dip、离子中心、自动选面、跳变面距离；
+  3. `ConstraintLoop`：`observe()` 被动更新、REFERENCE→CONSTRAINED 时 p_ref 随 Q_ref
+     同点快照、`final_report()` 偶极块、`q_dip(bool&)`；
+  4. 新增 `MODULE_ESTATE_constraint_dipole`（8 测试）+ io/loop 级新用例；
+  5. CMake 接线（estate 库、test 目标、loop 测试 SOURCES）。
+- **验证**：
+  - 单元：dipole 8/8、io、loop 全部 PASS；`ctest -R constraint` 10/12
+    （2 个 MPI 测试因本机 OpenMPI daemon 无法启动而失败，环境性）。
+  - h2o_dimer（LCAO，`scf_nmax 100`）：默认关闭无 dipole block；开启 molecular/saw
+    均输出正确块；三种运行 drho 轨迹逐位相同（纯观测）。
+  - 100 步内 reference 在 iter 30 收敛（7.7e-8），但约束相只完成 2 次 outer step，
+    iter 100 drho=1.27e-2 未收敛；旧 400 步归档需 318 步（既有约束收敛成本，
+    M2/M3 目标）。
+  - LiCl（PW，18 步）：|p|=6.8702 D vs 性质1 6.8665 D（+0.054%），q_dip=0，
+    Li Becke q=3.095941178（回归不变）。
+- **文件**：`source/source_estate/module_constraint/constraint_dipole.{h,cpp}`（新建）；
+  `test/constraint_dipole_test.cpp`（新建）；`constraint_io.{h,cpp}`、
+  `constraint_loop.{h,cpp}`、`input_parameter.h`、`read_input_item_other.cpp`、
+  `source_estate/CMakeLists.txt`、`test/CMakeLists.txt`、
+  `test/constraint_io_test.cpp`、`test/constraint_loop_test.cpp`；
+  `docs/superpowers/specs/2026-10-20-m1-dipole-report-test.md`（新建）。
+- **Bug/fix list**：无新增物理 bug。实现期修正两处计划笔误：
+  ① `ModuleBase::Matrix3` 无 `operator()`，改 `latvec.e13/e23/e31/e32/e33`；
+  ② 测试目标未定义 `__MPI` 时仍需避免 `MPI_Allreduce`，reduce 调用按既有
+  `constraint_observe.cpp` 风格加 `#ifdef __MPI`。
+- **下一轮**：编写并执行 M2 计划（C1 热启动 + C4 定 μ 产品化）；`MODULE_ESTATE_charge_mixing`
+  的 mock 链接问题另行处理。
+
+## 2026-10-20 (15): M1 评审闭合（With fixes → 可合入）
+
+- **评审结论**：独立子代理复核 diff/计划/AGENTS.md 并重跑测试；物理公式、网格约定、
+  MPI 归约、p_ref 与 Q_ref 同点快照、fixed_mu 早退前布防、默认关闭回归、真实对拍
+  与分支注释均无 Critical 问题。合入前需修 1 个 Important + 5 个 Minor。
+- **修复**：
+  1. Important：saw frame 的 q_dip 只取 z 分量。`init` 在 saw frame 下把两片段中心
+     投影到 z 轴（x,y=0），并加 `|Δz|<1e-6 → frag_valid_=false` 守卫；h2o_dimer saw
+     的 R 从 5.4801→5.46192 Bohr、q_dip 从 -0.182055→-0.183269 e，drho 轨迹逐位不变。
+  2. `min_atom_decay_distance` 头注释改为"窗口内 0，否则到最近边的周期距离"。
+  3. auto 选面解析后补跑 1 Bohr 跳变面警告（显式 pos_max 仍由 init 检查）。
+  4. 设计文档 §3.1 回写：参考点=全胞离子电荷中心；q_dip 由 p−p_ref 消去原点；
+     saw 的 d 为 z 投影并带 Δz→0 守卫。
+  5. 新增打印串 em-dash → `--`（只改本轮新增串）。
+  6. 新增 loop 测试 `SawQdipProjectsLateralOffset`（dx=-4,dz=-5 时验证 25/41 稀释
+     被消除）与 `SawQdipRequiresZSeparation`（Δz=0 → q_dip invalid）。
+- **验证**：`MODULE_ESTATE_constraint_{dipole,io,loop}` 3/3 通过；saw 集成重跑完成，
+  轨迹与默认关闭运行逐位一致；测试报告 §3.7 记录修复前后数值。
+- **文件**：`constraint_loop.cpp`、`constraint_dipole.h`、`constraint_loop_test.cpp`、
+  设计文档、测试报告、本日志。
+- **下一步**：按 Task 粒度拆分 commit；随后开 M2 计划（μ 跨离子步热启动 +
+  FIXED_MU 产品化，设计文档 §5.1/5.4）。
