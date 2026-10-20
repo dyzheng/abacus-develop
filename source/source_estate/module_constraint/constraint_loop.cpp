@@ -450,6 +450,38 @@ void ConstraintLoop::warm_reinit(
         << "\n";
 }
 
+void ConstraintLoop::finish_warm_start()
+{
+    // Anchor at the new geometry: the previous Q_prev belongs to another
+    // ionic configuration and must not enter the slope.
+    mu_solver_.rebind(mu_, Q_);
+    // Branch: delta mode -> the target is measured relative to THIS
+    // geometry's free reference.  Q(mu_prev) = Q_ref + kappa*mu_prev, so
+    // Q_ref = Q_obs - kappa*mu_prev with the kappa carried across the step.
+    if (cfg_.target_mode == "delta")
+    {
+        for (size_t a = 0; a < mu_.size(); ++a)
+        {
+            Q_ref_[a] = Q_[a]
+                        - mu_solver_.slope(static_cast<int>(a)) * mu_[a];
+            targets_[a] = Q_ref_[a] + specs_[a].target;
+        }
+        GlobalV::ofs_running
+            << "[constraint] WARM_START delta: Q_ref re-derived from the new "
+               "geometry (targets rebuilt)\n";
+        for (size_t a = 0; a < mu_.size(); ++a)
+        {
+            GlobalV::ofs_running
+                << "  c[" << a << "]: mu_prev=" << mu_[a]
+                << " Ry, Q_ref=" << Q_ref_[a] << " e\n";
+        }
+    }
+    // The probe is over: re-arm the INNER schedule (if selected) so later
+    // SCF iterations may update mu again.
+    inner_active_ = inner_schedule_;
+    warm_pending_ = false;
+}
+
 void ConstraintLoop::inject_potential(const int iter,
                                       ModuleBase::matrix& v_eff,
                                       ModuleBase::matrix& veff_smooth)
@@ -904,7 +936,14 @@ void ConstraintLoop::on_scf_converged(const int iter, bool& conv_esolver)
             }
         }
     }
-    // Branch C: converged SCF with an active outer loop — outer step.
+    // Branch: the first converged SCF of a warm-started geometry.  Q_ is the
+    // observation at the carried mu; anchor the secant history there and (in
+    // delta mode) re-derive the geometry's free reference before stepping.
+    if (warm_pending_)
+    {
+        finish_warm_start();
+    }
+    // Branch C: converged SCF with an active outer loop -- outer step.
     outer_step(iter, conv_esolver);
 }
 

@@ -222,6 +222,7 @@ class ConstraintLoop
                      const std::vector<ConstraintSpec>& specs,
                      const std::vector<double>& radii,
                      const double nelec);
+    void finish_warm_start();
     // Run one outer step from the current charges Q_ against targets_.
     void outer_step(const int iter, bool& conv_esolver);
     // One INNER-schedule mu update from the current observation.  Returns true

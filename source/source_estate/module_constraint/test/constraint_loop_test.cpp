@@ -1602,3 +1602,73 @@ TEST_F(ConstraintLoopTest, WarmStartKeepsMuAndPhase)
     EXPECT_EQ(loop.phase(), constraint::LoopPhase::REFERENCE);
     EXPECT_DOUBLE_EQ(loop.mu()[0], 0.0);
 }
+
+// Delta warm start: the first converged observation of the new geometry is
+// taken at the carried mu; Q_ref is re-derived as Q_obs - kappa*mu, and the
+// targets follow the new geometry instead of the old reference.
+TEST_F(ConstraintLoopTest, WarmStartDeltaRedefinesTarget)
+{
+    PARAM.input.calculation = "relax";
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    constraint::ConstraintConfig cfg = make_cfg(0.1);
+    cfg.warm_start = true;
+    loop.init(*ucell, rhopw, cfg, radii, 10.0, 0);
+    std::vector<double> rho;
+    bool conv = false;
+    int iter = 0;
+    while (loop.status() == constraint::MuStatus::RUNNING && iter < 20)
+    {
+        ++iter;
+        mock_iteration(loop, rho, iter, loop.mu()[0], 1e-9, conv, true);
+    }
+    ASSERT_EQ(loop.status(), constraint::MuStatus::CONVERGED);
+    const double target_old = loop.targets()[0]; // Q_ref(old) + 0.1
+
+    // New geometry: warm re-init, then hand in the first converged
+    // observation at the carried mu (mock rho built by mock_iteration).
+    ucell->atoms[1].taud[0].x += 0.05;
+    wg->build(); // test-side weights follow the moved geometry
+    loop.init(*ucell, rhopw, cfg, radii, 10.0, 1);
+    mock_iteration(loop, rho, iter + 1, loop.mu()[0], 1e-9, conv, true);
+    // Q_ref moved with the geometry: the re-derived target differs from the
+    // old one (mock: Q_ref re-derived = Q_obs - (-1)*mu is the exact new
+    // free reference, so the shift is purely the geometry's weight change).
+    EXPECT_NE(loop.targets()[0], target_old);
+}
+
+TEST_F(ConstraintLoopTest, WarmStartAbsoluteKeepsTarget)
+{
+    PARAM.input.calculation = "relax";
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    constraint::ConstraintConfig cfg = make_cfg(0.1);
+    cfg.target_mode = "absolute";
+    // Absolute target close to the free reference so the unit-stiffness
+    // mock converges in ~3 steps: Q* = Q_ref + 0.1 -> mu* = -0.1.
+    cfg.targets[0].value = Q_of(rho_ref) + 0.1;
+    cfg.warm_start = true;
+    loop.init(*ucell, rhopw, cfg, radii, 10.0, 0);
+    std::vector<double> rho;
+    bool conv = false;
+    int iter = 0;
+    while (loop.status() == constraint::MuStatus::RUNNING && iter < 20)
+    {
+        ++iter;
+        mock_iteration(loop, rho, iter, loop.mu()[0], 1e-9, conv, true);
+    }
+    ASSERT_EQ(loop.status(), constraint::MuStatus::CONVERGED);
+    const double target_old = loop.targets()[0];
+    // The measured unit slope is the kappa carried into the warm geometry.
+    EXPECT_NEAR(loop.solver_slope(0), -1.0, 1e-9);
+
+    // Warm re-init (absolute): the rebind must anchor the history at the
+    // carried mu even though no Q_ref re-derivation happens.
+    ucell->atoms[1].taud[0].x += 0.05;
+    loop.init(*ucell, rhopw, cfg, radii, 10.0, 1);
+    ASSERT_TRUE(loop.warm_started_last_init()); // really the warm path
+    mock_iteration(loop, rho, iter + 1, loop.mu()[0], 1e-9, conv, true);
+    EXPECT_DOUBLE_EQ(loop.targets()[0], target_old);
+    // Slope-pollution assertion: with the rebind the first warm step saw
+    // dmu_obs == 0 and kept the retained slope; without it the step would
+    // have recorded a cross-geometry pseudo-slope instead.
+    EXPECT_NEAR(loop.solver_slope(0), -1.0, 1e-9);
+}
