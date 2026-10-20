@@ -5379,3 +5379,55 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   `docs/superpowers/specs/2026-10-20-m2-warmstart-fixedmu-test.md`（新建）。
 - **下一步**：M2 关闭；开 M3 计划（设计 §5.2/§5.3 信赖域/自适应 SCF），
   以本轮 drho 锯齿与 SCF 重建成本为目标；warm-start 状态持久化作为 M3/M4 基础。
+
+## 2026-10-20 (17): M3 信赖域 + 渐进 SCF + 鲁棒性实现与验证
+
+- **完成内容（plan `2026-10-20-m3-trustregion-progressive-robustness.md` Task 1-6）**：
+  1. INPUT/Config：`constraint_trust_region`、`constraint_progressive_scf`、
+     `constraint_mag_anchor`、`constraint_mag_tol`；`constraint_branch_tol=-1`
+     auto（spin 非 fixed -> 1e-3 Ry，charge/全 fixed -> 0）；
+     `mag_anchor` 需要 trust、正 tol、nspin=2 的互斥守卫。
+  2. `MuSolver`：独立 trust-region/Broyden/reject 路径；旧分量 secant 原样保留；
+     ρ=实际/预测最大残差下降，好步半径×2、坏步×0.5 并回退 μ；reduced active set
+     + 部分主元求解；奇异 J 回退对角 secant；连续 20 次拒绝永久回退旧路径；
+     `rebind()` 重置 J/pending/radius。
+  3. `ConstraintLoop`：trust 参数映射、`consume_trust_rollback()`、
+     审计行 opt-in 追加 `trust_radius/trust_rej`；PW/LCAO 在回退后 `mix_reset()`。
+  4. C3：`scf_threshold(strict)` 在 OUTER 探针期返回 `max(1e-5,100*strict)`；
+     残差 `<10*constraint_thr` 时冻结 μ、强制严格 final SCF；REFERENCE/INNER/
+     fixed/warm probe 保持严格；μ 实际变化后重新进入探针期。
+  5. E1：REFERENCE 与暖几何首收敛记录 TMAG，约束相超过 `mag_tol` 时
+     `MuSolver::reject()` 回退重走；E3：UNREACHABLE 文案改为 protocol cap。
+  6. 测试：mu_solver 16 例、constraint_loop 43 例；新增 C2/C3/E1 专项用例。
+- **提交**：`07bafb861`（INPUT/Config 管道）、`6a8919c71`（MuSolver + Loop +
+  esolver 接线 + 测试）；测试报告见 `2026-10-20-m3-trustregion-test.md`。
+- **单元验证**：`ctest -j 16 -R constraint` **12/12 PASS**，47.73 s；
+  `abacus_basic_para` 构建成功。
+- **C2 根因修复（集成中发现）**：首版坏 rho 拒绝后沿用旧 J 重走，若原步长小于
+  trust radius，会重复完全相同的 μ；0.001 e 用例在 SCF 58/59/60/61 连续拒绝 4 次，
+  帧 1 到 100 步仍 RUNNING。修正为“拒绝的 trial 仍是已收敛观测，先更新
+  Broyden/对角模型再重走”，并加响应符号守卫；新增
+  `BadRhoUpdatesModelInsteadOfRepeatingTheStep`。修复后同一用例只拒绝 1 次。
+- **集成结果（h2o_dimer LCAO，np8，scf_nmax=100）**：
+  - C2 0.001 e：帧迭代 75/46、154 s、两帧 CONVERGED（M2 基线 88/46、176 s）；
+    帧 1 减少 13 步（-14.8%），总墙钟 -12.5%。
+  - C3 0.001 e：帧迭代 92/46、165 s、两帧 CONVERGED；探针阈值 1e-5 与严格
+    1e-7 只差两个数量级，帧 1 多 4 步。**C3 单独无迭代收益**，按实测记录。
+  - C2 0.01 e：帧迭代 84/100、212 s；帧 1 CONVERGED，帧 2 RUNNING
+    （末 drho 2.4034e-4、末 res +3.265e-4 e）。M2 基线为 97/100、230 s、
+    末 res -1.1128e-2 e，C2 把末 residual 改善约 34 倍。
+  - C2+C3 0.01 e：帧迭代 78/100、201 s；帧 2 末 drho 3.7018e-5、末 res
+    +3.263e-4 e，仍差 target 1e-4。按要求未提高 scf_nmax。
+- **Bug/fix list**：
+  1. C2 坏步重复重走（见上），`6a8919c71` 修复。
+  2. C3 对 `scf_thr=1e-7` 的收敛尾部收益有限；不关闭开关，但在报告中明确记录
+     “本用例无收益”，避免把墙钟波动当算法收益。
+  3. 0.01 e 帧 2 的最后一次 μ 更新发生在 iter 96，仅余 4 步 SCF；瓶颈转为外层
+     调度/预算，留待 M4 ALM 处理。
+- **文件**：`mu_solver.{h,cpp}`、`constraint_loop.{h,cpp}`、
+  `esolver_ks.cpp`、`esolver_ks_pw.cpp`、`esolver_ks_lcao.cpp`、
+  `test/constraint_{mu_solver,loop}_test.cpp`、
+  `docs/superpowers/specs/2026-10-20-m3-trustregion-test.md`（新建）。
+- **下一步**：M3 关闭；M4 按设计 §5.1/5.4 的 ALM/外层调度推进，目标是在不提高
+  `scf_nmax` 的前提下给最后一次 μ 更新留足完整 SCF 预算，并继续使用 C2 的
+  Broyden 模型与 warm-start 状态。
