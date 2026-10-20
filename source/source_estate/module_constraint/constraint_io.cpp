@@ -961,12 +961,13 @@ ConfigStatus configure_constraint(ConstraintConfig& cfg,
                 "constraint_step_max (0 selects the legacy probe = step_max)";
         return ConfigStatus::ERROR;
     }
-    // Guard: a negative branch tolerance has no meaning; 0 is the explicit
-    // "guard off" value and must stay reachable (the guard is opt-in).
-    if (branch_tol < 0.0)
+    // Guard: -1 is the explicit "auto" sentinel (resolved after the specs
+    // are parsed); any other negative value has no meaning.  0 is the
+    // explicit "guard off" value and must stay reachable.
+    if (branch_tol < 0.0 && branch_tol != -1.0)
     {
-        error = "constraint_branch_tol must be >= 0 (0 disables the energy "
-                "branch guard)";
+        error = "constraint_branch_tol must be >= 0, or -1 for auto (spin: "
+                "1e-3 Ry; charge/all-fixed: 0)";
         return ConfigStatus::ERROR;
     }
     // Guard: the dual-iteration schedule is an explicit two-value switch.
@@ -1043,6 +1044,27 @@ ConfigStatus configure_constraint(ConstraintConfig& cfg,
                                specs, fmt, warnings, error))
     {
         return ConfigStatus::ERROR;
+    }
+    // Branch (E2): resolve the auto sentinel after the full list is known.
+    // A spin constraint (non-fixed) gets the historical guarded default
+    // 1e-3 Ry; charge-only and all-fixed lists stay off, so fixed-mu product
+    // runs never trip the branch_tol/fixed_mu mutual-exclusion guard.
+    if (branch_tol < 0.0)
+    {
+        bool has_spin = false;
+        bool all_fixed = !specs.empty();
+        for (const ConstraintSpec& spec : specs)
+        {
+            has_spin = has_spin || (spec.kind == ConstraintKind::Spin);
+            all_fixed = all_fixed && spec.fixed_mu;
+        }
+        cfg.branch_tol = (has_spin && !all_fixed) ? 1e-3 : 0.0;
+        if (cfg.branch_tol > 0.0)
+        {
+            warnings.push_back(
+                "constraint_branch_tol=-1 (auto): spin channel selected the "
+                "default 1e-3 Ry energy branch guard; set 0 to disable");
+        }
     }
     if (fmt == ConstraintFileFormat::V1)
     {
@@ -1223,6 +1245,37 @@ ConfigStatus configure_from_inputs(ConstraintConfig& cfg,
     }
 
     cfg.warm_start = PARAM.inp.constraint_warm_start;
+    // M3 C2/C3/E1 switches: independent of the target list, so they are
+    // copied after the validated core just like warm_start / dipole.
+    cfg.trust_region = PARAM.inp.constraint_trust_region;
+    cfg.progressive_scf = PARAM.inp.constraint_progressive_scf;
+    cfg.mag_anchor = PARAM.inp.constraint_mag_anchor;
+    cfg.mag_tol = PARAM.inp.constraint_mag_tol;
+    // Guard (E1): the magnetic anchor is a trust-region rejection policy;
+    // without a radius there is no rollback mechanism to invoke.
+    if (cfg.mag_anchor && !cfg.trust_region)
+    {
+        error = "constraint_mag_anchor=true requires "
+                "constraint_trust_region=true (the magnetic anchor rejects "
+                "a step through the trust region)";
+        return ConfigStatus::ERROR;
+    }
+    // Guard (E1): a non-positive magnetization tolerance would reject every
+    // step (including numerical noise) and livelock the rollback loop.
+    if (cfg.mag_anchor && cfg.mag_tol <= 0.0)
+    {
+        error = "constraint_mag_tol must be > 0 when "
+                "constraint_mag_anchor=true";
+        return ConfigStatus::ERROR;
+    }
+    // Guard (E1): the anchor monitors the collinear total magnetization,
+    // which only exists for nspin=2.
+    if (cfg.mag_anchor && PARAM.inp.nspin != 2)
+    {
+        error = "constraint_mag_anchor requires nspin=2 (it monitors the "
+                "collinear total magnetization)";
+        return ConfigStatus::ERROR;
+    }
 
     // Partition radii from the covalent-radius table (Angstrom -> Bohr).
     radii.assign(ucell.nat, 0.0);

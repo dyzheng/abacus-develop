@@ -761,7 +761,14 @@ struct Input_para
     double constraint_thr = 1e-4;    ///< per-constraint convergence threshold in e
     double constraint_step_max = 0.05;   ///< Ry, cap on |dmu| per outer step
     double constraint_step_probe = 0.0;  ///< Ry, first (history-free) step cap; 0 = use step_max
-    double constraint_branch_tol = 0.0;  ///< Ry, energy branch-guard tolerance; 0 = guard off
+    // Ry, energy branch-guard tolerance.  -1 (default) = auto: spin
+    // constraints default to 1e-3 Ry, charge (and all-fixed lists) to 0.
+    // An explicit 0 always disables the guard.
+    double constraint_branch_tol = -1.0;
+    bool constraint_trust_region = false; ///< C2: adaptive trust-region step + Broyden coupling
+    bool constraint_progressive_scf = false; ///< C3: relaxed drho during the outer probe, strict final step
+    bool constraint_mag_anchor = false;   ///< E1: roll back a step that jumps the total magnetization
+    double constraint_mag_tol = 0.5;      ///< E1: allowed |TMAG - reference| in mu_B
     std::string constraint_mu_schedule = "outer"; ///< "outer" (SCF fully converges, then one mu step) or "inner" (drho-gated in-SCF mu update + mix_reset)
     double constraint_inner_thr = 1e-3;  ///< drho gate for the INNER schedule (Ry); only used when constraint_mu_schedule=inner
     int constraint_inner_nmax = 20;      ///< max INNER mu updates per run before falling back to OUTER

@@ -856,3 +856,122 @@ TEST(ConstraintIOTest, FixedMuParsingAndGuards)
     EXPECT_FALSE(specs[0].fixed_mu);
     std::remove(path.c_str());
 }
+
+TEST(ConstraintIOTest, BranchTolAutoForSpin)
+{
+    // E2: -1 is the auto sentinel.  A non-fixed spin list selects the
+    // historical 1e-3 Ry guard; charge and all-fixed lists stay off.  An
+    // explicit 0 always disables it, and other negative values are refused.
+    const std::string v1 = R"({"targets": [0.1], "atoms": [[0]]})";
+    const std::string v2_fixed = R"({"constraints": [
+        {"type":"spin","target":0.1,"atoms":[0],"fixed_mu":0.1}]})";
+    constraint::ConstraintConfig cfg;
+    std::vector<constraint::ConstraintSpec> specs;
+    std::vector<std::string> warnings;
+    std::string error;
+
+    // Spin + auto -> 1e-3 Ry.
+    EXPECT_EQ(constraint::configure_constraint(
+                  cfg, specs, warnings, true, "spin", "becke", "delta", v1,
+                  5.0, 1e-4, 0.05, 0.0, -1.0, 3, 2, error),
+              constraint::ConfigStatus::OK)
+        << error;
+    EXPECT_DOUBLE_EQ(cfg.branch_tol, 1e-3);
+
+    // Charge + auto -> 0.
+    EXPECT_EQ(constraint::configure_constraint(
+                  cfg, specs, warnings, true, "charge", "becke", "delta", v1,
+                  5.0, 1e-4, 0.05, 0.0, -1.0, 3, 1, error),
+              constraint::ConfigStatus::OK)
+        << error;
+    EXPECT_DOUBLE_EQ(cfg.branch_tol, 0.0);
+
+    // Explicit 0 still disables the spin default.
+    EXPECT_EQ(constraint::configure_constraint(
+                  cfg, specs, warnings, true, "spin", "becke", "delta", v1,
+                  5.0, 1e-4, 0.05, 0.0, 0.0, 3, 2, error),
+              constraint::ConfigStatus::OK)
+        << error;
+    EXPECT_DOUBLE_EQ(cfg.branch_tol, 0.0);
+
+    // All-fixed spin (v2) + auto -> 0: fixed-mu product runs must not trip
+    // the branch_tol/fixed_mu mutual-exclusion guard.
+    EXPECT_EQ(constraint::configure_constraint(
+                  cfg, specs, warnings, true, "charge", "becke", "absolute",
+                  v2_fixed, 5.0, 1e-4, 0.05, 0.0, -1.0, 3, 2, error),
+              constraint::ConfigStatus::OK)
+        << error;
+    EXPECT_DOUBLE_EQ(cfg.branch_tol, 0.0);
+
+    // Other negative sentinels are not "auto": refuse loudly.
+    EXPECT_EQ(constraint::configure_constraint(
+                  cfg, specs, warnings, true, "spin", "becke", "delta", v1,
+                  5.0, 1e-4, 0.05, 0.0, -2.0, 3, 2, error),
+              constraint::ConfigStatus::ERROR);
+    EXPECT_NE(error.find("constraint_branch_tol"), std::string::npos);
+}
+
+TEST(ConstraintIOTest, TrustProgressiveMagPlumbing)
+{
+    auto ucell = make_h2o_ucell();
+    Set_GlobalV_Default();
+    PARAM.input.constraint = true;
+    PARAM.input.constraint_type = "charge";
+    PARAM.input.constraint_weight_type = "becke";
+    PARAM.input.constraint_target_mode = "delta";
+    PARAM.input.constraint_mu_max = 5.0;
+    PARAM.input.constraint_thr = 1e-4;
+    PARAM.input.nspin = 2;
+    const std::string path = "constraint_target_m3_plumbing.json";
+    {
+        std::ofstream ofs(path);
+        ofs << R"({"targets": [0.1], "atoms": [[0]]})";
+    }
+    PARAM.input.constraint_target_file = path;
+
+    constraint::ConstraintConfig cfg;
+    std::vector<constraint::ConstraintSpec> specs;
+    std::vector<double> radii;
+    std::string error;
+
+    // Defaults: all M3 behavior switches off.
+    EXPECT_EQ(constraint::configure_from_inputs(cfg, specs, *ucell, radii,
+                                                error),
+              constraint::ConfigStatus::OK)
+        << error;
+    EXPECT_FALSE(cfg.trust_region);
+    EXPECT_FALSE(cfg.progressive_scf);
+    EXPECT_FALSE(cfg.mag_anchor);
+    EXPECT_DOUBLE_EQ(cfg.mag_tol, 0.5);
+
+    // Explicit values flow through the INPUT pipe.
+    PARAM.input.constraint_trust_region = true;
+    PARAM.input.constraint_progressive_scf = true;
+    PARAM.input.constraint_mag_anchor = true;
+    PARAM.input.constraint_mag_tol = 0.3;
+    EXPECT_EQ(constraint::configure_from_inputs(cfg, specs, *ucell, radii,
+                                                error),
+              constraint::ConfigStatus::OK)
+        << error;
+    EXPECT_TRUE(cfg.trust_region);
+    EXPECT_TRUE(cfg.progressive_scf);
+    EXPECT_TRUE(cfg.mag_anchor);
+    EXPECT_DOUBLE_EQ(cfg.mag_tol, 0.3);
+
+    // E1 requires the trust-region rollback machinery.
+    PARAM.input.constraint_trust_region = false;
+    EXPECT_EQ(constraint::configure_from_inputs(cfg, specs, *ucell, radii,
+                                                error),
+              constraint::ConfigStatus::ERROR);
+    EXPECT_NE(error.find("constraint_mag_anchor"), std::string::npos);
+
+    // A non-positive tolerance would reject numerical noise forever.
+    PARAM.input.constraint_trust_region = true;
+    PARAM.input.constraint_mag_tol = 0.0;
+    EXPECT_EQ(constraint::configure_from_inputs(cfg, specs, *ucell, radii,
+                                                error),
+              constraint::ConfigStatus::ERROR);
+    EXPECT_NE(error.find("constraint_mag_tol"), std::string::npos);
+
+    std::remove(path.c_str());
+}

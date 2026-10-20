@@ -1602,14 +1602,62 @@ Manual override is allowed: if sc_acceleration_mode is explicitly set, it takes 
     }
     {
         Input_Item item("constraint_branch_tol");
-        item.annotation = "energy branch-guard tolerance (0 = guard off)";
+        item.annotation = "energy branch-guard tolerance (-1 = auto, 0 = off)";
         item.category = "Constraint";
         item.type = "Real";
-        item.description = "Online branch guard tolerance in Ry (default 0 = off). When > 0, at every converged SCF the constrained total energy E_tot = E_KS + sum_a mu_a(Q_a - t_a) is compared with the reference (mu = 0) energy E_ref of the same run; if E_tot drops more than this tolerance BELOW E_ref, the run is fused as BRANCH_FLIP (the SCF left the reference electronic branch, so the targets are not validated) instead of silently reporting CONVERGED. Only catches downward branch flips (a flipped state lying above E_ref is not detected). Recommended setting: a few times the SCF energy noise but far below the expected constraint energy rise 0.5*|delta|*|mu*| (FeO II-1: 0.044 eV at delta = 0.1 uB -> use ~1e-3 Ry).";
-        item.default_value = "0.0";
+        item.description = "Online branch guard tolerance in Ry. -1 (default) = auto: any spin constraint (non-fixed) selects 1e-3 Ry, charge and all-fixed lists select 0. An explicit 0 disables the guard. When > 0, at every converged SCF the constrained total energy E_tot = E_KS + sum_a mu_a(Q_a - t_a) is compared with the reference (mu = 0) energy E_ref of the same run; if E_tot drops more than this tolerance BELOW E_ref, the run is fused as BRANCH_FLIP (the SCF left the reference electronic branch, so the targets are not validated) instead of silently reporting CONVERGED. Only catches downward branch flips (a flipped state lying above E_ref is not detected). Recommended setting: a few times the SCF energy noise but far below the expected constraint energy rise 0.5*|delta|*|mu*| (FeO II-1: 0.044 eV at delta = 0.1 uB -> use ~1e-3 Ry).";
+        item.default_value = "-1.0";
         item.unit = "Ry";
         item.availability = "constraint is true";
         read_sync_double(input.constraint_branch_tol);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("constraint_trust_region");
+        item.annotation = "adaptive trust-region outer steps (C2)";
+        item.category = "Constraint";
+        item.type = "Boolean";
+        item.description = "Enable the C2 trust-region outer solver. Each proposed step is scored by rho = actual / predicted residual reduction: rho > 0.5 doubles the radius (cap 1 Ry), rho < 0.1 halves it and rolls the step back. With multiple constraints the component secant is upgraded to a Broyden rank-one Jacobian so charge/spin coupling is handled. Off (default) keeps the legacy component-secant path bit-identical; constraint_step_max is then the initial trust radius.";
+        item.default_value = "False";
+        item.unit = "";
+        item.availability = "constraint is true";
+        read_sync_bool(input.constraint_trust_region);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("constraint_progressive_scf");
+        item.annotation = "relax drho during the outer probe, tighten for the final step (C3)";
+        item.category = "Constraint";
+        item.type = "Boolean";
+        item.description = "Enable C3 progressive SCF tightening. During the outer probe (CONSTRAINED phase, outer schedule, not fixed and not the warm-start probe) the drho convergence gate is relaxed to max(1e-5, 100*scf_thr), because the secant only needs relative Q accuracy. Once max|Q-target| < 10*constraint_thr the multiplier is frozen and the SCF is rerun at the strict scf_thr. Off (default) keeps the historical per-iteration gate. INNER/fixed/REFERENCE/warm-probe iterations always use the strict scf_thr.";
+        item.default_value = "False";
+        item.unit = "";
+        item.availability = "constraint is true";
+        read_sync_bool(input.constraint_progressive_scf);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("constraint_mag_anchor");
+        item.annotation = "roll back a step that jumps the total magnetization (E1)";
+        item.category = "Constraint";
+        item.type = "Boolean";
+        item.description = "Enable E1 magnetic branch anchoring (nspin=2 only, requires constraint_trust_region). The total magnetization is recorded at each geometry's reference (or warm-start first converged) point; if a later constrained SCF moves it by more than constraint_mag_tol, the pending multiplier step is rejected through the trust region and re-walked with a smaller radius. Off (default) leaves the magnetic state unguarded.";
+        item.default_value = "False";
+        item.unit = "";
+        item.availability = "constraint is true";
+        read_sync_bool(input.constraint_mag_anchor);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("constraint_mag_tol");
+        item.annotation = "allowed total-magnetization jump for E1 (mu_B)";
+        item.category = "Constraint";
+        item.type = "Real";
+        item.description = "E1 magnetic-anchor tolerance in mu_B: a constrained SCF whose |TMAG - TMAG_ref| exceeds this value triggers a trust-region rollback. Default 0.5. Ignored when constraint_mag_anchor=false.";
+        item.default_value = "0.5";
+        item.unit = "mu_B";
+        item.availability = "constraint is true";
+        read_sync_double(input.constraint_mag_tol);
         this->add_item(item);
     }
     {

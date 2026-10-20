@@ -28,11 +28,21 @@ struct ConstraintConfig
     double thr = 1e-4;                  // e, per-constraint convergence
     double step_max = 0.05;             // Ry, cap on |dmu| per outer step
     double step_probe = 0.0;            // Ry, first-step cap; 0 = use step_max
-    // Ry, online energy branch-guard tolerance; 0 (default) = guard off.
-    // When > 0 the outer loop fuses as BRANCH_FLIP as soon as the constrained
-    // total energy drops more than this below the unconstrained reference
-    // energy of the same run (see ConstraintLoop::set_scf_energy).
+    // Ry, online energy branch-guard tolerance.  -1 at configure time means
+    // "auto" (spin -> 1e-3 Ry, charge / all-fixed -> 0); the stored value is
+    // always resolved to >= 0.  0 disables the guard.  When > 0 the outer
+    // loop fuses as BRANCH_FLIP as soon as the constrained total energy drops
+    // more than this below the unconstrained reference energy of the same run
+    // (see ConstraintLoop::set_scf_energy).
     double branch_tol = 0.0;
+    // M3 C2: adaptive trust-region outer solver (default off = legacy
+    // component secant, bit-identical).
+    bool trust_region = false;
+    // M3 C3: relaxed drho during the outer probe and a strict final SCF.
+    bool progressive_scf = false;
+    // M3 E1: roll back a step that jumps the total magnetization.
+    bool mag_anchor = false;
+    double mag_tol = 0.5; // mu_B
     // M2 C1: reuse mu / secant history across MD/relax ionic steps.
     bool warm_start = true;
     // Dual-iteration schedule (plan 2026-09-11-dual-iteration-strategy.md):
