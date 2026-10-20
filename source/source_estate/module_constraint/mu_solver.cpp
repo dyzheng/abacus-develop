@@ -26,6 +26,7 @@ void MuSolver::reset()
     has_history_.clear();
     mu_prev_.clear();
     Q_prev_.clear();
+    last_slope_.clear();
     residual_window_.clear();
     nsteps_ = 0;
     sign_flip_count_ = 0;
@@ -45,6 +46,8 @@ MuStatus MuSolver::step(const std::vector<double>& Q,
         has_history_.assign(n, false);
         mu_prev_.assign(n, 0.0);
         Q_prev_.assign(n, 0.0);
+        const double resp = (params_.response_sign > 0) ? 1.0 : -1.0;
+        last_slope_.assign(n, resp * params_.kappa_min);
         residual_window_.assign(n, std::vector<double>());
     }
     // Guard: a heterogeneous per-constraint cap list must stay parallel to
@@ -94,7 +97,7 @@ MuStatus MuSolver::step(const std::vector<double>& Q,
 
         // Secant slope.  Without history, or on a degenerate (zero) observed
         // step, fall back to the channel's conservative response.
-        double kappa = resp * params_.kappa_min;
+        double kappa = slope(i);
         if (has_history_[i])
         {
             const double dmu_obs = mu_at_obs - mu_prev_[i];
@@ -122,6 +125,9 @@ MuStatus MuSolver::step(const std::vector<double>& Q,
                                               params_.kappa_max);
                     kappa = resp * mag;
                 }
+                // Retain the value the update actually used: this is the
+                // slope handed to the next ionic geometry by rebind().
+                last_slope_[i] = kappa;
             }
         }
 
@@ -190,6 +196,45 @@ MuStatus MuSolver::step(const std::vector<double>& Q,
     }
     ++nsteps_;
     return MuStatus::RUNNING;
+}
+
+void MuSolver::rebind(const std::vector<double>& mu,
+                      const std::vector<double>& Q)
+{
+    const int n = static_cast<int>(Q.size());
+    // Guard: the anchor is one (mu, Q) pair per component.  A size mismatch
+    // would make later history reads pair observations from different
+    // components (wiring bug), so refuse loudly.
+    if (static_cast<int>(mu.size()) != n)
+    {
+        ModuleBase::WARNING_QUIT(
+            "MuSolver::rebind",
+            "mu and Q sizes differ while anchoring a new geometry");
+    }
+    has_history_.assign(n, true);
+    mu_prev_ = mu;
+    Q_prev_ = Q;
+    residual_window_.assign(n, std::vector<double>());
+    fuse_component_ = -1;
+    fuse_mu_ = 0.0;
+    fuse_residual_ = 0.0;
+    // last_slope_ intentionally NOT cleared: it is the kappa carried across
+    // ionic steps (C1).
+    if (static_cast<int>(last_slope_.size()) != n)
+    {
+        const double resp = (params_.response_sign > 0) ? 1.0 : -1.0;
+        last_slope_.assign(n, resp * params_.kappa_min);
+    }
+}
+
+double MuSolver::slope(const int i) const
+{
+    if (i >= 0 && i < static_cast<int>(last_slope_.size()))
+    {
+        return last_slope_[i];
+    }
+    const double resp = (params_.response_sign > 0) ? 1.0 : -1.0;
+    return resp * params_.kappa_min;
 }
 
 } // namespace constraint

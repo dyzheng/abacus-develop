@@ -88,6 +88,23 @@ class MuSolver
     // Forget all history (fresh outer run with a new target).
     void reset();
 
+    // M2 warm start: anchor the secant history at a new geometry's first
+    // converged observation (mu_at_obs, Q_at_obs).  The retained slope from
+    // the previous geometry survives; mu_prev/Q_prev are replaced so the
+    // geometry change can not be mistaken for a mu response.  The residual
+    // window / fuse state are cleared (a new geometry is a new problem).
+    void rebind(const std::vector<double>& mu,
+                const std::vector<double>& Q);
+
+    // Last accepted dQ/dmu of component i (signed, AFTER the
+    // kappa_min/kappa_max clamp -- the value the update actually used;
+    // negative for charge/spin), or the conservative
+    // response_sign*kappa_min when none was measured.  A sign-flip fallback
+    // value is recorded too (deliberate conservative choice: one bad step
+    // degrades the retained slope to kappa_min instead of keeping a stale
+    // measurement across geometries).
+    double slope(const int i) const;
+
     int nsteps() const { return nsteps_; }
     int sign_flip_count() const { return sign_flip_count_; }
 
@@ -102,6 +119,7 @@ class MuSolver
     std::vector<bool> has_history_;
     std::vector<double> mu_prev_;
     std::vector<double> Q_prev_;
+    std::vector<double> last_slope_; // retained across rebind()
     std::vector<std::vector<double>> residual_window_;
     int nsteps_ = 0;
     int sign_flip_count_ = 0;

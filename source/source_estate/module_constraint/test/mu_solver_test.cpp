@@ -297,3 +297,50 @@ TEST(MuSolverTest, StepProbeCapsOnlyTheFirstStep)
               constraint::MuStatus::RUNNING);
     EXPECT_DOUBLE_EQ(mu2[0], legacy.step_max);
 }
+
+TEST(MuSolverTest, RebindRetainsSlope)
+{
+    constraint::MuSolverParams p;
+    p.step_max = 0.05;
+    p.kappa_min = 0.3;
+    p.response_sign = -1;
+    constraint::MuSolver s(p);
+    std::vector<double> mu = {0.0};
+    // First observation at mu = 0 with Q = 1.0 above the target 0: the
+    // negative-response channel needs +mu to repel charge,
+    // dmu = -(Q-t)/kappa = -(1.0)/(-0.3) = +3.33, capped to +0.05.
+    EXPECT_EQ(s.step({1.0}, {0.0}, mu), constraint::MuStatus::RUNNING);
+    const double mu1 = mu[0];
+    EXPECT_DOUBLE_EQ(mu1, 0.05);
+    // Second observation Q = 0.9 (fell by 0.1 under +0.05 Ry): the measured
+    // slope is dQ/dmu = -0.1/+0.05 = -2 (physical negative response).
+    EXPECT_EQ(s.step({0.9}, {0.0}, mu), constraint::MuStatus::RUNNING);
+    const double slope = s.slope(0);
+    EXPECT_NEAR(slope, -2.0, 1e-12);
+
+    // New geometry: anchor at the carried mu with a fresh Q.  The retained
+    // slope must survive rebind, while the stale cross-geometry Q history
+    // must not.
+    s.rebind({mu1}, {0.95});
+    EXPECT_NEAR(s.slope(0), slope, 1e-12);
+    const double mu_before = mu[0];
+    s.step({0.95}, {0.0}, mu); // dmu_obs == 0 -> retained slope path
+    EXPECT_NE(mu[0], mu_before);
+}
+
+TEST(MuSolverTest, RebindResetsFuseWindow)
+{
+    constraint::MuSolverParams p;
+    p.step_max = 0.05;
+    p.mu_max = 0.05;
+    p.plateau_window = 2;
+    constraint::MuSolver s(p);
+    std::vector<double> mu = {0.0};
+    // Drive the component onto the cap with a flat residual.
+    s.step({1.0}, {0.0}, mu);
+    s.step({1.0}, {0.0}, mu);
+    // A stale plateau must not fuse the new geometry immediately.
+    s.rebind(mu, {1.0});
+    const constraint::MuStatus st = s.step({1.0}, {0.0}, mu);
+    EXPECT_EQ(st, constraint::MuStatus::RUNNING);
+}
