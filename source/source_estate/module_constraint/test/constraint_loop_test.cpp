@@ -1672,3 +1672,39 @@ TEST_F(ConstraintLoopTest, WarmStartAbsoluteKeepsTarget)
     // have recorded a cross-geometry pseudo-slope instead.
     EXPECT_NEAR(loop.solver_slope(0), -1.0, 1e-9);
 }
+
+TEST_F(ConstraintLoopTest, FixedMuFromSpecsRunsOneScf)
+{
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    std::vector<constraint::ConstraintSpec> specs;
+    constraint::ConstraintSpec s;
+    s.kind = constraint::ConstraintKind::Charge;
+    s.chan = constraint::build_channel_profile(s.kind);
+    s.atoms = {0};
+    s.target = 3.0;
+    s.mu_max = 5.0;
+    s.fixed_mu = true;
+    s.fixed_mu_value = -0.12;
+    specs.push_back(s);
+    constraint::ConstraintConfig cfg = make_cfg(0.0);
+    loop.init(*ucell, rhopw, cfg, specs, radii, 10.0, 0);
+    ASSERT_TRUE(loop.enabled());
+    EXPECT_EQ(loop.phase(), constraint::LoopPhase::CONSTRAINED);
+    EXPECT_DOUBLE_EQ(loop.mu()[0], -0.12);
+    const double* rp[1] = {rho_ref.data()};
+    loop.observe(1, rp, 1);
+    bool conv = true;
+    loop.on_scf_converged(2, conv);
+    EXPECT_TRUE(loop.done());
+    EXPECT_TRUE(loop.fixed_mu_mode());
+}
+
+TEST_F(ConstraintLoopTest, FixedMuEnvironmentStillWorks)
+{
+    setenv("ABA_CONSTRAINT_FIXED_MU", "-0.07", 1);
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    loop.init(*ucell, rhopw, make_cfg(0.0), radii, 10.0, 0);
+    EXPECT_TRUE(loop.fixed_mu_mode());
+    EXPECT_DOUBLE_EQ(loop.mu()[0], -0.07);
+    unsetenv("ABA_CONSTRAINT_FIXED_MU");
+}

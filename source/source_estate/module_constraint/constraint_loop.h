@@ -158,6 +158,7 @@ class ConstraintLoop
     const std::string& type() const { return cfg_.type; }
     LoopPhase phase() const { return phase_; }
     MuStatus status() const { return status_; }
+    bool fixed_mu_mode() const { return fixed_mu_; }
     int outer_steps() const { return outer_steps_; }
     bool warm_started_last_init() const { return warm_started_last_init_; }
     // Test-only diagnostic: the solver's retained slope of component i.
@@ -312,6 +313,7 @@ class ConstraintLoop
     // the multiplier is frozen at the env value and the outer secant loop
     // is disabled (constraint potential acts as a fixed external potential).
     bool fixed_mu_ = false;
+    bool json_fixed_source_ = false; // fixed_mu came from the v2 target file
 };
 
 } // namespace constraint

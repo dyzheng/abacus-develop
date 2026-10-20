@@ -63,6 +63,7 @@ void ConstraintLoop::reset()
     targets_.clear();
     nelec_ = 0.0;
     fixed_mu_ = false;
+    json_fixed_source_ = false;
     phase_ = LoopPhase::IDLE;
     status_ = MuStatus::RUNNING;
     outer_steps_ = 0;
@@ -185,6 +186,48 @@ void ConstraintLoop::init(const UnitCell& ucell,
 
     // mu starts at zero: the first SCF is the unconstrained reference.
     mu_.assign(specs_.size(), 0.0);
+    // Branch: v2 fixed_mu (M2 C4) -> product fixed-mu mode.  Every component
+    // has a value (configure guard); the outer loop never runs and one SCF
+    // is one frame.  The legacy env switch below stays as the v1 path.
+    bool json_fixed = !specs_.empty();
+    for (const ConstraintSpec& s : specs_)
+    {
+        json_fixed = json_fixed && s.fixed_mu;
+    }
+    if (json_fixed)
+    {
+        // Guard: this mode skips the mu = 0 reference SCF, so the energy
+        // branch guard has no reference energy.  Refuse the combination
+        // loudly instead of running an unarmed guard.
+        if (cfg_.branch_tol > 0.0)
+        {
+            ModuleBase::WARNING_QUIT("ConstraintLoop::init",
+                "constraint_branch_tol > 0 is incompatible with v2 "
+                "\"fixed_mu\" (no reference SCF energy is available); "
+                "remove fixed_mu from the target file or set "
+                "constraint_branch_tol = 0");
+        }
+        // Guard: the env experiment must not silently override a file that
+        // says exactly what mu to use.
+        if (std::getenv("ABA_CONSTRAINT_FIXED_MU") != nullptr)
+        {
+            ModuleBase::WARNING("ConstraintLoop::init",
+                "ABA_CONSTRAINT_FIXED_MU is ignored because the v2 target "
+                "file sets fixed_mu");
+        }
+        targets_.resize(specs_.size());
+        for (size_t a = 0; a < specs_.size(); ++a)
+        {
+            mu_[a] = specs_[a].fixed_mu_value;
+            targets_[a] = specs_[a].target;
+        }
+        fixed_mu_ = true;
+        json_fixed_source_ = true;
+        inner_active_ = false;
+        phase_ = LoopPhase::CONSTRAINED;
+        status_ = MuStatus::RUNNING;
+        return;
+    }
     // Experiment branch (default off): freeze the multiplier at a constant
     // read from the environment so the constraint potential acts as an
     // ordinary fixed external potential (no outer secant loop, no reference
@@ -1147,8 +1190,19 @@ void ConstraintLoop::final_report()
     GlobalV::ofs_running << "\n[constraint] final status: ";
     if (fixed_mu_)
     {
-        GlobalV::ofs_running
-            << "FIXED_MU (experiment switch; multiplier frozen, targets not enforced)\n";
+        // Branch: the file pins mu -> report the product-mode source.  The
+        // legacy env string below stays byte-identical for existing parsers.
+        if (json_fixed_source_)
+        {
+            GlobalV::ofs_running
+                << "FIXED_MU (mu fixed by the v2 target file; targets are "
+                   "labels, not enforced)\n";
+        }
+        else
+        {
+            GlobalV::ofs_running
+                << "FIXED_MU (experiment switch; multiplier frozen, targets not enforced)\n";
+        }
     }
     else if (status_ == MuStatus::CONVERGED)
     {
