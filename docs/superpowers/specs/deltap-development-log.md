@@ -5235,3 +5235,24 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   `tests/constraint_fd_force/{README.md,tools/run_constraint_fd.sh,cases/213_*,results/v1_lcao_mixed_fullaxis/*}`。
 - Bug/fix list：无新增 bug；工具限制登记（fixed-μ 标量 → v2 不可用）。
 - 下一轮（另一台机器）：① 补 3 轴 → 混合通道 9/9；② PW 混合冒烟 2 轴；③ 约束 relax 单步冒烟。
+
+## 2026-10-20 (13): 约束方法改进设计立项（偶极口径 + 高效求解）
+
+- 用户令："根据性质1-4 四个测试报告计划电荷约束方法改进；诉求：电荷估计要有物理意义、
+  和偶极矩对应；两层循环效率太低，需要高效方案"。
+- **设计文档**：`docs/superpowers/specs/2026-10-20-constraint-improvement-design.md`
+  （brainstorming 流程，用户逐节确认）。
+- **问题清单**（报告证据）：P1 Becke 片段电荷分区敏感（性质1 §5.3，Li 2.50-3.26 e）；
+  P2 物理电荷转移权威口径是偶极（性质1 §5.2，6.87 D / 0.71 e）；P3 外层可翻磁分支崩溃
+  （性质2 §5.2，APNS 自旋 psi_norm<=0）；P4 step_max=0.05 Ry 默认太小（性质3 批次 C）；
+  P5 陡段外推失效（性质3 §6.4，-0.8 低估 53%）；P6 MD 每步重跑自由相+从零割线
+  （性质4，52.5 SCF/步）；P7 inner schedule 有害（性质4）；P8 UNREACHABLE 语义易误读（性质3 §6.2）。
+- **决策**：定 Q+定 μ 两系综都要；偶极分两步走（报告先行、约束坐标第二阶段）；
+  效率=保守路线（热启动/信赖域/渐进SCF/定μ产品化）+ALM 单层循环深水区；
+  偶极约束周期界面优先（saw 通道）；推进顺序 A→C→D→B。
+- **里程碑**：M1 偶极报告（低风险）→ M2 热启动+定μ → M3 信赖域+渐进SCF+鲁棒性 →
+  M4 ALM 单层循环（需重过性质2/4 判据）→ M5 偶极约束坐标（saw 优先）。
+- 文件：`docs/superpowers/specs/2026-10-20-constraint-improvement-design.md`（新建）。
+- Bug/fix list：无代码改动；设计期修正一处 χ 数值引用（LiCl 0.075-0.65 e/Ry、
+  LiNiO2 电荷 ~2.5 e/Ry、自旋 ~12 μB/Ry）。
+- 下一轮：用户审阅设计文档 → writing-plans 生成 M1 实施计划。
