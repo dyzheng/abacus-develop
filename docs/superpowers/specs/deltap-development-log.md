@@ -5256,3 +5256,13 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - Bug/fix list：无代码改动；设计期修正一处 χ 数值引用（LiCl 0.075-0.65 e/Ry、
   LiNiO2 电荷 ~2.5 e/Ry、自旋 ~12 μB/Ry）。
 - 下一轮：用户审阅设计文档 → writing-plans 生成 M1 实施计划。
+
+## 2026-10-20 (13b): M1 实施计划完成
+
+- **计划文档**：`docs/superpowers/plans/2026-10-20-m1-dipole-report.md`（M1 偶极报告口径，
+  6 个 Task：INPUT 管道 / DipoleObserver 分子通道 / saw 通道+ΔV / ConstraintLoop 集成 /
+  全量回归 / h2o_dimer+LiCl 集成验证）。M2-M5 各自独立成计划，在前序里程碑合入后编写。
+- 关键实现事实（探明）：偶极报告走 ConstraintLoop::observe/final_report 钩子，
+  **不需要改 esolver**；p_ref 快照点 constraint_loop.cpp:322（Q_ref_ 同点）；
+  fixed_mu 早退分支之前必须布防 dipole init；saw 语义镜像 efield.cpp:234-251。
+- 下一轮：执行 M1（subagent-driven 或 inline），完成后开 M2 计划。
