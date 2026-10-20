@@ -344,3 +344,177 @@ TEST(MuSolverTest, RebindResetsFuseWindow)
     const constraint::MuStatus st = s.step({1.0}, {0.0}, mu);
     EXPECT_EQ(st, constraint::MuStatus::RUNNING);
 }
+
+TEST(MuSolverTest, TrustRegionExpandsOnGoodStep)
+{
+    // Linear response with a perfect model after the first observation:
+    // rho ~= 1 on every step, so the radius must double and let the next
+    // step exceed the initial step_max cap.
+    constraint::MuSolverParams params;
+    params.trust_region = true;
+    params.step_max = 0.05;
+    params.trust_radius_max = 1.0;
+    params.kappa_min = 0.3;
+    params.conv_tol = 1e-4;
+    constraint::MuSolver solver(params);
+    MockResponse mock{2.0, 0.5};
+
+    std::vector<double> mu = {0.0};
+    const std::vector<double> target = {0.5}; // root mu = 3.0
+
+    EXPECT_EQ(solver.step({mock(0.0)}, target, mu),
+              constraint::MuStatus::RUNNING);
+    EXPECT_NEAR(mu[0], params.step_max, 1e-12);
+    EXPECT_NEAR(solver.trust_radius(), params.step_max, 1e-12);
+
+    EXPECT_EQ(solver.step({mock(mu[0])}, target, mu),
+              constraint::MuStatus::RUNNING);
+    EXPECT_NEAR(solver.trust_radius(), 2.0 * params.step_max, 1e-12);
+    // The second trial is twice the first one: the expanded radius -- not
+    // step_max -- is the binding cap.
+    EXPECT_NEAR(mu[0], 3.0 * params.step_max, 1e-12);
+    EXPECT_GT(solver.trust_accept_count(), 0);
+}
+
+TEST(MuSolverTest, TrustRegionRejectsBadStep)
+{
+    // Q(mu) = 2 - 0.5 mu + 100 mu^2: the linear model predicts the first
+    // step improves the residual, but the quadratic term makes it worse.
+    // The solver must reject, halve the radius, restore mu and re-walk.
+    constraint::MuSolverParams params;
+    params.trust_region = true;
+    params.step_max = 0.05;
+    params.trust_radius_max = 1.0;
+    params.kappa_min = 0.3;
+    params.conv_tol = 1e-4;
+    constraint::MuSolver solver(params);
+    auto mock = [](const double m) { return 2.0 - 0.5 * m + 100.0 * m * m; };
+
+    std::vector<double> mu = {0.0};
+    const std::vector<double> target = {1.0};
+    EXPECT_EQ(solver.step({mock(0.0)}, target, mu),
+              constraint::MuStatus::RUNNING);
+    EXPECT_NEAR(mu[0], params.step_max, 1e-12);
+
+    const double rejected_mu = mu[0];
+    EXPECT_EQ(solver.step({mock(mu[0])}, target, mu),
+              constraint::MuStatus::RUNNING);
+    EXPECT_EQ(solver.trust_reject_count(), 1);
+    EXPECT_NEAR(solver.trust_radius(), 0.5 * params.step_max, 1e-12);
+    // Re-walked from the pre-trial anchor: the new trial is smaller than the
+    // rejected one and points in the same direction.
+    EXPECT_GT(mu[0], 0.0);
+    EXPECT_LT(mu[0], rejected_mu);
+    EXPECT_NEAR(mu[0], 0.5 * params.step_max, 1e-12);
+}
+
+TEST(MuSolverTest, BroydenCapturesCoupling)
+{
+    // Coupled two-channel response Q = Q0 + J mu with J = [[-1, 0.5],
+    // [0.5, -1]].  The first noisy rank-one update already leaves a
+    // nonzero off-diagonal; the coupled solve must then reach the root.
+    constraint::MuSolverParams params;
+    params.trust_region = true;
+    params.broyden = true;
+    params.step_max = 0.05;
+    params.trust_radius_max = 1.0;
+    params.kappa_min = 0.3;
+    params.conv_tol = 1e-4;
+    constraint::MuSolver solver(params);
+
+    const std::vector<double> q0 = {1.0, 1.0};
+    const std::vector<double> target = {0.0, 0.0};
+    std::vector<double> mu = {0.0, 0.0};
+    constraint::MuStatus st = constraint::MuStatus::RUNNING;
+    for (int k = 0; k < 30; ++k)
+    {
+        const std::vector<double> Q = {q0[0] - mu[0] + 0.5 * mu[1],
+                                       q0[1] + 0.5 * mu[0] - mu[1]};
+        st = solver.step(Q, target, mu);
+        if (st != constraint::MuStatus::RUNNING)
+        {
+            break;
+        }
+    }
+    EXPECT_EQ(st, constraint::MuStatus::CONVERGED);
+    EXPECT_NE(solver.jacobian(0, 1), 0.0);
+    EXPECT_NEAR(mu[0], 2.0, 1e-3);
+    EXPECT_NEAR(mu[1], 2.0, 1e-3);
+}
+
+TEST(MuSolverTest, RejectStepRestoresMu)
+{
+    // A forced rejection (E1 magnetic anchor) must shrink the radius and
+    // re-walk from the pre-trial anchor instead of accepting the pending mu.
+    constraint::MuSolverParams params;
+    params.trust_region = true;
+    params.step_max = 0.05;
+    params.trust_radius_max = 1.0;
+    params.kappa_min = 0.3;
+    params.conv_tol = 1e-4;
+    constraint::MuSolver solver(params);
+    MockResponse mock{2.0, 0.5};
+
+    std::vector<double> mu = {0.0};
+    const std::vector<double> target = {1.9};
+    EXPECT_EQ(solver.step({mock(0.0)}, target, mu),
+              constraint::MuStatus::RUNNING);
+    const double rejected_mu = mu[0];
+    EXPECT_DOUBLE_EQ(rejected_mu, params.step_max);
+
+    EXPECT_EQ(solver.reject({mock(mu[0])}, target, mu),
+              constraint::MuStatus::RUNNING);
+    EXPECT_EQ(solver.trust_reject_count(), 1);
+    EXPECT_NEAR(solver.trust_radius(), 0.5 * params.step_max, 1e-12);
+    EXPECT_GT(mu[0], 0.0);
+    EXPECT_LT(mu[0], rejected_mu);
+    EXPECT_NEAR(mu[0], 0.5 * params.step_max, 1e-12);
+}
+
+TEST(MuSolverTest, BadRhoUpdatesModelInsteadOfRepeatingTheStep)
+{
+    // Two independent charge-like channels (dQ/dmu = -0.58) with opposite
+    // targets.  The first trial (+/-0.00333 Ry) is not radius-limited; rho is
+    // bad because the initial kappa=-0.3 over-predicts the improvement.  The
+    // rejected observation must update J so the re-walk is smaller instead
+    // of repeating the identical +/-0.00333 step.
+    constraint::MuSolverParams params;
+    params.trust_region = true;
+    params.broyden = true;
+    params.step_max = 0.05;
+    params.trust_radius_max = 1.0;
+    params.kappa_min = 0.3;
+    params.conv_tol = 1e-4;
+    constraint::MuSolver solver(params);
+
+    const double q0 = 10.0;
+    const double q1 = 10.0;
+    const double chi = 0.58;
+    const std::vector<double> target = {q0 + 0.001, q1 - 0.001};
+    std::vector<double> mu = {0.0, 0.0};
+    std::vector<double> Q = {q0, q1};
+    EXPECT_EQ(solver.step(Q, target, mu), constraint::MuStatus::RUNNING);
+    EXPECT_NEAR(mu[0], -0.001 / 0.3, 1e-12);
+    EXPECT_NEAR(mu[1], 0.001 / 0.3, 1e-12);
+
+    Q = {q0 - chi * mu[0], q1 - chi * mu[1]};
+    EXPECT_EQ(solver.step(Q, target, mu), constraint::MuStatus::RUNNING);
+    EXPECT_EQ(solver.trust_reject_count(), 1);
+    // The re-walk used the measured chi, not the stale kappa.
+    EXPECT_NEAR(mu[0], -0.001 / chi, 1e-6);
+    EXPECT_NEAR(mu[1], 0.001 / chi, 1e-6);
+
+    constraint::MuStatus st = constraint::MuStatus::RUNNING;
+    for (int k = 0; k < 10; ++k)
+    {
+        Q = {q0 - chi * mu[0], q1 - chi * mu[1]};
+        st = solver.step(Q, target, mu);
+        if (st != constraint::MuStatus::RUNNING)
+        {
+            break;
+        }
+    }
+    EXPECT_EQ(st, constraint::MuStatus::CONVERGED);
+    EXPECT_NEAR(mu[0], -0.001 / chi, 1e-6);
+    EXPECT_NEAR(mu[1], 0.001 / chi, 1e-6);
+}

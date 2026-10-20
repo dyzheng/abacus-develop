@@ -143,6 +143,24 @@ class ConstraintLoopTest : public ::testing::Test
         }
     }
 
+    // Nonlinear mock for the trust-region rejection path:
+    //   Q(mu) = Q_ref - 0.5 mu + 100 mu^2.
+    // The linear model predicts an improvement for the first step, but the
+    // quadratic term makes the actual residual worse, so the trial must be
+    // rejected and re-walked with a smaller radius.
+    void fill_rho_mock_quadratic(const double mu,
+                                 std::vector<double>& rho) const
+    {
+        rho = rho_ref;
+        const double S = S_int();
+        const std::vector<double>& w0 = wg->constraint_weight(0);
+        const double dQ = -0.5 * mu + 100.0 * mu * mu;
+        for (int ir = 0; ir < rhopw->nrxx; ++ir)
+        {
+            rho[ir] += dQ * w0[ir] / S;
+        }
+    }
+
     double S_int() const
     {
         const std::vector<double>& w0 = wg->constraint_weight(0);
@@ -603,6 +621,11 @@ TEST_F(ConstraintLoopTest, FuseUnreachable)
     EXPECT_EQ(loop.phase(), constraint::LoopPhase::DONE);
     EXPECT_TRUE(conv); // fused: SCF terminates cleanly
     EXPECT_DOUBLE_EQ(loop.mu()[0], -0.2); // pinned at the cap
+    // E3 wording: the fuse names the protocol cap, not an algorithm failure.
+    const std::string status = loop.final_status_line();
+    EXPECT_NE(status.find("protocol cap"), std::string::npos);
+    EXPECT_NE(status.find("constraint_mu_max=0.2"), std::string::npos);
+    EXPECT_NE(status.find("increase constraint_mu_max"), std::string::npos);
 }
 
 TEST_F(ConstraintLoopTest, InjectMatchesObserver)
@@ -1763,4 +1786,239 @@ TEST_F(ConstraintLoopTest, FixedMuEnvironmentStillWorks)
     EXPECT_TRUE(loop.fixed_mu_mode());
     EXPECT_DOUBLE_EQ(loop.mu()[0], -0.07);
     unsetenv("ABA_CONSTRAINT_FIXED_MU");
+}
+
+TEST_F(ConstraintLoopTest, TrustRegionConfigReachesSolver)
+{
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    constraint::ConstraintConfig cfg = make_cfg(0.1);
+    cfg.trust_region = true;
+    loop.init(*ucell, rhopw, cfg, radii, 10.0);
+    ASSERT_TRUE(loop.enabled());
+    EXPECT_TRUE(loop.trust_enabled());
+    EXPECT_NEAR(loop.trust_radius(), cfg.step_max, 1e-12);
+    EXPECT_EQ(loop.trust_rejections(), 0);
+
+    const double* rp[1] = {rho_ref.data()};
+    loop.observe(1, rp, 1);
+    bool conv = true;
+    loop.on_scf_converged(1, conv);
+    EXPECT_FALSE(conv);
+    EXPECT_GT(std::abs(loop.mu()[0]), 0.0);
+    EXPECT_NE(loop.last_audit_line().find("trust_radius="),
+              std::string::npos);
+    EXPECT_NE(loop.last_audit_line().find("trust_rej=0"), std::string::npos);
+}
+
+TEST_F(ConstraintLoopTest, TrustRejectionRequestsMixReset)
+{
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    constraint::ConstraintConfig cfg = make_cfg(-1.0);
+    cfg.trust_region = true;
+    loop.init(*ucell, rhopw, cfg, radii, 10.0);
+    ASSERT_TRUE(loop.enabled());
+
+    std::vector<double> rho;
+    int iter = 1;
+    // Reference SCF: the first trust trial moves mu to +step_max.
+    fill_rho_mock_quadratic(0.0, rho);
+    const double* rp[1] = {rho.data()};
+    loop.observe(iter, rp, 1);
+    bool conv = true;
+    loop.on_scf_converged(iter, conv);
+    EXPECT_FALSE(conv);
+    const double rejected_mu = loop.mu()[0];
+    EXPECT_NEAR(rejected_mu, cfg.step_max, 1e-12);
+    EXPECT_EQ(loop.trust_rejections(), 0);
+    EXPECT_FALSE(loop.consume_trust_rollback());
+
+    // Next SCF convergence at that trial: the quadratic term worsened the
+    // residual, so the trial is rejected and mu is re-walked with radius/2.
+    ++iter;
+    fill_rho_mock_quadratic(loop.mu()[0], rho);
+    loop.observe(iter, rp, 1);
+    conv = true;
+    loop.on_scf_converged(iter, conv);
+    EXPECT_FALSE(conv);
+    EXPECT_EQ(loop.trust_rejections(), 1);
+    EXPECT_NEAR(loop.trust_radius(), 0.5 * cfg.step_max, 1e-12);
+    EXPECT_GT(loop.mu()[0], 0.0);
+    EXPECT_LT(loop.mu()[0], rejected_mu);
+    // The esolver consumes the request exactly once and resets mixing.
+    EXPECT_TRUE(loop.consume_trust_rollback());
+    EXPECT_FALSE(loop.consume_trust_rollback());
+    EXPECT_NE(loop.last_audit_line().find("trust_rej=1"), std::string::npos);
+}
+
+TEST_F(ConstraintLoopTest, TrustAuditAppendsDiagnosticsOnlyWhenEnabled)
+{
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    const double* rp[1] = {rho_ref.data()};
+
+    // Default-off run: the historical audit format is unchanged.
+    loop.init(*ucell, rhopw, make_cfg(0.1), radii, 10.0);
+    loop.observe(1, rp, 1);
+    bool conv = true;
+    loop.on_scf_converged(1, conv);
+    EXPECT_EQ(loop.last_audit_line().find("trust_"), std::string::npos);
+
+    // Opt-in run: one trust_radius / trust_rej suffix on the same line.
+    loop.reset();
+    constraint::ConstraintConfig cfg = make_cfg(0.1);
+    cfg.trust_region = true;
+    loop.init(*ucell, rhopw, cfg, radii, 10.0);
+    loop.observe(1, rp, 1);
+    conv = true;
+    loop.on_scf_converged(1, conv);
+    EXPECT_NE(loop.last_audit_line().find(" trust_radius="),
+              std::string::npos);
+    EXPECT_NE(loop.last_audit_line().find(" trust_rej="),
+              std::string::npos);
+}
+
+TEST_F(ConstraintLoopTest, ProgressiveScfDefaultOff)
+{
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    loop.init(*ucell, rhopw, make_cfg(0.01), radii, 10.0);
+    EXPECT_DOUBLE_EQ(loop.scf_threshold(1e-7), 1e-7);
+}
+
+TEST_F(ConstraintLoopTest, ProgressiveScfRelaxesProbeAndTightensFinal)
+{
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    constraint::ConstraintConfig cfg = make_cfg(0.01);
+    cfg.progressive_scf = true;
+    loop.init(*ucell, rhopw, cfg, radii, 10.0);
+    // REFERENCE is the clean mu = 0 observation and must stay strict.
+    EXPECT_DOUBLE_EQ(loop.scf_threshold(1e-7), 1e-7);
+
+    std::vector<double> rho;
+    bool conv = false;
+    mock_iteration(loop, rho, 1, 0.0, 1e-9, conv);
+    EXPECT_FALSE(conv);
+    ASSERT_EQ(loop.phase(), constraint::LoopPhase::CONSTRAINED);
+    // Outer probe: max(1e-5, 100*scf_thr) = 1e-5 for scf_thr = 1e-7.
+    EXPECT_NEAR(loop.scf_threshold(1e-7), 1e-5, 1e-15);
+
+    int iter = 1;
+    bool tightened = false;
+    int outer_before_tighten = loop.outer_steps();
+    for (int guard = 0; guard < 20; ++guard)
+    {
+        ++iter;
+        outer_before_tighten = loop.outer_steps();
+        mock_iteration(loop, rho, iter, loop.mu()[0], 1e-9, conv, true);
+        if (loop.scf_threshold(1e-7) == 1e-7)
+        {
+            tightened = true;
+            break;
+        }
+        ASSERT_EQ(loop.status(), constraint::MuStatus::RUNNING);
+    }
+    ASSERT_TRUE(tightened);
+    EXPECT_FALSE(conv);
+    EXPECT_EQ(loop.status(), constraint::MuStatus::RUNNING);
+    // The near-target call did not advance mu: it only requested the strict
+    // final SCF at the frozen multiplier.
+    EXPECT_EQ(loop.outer_steps(), outer_before_tighten);
+
+    // Strict final SCF at the same mu: now the outer step adjudicates CONVERGED.
+    ++iter;
+    mock_iteration(loop, rho, iter, loop.mu()[0], 1e-9, conv, true);
+    EXPECT_TRUE(conv);
+    EXPECT_EQ(loop.status(), constraint::MuStatus::CONVERGED);
+    EXPECT_TRUE(loop.done());
+}
+
+TEST_F(ConstraintLoopTest, ProgressiveScfInertForInnerAndFixed)
+{
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    constraint::ConstraintConfig cfg = make_cfg(0.01);
+    cfg.progressive_scf = true;
+    cfg.mu_schedule = "inner";
+    loop.init(*ucell, rhopw, cfg, radii, 10.0);
+    std::vector<double> rho;
+    bool conv = false;
+    mock_iteration(loop, rho, 1, 0.0, 1e-9, conv);
+    ASSERT_EQ(loop.phase(), constraint::LoopPhase::CONSTRAINED);
+    // INNER schedule never relaxes drho, even though it is in CONSTRAINED.
+    EXPECT_DOUBLE_EQ(loop.scf_threshold(1e-7), 1e-7);
+
+    // FIXED_MU is one SCF per geometry by construction: no probe to relax.
+    loop.reset();
+    setenv("ABA_CONSTRAINT_FIXED_MU", "-0.01", 1);
+    cfg.mu_schedule = "outer";
+    loop.init(*ucell, rhopw, cfg, radii, 10.0);
+    EXPECT_TRUE(loop.fixed_mu_mode());
+    EXPECT_DOUBLE_EQ(loop.scf_threshold(1e-7), 1e-7);
+    unsetenv("ABA_CONSTRAINT_FIXED_MU");
+}
+
+TEST_F(ConstraintLoopTest, MagAnchorRejectsBranchJump)
+{
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    constraint::ConstraintConfig cfg = make_cfg(0.01);
+    cfg.trust_region = true;
+    cfg.mag_anchor = true;
+    cfg.mag_tol = 0.5;
+    loop.init(*ucell, rhopw, cfg, radii, 10.0);
+
+    std::vector<double> rho;
+    bool conv = false;
+    // Free reference branch: TMAG = 1 mu_B.
+    ucell->magnet.tot_mag = 1.0;
+    mock_iteration(loop, rho, 1, 0.0, 1e-9, conv, true);
+    ASSERT_EQ(loop.phase(), constraint::LoopPhase::CONSTRAINED);
+    ASSERT_FALSE(conv);
+    EXPECT_EQ(loop.mag_rejections(), 0);
+    const double trial_mu = loop.mu()[0];
+    const double radius_before = loop.trust_radius();
+    ASSERT_GT(std::abs(trial_mu), 1e-6);
+
+    // The constrained SCF lands on a different magnetic branch: TMAG jumps
+    // to 2 mu_B, beyond tol = 0.5.  E1 must reject the trial and re-walk.
+    ucell->magnet.tot_mag = 2.0;
+    mock_iteration(loop, rho, 2, loop.mu()[0], 1e-9, conv, true);
+    EXPECT_FALSE(conv);
+    EXPECT_EQ(loop.mag_rejections(), 1);
+    EXPECT_LT(loop.trust_radius(), radius_before);
+    EXPECT_LT(std::abs(loop.mu()[0]), std::abs(trial_mu));
+    EXPECT_TRUE(loop.consume_trust_rollback());
+    EXPECT_FALSE(loop.consume_trust_rollback());
+
+    // Back on the reference branch: the run converges and E1 stays quiet.
+    ucell->magnet.tot_mag = 1.0;
+    int iter = 2;
+    int guard = 0;
+    while (loop.status() == constraint::MuStatus::RUNNING && guard < 30)
+    {
+        ++iter;
+        mock_iteration(loop, rho, iter, loop.mu()[0], 1e-9, conv, true);
+        ++guard;
+    }
+    ASSERT_LT(guard, 30);
+    EXPECT_EQ(loop.status(), constraint::MuStatus::CONVERGED);
+    EXPECT_EQ(loop.mag_rejections(), 1);
+}
+
+TEST_F(ConstraintLoopTest, MagAnchorInertWhenDisabled)
+{
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    constraint::ConstraintConfig cfg = make_cfg(0.01); // mag_anchor = false
+    loop.init(*ucell, rhopw, cfg, radii, 10.0);
+    ucell->magnet.tot_mag = 2.0; // a jump the anchor would reject
+
+    std::vector<double> rho;
+    bool conv = false;
+    int iter = 0;
+    int guard = 0;
+    while (loop.status() == constraint::MuStatus::RUNNING && guard < 20)
+    {
+        ++iter;
+        mock_iteration(loop, rho, iter, loop.mu()[0], 1e-9, conv, true);
+        ++guard;
+    }
+    ASSERT_LT(guard, 20);
+    EXPECT_EQ(loop.status(), constraint::MuStatus::CONVERGED);
+    EXPECT_EQ(loop.mag_rejections(), 0);
 }

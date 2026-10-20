@@ -7,6 +7,7 @@
 
 #include "source_estate/update_pot.h" // mohan add 20251016
 #include "source_estate/module_charge/chgmixing.h" // mohan add 20251018
+#include "source_estate/module_constraint/constraint_loop.h"
 #include "source_pw/module_pwdft/setup_pwwfc.h" // mohan add 20251018
 #include "source_hsolver/hsolver.h"
 #include "source_io/module_energy/write_eig_occ.h"
@@ -236,9 +237,17 @@ void ESolver_KS::iter_finish(UnitCell& ucell, const int istep, int& iter, bool &
     }
 #endif
 
-    module_charge::chgmixing_ks(iter, ucell, this->pelec, this->chr, this->p_chgmix, 
+    // M3 C3: the constraint loop owns the drho threshold while it probes the
+    // outer multiplier; it returns this->scf_thr unchanged whenever the
+    // progressive path is off or inactive.
+    const double scf_thr_iter
+        = PARAM.inp.constraint
+              ? constraint::ConstraintLoop::instance().scf_threshold(
+                    this->scf_thr)
+              : this->scf_thr;
+    module_charge::chgmixing_ks(iter, ucell, this->pelec, this->chr, this->p_chgmix,
       this->pw_rhod->nrxx, this->drho, this->oscillate_esolver, conv_esolver, hsolver_error, 
-      this->scf_thr, this->scf_ene_thr, converged_u, PARAM.inp);
+      scf_thr_iter, this->scf_ene_thr, converged_u, PARAM.inp);
 
     // 2.3) Update potentials (should be done every SF iter)
     elecstate::update_pot(ucell, this->pelec, this->chr, conv_esolver);

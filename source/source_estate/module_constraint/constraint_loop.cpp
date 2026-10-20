@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <numeric>
+#include <sstream>
 
 #include "constraint_deriv.h"
 #include "constraint_dipole.h"
@@ -88,6 +89,12 @@ void ConstraintLoop::reset()
     settle_armed_ = false;
     inner_step_this_iter_ = false;
     last_reset_iter_ = 0;
+    trust_rollback_pending_ = false;
+    tighten_pending_ = false;
+    tighten_notice_done_ = false;
+    mag_ref_ = 0.0;
+    mag_ref_valid_ = false;
+    mag_rejections_ = 0;
     dipole_report_ = false;
     dipole_frame_ = "molecular";
     dipole_saw_pos_max_ = -1.0;
@@ -283,6 +290,10 @@ void ConstraintLoop::init(const UnitCell& ucell,
     // same negative density response as charge, verified empirically in the
     // 212_PW_constraint_h2o_spin integration case (dQ/dmu ~ -1.4 e/Ry).
     params.response_sign = -1;
+    // M3 C2: opt-in adaptive trust-region step (Broyden coupled by default).
+    // Off leaves the component-secant path bit-identical.
+    params.trust_region = cfg_.trust_region;
+    params.broyden = true;
     mu_solver_ = MuSolver(params);
     phase_ = LoopPhase::REFERENCE;
     status_ = MuStatus::RUNNING;
@@ -486,6 +497,10 @@ void ConstraintLoop::warm_reinit(
     // warm_pending_ is true for BOTH target modes: the rebind is
     // mode-independent; only the Q_ref re-derivation is delta-specific.
     warm_pending_ = true;
+    tighten_pending_ = false;
+    tighten_notice_done_ = false;
+    mag_ref_ = 0.0;
+    mag_ref_valid_ = false;
     status_ = MuStatus::RUNNING;
     phase_ = LoopPhase::CONSTRAINED;
     saw_resolved_ = false;
@@ -786,7 +801,14 @@ void ConstraintLoop::outer_step(const int iter, bool& conv_esolver)
         // phase with the updated mu.
         phase_ = LoopPhase::CONSTRAINED;
         ++outer_steps_;
+        const int rejects_before = mu_solver_.trust_reject_count();
         status_ = mu_solver_.step(Q_, targets_, mu_);
+        // Branch: the solver rejected this trial and re-walked it with a
+        // smaller radius -> request one mixing reset from the esolver.
+        if (mu_solver_.trust_reject_count() > rejects_before)
+        {
+            trust_rollback_pending_ = true;
+        }
         print_audit(iter);
         if (status_ == MuStatus::CONVERGED || status_ == MuStatus::UNREACHABLE)
         {
@@ -800,7 +822,22 @@ void ConstraintLoop::outer_step(const int iter, bool& conv_esolver)
 
     // Branch B: constrained phase — advance mu from the observed Q(mu).
     ++outer_steps_;
+    const std::vector<double> mu_before = mu_;
+    const int rejects_before = mu_solver_.trust_reject_count();
     status_ = mu_solver_.step(Q_, targets_, mu_);
+    // Branch: a rejected trust trial invalidates the previous fixed-point
+    // map; request one mixing reset (default-off path never sets this).
+    if (mu_solver_.trust_reject_count() > rejects_before)
+    {
+        trust_rollback_pending_ = true;
+    }
+    // Branch: any actual mu move starts a new probe, so the next SCF uses the
+    // relaxed threshold again.  A converged step leaves the flag alone (the
+    // run is done anyway).
+    if (mu_ != mu_before)
+    {
+        tighten_pending_ = false;
+    }
     print_audit(iter);
     if (status_ == MuStatus::CONVERGED || status_ == MuStatus::UNREACHABLE)
     {
@@ -992,12 +1029,108 @@ void ConstraintLoop::on_scf_converged(const int iter, bool& conv_esolver)
     // Branch: the first converged SCF of a warm-started geometry.  Q_ is the
     // observation at the carried mu; anchor the secant history there and (in
     // delta mode) re-derive the geometry's free reference before stepping.
+    const bool warm_probe = warm_pending_;
     if (warm_pending_)
     {
         finish_warm_start();
     }
+    // M3 E1: anchor the total magnetization at the free reference (cold) or
+    // at the first warm-geometry convergence.  The anchor is a branch label,
+    // not a target: later steps are rejected only when TMAG jumps away from
+    // it beyond constraint_mag_tol.
+    if (cfg_.mag_anchor && ucell_
+        && (phase_ == LoopPhase::REFERENCE || warm_probe))
+    {
+        mag_ref_ = ucell_->magnet.tot_mag;
+        mag_ref_valid_ = true;
+        GlobalV::ofs_running
+            << "[constraint] MAG_ANCHOR: reference total magnetization "
+            << mag_ref_ << " mu_B (tol=" << cfg_.mag_tol << " mu_B)\n";
+    }
+    // Branch E1: a constrained step that lands on a different magnetic branch
+    // is physically unacceptable even if the weighted observable matches the
+    // target.  Force the trust solver to reject the pending trial and re-walk
+    // it with a smaller radius before any outer secant update.
+    if (cfg_.mag_anchor && phase_ == LoopPhase::CONSTRAINED && mag_ref_valid_
+        && ucell_ && !warm_probe)
+    {
+        const double dmag = std::abs(ucell_->magnet.tot_mag - mag_ref_);
+        if (dmag > cfg_.mag_tol)
+        {
+            const int rejects_before = mu_solver_.trust_reject_count();
+            const MuStatus rej_status = mu_solver_.reject(Q_, targets_, mu_);
+            if (mu_solver_.trust_reject_count() > rejects_before)
+            {
+                trust_rollback_pending_ = true;
+            }
+            ++mag_rejections_;
+            GlobalV::ofs_running
+                << "[constraint] MAG_ANCHOR: total magnetization "
+                << ucell_->magnet.tot_mag << " mu_B is " << dmag
+                << " mu_B from the reference " << mag_ref_ << " (tol "
+                << cfg_.mag_tol
+                << " mu_B) -> rejecting the trial and re-walking with a "
+                   "smaller trust radius\n";
+            // Branch E1a: the forced rollback itself finished the run (fuse
+            // or an already-converged retry) -> publish that verdict.
+            if (rej_status != MuStatus::RUNNING)
+            {
+                status_ = rej_status;
+                phase_ = LoopPhase::DONE;
+                return;
+            }
+            // Branch E1b: a new, smaller mu is armed; keep the SCF running.
+            conv_esolver = false;
+            return;
+        }
+    }
+    // M3 C3: once the observed residual is within 10*constraint_thr, do not
+    // take another outer step on the relaxed density.  Force one final SCF at
+    // the strict threshold (mu frozen) and adjudicate the target afterwards.
+    if (cfg_.progressive_scf && phase_ == LoopPhase::CONSTRAINED && !fixed_mu_
+        && cfg_.mu_schedule == "outer" && !warm_probe && !warm_pending_
+        && !tighten_pending_)
+    {
+        const double res = max_residual();
+        if (res < 10.0 * cfg_.thr)
+        {
+            tighten_pending_ = true;
+            conv_esolver = false;
+            if (!tighten_notice_done_)
+            {
+                GlobalV::ofs_running
+                    << "[constraint] progressive SCF: outer residual " << res
+                    << " < " << 10.0 * cfg_.thr
+                    << " e -> freezing mu and tightening drho to the strict "
+                       "threshold for the final SCF\n";
+                tighten_notice_done_ = true;
+            }
+            return;
+        }
+    }
     // Branch C: converged SCF with an active outer loop -- outer step.
     outer_step(iter, conv_esolver);
+}
+
+double ConstraintLoop::scf_threshold(const double strict_thr) const
+{
+    // Branch A: progressive SCF off or the loop not active -> historical
+    // strict threshold, byte-identical to the pre-M3 call.
+    if (!cfg_.progressive_scf || !enabled())
+    {
+        return strict_thr;
+    }
+    // Branch B: only the outer probe relaxes drho.  REFERENCE, INNER,
+    // fixed-mu, warm-start probes and the forced final SCF all stay strict.
+    if (phase_ != LoopPhase::CONSTRAINED || cfg_.mu_schedule != "outer"
+        || fixed_mu_ || warm_pending_ || tighten_pending_)
+    {
+        return strict_thr;
+    }
+    // Branch C: outer probe -> accept a looser density so the next mu step is
+    // not paid for by a fully converged SCF.  The floor keeps the probe
+    // density accurate enough for the secant/Broyden response.
+    return std::max(1e-5, 100.0 * strict_thr);
 }
 
 void ConstraintLoop::set_scf_energy(const double etot_ks)
@@ -1066,7 +1199,14 @@ bool ConstraintLoop::take_inner_step(const int iter)
     // M4 secant step on the freshly observed Q at the current mu.  The same
     // solver, caps and guards as the outer path (this is a schedule change,
     // not a solver change).
+    const int rejects_before = mu_solver_.trust_reject_count();
     status_ = mu_solver_.step(Q_, targets_, mu_);
+    // Branch: a rejected trust trial changed the fixed-point map; the caller
+    // must reset its mixing history in addition to the normal INNER reset.
+    if (mu_solver_.trust_reject_count() > rejects_before)
+    {
+        trust_rollback_pending_ = true;
+    }
     print_audit_line(iter, inner_steps_, "inner");
     // Branch A: the inner solver reached the target.  mu is frozen from now
     // on; convergence is NOT declared here -- the density must settle first
@@ -1183,6 +1323,16 @@ void ConstraintLoop::print_audit_line(const int iter, const int step,
     audit_ = ConstraintAccounting::audit(*wg_, mu_, Q_, targets_, nelec_,
                                          kinds_, onsite_atom_);
     last_audit_line_ = ConstraintAccounting::audit_line(audit_);
+    // Branch: trust diagnostics are opt-in.  Appending them to the stored
+    // line (rather than printing a separate line) keeps one machine-readable
+    // record per step; the default-off line stays byte-identical.
+    if (cfg_.trust_region)
+    {
+        std::ostringstream trust;
+        trust << " trust_radius=" << mu_solver_.trust_radius()
+              << " trust_rej=" << mu_solver_.trust_reject_count();
+        last_audit_line_ += trust.str();
+    }
     GlobalV::ofs_running << "\n[constraint] " << label << " step " << step
                          << " after SCF iteration " << iter << " (phase="
                          << (phase_ == LoopPhase::CONSTRAINED ? "constrained"
@@ -1197,27 +1347,38 @@ void ConstraintLoop::final_report()
     {
         return;
     }
-    GlobalV::ofs_running << "\n[constraint] final status: ";
+    GlobalV::ofs_running << "\n[constraint] final status: "
+                         << final_status_line() << "\n";
+    GlobalV::ofs_running << last_audit_line_ << "\n";
+    // Module A (M1): the dipole block rides the final report; off by
+    // default, so the historical output is byte-identical when disabled.
+    if (dipole_report_)
+    {
+        print_dipole_report();
+    }
+}
+
+std::string ConstraintLoop::final_status_line() const
+{
+    std::ostringstream os;
     if (fixed_mu_)
     {
         // Branch: the file pins mu -> report the product-mode source.  The
         // legacy env string below stays byte-identical for existing parsers.
         if (json_fixed_source_)
         {
-            GlobalV::ofs_running
-                << "FIXED_MU (mu fixed by the v2 target file; targets are "
-                   "labels, not enforced)\n";
+            os << "FIXED_MU (mu fixed by the v2 target file; targets are "
+                  "labels, not enforced)";
         }
         else
         {
-            GlobalV::ofs_running
-                << "FIXED_MU (experiment switch; multiplier frozen, targets not enforced)\n";
+            os << "FIXED_MU (experiment switch; multiplier frozen, targets "
+                  "not enforced)";
         }
     }
     else if (status_ == MuStatus::CONVERGED)
     {
-        GlobalV::ofs_running << "CONVERGED (targets reached within "
-                             << cfg_.thr << " e)\n";
+        os << "CONVERGED (targets reached within " << cfg_.thr << " e)";
     }
     else if (status_ == MuStatus::UNREACHABLE)
     {
@@ -1230,34 +1391,27 @@ void ConstraintLoop::final_report()
         {
             fused_cap = mu_caps_[fc];
         }
-        GlobalV::ofs_running << "UNREACHABLE (fused at mu cap "
-                             << fused_cap << " Ry)\n";
+        os << "UNREACHABLE (protocol cap constraint_mu_max=" << fused_cap
+           << " Ry reached; increase constraint_mu_max to extend)";
     }
     else if (status_ == MuStatus::BRANCH_FLIP)
     {
         // Online energy branch guard verdict: report the two energies in Ry
         // and eV so the fuse is auditable without re-parsing the run.
         const double de = e_guard_ - e_ref_;
-        GlobalV::ofs_running
-            << "BRANCH_FLIP (fused: constrained energy " << e_guard_
-            << " Ry is " << -de << " Ry (" << -de * ModuleBase::Ry_to_eV
-            << " eV) below the reference " << e_ref_
-            << " Ry at constraint_branch_tol=" << cfg_.branch_tol
-            << " Ry — the SCF left the reference electronic branch; the "
-               "targets are NOT validated)\n";
+        os << "BRANCH_FLIP (fused: constrained energy " << e_guard_
+           << " Ry is " << -de << " Ry (" << -de * ModuleBase::Ry_to_eV
+           << " eV) below the reference " << e_ref_
+           << " Ry at constraint_branch_tol=" << cfg_.branch_tol
+           << " Ry — the SCF left the reference electronic branch; the "
+              "targets are NOT validated)";
     }
     else
     {
-        GlobalV::ofs_running << "RUNNING (SCF ended before the outer loop "
-                                "converged — raise scf_nmax)\n";
+        os << "RUNNING (SCF ended before the outer loop converged — raise "
+              "scf_nmax)";
     }
-    GlobalV::ofs_running << last_audit_line_ << "\n";
-    // Module A (M1): the dipole block rides the final report; off by
-    // default, so the historical output is byte-identical when disabled.
-    if (dipole_report_)
-    {
-        print_dipole_report();
-    }
+    return os.str();
 }
 
 double ConstraintLoop::mu_norm() const

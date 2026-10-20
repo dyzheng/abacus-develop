@@ -106,6 +106,13 @@ class ConstraintLoop
     // loop is done (CONVERGED / UNREACHABLE / BRANCH_FLIP) or inactive.
     void on_scf_converged(const int iter, bool& conv_esolver);
 
+    // M3 C3: drho threshold for this SCF iteration.  During the outer probe
+    // (CONSTRAINED, OUTER schedule, neither fixed-mu nor a warm-start probe)
+    // it relaxes to max(1e-5, 100*strict); once the residual is within
+    // 10*constraint_thr the next SCF is forced to the strict threshold for a
+    // final, fully converged density.  Every other phase returns 'strict'.
+    double scf_threshold(double strict_thr) const;
+
     // Dual-iteration schedule hook (plan 2026-09-11-dual-iteration-strategy.md),
     // called by the esolver once per SCF iteration, after observe() and before
     // on_scf_converged().  No-op unless constraint_mu_schedule=inner, the loop
@@ -163,6 +170,26 @@ class ConstraintLoop
     bool warm_started_last_init() const { return warm_started_last_init_; }
     // Test-only diagnostic: the solver's retained slope of component i.
     double solver_slope(const int i) const { return mu_solver_.slope(i); }
+    // M3 C2 diagnostics: switch, current trust radius [Ry] and cumulative
+    // rejected-trial count.  The radius is 0 while the trust path is off.
+    bool trust_enabled() const { return cfg_.trust_region; }
+    double trust_radius() const { return mu_solver_.trust_radius(); }
+    int trust_rejections() const { return mu_solver_.trust_reject_count(); }
+    // Consume the one-shot "a trust step was rejected" request.  The esolver
+    // calls this right after on_scf_converged() and resets the charge-mixing
+    // history when true: the rejected fixed-point map no longer exists.
+    bool consume_trust_rollback()
+    {
+        const bool pending = trust_rollback_pending_;
+        trust_rollback_pending_ = false;
+        return pending;
+    }
+    // M3 E1 diagnostics: number of steps rejected because the total
+    // magnetization jumped away from the reference branch.
+    int mag_rejections() const { return mag_rejections_; }
+    // Final status token (one line, no trailing newline).  final_report()
+    // prints exactly this string; tests and logs can reuse it.
+    std::string final_status_line() const;
     // Energy branch guard (L10 lineage): armed iff constraint_branch_tol > 0.
     // reference_energy() is the constrained energy of the mu = 0 reference
     // SCF (valid once recorded); guard_energy() is the constrained energy
@@ -291,6 +318,19 @@ class ConstraintLoop
     bool settle_armed_ = false;
     bool inner_step_this_iter_ = false;
     int last_reset_iter_ = 0;
+    // Set by outer_step()/take_inner_step() when the trust solver rejected a
+    // trial; consumed once by the esolver to reset the mixing history.
+    bool trust_rollback_pending_ = false;
+    // M3 C3 progressive-SCF state: tighten_pending_ is set when the outer
+    // residual is close enough to the target that the next SCF must use the
+    // strict threshold; tighten_notice_done_ keeps the log one-shot.
+    bool tighten_pending_ = false;
+    bool tighten_notice_done_ = false;
+    // M3 E1 magnetic branch anchor: TMAG recorded at the reference (or the
+    // first warm-geometry convergence) and the number of rejected jumps.
+    double mag_ref_ = 0.0;
+    bool mag_ref_valid_ = false;
+    int mag_rejections_ = 0;
     // Module A reporter state (see the public accessors above).
     void update_dipole(const double* const* rho, const int nspin);
     void print_dipole_report() const;

@@ -29,6 +29,25 @@ struct MuSolverParams
     double kappa_max = 20.0; // largest kept |dQ/dmu| (secant guard)
     double conv_tol = 1e-4;  // e: per-component |Q - target| convergence
     int plateau_window = 3;  // fuse look-back: steps with <1% improvement
+    // M3 C2: adaptive trust-region outer solver.  Off (default) keeps the
+    // legacy component-secant path bit-identical.  When on, each trial step is
+    // scored by rho = actual/predicted residual reduction:
+    //   rho > eta_good -> radius *= grow (cap radius_max)
+    //   rho < eta_bad  -> radius *= shrink and the step is rolled back
+    // A multi-component list uses a Broyden rank-one Jacobian (when
+    // broyden=true) instead of independent component secants.
+    bool trust_region = false;
+    bool broyden = true;
+    double trust_radius_max = 1.0;   // Ry
+    double trust_eta_good = 0.5;
+    double trust_eta_bad = 0.1;
+    double trust_shrink = 0.5;
+    double trust_grow = 2.0;
+    double trust_radius_min = 1e-8;  // Ry: numerical floor on the radius
+    // After this many consecutive rejections the solver falls back to the
+    // legacy secant path instead of shrinking forever (a noisy channel can
+    // otherwise livelock on rejected sub-noise steps).
+    int trust_max_rejects = 20;
     // Expected sign of the observed response dQ/dmu.  Both the charge and
     // the spin channel respond negatively (-1): a positive potential on the
     // fragment repels the coupled density (charge: rho; spin: m = rho_up -
@@ -105,8 +124,25 @@ class MuSolver
     // measurement across geometries).
     double slope(const int i) const;
 
+    // M3 C2/E1: force-reject the pending trial step and re-walk it with a
+    // smaller trust radius.  Used by the magnetic branch anchor, which knows
+    // the step was physically unacceptable even if its residual improved.
+    // With no pending trial the last accepted (mu_prev_, Q_prev_) anchor is
+    // used.  Returns RUNNING; the caller must rerun the SCF at the new mu.
+    MuStatus reject(const std::vector<double>& Q,
+                    const std::vector<double>& target,
+                    std::vector<double>& mu);
+
     int nsteps() const { return nsteps_; }
     int sign_flip_count() const { return sign_flip_count_; }
+
+    // M3 C2 diagnostics (zero/empty when trust_region is off).
+    double trust_radius() const { return trust_radius_; }
+    int trust_accept_count() const { return trust_accept_count_; }
+    int trust_reject_count() const { return trust_reject_count_; }
+    double last_rho() const { return last_rho_; }
+    bool trust_fallback() const { return trust_fallback_; }
+    double jacobian(const int i, const int j) const;
 
     // Fuse diagnostics: component that triggered UNREACHABLE, the mu value
     // and the residual at the fuse point (Q(mu) endpoint report).
@@ -115,6 +151,37 @@ class MuSolver
     double fuse_residual() const { return fuse_residual_; }
 
   private:
+    // Legacy component-secant path (pre-M3, must stay bit-identical).
+    MuStatus step_secant(const std::vector<double>& Q,
+                         const std::vector<double>& target,
+                         std::vector<double>& mu);
+    // M3 C2 trust-region/Broyden path.
+    MuStatus step_trust(const std::vector<double>& Q,
+                        const std::vector<double>& target,
+                        std::vector<double>& mu);
+    void ensure_history(const int n);
+    double cap_for(const int i, const int n) const;
+    // Solve J_active * dmu = -res_active; false on a singular system.
+    bool solve_active(const std::vector<double>& res,
+                      const std::vector<bool>& active,
+                      std::vector<double>& dmu) const;
+    std::vector<bool> active_for(const std::vector<double>& res) const;
+    void broyden_update(const std::vector<double>& dmu,
+                        const std::vector<double>& dQ);
+    // Feed a (dmu, dQ) observation into the trust model.  The sign guard
+    // keeps a pathological anti-response from flipping the solve direction;
+    // accepted and bad-rho-rejected trials both use it (the rejected trial's
+    // Q is still a converged observation, and without the update the retry
+    // can repeat the identical step when the radius was not binding).
+    void update_trial_model(const std::vector<double>& dmu,
+                            const std::vector<double>& dQ);
+    // Store a new pending trial from the current (restored) mu and the
+    // residual at that mu.  Returns the step actually taken.
+    void propose_trial(const std::vector<double>& res,
+                       const std::vector<bool>& active,
+                       std::vector<double>& mu);
+    void reset_trust_state();
+
     MuSolverParams params_;
     std::vector<bool> has_history_;
     std::vector<double> mu_prev_;
@@ -126,6 +193,19 @@ class MuSolver
     int fuse_component_ = -1;
     double fuse_mu_ = 0.0;
     double fuse_residual_ = 0.0;
+    // M3 C2 trust-region/Broyden state.
+    std::vector<std::vector<double>> jacobian_;
+    double trust_radius_ = 0.0;
+    bool trust_pending_ = false;
+    std::vector<double> mu_before_step_;
+    std::vector<double> Q_before_step_;
+    std::vector<double> res_before_step_;
+    std::vector<double> pred_res_step_;
+    int trust_accept_count_ = 0;
+    int trust_reject_count_ = 0;
+    int trust_consecutive_rejects_ = 0;
+    double last_rho_ = 1.0;
+    bool trust_fallback_ = false;
 };
 
 } // namespace constraint

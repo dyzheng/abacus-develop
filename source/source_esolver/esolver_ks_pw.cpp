@@ -380,6 +380,13 @@ void ESolver_KS_PW<T, Device>::iter_finish(UnitCell& ucell, const int istep, int
             this->p_chgmix->mix_reset();
         }
         cloop.on_scf_converged(iter, conv_esolver);
+        // M3 C2: a rejected trust trial rolled mu back to a previous
+        // fixed-point map; the mixing history built for the rejected mu is
+        // stale, so reset it once before the next SCF iteration.
+        if (cloop.consume_trust_rollback())
+        {
+            this->p_chgmix->mix_reset();
+        }
         // Refresh the total energy with the constraint correction
         // (cc_escon), mirroring the dp_escon path.
         this->pelec->f_en.cc_escon = cloop.last_audit().e_con;
