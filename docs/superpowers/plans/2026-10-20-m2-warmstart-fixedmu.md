@@ -24,6 +24,8 @@
 
 **资源约束（本轮用户令）：** 所有集成 SCF 运行 `scf_nmax <= 100`；100 步不收敛则记录 drho 轨迹并分析，不提高步数。
 
+**修订记录：** 2026-10-20 计划评审发现的 6 个 Important（I1-I6）与 4 项 Minor 已全部修订入本文档，清单见文末"评审修订记录"。
+
 ---
 
 ## 文件结构
@@ -56,6 +58,8 @@
 - delta 目标构建：`ConstraintLoop::outer_step` 的 `targets_[a] = Q_ref_[a] + specs_[a].target`（`constraint_loop.cpp:515-540`）。
 - 偶极状态 armed 在 `init` 的 WeightGrid 构建之后（`constraint_loop.cpp:170-250`），热重建必须复用同一段逻辑。
 - h2o_dimer 100 步实测：reference 在 iter 30 收敛；第一约束相在 iter 73 收敛；第二 μ 注入后 iter 100 仍 drho=1.27e-2（M2 的直接动机）。
+- 能量分支守卫：`on_scf_converged` 内 `if (cfg_.branch_tol > 0.0)`（constraint_loop.cpp:683 附近）；G1（REFERENCE 相）记录 `e_ref_`，G2（CONSTRAINED 相）比较 `e_guard_` 与 `e_ref_`；`reset()` 清 `e_ref_valid_`。
+- fixed_mu 运行时分支：`outer_step` 首段（constraint_loop.cpp:530-541）——首次真收敛即 DONE，无割线步；`mu_.assign(specs_.size(), 0.0)` 在 :259（env 分支之前）。
 
 ---
 
@@ -339,12 +343,17 @@ TEST(MuSolverTest, RebindRetainsSlope)
     p.response_sign = -1;
     constraint::MuSolver s(p);
     std::vector<double> mu = {0.0};
-    // First observation at mu=0 -> conservative first step.
+    // First observation at mu = 0 with Q = 1.0 above the target 0: the
+    // negative-response channel needs +mu to repel charge,
+    // dmu = -(Q-t)/kappa = -(1.0)/(-0.3) = +3.33, capped to +0.05.
     EXPECT_EQ(s.step({1.0}, {0.0}, mu), constraint::MuStatus::RUNNING);
     const double mu1 = mu[0];
-    // Second observation gives a measured slope dQ/dmu = -2
-    // (mu fell by 0.05 and Q rose by 0.1: the physical charge response).
-    EXPECT_EQ(s.step({1.1}, {0.0}, mu), constraint::MuStatus::RUNNING);
+    EXPECT_DOUBLE_EQ(mu1, 0.05);
+    // Second observation Q = 0.9 (fell by 0.1 under +0.05 Ry): the measured
+    // slope is dQ/dmu = -0.1/+0.05 = -2 (physical negative response).
+    // (Review I5: an earlier draft used Q = 1.1, a POSITIVE slope that
+    // trips the sign-flip fallback and can never yield -2.)
+    EXPECT_EQ(s.step({0.9}, {0.0}, mu), constraint::MuStatus::RUNNING);
     const double slope = s.slope(0);
     EXPECT_NEAR(slope, -2.0, 1e-12);
 
@@ -395,8 +404,13 @@ cmake --build build -j 32 --target MODULE_ESTATE_constraint_mu_solver 2>&1 | tai
     // window / fuse state are cleared (a new geometry is a new problem).
     void rebind(const std::vector<double>& mu,
                 const std::vector<double>& Q);
-    // Last accepted raw dQ/dmu for component i (negative for charge/spin),
-    // or the conservative response_sign*kappa_min when none was measured.
+    // Last accepted dQ/dmu of component i (signed, AFTER the
+    // kappa_min/kappa_max clamp — the value the update actually used;
+    // negative for charge/spin), or the conservative
+    // response_sign*kappa_min when none was measured.  A sign-flip fallback
+    // value is recorded too (deliberate conservative choice: one bad step
+    // degrades the retained slope to kappa_min instead of keeping a stale
+    // measurement across geometries).
     double slope(const int i) const;
 ```
 
@@ -491,20 +505,29 @@ git commit -am "feat(constraint): MuSolver rebind/slope for cross-geometry warm 
 
 ```cpp
 // Warm start: the second geometry rebuilds the weights but keeps mu, phase
-// and the solver history; a cold re-init resets everything.
+// and the solver history; a cold re-init resets everything.  Eligibility
+// requires the previous frame CONVERGED, so the loop is first driven to
+// convergence with the unit-stiffness mock (Q(mu) = Q_ref - mu, target
+// Q_ref + 0.1 -> mu* = -0.1 in ~3 iterations).  (Review I6: an earlier
+// draft stopped after ONE outer step — status RUNNING — and could never
+// pass its own eligibility guard.)
 TEST_F(ConstraintLoopTest, WarmStartKeepsMuAndPhase)
 {
     constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
     constraint::ConstraintConfig cfg = make_cfg(0.1);
     cfg.warm_start = true;
     loop.init(*ucell, rhopw, cfg, radii, 10.0, /*istep=*/0);
-    const double* rp[1] = {rho_ref.data()};
-    loop.observe(1, rp, 1);
-    bool conv = true;
-    loop.on_scf_converged(2, conv);
-    ASSERT_EQ(loop.phase(), constraint::LoopPhase::CONSTRAINED);
+    std::vector<double> rho;
+    bool conv = false;
+    int iter = 0;
+    while (loop.status() == constraint::MuStatus::RUNNING && iter < 20)
+    {
+        ++iter;
+        mock_iteration(loop, rho, iter, loop.mu()[0], 1e-9, conv, true);
+    }
+    ASSERT_EQ(loop.status(), constraint::MuStatus::CONVERGED);
+    EXPECT_NEAR(loop.mu()[0], -0.1, 1e-12);
     const double mu1 = loop.mu()[0];
-    ASSERT_NE(mu1, 0.0);
 
     // New geometry: move an atom so the rebuilt WeightGrid differs.
     ucell->atoms[1].taud[0].x += 0.05;
@@ -520,6 +543,8 @@ TEST_F(ConstraintLoopTest, WarmStartKeepsMuAndPhase)
     EXPECT_DOUBLE_EQ(loop.mu()[0], 0.0);
 }
 ```
+
+> 实现注意（I6 附注）：移动原子后**测试自身的 wg 也是陈旧的**（它共享被改动的 ucell 引用，但 build() 不会自动重跑）。本测试只查 phase/mu，不受影响；任何在移动后还要继续驱动收敛的测试（如 Task 4 的 delta 测试）必须先 `wg->build();` 重建测试侧权重，使 mock 密度与 loop 内部的观测口径一致。
 
 - [ ] **Step 2: 运行确认失败**
 
@@ -551,14 +576,20 @@ public 诊断：
 
 ```cpp
     bool warm_started_last_init() const { return warm_started_last_init_; }
+    // Test-only diagnostic (review I1): the solver's retained slope of
+    // component i.  A warm-start regression check that the rebind anchored
+    // the history — a missing rebind records a cross-geometry pseudo-slope
+    // instead (used by WarmStartAbsoluteKeepsTarget, Task 4).
+    double solver_slope(const int i) const { return mu_solver_.slope(i); }
 ```
 
 private：
 
 ```cpp
     bool warm_started_last_init_ = false;
-    bool warm_pending_ = false; // delta Q_ref re-derivation at next convergence
+    bool warm_pending_ = false; // rebind (+ delta Q_ref) at next convergence
     bool geometry_state_valid_ = false;
+    bool warm_guard_notice_done_ = false; // I4: once-per-cold-geometry log
     void build_geometry(const UnitCell& ucell,
                         const ModulePW::PW_Basis* rho_basis,
                         const std::vector<double>& radii,
@@ -592,10 +623,15 @@ bool warm_start_calculation()
 `ConstraintLoop::init` 全量入口开头：
 
 ```cpp
-    // NOTE (Task 5): the fixed-mu product branch (v2 "fixed_mu") is inserted
-    // HERE, before the warm-start branch, so it wins over warm start.  Task 3
-    // lands the cold/warm split first; Task 5 adds that branch with its
-    // all-or-none configure guard.
+    // NOTE (Task 5, review I2): the fixed-mu product branch (v2 "fixed_mu")
+    // is NOT inserted here at the top — at this point reset() has emptied
+    // mu_/targets_ and wg_ does not exist, so a top branch would
+    // dereference empty state.  It goes in the MIDDLE of init, right before
+    // the ABA_CONSTRAINT_FIXED_MU env branch (after WeightGrid build and
+    // mu_.assign).  "Fixed wins over warm" is instead guaranteed by the
+    // all-fixed guard in warm_start_eligible below: an all-fixed list is
+    // never warm-eligible, so every geometry takes the cold path and hits
+    // the fixed branch (correct — fixed frames need no carried state).
     // Branch: warm start (M2 C1) — only MD/relax, only after a converged
     // previous geometry, only with an unchanged constraint list.
     if (warm_start_eligible(cfg, specs, istep))
@@ -624,6 +660,19 @@ bool ConstraintLoop::warm_start_eligible(const ConstraintConfig& cfg,
     // Guard: an unreachable / branch-flipped previous frame must not be
     // recycled; the run needs a clean reference instead.
     if (status_ != MuStatus::CONVERGED)
+    {
+        return false;
+    }
+    // Guard (review I2): an all-fixed list (v2 fixed_mu, M2 C4) never
+    // warm-starts — fixed frames are independent (no outer loop to carry),
+    // and this is what makes the fixed branch win over warm start (see the
+    // init NOTE above).
+    bool all_fixed = !specs.empty();
+    for (const ConstraintSpec& s : specs)
+    {
+        all_fixed = all_fixed && s.fixed_mu;
+    }
+    if (all_fixed)
     {
         return false;
     }
@@ -659,10 +708,21 @@ void ConstraintLoop::warm_reinit(...)
     // The first SCF of the new geometry is a probe at the carried mu: no
     // inner updates may move mu before Q(μ_prev) is observed.
     inner_active_ = false;
-    warm_pending_ = (cfg_.target_mode == "delta");
+    // warm_pending_ is true for BOTH target modes (review I1): the
+    // mu_solver rebind at the first converged SCF is mode-independent —
+    // without it the first secant step of an ABSOLUTE run would measure
+    // dQ/dmu across geometries (stale Q_prev from the previous ionic
+    // configuration).  Only the Q_ref re-derivation inside
+    // finish_warm_start is delta-specific.
+    warm_pending_ = true;
     status_ = MuStatus::RUNNING;
     phase_ = LoopPhase::CONSTRAINED;
     saw_resolved_ = false;
+    // M1 x M2 (review I3): the reference dipole belongs to the previous
+    // geometry; a warm geometry has no free phase, so q_dip must go
+    // invalid (the raw dipole keeps printing) instead of silently diffing
+    // p against a stale p_ref from another ionic configuration.
+    dipole_ref_valid_ = false;
     // Q_ from the previous geometry is stale; rebind happens at the first
     // converged observation (Task 4).
     GlobalV::ofs_running
@@ -676,6 +736,32 @@ void ConstraintLoop::warm_reinit(...)
 ```
 
 `build_geometry` 抽出现有 WeightGrid 构建 + M1 dipole arming。冷 init 与 warm reinit 共用；区别仅冷 init 在 `reset()` 后调用。
+
+`on_scf_converged` 的能量分支守卫入口加暖几何跳过（review I4；守卫块位于 constraint_loop.cpp:683 附近的 `if (cfg_.branch_tol > 0.0)`，G1 记录 e_ref_ / G2 比较）：
+
+```cpp
+    // M2 (I4): the branch-guard reference e_ref_ belongs to the geometry
+    // that ran the mu = 0 reference SCF.  A warm-started geometry never
+    // runs one, so comparing the new geometry's energy against the old
+    // reference would be cross-geometry garbage (false BRANCH_FLIP or
+    // missed flips) — skip the guard here (once-per-cold-geometry notice).
+    if (warm_started_last_init_ && cfg_.branch_tol > 0.0
+        && !warm_guard_notice_done_)
+    {
+        GlobalV::ofs_running
+            << "[constraint] branch guard skipped for this warm-started "
+               "geometry (no mu = 0 reference energy; the guard covers "
+               "cold geometries only)\n";
+        warm_guard_notice_done_ = true;
+    }
+    // 原守卫块改为：
+    if (cfg_.branch_tol > 0.0 && !warm_started_last_init_)
+    {
+        ... 原有 G1/G2 守卫代码，逐行不动 ...
+    }
+```
+
+（`warm_guard_notice_done_` 在 `reset()` 清零——reset 只在冷 init 走，因此一段连续暖几何只提示一次；若中途回退冷启动，提示资格随之重置。冷几何的 G1 会正常重新武装 e_ref_，无需额外处理。）
 
 `geometry_state_valid_ = true` 在全量 init 末尾与 warm_reinit 末尾设置；`reset()` 置 false、`warm_started_last_init_=false`、`warm_pending_=false`。
 
@@ -712,34 +798,41 @@ git commit -am "feat(constraint): M2 cold/warm init split + esolver istep plumbi
 ```cpp
 // Delta warm start: the first converged observation of the new geometry is
 // taken at the carried mu; Q_ref is re-derived as Q_obs - kappa*mu, and the
-// targets follow the new geometry instead of the old reference.
+// targets follow the new geometry instead of the old reference.  (Review
+// I6: drive the first geometry to CONVERGED — the eligibility guard
+// requires it — and rebuild the test-side wg after the move so the mock
+// density and the loop's rebuilt weights stay bit-identical.)
 TEST_F(ConstraintLoopTest, WarmStartDeltaRedefinesTarget)
 {
     constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
     constraint::ConstraintConfig cfg = make_cfg(0.1);
     cfg.warm_start = true;
     loop.init(*ucell, rhopw, cfg, radii, 10.0, 0);
-    const double* rp[1] = {rho_ref.data()};
-    loop.observe(1, rp, 1);
-    bool conv = true;
-    loop.on_scf_converged(2, conv);
-    const double target_old = loop.targets()[0];
+    std::vector<double> rho;
+    bool conv = false;
+    int iter = 0;
+    while (loop.status() == constraint::MuStatus::RUNNING && iter < 20)
+    {
+        ++iter;
+        mock_iteration(loop, rho, iter, loop.mu()[0], 1e-9, conv, true);
+    }
+    ASSERT_EQ(loop.status(), constraint::MuStatus::CONVERGED);
+    const double target_old = loop.targets()[0]; // Q_ref(old) + 0.1
 
-    // New geometry: rebuild with warm start, then hand in the first
-    // converged observation at the carried mu.
+    // New geometry: warm re-init, then hand in the first converged
+    // observation at the carried mu (mock rho built by mock_iteration).
     ucell->atoms[1].taud[0].x += 0.05;
+    wg->build(); // test-side weights follow the moved geometry (I6 note)
     loop.init(*ucell, rhopw, cfg, radii, 10.0, 1);
-    std::vector<double> rho = rho_ref;
-    const double* rp2[1] = {rho.data()};
-    loop.observe(3, rp2, 1);
-    bool conv2 = true;
-    loop.on_scf_converged(4, conv2);
-    // Q_ref moved with the geometry: the new target differs from the old.
+    mock_iteration(loop, rho, iter + 1, loop.mu()[0], 1e-9, conv, true);
+    // Q_ref moved with the geometry: the re-derived target differs from the
+    // old one (mock: Q_ref re-derived = Q_obs - (-1)*mu is the exact new
+    // free reference, so the shift is purely the geometry's weight change).
     EXPECT_NE(loop.targets()[0], target_old);
 }
 ```
 
-Absolute 模式测试：
+Absolute 模式测试（review I1：除 targets 不变外，还必须断言**斜率未被跨几何污染**——没有 rebind 时首个暖步会把跨几何伪斜率记进 last_slope_）：
 
 ```cpp
 TEST_F(ConstraintLoopTest, WarmStartAbsoluteKeepsTarget)
@@ -747,19 +840,36 @@ TEST_F(ConstraintLoopTest, WarmStartAbsoluteKeepsTarget)
     constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
     constraint::ConstraintConfig cfg = make_cfg(0.1);
     cfg.target_mode = "absolute";
-    cfg.targets[0].value = 9.9;
+    // Absolute target close to the free reference so the unit-stiffness
+    // mock converges in ~3 steps: Q* = Q_ref + 0.1 -> mu* = -0.1.
+    cfg.targets[0].value = Q_of(rho_ref) + 0.1;
     cfg.warm_start = true;
     loop.init(*ucell, rhopw, cfg, radii, 10.0, 0);
-    const double* rp[1] = {rho_ref.data()};
-    loop.observe(1, rp, 1);
-    bool conv = true;
-    loop.on_scf_converged(2, conv);
+    std::vector<double> rho;
+    bool conv = false;
+    int iter = 0;
+    while (loop.status() == constraint::MuStatus::RUNNING && iter < 20)
+    {
+        ++iter;
+        mock_iteration(loop, rho, iter, loop.mu()[0], 1e-9, conv, true);
+    }
+    ASSERT_EQ(loop.status(), constraint::MuStatus::CONVERGED);
     const double target_old = loop.targets()[0];
+    // The measured unit slope is the kappa carried into the warm geometry.
+    EXPECT_NEAR(loop.solver_slope(0), -1.0, 1e-12);
+
+    // Warm re-init (absolute): the rebind must anchor the history at the
+    // carried mu (I1) even though no Q_ref re-derivation happens.
     ucell->atoms[1].taud[0].x += 0.05;
     loop.init(*ucell, rhopw, cfg, radii, 10.0, 1);
-    loop.observe(3, rp, 1);
-    loop.on_scf_converged(4, conv);
+    ASSERT_TRUE(loop.warm_started_last_init()); // really the warm path
+    mock_iteration(loop, rho, iter + 1, loop.mu()[0], 1e-9, conv, true);
     EXPECT_DOUBLE_EQ(loop.targets()[0], target_old);
+    // Slope-pollution assertion: with the rebind the first warm step saw
+    // dmu_obs == 0 and kept the retained slope; without it the step would
+    // have recorded a cross-geometry pseudo-slope
+    // (-1 + dQ_ref_geometry/dmu) instead.
+    EXPECT_NEAR(loop.solver_slope(0), -1.0, 1e-12);
 }
 ```
 
@@ -887,7 +997,7 @@ cmake --build build -j 32 --target MODULE_ESTATE_constraint_loop 2>&1 | tail -5
     bool fixed_mu_mode() const { return fixed_mu_; }
 ```
 
-`constraint_loop.cpp` 的 init 中，在环境变量分支之前：
+`constraint_loop.cpp` 的 init 中，在环境变量分支之前（**位置纪律，review I2**：必须位于 WeightGrid 构建与 `mu_.assign(specs_.size(), 0.0)`（:259）之后、env 分支（:266）之前；严禁放 init 顶部——那里 reset() 刚清空 mu_/targets_、wg_ 未建，会越界崩溃。对 warm 的优先级由 Task 3 的 all-fixed 守卫保证，不依赖分支顺序）：
 
 ```cpp
     // Branch: v2 fixed_mu (M2 C4) -> product fixed-mu mode.  Every component
@@ -900,6 +1010,18 @@ cmake --build build -j 32 --target MODULE_ESTATE_constraint_loop 2>&1 | tail -5
     }
     if (json_fixed)
     {
+        // Guard (review I4b): like the env experiment below, this mode
+        // skips the mu = 0 reference SCF, so the energy branch guard has no
+        // reference energy — refuse the combination loudly instead of
+        // running an unarmed guard.
+        if (cfg_.branch_tol > 0.0)
+        {
+            ModuleBase::WARNING_QUIT("ConstraintLoop::init",
+                "constraint_branch_tol > 0 is incompatible with v2 "
+                "\"fixed_mu\" (no reference SCF energy is available); "
+                "remove fixed_mu from the target file or set "
+                "constraint_branch_tol = 0");
+        }
         // Guard: the env experiment must not silently override a file that
         // says exactly what mu to use.
         if (std::getenv("ABA_CONSTRAINT_FIXED_MU") != nullptr)
@@ -914,6 +1036,7 @@ cmake --build build -j 32 --target MODULE_ESTATE_constraint_loop 2>&1 | tail -5
             targets_[a] = specs_[a].target;
         }
         fixed_mu_ = true;
+        json_fixed_source_ = true;
         inner_active_ = false;
         phase_ = LoopPhase::CONSTRAINED;
         status_ = MuStatus::RUNNING;
@@ -921,13 +1044,26 @@ cmake --build build -j 32 --target MODULE_ESTATE_constraint_loop 2>&1 | tail -5
     }
 ```
 
-`outer_step` 的 fixed 分支保持现状（首次 SCF 收敛后 DONE），但审计/最终状态区分来源：
+`outer_step` 的 fixed 分支保持现状（首次 SCF 收敛后 DONE），但最终状态字符串**按来源区分**（review Minor：既有 env 字符串保持不变——`tests/constraint_fd_force` 的 runner 可能 grep 它；先 `grep -rn "FIXED_MU" tests/constraint_fd_force/tools/` 确认，无论如何保守保留）：
 
 ```cpp
+    // final_report() 的 fixed_mu 分支：
+    if (json_fixed_source_)
+    {
         GlobalV::ofs_running
-            << "FIXED_MU (mu fixed by input/env; targets are labels, not "
+            << "FIXED_MU (mu fixed by the v2 target file; targets are "
+               "labels, not enforced)\n";
+    }
+    else
+    {
+        // 既有字符串逐字节保留（env 路径）：
+        GlobalV::ofs_running
+            << "FIXED_MU (experiment switch; multiplier frozen, targets not "
                "enforced)\n";
+    }
 ```
+
+private 成员加 `bool json_fixed_source_ = false;`（JSON 分支置 true，`reset()` 清零）。
 
 `print_audit_line` 不新增字段；`CONSTRAINT_AUDIT` 的 `q/t/res` 照常输出供标注。
 
@@ -982,6 +1118,8 @@ constraint_target_file constraint_target.json
   {"type":"charge","target":9.957147948,"atoms":[1,4,5]}]}
 ```
 
+> 数值来源纪律（review Minor）：上述 absolute 目标值必须来自**同结构自由相（mu=0）实测片段电荷**——实施时先跑一次无约束/空约束运行测得，若与表中值不同以实测为准更新（两目标之和必须 = nelec=20），并在测试文档中记录来源运行的日志路径。
+
 运行两次（同结构、同 SCF 上限）：
 
 ```bash
@@ -1021,6 +1159,8 @@ mpirun -np 8 abacus_basic_para > run_cold.log 2>&1   # warm_start=0
 - `CONSTRAINT_AUDIT` 的 `q` 可用于标注；
 - 与 warm-start 扫描同一 μ 的 Q 偏差 < 1e-2 e。
 
+> 数值来源纪律（review Minor）：`fixed_mu` 的 ±0.0654 必须来自**同一用例的冷启动收敛 μ**（Step 2 的 cold run 或一次单点约束收敛）；"Q 偏差 < 1e-2 e" 的参照是同一 μ 下 warm 运行的收敛 Q。来源值不同则以实测为准，并在测试文档记录出处。
+
 - [ ] **Step 5: 写测试文档 + 更新开发日志**
 
 按 AGENTS.md 五段格式写 `2026-10-20-m2-warmstart-fixedmu-test.md`，并在
@@ -1040,4 +1180,23 @@ git commit -m "docs(constraint): M2 warm-start + fixed_mu test round"
 1. **Spec 覆盖**：§5.1 的冷/热拆分、μ/κ/phase 保留、delta Q_ref 反推、absolute 推荐、仅 MD/relax 生效；§5.4 的 v2 `fixed_mu`、一次 SCF 一帧、审计 Q 输出、env 兼容——全部映射到 Task 1-6。✅
 2. **默认路径**：`constraint_warm_start` 默认 true 但 `istep<=0` / `calculation=scf` / 无上一几何状态时走冷路径；单点输出不变。✅
 3. **风险**：①delta 反推依赖跨几何 κ，首个 warm 步可能偏差大——Task 4 用 rebind 清除陈旧 Q 历史并以保留 κ 起步，集成测试用 absolute 主验收；②fixed_mu 与 warm_start 同开时 fixed 优先（每个几何重置到输入 μ）；③`warm_start_eligible` 要求上一帧 `CONVERGED`，未收敛帧回退冷启动并打印警告。✅
-4. **类型一致性**：`ConstraintConfig::warm_start`、`ConstraintSpec::{fixed_mu,fixed_mu_value}`、`ConstraintLoop::{init(...,istep),warm_started_last_init(),fixed_mu_mode()}`、`MuSolver::{rebind,slope}` 在全部 Task 间一致。✅
+4. **类型一致性**：`ConstraintConfig::warm_start`、`ConstraintSpec::{fixed_mu,fixed_mu_value}`、`ConstraintLoop::{init(...,istep),warm_started_last_init(),solver_slope(),fixed_mu_mode()}`、`MuSolver::{rebind,slope}` 在全部 Task 间一致。✅
+
+---
+
+## 评审修订记录（2026-10-20，评审人：主会话 + code-reviewer 子代理）
+
+计划初版（commit `97d470427`）经评审发现 6 个 Important 与 4 项 Minor，已全部修订入上文对应位置：
+
+| # | 级别 | 问题 | 修订位置 |
+|---|---|---|---|
+| I1 | Important | `warm_pending_` 原仅在 delta 模式置 true → absolute 模式跳过 `mu_solver_.rebind`，首个暖步用跨几何伪斜率（absolute 恰是设计推荐的 MD 模式） | Task 3 `warm_reinit`：`warm_pending_ = true`（两模式）；Task 4 absolute 测试改为驱动到 CONVERGED 后以 `solver_slope(0) == -1.0` 做抗污染断言 + `solver_slope` 测试访问器 |
+| I2 | Important | fixed_mu 分支位置自相矛盾（Task 3 注释说插 init 顶部——会对空 mu_/targets_ 越界；Task 5 说插 env 之前——则 warm 在 istep>0 抢先命中，"fixed 优先"落空） | Task 3 NOTE 改为"中部插入（WeightGrid 构建与 mu_.assign 之后、env 分支之前）"；`warm_start_eligible` 增加 all-fixed 守卫（fixed 帧永不暖启，自然走冷路径命中 fixed 分支） |
+| I3 | Important | 暖几何下 M1 `dipole_ref_valid_` 陈旧 → q_dip 用旧几何 p_ref 对新几何 p 计算，输出错误读数 | Task 3 `warm_reinit` 显式置 `dipole_ref_valid_ = false`（裸 p 照常打印，q_dip 自动省略） |
+| I4 | Important | 能量分支守卫（branch_tol>0）在暖几何用首几何的 e_ref_ 比较新几何能量（误判/漏判）；JSON fixed_mu 缺 env 同款 branch_tol 互斥守卫 | Task 3：`on_scf_converged` 守卫块加 `!warm_started_last_init_` 条件 + 每冷几何一次性提示（`warm_guard_notice_done_`）；Task 5：JSON fixed 分支加 WARNING_QUIT 互斥守卫 |
+| I5 | Important | Task 2 `RebindRetainsSlope` 测试向量违反求解器符号约定（Q0=1.0 时首步必为 +0.05；Q1=1.1 给正斜率触发 sign-flip 回退，永远测不到 -2.0） | Task 2 测试向量改为 Q1=0.9（raw slope -2），并加 `EXPECT_DOUBLE_EQ(mu1, 0.05)` 锁定首步方向 |
+| I6 | Important | Task 3/4 三个测试在首几何只走一次 outer step（status RUNNING），过不了 `warm_start_eligible` 的 CONVERGED 守卫；且移动原子后测试侧 wg 陈旧未重建 | Task 3/4 测试改为先用 `mock_iteration` 驱动到 CONVERGED（单位刚度 mock ~3 步收敛到 mu=-0.1）；delta 测试在移动后 `wg->build()` 重建测试侧权重 |
+| M1 | Minor | `slope()` 注释 "raw dQ/dmu" 与实际存的 clamp 后带符号 κ 不符 | Task 2 注释修正，并注明 sign-flip 回退值也记录是刻意的保守选择 |
+| M2 | Minor | Task 5 修改既有 env 路径 final status 字符串 → 破坏字节兼容 | 改为按来源区分：env 路径旧串逐字节保留，JSON 路径新串（`json_fixed_source_` 成员） |
+| M3 | Minor | Task 6 的 absolute 目标值与 fixed_mu 数值是魔术数 | Task 6 Step 2/4 加"数值来源纪律"注：必须来自同结构自由相/冷启动收敛实测，以实测为准并在测试文档记录出处 |
+| M4 | Minor | 关键既有事实清单缺分支守卫与 fixed_mu 运行时分支位置 | "关键既有事实"补两条（守卫块 :683、outer_step fixed 分支 :530-541、mu_.assign :259） |
