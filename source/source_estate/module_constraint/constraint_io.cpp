@@ -575,6 +575,30 @@ bool parse_constraint_object(const std::string& obj,
     {
         spec.mu_max = run_mu_max;
     }
+
+    // Branch F: optional "fixed_mu" (M2 C4).  The value is a Lagrange
+    // multiplier in Ry, not a target; |value| is validated against the
+    // component cap once the cap is known.
+    pos = 0;
+    if (find_key(obj, "fixed_mu", pos))
+    {
+        skip_ws(obj, pos);
+        if (pos >= obj.size() || obj[pos] != ':')
+        {
+            error = "constraint c[" + std::to_string(index)
+                    + "]: expected ':' after \"fixed_mu\"";
+            return false;
+        }
+        ++pos;
+        skip_ws(obj, pos);
+        if (!parse_number(obj, pos, spec.fixed_mu_value))
+        {
+            error = "constraint c[" + std::to_string(index)
+                    + "]: malformed number in \"fixed_mu\"";
+            return false;
+        }
+        spec.fixed_mu = true;
+    }
     return true;
 }
 
@@ -688,6 +712,39 @@ bool parse_v2_list(const std::string& content,
     {
         error = "constraint file: the \"constraints\" list must not be empty";
         return false;
+    }
+
+    // Guard (M2 C4): fixed mu is a run-level dynamics mode.  A mixed list
+    // would need a two-mode outer loop; refuse instead of silently freezing
+    // only part of the run.
+    int n_fixed = 0;
+    for (const ConstraintSpec& s : specs)
+    {
+        if (s.fixed_mu)
+        {
+            ++n_fixed;
+        }
+    }
+    if (n_fixed > 0 && n_fixed != static_cast<int>(specs.size()))
+    {
+        error = "constraint file: \"fixed_mu\" must be set for all "
+                "constraints or none (mixed fixed/free runs are not "
+                "implemented)";
+        return false;
+    }
+    // Guard: a fixed value beyond the component cap is a user error, not a
+    // value to clamp silently (the audit would otherwise report a mu that
+    // was never applied).
+    for (const ConstraintSpec& s : specs)
+    {
+        if (s.fixed_mu && std::abs(s.fixed_mu_value) > s.mu_max)
+        {
+            error = "constraint file: |fixed_mu| = "
+                    + std::to_string(std::abs(s.fixed_mu_value))
+                    + " exceeds the component mu_max = "
+                    + std::to_string(s.mu_max);
+            return false;
+        }
     }
     return true;
 }
@@ -1164,6 +1221,8 @@ ConfigStatus configure_from_inputs(ConstraintConfig& cfg,
     {
         ModuleBase::WARNING("ConstraintIO", w);
     }
+
+    cfg.warm_start = PARAM.inp.constraint_warm_start;
 
     // Partition radii from the covalent-radius table (Angstrom -> Bohr).
     radii.assign(ucell.nat, 0.0);

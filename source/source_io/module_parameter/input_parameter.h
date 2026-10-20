@@ -765,6 +765,9 @@ struct Input_para
     std::string constraint_mu_schedule = "outer"; ///< "outer" (SCF fully converges, then one mu step) or "inner" (drho-gated in-SCF mu update + mix_reset)
     double constraint_inner_thr = 1e-3;  ///< drho gate for the INNER schedule (Ry); only used when constraint_mu_schedule=inner
     int constraint_inner_nmax = 20;      ///< max INNER mu updates per run before falling back to OUTER
+    // M2 (C1): keep mu / secant history / CONSTRAINED phase across ionic
+    // steps of MD/relax.  Single-point scf is unaffected (see loop init).
+    bool constraint_warm_start = true;
 
     // Module A (M1, plan 2026-10-20): passive dipole reporting alongside the
     // Becke fragment charges.  Pure observation; never enters the loop logic.

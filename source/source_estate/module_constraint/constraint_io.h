@@ -33,6 +33,8 @@ struct ConstraintConfig
     // total energy drops more than this below the unconstrained reference
     // energy of the same run (see ConstraintLoop::set_scf_energy).
     double branch_tol = 0.0;
+    // M2 C1: reuse mu / secant history across MD/relax ionic steps.
+    bool warm_start = true;
     // Dual-iteration schedule (plan 2026-09-11-dual-iteration-strategy.md):
     //   "outer" (default): the SCF converges fully, then one M4 secant step.
     //   "inner": inside the SCF, once drho < inner_thr the observable is read
@@ -149,6 +151,11 @@ struct ConstraintSpec
     double target = 0.0;    // delta/absolute semantics set by the run-level
                             // target_mode (A0 D1: target_mode stays run-level)
     double mu_max = 5.0;    // per-constraint cap; omitted -> run-level cap
+    // M2 C4 (fixed-mu productization): "fixed_mu" in a v2 file pins this
+    // component; the outer loop does not run.  The field is all-or-none
+    // across the list (configure guard), so mixed dynamics can not happen.
+    bool fixed_mu = false;
+    double fixed_mu_value = 0.0; // Ry
 };
 
 // Build the fully validated constraint configuration from the global INPUT

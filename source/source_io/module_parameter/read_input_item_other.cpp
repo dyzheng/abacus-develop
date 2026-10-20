@@ -1649,6 +1649,18 @@ Manual override is allowed: if sc_acceleration_mode is explicitly set, it takes 
         this->add_item(item);
     }
     {
+        Input_Item item("constraint_warm_start");
+        item.annotation = "warm start the constraint multiplier across ionic steps";
+        item.category = "Constraint";
+        item.type = "Boolean";
+        item.description = "MD/relax only. true (default): the first ionic step runs the full free reference SCF, later steps rebuild the geometry but keep mu, the secant slope and the CONSTRAINED phase (one outer update per step instead of a fresh reference). false: every ionic step restarts from the free reference. Single-point calculation=scf is unaffected.";
+        item.default_value = "True";
+        item.unit = "";
+        item.availability = "constraint is true";
+        read_sync_bool(input.constraint_warm_start);
+        this->add_item(item);
+    }
+    {
         Input_Item item("constraint_dipole_report");
         item.annotation = "report the molecular / saw-frame dipole alongside the fragment charges";
         item.category = "Constraint";

@@ -749,3 +749,110 @@ TEST(ConstraintIOTest, DipoleReportPlumbing)
     PARAM.input.constraint_dipole_frame = "molecular";
     std::remove(path.c_str());
 }
+
+TEST(ConstraintIOTest, WarmStartPlumbing)
+{
+    auto ucell = make_h2o_ucell();
+    Set_GlobalV_Default();
+    PARAM.input.constraint = true;
+    PARAM.input.constraint_type = "charge";
+    PARAM.input.constraint_weight_type = "becke";
+    PARAM.input.constraint_target_mode = "delta";
+    PARAM.input.constraint_mu_max = 5.0;
+    PARAM.input.constraint_thr = 1e-4;
+    const std::string path = "constraint_target_warm_test.json";
+    {
+        std::ofstream ofs(path);
+        ofs << R"({"targets": [0.1], "atoms": [[0]]})";
+    }
+    PARAM.input.constraint_target_file = path;
+    constraint::ConstraintConfig cfg;
+    std::vector<constraint::ConstraintSpec> specs;
+    std::vector<double> radii;
+    std::string error;
+
+    // Default: warm start is on (MD/relax only; the loop enforces the scope).
+    EXPECT_EQ(constraint::configure_from_inputs(cfg, specs, *ucell, radii,
+                                                error),
+              constraint::ConfigStatus::OK)
+        << error;
+    EXPECT_TRUE(cfg.warm_start);
+    PARAM.input.constraint_warm_start = false;
+    EXPECT_EQ(constraint::configure_from_inputs(cfg, specs, *ucell, radii,
+                                                error),
+              constraint::ConfigStatus::OK)
+        << error;
+    EXPECT_FALSE(cfg.warm_start);
+    std::remove(path.c_str());
+}
+
+TEST(ConstraintIOTest, FixedMuParsingAndGuards)
+{
+    auto ucell = make_h2o_ucell();
+    Set_GlobalV_Default();
+    PARAM.input.constraint = true;
+    PARAM.input.constraint_type = "charge";
+    PARAM.input.constraint_weight_type = "becke";
+    PARAM.input.constraint_target_mode = "absolute";
+    PARAM.input.constraint_mu_max = 5.0;
+    PARAM.input.constraint_thr = 1e-4;
+    const std::string path = "constraint_target_fixed_mu_test.json";
+    constraint::ConstraintConfig cfg;
+    std::vector<constraint::ConstraintSpec> specs;
+    std::vector<double> radii;
+    std::string error;
+
+    // All constraints fixed -> values flow into the specs.
+    {
+        std::ofstream ofs(path);
+        ofs << R"({"constraints": [
+            {"type":"charge","target":3.0,"atoms":[0],"fixed_mu":-0.12},
+            {"type":"charge","target":5.0,"atoms":[1,2],"fixed_mu":0.08}]})";
+    }
+    PARAM.input.constraint_target_file = path;
+    EXPECT_EQ(constraint::configure_from_inputs(cfg, specs, *ucell, radii,
+                                                error),
+              constraint::ConfigStatus::OK)
+        << error;
+    ASSERT_EQ(specs.size(), 2u);
+    EXPECT_TRUE(specs[0].fixed_mu);
+    EXPECT_TRUE(specs[1].fixed_mu);
+    EXPECT_DOUBLE_EQ(specs[0].fixed_mu_value, -0.12);
+    EXPECT_DOUBLE_EQ(specs[1].fixed_mu_value, 0.08);
+
+    // Mixed fixed/free -> ERROR (phase-1 C4 keeps one dynamics mode per run).
+    {
+        std::ofstream ofs(path);
+        ofs << R"({"constraints": [
+            {"type":"charge","target":3.0,"atoms":[0],"fixed_mu":-0.12},
+            {"type":"charge","target":5.0,"atoms":[1,2]}]})";
+    }
+    EXPECT_EQ(constraint::configure_from_inputs(cfg, specs, *ucell, radii,
+                                                error),
+              constraint::ConfigStatus::ERROR);
+    EXPECT_NE(error.find("fixed_mu"), std::string::npos);
+
+    // Fixed value outside the component cap -> ERROR (loud, no silent clamp).
+    {
+        std::ofstream ofs(path);
+        ofs << R"({"constraints": [
+            {"type":"charge","target":3.0,"atoms":[0],"fixed_mu":-7.5}]})";
+    }
+    EXPECT_EQ(constraint::configure_from_inputs(cfg, specs, *ucell, radii,
+                                                error),
+              constraint::ConfigStatus::ERROR);
+    EXPECT_NE(error.find("fixed_mu"), std::string::npos);
+
+    // v1 files can not express fixed_mu: the legacy path stays untouched.
+    {
+        std::ofstream ofs(path);
+        ofs << R"({"targets": [0.1], "atoms": [[0]]})";
+    }
+    EXPECT_EQ(constraint::configure_from_inputs(cfg, specs, *ucell, radii,
+                                                error),
+              constraint::ConfigStatus::OK)
+        << error;
+    ASSERT_EQ(specs.size(), 1u);
+    EXPECT_FALSE(specs[0].fixed_mu);
+    std::remove(path.c_str());
+}
