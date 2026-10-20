@@ -42,6 +42,13 @@ struct ConstraintConfig
     std::string mu_schedule = "outer";
     double inner_thr = 1e-3; // INNER drho gate (ignored when schedule=outer)
     int inner_nmax = 20;     // INNER mu-update budget (ignored when outer)
+    // Module A (M1): passive dipole reporting (plan 2026-10-20).  Observation
+    // only; the outer loop never reads these.  dipole_report=false (default)
+    // keeps the historical output byte-identical.
+    bool dipole_report = false;
+    std::string dipole_frame = "molecular"; // "molecular" | "saw"
+    double dipole_saw_pos_max = -1.0;       // -1 = auto lowest-density plane
+    double dipole_saw_pos_dec = 0.1;        // fractional decay width
     std::vector<ConstraintTarget> targets;
 };
 

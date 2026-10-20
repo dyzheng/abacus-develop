@@ -661,3 +661,91 @@ TEST(ConstraintIOTest, MixedGuards)
     EXPECT_DOUBLE_EQ(cfg.targets[0].value, 0.1);
     EXPECT_DOUBLE_EQ(cfg.targets[1].value, -0.1);
 }
+
+TEST(ConstraintIOTest, DipoleReportPlumbing)
+{
+    auto ucell = make_h2o_ucell(); // O, H, H -> 3 atoms
+    Set_GlobalV_Default();
+    PARAM.input.constraint = true;
+    PARAM.input.constraint_type = "charge";
+    PARAM.input.constraint_weight_type = "becke";
+    PARAM.input.constraint_target_mode = "delta";
+    PARAM.input.constraint_mu_max = 5.0;
+    PARAM.input.constraint_thr = 1e-4;
+    const std::string path = "constraint_target_dipole_test.json";
+    {
+        std::ofstream ofs(path);
+        ofs << R"({"targets": [0.1], "atoms": [[0]]})";
+    }
+    PARAM.input.constraint_target_file = path;
+
+    constraint::ConstraintConfig cfg;
+    std::vector<constraint::ConstraintSpec> specs;
+    std::vector<double> radii;
+    std::string error;
+
+    // Default off: the flag is false and the frames carry their defaults.
+    EXPECT_EQ(constraint::configure_from_inputs(cfg, specs, *ucell, radii,
+                                                error),
+              constraint::ConfigStatus::OK)
+        << error;
+    EXPECT_FALSE(cfg.dipole_report);
+    EXPECT_EQ(cfg.dipole_frame, "molecular");
+    EXPECT_DOUBLE_EQ(cfg.dipole_saw_pos_max, -1.0);
+    EXPECT_DOUBLE_EQ(cfg.dipole_saw_pos_dec, 0.1);
+
+    // Enabled with saw frame: values flow through.
+    PARAM.input.constraint_dipole_report = true;
+    PARAM.input.constraint_dipole_frame = "saw";
+    PARAM.input.constraint_dipole_saw_pos_max = 0.45;
+    PARAM.input.constraint_dipole_saw_pos_dec = 0.08;
+    EXPECT_EQ(constraint::configure_from_inputs(cfg, specs, *ucell, radii,
+                                                error),
+              constraint::ConfigStatus::OK)
+        << error;
+    EXPECT_TRUE(cfg.dipole_report);
+    EXPECT_EQ(cfg.dipole_frame, "saw");
+    EXPECT_DOUBLE_EQ(cfg.dipole_saw_pos_max, 0.45);
+    EXPECT_DOUBLE_EQ(cfg.dipole_saw_pos_dec, 0.08);
+
+    // Guard: unknown frame -> ERROR.
+    PARAM.input.constraint_dipole_frame = "circular";
+    EXPECT_EQ(constraint::configure_from_inputs(cfg, specs, *ucell, radii,
+                                                error),
+              constraint::ConfigStatus::ERROR);
+    EXPECT_NE(error.find("dipole_frame"), std::string::npos);
+
+    // Guard: saw decay width out of (0, 0.5] -> ERROR.
+    PARAM.input.constraint_dipole_frame = "saw";
+    PARAM.input.constraint_dipole_saw_pos_dec = 0.6;
+    EXPECT_EQ(constraint::configure_from_inputs(cfg, specs, *ucell, radii,
+                                                error),
+              constraint::ConfigStatus::ERROR);
+    PARAM.input.constraint_dipole_saw_pos_dec = 0.1;
+
+    // Guard: saw pos_max outside [-1, 1) -> ERROR.
+    PARAM.input.constraint_dipole_saw_pos_max = 1.5;
+    EXPECT_EQ(constraint::configure_from_inputs(cfg, specs, *ucell, radii,
+                                                error),
+              constraint::ConfigStatus::ERROR);
+    PARAM.input.constraint_dipole_saw_pos_max = -1.0;
+
+    // Guard: saw requires a z-aligned third lattice vector.
+    ucell->latvec.e13 = 0.1;
+    EXPECT_EQ(constraint::configure_from_inputs(cfg, specs, *ucell, radii,
+                                                error),
+              constraint::ConfigStatus::ERROR);
+    EXPECT_NE(error.find("z-aligned"), std::string::npos);
+    ucell->latvec.e13 = 0.0;
+
+    // Guard: non-collinear spin not implemented -> ERROR.
+    PARAM.input.nspin = 4;
+    EXPECT_EQ(constraint::configure_from_inputs(cfg, specs, *ucell, radii,
+                                                error),
+              constraint::ConfigStatus::ERROR);
+    EXPECT_NE(error.find("nspin"), std::string::npos);
+    PARAM.input.nspin = 1;
+    PARAM.input.constraint_dipole_report = false;
+    PARAM.input.constraint_dipole_frame = "molecular";
+    std::remove(path.c_str());
+}

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <fstream>
 #include <sstream>
 
@@ -1177,6 +1178,61 @@ ConfigStatus configure_from_inputs(ConstraintConfig& cfg,
                              ? it_rad->second / ModuleBase::BOHR_TO_A
                              : 1.0 / ModuleBase::BOHR_TO_A;
             ++iat;
+        }
+    }
+    // Module A (M1) dipole-report plumbing: passive observation, filled
+    // straight from INPUT (no interaction with the target list).  The
+    // legacy single-type configure entry leaves the defaults (report off),
+    // which is exactly its pre-M1 behaviour.
+    cfg.dipole_report = PARAM.inp.constraint_dipole_report;
+    cfg.dipole_frame = PARAM.inp.constraint_dipole_frame;
+    cfg.dipole_saw_pos_max = PARAM.inp.constraint_dipole_saw_pos_max;
+    cfg.dipole_saw_pos_dec = PARAM.inp.constraint_dipole_saw_pos_dec;
+    // Branch: report requested -> the frame and saw parameters must be
+    // valid; anything else refuses to run rather than silently reporting a
+    // wrong dipole (the same "loud guard" policy as the rest of this file).
+    if (cfg.dipole_report)
+    {
+        // Branch A: unknown frame.
+        if (cfg.dipole_frame != "molecular" && cfg.dipole_frame != "saw")
+        {
+            error = "constraint_dipole_frame must be \"molecular\" or "
+                    "\"saw\", got \"" + cfg.dipole_frame + "\"";
+            return ConfigStatus::ERROR;
+        }
+        // Branch B: saw-frame parameter sanity.
+        if (cfg.dipole_frame == "saw"
+            && (cfg.dipole_saw_pos_dec <= 0.0 || cfg.dipole_saw_pos_dec > 0.5
+                || cfg.dipole_saw_pos_max >= 1.0
+                || cfg.dipole_saw_pos_max < -1.0))
+        {
+            error = "constraint_dipole_saw_pos_dec must be in (0, 0.5] and "
+                    "constraint_dipole_saw_pos_max in [-1, 1)";
+            return ConfigStatus::ERROR;
+        }
+        // Branch B2: the saw frame requires a z-aligned third lattice
+        // vector orthogonal to a,b (the dipole and deltaV formulas use
+        // latvec(2,2) as the exact cell height).
+        if (cfg.dipole_frame == "saw")
+        {
+            const ModuleBase::Matrix3& lv = ucell.latvec;
+            const double off = std::abs(lv.e13) + std::abs(lv.e23)
+                               + std::abs(lv.e31) + std::abs(lv.e32);
+            // Branch: cell shape violates the saw-frame assumption.
+            if (off > 1e-10 || lv.e33 <= 0.0)
+            {
+                error = "constraint_dipole_frame = saw requires a z-aligned "
+                        "third lattice vector orthogonal to a,b";
+                return ConfigStatus::ERROR;
+            }
+        }
+        // Branch C: non-collinear spin (nspin == 4) reads a 4-component
+        // density the reporter is not wired for -> refuse loudly.
+        if (PARAM.inp.nspin == 4)
+        {
+            error = "constraint_dipole_report is not implemented for "
+                    "nspin = 4";
+            return ConfigStatus::ERROR;
         }
     }
     return st;

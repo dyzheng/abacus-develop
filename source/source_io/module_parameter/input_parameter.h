@@ -766,6 +766,13 @@ struct Input_para
     double constraint_inner_thr = 1e-3;  ///< drho gate for the INNER schedule (Ry); only used when constraint_mu_schedule=inner
     int constraint_inner_nmax = 20;      ///< max INNER mu updates per run before falling back to OUTER
 
+    // Module A (M1, plan 2026-10-20): passive dipole reporting alongside the
+    // Becke fragment charges.  Pure observation; never enters the loop logic.
+    bool constraint_dipole_report = false;   ///< print dipole / q_dip / deltaV block
+    std::string constraint_dipole_frame = "molecular";  ///< "molecular" | "saw"
+    double constraint_dipole_saw_pos_max = -1.0;  ///< saw maximum (fractional z); -1 = auto lowest-density plane
+    double constraint_dipole_saw_pos_dec = 0.1;   ///< saw decay width (fractional z)
+
     // ==============   #Parameters (25.uncommon hardware) ==================
     int dsp_count = 4;           ///< count of DSP hardwares in one node
 };

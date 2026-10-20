@@ -1649,6 +1649,54 @@ Manual override is allowed: if sc_acceleration_mode is explicitly set, it takes 
         this->add_item(item);
     }
     {
+        Input_Item item("constraint_dipole_report");
+        item.annotation = "report the molecular / saw-frame dipole alongside the fragment charges";
+        item.category = "Constraint";
+        item.type = "Boolean";
+        item.description = "When true, the final constraint report adds a dipole block: the molecular-frame dipole p (e*Bohr and Debye), the dipole-derived charge transfer q_dip (e), and (frame=saw) the potential drop deltaV = 4*pi*p_saw/A (V). Pure observation; the constraint dynamics is unchanged. Default false keeps the historical output byte-identical.";
+        item.default_value = "False";
+        item.unit = "";
+        item.availability = "constraint is true";
+        read_sync_bool(input.constraint_dipole_report);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("constraint_dipole_frame");
+        item.annotation = "dipole frame: molecular or saw";
+        item.category = "Constraint";
+        item.type = "String";
+        item.description = "molecular (default): p = sum Z*R - int rho*r dr about the ionic charge center (origin-independent for neutral cells). saw: saw-function-referenced p_z for periodic slabs (the decay plane must sit in a low-density region; deltaV is reported). Only read when constraint_dipole_report is true.";
+        item.default_value = "molecular";
+        item.unit = "";
+        item.availability = "constraint_dipole_report is true";
+        read_sync_string(input.constraint_dipole_frame);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("constraint_dipole_saw_pos_max");
+        item.annotation = "saw maximum position (fractional z)";
+        item.category = "Constraint";
+        item.type = "Real";
+        item.description = "Fractional z of the saw maximum; the decay (jump) plane occupies [pos_max, pos_max+pos_dec] and must lie in a low-density region. -1 (default) auto-places it at the lowest plane-averaged density plane, resolved on the first SCF iteration of each geometry.";
+        item.default_value = "-1.0";
+        item.unit = "";
+        item.availability = "constraint_dipole_frame is saw";
+        read_sync_double(input.constraint_dipole_saw_pos_max);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("constraint_dipole_saw_pos_dec");
+        item.annotation = "saw decay width (fractional z)";
+        item.category = "Constraint";
+        item.type = "Real";
+        item.description = "Fractional width of the saw decay region; must be in (0, 0.5].";
+        item.default_value = "0.1";
+        item.unit = "";
+        item.availability = "constraint_dipole_frame is saw";
+        read_sync_double(input.constraint_dipole_saw_pos_dec);
+        this->add_item(item);
+    }
+    {
         Input_Item item("deltap_branch_write");
         item.annotation = "persist deltap_branch.dat: true or false";
         item.category = "DeltaP";
