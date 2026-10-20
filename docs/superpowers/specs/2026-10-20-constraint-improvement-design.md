@@ -70,8 +70,9 @@ constraint_accounting,mu_solver,weight_grid}.{h,cpp}`，注入点 `esolver_ks_pw
 ### 3.1 观测量
 
 - **分子通道**（真空盒，Γ 点）：`p_α = Σ_i Z*_i·R_iα − ∫ρ(r)·r_α dr`。
-  体系带电（ΣZ*≠nelec）时偶极依赖原点：要求显式指定参考点（默认受约束片段质心），
-  报告中显式打印所用参考点。
+  体系带电（ΣZ*≠nelec）时偶极依赖原点：实现取**全胞离子电荷中心**
+  `ΣZ*_i R_i / ΣZ*_i` 为参考点，报告中显式打印；`q_dip` 用 `p − p_ref`
+  消去该原点依赖，带电体系的绝对 `p` 只作带原点的记录。
 - **周期 saw 通道**（优先）：复用 `efield.cpp` 的 saw 口径
   `p_z = Σ_i Z*_i·saw(z_i) − ∫ρ·saw(z) dr`，同时报 **ΔV = 4π·p_z/A**（转 Volt）——
   即界面电势降，与恒电势语义直接对应。saw 跳变面默认放在电子密度最低的 z 平面
@@ -79,7 +80,8 @@ constraint_accounting,mu_solver,weight_grid}.{h,cpp}`，注入点 `esolver_ks_pw
 - **偶极导出电荷**（双片段）：`q_dip = (p − p_ref)·d̂ / |R_f1 − R_f2|`，
   d̂ = 两约束片段质心连线单位矢量，p_ref = 自由相偶极（delta 口径，与
   `constraint_target_mode=delta` 对齐）。与 Becke q 并列打印，两者之差即分区口径偏差的
-  实时量化。
+  实时量化。saw 通道只有 z 分量有物理意义：实现把两片段中心投影到 z 轴后计算
+  `q_dip = (p_z − p_ref,z)/(R_f1,z − R_f2,z)`，并在 `|Δz| < 1e-6` 时判为不可用。
 
 ### 3.2 输出与开关
 
