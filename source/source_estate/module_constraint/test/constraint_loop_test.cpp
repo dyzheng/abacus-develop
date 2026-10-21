@@ -2243,3 +2243,88 @@ TEST_F(ConstraintLoopTest, ProgressiveProbeScalesWithResidual)
     loop.observe(3, rp, 1);
     EXPECT_NEAR(loop.scf_threshold(1e-7), 1e-5, 1e-15);
 }
+
+// Budget freeze: with the SCF budget nearly exhausted and the residual
+// already below 10*thr, the loop freezes at the current converged SCF
+// instead of starting a doomed mu update (M3 0.01 e frame-2 signature).
+TEST_F(ConstraintLoopTest, BudgetFreezeConvertsDoomedUpdate)
+{
+    PARAM.input.scf_nmax = 100;
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    constraint::ConstraintConfig cfg = make_cfg(0.1, 5.0, 0.02);
+    cfg.budget_freeze = true;
+    loop.init(*ucell, rhopw, cfg, radii, 10.0, 0);
+    const double* rho_ptr[1] = {rho_ref.data()};
+    loop.observe(1, rho_ptr, 1);
+    bool conv = true;
+    loop.on_scf_converged(1, conv);
+    ASSERT_EQ(loop.phase(), constraint::LoopPhase::CONSTRAINED);
+
+    // Residual 0.05 e: below 10*thr = 0.2 but above thr = 0.02, so a normal
+    // loop would schedule another rebuild at the budget edge.
+    const double S = S_int();
+    std::vector<double> rho = rho_ref;
+    const std::vector<double>& w0 = wg->constraint_weight(0);
+    for (int ir = 0; ir < rhopw->nrxx; ++ir)
+    {
+        rho[ir] += 0.05 * w0[ir] / S;
+    }
+    const double* rp[1] = {rho.data()};
+    loop.observe(90, rp, 1);
+    conv = true;
+    loop.on_scf_converged(90, conv);
+    EXPECT_TRUE(loop.budget_frozen());
+    EXPECT_TRUE(loop.done());
+    EXPECT_EQ(loop.status(), constraint::MuStatus::RUNNING);
+    EXPECT_TRUE(conv); // the frame's SCF is genuinely converged
+}
+
+// Warm-from-RUNNING: a frame that ended RUNNING with residual < 10*thr is
+// warm-eligible; a mid-flight frame (residual >= 10*thr) is not.
+TEST_F(ConstraintLoopTest, WarmStartFromNearConvergedRunning)
+{
+    PARAM.input.calculation = "relax";
+    PARAM.input.scf_nmax = 100;
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    constraint::ConstraintConfig cfg = make_cfg(0.1, 5.0, 0.02);
+    cfg.warm_start = true;
+    cfg.budget_freeze = true;
+    loop.init(*ucell, rhopw, cfg, radii, 10.0, 0);
+    const double* rho_ptr[1] = {rho_ref.data()};
+    loop.observe(1, rho_ptr, 1);
+    bool conv = true;
+    loop.on_scf_converged(1, conv);
+
+    const double S = S_int();
+    std::vector<double> rho = rho_ref;
+    const std::vector<double>& w0 = wg->constraint_weight(0);
+    for (int ir = 0; ir < rhopw->nrxx; ++ir)
+    {
+        rho[ir] += 0.05 * w0[ir] / S;
+    }
+    const double* rp[1] = {rho.data()};
+    loop.observe(90, rp, 1);
+    conv = true;
+    loop.on_scf_converged(90, conv);
+    ASSERT_TRUE(loop.budget_frozen());
+    ASSERT_EQ(loop.status(), constraint::MuStatus::RUNNING);
+
+    ucell->atoms[1].taud[0].x += 0.05;
+    wg->build();
+    loop.init(*ucell, rhopw, cfg, radii, 10.0, 1);
+    EXPECT_TRUE(loop.warm_started_last_init());
+
+    // Mid-flight control: a large residual RUNNING frame must cold-start.
+    loop.reset();
+    constraint::ConstraintConfig far = make_cfg(0.5, 5.0, 0.02);
+    far.warm_start = true;
+    loop.init(*ucell, rhopw, far, radii, 10.0, 0);
+    loop.observe(1, rho_ptr, 1);
+    conv = true;
+    loop.on_scf_converged(1, conv);
+    loop.observe(2, rho_ptr, 1); // residual 0.5 >= 10*thr = 0.2
+    ASSERT_EQ(loop.status(), constraint::MuStatus::RUNNING);
+    loop.init(*ucell, rhopw, far, radii, 10.0, 1);
+    EXPECT_FALSE(loop.warm_started_last_init());
+    EXPECT_EQ(loop.phase(), constraint::LoopPhase::REFERENCE);
+}

@@ -168,6 +168,9 @@ class ConstraintLoop
     MuStatus status() const { return status_; }
     bool fixed_mu_mode() const { return fixed_mu_; }
     int outer_steps() const { return outer_steps_; }
+    // M4 scheduling pack B diagnostics: the SCF converged on the last frame
+    // but mu was frozen because another update could not fit scf_nmax.
+    bool budget_frozen() const { return budget_frozen_; }
     bool warm_started_last_init() const { return warm_started_last_init_; }
     // Test-only diagnostic: the solver's retained slope of component i.
     double solver_slope(const int i) const { return mu_solver_.slope(i); }
@@ -348,6 +351,10 @@ class ConstraintLoop
     // strict threshold; tighten_notice_done_ keeps the log one-shot.
     bool tighten_pending_ = false;
     bool tighten_notice_done_ = false;
+    // M4 scheduling pack B: rebuild-cost estimate for the budget freeze.
+    bool budget_frozen_ = false;
+    int last_step_iter_ = 0;
+    int last_rebuild_cost_ = 0;
     // M3 E1 magnetic branch anchor: TMAG recorded at the reference (or the
     // first warm-geometry convergence) and the number of rejected jumps.
     double mag_ref_ = 0.0;

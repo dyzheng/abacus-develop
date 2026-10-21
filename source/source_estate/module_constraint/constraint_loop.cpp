@@ -98,6 +98,9 @@ void ConstraintLoop::reset()
     trust_rollback_pending_ = false;
     tighten_pending_ = false;
     tighten_notice_done_ = false;
+    budget_frozen_ = false;
+    last_step_iter_ = 0;
+    last_rebuild_cost_ = 0;
     mag_ref_ = 0.0;
     mag_ref_valid_ = false;
     mag_rejections_ = 0;
@@ -439,10 +442,22 @@ bool ConstraintLoop::warm_start_eligible(
         return false;
     }
     // Guard: an unreachable / branch-flipped previous frame must not be
-    // recycled; the run needs a clean reference instead.
+    // recycled; a budget-limited RUNNING frame may be (M4 pack B).
     if (status_ != MuStatus::CONVERGED)
     {
-        return false;
+        const bool running_ok
+            = cfg.warm_start_running && status_ == MuStatus::RUNNING
+              && (phase_ == LoopPhase::CONSTRAINED
+                  || phase_ == LoopPhase::DONE)
+              && max_residual() < 10.0 * cfg.thr && mag_rejections_ == 0;
+        if (!running_ok)
+        {
+            return false;
+        }
+        GlobalV::ofs_running
+            << "[constraint] WARM_START from a RUNNING frame (residual "
+            << max_residual() << " e < 10*thr; budget-limited, rebind at "
+               "the first convergence)\n";
     }
     // Guard: an all-fixed list (v2 fixed_mu, M2 C4) never warm-starts --
     // fixed frames are independent (no outer loop to carry), and this is
@@ -898,6 +913,13 @@ void ConstraintLoop::outer_step(const int iter, bool& conv_esolver)
         phase_ = LoopPhase::DONE;
         return;
     }
+    // Rebuild-cost bookkeeping (M4 pack B): iterations spent since the last
+    // mu move, used by the budget-freeze estimator on the next adjudication.
+    if (last_step_iter_ > 0)
+    {
+        last_rebuild_cost_ = iter - last_step_iter_;
+    }
+    last_step_iter_ = iter;
     if (phase_ == LoopPhase::REFERENCE)
     {
         // Reference convergence: record Q_ref and build the targets.
@@ -1333,6 +1355,30 @@ void ConstraintLoop::on_scf_converged(const int iter, bool& conv_esolver)
             return;
         }
     }
+    // M4 pack B (budget freeze): estimate the rebuild cost of another mu
+    // update; if it cannot fit the remaining scf_nmax budget and the residual
+    // is already below 10*thr, freeze here -- a converged frame at a slightly
+    // off mu is usable, an exhausted SCF is not (M3 0.01 e signature).
+    if (cfg_.budget_freeze && phase_ == LoopPhase::CONSTRAINED && !fixed_mu_
+        && cfg_.mu_schedule == "outer"
+        && max_residual() < 10.0 * cfg_.thr && max_residual() >= cfg_.thr)
+    {
+        const int est = std::max(15, last_rebuild_cost_);
+        if (iter + 3 * est / 2 >= PARAM.inp.scf_nmax)
+        {
+            budget_frozen_ = true;
+            phase_ = LoopPhase::DONE;
+            GlobalV::ofs_running
+                << "[constraint] BUDGET_FREEZE: iter " << iter
+                << " + estimated rebuild " << est
+                << " would exceed scf_nmax=" << PARAM.inp.scf_nmax
+                << "; mu frozen at the current converged SCF (residual "
+                << max_residual() << " e).  Reported RUNNING (budget) -- "
+                   "the frame is converged and usable, the target is not "
+                   "validated\n";
+            return; // conv_esolver stays true: the SCF is converged
+        }
+    }
     // Branch (M4 ALM) adjudication at a converged ALM SCF.  The cold probe
     // close above already returned; here k is armed and the single-layer
     // stream is ready to update mu and continue without an inject/rebuild.
@@ -1691,6 +1737,13 @@ std::string ConstraintLoop::final_status_line() const
     {
         os << "RUNNING (SCF ended before the outer loop converged — raise "
               "scf_nmax)";
+        // Branch: the budget-freeze path deliberately stopped one step short
+        // on a fully converged SCF; label it so the frame is not mistaken for
+        // an exhausted SCF.
+        if (budget_frozen_)
+        {
+            os << " [budget freeze; converged frame, target not validated]";
+        }
     }
     return os.str();
 }
