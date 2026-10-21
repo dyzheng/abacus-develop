@@ -1121,6 +1121,11 @@ void ConstraintLoop::alm_adjudicate(const int iter, bool& conv_esolver)
     // this density (mu + k(Q-t), with |Q-t| below the threshold).
     if (res < cfg_.thr)
     {
+        // Report the constant-potential label mu + k(Q-t), not the bare
+        // outer multiplier.  The final settle may have run with the penalty
+        // switched off (two-stage schedule), but the penalty term still
+        // belongs to the converged energy and force.
+        alm_.mu_eff(mu_, Q_, targets_, mu_eff_);
         status_ = MuStatus::CONVERGED;
         print_audit_line(iter, outer_steps_, "alm");
         phase_ = LoopPhase::DONE;

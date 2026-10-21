@@ -2313,6 +2313,80 @@ TEST_F(ConstraintLoopTest, AlmForceUsesMuPhys)
     }
 }
 
+// The two-stage schedule can settle the last SCF with the penalty switched
+// off.  The converged label must still be the ALM constant-potential
+// multiplier mu + k(Q-t): it is what the energy correction and the force
+// kernel differentiate, even when |Q-t| is already below constraint_thr.
+TEST_F(ConstraintLoopTest, AlmConvergedLabelIncludesPenaltyTerm)
+{
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    constraint::ConstraintConfig cfg = make_cfg(0.1);
+    cfg.mu_schedule = "alm";
+    loop.init(*ucell, rhopw, cfg, radii, 10.0, 0);
+
+    const double chi = -0.65;
+    const double* rho_ptr[1] = {rho_ref.data()};
+    bool conv = true;
+    loop.observe(1, rho_ptr, 1);
+    loop.on_scf_converged(1, conv);
+    // Reference close armed the cold probe at the zero-sum pattern.
+    ASSERT_FALSE(loop.alm_armed());
+    ASSERT_NE(loop.mu()[0], 0.0);
+
+    // Probe close at the measured response: arms k and seeds the Newton mu.
+    const constraint::WeightGrid& g = loop.weight_grid();
+    const double S = S_alpha(g, 0);
+    const std::vector<double>& w0 = g.constraint_weight(0);
+    std::vector<double> rho_probe = rho_ref;
+    for (int ir = 0; ir < rhopw->nrxx; ++ir)
+    {
+        rho_probe[ir] += chi * loop.mu_eff()[0] * w0[ir] / S;
+    }
+    const double* rp[1] = {rho_probe.data()};
+    loop.observe(2, rp, 1);
+    loop.on_scf_converged(2, conv);
+    ASSERT_TRUE(loop.alm_armed());
+    ASSERT_EQ(loop.status(), constraint::MuStatus::RUNNING);
+
+    // Final density with a small but non-zero target residual (5e-5 < thr):
+    // the run converges, but the penalty label is not negligible.
+    const double res = 5e-5;
+    const double q_des = loop.targets()[0] + res;
+    const double q_ref = Q_of(rho_ref);
+    std::vector<double> rho_final = rho_ref;
+    for (int ir = 0; ir < rhopw->nrxx; ++ir)
+    {
+        rho_final[ir] += (q_des - q_ref) * w0[ir] / S;
+    }
+    const double mu_base = loop.mu()[0];
+    const double k = loop.alm_k(0);
+    const double* rf[1] = {rho_final.data()};
+    loop.observe(3, rf, 1);
+    bool conv_final = true;
+    loop.on_scf_converged(3, conv_final);
+    ASSERT_EQ(loop.status(), constraint::MuStatus::CONVERGED);
+    EXPECT_NEAR(loop.charges()[0] - loop.targets()[0], res, 1e-12);
+    EXPECT_NEAR(loop.mu_phys(0), mu_base + k * res, 1e-12);
+    EXPECT_GT(std::abs(loop.mu_phys(0) - mu_base), 1e-6);
+
+    // The force path must consume that same physical label.
+    ModuleBase::matrix Floop(ucell->nat, 3);
+    loop.compute_force(rf, 1, Floop);
+    wg->build_derivatives();
+    std::vector<double> meff = loop.mu_eff();
+    ModuleBase::matrix Fdir(ucell->nat, 3);
+    constraint::constraint_force(*wg, rf, 1,
+                                 constraint::DensityChannel::Charge, meff,
+                                 Fdir);
+    for (int J = 0; J < ucell->nat; ++J)
+    {
+        for (int d = 0; d < 3; ++d)
+        {
+            EXPECT_DOUBLE_EQ(Floop(J, d), Fdir(J, d)) << "J " << J;
+        }
+    }
+}
+
 // Progressive probe scales with the outer residual (M3 data: drho and the
 // residual in e are the same order; 0.3x keeps the Q error below the residual,
 // and the trust rho score guards the step quality).
