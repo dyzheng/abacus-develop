@@ -31,7 +31,7 @@ class AlmController
     // (k = kappa_target) with the event counted (the caller logs it).
     void arm(const std::vector<double>& chi);
     // Explicit global gain (INPUT constraint_alm_k > 0).  When set, arm()
-    // uses this k for every component instead of 7.5/|chi|; the value is
+    // uses this k for every component instead of kappa_target/|chi|; the value is
     // still clamped to [k_min, k_max].  0 restores automatic arming.
     void set_k_override(const double k);
     int arm_fallback_count() const { return arm_fallback_; }
@@ -40,6 +40,13 @@ class AlmController
                 const std::vector<double>& Q,
                 const std::vector<double>& target,
                 std::vector<double>& out) const;
+    // Damped per-SCF-iteration step for the penalty potential.  The raw map
+    // v <- mu + k(Q(v)-t) has linearised derivative k*chi (negative, and
+    // |k*chi| = kappa_target by construction), so iterating it explicitly
+    // every SCF iteration diverges (R1: drho frozen at 0.194 in a 2-cycle).
+    // alpha = 1/(1 + k|chi|) gives derivative 0 at the converged response
+    // while leaving the fixed point v = mu + k(Q-t) unchanged.
+    double damping(const int a) const;
     // Outer ALM update mu_a += k_a (Q_a - t_a), per-component caps; a
     // component pinned at its cap whose residual has not improved by >= 1%
     // over the last plateau_window updates fuses (UNREACHABLE mirror).
@@ -64,8 +71,19 @@ class AlmController
 
   private:
     std::vector<double> k_;
+    // Measured |dQ/dmu| per component (nominal 1.0 on the arm fallback);
+    // retained for the potential-step damping only.
+    std::vector<double> chi_abs_;
     bool armed_ = false;
-    double kappa_target_ = 7.5; // design sec. 6.2 (k*|chi| target)
+    // Auto-gain target k*|chi|.  The design asked for 5-10 (fast implicit
+    // ALM outer contraction), but the implemented single-layer loop feeds the
+    // penalty potential back once per SCF iteration, where the density lags
+    // the potential by (at least) one iteration.  For that lagged map the
+    // mode amplitude is sqrt(k|chi|/(1+k|chi|)): 0.94 at 7.5 (R1 never
+    // settles inside scf_nmax=100) versus 0.58 at 0.5.  The outer update at
+    // SCF convergence still drives the residual to zero; the Newton seed
+    // from the probe supplies the starting multiplier.
+    double kappa_target_ = 0.5;
     double k_min_ = 0.1;        // Ry/e
     double k_max_ = 100.0;      // Ry/e
     double k_override_ = 0.0;   // INPUT constraint_alm_k; 0 = auto

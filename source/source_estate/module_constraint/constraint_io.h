@@ -63,7 +63,7 @@ struct ConstraintConfig
     double dipole_saw_pos_dec = 0.1;        // fractional decay width
     std::vector<ConstraintTarget> targets;
     // M4 (module D) ALM schedule.
-    double alm_k = 0.0; // 0 = auto (7.5/|chi|); >0 = explicit global k (Ry/e)
+    double alm_k = 0.0; // 0 = auto (0.5/|chi|); >0 = explicit global k (Ry/e)
     // M4 scheduling pack.
     bool trust_carry_jacobian = false;
     bool budget_freeze = true;

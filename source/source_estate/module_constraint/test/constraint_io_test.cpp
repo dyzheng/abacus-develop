@@ -1009,7 +1009,7 @@ TEST(ConstraintIOTest, AlmPlumbingAndGuards)
               constraint::ConfigStatus::OK)
         << error;
     EXPECT_EQ(cfg.mu_schedule, "alm");
-    EXPECT_DOUBLE_EQ(cfg.alm_k, 0.0); // 0 = auto (k = 7.5/|chi|)
+    EXPECT_DOUBLE_EQ(cfg.alm_k, 0.0); // 0 = auto (k = 0.5/|chi|)
 
     // Explicit k flows through.
     PARAM.input.constraint_alm_k = 3.0;

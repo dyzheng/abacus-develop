@@ -10,6 +10,7 @@ void AlmController::resize(const int n)
 {
     const int count = std::max(0, n);
     k_.assign(count, 0.0);
+    chi_abs_.assign(count, 1.0);
     residual_window_.assign(count, {});
     armed_ = false;
     fuse_component_ = -1;
@@ -28,13 +29,17 @@ void AlmController::arm(const std::vector<double>& chi)
     const size_t n = k_.size();
     for (size_t a = 0; a < n; ++a)
     {
+        const double c = (a < chi.size()) ? chi[a] : 0.0;
+        // Retain the measured response magnitude for the damping even when
+        // an explicit k overrides the gain: the fixed-point stiffness is
+        // k*chi, not kappa_target.
+        chi_abs_[a] = (std::abs(c) >= 1e-6) ? std::abs(c) : 1.0;
         // Branch: explicit k overrides the response-derived gain.
         if (k_override_ > 0.0)
         {
             k_[a] = k_override_;
             continue;
         }
-        const double c = (a < chi.size()) ? chi[a] : 0.0;
         // Branch: a non-negative or numerically flat response cannot define
         // a stable penalty gain -> nominal |chi| = 1 fallback.
         if (c >= 0.0 || std::abs(c) < 1e-6)
@@ -73,6 +78,24 @@ void AlmController::mu_eff(const std::vector<double>& mu,
             out[a] = mu[a] + k_[a] * res;
         }
     }
+}
+
+double AlmController::damping(const int a) const
+{
+    // Branch: an unarmed controller (probe / legacy outer phases) must pass
+    // the potential through unchanged.
+    if (!armed_ || a < 0 || a >= static_cast<int>(k_.size()))
+    {
+        return 1.0;
+    }
+    const double c = (a < static_cast<int>(chi_abs_.size()))
+                         ? chi_abs_[a]
+                         : 1.0;
+    // alpha = 1/(1 + k|chi|): the linearised damped map is
+    // 1 - alpha(1 - k*chi) = 0 for the measured full response.  In the SCF
+    // the per-iteration response is attenuated by mixing, which keeps the
+    // factor in (0,1) (still contractive).
+    return 1.0 / (1.0 + k_[a] * c);
 }
 
 double AlmController::update(const std::vector<double>& Q,
