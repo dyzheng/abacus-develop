@@ -4,6 +4,7 @@
 #include <cmath>
 #include <numeric>
 
+#include "constraint_dipole.h"
 #include "source_base/global_function.h"
 #include "source_base/parallel_reduce.h"
 #include "source_base/module_grid/partition.h"
@@ -15,17 +16,35 @@ WeightGrid::WeightGrid(const UnitCell& ucell,
                        const ModulePW::PW_Basis* rho_basis,
                        const std::vector<double>& radii,
                        const WeightType type,
-                       const double screening_radius)
+                       const double screening_radius,
+                       const int dipole_axis,
+                       const double dipole_pos_max,
+                       const double dipole_pos_dec)
     : ucell_(ucell), rho_basis_(rho_basis), radii_(radii), type_(type),
-      screening_radius_(screening_radius)
+      screening_radius_(screening_radius), dipole_axis_(dipole_axis),
+      dipole_pos_max_(dipole_pos_max), dipole_pos_dec_(dipole_pos_dec)
 {
     nat_ = ucell_.nat;
     nrxx_ = rho_basis_->nrxx;
-    // Default constraint set: one constraint per atom.
-    constraint_atoms_.resize(nat_);
-    for (int iat = 0; iat < nat_; ++iat)
+    // Branch A: dipole coordinates are a single global observable; there is
+    // exactly one constraint and it spans the whole cell.
+    if (is_dipole())
     {
-        constraint_atoms_[iat] = {iat};
+        constraint_atoms_.resize(1);
+        constraint_atoms_[0].resize(nat_);
+        for (int iat = 0; iat < nat_; ++iat)
+        {
+            constraint_atoms_[0][iat] = iat;
+        }
+    }
+    // Branch B: Becke fragments keep the one-constraint-per-atom default.
+    else
+    {
+        constraint_atoms_.resize(nat_);
+        for (int iat = 0; iat < nat_; ++iat)
+        {
+            constraint_atoms_[iat] = {iat};
+        }
     }
 }
 
@@ -66,6 +85,13 @@ ModuleBase::Vector3<double> WeightGrid::grid_position(const int ir) const
 
 void WeightGrid::build()
 {
+    // Branch: a dipole coordinate has its own analytic weight source; it
+    // does not partition the density and must not run the Becke loop.
+    if (is_dipole())
+    {
+        build_dipole();
+        return;
+    }
     // Per-atom fractional (direct) coordinates.
     std::vector<ModuleBase::Vector3<double>> taud(nat_);
     int iat_glob = 0;
@@ -166,6 +192,62 @@ void WeightGrid::build()
     }
 }
 
+void WeightGrid::build_dipole()
+{
+    cw_.assign(1, std::vector<double>(nrxx_, 0.0));
+    observable_offset_.assign(1, 0.0);
+    const double lz = ucell_.latvec.e33 * ucell_.lat0;
+    // Branch A: periodic saw frame.  The density weight is -Lz*s(x), and
+    // the ionic part of p_z is Lz*sum Z*s(x_I).
+    if (type_ == WeightType::DipoleSaw)
+    {
+        for (int ir = 0; ir < nrxx_; ++ir)
+        {
+            const double x = grid_fraction(ir).z;
+            cw_[0][ir] = -lz * DipoleObserver::saw(dipole_pos_max_,
+                                                   dipole_pos_dec_, x);
+        }
+        int iat = 0;
+        for (int it = 0; it < ucell_.ntype; ++it)
+        {
+            for (int ia = 0; ia < ucell_.atoms[it].na; ++ia)
+            {
+                double x = ucell_.atoms[it].taud[ia].z;
+                x -= std::floor(x);
+                observable_offset_[0]
+                    += ucell_.atoms[it].ncpp.zv * lz
+                       * DipoleObserver::saw(dipole_pos_max_,
+                                             dipole_pos_dec_, x);
+                ++iat;
+            }
+        }
+    }
+    // Branch B: molecular frame about the Cartesian origin.  Delta semantics
+    // subtract the reference dipole, so the charged-cell origin dependence
+    // cancels; the raw absolute value keeps this convention in the report.
+    else
+    {
+        for (int ir = 0; ir < nrxx_; ++ir)
+        {
+            cw_[0][ir] = -grid_position(ir)[dipole_axis_];
+        }
+        int iat = 0;
+        for (int it = 0; it < ucell_.ntype; ++it)
+        {
+            for (int ia = 0; ia < ucell_.atoms[it].na; ++ia)
+            {
+                const ModuleBase::Vector3<double> r
+                    = ucell_.atoms[it].taud[ia] * ucell_.latvec * ucell_.lat0;
+                observable_offset_[0]
+                    += ucell_.atoms[it].ncpp.zv * r[dipole_axis_];
+                ++iat;
+            }
+        }
+    }
+    // A dipole does not form a partition of unity; maxdev has no meaning.
+    maxdev_ = 0.0;
+}
+
 namespace
 {
 // Grid point / atom coincidence threshold (Bohr): within this distance the
@@ -178,6 +260,15 @@ const double k_deriv_eps = 1e-8;
 
 void WeightGrid::build_derivatives()
 {
+    // Branch: the dipole density weight is a fixed function of the grid, not
+    // of atomic positions.  Its force comes from the ionic offset derivative
+    // instead, so an all-zero derivative grid is exact (and avoids the
+    // expensive Becke derivative build).
+    if (is_dipole())
+    {
+        dw_.assign(1, std::vector<double>(nat_ * 3 * nrxx_, 0.0));
+        return;
+    }
     // Per-atom fractional (direct) coordinates — same geometry setup as
     // build(): the derivative grid is a pure function of the geometry and
     // must be recomputed together with the weights.
@@ -313,6 +404,63 @@ void WeightGrid::build_derivatives()
             }
         }
     }
+}
+
+double WeightGrid::dipole_atom_offset_derivative(const int alpha,
+                                                 const int J,
+                                                 const int d) const
+{
+    // Guard: only the single dipole constraint carries an offset.
+    if (alpha != 0 || !is_dipole() || J < 0 || J >= nat_ || d < 0 || d > 2)
+    {
+        return 0.0;
+    }
+    // Locate the atom in the UnitCell (global iat order).
+    int iat = 0;
+    for (int it = 0; it < ucell_.ntype; ++it)
+    {
+        for (int ia = 0; ia < ucell_.atoms[it].na; ++ia)
+        {
+            // Branch: this is the requested global atom.
+            if (iat == J)
+            {
+                const double zv = ucell_.atoms[it].ncpp.zv;
+                // Branch A: molecular offset Z*R_axis -> derivative Z on
+                // the selected axis only.
+                if (type_ == WeightType::DipoleMolecular)
+                {
+                    return (d == dipole_axis_) ? zv : 0.0;
+                }
+                // Branch B: saw offset Lz*Z*s(x) -> Z*ds/dx for z only
+                // (d/dz = ds/dx * dx/dz, and Lz*dx/dz = 1).
+                if (d == 2)
+                {
+                    double x = ucell_.atoms[it].taud[ia].z;
+                    x -= std::floor(x);
+                    return zv * DipoleObserver::saw_slope(
+                                    dipole_pos_max_, dipole_pos_dec_, x);
+                }
+                return 0.0;
+            }
+            ++iat;
+        }
+    }
+    return 0.0;
+}
+
+void WeightGrid::set_dipole_saw_pos(const double pos_max)
+{
+    // Guard: only the saw source has a movable decay plane.
+    if (type_ != WeightType::DipoleSaw)
+    {
+        return;
+    }
+    dipole_pos_max_ = pos_max;
+    // The old derivative grid (all zeros) is still valid in value, but drop
+    // it so a later build_derivatives() cannot be mistaken for the new
+    // geometry's cache.
+    dw_.clear();
+    build();
 }
 
 void WeightGrid::set_constraint_atoms(

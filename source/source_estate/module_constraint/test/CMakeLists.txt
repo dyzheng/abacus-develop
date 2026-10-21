@@ -9,6 +9,7 @@ AddTest(
   LIBS parameter ${math_libs} base device planewave_serial cell_info
   SOURCES weight_grid_test.cpp
     ../weight_grid.cpp
+    ../constraint_dipole.cpp
     ../../../source_io/module_output/output.cpp
 )
 
@@ -18,6 +19,7 @@ AddTest(
   SOURCES constraint_observe_test.cpp
     ../constraint_io.cpp
     ../constraint_observe.cpp
+    ../constraint_dipole.cpp
     ../weight_grid.cpp
     ../../../source_base/module_grid/radial.cpp
     ../../../source_base/module_grid/delley.cpp
@@ -31,6 +33,7 @@ AddTest(
     ../constraint_io.cpp
     ../constraint_deriv.cpp
     ../constraint_observe.cpp
+    ../constraint_dipole.cpp
     ../weight_grid.cpp
     ../../../source_base/module_grid/radial.cpp
     ../../../source_base/module_grid/delley.cpp
@@ -63,6 +66,7 @@ AddTest(
     ../constraint_io.cpp
     ../constraint_inject_pw.cpp
     ../constraint_observe.cpp
+    ../constraint_dipole.cpp
     ../weight_grid.cpp
     ../../../source_base/module_grid/radial.cpp
     ../../../source_base/module_grid/delley.cpp
@@ -75,6 +79,7 @@ AddTest(
   SOURCES constraint_accounting_test.cpp
     ../constraint_accounting.cpp
     ../constraint_io.cpp
+    ../constraint_dipole.cpp
     ../weight_grid.cpp
     ../../../source_io/module_output/output.cpp
 )

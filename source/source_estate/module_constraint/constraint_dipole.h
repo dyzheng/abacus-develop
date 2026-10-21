@@ -36,6 +36,15 @@ class DipoleObserver
     static double saw(const double pos_max, const double pos_dec,
                       const double x);
 
+    // Derivative ds/dx of the dimensionless saw above.  Piecewise constant
+    // (1 on the rising ramp, -(1-pos_dec)/pos_dec in the decay window, 1
+    // again after it), so it is also the force factor multiplying Z_I in the
+    // saw dipole constraint.  At the two segment boundaries the left/right
+    // values differ; the configure-time 1 Bohr guard keeps atoms away from
+    // them.
+    static double saw_slope(const double pos_max, const double pos_dec,
+                            const double x);
+
     // Molecular-frame dipole about 'origin' [e*Bohr].  rho[is][ir] is the
     // per-spin density on rho_basis (nspin = 1/2; nspin = 4 is guarded out
     // at configure time).  MPI: pool-reduced.

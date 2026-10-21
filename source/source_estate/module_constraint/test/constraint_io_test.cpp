@@ -494,7 +494,8 @@ TEST(ConstraintIOTest, MixedGuards)
               constraint::ConfigStatus::ERROR);
     EXPECT_NE(error.find("nspin"), std::string::npos);
 
-    // "dipole" kind is not implemented in stage A -> ERROR.
+    // M5: the dipole coordinate is a single global constraint; an atom
+    // fragment would silently turn it into an undefined fragment dipole.
     error.clear();
     const std::string dipole = R"({"constraints": [
         {"type": "dipole", "target": 0.1, "atoms": [0]}]})";
@@ -503,7 +504,7 @@ TEST(ConstraintIOTest, MixedGuards)
                                                error),
               constraint::ConfigStatus::ERROR);
     EXPECT_NE(error.find("dipole"), std::string::npos);
-    EXPECT_NE(error.find("not implemented"), std::string::npos);
+    EXPECT_NE(error.find("atoms"), std::string::npos);
 
     // Empty "constraints" list -> ERROR (no implicit constraint).
     error.clear();
@@ -660,6 +661,162 @@ TEST(ConstraintIOTest, MixedGuards)
     ASSERT_EQ(cfg.targets.size(), 2u);
     EXPECT_DOUBLE_EQ(cfg.targets[0].value, 0.1);
     EXPECT_DOUBLE_EQ(cfg.targets[1].value, -0.1);
+}
+
+TEST(ConstraintIOTest, DipoleConstraintParsingAndGuards)
+{
+    std::string error;
+    constraint::ConstraintConfig cfg;
+    std::vector<constraint::ConstraintSpec> specs;
+    std::vector<std::string> warnings;
+    const std::string json = R"({"constraints": [
+        {"type":"dipole","target":0.25,"axis":"z","frame":"saw",
+         "saw_pos":0.7,"saw_pos_dec":0.08,"mu_max":0.05}]})";
+    ASSERT_EQ(constraint::configure_constraint(
+                  cfg, specs, warnings, true, "charge", "becke", "delta", json,
+                  5.0, 1e-4, 0.05, 0.0, 0.0, 3, 1, error),
+              constraint::ConfigStatus::OK)
+        << error;
+    ASSERT_EQ(specs.size(), 1u);
+    EXPECT_EQ(specs[0].kind, constraint::ConstraintKind::Dipole);
+    EXPECT_EQ(specs[0].atoms, std::vector<int>({0, 1, 2}));
+    EXPECT_EQ(specs[0].dipole_frame, "saw");
+    EXPECT_EQ(specs[0].dipole_axis, 2);
+    EXPECT_DOUBLE_EQ(specs[0].dipole_saw_pos, 0.7);
+    EXPECT_DOUBLE_EQ(specs[0].dipole_saw_pos_dec, 0.08);
+    EXPECT_DOUBLE_EQ(specs[0].mu_max, 0.05);
+    EXPECT_EQ(cfg.type, "dipole");
+
+    // Molecular x-axis is accepted and carries its axis index.
+    error.clear();
+    specs.clear();
+    warnings.clear();
+    const std::string molecular = R"({"constraints": [
+        {"type":"dipole","target":1.0,"axis":"x","frame":"molecular"}]})";
+    ASSERT_EQ(constraint::configure_constraint(
+                  cfg, specs, warnings, true, "charge", "becke", "delta",
+                  molecular, 5.0, 1e-4, 0.05, 0.0, 0.0, 3, 1, error),
+              constraint::ConfigStatus::OK)
+        << error;
+    EXPECT_EQ(specs[0].dipole_axis, 0);
+    EXPECT_EQ(specs[0].dipole_frame, "molecular");
+
+    // Mixed charge+dipole -> ERROR (one global dipole coordinate only).
+    error.clear();
+    specs.clear();
+    warnings.clear();
+    const std::string mixed = R"({"constraints": [
+        {"type":"charge","target":0.1,"atoms":[0]},
+        {"type":"dipole","target":0.25,"saw_pos":0.7}]})";
+    EXPECT_EQ(constraint::configure_constraint(
+                  cfg, specs, warnings, true, "charge", "becke", "delta",
+                  mixed, 5.0, 1e-4, 0.05, 0.0, 0.0, 3, 1, error),
+              constraint::ConfigStatus::ERROR);
+    EXPECT_NE(error.find("only constraint"), std::string::npos);
+
+    // Saw frame currently only implements the z axis.
+    error.clear();
+    specs.clear();
+    warnings.clear();
+    const std::string saw_x = R"({"constraints": [
+        {"type":"dipole","target":0.25,"axis":"x","frame":"saw"}]})";
+    EXPECT_EQ(constraint::configure_constraint(
+                  cfg, specs, warnings, true, "charge", "becke", "delta",
+                  saw_x, 5.0, 1e-4, 0.05, 0.0, 0.0, 3, 1, error),
+              constraint::ConfigStatus::ERROR);
+    EXPECT_NE(error.find("axis"), std::string::npos);
+
+    // V targets are meaningful only for the periodic saw frame.
+    error.clear();
+    specs.clear();
+    warnings.clear();
+    const std::string volt_mol = R"({"constraints": [
+        {"type":"dipole","target":0.25,"frame":"molecular","unit":"V"}]})";
+    EXPECT_EQ(constraint::configure_constraint(
+                  cfg, specs, warnings, true, "charge", "becke", "delta",
+                  volt_mol, 5.0, 1e-4, 0.05, 0.0, 0.0, 3, 1, error),
+              constraint::ConfigStatus::ERROR);
+    EXPECT_NE(error.find("V"), std::string::npos);
+
+    // Automatic saw placement cannot serve the fixed-mu product mode: the
+    // first injection happens before any density exists.
+    error.clear();
+    specs.clear();
+    warnings.clear();
+    const std::string fixed_auto = R"({"constraints": [
+        {"type":"dipole","target":0.25,"fixed_mu":-0.01}]})";
+    constraint::ConstraintFileFormat fmt;
+    ASSERT_TRUE(constraint::parse_constraint_file(
+        fixed_auto, "charge", 5.0, 3, 1, specs, fmt, warnings, error))
+        << error;
+    auto ucell = make_h2o_ucell();
+    Set_GlobalV_Default();
+    PARAM.input.constraint = true;
+    PARAM.input.constraint_type = "charge";
+    PARAM.input.constraint_weight_type = "becke";
+    PARAM.input.constraint_target_mode = "delta";
+    PARAM.input.constraint_mu_max = 5.0;
+    PARAM.input.constraint_thr = 1e-4;
+    const std::string path = "constraint_target_dipole_fixed_auto.json";
+    {
+        std::ofstream ofs(path);
+        ofs << fixed_auto;
+    }
+    PARAM.input.constraint_target_file = path;
+    std::vector<double> radii;
+    EXPECT_EQ(constraint::configure_from_inputs(cfg, specs, *ucell, radii,
+                                                error),
+              constraint::ConfigStatus::ERROR);
+    EXPECT_NE(error.find("saw_pos"), std::string::npos);
+    std::remove(path.c_str());
+    PARAM.input.constraint = false;
+    PARAM.input.constraint_target_file.clear();
+    PARAM.input.efield_amp = 0.0;
+    PARAM.input.dip_cor_flag = false;
+}
+
+TEST(ConstraintIOTest, DipoleVoltTargetConverted)
+{
+    auto ucell = make_h2o_ucell();
+    Set_GlobalV_Default();
+    PARAM.input.constraint = true;
+    PARAM.input.constraint_type = "charge";
+    PARAM.input.constraint_weight_type = "becke";
+    PARAM.input.constraint_target_mode = "absolute";
+    PARAM.input.constraint_mu_max = 5.0;
+    PARAM.input.constraint_thr = 1e-4;
+    PARAM.input.efield_amp = 0.0;
+    PARAM.input.dip_cor_flag = false;
+    const std::string path = "constraint_target_dipole_volt.json";
+    {
+        std::ofstream ofs(path);
+        ofs << R"({"constraints": [
+            {"type":"dipole","target":1.0,"frame":"saw","saw_pos":0.9,
+             "unit":"V"}]})";
+    }
+    PARAM.input.constraint_target_file = path;
+    constraint::ConstraintConfig cfg;
+    std::vector<constraint::ConstraintSpec> specs;
+    std::vector<double> radii;
+    std::string error;
+    ASSERT_EQ(constraint::configure_from_inputs(cfg, specs, *ucell, radii,
+                                                error),
+              constraint::ConfigStatus::OK)
+        << error;
+    ASSERT_EQ(specs.size(), 1u);
+    // 1 V potential drop -> p = A*dV/(4*pi*Hartree_to_eV).
+    const double area = 20.0 * 20.0;
+    const double expected = area
+                            / (ModuleBase::FOUR_PI
+                               * ModuleBase::Hartree_to_eV);
+    EXPECT_NEAR(specs[0].target, expected, 1e-12);
+    EXPECT_EQ(specs[0].dipole_unit, "ebohr");
+    ASSERT_EQ(cfg.targets.size(), 1u);
+    EXPECT_NEAR(cfg.targets[0].value, expected, 1e-12);
+    std::remove(path.c_str());
+    PARAM.input.constraint = false;
+    PARAM.input.constraint_target_file.clear();
+    PARAM.input.constraint_target_mode = "delta";
 }
 
 TEST(ConstraintIOTest, DipoleReportPlumbing)

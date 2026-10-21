@@ -32,6 +32,27 @@ double DipoleObserver::saw(const double pos_max, const double pos_dec,
     }
 }
 
+double DipoleObserver::saw_slope(const double pos_max, const double pos_dec,
+                                 const double x)
+{
+    const double fac = 1.0 - pos_dec;
+    // Branch A: rising ramp.
+    if (x <= pos_max)
+    {
+        return 1.0;
+    }
+    // Branch B: right of the decay window -> periodic rising ramp.
+    else if (x > pos_max + pos_dec)
+    {
+        return 1.0;
+    }
+    // Branch C: decay window (steep negative slope).
+    else
+    {
+        return -fac / pos_dec;
+    }
+}
+
 ModuleBase::Vector3<double> DipoleObserver::molecular(
     const UnitCell& ucell, const ModulePW::PW_Basis* rho_basis,
     const double* const* rho, const int nspin,

@@ -10,6 +10,7 @@
 #include "source_base/global_variable.h"
 #include "source_base/module_grid/partition.h"
 #include "source_basis/module_pw/pw_basis.h"
+#include "source_estate/module_constraint/constraint_dipole.h"
 #include "source_estate/module_constraint/weight_grid.h"
 #include "source_io/module_parameter/parameter.h"
 #include "../../test/prepare_unitcell.h"
@@ -124,6 +125,79 @@ TEST_F(WeightGridTest, PartitionOfUnity)
            rhopw->nrxx, wg.nat(),
            std::chrono::duration<double>(dur).count(),
            std::chrono::duration<double>(dur).count() / rhopw->nrxx);
+}
+
+// M5: the dipole density weight plus its ionic offset must reproduce the
+// passive DipoleObserver's saw dipole exactly (same saw function, same grid
+// quadrature).  A uniform toy density keeps the check independent of any
+// atom-centred integration error.
+TEST_F(WeightGridTest, DipoleSawWeightMatchesObserver)
+{
+    ucell->atoms[0].ncpp.zv = 6.0;
+    ucell->atoms[1].ncpp.zv = 1.0;
+    const double pos_max = 0.7;
+    const double pos_dec = 0.1;
+    constraint::WeightGrid wg(*ucell, rhopw, radii,
+                              constraint::WeightType::DipoleSaw, 0.0, 2,
+                              pos_max, pos_dec);
+    wg.build();
+    ASSERT_EQ(wg.nconstraint(), 1);
+    ASSERT_TRUE(wg.is_dipole());
+
+    std::vector<double> rho(rhopw->nrxx, 0.3);
+    const double* rp[1] = {rho.data()};
+    const double expected = constraint::DipoleObserver::saw_dipole(
+        *ucell, rhopw, rp, 1, pos_max, pos_dec);
+    const double dV = rhopw->omega / static_cast<double>(rhopw->nxyz);
+    double qe = 0.0;
+    for (int ir = 0; ir < rhopw->nrxx; ++ir)
+    {
+        qe += wg.constraint_weight(0)[ir] * rho[ir];
+    }
+    const double q = wg.observable_offset(0) + qe * dV;
+    EXPECT_NEAR(q, expected, 1e-9);
+
+    // The density weight is geometry-independent: the derivative grid is
+    // exactly zero, while the ionic offset derivative is Z*saw'.
+    wg.build_derivatives();
+    ASSERT_TRUE(wg.derivatives_built());
+    double dmax = 0.0;
+    for (const double v : wg.weight_derivatives()[0])
+    {
+        dmax = std::max(dmax, std::fabs(v));
+    }
+    EXPECT_DOUBLE_EQ(dmax, 0.0);
+    EXPECT_DOUBLE_EQ(wg.dipole_atom_offset_derivative(0, 0, 0), 0.0);
+    EXPECT_DOUBLE_EQ(wg.dipole_atom_offset_derivative(0, 0, 1), 0.0);
+    EXPECT_DOUBLE_EQ(wg.dipole_atom_offset_derivative(0, 0, 2), 6.0);
+
+    // Moving the saw plane rebuilds both the weight and the offset.
+    const double old_offset = wg.observable_offset(0);
+    wg.set_dipole_saw_pos(0.2);
+    EXPECT_DOUBLE_EQ(wg.dipole_saw_pos(), 0.2);
+    EXPECT_NE(wg.observable_offset(0), old_offset);
+}
+
+// Molecular dipole weight: w = -r_axis at every grid point and the ionic
+// offset is sum Z*R_axis.
+TEST_F(WeightGridTest, DipoleMolecularWeightAndOffset)
+{
+    ucell->atoms[0].ncpp.zv = 6.0;
+    ucell->atoms[1].ncpp.zv = 1.0;
+    constraint::WeightGrid wg(*ucell, rhopw, radii,
+                              constraint::WeightType::DipoleMolecular, 0.0,
+                              2);
+    wg.build();
+    for (int ir = 0; ir < rhopw->nrxx; ir += 37)
+    {
+        EXPECT_DOUBLE_EQ(wg.constraint_weight(0)[ir],
+                         -wg.grid_position(ir).z);
+    }
+    // O at z=5, both H at z=5 -> offset = (6+1+1)*5 = 40 e*Bohr.
+    EXPECT_NEAR(wg.observable_offset(0), 40.0, 1e-12);
+    EXPECT_DOUBLE_EQ(wg.dipole_atom_offset_derivative(0, 0, 2), 6.0);
+    EXPECT_DOUBLE_EQ(wg.dipole_atom_offset_derivative(0, 1, 2), 1.0);
+    EXPECT_DOUBLE_EQ(wg.dipole_atom_offset_derivative(0, 1, 0), 0.0);
 }
 
 TEST_F(WeightGridTest, SymmetryMirror)

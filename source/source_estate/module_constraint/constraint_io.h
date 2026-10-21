@@ -136,13 +136,14 @@ bool parse_target_file(const std::string& content,
 // its own fragment, density channel and per-constraint multiplier cap.
 // ---------------------------------------------------------------------------
 
-// Observable kind of one constraint.  Stage A implements only the total
-// charge and the magnetization channels; "dipole" (z-weighted, redesign
-// stage C) is rejected by the guards and never reaches this enum.
+// Observable kind of one constraint.  Charge and spin use Becke fragment
+// weights; dipole is the global stage-C coordinate (saw or molecular) whose
+// weight is the derivative of the dipole with respect to the density.
 enum class ConstraintKind
 {
     Charge, // Q = int w (rho_up + rho_dn)
-    Spin    // Q = int w (rho_up - rho_dn); requires nspin == 2
+    Spin,   // Q = int w (rho_up - rho_dn); requires nspin == 2
+    Dipole  // Q = p_axis (saw/molecular; one global constraint only)
 };
 
 // Per-constraint density read / potential injection signs.  Built only by
@@ -172,6 +173,14 @@ struct ConstraintSpec
     // across the list (configure guard), so mixed dynamics can not happen.
     bool fixed_mu = false;
     double fixed_mu_value = 0.0; // Ry
+    // Module B (M5): dipole-coordinate frame.  Only meaningful for
+    // kind == Dipole.  The target is in e*Bohr after configure_from_inputs
+    // has resolved an optional unit="V" through the cell area.
+    std::string dipole_frame = "saw"; // "saw" | "molecular"
+    int dipole_axis = 2;              // 0=x, 1=y, 2=z (saw: z only)
+    double dipole_saw_pos = -1.0;     // fractional z; -1 = auto plane
+    double dipole_saw_pos_dec = 0.1;  // fractional decay width
+    std::string dipole_unit = "ebohr"; // "ebohr" | "V" (V: saw only)
 };
 
 // Build the fully validated constraint configuration from the global INPUT

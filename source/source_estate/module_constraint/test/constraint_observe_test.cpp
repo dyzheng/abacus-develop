@@ -28,6 +28,7 @@ InfoNonlocal::~InfoNonlocal()
 #include "source_base/module_grid/partition.h"
 #include "source_base/module_grid/radial.h"
 #include "source_estate/module_constraint/constraint_observe.h"
+#include "source_estate/module_constraint/constraint_dipole.h"
 #include "source_estate/module_constraint/weight_grid.h"
 
 using ModuleBase::PI;
@@ -610,4 +611,29 @@ TEST_F(ConstraintObserveTest, MixedChannelConservation)
     EXPECT_NEAR(qsum, 2.0 * ucell->omega, 1e-8);
     EXPECT_NEAR(Q[3], 0.0, 1e-12);
     EXPECT_NEAR(Q[4], 0.0, 1e-12);
+}
+
+// M5: the observer returns the ionic offset plus the density integral.  A
+// uniform density makes both terms explicit and pins the sign of the saw
+// weight (-Lz*saw).
+TEST_F(ConstraintObserveTest, DipoleOffsetIsAddedToIntegral)
+{
+    ucell->atoms[0].ncpp.zv = 6.0;
+    ucell->atoms[1].ncpp.zv = 1.0;
+    const double a = 0.7;
+    const double b = 0.1;
+    constraint::WeightGrid wg(*ucell, rhopw, radii,
+                              constraint::WeightType::DipoleSaw, 0.0, 2, a,
+                              b);
+    wg.build();
+    std::vector<double> rho(rhopw->nrxx, 0.25);
+    const double* rp[1] = {rho.data()};
+    const std::vector<constraint::ChannelProfile> chans(
+        1, constraint::build_channel_profile(constraint::ConstraintKind::Dipole));
+    std::vector<double> Q;
+    constraint::ConstraintObserver::observe(wg, rp, 1, chans, Q);
+    ASSERT_EQ(Q.size(), 1u);
+    const double expected = constraint::DipoleObserver::saw_dipole(
+        *ucell, rhopw, rp, 1, a, b);
+    EXPECT_NEAR(Q[0], expected, 1e-9);
 }

@@ -278,3 +278,26 @@ TEST_F(ConstraintDipoleTest, DecayWindowGuard)
     EXPECT_GT(d, 8.9);
     EXPECT_LT(d, 9.1);
 }
+
+// The analytic slope used by the dipole constraint force must be the
+// derivative of the saw itself on all three segments.  Segment interiors are
+// used so the finite difference never straddles a slope discontinuity.
+TEST_F(ConstraintDipoleTest, SawSlopeMatchesFiniteDifference)
+{
+    const double a = 0.7;
+    const double b = 0.1;
+    const double h = 1e-7;
+    const double points[3] = {0.2, 0.74, 0.9};
+    for (const double x : points)
+    {
+        const double fd = (constraint::DipoleObserver::saw(a, b, x + h)
+                           - constraint::DipoleObserver::saw(a, b, x - h))
+                          / (2.0 * h);
+        EXPECT_NEAR(constraint::DipoleObserver::saw_slope(a, b, x), fd,
+                    1e-8)
+            << "x=" << x;
+    }
+    EXPECT_DOUBLE_EQ(constraint::DipoleObserver::saw_slope(a, b, 0.2), 1.0);
+    EXPECT_NEAR(constraint::DipoleObserver::saw_slope(a, b, 0.74),
+                -(1.0 - b) / b, 1e-12);
+}

@@ -9,6 +9,7 @@
 #include "source_base/global_variable.h"
 #include "source_base/parallel_global.h"
 #include "source_basis/module_pw/pw_basis.h"
+#include "source_estate/module_constraint/constraint_dipole.h"
 #include "source_estate/module_constraint/constraint_observe.h"
 #include "source_estate/module_constraint/weight_grid.h"
 #include "source_io/module_parameter/parameter.h"
@@ -260,6 +261,67 @@ TEST(WeightGridMpiTest, ObserveReduceConsistent)
         qsum += q;
     }
     EXPECT_NEAR(qsum, vol, 1e-8);
+}
+
+// M5: the saw dipole's ionic offset is rank-independent.  It must be added
+// after the pool reduction, otherwise a 4-rank run reports Q = integral +
+// 4*offset instead of integral + offset.  Comparing against the passive
+// observer on every rank pins both the reduction and the weight/offset split.
+TEST(WeightGridMpiTest, DipoleObserveReducesOffsetOnce)
+{
+    PARAM.input.device = "cpu";
+    PARAM.input.precision = "double";
+    PARAM.input.nspin = 1;
+    PARAM.input.nelec = 10.0;
+    PARAM.input.basis_type = "pw";
+    GlobalV::KPAR = 1;
+    Parallel_Global::init_pools(GlobalV::NPROC,
+                                GlobalV::MY_RANK,
+                                PARAM.input.bndpar,
+                                GlobalV::KPAR,
+                                GlobalV::NPROC_IN_BNDGROUP,
+                                GlobalV::RANK_IN_BPGROUP,
+                                GlobalV::MY_BNDGROUP,
+                                GlobalV::NPROC_IN_POOL,
+                                GlobalV::RANK_IN_POOL,
+                                GlobalV::MY_POOL);
+
+    auto ucell = make_h2o_ucell();
+    const std::vector<double> radii = {1.5, 0.5, 0.5};
+    const double pos_max = 0.7;
+    const double pos_dec = 0.1;
+
+    ModulePW::PW_Basis rhopw;
+    rhopw.initmpi(GlobalV::NPROC_IN_POOL, GlobalV::RANK_IN_POOL, POOL_WORLD);
+    rhopw.initgrids(1.0, ucell->latvec, 24, 16, 20);
+    rhopw.distribute_r();
+
+    constraint::WeightGrid wg(*ucell, &rhopw, radii,
+                              constraint::WeightType::DipoleSaw, 0.0, 2,
+                              pos_max, pos_dec);
+    wg.build();
+
+    // A uniform density keeps the check independent of atom-centred
+    // quadrature; only the reduction arithmetic is under test.
+    std::vector<double> rho(rhopw.nrxx, 0.3);
+    const double* rho_ptr = rho.data();
+    std::vector<double> Q;
+    constraint::ConstraintObserver::observe(wg, &rho_ptr, 1,
+                                            constraint::DensityChannel::Charge,
+                                            Q);
+    ASSERT_EQ(Q.size(), 1u);
+    const double expected = constraint::DipoleObserver::saw_dipole(
+        *ucell, &rhopw, &rho_ptr, 1, pos_max, pos_dec);
+    EXPECT_NEAR(Q[0], expected, 1e-9);
+
+    // reduce_pool is an allreduce: every rank must observe the same value.
+    std::vector<double> Q_all(GlobalV::NPROC, 0.0);
+    MPI_Allgather(Q.data(), 1, MPI_DOUBLE, Q_all.data(), 1, MPI_DOUBLE,
+                  MPI_COMM_WORLD);
+    for (const double q : Q_all)
+    {
+        EXPECT_DOUBLE_EQ(q, Q[0]);
+    }
 }
 
 int main(int argc, char** argv)

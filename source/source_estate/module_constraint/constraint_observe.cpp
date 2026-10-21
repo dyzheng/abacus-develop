@@ -95,6 +95,9 @@ void ConstraintObserver::observe(const WeightGrid& wg,
                 q += w[ir] * rho[0][ir] * static_cast<double>(ch.read_up);
             }
         }
+        // Store only the grid integral here.  A dipole's ionic offset is
+        // rank-independent, so it must be added after the pool reduction;
+        // adding it before would multiply it by the number of ranks.
         Q[alpha] = q * dV;
     }
 
@@ -102,6 +105,14 @@ void ConstraintObserver::observe(const WeightGrid& wg,
 #ifdef __MPI
     Parallel_Reduce::reduce_pool(Q.data(), static_cast<int>(Q.size()));
 #endif
+
+    // M5: dipole observables carry an ionic offset that is not represented by
+    // the density grid.  Every other kind stores offset 0, leaving the
+    // historical value bit-identical.
+    for (int alpha = 0; alpha < nalpha; ++alpha)
+    {
+        Q[alpha] += wg.observable_offset(alpha);
+    }
 }
 
 } // namespace constraint

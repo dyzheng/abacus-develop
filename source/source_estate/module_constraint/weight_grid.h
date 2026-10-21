@@ -12,6 +12,8 @@ namespace constraint
 enum class WeightType
 {
     Becke, // Becke partition with heteronuclear size adjustment (M0)
+    DipoleSaw,      // M5: dipole weight -Lz*saw(z/Lz), global one-constraint
+    DipoleMolecular // M5: dipole weight -r_axis, global one-constraint
 };
 
 /**
@@ -43,7 +45,10 @@ class WeightGrid
                const ModulePW::PW_Basis* rho_basis,
                const std::vector<double>& radii,
                WeightType type = WeightType::Becke,
-               double screening_radius = 0.0);
+               double screening_radius = 0.0,
+               int dipole_axis = 2,
+               double dipole_pos_max = 0.0,
+               double dipole_pos_dec = 0.1);
 
     // (Re)compute all weights and the partition-of-unity audit.  Calling this
     // twice with the same geometry yields bit-identical results.
@@ -96,6 +101,27 @@ class WeightGrid
         return constraint_atoms_;
     }
 
+    // M5 dipole support.  The observable offset is the ionic part of the
+    // dipole (saw: Lz*sum Z*s; molecular: sum Z*R_axis); the observer adds it
+    // to int rho*w.  Non-dipole kinds return 0 and are not dipole.
+    bool is_dipole() const
+    {
+        return type_ == WeightType::DipoleSaw
+               || type_ == WeightType::DipoleMolecular;
+    }
+    double observable_offset(const int alpha) const
+    {
+        return observable_offset_.empty() ? 0.0
+                                          : observable_offset_[alpha];
+    }
+    // d(offset)/dR_{J,d}: the only explicit-coordinate force term of a
+    // dipole constraint (the density weight itself is geometry-independent).
+    double dipole_atom_offset_derivative(const int alpha, const int J,
+                                         const int d) const;
+    void set_dipole_saw_pos(const double pos_max);
+    double dipole_saw_pos() const { return dipole_pos_max_; }
+    double dipole_saw_pos_dec() const { return dipole_pos_dec_; }
+
     // Cartesian position (Bohr) of local grid point ir.
     ModuleBase::Vector3<double> grid_position(const int ir) const;
 
@@ -116,17 +142,24 @@ class WeightGrid
     std::vector<double> radii_;
     WeightType type_;
     double screening_radius_;
+    int dipole_axis_ = 2;
+    double dipole_pos_max_ = 0.0;
+    double dipole_pos_dec_ = 0.1;
     int nat_ = 0;
     int nrxx_ = 0;
 
     // Per-atom weights w_[iat][ir_local] and derived per-constraint weights.
     std::vector<std::vector<double>> w_;
     std::vector<std::vector<double>> cw_;
+    std::vector<double> observable_offset_;
     // Per-atom position-derivative cache wat_deriv_[iat][(J*3+d)*nrxx_+ir]
     // and the derived per-constraint derivative grid dw_ (same layout).
     std::vector<std::vector<double>> wat_deriv_;
     std::vector<std::vector<double>> dw_;
     std::vector<std::vector<int>> constraint_atoms_;
+
+    // M5: build the single global dipole weight and its ionic offset.
+    void build_dipole();
 
     // Partition-of-unity audit result (global max over ranks).
     double maxdev_ = 0.0;

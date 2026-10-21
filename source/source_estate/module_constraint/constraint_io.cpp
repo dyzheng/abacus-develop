@@ -310,6 +310,11 @@ bool parse_target_file(const std::string& content,
 // never drift from the config vocabulary.
 const char* kind_to_type_string(ConstraintKind kind)
 {
+    // Branch: global dipole coordinate string.
+    if (kind == ConstraintKind::Dipole)
+    {
+        return "dipole";
+    }
     // Branch: spin channel string.
     if (kind == ConstraintKind::Spin)
     {
@@ -382,7 +387,7 @@ bool parse_string_token(const std::string& s, size_t& pos, std::string& out)
 // Validate one per-constraint object of the v2 list.  Fields may appear in
 // any order; each one is located by an independent key scan of the object
 // slice.  Guarded (never silently run a wrong calculation):
-//   - "type" outside {charge, spin} (incl. "dipole") -> ERROR
+//   - "type" outside {charge, spin, dipole} -> ERROR
 //   - spin under nspin != 2 -> ERROR (the spin channel needs two channels)
 //   - missing "type"/"target" -> ERROR
 //   - "atoms": empty fragment, out-of-range index, or nested arrays -> ERROR
@@ -418,8 +423,8 @@ bool parse_constraint_object(const std::string& obj,
                 + "]: \"type\" must be a quoted string";
         return false;
     }
-    // Branch B: implemented kinds only; anything else (incl. "dipole") is
-    // refused loudly rather than guessed.
+    // Branch B: implemented kinds only; anything else is refused loudly
+    // rather than guessed.
     if (type == "charge")
     {
         spec.kind = ConstraintKind::Charge;
@@ -428,11 +433,15 @@ bool parse_constraint_object(const std::string& obj,
     {
         spec.kind = ConstraintKind::Spin;
     }
+    else if (type == "dipole")
+    {
+        spec.kind = ConstraintKind::Dipole;
+    }
     else
     {
         error = "constraint type \"" + type
-                + "\" is not implemented in stage A (only \"charge\" and "
-                  "\"spin\")";
+                + "\" is not implemented (only \"charge\", \"spin\" and "
+                  "\"dipole\")";
         return false;
     }
     spec.chan = build_channel_profile(spec.kind);
@@ -468,11 +477,140 @@ bool parse_constraint_object(const std::string& obj,
         return false;
     }
 
+    // Branch B2: dipole-only frame fields.  They are parsed here, before the
+    // atom-list branch, so a dipole can never silently acquire a fragment
+    // (a global dipole is the only allowed form; multi-fragment dipoles are
+    // underdetermined).
+    if (spec.kind == ConstraintKind::Dipole)
+    {
+        pos = 0;
+        if (find_key(obj, "frame", pos))
+        {
+            skip_ws(obj, pos);
+            if (pos >= obj.size() || obj[pos] != ':')
+            {
+                error = "constraint c[" + std::to_string(index)
+                        + "]: expected ':' after \"frame\"";
+                return false;
+            }
+            ++pos;
+            if (!parse_string_token(obj, pos, spec.dipole_frame))
+            {
+                error = "constraint c[" + std::to_string(index)
+                        + "]: \"frame\" must be a quoted string";
+                return false;
+            }
+        }
+        pos = 0;
+        if (find_key(obj, "axis", pos))
+        {
+            skip_ws(obj, pos);
+            if (pos >= obj.size() || obj[pos] != ':')
+            {
+                error = "constraint c[" + std::to_string(index)
+                        + "]: expected ':' after \"axis\"";
+                return false;
+            }
+            ++pos;
+            std::string axis;
+            if (!parse_string_token(obj, pos, axis))
+            {
+                error = "constraint c[" + std::to_string(index)
+                        + "]: \"axis\" must be a quoted string";
+                return false;
+            }
+            // Branch: x/y/z map to Cartesian component indices.
+            if (axis == "x")
+            {
+                spec.dipole_axis = 0;
+            }
+            else if (axis == "y")
+            {
+                spec.dipole_axis = 1;
+            }
+            else if (axis == "z")
+            {
+                spec.dipole_axis = 2;
+            }
+            else
+            {
+                error = "constraint c[" + std::to_string(index)
+                        + "]: \"axis\" must be \"x\", \"y\" or \"z\"";
+                return false;
+            }
+        }
+        pos = 0;
+        if (find_key(obj, "saw_pos", pos))
+        {
+            skip_ws(obj, pos);
+            if (pos >= obj.size() || obj[pos] != ':')
+            {
+                error = "constraint c[" + std::to_string(index)
+                        + "]: expected ':' after \"saw_pos\"";
+                return false;
+            }
+            ++pos;
+            skip_ws(obj, pos);
+            if (!parse_number(obj, pos, spec.dipole_saw_pos))
+            {
+                error = "constraint c[" + std::to_string(index)
+                        + "]: malformed number in \"saw_pos\"";
+                return false;
+            }
+        }
+        pos = 0;
+        if (find_key(obj, "saw_pos_dec", pos))
+        {
+            skip_ws(obj, pos);
+            if (pos >= obj.size() || obj[pos] != ':')
+            {
+                error = "constraint c[" + std::to_string(index)
+                        + "]: expected ':' after \"saw_pos_dec\"";
+                return false;
+            }
+            ++pos;
+            skip_ws(obj, pos);
+            if (!parse_number(obj, pos, spec.dipole_saw_pos_dec))
+            {
+                error = "constraint c[" + std::to_string(index)
+                        + "]: malformed number in \"saw_pos_dec\"";
+                return false;
+            }
+        }
+        pos = 0;
+        if (find_key(obj, "unit", pos))
+        {
+            skip_ws(obj, pos);
+            if (pos >= obj.size() || obj[pos] != ':')
+            {
+                error = "constraint c[" + std::to_string(index)
+                        + "]: expected ':' after \"unit\"";
+                return false;
+            }
+            ++pos;
+            if (!parse_string_token(obj, pos, spec.dipole_unit))
+            {
+                error = "constraint c[" + std::to_string(index)
+                        + "]: \"unit\" must be a quoted string";
+                return false;
+            }
+        }
+    }
+
     // Branch D: optional "atoms" flat fragment list; default = atom 'index'
     // (the constraint position in the list), mirroring the v1 default.
     pos = 0;
     if (find_key(obj, "atoms", pos))
     {
+        // Guard: a dipole is one global observable.  A per-constraint atom
+        // fragment would silently redefine it as a fragment dipole.
+        if (spec.kind == ConstraintKind::Dipole)
+        {
+            error = "constraint c[" + std::to_string(index)
+                    + "]: type=dipole is a global constraint and must not "
+                      "carry \"atoms\"";
+            return false;
+        }
         skip_ws(obj, pos);
         if (pos >= obj.size() || obj[pos] != ':')
         {
@@ -529,7 +667,20 @@ bool parse_constraint_object(const std::string& obj,
     }
     else
     {
-        spec.atoms = {index};
+        // Branch: dipole covers the whole cell; other kinds keep the v2
+        // default fragment (atom at the list position).
+        if (spec.kind == ConstraintKind::Dipole)
+        {
+            spec.atoms.resize(nat);
+            for (int iat = 0; iat < nat; ++iat)
+            {
+                spec.atoms[iat] = iat;
+            }
+        }
+        else
+        {
+            spec.atoms = {index};
+        }
     }
     for (const int iat : spec.atoms)
     {
@@ -598,6 +749,55 @@ bool parse_constraint_object(const std::string& obj,
             return false;
         }
         spec.fixed_mu = true;
+    }
+
+    // Branch G: dipole semantic guards.  These are independent of the cell
+    // shape (the latter is checked in configure_from_inputs, which has the
+    // UnitCell); refusing an unknown frame/axis here keeps a malformed file
+    // from reaching the weight builder.
+    if (spec.kind == ConstraintKind::Dipole)
+    {
+        if (spec.dipole_frame != "saw" && spec.dipole_frame != "molecular")
+        {
+            error = "constraint c[" + std::to_string(index)
+                    + "]: \"frame\" must be \"saw\" or \"molecular\"";
+            return false;
+        }
+        // Branch: the saw implementation is tied to the z-aligned third
+        // lattice vector; other axes are refused rather than approximating.
+        if (spec.dipole_frame == "saw" && spec.dipole_axis != 2)
+        {
+            error = "constraint c[" + std::to_string(index)
+                    + "]: frame=saw currently supports only axis=\"z\"";
+            return false;
+        }
+        if (spec.dipole_saw_pos_dec <= 0.0
+            || spec.dipole_saw_pos_dec > 0.5)
+        {
+            error = "constraint c[" + std::to_string(index)
+                    + "]: \"saw_pos_dec\" must be in (0, 0.5]";
+            return false;
+        }
+        if (spec.dipole_saw_pos < -1.0 || spec.dipole_saw_pos >= 1.0)
+        {
+            error = "constraint c[" + std::to_string(index)
+                    + "]: \"saw_pos\" must be in [-1, 1) (-1 = auto)";
+            return false;
+        }
+        if (spec.dipole_unit != "ebohr" && spec.dipole_unit != "V")
+        {
+            error = "constraint c[" + std::to_string(index)
+                    + "]: \"unit\" must be \"ebohr\" or \"V\"";
+            return false;
+        }
+        // Branch: a potential-drop target has no meaning in the molecular
+        // frame (there is no periodic saw), so refuse the combination.
+        if (spec.dipole_unit == "V" && spec.dipole_frame != "saw")
+        {
+            error = "constraint c[" + std::to_string(index)
+                    + "]: unit=\"V\" requires frame=\"saw\"";
+            return false;
+        }
     }
     return true;
 }
@@ -746,6 +946,25 @@ bool parse_v2_list(const std::string& content,
             return false;
         }
     }
+
+    // Guard (M5): the dipole is a single global coordinate.  A mixed list or
+    // a second dipole would require a decomposition the real-space weight
+    // formulation does not define, so refuse instead of silently dropping
+    // one component.
+    int n_dipole = 0;
+    for (const ConstraintSpec& s : specs)
+    {
+        if (s.kind == ConstraintKind::Dipole)
+        {
+            ++n_dipole;
+        }
+    }
+    if (n_dipole > 0 && static_cast<int>(specs.size()) != 1)
+    {
+        error = "constraint file: a dipole constraint must be the only "
+                "constraint (global single-dipole runs only)";
+        return false;
+    }
     return true;
 }
 
@@ -757,7 +976,9 @@ bool parse_v2_list(const std::string& content,
 ChannelProfile build_channel_profile(ConstraintKind kind)
 {
     // Branch: charge channel couples to the total density rho_up + rho_dn.
-    if (kind == ConstraintKind::Charge)
+    // The dipole weight is also built from the total density (the ionic
+    // offset is added separately by the observer), so it shares this profile.
+    if (kind == ConstraintKind::Charge || kind == ConstraintKind::Dipole)
     {
         return ChannelProfile{1, 1, 1.0, 1.0};
     }
@@ -1088,11 +1309,16 @@ ConfigStatus configure_constraint(ConstraintConfig& cfg,
         }
         bool saw_charge = false;
         bool saw_spin = false;
+        bool saw_dipole = false;
         for (const ConstraintSpec& spec : specs)
         {
             if (spec.kind == ConstraintKind::Spin)
             {
                 saw_spin = true;
+            }
+            else if (spec.kind == ConstraintKind::Dipole)
+            {
+                saw_dipole = true;
             }
             else
             {
@@ -1105,7 +1331,7 @@ ConfigStatus configure_constraint(ConstraintConfig& cfg,
         // authority for a mixed kind run and for heterogeneous per-constraint
         // caps; the mirror only reports a representative kind and cap.  The
         // legacy 11-arg entry below re-guards what it can not express.
-        cfg.type = saw_spin ? "spin" : "charge";
+        cfg.type = saw_dipole ? "dipole" : (saw_spin ? "spin" : "charge");
         cfg.mu_max = specs.front().mu_max;
     }
 
@@ -1158,6 +1384,7 @@ ConfigStatus configure_constraint(ConstraintConfig& cfg,
     // the specs-bearing configure_from_inputs / stage-A loop is required.
     bool saw_charge = false;
     bool saw_spin = false;
+    bool saw_dipole = false;
     const double cap = specs.front().mu_max;
     for (size_t i = 0; i < specs.size(); ++i)
     {
@@ -1165,6 +1392,10 @@ ConfigStatus configure_constraint(ConstraintConfig& cfg,
         if (specs[i].kind == ConstraintKind::Spin)
         {
             saw_spin = true;
+        }
+        else if (specs[i].kind == ConstraintKind::Dipole)
+        {
+            saw_dipole = true;
         }
         else
         {
@@ -1186,6 +1417,15 @@ ConfigStatus configure_constraint(ConstraintConfig& cfg,
         error = "mixed charge+spin constraint runs can not be expressed by "
                 "the legacy single-channel configure entry; use the "
                 "specs-bearing configure_from_inputs (stage-A loop wiring)";
+        return ConfigStatus::ERROR;
+    }
+    // Guard: the legacy cfg carries no dipole frame/axis fields, so this
+    // entry can not arm the dipole coordinate without losing its semantics.
+    if (saw_dipole)
+    {
+        error = "dipole constraints must use the specs-bearing "
+                "configure_from_inputs entry (the legacy single-channel cfg "
+                "has no frame/axis fields)";
         return ConfigStatus::ERROR;
     }
     return st;
@@ -1244,6 +1484,97 @@ ConfigStatus configure_from_inputs(ConstraintConfig& cfg,
     for (const std::string& w : warnings)
     {
         ModuleBase::WARNING("ConstraintIO", w);
+    }
+
+    // M5 dipole coordinate: frame/unit/cell guards and the V -> e*Bohr
+    // conversion need the UnitCell, so they live here rather than in the
+    // cell-free parser.
+    bool has_dipole = false;
+    bool all_fixed = !specs.empty();
+    for (const ConstraintSpec& spec : specs)
+    {
+        has_dipole = has_dipole || (spec.kind == ConstraintKind::Dipole);
+        all_fixed = all_fixed && spec.fixed_mu;
+    }
+    // Branch: a dipole coordinate shares the periodic field with Efield's
+    // saw potential and the dipole correction; running both would count the
+    // same external field twice, so refuse instead of silently adding them.
+    if (has_dipole
+        && (PARAM.inp.efield_amp != 0.0 || PARAM.inp.dip_cor_flag))
+    {
+        error = "a dipole constraint is mutually exclusive with "
+                "efield_amp != 0 and dip_cor_flag = true (both add the same "
+                "periodic electric field)";
+        return ConfigStatus::ERROR;
+    }
+    if (has_dipole)
+    {
+        // Branch: non-collinear densities store four components while the
+        // observer integrates only the total (one/two-component) density.
+        if (PARAM.inp.nspin == 4)
+        {
+            error = "dipole constraints are not implemented for nspin = 4";
+            return ConfigStatus::ERROR;
+        }
+        for (ConstraintSpec& spec : specs)
+        {
+            // Branch: only the dipole entry needs frame-specific work.
+            if (spec.kind != ConstraintKind::Dipole)
+            {
+                continue;
+            }
+            // Branch: saw frame requires the z-aligned third lattice vector
+            // assumed by the dipole / deltaV formulas.
+            if (spec.dipole_frame == "saw")
+            {
+                const ModuleBase::Matrix3& lv = ucell.latvec;
+                const double off = std::abs(lv.e13) + std::abs(lv.e23)
+                                   + std::abs(lv.e31)
+                                   + std::abs(lv.e32);
+                if (off > 1e-10 || lv.e33 <= 0.0)
+                {
+                    error = "a saw dipole constraint requires a z-aligned "
+                            "third lattice vector orthogonal to a,b";
+                    return ConfigStatus::ERROR;
+                }
+            }
+            // Branch: potential-drop targets are converted through
+            // deltaV = 4*pi*p/A (Hartree), with A the xy cell area.
+            if (spec.dipole_unit == "V")
+            {
+                const ModuleBase::Matrix3& lv = ucell.latvec;
+                const double axb = lv.e11 * lv.e22 - lv.e12 * lv.e21;
+                const double area = std::abs(axb) * ucell.lat0 * ucell.lat0;
+                spec.target = spec.target * area
+                              / (ModuleBase::FOUR_PI
+                                 * ModuleBase::Hartree_to_eV);
+                spec.dipole_unit = "ebohr";
+            }
+        }
+        // Mirror the (possibly unit-converted) dipole target into the legacy
+        // cfg.targets view used by reports and historical tests.
+        for (size_t a = 0; a < specs.size() && a < cfg.targets.size(); ++a)
+        {
+            cfg.targets[a].value = specs[a].target;
+        }
+        // Guard: an all-fixed run injects before the first density exists, so
+        // an auto saw plane would seed a nonzero mu through an arbitrary
+        // placeholder plane.  Require the user to place it explicitly.
+        if (all_fixed)
+        {
+            for (const ConstraintSpec& spec : specs)
+            {
+                if (spec.kind == ConstraintKind::Dipole
+                    && spec.dipole_frame == "saw"
+                    && spec.dipole_saw_pos < 0.0)
+                {
+                    error = "fixed_mu dipole saw constraints require an "
+                            "explicit \"saw_pos\" (no density is available "
+                            "before the first injection)";
+                    return ConfigStatus::ERROR;
+                }
+            }
+        }
     }
 
     cfg.warm_start = PARAM.inp.constraint_warm_start;
