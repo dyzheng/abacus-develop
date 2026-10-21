@@ -179,9 +179,12 @@ class ConstraintLoop
     bool trust_enabled() const { return cfg_.trust_region; }
     double trust_radius() const { return mu_solver_.trust_radius(); }
     int trust_rejections() const { return mu_solver_.trust_reject_count(); }
-    // Consume the one-shot "a trust step was rejected" request.  The esolver
-    // calls this right after on_scf_converged() and resets the charge-mixing
-    // history when true: the rejected fixed-point map no longer exists.
+    // Consume the one-shot "the fixed-point map changed" request.  The
+    // esolver calls this right after on_scf_converged() and resets the
+    // charge-mixing history when true.  Set on a rejected trust trial and on
+    // every ALM multiplier move (probe seed / Newton re-seed / outer update):
+    // the Broyden/DIIS cache extrapolates across the old potential, and R2
+    // showed a 0.25 drho transient without the reset.
     bool consume_trust_rollback()
     {
         const bool pending = trust_rollback_pending_;
@@ -297,8 +300,27 @@ class ConstraintLoop
     AlmController alm_;
     bool alm_mode_ = false;          // cfg_.mu_schedule == "alm"
     bool alm_armed_ = false;         // k set (probe / carried warm response)
+    // Penalty feedback switch.  False right after the probe / a warm rebind:
+    // the Newton (or carried) mu is run as a plain fixed-potential SCF first.
+    // Engaging the penalty on the stale probe density overshoots (R1: the
+    // first post-probe potential jumped to 5x the fixed point and cost the
+    // frame its 100-iteration budget).  adjudicate turns it on only when the
+    // settled density still misses the target.
+    bool alm_penalty_live_ = false;
     bool alm_probe_pending_ = false; // cold probe SCF in flight
-    double alm_probe_mu_ = 0.02;     // Ry: chi-measurement probe multiplier
+    // Warm-start secant state: the carried slope can be stale when the new
+    // geometry's gap closes (R2 frame 2: carried |chi|=0.58, true 1.49).  The
+    // first warm settle anchors (mu0, Q0); the next one measures the secant
+    // slope on THIS geometry and takes one Newton step with it.
+    bool alm_warm_secant_pending_ = false;
+    std::vector<double> alm_warm_mu0_;
+    std::vector<double> alm_warm_q0_;
+    // Ry: chi-measurement probe multiplier.  0.02 (the original plan value)
+    // costs a full-length probe SCF plus a settle whose combined length left
+    // no room for the ALM correction inside scf_nmax=100 on the delta=0.01
+    // R2 case; 0.005 is still far above SCF noise (dQ ~ 3e-3 e) and keeps
+    // both the probe and the post-probe settle short.
+    double alm_probe_mu_ = 0.005;
     std::vector<double> mu_eff_;     // injector / force multiplier
     std::vector<double> drho_trend_; // last drho values for the dampen guard
     std::vector<double> Q_;

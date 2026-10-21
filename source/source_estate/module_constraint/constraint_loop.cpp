@@ -41,6 +41,25 @@ bool inner_no_reset_experiment()
         = (std::getenv("ABA_CONSTRAINT_INNER_NO_RESET") != nullptr);
     return enabled;
 }
+
+// Zero-sum multiplier pattern for the cold ALM chi probe.  With n > 1
+// components a uniform probe multiplier is a constant potential shift: it
+// cancels in every relative channel and the measured dQ is numerically zero
+// (this is what R1 exposed for complementary charge fragments), so k would
+// silently fall back to the nominal gain.  The pattern keeps a relative
+// potential while leaving the uniform (total-charge) direction untouched --
+// that direction is fixed by sum_a Q_a = nelec and cannot be constrained.
+// n == 1 keeps the plain +1 probe.
+double alm_probe_pattern(const size_t a, const size_t n)
+{
+    // Branch: single component, or the reference component -> +1.
+    if (n <= 1 || a == 0)
+    {
+        return 1.0;
+    }
+    // Branch: compensating components share -1/(n-1), so sum_a p_a = 0.
+    return -1.0 / static_cast<double>(n - 1);
+}
 } // anonymous namespace
 
 ConstraintLoop& ConstraintLoop::instance()
@@ -62,6 +81,10 @@ void ConstraintLoop::reset()
     alm_ = AlmController();
     alm_mode_ = false;
     alm_armed_ = false;
+    alm_penalty_live_ = false;
+    alm_warm_secant_pending_ = false;
+    alm_warm_mu0_.clear();
+    alm_warm_q0_.clear();
     alm_probe_pending_ = false;
     mu_eff_.clear();
     drho_trend_.clear();
@@ -210,6 +233,10 @@ void ConstraintLoop::init(const UnitCell& ucell,
     alm_.resize(static_cast<int>(mu_.size()));
     alm_.set_k_override(cfg_.alm_k);
     alm_armed_ = false;
+    alm_penalty_live_ = false;
+    alm_warm_secant_pending_ = false;
+    alm_warm_mu0_.clear();
+    alm_warm_q0_.clear();
     alm_probe_pending_ = false;
     mu_eff_ = mu_;
     drho_trend_.clear();
@@ -521,6 +548,10 @@ void ConstraintLoop::warm_reinit(
     }
     alm_.set_k_override(cfg_.alm_k);
     mu_solver_.set_carry_jacobian(cfg_.trust_carry_jacobian);
+    alm_penalty_live_ = false;
+    alm_warm_secant_pending_ = false;
+    alm_warm_mu0_.clear();
+    alm_warm_q0_.clear();
     alm_probe_pending_ = false;
     drho_trend_.clear();
     kinds_.clear();
@@ -622,10 +653,33 @@ void ConstraintLoop::finish_warm_start_alm()
         chi[a] = mu_solver_.slope(static_cast<int>(a));
     }
     alm_arm(chi);
-    // Start the first ALM SCF from the physical effective multiplier on the
-    // just-observed density (mu + k(Q-t)); this is the continuous ALM state
-    // the penalty formulation prescribes at the carried point.
-    alm_.mu_eff(mu_, Q_, targets_, mu_eff_);
+    // Anchor the first warm observation (mu0, Q0) for the secant below, then
+    // take a CAPPED Newton step with the carried slope.  The cap matters:
+    // the carried slope can be stale when the new geometry's gap closes
+    // (R2 frame 2: carried |chi|=0.58, true 1.49), and an uncapped step
+    // overshoots by 2.5x.  The next settle measures the real slope.
+    alm_warm_mu0_ = mu_;
+    alm_warm_q0_ = Q_;
+    alm_warm_secant_pending_ = true;
+    for (size_t a = 0; a < mu_.size(); ++a)
+    {
+        const double c = (a < chi.size()) ? chi[a] : 0.0;
+        // Branch: only a healthy measured slope supports the re-seed.
+        if (c < -1e-6)
+        {
+            double step = (targets_[a] - Q_[a]) / c;
+            step = std::max(-alm_probe_mu_, std::min(alm_probe_mu_, step));
+            mu_[a] += step;
+            mu_[a] = std::max(-mu_caps_[a],
+                              std::min(mu_caps_[a], mu_[a]));
+        }
+    }
+    // Warm restart: run the re-seeded multiplier as a fixed-potential SCF
+    // first (same rationale as the cold probe close).  The re-seed moved mu
+    // across geometries, so the old mixing history must not survive.
+    trust_rollback_pending_ = true;
+    alm_penalty_live_ = false;
+    mu_eff_ = mu_;
 }
 
 void ConstraintLoop::alm_arm(const std::vector<double>& chi)
@@ -768,11 +822,52 @@ void ConstraintLoop::observe(const int iter, const double* const* rho,
     // Stage-A reading: every alpha reads with its own channel signs, so a
     // mixed charge+spin list is observed in one integral (A2 core).
     ConstraintObserver::observe(*wg_, rho, nspin, channels_, Q_);
-    // M4 ALM: keep the effective multiplier in sync with the observation
-    // (unarmed phases pass mu through unchanged -- probe / outer schedules).
-    if (alm_armed_)
+    // M4 ALM: keep the effective multiplier in sync with the observation.
+    // The penalty potential is updated with a damped fixed-point step: the
+    // raw map v <- mu + k(Q(v)-t) has derivative k*chi ~ -0.5 by design and
+    // 2-cycles when applied every SCF iteration (R1).  Damping preserves
+    // the same fixed point and is the identity for unarmed phases.
+    if (alm_armed_ && alm_penalty_live_)
     {
-        alm_.mu_eff(mu_, Q_, targets_, mu_eff_);
+        // Penalty engagement floor: the per-iteration penalty potential
+        // tracks the density noise, so its feedback keeps drho above
+        // scf_thr (1e-7 here) even when the constraint residual is already
+        // ~1e-4.  Only use the penalty while it is doing real work; below
+        // 10*constraint_thr freeze at mu and let the SCF settle cleanly.
+        double worst = 0.0;
+        for (size_t a = 0; a < Q_.size(); ++a)
+        {
+            // Guard: targets may still be shorter than Q during init; the
+            // unmatched channels carry no residual yet.
+            if (a < targets_.size())
+            {
+                worst = std::max(worst, std::abs(Q_[a] - targets_[a]));
+            }
+        }
+        const double penalty_floor = std::max(10.0 * cfg_.thr, 1e-8);
+        // Branch: residual still large enough for the penalty to help.
+        if (worst > penalty_floor)
+        {
+            std::vector<double> desired(mu_.size(), 0.0);
+            alm_.mu_eff(mu_, Q_, targets_, desired);
+            // Guard: first engage after init or a geometry rebuild; start
+            // the ramp from zero rather than reading an uninitialised size.
+            if (mu_eff_.size() != desired.size())
+            {
+                mu_eff_.assign(desired.size(), 0.0);
+            }
+            for (size_t a = 0; a < desired.size(); ++a)
+            {
+                const double alpha = alm_.damping(static_cast<int>(a));
+                mu_eff_[a] += alpha * (desired[a] - mu_eff_[a]);
+            }
+        }
+        else
+        {
+            // Branch: residual below the penalty floor -> plain mu injection
+            // for the final SCF settle.
+            mu_eff_ = mu_;
+        }
     }
     else
     {
@@ -954,9 +1049,12 @@ void ConstraintLoop::outer_step(const int iter, bool& conv_esolver)
         {
             for (size_t a = 0; a < mu_.size(); ++a)
             {
-                mu_[a] = alm_probe_mu_;
+                mu_[a] = alm_probe_mu_ * alm_probe_pattern(a, mu_.size());
             }
             mu_eff_ = mu_; // unarmed probe: plain mu injection
+            // The probe potential differs from the reference (mu=0); reset
+            // the mixing history built for the unconstrained map.
+            trust_rollback_pending_ = true;
             alm_probe_pending_ = true;
             tighten_pending_ = false;
             drho_trend_.clear();
@@ -1028,15 +1126,71 @@ void ConstraintLoop::alm_adjudicate(const int iter, bool& conv_esolver)
         phase_ = LoopPhase::DONE;
         return; // conv_esolver stays true: the SCF itself converged
     }
-    // Branch B: one gentle ALM outer update mu += k(Q-t), then continue the
-    // same SCF stream at the new effective potential (no injection event and
-    // no mixing reset -- the density map changes continuously).
+    // Branch B0 (warm start, second settle): measure the response on THIS
+    // geometry from the two (mu, Q) points and take one Newton step with the
+    // fresh slope.  This replaces the stale carried gain before it can
+    // oscillate (R2 frame 2).
+    if (alm_warm_secant_pending_ && alm_warm_mu0_.size() == mu_.size())
+    {
+        std::vector<double> chi(mu_.size(), 0.0);
+        bool any_valid = false;
+        for (size_t a = 0; a < mu_.size(); ++a)
+        {
+            const double dmu = mu_[a] - alm_warm_mu0_[a];
+            // Branch: a real potential move gives a valid secant response.
+            if (std::abs(dmu) > 1e-12)
+            {
+                chi[a] = (Q_[a] - alm_warm_q0_[a]) / dmu;
+            }
+            // Branch: healthy secant -> one Newton step with it; otherwise
+            // keep this component's current gain (no step).
+            if (chi[a] < -1e-6)
+            {
+                any_valid = true;
+                double step = (targets_[a] - Q_[a]) / chi[a];
+                step = std::max(-2.0 * alm_probe_mu_,
+                                std::min(2.0 * alm_probe_mu_, step));
+                mu_[a] += step;
+                mu_[a] = std::max(-mu_caps_[a],
+                                  std::min(mu_caps_[a], mu_[a]));
+            }
+            else
+            {
+                chi[a] = -0.5 / std::max(alm_.k()[a], 1e-12);
+            }
+        }
+        // Re-arm k (and the carried MuSolver slope) from the fresh response.
+        if (any_valid)
+        {
+            alm_arm(chi);
+        }
+        alm_warm_secant_pending_ = false;
+        alm_penalty_live_ = false;
+        mu_eff_ = mu_;
+        trust_rollback_pending_ = true;
+        status_ = MuStatus::RUNNING;
+        print_audit_line(iter, outer_steps_, "alm");
+        conv_esolver = false;
+        return;
+    }
+    // Branch B1: one gentle ALM outer update mu += k(Q-t), then continue the
+    // same SCF stream at the new effective potential.  The injection value
+    // changes immediately; the mixing history is reset below because the
+    // fixed-point map moved (same policy as every other mu move).
     alm_.update(Q_, targets_, mu_caps_, mu_);
-    // Keep the injector/force vector consistent immediately; observing the
-    // next SCF iteration would otherwise leave one iteration on the old value.
-    alm_.mu_eff(mu_, Q_, targets_, mu_eff_);
+    // The Newton / carried mu did not reach the target on its own: enable
+    // the ALM penalty feedback for the next SCF stream.  mu moved, so the
+    // next SCF starts from a fresh mixing history.
+    alm_penalty_live_ = true;
+    trust_rollback_pending_ = true;
+    // Restart the next inner solve from the new multiplier itself.  At the
+    // inner fixed point mu_new = mu + k(Q-t) equals the potential the SCF
+    // just felt, so mu_eff_ = mu_ avoids double-counting the penalty term
+    // (the old mu_new + k(Q-t) jumped by twice the correction).  observe()
+    // then ramps the penalty potential with the damped step.
+    mu_eff_ = mu_;
     const int fused = alm_.fuse_component();
-    // Branch B1: a component pinned at its cap with a flat residual is
+    // Branch B2: a component pinned at its cap with a flat residual is
     // unreachable in this channel -> fuse like the MuSolver protocol.
     if (fused >= 0)
     {
@@ -1245,6 +1399,16 @@ void ConstraintLoop::on_scf_converged(const int iter, bool& conv_esolver)
     if (warm_pending_)
     {
         finish_warm_start();
+        // Branch (ALM warm start): finish_warm_start_alm() re-armed k and
+        // re-seeded mu from THIS geometry's first observation.  Q_ still
+        // belongs to the carried potential, so adjudicating it here would
+        // consume the secant anchor on stale data (R2 frame 2).  Continue
+        // the SCF; the next convergence adjudicates the new potential.
+        if (alm_mode_)
+        {
+            conv_esolver = false;
+            return;
+        }
     }
     // Branch (M4 ALM) probe close: measure chi on the converged probe
     // density, arm k, take the Newton mu0 = (target - Q_ref)/chi (capped),
@@ -1256,13 +1420,20 @@ void ConstraintLoop::on_scf_converged(const int iter, bool& conv_esolver)
         std::vector<double> safe_chi(mu_.size(), -1.0);
         for (size_t a = 0; a < chi.size(); ++a)
         {
-            chi[a] = (Q_[a] - Q_ref_[a]) / alm_probe_mu_;
+            // Divide by p_a * probe_mu: the applied multiplier is the
+            // zero-sum pattern, so the per-component response must be
+            // measured against that component's own probe step (a>0 sees a
+            // compensating negative step, which flips the raw Q sign).
+            const double p = alm_probe_pattern(a, chi.size());
+            chi[a] = (Q_[a] - Q_ref_[a]) / (p * alm_probe_mu_);
             // Guard: the controller falls back for a bad sign/degenerate
-            // response; the Newton seed must use the same nominal slope or
-            // it would divide by the bad measurement.
-            if (chi[a] < -1e-6)
+            // response; the Newton seed must use a conservative slope or it
+            // would divide by near-zero noise.  The 0.3 floor is the same
+            // kappa_min the secant solver uses; a genuinely stiff channel
+            // keeps its larger measured magnitude.
+            if (chi[a] < 0.0)
             {
-                safe_chi[a] = chi[a];
+                safe_chi[a] = -std::max(0.3, std::abs(chi[a]));
             }
         }
         alm_arm(safe_chi);
@@ -1275,6 +1446,9 @@ void ConstraintLoop::on_scf_converged(const int iter, bool& conv_esolver)
         // evaluated on the old probe density.  On a linear response this is
         // the exact root, so the next convergence adjudicates immediately.
         mu_eff_ = mu_;
+        // Newton seed is a new potential: reset before the settle SCF.
+        trust_rollback_pending_ = true;
+        alm_penalty_live_ = false;
         alm_probe_pending_ = false;
         drho_trend_.clear();
         print_audit(iter);
@@ -1364,10 +1538,16 @@ void ConstraintLoop::on_scf_converged(const int iter, bool& conv_esolver)
         && max_residual() < 10.0 * cfg_.thr && max_residual() >= cfg_.thr)
     {
         const int est = std::max(15, last_rebuild_cost_);
+        // Branch: the estimated rebuild leaves not enough iterations for a
+        // settle SCF, so freeze on the already-converged frame.
         if (iter + 3 * est / 2 >= PARAM.inp.scf_nmax)
         {
             budget_frozen_ = true;
             phase_ = LoopPhase::DONE;
+            // Refresh the audit record at the freeze point: final_report()
+            // replays last_audit_line_, which would otherwise still describe
+            // the previous outer step (and print a stale residual).
+            print_audit(iter);
             GlobalV::ofs_running
                 << "[constraint] BUDGET_FREEZE: iter " << iter
                 << " + estimated rebuild " << est

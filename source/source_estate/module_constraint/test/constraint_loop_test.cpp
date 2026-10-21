@@ -2077,6 +2077,109 @@ TEST_F(ConstraintLoopTest, AlmColdConvergesWithExactMuPhys)
     EXPECT_LE(loop.outer_steps(), 6);
 }
 
+// Multi-fragment ALM probe regression (R1): two complementary charge
+// fragments must be probed with a zero-sum multiplier pattern.  A uniform
+// probe is a constant potential shift, cancels in the relative channel and
+// measures dQ ~ 0, which silently degrades k to the nominal 0.5 fallback.
+// The mock below responds only to the RELATIVE multiplier, exactly like the
+// periodic-interface dimer:
+//   delta_rho = alpha*w0 + beta*w1,  int w_a delta_rho = (-dmu, +dmu)
+// with (alpha,beta) solved from the weight Gram matrix, so chi_a = -2
+// exactly and the Newton seed is the exact solution.
+TEST_F(ConstraintLoopTest, AlmDifferentialProbeMeasuresRelativeResponse)
+{
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    constraint::ConstraintConfig cfg;
+    cfg.enabled = true;
+    cfg.type = "charge";
+    cfg.weight_type = "becke";
+    cfg.target_mode = "delta";
+    cfg.mu_max = 5.0;
+    cfg.thr = 1e-4;
+    cfg.mu_schedule = "alm";
+    constraint::ConstraintTarget ta;
+    ta.value = 0.01;
+    ta.atoms = {0};
+    constraint::ConstraintTarget tb;
+    tb.value = -0.01;
+    tb.atoms = {1, 2};
+    cfg.targets = {ta, tb};
+    loop.init(*ucell, rhopw, cfg, radii, 10.0, 0);
+
+    const constraint::WeightGrid& g = loop.weight_grid();
+    const std::vector<double>& w0 = g.constraint_weight(0);
+    const std::vector<double>& w1 = g.constraint_weight(1);
+    double s00 = 0.0;
+    double s11 = 0.0;
+    double s01 = 0.0;
+    for (int ir = 0; ir < rhopw->nrxx; ++ir)
+    {
+        s00 += w0[ir] * w0[ir];
+        s11 += w1[ir] * w1[ir];
+        s01 += w0[ir] * w1[ir];
+    }
+    s00 *= dV;
+    s11 *= dV;
+    s01 *= dV;
+    const double det = s00 * s11 - s01 * s01;
+    ASSERT_GT(det, 0.0);
+
+    // rho(mu0, mu1) = rho_ref + alpha*w0 + beta*w1 with dmu = mu0 - mu1.
+    auto fill_rel = [&](const std::vector<double>& mu,
+                        std::vector<double>& rho) {
+        const double dmu = mu[0] - mu[1];
+        const double alpha = -dmu * (s11 + s01) / det;
+        const double beta = dmu * (s00 + s01) / det;
+        rho = rho_ref;
+        for (int ir = 0; ir < rhopw->nrxx; ++ir)
+        {
+            rho[ir] += alpha * w0[ir] + beta * w1[ir];
+        }
+    };
+
+    std::vector<double> rho;
+    bool conv = true;
+    // 1) Reference SCF at mu = 0 closes and arms the probe pattern.
+    rho = rho_ref;
+    const double* rp[1] = {rho.data()};
+    loop.observe(1, rp, 1);
+    loop.on_scf_converged(1, conv);
+    ASSERT_EQ(loop.status(), constraint::MuStatus::RUNNING);
+    ASSERT_EQ(loop.mu().size(), 2u);
+    // Zero-sum pattern: +mu on the first fragment, -mu on the second.
+    EXPECT_NEAR(loop.mu()[0], 0.005, 1e-12);
+    EXPECT_NEAR(loop.mu()[1], -0.005, 1e-12);
+
+    // 2) Probe SCF at that pattern; the close measures chi.  The reference
+    // close above reset conv to false (it keeps the SCF running), so a fresh
+    // true verdict is required here.
+    fill_rel(loop.mu(), rho);
+    const double* rp2[1] = {rho.data()};
+    loop.observe(2, rp2, 1);
+    bool conv2 = true;
+    loop.on_scf_converged(2, conv2);
+    ASSERT_TRUE(loop.alm_armed());
+    // chi_a = dQ_a/dmu_a = -2 for both -> k = kappa_target/|chi| = 0.25.
+    // A uniform probe measures chi = 0 here and falls back to k = 0.5.
+    EXPECT_NEAR(loop.alm_k(0), 0.25, 1e-9);
+    EXPECT_NEAR(loop.alm_k(1), 0.25, 1e-9);
+    // Newton seed: (target - Q_ref)/chi = (0.01, -0.01)/(-2).
+    EXPECT_NEAR(loop.mu()[0], -0.005, 1e-9);
+    EXPECT_NEAR(loop.mu()[1], 0.005, 1e-9);
+
+    // 3) First ALM SCF: the linear mock sits exactly on both targets.
+    fill_rel(loop.mu_eff(), rho);
+    const double* rp3[1] = {rho.data()};
+    loop.observe(3, rp3, 1);
+    bool conv3 = true;
+    loop.on_scf_converged(3, conv3);
+    EXPECT_EQ(loop.status(), constraint::MuStatus::CONVERGED);
+    EXPECT_NEAR(loop.charges()[0], loop.targets()[0], 1e-9);
+    EXPECT_NEAR(loop.charges()[1], loop.targets()[1], 1e-9);
+    EXPECT_NEAR(loop.mu_phys(0), -0.005, 1e-9);
+    EXPECT_NEAR(loop.mu_phys(1), 0.005, 1e-9);
+}
+
 // ALM + warm start: k from the carried slope (no probe SCF), mu carried.
 TEST_F(ConstraintLoopTest, AlmWarmStartSkipsProbe)
 {
