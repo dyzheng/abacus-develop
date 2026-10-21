@@ -5514,3 +5514,48 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
      与静态值对照（5% 判据）；先跑 50 fs 冒烟，再决定 68 元/14 h 全量。
 - **下一步**：M4 关闭；进入性质 2/4 的 Bohrium 重验与 M5
   （ALM μ 时序预测 + MD warm-state 持久化）。
+
+## 2026-10-21 (19): M5 偶极约束坐标（saw 优先）
+
+- **完成内容（plan `2026-10-21-m5-dipole-constraint.md` Task 1-6）**：
+  1. `ConstraintKind::Dipole` 与 JSON v2 frame/axis/saw_pos/saw_pos_dec/unit
+     解析；支持 `unit:"V"` 在 configure 阶段按 cell area 换算到 e*Bohr。
+  2. 守卫：dipole 必须是唯一全局约束、禁止 atoms；与 `efield_amp` /
+     `dip_cor_flag` 互斥；拒绝 nspin=4；fixed_mu/warm start 禁止自动 saw 平面；
+     saw 仅支持 z 对齐正交盒。
+  3. `WeightGrid` 新增 saw/molecular 权重源：saw `w=-Lz*saw(x)`、offset
+     `Lz*sum Z*saw(x_I)`；molecular `w=-r_axis`、offset `sum Z*R_axis`。
+  4. 观测器加离子偏移；力核在 MPI allreduce 后加 `-mu*d(offset)/dR`。
+  5. `ConstraintLoop` 支持 dipole 专属几何、自动 saw 平面 reference-first
+     解析、ALM/热启动参数兼容、`e*Bohr` 状态单位和最终 frame/deltaV 报告。
+- **本轮实测修复**：
+  1. **MPI 偏移重复计数（Critical）**：offset 原先在 pool allreduce 前加入，
+     np8 下被累加 8 次，审计 Q 与被动 `p_z` 相差 `7*offset`。改为先归约密度
+     积分、后加一次 offset；新增 4-rank `DipoleObserveReducesOffsetOnce`。
+  2. **M3b 审计口径**：`Tr[W.DM]` 不含 dipole 离子偏移，直接对含 offset 的 Q
+     会得到假偏差 21.0188 e。审计前减去 `observable_offset` 后为 1.3663e-6 e。
+  3. **MPI 测试依赖**：`test_mpi` 目标补 `constraint_dipole.cpp`，否则干净构建
+     会缺失 `DipoleObserver::saw*` 符号。
+  4. **100 步预算证据**：0.05 e*Bohr 目标在 ALM 下 iter 77 residual
+     1.4739e-4，末段反向振荡，100 步 RUNNING；按纪律未提高 scf_nmax。
+     0.01 e*Bohr 目标在 77 步 CONVERGED，residual 2.201e-5。
+- **验证**：
+  - 首轮 `ctest -R constraint` 13/13 PASS（61.67 s）；
+  - 最终 MPI 修复后 `weight_grid_mpi`、`_4np`、`observe` 3/3 PASS；
+    最终全量回归在用户要求提交时中止，主程序构建成功。
+  - 集成最终验收：h2o dimer，np8，`scf_nmax=100`，显式 saw_pos=0.9，
+    delta 0.01 e*Bohr，iter 77 CONVERGED；Q=-6.72088832,
+    target=-6.7209103342, res=2.201e-5 e*Bohr；被动 p_z=-6.7208883204；
+    deltaV=-2.8602705391 V；TOTAL-FORCE 有限；墙钟 71 s。
+- **文件**：`constraint_io.{h,cpp}`、`constraint_dipole.{h,cpp}`、
+  `weight_grid.{h,cpp}`、`constraint_observe.cpp`、`constraint_deriv.cpp`、
+  `constraint_loop.{h,cpp}`、`esolver_ks_lcao.cpp`；
+  `module_constraint/test/{CMakeLists.txt,constraint_io_test.cpp,
+  constraint_dipole_test.cpp,weight_grid_test.cpp,constraint_observe_test.cpp,
+  constraint_deriv_test.cpp,constraint_loop_test.cpp}`；
+  `test_mpi/{CMakeLists.txt,weight_grid_mpi_test.cpp}`；
+  `tests/constraint_ct_dimer/m5_dipole/{INPUT,STRU,KPT,constraint_target.json}`；
+  plan、`2026-10-21-m5-dipole-test.md`（新建）、设计 §4 与本日志。
+- **遗留风险/下一步**：补跑最终全量 constraint 回归；0.05 e*Bohr 单点如仍需
+  闭合，优先改 ALM 末段阻尼/初值，不提高 100 步预算；继续覆盖界面场景的
+  saw 平面真空区与 warm/fixed 限制。

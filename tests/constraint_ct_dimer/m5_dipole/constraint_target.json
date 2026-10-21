@@ -1,0 +1,1 @@
+{"constraints":[{"type":"dipole","target":0.01,"axis":"z","frame":"saw","saw_pos":0.9,"saw_pos_dec":0.1,"unit":"ebohr","mu_max":5.0}]}

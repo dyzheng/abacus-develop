@@ -112,16 +112,28 @@ constraint_accounting,mu_solver,weight_grid}.{h,cpp}`，注入点 `esolver_ks_pw
 
 ### 4.2 关键设计决定
 
-1. 新 `ConstraintKind::Dipole`，解除 constraint_io.cpp:420 的 "dipole" 守卫拒绝；
+1. 新 `ConstraintKind::Dipole`，解除 `constraint_io.cpp` 的 "dipole" 守卫拒绝；
    JSON v2 扩展：
-   `{"type":"dipole","axis":"z","frame":"saw"|"molecular","saw_pos":<可选>,"target":<e·Bohr 或 V>}`。
-   与 charge/spin 共用同一 `ConstraintLoop`/`MuSolver`（ChannelProfile 增加权重来源维：
-   Becke 权重 vs saw/ramp 函数——观测量与注入算子同源的原则保持不变）。
+   `{"type":"dipole","axis":"z","frame":"saw"|"molecular","saw_pos":<可选>,"target":<e*Bohr 或 V>}`。
+   与 charge/spin 共用同一 `ConstraintLoop`/`MuSolver`。`WeightGrid` 新增
+   `DipoleSaw` / `DipoleMolecular` 权重源：saw 存 `w=-Lz*saw(x)`、离子偏移
+   `Lz*sum Z*saw(x_I)`；molecular 存 `w=-r_axis`、偏移 `sum Z*R_axis`。
+   观测值统一为 `int rho*w dV + offset`，注入直接复用同一权重，保持
+   “观测量 == 注入算子”。
 2. **互斥守卫**：dipole 约束与 `efield_amp≠0` 或偶极校正同开 → WARNING_QUIT（双重计数）。
 3. **delta 语义**：δp = p − p_ref（自由相偶极为参考），复用现有 target_mode 机制。
 4. **范围限制**：只支持全局偶极单约束（电极-电解液界面天然是二体电荷分离）；
    多片段偶极分解欠定，明确不做。
 5. 带电体系的参考点规则与模块 A 一致。
+
+6. **实现约定（M5 回写）**：循环内部 target 单位固定为 `e*Bohr`；`unit:"V"`
+   仅在 `configure_from_inputs` 中按 `p = A*dV/(4*pi*Hartree_to_eV)` 换算。
+   saw 只支持 z 轴且要求第三晶格矢量沿 z、与 a/b 正交。自动 `saw_pos` 在冷启动
+   的首次密度观测时解析，reference Q 与后续注入必须共用该平面；`fixed_mu` 或
+   warm start 因首次注入早于首次观测，必须显式给出 `saw_pos`。
+7. **MPI 归约约定**：离子偏移与 `d(offset)/dR` 都是 rank-independent 量，必须在
+   pool allreduce 之后各加一次。M3b `Tr[W.DM]` 只对应密度权重项，因此比较前需从
+   审计 Q 中减去 `observable_offset(alpha)`。
 
 ### 4.3 验证
 
