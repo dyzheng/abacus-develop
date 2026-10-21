@@ -15,6 +15,167 @@
 #include <xc.h>
 
 #include <vector>
+#include <complex>
+
+void XC_Functional_Libxc::gradcorr_ncgga_sf_libxc(const std::vector<int>& func_id,
+                                                  const std::size_t nrxx,
+                                                  const double tpiba,
+                                                  const Charge* const chr,
+                                                  const std::map<int, double>* scaling_factor,
+                                                  const double hybrid_alpha,
+                                                  const double hse_omega,
+                                                  std::vector<double>& stress_gga)
+{
+    constexpr int nspin = 2;
+    stress_gga.assign(9, 0.0);
+
+    std::vector<xc_func_type> funcs = XC_Functional_Libxc::init_func(func_id, XC_POLARIZED, hybrid_alpha, hse_omega);
+    bool has_gga = false;
+    for (const xc_func_type& func: funcs)
+    {
+        has_gga = has_gga || func.info->family == XC_FAMILY_GGA || func.info->family == XC_FAMILY_HYB_GGA;
+    }
+    if (!has_gga)
+    {
+        XC_Functional_Libxc::finish_func(funcs);
+        return;
+    }
+
+    // This is the same forward graph used by v_xc_libxc: the local spin map,
+    // FFT gradients of the mapped densities, and the sigma invariants are constructed
+    // once and shared by all Libxc components.
+    const XC_Functional_Libxc::NclSfDiscreteData sf_data
+        = XC_Functional_Libxc::make_ncl_sf_discrete_data(nrxx, tpiba, chr, true);
+    const std::vector<double>& rho = sf_data.rho;
+    const std::vector<double> sigma = XC_Functional_Libxc::convert_sigma(sf_data.spin_gradient);
+    std::vector<double> aggregate_dsigma(3 * nrxx, 0.0);
+
+    for (xc_func_type& func: funcs)
+    {
+        if (func.info->family != XC_FAMILY_GGA && func.info->family != XC_FAMILY_HYB_GGA)
+        {
+            continue;
+        }
+
+        constexpr double rho_threshold = 1.0e-6;
+        constexpr double grho_threshold = 1.0e-10;
+        xc_func_set_dens_threshold(&func, rho_threshold);
+        const std::vector<double> sgn
+            = XC_Functional_Libxc::cal_sgn(rho_threshold, grho_threshold, func, nspin, nrxx, rho, sigma);
+        std::vector<double> exc(nrxx);
+        std::vector<double> vrho(nspin * nrxx);
+        std::vector<double> vsigma(3 * nrxx);
+        constexpr int nr_batch_size = 1024;
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, nr_batch_size)
+#endif
+        for (int ir_start = 0; ir_start < static_cast<int>(nrxx); ir_start += nr_batch_size)
+        {
+            const int ir_end = std::min(ir_start + nr_batch_size, static_cast<int>(nrxx));
+            const int nrxx_thread = ir_end - ir_start;
+            xc_gga_exc_vxc(&func,
+                           nrxx_thread,
+                           rho.data() + ir_start * nspin,
+                           sigma.data() + ir_start * 3,
+                           exc.data() + ir_start,
+                           vrho.data() + ir_start * nspin,
+                           vsigma.data() + ir_start * 3);
+        }
+
+        double factor = 1.0;
+        if (scaling_factor != nullptr)
+        {
+            const std::map<int, double>::const_iterator entry = scaling_factor->find(func.info->number);
+            if (entry != scaling_factor->end())
+            {
+                factor = entry->second;
+            }
+        }
+        for (std::size_t ir = 0; ir < nrxx; ++ir)
+        {
+            const std::size_t sigma_index = 3 * ir;
+            aggregate_dsigma[sigma_index]
+                += factor * vsigma[sigma_index] * sgn[ir * nspin];
+            aggregate_dsigma[sigma_index + 1]
+                += factor * vsigma[sigma_index + 1] * sgn[ir * nspin] * sgn[ir * nspin + 1];
+            aggregate_dsigma[sigma_index + 2]
+                += factor * vsigma[sigma_index + 2] * sgn[ir * nspin + 1];
+        }
+    }
+
+    // For g_s = G_h N_s(x), a reciprocal-metric variation at fixed real-grid
+    // density values changes G_h while holding N_s(x) fixed. The gradient-metric
+    // contribution is sum_s h_s,l g_s,m, with h_s = df/dg_s built from the
+    // accumulated vsigma.
+#ifdef _OPENMP
+#pragma omp parallel
+    {
+        std::vector<double> local_stress(9, 0.0);
+#pragma omp for schedule(static, 512)
+        for (std::size_t ir = 0; ir < nrxx; ++ir)
+        {
+            const std::size_t sigma_index = 3 * ir;
+            const ModuleBase::Vector3<double>& grad_up = sf_data.spin_gradient[0][ir];
+            const ModuleBase::Vector3<double>& grad_down = sf_data.spin_gradient[1][ir];
+            const ModuleBase::Vector3<double> h_up
+                = ModuleBase::e2
+                  * (2.0 * aggregate_dsigma[sigma_index] * grad_up + aggregate_dsigma[sigma_index + 1] * grad_down);
+            const ModuleBase::Vector3<double> h_down
+                = ModuleBase::e2
+                  * (2.0 * aggregate_dsigma[sigma_index + 2] * grad_down + aggregate_dsigma[sigma_index + 1] * grad_up);
+            const double grad_up_component[3] = {grad_up.x, grad_up.y, grad_up.z};
+            const double grad_down_component[3] = {grad_down.x, grad_down.y, grad_down.z};
+            const double h_up_component[3] = {h_up.x, h_up.y, h_up.z};
+            const double h_down_component[3] = {h_down.x, h_down.y, h_down.z};
+            for (int l = 0; l < 3; ++l)
+            {
+                for (int m = 0; m <= l; ++m)
+                {
+                    local_stress[l * 3 + m]
+                        += h_up_component[l] * grad_up_component[m] + h_down_component[l] * grad_down_component[m];
+                }
+            }
+        }
+#pragma omp critical(libxc_ncgga_stress_reduce)
+        {
+            for (int l = 0; l < 3; ++l)
+            {
+                for (int m = 0; m <= l; ++m)
+                {
+                    stress_gga[l * 3 + m] += local_stress[l * 3 + m];
+                }
+            }
+        }
+    }
+#else
+    for (std::size_t ir = 0; ir < nrxx; ++ir)
+    {
+        const std::size_t sigma_index = 3 * ir;
+        const ModuleBase::Vector3<double>& grad_up = sf_data.spin_gradient[0][ir];
+        const ModuleBase::Vector3<double>& grad_down = sf_data.spin_gradient[1][ir];
+        const ModuleBase::Vector3<double> h_up
+            = ModuleBase::e2
+              * (2.0 * aggregate_dsigma[sigma_index] * grad_up + aggregate_dsigma[sigma_index + 1] * grad_down);
+        const ModuleBase::Vector3<double> h_down
+            = ModuleBase::e2
+              * (2.0 * aggregate_dsigma[sigma_index + 2] * grad_down + aggregate_dsigma[sigma_index + 1] * grad_up);
+        const double grad_up_component[3] = {grad_up.x, grad_up.y, grad_up.z};
+        const double grad_down_component[3] = {grad_down.x, grad_down.y, grad_down.z};
+        const double h_up_component[3] = {h_up.x, h_up.y, h_up.z};
+        const double h_down_component[3] = {h_down.x, h_down.y, h_down.z};
+        for (int l = 0; l < 3; ++l)
+        {
+            for (int m = 0; m <= l; ++m)
+            {
+                stress_gga[l * 3 + m]
+                    += h_up_component[l] * grad_up_component[m] + h_down_component[l] * grad_down_component[m];
+            }
+        }
+    }
+#endif
+
+    XC_Functional_Libxc::finish_func(funcs);
+}
 
 std::tuple<double,double,ModuleBase::matrix> XC_Functional_Libxc::v_xc_libxc(		// Peize Lin update for nspin==4 at 2023.01.14
         const std::vector<int> &func_id,
@@ -35,6 +196,12 @@ std::tuple<double,double,ModuleBase::matrix> XC_Functional_Libxc::v_xc_libxc(		/
     const int nspin =
         (nspin_in == 1 || ( nspin_in ==4 && !domag && !domag_z))
         ? 1 : 2;
+
+    // For nspin=4 with noncollinear magnetism, gga_grad=2 selects the
+    // regularized mapped-density local-collinear graph; gga_grad=0/1 keeps the
+    // original collinear algorithm.
+    const bool has_mag = domag || domag_z;
+    const bool use_lca = (nspin_in == 4) && has_mag && PARAM.inp.gga_grad == 2;
 
     //----------------------------------------------------------
     // xc_func_type is defined in Libxc package
@@ -66,29 +233,33 @@ std::tuple<double,double,ModuleBase::matrix> XC_Functional_Libxc::v_xc_libxc(		/
     // converting rho
     std::vector<double> rho;
     std::vector<double> amag;
-    std::vector<double> mag_part;
+    XC_Functional_Libxc::NclSfDiscreteData sf_data;
     if(1==nspin || 2==PARAM.inp.nspin)
     {
         rho = XC_Functional_Libxc::convert_rho(nspin, nrxx, chr);
+    }
+    else if(use_lca)
+    {
+        // gga_grad=2 uses one complete local map for both the Libxc density
+        // input and the mapped-density FFT-gradient graph. LDA-only functionals
+        // need the same local map but do not pay for gradients.
+        sf_data = XC_Functional_Libxc::make_ncl_sf_discrete_data(nrxx, tpiba, chr, is_gga);
+        rho = sf_data.rho;
     }
     else
     {
         std::tuple<std::vector<double>,std::vector<double>> rho_amag = XC_Functional_Libxc::convert_rho_amag_nspin4(nspin, nrxx, chr);
         rho = std::get<0>(std::move(rho_amag));
         amag = std::get<1>(std::move(rho_amag));
-        if(PARAM.inp.gga_grad == 2 && (PARAM.globalv.domag || PARAM.globalv.domag_z))
-        {
-            mag_part = XC_Functional_Libxc::compute_mag_part_nspin4(nrxx, chr);
-        }
     }
 
     std::vector<std::vector<ModuleBase::Vector3<double>>> gdr;
     std::vector<double> sigma;
     if(is_gga)
     {
-        if(PARAM.inp.nspin==4 && PARAM.inp.gga_grad == 2 && (PARAM.globalv.domag || PARAM.globalv.domag_z))
+        if(use_lca)
         {
-            gdr = XC_Functional_Libxc::cal_gdr_sf(nspin, nrxx, rho, mag_part, tpiba, chr);
+            gdr = sf_data.spin_gradient;
         }
         else
         {
@@ -99,18 +270,38 @@ std::tuple<double,double,ModuleBase::matrix> XC_Functional_Libxc::v_xc_libxc(		/
 
     double etxc = 0.0;
     double vtxc = 0.0;
-    ModuleBase::matrix v(nspin,nrxx);
+    ModuleBase::matrix v(use_lca ? 4 : nspin, nrxx);
+    std::vector<double> sf_drho;
+    std::vector<double> sf_dsigma;
+    if(use_lca)
+    {
+        sf_drho.assign(nrxx * nspin, 0.0);
+        if(is_gga)
+        {
+            sf_dsigma.assign(nrxx * 3, 0.0);
+        }
+    }
 
     for( xc_func_type &func : funcs )
     {
-        // jiyy add for threshold
-        constexpr double rho_threshold = 1E-6;
-        constexpr double grho_threshold = 1E-10;
+        // thresholds: same convention as Quantum ESPRESSO's libxc interface
+        // (XClib/xc_wrapper_gga.f90): exc and vrho are evaluated down to
+        // rho_threshold_lda, while only the vsigma (gradient) term is
+        // suppressed below rho_threshold_gga / grho_threshold_gga
+        constexpr double rho_threshold_lda = 1E-10;
+        constexpr double rho_threshold_gga = 1E-6;
+        constexpr double grho_threshold_gga = 1E-10;
 
-        xc_func_set_dens_threshold(&func, rho_threshold);
+        // Keep the regularized mode's weighted-energy contract. The legacy
+        // path uses upstream's separate density and gradient cutoffs.
+        xc_func_set_dens_threshold(&func, use_lca ? rho_threshold_gga : rho_threshold_lda);
 
-        // sgn for threshold mask
-        const std::vector<double> sgn = XC_Functional_Libxc::cal_sgn(rho_threshold, grho_threshold, func, nspin, nrxx, rho, sigma);
+        // sgn for threshold masks
+        const std::pair<std::vector<double>,std::vector<double>> sgn = XC_Functional_Libxc::cal_sgn_vxc(
+            rho_threshold_lda, rho_threshold_gga, grho_threshold_gga, func, nspin, nrxx, rho, sigma);
+        const std::vector<double> energy_mask = use_lca
+            ? XC_Functional_Libxc::cal_sgn(rho_threshold_gga, grho_threshold_gga, func, nspin, nrxx, rho, sigma)
+            : sgn.first;
 
         std::vector<double> exc   ( nrxx                    );
         std::vector<double> vrho  ( nrxx * nspin            );
@@ -179,26 +370,50 @@ std::tuple<double,double,ModuleBase::matrix> XC_Functional_Libxc::v_xc_libxc(		/
         }
 
         // time factor is added by jghan, 2024-10-10
-        etxc += XC_Functional_Libxc::convert_etxc(nspin, nrxx, sgn, rho, exc) * factor;
-        const std::pair<double,ModuleBase::matrix> vtxc_v = XC_Functional_Libxc::convert_vtxc_v(
-            func, nspin, nrxx,
-            sgn, rho, gdr,
-            vrho, vsigma,
-            tpiba, chr);
-        vtxc += std::get<0>(vtxc_v) * factor;
-        v += std::get<1>(vtxc_v) * factor;
-    } // end for( xc_func_type &func : funcs )
-
-    if(4==nspin_in)
-    {
-        if(PARAM.inp.gga_grad == 2 && (PARAM.globalv.domag || PARAM.globalv.domag_z))
+        etxc += XC_Functional_Libxc::convert_etxc(nspin, nrxx, energy_mask, rho, exc) * factor;
+        if(use_lca)
         {
-            v = XC_Functional_Libxc::convert_v_nspin4_sf(nrxx, chr, mag_part, v);
+            for(std::size_t ir = 0; ir < nrxx; ++ir)
+            {
+                sf_drho[ir * nspin] += factor * vrho[ir * nspin] * energy_mask[ir * nspin];
+                sf_drho[ir * nspin + 1] += factor * vrho[ir * nspin + 1] * energy_mask[ir * nspin + 1];
+                if(is_gga)
+                {
+                    const std::size_t sigma_index = 3 * ir;
+                    sf_dsigma[sigma_index] += factor * vsigma[sigma_index] * energy_mask[ir * nspin];
+                    sf_dsigma[sigma_index + 1] += factor * vsigma[sigma_index + 1]
+                        * energy_mask[ir * nspin] * energy_mask[ir * nspin + 1];
+                    sf_dsigma[sigma_index + 2] += factor * vsigma[sigma_index + 2] * energy_mask[ir * nspin + 1];
+                }
+            }
         }
         else
         {
-            v = XC_Functional_Libxc::convert_v_nspin4(nrxx, chr, amag, v);
+            const std::pair<double,ModuleBase::matrix> vtxc_v = XC_Functional_Libxc::convert_vtxc_v(
+                func, nspin, nrxx,
+                sgn.first, sgn.second, rho, gdr,
+                vrho, vsigma,
+                tpiba, chr);
+            vtxc += std::get<0>(vtxc_v) * factor;
+            v += std::get<1>(vtxc_v) * factor;
         }
+    } // end for( xc_func_type &func : funcs )
+
+    if(use_lca)
+    {
+        v = XC_Functional_Libxc::reverse_ncl_sf_discrete(nrxx, sf_data, sf_drho, sf_dsigma, tpiba, chr);
+        vtxc = 0.0;
+        for(std::size_t ir = 0; ir < nrxx; ++ir)
+        {
+            for(int channel = 0; channel < 4; ++channel)
+            {
+                vtxc += v(channel, ir) * chr->rho[channel][ir];
+            }
+        }
+    }
+    else if(4==nspin_in)
+    {
+        v = XC_Functional_Libxc::convert_v_nspin4(nrxx, chr, amag, v);
     }
 
     //-------------------------------------------------

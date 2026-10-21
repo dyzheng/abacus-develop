@@ -59,6 +59,21 @@ void XC_Functional::gradcorr(double& etxc,
         return;
     }
 
+#ifdef __LIBXC
+    if (is_stress && use_libxc && nspin == 4 && (domag || domag_z) && gga_grad == 2)
+    {
+        XC_Functional_Libxc::gradcorr_ncgga_sf_libxc(func_id,
+                                                     rhopw->nrxx,
+                                                     ucell->tpiba,
+                                                     chr,
+                                                     &XC_Functional::scaling_factor_xc,
+                                                     hybrid_alpha_in,
+                                                     hse_omega_in,
+                                                     stress_gga);
+        return;
+    }
+#endif
+
     bool igcc_is_lyp = false;
     if (func_id[1] == XC_GGA_C_LYP)
     {
@@ -270,6 +285,20 @@ void XC_Functional::gradcorr(double& etxc,
     double& local_etxcgc = etxcgc;
 #endif
 
+        // Initialize the libxc functional once per thread (not once per grid
+        // point) and reuse it for all points this thread handles. The
+        // polarized flag matches the per-point wrappers used below:
+        // nspin0==1 uses the unpolarized wrappers, otherwise the spin ones.
+#ifdef __LIBXC
+        std::vector<xc_func_type> tls_funcs;
+        const bool need_libxc_funcs = use_libxc && (nspin0 != 1 || is_stress);
+        if (need_libxc_funcs)
+        {
+            const int xc_polarized = (nspin0 == 1) ? XC_UNPOLARIZED : XC_POLARIZED;
+            tls_funcs = XC_Functional_Libxc::init_func(func_id, xc_polarized, hybrid_alpha_in, hse_omega_in);
+        }
+#endif
+
         double grho2a = 0.0;
         double grho2b = 0.0;
         double sxc = 0.0;
@@ -312,7 +341,7 @@ void XC_Functional::gradcorr(double& etxc,
                         {
                             double v3xc = 0.0;
                             double atau = chr->kin_r[0][ir] / 2.0;
-                            XC_Functional_Libxc::tau_xc(func_id,
+                            XC_Functional_Libxc::tau_xc(tls_funcs,
                                                         arho,
                                                         grho2a,
                                                         atau,
@@ -320,19 +349,16 @@ void XC_Functional::gradcorr(double& etxc,
                                                         v1xc,
                                                         v2xc,
                                                         v3xc,
-                                                        hybrid_alpha_in,
-                                                        hse_omega_in);
+                                                        hybrid_alpha_in);
                         }
                         else
                         {
-                            XC_Functional_Libxc::gcxc_libxc(func_id,
+                            XC_Functional_Libxc::gcxc_libxc(tls_funcs,
                                                             arho,
                                                             grho2a,
                                                             sxc,
                                                             v1xc,
-                                                            v2xc,
-                                                            hybrid_alpha_in,
-                                                            hse_omega_in);
+                                                            v2xc);
                         }
 #endif
                     }
@@ -393,7 +419,7 @@ void XC_Functional::gradcorr(double& etxc,
                         double v3xcdw = 0.0;
                         double atau1 = chr->kin_r[0][ir] / 2.0;
                         double atau2 = chr->kin_r[1][ir] / 2.0;
-                        XC_Functional_Libxc::tau_xc_spin(func_id,
+                        XC_Functional_Libxc::tau_xc_spin(tls_funcs,
                                                          rhotmp1[ir],
                                                          rhotmp2[ir],
                                                          gdr1[ir],
@@ -408,12 +434,11 @@ void XC_Functional::gradcorr(double& etxc,
                                                          v2xcud,
                                                          v3xcup,
                                                          v3xcdw,
-                                                         hybrid_alpha_in,
-                                                         hse_omega_in);
+                                                         hybrid_alpha_in);
                     }
                     else
                     {
-                        XC_Functional_Libxc::gcxc_spin_libxc(func_id,
+                        XC_Functional_Libxc::gcxc_spin_libxc(tls_funcs,
                                                              rhotmp1[ir],
                                                              rhotmp2[ir],
                                                              gdr1[ir],
@@ -423,9 +448,7 @@ void XC_Functional::gradcorr(double& etxc,
                                                              v1xcdw,
                                                              v2xcup,
                                                              v2xcdw,
-                                                             v2xcud,
-                                                             hybrid_alpha_in,
-                                                             hse_omega_in);
+                                                             v2xcud);
                     }
                     if (is_stress)
                     {
@@ -560,6 +583,10 @@ void XC_Functional::gradcorr(double& etxc,
                 }
             }
         }
+        // Release the per-thread functional vector before the reduction.
+#ifdef __LIBXC
+        XC_Functional_Libxc::finish_func(tls_funcs);
+#endif
 #ifdef _OPENMP
 #pragma omp critical(xc_grad_reduce)
         {

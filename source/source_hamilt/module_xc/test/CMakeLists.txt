@@ -32,6 +32,7 @@ AddTest(
   ../xc_functional_ncgga_lca.cpp ../xc_ncgga_radial.cpp
   ../xc_lda_wrap.cpp ../xc_gga_wrap.cpp
   ../libxc_setup.cpp
+  ../libxc_pot.cpp ../libxc_tools.cpp
   ../libxc_lda_wrap.cpp
   ../libxc_gga_wrap.cpp
   ../libxc_mgga_wrap.cpp
