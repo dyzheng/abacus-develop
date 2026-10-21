@@ -328,6 +328,33 @@ TEST(MuSolverTest, RebindRetainsSlope)
     EXPECT_NE(mu[0], mu_before);
 }
 
+TEST(MuSolverTest, RebindCarriesJacobianWhenEnabled)
+{
+    constraint::MuSolverParams p;
+    p.trust_region = true;
+    p.broyden = true;
+    p.step_max = 0.05;
+    constraint::MuSolver s(p);
+    std::vector<double> mu = {0.0, 0.0};
+    // Drive several accepted steps so an off-diagonal coupling is learned.
+    s.step({1.0, 0.5}, {0.0, 0.0}, mu);
+    s.step({0.9, 0.55}, {0.0, 0.0}, mu);
+    s.step({0.81, 0.605}, {0.0, 0.0}, mu);
+    const double j01 = s.jacobian(0, 1);
+    // Carry on: the full Jacobian survives the rebind.
+    s.set_carry_jacobian(true);
+    s.rebind(mu, {0.8, 0.6});
+    EXPECT_NEAR(s.jacobian(0, 1), j01, 1e-12);
+    // Carry off (legacy): diagonal reset wipes the coupling.
+    constraint::MuSolver s2(p);
+    std::vector<double> mu2 = {0.0, 0.0};
+    s2.step({1.0, 0.5}, {0.0, 0.0}, mu2);
+    s2.step({0.9, 0.55}, {0.0, 0.0}, mu2);
+    s2.step({0.81, 0.605}, {0.0, 0.0}, mu2);
+    s2.rebind(mu2, {0.8, 0.6});
+    EXPECT_DOUBLE_EQ(s2.jacobian(0, 1), 0.0);
+}
+
 TEST(MuSolverTest, RebindResetsFuseWindow)
 {
     constraint::MuSolverParams p;

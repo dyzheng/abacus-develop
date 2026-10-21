@@ -63,6 +63,7 @@ void MuSolver::reset()
     fuse_mu_ = 0.0;
     fuse_residual_ = 0.0;
     reset_trust_state();
+    carry_jacobian_ = false;
 }
 
 MuStatus MuSolver::step(const std::vector<double>& Q,
@@ -823,10 +824,28 @@ void MuSolver::rebind(const std::vector<double>& mu,
     // fallback (the new fixed-point problem may be smoother).
     if (params_.trust_region)
     {
-        jacobian_.assign(n, std::vector<double>(n, 0.0));
-        for (int i = 0; i < n; ++i)
+        // Branch: carry the full Jacobian across geometries (M4 scheduling
+        // pack A, opt-in).  The off-diagonal fragment couplings cost outer
+        // steps to relearn every frame; the trust-region rho score rejects
+        // and relearns a stale model, so carrying is safe.  Legacy (flag
+        // off): diagonal reset from the carried slopes.
+        if (!carry_jacobian_)
         {
-            jacobian_[i][i] = last_slope_[i];
+            jacobian_.assign(n, std::vector<double>(n, 0.0));
+            for (int i = 0; i < n; ++i)
+            {
+                jacobian_[i][i] = last_slope_[i];
+            }
+        }
+        else if (static_cast<int>(jacobian_.size()) != n)
+        {
+            // Guard: a changed component count has no compatible old J, so
+            // seed the carried diagonal instead of reusing a wrong shape.
+            jacobian_.assign(n, std::vector<double>(n, 0.0));
+            for (int i = 0; i < n; ++i)
+            {
+                jacobian_[i][i] = last_slope_[i];
+            }
         }
         trust_radius_ = std::max(
             params_.trust_radius_min,

@@ -115,6 +115,11 @@ class MuSolver
     void rebind(const std::vector<double>& mu,
                 const std::vector<double>& Q);
 
+    // M4 scheduling pack A: preserve the full Broyden Jacobian (including
+    // off-diagonal fragment couplings) across rebind().  Off (default) keeps
+    // the legacy diagonal reset from the carried slope.
+    void set_carry_jacobian(const bool on) { carry_jacobian_ = on; }
+
     // Last accepted dQ/dmu of component i (signed, AFTER the
     // kappa_min/kappa_max clamp -- the value the update actually used;
     // negative for charge/spin), or the conservative
@@ -213,6 +218,7 @@ class MuSolver
     int trust_consecutive_rejects_ = 0;
     double last_rho_ = 1.0;
     bool trust_fallback_ = false;
+    bool carry_jacobian_ = false;
 };
 
 } // namespace constraint

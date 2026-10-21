@@ -314,6 +314,7 @@ void ConstraintLoop::init(const UnitCell& ucell,
     params.trust_region = cfg_.trust_region;
     params.broyden = true;
     mu_solver_ = MuSolver(params);
+    mu_solver_.set_carry_jacobian(cfg_.trust_carry_jacobian);
     phase_ = LoopPhase::REFERENCE;
     status_ = MuStatus::RUNNING;
     outer_steps_ = 0;
@@ -504,6 +505,7 @@ void ConstraintLoop::warm_reinit(
         mu_eff_ = mu_;
     }
     alm_.set_k_override(cfg_.alm_k);
+    mu_solver_.set_carry_jacobian(cfg_.trust_carry_jacobian);
     alm_probe_pending_ = false;
     drho_trend_.clear();
     kinds_.clear();
@@ -1358,10 +1360,13 @@ double ConstraintLoop::scf_threshold(const double strict_thr) const
     {
         return strict_thr;
     }
-    // Branch C: outer probe -> accept a looser density so the next mu step is
-    // not paid for by a fully converged SCF.  The floor keeps the probe
-    // density accurate enough for the secant/Broyden response.
-    return std::max(1e-5, 100.0 * strict_thr);
+    // Branch C: outer probe -- the threshold scales with the outer residual.
+    // M3 data (h2o_dimer): drho and the residual in e are the same order of
+    // magnitude, so 0.3*res keeps the probe Q error well below the residual
+    // (the step direction is unaffected; the trust rho score guards).  The
+    // floor/ceiling keep the probe sane at both ends.
+    const double probe = std::min(1e-3, 0.3 * max_residual());
+    return std::max(std::max(1e-5, 100.0 * strict_thr), probe);
 }
 
 void ConstraintLoop::set_scf_energy(const double etot_ks)

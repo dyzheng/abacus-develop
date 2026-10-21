@@ -1922,8 +1922,8 @@ TEST_F(ConstraintLoopTest, ProgressiveScfRelaxesProbeAndTightensFinal)
     mock_iteration(loop, rho, 1, 0.0, 1e-9, conv);
     EXPECT_FALSE(conv);
     ASSERT_EQ(loop.phase(), constraint::LoopPhase::CONSTRAINED);
-    // Outer probe: max(1e-5, 100*scf_thr) = 1e-5 for scf_thr = 1e-7.
-    EXPECT_NEAR(loop.scf_threshold(1e-7), 1e-5, 1e-15);
+    // Outer probe: residual-scaled 0.3*|Q-t| = 3e-3, capped at 1e-3.
+    EXPECT_NEAR(loop.scf_threshold(1e-7), 1e-3, 1e-15);
 
     int iter = 1;
     bool tightened = false;
@@ -2208,4 +2208,38 @@ TEST_F(ConstraintLoopTest, AlmForceUsesMuPhys)
                 << "J " << J << " d " << d;
         }
     }
+}
+
+// Progressive probe scales with the outer residual (M3 data: drho and the
+// residual in e are the same order; 0.3x keeps the Q error below the residual,
+// and the trust rho score guards the step quality).
+TEST_F(ConstraintLoopTest, ProgressiveProbeScalesWithResidual)
+{
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    constraint::ConstraintConfig cfg = make_cfg(0.1);
+    cfg.progressive_scf = true;
+    loop.init(*ucell, rhopw, cfg, radii, 10.0, 0);
+    // Close the reference; the loop enters CONSTRAINED and takes its first
+    // probe step, but no observation exists at the new mu yet.
+    const double* rho_ptr[1] = {rho_ref.data()};
+    loop.observe(1, rho_ptr, 1);
+    bool conv = true;
+    loop.on_scf_converged(1, conv);
+    ASSERT_EQ(loop.phase(), constraint::LoopPhase::CONSTRAINED);
+
+    // Far from target (res ~ 0.1 e): the probe may rise to the 1e-3 ceiling.
+    loop.observe(2, rho_ptr, 1);
+    EXPECT_NEAR(loop.scf_threshold(1e-7), 1e-3, 1e-15);
+
+    // Near target (res ~ 5e-6 e): the probe falls back to the 1e-5 floor.
+    const double S = S_int();
+    std::vector<double> rho = rho_ref;
+    const std::vector<double>& w0 = wg->constraint_weight(0);
+    for (int ir = 0; ir < rhopw->nrxx; ++ir)
+    {
+        rho[ir] += (0.1 - 5e-6) * w0[ir] / S;
+    }
+    const double* rp[1] = {rho.data()};
+    loop.observe(3, rp, 1);
+    EXPECT_NEAR(loop.scf_threshold(1e-7), 1e-5, 1e-15);
 }
