@@ -1000,9 +1000,18 @@ void ESolver_KS_LCAO<TK, TR>::iter_finish(UnitCell& ucell, const int istep, int&
             }
             const hamilt::HContainer<double>* dmr
                 = this->dmat.dm->get_DMR_pointer(1);
+            // The matrix trace represents only the density-weight term.
+            // A dipole coordinate also carries a rank-independent ionic
+            // offset in Q; subtract it before the cross-check (zero for all
+            // historical charge/spin constraints).
+            std::vector<double> q_grid = cloop.charges();
+            for (size_t a = 0; a < q_grid.size(); ++a)
+            {
+                q_grid[a] -= wg.observable_offset(static_cast<int>(a));
+            }
             const double dev = constraint::ConstraintInjectLCAO::
                 audit_weighted_trace(cw, this->gint_info_.get(), dmr,
-                                     cloop.charges(), &this->pv);
+                                     q_grid, &this->pv);
             if (PARAM.inp.nspin == 2)
             {
                 this->dmat.dm->switch_dmr(0);
