@@ -44,6 +44,12 @@ AddTest(
 )
 
 AddTest(
+  TARGET MODULE_ESTATE_constraint_alm
+  LIBS parameter ${math_libs} base device
+  SOURCES constraint_alm_test.cpp ../constraint_alm.cpp
+)
+
+AddTest(
   TARGET MODULE_ESTATE_constraint_io
   LIBS parameter ${math_libs} base device cell_info
   SOURCES constraint_io_test.cpp ../constraint_io.cpp
@@ -78,6 +84,7 @@ AddTest(
   LIBS parameter ${math_libs} base device planewave_serial cell_info
   SOURCES constraint_loop_test.cpp
     ../constraint_loop.cpp
+    ../constraint_alm.cpp
     ../constraint_accounting.cpp
     ../constraint_deriv.cpp
     ../constraint_io.cpp
