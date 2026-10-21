@@ -1709,6 +1709,54 @@ Manual override is allowed: if sc_acceleration_mode is explicitly set, it takes 
         this->add_item(item);
     }
     {
+        Input_Item item("constraint_alm_k");
+        item.annotation = "ALM penalty gain k (Ry/e); 0 = auto";
+        item.category = "Constraint";
+        item.type = "Real";
+        item.description = "Augmented-Lagrangian penalty gain. 0 (default): auto-set per component to k*|chi| = 7.5 with chi the measured density response dQ/dmu (cold: one probe SCF; warm: carried secant slope). >0: explicit global k for every component, clamped to [0.1, 100] with a warning. Only used when constraint_mu_schedule=alm.";
+        item.default_value = "0.0";
+        item.unit = "Ry/e";
+        item.availability = "constraint_mu_schedule is alm";
+        read_sync_double(input.constraint_alm_k);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("constraint_trust_carry_jacobian");
+        item.annotation = "carry the Broyden Jacobian across ionic steps";
+        item.category = "Constraint";
+        item.type = "Boolean";
+        item.description = "trust_region only. false (default): each warm-started geometry resets the Jacobian to the diagonal carried slope (legacy). true: the full Broyden Jacobian (including fragment couplings) is carried across ionic steps; the trust-region rho score rejects and relearns a stale model.";
+        item.default_value = "False";
+        item.unit = "";
+        item.availability = "constraint_trust_region is true";
+        read_sync_bool(input.constraint_trust_carry_jacobian);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("constraint_budget_freeze");
+        item.annotation = "freeze mu instead of starting a doomed final update";
+        item.category = "Constraint";
+        item.type = "Boolean";
+        item.description = "true (default): when the remaining SCF budget (scf_nmax) cannot cover another mu-update rebuild (estimated from the previous rebuild cost) and the residual is already below 10*constraint_thr, the outer loop freezes mu at the current converged SCF and reports RUNNING (budget) with a usable converged frame instead of exhausting scf_nmax on a doomed update.";
+        item.default_value = "True";
+        item.unit = "";
+        item.availability = "constraint is true";
+        read_sync_bool(input.constraint_budget_freeze);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("constraint_warm_start_running");
+        item.annotation = "allow warm start from near-converged RUNNING frames";
+        item.category = "Constraint";
+        item.type = "Boolean";
+        item.description = "true (default): an ionic frame that ended RUNNING with max residual < 10*constraint_thr (budget-limited, not physics-limited) may warm-start the next frame (mu/J carried, rebind at the first convergence) instead of forcing an expensive cold reference restart.";
+        item.default_value = "True";
+        item.unit = "";
+        item.availability = "constraint_warm_start is true";
+        read_sync_bool(input.constraint_warm_start_running);
+        this->add_item(item);
+    }
+    {
         Input_Item item("constraint_dipole_report");
         item.annotation = "report the molecular / saw-frame dipole alongside the fragment charges";
         item.category = "Constraint";

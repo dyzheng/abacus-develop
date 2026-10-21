@@ -776,6 +776,19 @@ struct Input_para
     // steps of MD/relax.  Single-point scf is unaffected (see loop init).
     bool constraint_warm_start = true;
 
+    // M4 (module D): augmented-Lagrangian single-layer schedule
+    // (constraint_mu_schedule = "alm").  0 = auto k = 7.5/|chi| per
+    // component; >0 = explicit global k in Ry/e.
+    double constraint_alm_k = 0.0;
+    // M4 scheduling pack: carry the full Broyden Jacobian across ionic-step
+    // rebinds (off = legacy diagonal reset); budget-aware freeze converts a
+    // doomed final mu update into a converged best-effort frame;
+    // warm_start_running allows warm starts from near-converged RUNNING
+    // frames (residual < 10*constraint_thr) instead of a cold restart.
+    bool constraint_trust_carry_jacobian = false;
+    bool constraint_budget_freeze = true;
+    bool constraint_warm_start_running = true;
+
     // Module A (M1, plan 2026-10-20): passive dipole reporting alongside the
     // Becke fragment charges.  Pure observation; never enters the loop logic.
     bool constraint_dipole_report = false;   ///< print dipole / q_dip / deltaV block

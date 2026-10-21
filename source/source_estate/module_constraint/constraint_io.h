@@ -62,6 +62,12 @@ struct ConstraintConfig
     double dipole_saw_pos_max = -1.0;       // -1 = auto lowest-density plane
     double dipole_saw_pos_dec = 0.1;        // fractional decay width
     std::vector<ConstraintTarget> targets;
+    // M4 (module D) ALM schedule.
+    double alm_k = 0.0; // 0 = auto (7.5/|chi|); >0 = explicit global k (Ry/e)
+    // M4 scheduling pack.
+    bool trust_carry_jacobian = false;
+    bool budget_freeze = true;
+    bool warm_start_running = true;
 };
 
 enum class ConfigStatus
@@ -87,7 +93,7 @@ enum class ConfigStatus
  *  - step_max / step_probe sanity -> ERROR (step_max > 0, and 0 <= step_probe
  *    <= step_max; the probe is a sub-cap for the history-free first step)
  *  - branch_tol sanity      -> ERROR (>= 0; 0 disables the guard)
- *  - mu_schedule            -> ERROR unless "outer" / "inner"
+ *  - mu_schedule            -> ERROR unless "outer" / "inner" / "alm"
  *  - INNER schedule only    -> ERROR unless inner_thr > 0 and inner_nmax > 0
  *    (the schedule must receive positive values; an unusable inner loop would
  *    otherwise silently behave like outer or trip the budget immediately)

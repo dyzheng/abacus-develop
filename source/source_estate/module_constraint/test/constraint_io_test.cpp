@@ -975,3 +975,81 @@ TEST(ConstraintIOTest, TrustProgressiveMagPlumbing)
 
     std::remove(path.c_str());
 }
+
+TEST(ConstraintIOTest, AlmPlumbingAndGuards)
+{
+    auto ucell = make_h2o_ucell();
+    Set_GlobalV_Default();
+    PARAM.input.constraint = true;
+    PARAM.input.constraint_type = "charge";
+    PARAM.input.constraint_weight_type = "becke";
+    PARAM.input.constraint_target_mode = "delta";
+    PARAM.input.constraint_mu_max = 5.0;
+    PARAM.input.constraint_thr = 1e-4;
+    // Isolate the global PARAM state from the preceding M3 plumbing test.
+    PARAM.input.constraint_trust_region = false;
+    PARAM.input.constraint_progressive_scf = false;
+    PARAM.input.constraint_mag_anchor = false;
+    PARAM.input.constraint_mag_tol = 0.5;
+    const std::string path = "constraint_target_alm_test.json";
+    {
+        std::ofstream ofs(path);
+        ofs << R"({"targets": [0.1], "atoms": [[0]]})";
+    }
+    PARAM.input.constraint_target_file = path;
+    constraint::ConstraintConfig cfg;
+    std::vector<constraint::ConstraintSpec> specs;
+    std::vector<double> radii;
+    std::string error;
+
+    // mu_schedule = alm is accepted and flows through; k default = auto.
+    PARAM.input.constraint_mu_schedule = "alm";
+    EXPECT_EQ(constraint::configure_from_inputs(cfg, specs, *ucell, radii,
+                                                error),
+              constraint::ConfigStatus::OK)
+        << error;
+    EXPECT_EQ(cfg.mu_schedule, "alm");
+    EXPECT_DOUBLE_EQ(cfg.alm_k, 0.0); // 0 = auto (k = 7.5/|chi|)
+
+    // Explicit k flows through.
+    PARAM.input.constraint_alm_k = 3.0;
+    EXPECT_EQ(constraint::configure_from_inputs(cfg, specs, *ucell, radii,
+                                                error),
+              constraint::ConfigStatus::OK)
+        << error;
+    EXPECT_DOUBLE_EQ(cfg.alm_k, 3.0);
+    PARAM.input.constraint_alm_k = 0.0;
+
+    // Guard: alm + negative k -> ERROR.
+    PARAM.input.constraint_alm_k = -1.0;
+    EXPECT_EQ(constraint::configure_from_inputs(cfg, specs, *ucell, radii,
+                                                error),
+              constraint::ConfigStatus::ERROR);
+    PARAM.input.constraint_alm_k = 0.0;
+
+    // Guard: alm + json fixed_mu (all-fixed) -> ERROR (one dynamics mode).
+    {
+        std::ofstream ofs(path);
+        ofs << R"({"constraints": [
+            {"type":"charge","target":3.0,"atoms":[0],"fixed_mu":-0.1}]})";
+    }
+    EXPECT_EQ(constraint::configure_from_inputs(cfg, specs, *ucell, radii,
+                                                error),
+              constraint::ConfigStatus::ERROR);
+    EXPECT_NE(error.find("alm"), std::string::npos);
+
+    // Scheduling flags flow through with defaults.
+    {
+        std::ofstream ofs(path);
+        ofs << R"({"targets": [0.1], "atoms": [[0]]})";
+    }
+    EXPECT_EQ(constraint::configure_from_inputs(cfg, specs, *ucell, radii,
+                                                error),
+              constraint::ConfigStatus::OK)
+        << error;
+    EXPECT_FALSE(cfg.trust_carry_jacobian);
+    EXPECT_TRUE(cfg.budget_freeze);
+    EXPECT_TRUE(cfg.warm_start_running);
+    PARAM.input.constraint_mu_schedule = "outer";
+    std::remove(path.c_str());
+}

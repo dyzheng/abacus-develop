@@ -970,12 +970,14 @@ ConfigStatus configure_constraint(ConstraintConfig& cfg,
                 "1e-3 Ry; charge/all-fixed: 0)";
         return ConfigStatus::ERROR;
     }
-    // Guard: the dual-iteration schedule is an explicit two-value switch.
+    // Guard: the schedule is an explicit vocabulary switch.
     // Anything else must abort rather than silently fall back to outer (the
     // user asked for a different dynamics and would not get it).
-    if (mu_schedule != "outer" && mu_schedule != "inner")
+    if (mu_schedule != "outer" && mu_schedule != "inner"
+        && mu_schedule != "alm")
     {
-        error = "constraint_mu_schedule must be \"outer\" or \"inner\"";
+        error = "constraint_mu_schedule must be \"outer\", \"inner\" or "
+                "\"alm\"";
         return ConfigStatus::ERROR;
     }
     // Guard (INNER only): both inner knobs must be usable.  A non-positive
@@ -1245,6 +1247,37 @@ ConfigStatus configure_from_inputs(ConstraintConfig& cfg,
     }
 
     cfg.warm_start = PARAM.inp.constraint_warm_start;
+    // M4 ALM + scheduling pack plumbing (guards at the same site as the M1
+    // dipole guards below).
+    cfg.alm_k = PARAM.inp.constraint_alm_k;
+    cfg.trust_carry_jacobian = PARAM.inp.constraint_trust_carry_jacobian;
+    cfg.budget_freeze = PARAM.inp.constraint_budget_freeze;
+    cfg.warm_start_running = PARAM.inp.constraint_warm_start_running;
+    // Branch: ALM requested -> validate its gain and reject a dynamics mode
+    // that has no outer multiplier at all (all components fixed).
+    if (cfg.mu_schedule == "alm")
+    {
+        // Branch: negative gain has no physical meaning; 0 is the auto
+        // sentinel and must stay accepted.
+        if (cfg.alm_k < 0.0)
+        {
+            error = "constraint_alm_k must be >= 0 (0 = auto)";
+            return ConfigStatus::ERROR;
+        }
+        bool all_fixed = !specs.empty();
+        for (const ConstraintSpec& s : specs)
+        {
+            all_fixed = all_fixed && s.fixed_mu;
+        }
+        // Branch: fixed-mu runs have no outer loop, so ALM can never arm.
+        if (all_fixed)
+        {
+            error = "constraint_mu_schedule=alm is incompatible with "
+                    "\"fixed_mu\" (fixed-mu runs have no outer loop; use "
+                    "outer/inner or remove fixed_mu)";
+            return ConfigStatus::ERROR;
+        }
+    }
     // M3 C2/C3/E1 switches: independent of the target list, so they are
     // copied after the validated core just like warm_start / dipole.
     cfg.trust_region = PARAM.inp.constraint_trust_region;
