@@ -851,4 +851,42 @@ double MuSolver::slope(const int i) const
     return resp * params_.kappa_min;
 }
 
+void MuSolver::seed_slope(const std::vector<double>& chi)
+{
+    const int n = static_cast<int>(chi.size());
+    const double resp = (params_.response_sign > 0) ? 1.0 : -1.0;
+    last_slope_.assign(n, resp * params_.kappa_min);
+    for (int i = 0; i < n; ++i)
+    {
+        // Branch: a response with the expected sign is retained; the wrong
+        // sign or a dead channel keeps the conservative fallback (the same
+        // guard as the secant path).
+        if (chi[i] * resp > 0.0 && std::abs(chi[i]) >= 1e-6)
+        {
+            const double mag = clamp_value(std::abs(chi[i]), params_.kappa_min,
+                                           params_.kappa_max);
+            last_slope_[i] = resp * mag;
+        }
+    }
+    // A probe is not an accepted Newton step: keep the history empty so a
+    // later legacy step() cannot pair this response with a cross-iteration
+    // delta it never observed.
+    has_history_.assign(n, false);
+    mu_prev_.assign(n, 0.0);
+    Q_prev_.assign(n, 0.0);
+    residual_window_.assign(n, std::vector<double>());
+    fuse_component_ = -1;
+    fuse_mu_ = 0.0;
+    fuse_residual_ = 0.0;
+    // The trust model, when enabled, starts from the seeded diagonal.
+    if (params_.trust_region)
+    {
+        jacobian_.assign(n, std::vector<double>(n, 0.0));
+        for (int i = 0; i < n; ++i)
+        {
+            jacobian_[i][i] = last_slope_[i];
+        }
+    }
+}
+
 } // namespace constraint

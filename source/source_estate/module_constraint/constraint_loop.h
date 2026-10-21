@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "constraint_accounting.h"
+#include "constraint_alm.h"
 #include "constraint_io.h"
 #include "constraint_observe.h"
 #include "mu_solver.h"
@@ -213,6 +214,16 @@ class ConstraintLoop
     const std::vector<double>& mu() const { return mu_; }
     const std::vector<double>& targets() const { return targets_; }
     const std::vector<double>& charges() const { return Q_; }
+    // ---- M4 ALM schedule (module D) ---------------------------------------
+    // mu_eff is the multiplier the injector/force actually apply:
+    // mu_a + k_a(Q_a - t_a) when the ALM is armed, else plain mu (probe or
+    // outer schedules).  mu_phys(i) is the constant-potential label of
+    // component i (== mu_eff at convergence).  alm_armed() is true once k
+    // was set (probe measurement or carried warm-start response).
+    const std::vector<double>& mu_eff() const { return mu_eff_; }
+    double mu_phys(const int i) const { return mu_eff_.at(i); }
+    bool alm_armed() const { return alm_armed_; }
+    double alm_k(const int i) const { return alm_.k().at(i); }
     // ---- Module A (M1) passive dipole report -----------------------------
     // Pure observation: armed by cfg.dipole_report, refreshed by observe(),
     // never read by the loop logic.  dipole_ref() is the REFERENCE-phase
@@ -251,6 +262,9 @@ class ConstraintLoop
                      const std::vector<double>& radii,
                      const double nelec);
     void finish_warm_start();
+    void finish_warm_start_alm();
+    void alm_arm(const std::vector<double>& chi);
+    void alm_adjudicate(const int iter, bool& conv_esolver);
     // Run one outer step from the current charges Q_ against targets_.
     void outer_step(const int iter, bool& conv_esolver);
     // One INNER-schedule mu update from the current observation.  Returns true
@@ -276,6 +290,14 @@ class ConstraintLoop
     std::unique_ptr<WeightGrid> wg_;
     MuSolver mu_solver_;
     std::vector<double> mu_;
+    // M4 ALM state.
+    AlmController alm_;
+    bool alm_mode_ = false;          // cfg_.mu_schedule == "alm"
+    bool alm_armed_ = false;         // k set (probe / carried warm response)
+    bool alm_probe_pending_ = false; // cold probe SCF in flight
+    double alm_probe_mu_ = 0.02;     // Ry: chi-measurement probe multiplier
+    std::vector<double> mu_eff_;     // injector / force multiplier
+    std::vector<double> drho_trend_; // last drho values for the dampen guard
     std::vector<double> Q_;
     std::vector<double> Q_ref_;
     std::vector<double> targets_;

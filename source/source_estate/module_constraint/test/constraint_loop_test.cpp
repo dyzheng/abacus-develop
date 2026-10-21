@@ -315,6 +315,31 @@ class ConstraintLoopTest : public ::testing::Test
         return reset;
     }
 
+    // ALM-consistent mock SCF: build rho from the loop's CURRENT effective
+    // multiplier, so Q = Q_ref + chi * mu_eff exactly (the ALM injection
+    // convention).  The fixture rho_ref is unchanged by mu.
+    void mock_alm_iteration(constraint::ConstraintLoop& loop,
+                            std::vector<double>& rho,
+                            const int iter,
+                            const double chi,
+                            bool& conv_out)
+    {
+        rho = rho_ref;
+        const constraint::WeightGrid& g = loop.weight_grid();
+        const double S = S_alpha(g, 0);
+        const std::vector<double>& w0 = g.constraint_weight(0);
+        const double meff = loop.mu_eff()[0];
+        for (int ir = 0; ir < rhopw->nrxx; ++ir)
+        {
+            rho[ir] += chi * meff * w0[ir] / S;
+        }
+        const double* rp[1] = {rho.data()};
+        loop.observe(iter, rp, 1);
+        bool conv = true;
+        loop.on_scf_converged(iter, conv);
+        conv_out = conv;
+    }
+
     constraint::ConstraintConfig make_cfg(const double delta,
                                           const double mu_max = 5.0,
                                           const double thr = 1e-4,
@@ -2021,4 +2046,166 @@ TEST_F(ConstraintLoopTest, MagAnchorInertWhenDisabled)
     ASSERT_LT(guard, 20);
     EXPECT_EQ(loop.status(), constraint::MuStatus::CONVERGED);
     EXPECT_EQ(loop.mag_rejections(), 0);
+}
+
+// Cold ALM: reference -> probe (measures chi) -> arm -> ALM SCFs.  With a
+// linear mock and delta = +0.1, chi = -0.65, the Newton mu0 lands on the
+// exact solution, so the run converges in <= 2 ALM adjudications and the
+// reported mu_phys equals the exact multiplier.
+TEST_F(ConstraintLoopTest, AlmColdConvergesWithExactMuPhys)
+{
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    constraint::ConstraintConfig cfg = make_cfg(0.1);
+    cfg.mu_schedule = "alm";
+    loop.init(*ucell, rhopw, cfg, radii, 10.0, 0);
+    ASSERT_TRUE(loop.enabled());
+    EXPECT_EQ(loop.schedule(), "alm");
+
+    const double chi = -0.65;
+    std::vector<double> rho;
+    bool conv = false;
+    int iter = 0;
+    while (loop.status() == constraint::MuStatus::RUNNING && iter < 40)
+    {
+        ++iter;
+        mock_alm_iteration(loop, rho, iter, chi, conv);
+    }
+    ASSERT_EQ(loop.status(), constraint::MuStatus::CONVERGED) << "iter=" << iter;
+    const double q_ref = Q_of(rho_ref);
+    const double mu_star = (loop.targets()[0] - q_ref) / chi;
+    EXPECT_NEAR(loop.mu_phys(0), mu_star, 1e-6);
+    EXPECT_LE(loop.outer_steps(), 6);
+}
+
+// ALM + warm start: k from the carried slope (no probe SCF), mu carried.
+TEST_F(ConstraintLoopTest, AlmWarmStartSkipsProbe)
+{
+    PARAM.input.calculation = "relax";
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    constraint::ConstraintConfig cfg = make_cfg(0.1);
+    cfg.mu_schedule = "alm";
+    cfg.warm_start = true;
+    loop.init(*ucell, rhopw, cfg, radii, 10.0, 0);
+    const double chi = -0.65;
+    std::vector<double> rho;
+    bool conv = false;
+    int iter = 0;
+    while (loop.status() == constraint::MuStatus::RUNNING && iter < 40)
+    {
+        ++iter;
+        mock_alm_iteration(loop, rho, iter, chi, conv);
+    }
+    ASSERT_EQ(loop.status(), constraint::MuStatus::CONVERGED);
+    const double mu1 = loop.mu_phys(0);
+
+    // New geometry: warm re-init must NOT re-probe (k re-armed from the
+    // carried chi); mu carried.
+    ucell->atoms[1].taud[0].x += 0.05;
+    wg->build(); // test-side weights follow the moved geometry (M2 note)
+    loop.init(*ucell, rhopw, cfg, radii, 10.0, 1);
+    ASSERT_TRUE(loop.warm_started_last_init());
+    EXPECT_TRUE(loop.alm_armed());
+    while (loop.status() == constraint::MuStatus::RUNNING && iter < 60)
+    {
+        ++iter;
+        mock_alm_iteration(loop, rho, iter, chi, conv);
+    }
+    ASSERT_EQ(loop.status(), constraint::MuStatus::CONVERGED)
+        << "mu=" << loop.mu()[0] << " mu_eff=" << loop.mu_eff()[0]
+        << " Q=" << loop.charges()[0] << " target=" << loop.targets()[0]
+        << " mu1=" << mu1 << " slope=" << loop.solver_slope(0)
+        << " iter=" << iter;
+    EXPECT_NEAR(loop.mu_phys(0), mu1, 2e-2);
+}
+
+// Stiffness guard: growing drho three iterations in a row dampens k.
+TEST_F(ConstraintLoopTest, AlmDampensOnDrhoGrowth)
+{
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    constraint::ConstraintConfig cfg = make_cfg(0.1);
+    cfg.mu_schedule = "alm";
+    loop.init(*ucell, rhopw, cfg, radii, 10.0, 0);
+    const double chi = -0.65;
+    std::vector<double> rho;
+    bool conv = false;
+    // Two SCFs close the reference and the probe, arming k without yet
+    // adjudicating an ALM step (which would converge immediately here).
+    mock_alm_iteration(loop, rho, 1, chi, conv);
+    mock_alm_iteration(loop, rho, 2, chi, conv);
+    ASSERT_TRUE(loop.alm_armed());
+    ASSERT_EQ(loop.status(), constraint::MuStatus::RUNNING);
+    const double k0 = loop.alm_k(0);
+    loop.on_iteration(3, 1e-3);
+    loop.on_iteration(4, 2e-3);
+    loop.on_iteration(5, 4e-3); // three consecutive >20% growths
+    EXPECT_LT(loop.alm_k(0), k0);
+}
+
+// ALM energy convention: e_con carries the penalty term
+// sum_a [mu_a(Q-t) + (k_a/2)(Q-t)^2], not the accounting default sum mu(Q-t).
+TEST_F(ConstraintLoopTest, AlmEnergyCorrectionInAudit)
+{
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    constraint::ConstraintConfig cfg = make_cfg(0.1);
+    cfg.mu_schedule = "alm";
+    loop.init(*ucell, rhopw, cfg, radii, 10.0, 0);
+    const double chi = -0.65;
+    std::vector<double> rho;
+    bool conv = false;
+    int iter = 0;
+    while (loop.status() == constraint::MuStatus::RUNNING && iter < 40)
+    {
+        ++iter;
+        mock_alm_iteration(loop, rho, iter, chi, conv);
+    }
+    ASSERT_EQ(loop.status(), constraint::MuStatus::CONVERGED);
+    double expected = 0.0;
+    for (size_t a = 0; a < loop.mu().size(); ++a)
+    {
+        const double res = loop.charges()[a] - loop.targets()[a];
+        expected += loop.mu()[a] * res + 0.5 * loop.alm_k(a) * res * res;
+    }
+    EXPECT_NEAR(loop.last_audit().e_con, expected, 1e-12);
+}
+
+// ALM force convention: the force kernel must see the effective multiplier
+// (mu_phys), not the bare ALM mu.  Comparing against a direct kernel call at
+// mu_eff_ catches a stale/mismatched vector even when the residual is small.
+TEST_F(ConstraintLoopTest, AlmForceUsesMuPhys)
+{
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    constraint::ConstraintConfig cfg = make_cfg(0.1);
+    cfg.mu_schedule = "alm";
+    loop.init(*ucell, rhopw, cfg, radii, 10.0, 0);
+    const double chi = -0.65;
+    std::vector<double> rho;
+    bool conv = false;
+    int iter = 0;
+    while (loop.status() == constraint::MuStatus::RUNNING && iter < 40)
+    {
+        ++iter;
+        mock_alm_iteration(loop, rho, iter, chi, conv);
+    }
+    ASSERT_EQ(loop.status(), constraint::MuStatus::CONVERGED);
+    const double q_ref = Q_of(rho_ref);
+    const double mu_star = (loop.targets()[0] - q_ref) / chi;
+    EXPECT_NEAR(loop.mu_phys(0), mu_star, 1e-6);
+
+    const double* rho_arr[1] = {rho.data()};
+    ModuleBase::matrix Floop(ucell->nat, 3);
+    loop.compute_force(rho_arr, 1, Floop);
+    wg->build_derivatives();
+    std::vector<double> meff = loop.mu_eff();
+    ModuleBase::matrix Fdir(ucell->nat, 3);
+    constraint::constraint_force(*wg, rho_arr, 1,
+                                 constraint::DensityChannel::Charge, meff,
+                                 Fdir);
+    for (int J = 0; J < ucell->nat; ++J)
+    {
+        for (int d = 0; d < 3; ++d)
+        {
+            EXPECT_DOUBLE_EQ(Floop(J, d), Fdir(J, d))
+                << "J " << J << " d " << d;
+        }
+    }
 }

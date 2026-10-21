@@ -59,6 +59,12 @@ void ConstraintLoop::reset()
     wg_.reset();
     mu_solver_.reset();
     mu_.clear();
+    alm_ = AlmController();
+    alm_mode_ = false;
+    alm_armed_ = false;
+    alm_probe_pending_ = false;
+    mu_eff_.clear();
+    drho_trend_.clear();
     Q_.clear();
     Q_ref_.clear();
     targets_.clear();
@@ -193,6 +199,17 @@ void ConstraintLoop::init(const UnitCell& ucell,
 
     // mu starts at zero: the first SCF is the unconstrained reference.
     mu_.assign(specs_.size(), 0.0);
+    // M4 ALM: the controller lives in the same component space as mu.  The
+    // default (non-alm) schedule keeps it unarmed, so mu_eff_ == mu_ and the
+    // injection/force paths are bit-identical to the legacy behaviour.
+    alm_mode_ = (cfg_.mu_schedule == "alm");
+    alm_ = AlmController();
+    alm_.resize(static_cast<int>(mu_.size()));
+    alm_.set_k_override(cfg_.alm_k);
+    alm_armed_ = false;
+    alm_probe_pending_ = false;
+    mu_eff_ = mu_;
+    drho_trend_.clear();
     // Branch: v2 fixed_mu (M2 C4) -> product fixed-mu mode.  Every component
     // has a value (configure guard); the outer loop never runs and one SCF
     // is one frame.  The legacy env switch below stays as the v1 path.
@@ -231,6 +248,7 @@ void ConstraintLoop::init(const UnitCell& ucell,
         fixed_mu_ = true;
         json_fixed_source_ = true;
         inner_active_ = false;
+        mu_eff_ = mu_;
         phase_ = LoopPhase::CONSTRAINED;
         status_ = MuStatus::RUNNING;
         return;
@@ -267,6 +285,7 @@ void ConstraintLoop::init(const UnitCell& ucell,
         {
             targets_[a] = specs_[a].target;
         }
+        mu_eff_ = mu_;
         phase_ = LoopPhase::CONSTRAINED;
         status_ = MuStatus::RUNNING;
         return;
@@ -468,6 +487,25 @@ void ConstraintLoop::warm_reinit(
     inner_schedule_ = (cfg_.mu_schedule == "inner");
     inner_thr_ = cfg_.inner_thr;
     inner_nmax_ = cfg_.inner_nmax;
+    // M4 ALM warm state: keep the armed k for the first carried-mu probe SCF
+    // (the penalty smoothly pulls the density back), but never carry a cold
+    // probe flag into the new geometry.  finish_warm_start_alm() re-arms from
+    // the carried response once this geometry's first observation exists.
+    alm_mode_ = (cfg_.mu_schedule == "alm");
+    if (!alm_mode_)
+    {
+        alm_armed_ = false;
+        mu_eff_ = mu_;
+    }
+    else if (alm_.k().size() != mu_.size())
+    {
+        alm_.resize(static_cast<int>(mu_.size()));
+        alm_armed_ = false;
+        mu_eff_ = mu_;
+    }
+    alm_.set_k_override(cfg_.alm_k);
+    alm_probe_pending_ = false;
+    drho_trend_.clear();
     kinds_.clear();
     channels_.clear();
     mu_caps_.clear();
@@ -548,6 +586,66 @@ void ConstraintLoop::finish_warm_start()
     // SCF iterations may update mu again.
     inner_active_ = inner_schedule_;
     warm_pending_ = false;
+    // Branch: ALM also re-arms after the rebind/Q_ref update; its k comes
+    // from the carried slope and needs no second probe SCF.
+    if (alm_mode_)
+    {
+        finish_warm_start_alm();
+    }
+}
+
+void ConstraintLoop::finish_warm_start_alm()
+{
+    // Warm path (M4): the carried secant slope is the response measurement
+    // -- arm k directly, no probe SCF.  Q_ref re-derivation (delta) already
+    // happened in finish_warm_start() above this call.
+    std::vector<double> chi(mu_.size(), -1.0);
+    for (size_t a = 0; a < chi.size(); ++a)
+    {
+        chi[a] = mu_solver_.slope(static_cast<int>(a));
+    }
+    alm_arm(chi);
+    // Start the first ALM SCF from the physical effective multiplier on the
+    // just-observed density (mu + k(Q-t)); this is the continuous ALM state
+    // the penalty formulation prescribes at the carried point.
+    alm_.mu_eff(mu_, Q_, targets_, mu_eff_);
+}
+
+void ConstraintLoop::alm_arm(const std::vector<double>& chi)
+{
+    alm_.set_k_override(cfg_.alm_k);
+    const int fallback_before = alm_.arm_fallback_count();
+    alm_.arm(chi);
+    alm_armed_ = alm_.armed();
+    drho_trend_.clear();
+    // Carry the measured response into MuSolver so the next geometry's warm
+    // path can re-arm k without paying for another chi-probe SCF.
+    mu_solver_.seed_slope(chi);
+    if (cfg_.alm_k > 0.0)
+    {
+        // Branch: explicit gain -> report the clamped value actually used
+        // (the controller enforces [0.1, 100] Ry/e).
+        GlobalV::ofs_running << "[constraint] ALM gain: explicit k="
+                             << cfg_.alm_k << " Ry/e";
+        if (cfg_.alm_k < 0.1 || cfg_.alm_k > 100.0)
+        {
+            GlobalV::ofs_running << " (clamped to [0.1, 100])";
+        }
+        GlobalV::ofs_running << "\n";
+    }
+    if (alm_.arm_fallback_count() > fallback_before)
+    {
+        GlobalV::ofs_running
+            << "[constraint] ALM arm fell back to |chi|=1 for "
+            << (alm_.arm_fallback_count() - fallback_before)
+            << " component(s) with a non-negative/degenerate response\n";
+    }
+    GlobalV::ofs_running << "[constraint] ALM armed: k =";
+    for (const double kv : alm_.k())
+    {
+        GlobalV::ofs_running << " " << kv;
+    }
+    GlobalV::ofs_running << " Ry/e\n";
 }
 
 void ConstraintLoop::inject_potential(const int iter,
@@ -557,6 +655,13 @@ void ConstraintLoop::inject_potential(const int iter,
     if (!enabled())
     {
         return;
+    }
+    // M4 compatibility: outside the armed ALM, the effective multiplier is
+    // exactly mu.  Refresh it here as well as in observe() so a legacy outer
+    // step that just moved mu is injected without a one-iteration lag.
+    if (!alm_armed_)
+    {
+        mu_eff_ = mu_;
     }
     // Branch A: outer loop finished (CONVERGED / UNREACHABLE / BRANCH_FLIP):
     // the potential stays as the last injected one — nothing more to add.
@@ -571,8 +676,10 @@ void ConstraintLoop::inject_potential(const int iter,
     // rejects a mu/weight/profile length mismatch — per its contract the
     // caller must WARNING_QUIT rather than silently run without the
     // constraint potential (review P2).
-    if (!ConstraintInjectPW::inject(*wg_, mu_, channels_, v_eff)
-        || !ConstraintInjectPW::inject(*wg_, mu_, channels_, veff_smooth))
+    // M4: mu_eff_ tracks mu_ + k(Q - t) under the ALM schedule and equals
+    // mu_ on every other schedule -- a single swap point covers both.
+    if (!ConstraintInjectPW::inject(*wg_, mu_eff_, channels_, v_eff)
+        || !ConstraintInjectPW::inject(*wg_, mu_eff_, channels_, veff_smooth))
     {
         ModuleBase::WARNING_QUIT("ConstraintLoop::inject_potential",
             "mu length does not match the constraint count (wiring bug)");
@@ -587,6 +694,11 @@ void ConstraintLoop::inject_potential_lcao(const int iter,
     {
         return;
     }
+    // M4: same legacy lag guard as the PW injector.
+    if (!alm_armed_)
+    {
+        mu_eff_ = mu_;
+    }
     // Branch A: outer loop finished (CONVERGED / UNREACHABLE / BRANCH_FLIP):
     // the potential stays as the last injected one — nothing more to add.
     if (phase_ == LoopPhase::DONE)
@@ -600,7 +712,9 @@ void ConstraintLoop::inject_potential_lcao(const int iter,
     // injector rejects a mu/weight/profile length mismatch — per its
     // contract the caller must WARNING_QUIT rather than silently run without
     // the constraint potential (review P2).
-    if (!ConstraintInjectPW::inject(*wg_, mu_, channels_, v_eff))
+    // M4: same single swap point as the PW injector (mu_eff_ == mu_ unless
+    // the ALM is armed).
+    if (!ConstraintInjectPW::inject(*wg_, mu_eff_, channels_, v_eff))
     {
         ModuleBase::WARNING_QUIT("ConstraintLoop::inject_potential_lcao",
             "mu length does not match the constraint count (wiring bug)");
@@ -610,7 +724,7 @@ void ConstraintLoop::inject_potential_lcao(const int iter,
 
 void ConstraintLoop::add_back_constraint_potential(ModuleBase::matrix& veff) const
 {
-    if (!enabled() || !wg_ || mu_.empty())
+    if (!enabled() || !wg_ || mu_eff_.empty())
     {
         return; // constraint off or not armed: nothing was injected
     }
@@ -619,7 +733,8 @@ void ConstraintLoop::add_back_constraint_potential(ModuleBase::matrix& veff) con
     // added back, restoring the physical potential difference for the SCC
     // force integral (see header comment).  Per-constraint channels keep the
     // mixed charge+spin potential in sync with the forward injection.
-    if (!ConstraintInjectPW::inject(*wg_, mu_, channels_, veff))
+    // M4: add back exactly the ALM effective potential the Hamiltonian saw.
+    if (!ConstraintInjectPW::inject(*wg_, mu_eff_, channels_, veff))
     {
         ModuleBase::WARNING_QUIT("ConstraintLoop::add_back_constraint_potential",
             "mu/veff length mismatch (wiring bug)");
@@ -636,6 +751,16 @@ void ConstraintLoop::observe(const int iter, const double* const* rho,
     // Stage-A reading: every alpha reads with its own channel signs, so a
     // mixed charge+spin list is observed in one integral (A2 core).
     ConstraintObserver::observe(*wg_, rho, nspin, channels_, Q_);
+    // M4 ALM: keep the effective multiplier in sync with the observation
+    // (unarmed phases pass mu through unchanged -- probe / outer schedules).
+    if (alm_armed_)
+    {
+        alm_.mu_eff(mu_, Q_, targets_, mu_eff_);
+    }
+    else
+    {
+        mu_eff_ = mu_;
+    }
     // Module A (M1): passive dipole observation; never feeds the loop.
     if (dipole_report_)
     {
@@ -795,12 +920,30 @@ void ConstraintLoop::outer_step(const int iter, bool& conv_esolver)
                 targets_[a] = Q_ref_[a] + specs_[a].target;
             }
         }
+        phase_ = LoopPhase::CONSTRAINED;
+        ++outer_steps_;
+        // Branch (M4 ALM): the reference close arms the chi probe instead
+        // of a secant step.  One small plain-injection SCF at mu_probe
+        // measures the response chi = dQ/dmu before k is set -- the price of
+        // a safe k on a cold run (warm runs skip it via the carried slope).
+        if (alm_mode_)
+        {
+            for (size_t a = 0; a < mu_.size(); ++a)
+            {
+                mu_[a] = alm_probe_mu_;
+            }
+            mu_eff_ = mu_; // unarmed probe: plain mu injection
+            alm_probe_pending_ = true;
+            tighten_pending_ = false;
+            drho_trend_.clear();
+            print_audit(iter);
+            conv_esolver = false;
+            return;
+        }
         // The reference point is the mu = 0 observation: run the first
         // secant step immediately.  A delta = 0 target converges here and
         // the run ends; otherwise the SCF continues into the constrained
         // phase with the updated mu.
-        phase_ = LoopPhase::CONSTRAINED;
-        ++outer_steps_;
         const int rejects_before = mu_solver_.trust_reject_count();
         status_ = mu_solver_.step(Q_, targets_, mu_);
         // Branch: the solver rejected this trial and re-walked it with a
@@ -844,6 +987,42 @@ void ConstraintLoop::outer_step(const int iter, bool& conv_esolver)
         phase_ = LoopPhase::DONE;
         return;
     }
+    conv_esolver = false;
+}
+
+void ConstraintLoop::alm_adjudicate(const int iter, bool& conv_esolver)
+{
+    ++outer_steps_;
+    const double res = max_residual();
+    // Branch A: the SCF already sits on the target.  Declare convergence
+    // BEFORE any outer update; mu_eff_ is then the physical multiplier at
+    // this density (mu + k(Q-t), with |Q-t| below the threshold).
+    if (res < cfg_.thr)
+    {
+        status_ = MuStatus::CONVERGED;
+        print_audit_line(iter, outer_steps_, "alm");
+        phase_ = LoopPhase::DONE;
+        return; // conv_esolver stays true: the SCF itself converged
+    }
+    // Branch B: one gentle ALM outer update mu += k(Q-t), then continue the
+    // same SCF stream at the new effective potential (no injection event and
+    // no mixing reset -- the density map changes continuously).
+    alm_.update(Q_, targets_, mu_caps_, mu_);
+    // Keep the injector/force vector consistent immediately; observing the
+    // next SCF iteration would otherwise leave one iteration on the old value.
+    alm_.mu_eff(mu_, Q_, targets_, mu_eff_);
+    const int fused = alm_.fuse_component();
+    // Branch B1: a component pinned at its cap with a flat residual is
+    // unreachable in this channel -> fuse like the MuSolver protocol.
+    if (fused >= 0)
+    {
+        status_ = MuStatus::UNREACHABLE;
+        print_audit_line(iter, outer_steps_, "alm");
+        phase_ = LoopPhase::DONE;
+        return;
+    }
+    status_ = MuStatus::RUNNING;
+    print_audit_line(iter, outer_steps_, "alm");
     conv_esolver = false;
 }
 
@@ -998,9 +1177,18 @@ void ConstraintLoop::on_scf_converged(const int iter, bool& conv_esolver)
                     "branch guard: observed-charge/target size mismatch");
             }
             double e_con = 0.0;
-            for (size_t a = 0; a < mu_.size(); ++a)
+            // Branch: ALM -- the correction includes the penalty term and is
+            // computed by the same helper as the audit (single source).
+            if (alm_armed_)
             {
-                e_con += mu_[a] * (Q_[a] - targets_[a]);
+                e_con = alm_.energy_correction(mu_, Q_, targets_);
+            }
+            else
+            {
+                for (size_t a = 0; a < mu_.size(); ++a)
+                {
+                    e_con += mu_[a] * (Q_[a] - targets_[a]);
+                }
             }
             e_guard_ = scf_energy_ + e_con;
             const double de = e_guard_ - e_ref_;
@@ -1033,6 +1221,41 @@ void ConstraintLoop::on_scf_converged(const int iter, bool& conv_esolver)
     if (warm_pending_)
     {
         finish_warm_start();
+    }
+    // Branch (M4 ALM) probe close: measure chi on the converged probe
+    // density, arm k, take the Newton mu0 = (target - Q_ref)/chi (capped),
+    // and continue into the first ALM SCF.  The probe itself is unarmed, so
+    // its correction is still the plain Lagrange accounting.
+    if (alm_probe_pending_)
+    {
+        std::vector<double> chi(mu_.size(), -1.0);
+        std::vector<double> safe_chi(mu_.size(), -1.0);
+        for (size_t a = 0; a < chi.size(); ++a)
+        {
+            chi[a] = (Q_[a] - Q_ref_[a]) / alm_probe_mu_;
+            // Guard: the controller falls back for a bad sign/degenerate
+            // response; the Newton seed must use the same nominal slope or
+            // it would divide by the bad measurement.
+            if (chi[a] < -1e-6)
+            {
+                safe_chi[a] = chi[a];
+            }
+        }
+        alm_arm(safe_chi);
+        for (size_t a = 0; a < mu_.size(); ++a)
+        {
+            mu_[a] = (targets_[a] - Q_ref_[a]) / safe_chi[a];
+            mu_[a] = std::max(-mu_caps_[a], std::min(mu_caps_[a], mu_[a]));
+        }
+        // Start the first ALM SCF at the Newton point, not at the penalty
+        // evaluated on the old probe density.  On a linear response this is
+        // the exact root, so the next convergence adjudicates immediately.
+        mu_eff_ = mu_;
+        alm_probe_pending_ = false;
+        drho_trend_.clear();
+        print_audit(iter);
+        conv_esolver = false;
+        return;
     }
     // M3 E1: anchor the total magnetization at the free reference (cold) or
     // at the first warm-geometry convergence.  The anchor is a branch label,
@@ -1107,6 +1330,14 @@ void ConstraintLoop::on_scf_converged(const int iter, bool& conv_esolver)
             }
             return;
         }
+    }
+    // Branch (M4 ALM) adjudication at a converged ALM SCF.  The cold probe
+    // close above already returned; here k is armed and the single-layer
+    // stream is ready to update mu and continue without an inject/rebuild.
+    if (alm_mode_ && alm_armed_ && phase_ == LoopPhase::CONSTRAINED)
+    {
+        alm_adjudicate(iter, conv_esolver);
+        return;
     }
     // Branch C: converged SCF with an active outer loop -- outer step.
     outer_step(iter, conv_esolver);
@@ -1243,6 +1474,28 @@ bool ConstraintLoop::on_iteration(const int iter, const double drho)
     {
         return false;
     }
+    // M4 ALM stiffness guard: three consecutive >20% drho growths mean the
+    // penalty feedback is too stiff for the mixing -- dampen k (no mixing
+    // reset: the gain change is small and continuous by design).
+    if (alm_armed_)
+    {
+        drho_trend_.push_back(drho);
+        if (drho_trend_.size() > 3)
+        {
+            drho_trend_.erase(drho_trend_.begin());
+        }
+        if (drho_trend_.size() == 3
+            && drho_trend_[1] > 1.2 * drho_trend_[0]
+            && drho_trend_[2] > 1.2 * drho_trend_[1])
+        {
+            alm_.dampen();
+            drho_trend_.clear();
+            GlobalV::ofs_running
+                << "[constraint] ALM dampen: drho growing three iterations "
+                   "(penalty too stiff) -> k halved (x"
+                << alm_.dampen_count() << ")\n";
+        }
+    }
     // Branch B: OUTER schedule (default) or a degraded INNER run -- the
     // per-iteration hook is inert, exactly as before this feature.
     if (!inner_active_)
@@ -1322,6 +1575,13 @@ void ConstraintLoop::print_audit_line(const int iter, const int step,
     // Becke-weighted q (II-1b instrument).
     audit_ = ConstraintAccounting::audit(*wg_, mu_, Q_, targets_, nelec_,
                                          kinds_, onsite_atom_);
+    // M4 ALM: the energy correction carries the penalty term
+    // sum_a (k_a/2)(Q_a - t_a)^2 on top of the accounting's sum_a mu(Q-t);
+    // the branch guard (G2) consumes the same helper, never its own formula.
+    if (alm_armed_)
+    {
+        audit_.e_con = alm_.energy_correction(mu_, Q_, targets_);
+    }
     last_audit_line_ = ConstraintAccounting::audit_line(audit_);
     // Branch: trust diagnostics are opt-in.  Appending them to the stored
     // line (rather than printing a separate line) keeps one machine-readable
@@ -1350,6 +1610,22 @@ void ConstraintLoop::final_report()
     GlobalV::ofs_running << "\n[constraint] final status: "
                          << final_status_line() << "\n";
     GlobalV::ofs_running << last_audit_line_ << "\n";
+    // M4 ALM: report the physical multipliers (the constant-potential labels)
+    // and the penalty gains alongside the standard status.
+    if (alm_armed_)
+    {
+        GlobalV::ofs_running << "[constraint] ALM: mu_phys =";
+        for (size_t a = 0; a < mu_eff_.size(); ++a)
+        {
+            GlobalV::ofs_running << " " << mu_eff_[a];
+        }
+        GlobalV::ofs_running << " Ry, k =";
+        for (const double kv : alm_.k())
+        {
+            GlobalV::ofs_running << " " << kv;
+        }
+        GlobalV::ofs_running << " Ry/e\n";
+    }
     // Module A (M1): the dipole block rides the final report; off by
     // default, so the historical output is byte-identical when disabled.
     if (dipole_report_)
@@ -1430,6 +1706,12 @@ void ConstraintLoop::compute_force(const double* const* rho,
     {
         return; // constraint off: no constraint force
     }
+    // M4: the force path consumes the same refreshed effective multiplier as
+    // the injector (mu itself on every non-ALM schedule).
+    if (!alm_armed_)
+    {
+        mu_eff_ = mu_;
+    }
     // Build the position-derivative grid lazily (M6 kernel input); the
     // loop is one-per-geometry, so this happens once per force evaluation.
     if (!wg_->derivatives_built())
@@ -1463,7 +1745,9 @@ void ConstraintLoop::compute_force(const double* const* rho,
     // read_dn*rho_dn), so a mixed charge+spin list reaches the kernel in one
     // call — the A4 loop-side two-pass masking is retired.  The kernel
     // aborts loudly on a mu/channel/buffer mismatch.
-    constraint::constraint_force(*wg_, rho, nspin, channels_, mu_, forcecon);
+    // M4: the force kernel must see the same multiplier the SCF felt; under
+    // ALM that is mu_eff_, which equals mu_ on every legacy schedule.
+    constraint::constraint_force(*wg_, rho, nspin, channels_, mu_eff_, forcecon);
 }
 
 } // namespace constraint

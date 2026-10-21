@@ -124,6 +124,13 @@ class MuSolver
     // measurement across geometries).
     double slope(const int i) const;
 
+    // M4 ALM: seed the retained response from a cold probe measurement.  The
+    // ALM does not call step() during its single-layer iterations, so without
+    // this hook the carried slope a warm geometry re-arms from would remain
+    // the conservative kappa_min fallback.  Values are sign-checked and
+    // clamped by the same rules as an accepted secant observation.
+    void seed_slope(const std::vector<double>& chi);
+
     // M3 C2/E1: force-reject the pending trial step and re-walk it with a
     // smaller trust radius.  Used by the magnetic branch anchor, which knows
     // the step was physically unacceptable even if its residual improved.
