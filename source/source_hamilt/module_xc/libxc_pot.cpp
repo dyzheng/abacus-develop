@@ -309,7 +309,7 @@ std::tuple<double,double,ModuleBase::matrix,ModuleBase::matrix> XC_Functional_Li
 #endif
         for( int ir=0; ir<nrxx; ++ir )
         {
-            if ( rho[ir]<rho_th || sqrt(std::abs(sigma[ir]))<grho_th || std::abs(kin_r[ir])<tau_th)
+            if ( rho[ir]<rho_th || std::abs(kin_r[ir])<tau_th)
             {
                 sgn[ir] = 0.0;
             }

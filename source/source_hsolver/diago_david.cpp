@@ -1,4 +1,7 @@
 #include "diago_david.h"
+#include <ATen/core/tensor_map.h>
+#include <type_traits>
+#include "source_io/module_parameter/parameter.h"
 
 #include "source_base/timer.h"                  // ModuleBase::timer::tick
 #include "source_base/tool_title.h"             // ModuleBase::TITLE
@@ -153,6 +156,21 @@ int DiagoDavid<T, Device>::diag_once(const HPsiFunc& hpsi_func,
     std::vector<int> pre_matrix_mv_m(nband, 1);
     this->planSchmidtOrth(nband, pre_matrix_mm_m, pre_matrix_mv_m);
 
+#if defined(__CUDA)
+    const bool block_qr = this->device == base_device::GpuDevice
+                          && std::is_same<Real, float>::value && !PARAM.globalv.use_uspp
+                          && diag_comm.nproc == 1;
+    if (block_qr)
+    {
+        for (int m = 0; m < nband; ++m)
+            syncmem_complex_op()(basis + dim*m, psi_in + m*ld_psi, dim);
+        // Form the basis without subtracting nearly equal norm estimates.
+        ct::kernels::lapack_geqrf_inplace<T, ct_Device>()(dim, nband, basis, dim);
+        spsi_func(basis, spsi, dim, nband);
+    }
+    else
+#endif
+    {
     for (int m = 0; m < nband; m++)
     {
         {
@@ -176,6 +194,8 @@ int DiagoDavid<T, Device>::diag_once(const HPsiFunc& hpsi_func,
             // phm_in->sPsi(basis + dim*m, &this->spsi[m * dim], dim, dim, 1);
             spsi_func(basis + dim*m, &this->spsi[m * dim], dim, 1);
         }
+    }
+
     }
 
     // end of SchmidtOrth and calculate H|psi>
@@ -545,6 +565,23 @@ void DiagoDavid<T, Device>::cal_grad(const HPsiFunc& hpsi_func,
         );
     }
 
+#if defined(__CUDA)
+    const bool block_qr = this->device == base_device::GpuDevice
+                          && std::is_same<Real, float>::value && !PARAM.globalv.use_uspp
+                          && diag_comm.nproc == 1;
+    if (block_qr)
+    {
+        // Project the new block once and orthogonalize its columns together.
+        ModuleBase::gemm_op<T, Device>()('N', 'N', dim, notconv, nbase,
+            this->neg_one, basis, dim, lagrange, nbase + notconv,
+            this->one, basis + dim*nbase, dim);
+        ct::kernels::lapack_geqrf_inplace<T, ct_Device>()(
+            dim, notconv, basis + dim*nbase, dim);
+        spsi_func(basis + dim*nbase, spsi + dim*nbase, dim, notconv);
+    }
+    else
+#endif
+    {
     for (int m = 0; m < notconv; m++)
     {
         this->SchmidtOrth(dim,
@@ -559,6 +596,8 @@ void DiagoDavid<T, Device>::cal_grad(const HPsiFunc& hpsi_func,
             spsi_func(basis + dim*(nbase + m), &spsi[(nbase + m) * dim], dim, 1);
         }
     }
+    }
+
     // calculate H|psi> for not convergence bands
     // hpsi_info dav_hpsi_in(&basis,
     //                       psi::Range(true, 0, nbase, nbase + notconv - 1),
@@ -658,7 +697,23 @@ void DiagoDavid<T, Device>::diag_zhegvx(const int& nbase,
             syncmem_var_h2d_op()(eigenvalue_gpu, this->eigenvalue, nbase_x);
 
             // heevx_op<T, Device>()(this->ctx, nbase, nbase_x, hcc, nband, eigenvalue_gpu, vcc);
-            ct::kernels::lapack_heevx<T, ct_Device>()(nbase, nbase_x, hcc, nband, eigenvalue_gpu, vcc);
+            if (std::is_same<Real, float>::value && !PARAM.globalv.use_uspp)
+            {
+                // Use double only for this single reduced eigensolve.
+                auto h64 = ct::TensorMap(const_cast<T*>(hcc), ct::DataTypeToEnum<T>::value,
+                                        ct::DeviceType::GpuDevice, {nbase, nbase_x}).cast<std::complex<double>>();
+                ct::Tensor v64(ct::DataType::DT_COMPLEX_DOUBLE, ct::DeviceType::GpuDevice, {nbase, nbase_x});
+                ct::Tensor e64(ct::DataType::DT_DOUBLE, ct::DeviceType::GpuDevice, {nbase_x});
+                ct::kernels::lapack_heevx<std::complex<double>, ct_Device>()(
+                    nbase, nbase_x, h64.data<std::complex<double>>(), nband, e64.data<double>(), v64.data<std::complex<double>>());
+                base_device::memory::cast_memory_op<T, std::complex<double>, Device, Device>()(
+                    vcc, v64.data<std::complex<double>>(), static_cast<size_t>(nband) * nbase_x);
+                base_device::memory::cast_memory_op<Real, double, Device, Device>()(eigenvalue_gpu, e64.data<double>(), nband);
+            }
+            else
+            {
+                ct::kernels::lapack_heevx<T, ct_Device>()(nbase, nbase_x, hcc, nband, eigenvalue_gpu, vcc);
+            }
 
             syncmem_var_d2h_op()(this->eigenvalue, eigenvalue_gpu, nbase_x);
             delmem_var_op()(eigenvalue_gpu);
@@ -766,6 +821,7 @@ void DiagoDavid<T, Device>::refresh(const int& dim,
     nbase = nband;
 
     setmem_complex_op()(hcc, 0, nbase_x * nbase_x);
+    setmem_complex_op()(vcc, 0, nbase_x * nbase_x);
 
     if (this->device == base_device::GpuDevice)
     {
