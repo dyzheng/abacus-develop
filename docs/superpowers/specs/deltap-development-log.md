@@ -5431,3 +5431,86 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - **下一步**：M3 关闭；M4 按设计 §5.1/5.4 的 ALM/外层调度推进，目标是在不提高
   `scf_nmax` 的前提下给最后一次 μ 更新留足完整 SCF 预算，并继续使用 C2 的
   Broyden 模型与 warm-start 状态。
+
+## 2026-10-21 (18): M4 ALM + 调度包实现与验证
+
+- **完成内容（plan `2026-10-21-m4-alm-scheduling.md` Task 1-8）**：
+  1. INPUT/Config：`constraint_mu_schedule=alm`、`constraint_alm_k`，
+     以及调度包参数 `constraint_trust_carry_jacobian`、
+     `constraint_budget_freeze`、`constraint_warm_start_running`。
+  2. `AlmController`：`arm`（k=kappa/|chi|，clamp）、`mu_eff`、
+     `energy_correction`、`update`、`damping`、`fuse_component`。
+  3. `ConstraintLoop`：冷探针 -> arm -> Newton μ0 -> fixed-mu settle ->
+     adjudicate -> 必要时罚势；暖几何二段割线；`mu_eff_` 统一注入/力/能量口径。
+  4. 调度包 A/B：J 跨几何携带、残差自适应探针、预算冻结、
+     RUNNING 帧暖启动、μ 移动时 `mix_reset()`。
+- **本轮稳定性修复（集成中发现，均为实测驱动）**：
+  1. **差分探针**：互补电荷片段的均匀探针是常数势平移，`dQ≈0`；改为零和
+     模式 `+1, -1/(n-1)`。R1 的 `chi` 从退化值恢复到 -0.58。
+  2. **滞后反馈增益**：单层每 SCF 迭代反馈密度滞后一拍；`K=k|chi|=7.5` 的
+     模长 0.94，100 步内不收敛。自动增益改为 0.5，并加 `alpha=1/(1+K)` 阻尼。
+     旧增益的失败签名：R1 帧 2 drho 0.1945 -> 1.033 -> 0.3339，k 被 dampen 到
+     0.1 仍 RUNNING。
+  3. **两阶段罚势**：探针/暖启后先跑 fixed-mu settle；残差仍超阈值才开罚势；
+     罚势在 `max(10*thr,1e-8)` 以下退出，避免追逐密度噪声。
+  4. **暖启动二段割线**：携带斜率可过期（R2 帧 2：0.58 vs 1.49），改为有帽
+     Newton + 本几何二段割线，重新 arm k。
+  5. **mixing reset**：每次 μ 移动置 `trust_rollback_pending_`；R2 无 reset 时
+     出现 0.25 drho 瞬态。
+  6. **冻结尾审计**：`final_report()` 重放 `last_audit_line_`；预算冻结未刷新时
+     末审计是上一次 outer step 的旧 residual（0.0111），与冻结判据 3.265e-4
+     不一致。冻结路径补 `print_audit(iter)`。
+  7. **探针幅度**：0.02 -> 0.005 Ry；探针+settle 必须在 R2 的 100 步内留出
+     μ 修正余量，0.005 的 dQ~3e-3 e 仍远高于 SCF 噪声。
+  8. **收敛后 μ 标签**：两阶段 settle 可能关掉罚势，最后 `observe()` 的
+     `mu_eff_` 是裸 μ；CONVERGED 分支现重算 `mu + k(Q-t)`，否则 final report
+     和力核漏掉罚势项。新增 `AlmConvergedLabelIncludesPenaltyTerm`；R3 的 FD
+     差从 0.002673 降到 0.001414 eV/e。
+- **提交**：计划 `625dfbf10`；Task 1-6 分别 `7e6dc4714`、`c7826049d`、
+  `f4a8ed494`、`ab9aae081`、`39fac3739`；本轮稳定性修复、测试和文档按
+  Task 粒度追加提交。
+- **单元验证**：`ctest -R constraint` **13/13 PASS**，62.92 s；
+  `abacus_basic_para` 构建成功。新增 `LaggedPotentialMapRate`、
+  `DampingIdentityWhenUnarmed`、`AlmDifferentialProbeMeasuresRelativeResponse`、
+  `AlmConvergedLabelIncludesPenaltyTerm`。
+- **集成结果（h2o_dimer LCAO，np8，scf_nmax=100，未提高上限）**：
+
+  | 运行 | 帧 SCF | 状态 | `mu_phys` / Ry | 备注 |
+  |---|---|---|---|---|
+  | R1 0.001 e CG | 68 / 37 | CONVERGED / CONVERGED | -0.00172379 / -0.00253023 | M3 基线 75/46；μ 偏差 0.150% / 0.0127% |
+  | R2 0.01 e BFGS | 71 / 97 | CONVERGED / CONVERGED | -0.0172658 / -0.0152072 | M3 帧 2 RUNNING（84/100，res 3.265e-4）；M4 帧 2 res 7.691e-5 |
+  | R3 三点 FD | 68 / 71 / 87 | 全部 CONVERGED | -1.64e-8 / -0.0172658 / -0.0346012 | FD 0.471239 eV/e vs -2μ 0.469825，差 0.001414 < 0.02 |
+  | R4 spin 0.1 μB | 90 | CONVERGED | -0.0830393 | MAG_ANCHOR 拒绝 0；res 7.430e-5 |
+  | R5 outer+包 B | 84 / 96 / 57 | CONVERGED / RUNNING(budget) / CONVERGED | carried 0.03466 / 0.03016 | 帧 2 冻结 residual 3.265e-4；帧 3 RUNNING 暖启 |
+  | R6 progressive | 59 / 41 | CONVERGED / CONVERGED | -- | M3 C3 92/46；总 SCF -27.5% |
+
+  R5 帧 2 的 SCF 本身已收敛（drho 7.31e-8，`#SCF IS CONVERGED#`），RUNNING 仅表示
+  外层靶值未验证；没有出现 SCF 未收敛的帧。
+- **Bug/fix list**：
+  1. 均匀探针在互补片段上 `dQ≈0` -> 零和差分探针（含 loop 级解析 mock 回归）。
+  2. 单层滞后反馈 K=7.5 不收敛 -> K=0.5 + `alpha=1/(1+K)` 阻尼；测试注释同步
+     修正“raw alpha=1 的放大率是每两步 K，不是每步 6.5”。
+  3. 旧探针密度上立刻开罚势会 5 倍过冲 -> 两阶段 settle/adjudicate。
+  4. 跨几何携带斜率过期 -> 有帽 Newton + 本几何二段割线。
+  5. μ 移动后 Broyden 历史跨势外推 -> `mix_reset()`。
+  6. 预算冻结尾审计重放旧行 -> 冻结时 `print_audit(iter)`。
+  7. R4 scratch INPUT 的 `PP_ORB` 相对路径少一级，首跑报错；修正为
+     `../../../PP_ORB`，这不是代码问题。
+  8. 两阶段 settle 关罚势后收敛标签是裸 μ -> CONVERGED 分支重算
+     `mu + k(Q-t)`；新增 `AlmConvergedLabelIncludesPenaltyTerm`。
+- **文件**：`source/source_estate/module_constraint/constraint_alm.{h,cpp}`、
+  `constraint_io.h`、`constraint_loop.{h,cpp}`、
+  `test/constraint_{alm,io,loop}_test.cpp`；
+  `docs/superpowers/plans/2026-10-21-m4-alm-scheduling.md`；
+  `docs/superpowers/specs/2026-10-21-m4-alm-test.md`（新建）；
+  本日志。
+- **Bohrium 移交清单**：
+  1. 性质 2 重验（ALM）：LiCl PW 约束力 FD（13 点，FD 腿用重优化协议）+
+     LiNiO₂ 电荷/自旋力矩 FD（APNS）；判据 <0.0129 eV/Å、<0.02 eV/e、
+     <0.006 eV/μB；参考成本 ~5 元。
+  2. 性质 2 补账：E1+E2+信赖域下重跑 APNS 自旋三点，closure 16/19 -> 19/19；
+     `constraint_thr 5e-5` 预案保留。
+  3. 性质 4 重验（ALM）：LiCl 500 fs 约束 MD（δ=+0.1）测 `<mu_phys>`，
+     与静态值对照（5% 判据）；先跑 50 fs 冒烟，再决定 68 元/14 h 全量。
+- **下一步**：M4 关闭；进入性质 2/4 的 Bohrium 重验与 M5
+  （ALM μ 时序预测 + MD warm-state 持久化）。

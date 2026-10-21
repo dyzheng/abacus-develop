@@ -1298,3 +1298,21 @@ git commit -m "docs(constraint): M4 ALM + scheduling test round"
 3. **类型一致性**：`AlmController::{resize,arm,mu_eff,update,energy_correction,dampen,k,fuse_component,reset_fuse}`、`ConstraintLoop::{mu_eff,mu_phys,alm_armed,alm_k,schedule,budget_frozen}`、`MuSolver::set_carry_jacobian`、`ConstraintConfig::{alm_k,trust_carry_jacobian,budget_freeze,warm_start_running}` 跨 Task 一致。✅
 4. **已知风险**：①线性 mock 下 Newton μ0 精确，单元层测不到非线性收缩——由 Task 2 的 ContractionAndMuPhysExact（允许 5 次更新）与 R2 集成覆盖；②alm+warm+delta 的 Q_ref 反推沿用 M2 公式（κ 口径一致）；③budget freeze 的 est 估计在首帧无历史（last_rebuild_cost_=0 → est=15 地板，保守）。
 5. **与 M3 评审建议的映射**：#1 ALM=Task 2/3；#2 自适应探针=Task 5；#3 J 携带=Task 5；#4 μ 时序预测=**未纳入**（MD 生产强化，留待 M5 后评估）；#5 优雅收尾+RUNNING 暖启=Task 6；#6 扫描工作流=**未纳入**（属工作流层，与 M5 无关，建议单独立项）。
+
+---
+
+## 实施修订记录（2026-10-21，集成实测驱动）
+
+计划中的公式/参数在实现与 R1-R6 集成后被以下实测结论修订；代码注释、
+`docs/superpowers/specs/2026-10-21-m4-alm-test.md` 与开发日志同步更新。
+
+| 项 | 计划值 | 实现值 | 依据 |
+|---|---|---|---|
+| 自动增益 `k*|chi|` | 7.5（设计 §6.2 的 5-10） | 0.5 | 单层每 SCF 反馈的密度滞后一拍；滞后映射模长 `sqrt(K/(1+K))`，K=7.5 为 0.94，R1 在 100 步内不收敛；K=0.5 为 0.58 |
+| 势更新 | 每迭代 `mu+k(Q-t)`，不 reset | `alpha=1/(1+K)` 阻尼 + μ 移动时 `mix_reset()` | R1 旧增益出现 drho 0.1945 -> 1.033 -> 0.3339 的 2-cycle；R2 无 reset 时 0.25 drho 瞬态 |
+| 探针幅度 | 0.02 Ry | 0.005 Ry | 0.02 的探针+settle 在 R2 的 100 步预算内没有 μ 修正余量；0.005 的 dQ~3e-3 e 仍远高于噪声 |
+| 罚势时序 | 探针 close 后立即生效 | 先 fixed-mu settle，adjudicate 后残差仍大才开罚势 | 在旧探针密度上开罚势会 5 倍过冲，R1 首版耗尽 100 步 |
+| 暖启动 | 携带斜率直接 Newton | 有帽 Newton + 本几何二段割线 | R2 帧 2 携带 |chi|=0.58、真实 1.49，无帽步过冲 2.5 倍 |
+| R4 用例 | 212_NAO_constraint_h2o_spin | `tests/constraint_fd_force/cases/` 的 spin 用例 | 仓库内无 212_NAO 目录；现有 spin FD 用例覆盖 nspin=2、delta 0.1 μB、mag anchor、ALM |
+| 预算冻结审计 | 未规定 | 冻结时 `print_audit(iter)` | `final_report()` 重放 `last_audit_line_`，不刷新会打印上一次 outer step 的旧 residual（R5：0.0111 vs 3.265e-4） |
+| 收敛后 μ 标签 | `mu_eff` 即物理乘子 | CONVERGED 分支重算 `mu+k(Q-t)` | 两阶段 settle 可能关掉罚势，最后 `observe()` 的 `mu_eff` 是裸 μ；能量/力仍需要罚势项 |
