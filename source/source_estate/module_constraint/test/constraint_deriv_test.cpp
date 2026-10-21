@@ -11,6 +11,7 @@
 #include "source_base/module_grid/partition.h"
 #include "source_base/module_grid/radial.h"
 #include "source_estate/module_constraint/constraint_deriv.h"
+#include "source_estate/module_constraint/constraint_dipole.h"
 #include "source_estate/module_constraint/constraint_observe.h"
 
 using ModuleBase::PI;
@@ -772,5 +773,67 @@ TEST_F(ConstraintDerivTest, MixedForceNewtonThirdLaw)
             ref -= mu[alpha] * dQdt[alpha][d];
         }
         EXPECT_NEAR(sum, ref, 1e-9) << "component " << d;
+    }
+}
+
+// M5: a saw dipole force is the ionic term -mu*Z*saw' on top of the density
+// derivative term.  Its density weight is grid-fixed, so with a nonzero
+// uniform density the result still has to be exactly -mu*Z on the ramp.
+TEST_F(ConstraintDerivTest, DipoleSawForceIsIonicOffsetOnly)
+{
+    ucell->atoms[0].ncpp.zv = 6.0;
+    ucell->atoms[1].ncpp.zv = 1.0;
+    ModulePW::PW_Basis local_pw;
+    local_pw.initgrids(1.0, ucell->latvec, 32, 32, 32);
+    local_pw.distribute_r();
+    std::vector<double> rho(local_pw.nrxx, 0.2);
+    const double* rp[1] = {rho.data()};
+    // pos_max=0.8 keeps all atoms (z_frac ~0.47) on the rising ramp.
+    constraint::WeightGrid wg(*ucell, &local_pw, radii,
+                              constraint::WeightType::DipoleSaw, 0.0, 2,
+                              0.8, 0.1);
+    wg.build();
+    wg.build_derivatives();
+    const std::vector<constraint::ChannelProfile> channels(
+        1, constraint::build_channel_profile(constraint::ConstraintKind::Dipole));
+    const std::vector<double> mu = {0.3};
+    ModuleBase::matrix F(ucell->nat, 3);
+    constraint::constraint_force(wg, rp, 1, channels, mu, F);
+    for (int J = 0; J < ucell->nat; ++J)
+    {
+        const double zv = (J == 0) ? 6.0 : 1.0;
+        EXPECT_NEAR(F(J, 2), -0.3 * zv, 1e-12) << "J=" << J;
+        EXPECT_DOUBLE_EQ(F(J, 0), 0.0);
+        EXPECT_DOUBLE_EQ(F(J, 1), 0.0);
+    }
+}
+
+// Molecular frame: the same all-zero density derivative leaves only
+// -mu*Z on the selected Cartesian axis.
+TEST_F(ConstraintDerivTest, DipoleMolecularForceAxisOnly)
+{
+    ucell->atoms[0].ncpp.zv = 6.0;
+    ucell->atoms[1].ncpp.zv = 1.0;
+    ModulePW::PW_Basis local_pw;
+    local_pw.initgrids(1.0, ucell->latvec, 32, 32, 32);
+    local_pw.distribute_r();
+    std::vector<double> rho(local_pw.nrxx, 0.2);
+    const double* rp[1] = {rho.data()};
+    constraint::WeightGrid wg(*ucell, &local_pw, radii,
+                              constraint::WeightType::DipoleMolecular, 0.0,
+                              0);
+    wg.build();
+    wg.build_derivatives();
+    const std::vector<constraint::ChannelProfile> channels(
+        1, constraint::build_channel_profile(constraint::ConstraintKind::Dipole));
+    const std::vector<double> mu = {-0.4};
+    ModuleBase::matrix F(ucell->nat, 3);
+    constraint::constraint_force(wg, rp, 1, channels, mu, F);
+    for (int J = 0; J < ucell->nat; ++J)
+    {
+        const double zv = (J == 0) ? 6.0 : 1.0;
+        EXPECT_NEAR(F(J, 0), 0.4 * zv, 1e-12) << "J=" << J;
+        EXPECT_DOUBLE_EQ(F(J, 1), 0.0);
+        EXPECT_DOUBLE_EQ(F(J, 2), 0.0);
     }
 }

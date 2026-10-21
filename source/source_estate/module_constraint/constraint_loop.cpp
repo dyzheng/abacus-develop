@@ -142,6 +142,10 @@ void ConstraintLoop::reset()
     frag_a_ = ModuleBase::Vector3<double>(0.0, 0.0, 0.0);
     frag_b_ = ModuleBase::Vector3<double>(0.0, 0.0, 0.0);
     frag_valid_ = false;
+    dipole_constraint_ = false;
+    dipole_constraint_auto_saw_ = false;
+    dipole_constraint_saw_resolved_ = true;
+    dipole_constraint_saw_live_ = 0.5;
 }
 
 void ConstraintLoop::init(const UnitCell& ucell,
@@ -154,6 +158,14 @@ void ConstraintLoop::init(const UnitCell& ucell,
     // Legacy entry (pre-A4 callers / unit tests): derive a homogeneous
     // per-constraint list from the single-type cfg so every consumer below
     // reads only the specs — there is no second loop path to drift.
+    // Guard: the legacy cfg has no dipole frame/axis fields, so mapping its
+    // type string to a kind would silently lose the coordinate semantics.
+    if (cfg.type == "dipole")
+    {
+        ModuleBase::WARNING_QUIT("ConstraintLoop::init",
+            "dipole constraints require the specs-bearing init overload "
+            "(frame/axis live on ConstraintSpec)");
+    }
     std::vector<ConstraintSpec> specs;
     const ConstraintKind kind = (cfg.type == "spin")
                                     ? ConstraintKind::Spin
@@ -184,6 +196,19 @@ void ConstraintLoop::init(const UnitCell& ucell,
     // previous geometry, only with an unchanged constraint list.
     if (warm_start_eligible(cfg, specs, istep))
     {
+        // Guard: a warm geometry injects its carried nonzero mu before the
+        // first density of this geometry exists, so an auto saw plane would
+        // be resolved too late (after that first potential was built).
+        if (specs.size() == 1
+            && specs[0].kind == ConstraintKind::Dipole
+            && specs[0].dipole_frame == "saw"
+            && specs[0].dipole_saw_pos < 0.0)
+        {
+            ModuleBase::WARNING_QUIT("ConstraintLoop::init",
+                "a warm-started dipole saw constraint requires an explicit "
+                "saw_pos (the first carried-mu injection precedes the first "
+                "density observation)");
+        }
         warm_reinit(ucell, rho_basis, cfg, specs, radii, nelec);
         return;
     }
@@ -247,6 +272,14 @@ void ConstraintLoop::init(const UnitCell& ucell,
     for (const ConstraintSpec& s : specs_)
     {
         json_fixed = json_fixed && s.fixed_mu;
+    }
+    // Guard: both fixed-mu entry points inject in SCF iteration 1, before
+    // the first observe() can resolve an automatic saw plane.
+    if (dipole_constraint_auto_saw_
+        && (json_fixed || std::getenv("ABA_CONSTRAINT_FIXED_MU") != nullptr))
+    {
+        ModuleBase::WARNING_QUIT("ConstraintLoop::init",
+            "a fixed-mu dipole saw constraint requires an explicit saw_pos");
     }
     if (json_fixed)
     {
@@ -356,16 +389,47 @@ void ConstraintLoop::build_geometry(
     const std::vector<double>& radii,
     const std::vector<ConstraintSpec>& specs)
 {
-    // Build the shared weight field (M1) once per geometry.  The fragment
-    // map comes from the per-constraint fragments of the spec list.
-    wg_.reset(new WeightGrid(ucell, rho_basis, radii, WeightType::Becke));
-    std::vector<std::vector<int>> atom_map;
-    for (const ConstraintSpec& spec : specs)
+    ucell_ = &ucell; // per-geometry; the esolver outlives the loop usage
+    dipole_constraint_ = (specs.size() == 1
+                          && specs[0].kind == ConstraintKind::Dipole);
+    dipole_constraint_auto_saw_ = false;
+    dipole_constraint_saw_resolved_ = true;
+    // Branch A (M5): one global dipole uses a dedicated analytic weight
+    // source.  Its constraint count is one, independent of the atom count.
+    if (dipole_constraint_)
     {
-        atom_map.push_back(spec.atoms);
+        const ConstraintSpec& spec = specs[0];
+        const WeightType wt = (spec.dipole_frame == "saw")
+                                  ? WeightType::DipoleSaw
+                                  : WeightType::DipoleMolecular;
+        // An automatic saw plane gets a placeholder until observe() sees the
+        // first density; the reference phase has mu = 0, so the placeholder
+        // never enters a Hamiltonian.
+        dipole_constraint_auto_saw_ = (spec.dipole_frame == "saw"
+                                       && spec.dipole_saw_pos < 0.0);
+        dipole_constraint_saw_resolved_ = !dipole_constraint_auto_saw_;
+        dipole_constraint_saw_live_ = (spec.dipole_saw_pos >= 0.0)
+                                          ? spec.dipole_saw_pos
+                                          : 0.5;
+        wg_.reset(new WeightGrid(ucell, rho_basis, radii, wt, 0.0,
+                                 spec.dipole_axis,
+                                 dipole_constraint_saw_live_,
+                                 spec.dipole_saw_pos_dec));
+        wg_->build();
     }
-    wg_->set_constraint_atoms(atom_map);
-    wg_->build();
+    // Branch B: Becke charge/spin weights keep the per-constraint fragment
+    // map exactly as before.
+    else
+    {
+        wg_.reset(new WeightGrid(ucell, rho_basis, radii, WeightType::Becke));
+        std::vector<std::vector<int>> atom_map;
+        for (const ConstraintSpec& spec : specs)
+        {
+            atom_map.push_back(spec.atoms);
+        }
+        wg_->set_constraint_atoms(atom_map);
+        wg_->build();
+    }
 
     // ---- Module A (M1) passive dipole reporter arming --------------------
     // Must run before the fixed-mu early return in init() so FIXED_MU runs
@@ -377,7 +441,6 @@ void ConstraintLoop::build_geometry(
     saw_resolved_ = false;
     dipole_ref_valid_ = false;
     delta_v_latest_ = 0.0;
-    ucell_ = &ucell; // per-geometry; the esolver outlives the loop usage
     // Branch: reporter armed -> resolve the origin and the fragment pair.
     if (dipole_report_)
     {
@@ -507,7 +570,11 @@ bool ConstraintLoop::warm_start_eligible(
     for (size_t a = 0; a < specs.size(); ++a)
     {
         if (specs[a].kind != specs_[a].kind
-            || specs[a].atoms != specs_[a].atoms)
+            || specs[a].atoms != specs_[a].atoms
+            || specs[a].dipole_frame != specs_[a].dipole_frame
+            || specs[a].dipole_axis != specs_[a].dipole_axis
+            || specs[a].dipole_saw_pos != specs_[a].dipole_saw_pos
+            || specs[a].dipole_saw_pos_dec != specs_[a].dipole_saw_pos_dec)
         {
             return false;
         }
@@ -818,6 +885,32 @@ void ConstraintLoop::observe(const int iter, const double* const* rho,
     if (!enabled())
     {
         return;
+    }
+    // M5: resolve an automatic saw plane on the first density of this cold
+    // geometry.  This runs before the integral so the reference Q and every
+    // later injection use the same weight field.
+    if (dipole_constraint_auto_saw_ && !dipole_constraint_saw_resolved_)
+    {
+        dipole_constraint_saw_live_
+            = DipoleObserver::lowest_density_plane(wg_->rho_basis(), rho,
+                                                   nspin);
+        wg_->set_dipole_saw_pos(dipole_constraint_saw_live_);
+        dipole_constraint_saw_resolved_ = true;
+        GlobalV::ofs_running
+            << "[constraint] dipole saw plane resolved: pos_max="
+            << dipole_constraint_saw_live_
+            << " (auto), pos_dec=" << specs_[0].dipole_saw_pos_dec << "\n";
+        const double dist = DipoleObserver::min_atom_decay_distance(
+            *ucell_, dipole_constraint_saw_live_,
+            specs_[0].dipole_saw_pos_dec);
+        // Branch: too close to an atom -> the saw dipole is ill-defined
+        // there; warn but keep the resolved plane (the user can set it).
+        if (dist < 1.0)
+        {
+            ModuleBase::WARNING("ConstraintLoop::observe",
+                "the auto-placed dipole saw plane is within 1 Bohr of an "
+                "atom; set saw_pos explicitly in the target file");
+        }
     }
     // Stage-A reading: every alpha reads with its own channel signs, so a
     // mixed charge+spin list is observed in one integral (A2 core).
@@ -1862,6 +1955,34 @@ void ConstraintLoop::final_report()
         }
         GlobalV::ofs_running << " Ry/e\n";
     }
+    // M5: dipole-coordinate frame summary.  The audit line above already
+    // carries Q/t/residual; this line makes the frame and the saw plane
+    // explicit so an integration log can be checked without the JSON file.
+    if (dipole_constraint_ && !specs_.empty())
+    {
+        const ConstraintSpec& s = specs_[0];
+        GlobalV::ofs_running << "[constraint] dipole coordinate: frame="
+                             << s.dipole_frame << ", axis="
+                             << ((s.dipole_axis == 0)
+                                     ? "x"
+                                     : ((s.dipole_axis == 1) ? "y" : "z"))
+                             << ", target=" << targets_[0] << " e*Bohr";
+        if (s.dipole_frame == "saw")
+        {
+            GlobalV::ofs_running << ", saw_pos="
+                                 << dipole_constraint_saw_live_
+                                 << ", saw_pos_dec=" << s.dipole_saw_pos_dec;
+            if (!Q_.empty())
+            {
+                const double dv = DipoleObserver::potential_drop(Q_[0],
+                                                                 *ucell_);
+                GlobalV::ofs_running << ", deltaV="
+                                     << dv * ModuleBase::Hartree_to_eV
+                                     << " V";
+            }
+        }
+        GlobalV::ofs_running << "\n";
+    }
     // Module A (M1): the dipole block rides the final report; off by
     // default, so the historical output is byte-identical when disabled.
     if (dipole_report_)
@@ -1890,7 +2011,13 @@ std::string ConstraintLoop::final_status_line() const
     }
     else if (status_ == MuStatus::CONVERGED)
     {
-        os << "CONVERGED (targets reached within " << cfg_.thr << " e)";
+        // Branch: the dipole target is a dipole moment in e*Bohr, not a
+        // charge in e; keep the status line unit-honest.
+        const bool dipole = !kinds_.empty()
+                            && kinds_[0] == ConstraintKind::Dipole;
+        const char* unit = dipole ? "e*Bohr" : "e";
+        os << "CONVERGED (targets reached within " << cfg_.thr << " "
+           << unit << ")";
     }
     else if (status_ == MuStatus::UNREACHABLE)
     {

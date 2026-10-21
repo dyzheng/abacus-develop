@@ -172,6 +172,25 @@ void constraint_force(const WeightGrid& wg,
 #ifdef __MPI
     Parallel_Reduce::reduce_pool(f.data(), static_cast<int>(f.size()));
 #endif
+    // Branch: a dipole constraint carries an explicit-coordinate ionic
+    // offset.  Its density weight is grid-fixed (dw == 0), so this offset
+    // derivative is the complete force.  Add it AFTER the allreduce: every
+    // rank knows the same atomic positions, so adding before would multiply
+    // the term by the pool size.
+    if (wg.is_dipole())
+    {
+        for (int alpha = 0; alpha < nalpha; ++alpha)
+        {
+            for (int J = 0; J < nat; ++J)
+            {
+                for (int d = 0; d < 3; ++d)
+                {
+                    f[J * 3 + d] -= mu[alpha]
+                        * wg.dipole_atom_offset_derivative(alpha, J, d);
+                }
+            }
+        }
+    }
     for (int i = 0; i < nat * 3; ++i)
     {
         force.c[i] += f[i];

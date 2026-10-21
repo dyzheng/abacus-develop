@@ -25,6 +25,7 @@ InfoNonlocal::~InfoNonlocal()
 {
 }
 #include "source_estate/module_constraint/constraint_deriv.h"
+#include "source_estate/module_constraint/constraint_dipole.h"
 #include "source_estate/module_constraint/constraint_loop.h"
 
 using ModuleBase::PI;
@@ -1511,6 +1512,132 @@ TEST_F(ConstraintLoopTest, DipoleReportDefaultOff)
     EXPECT_FALSE(qd_valid);
 }
 
+// M5 loop-level saw constraint: the observed Q is the saw dipole (ionic
+// offset + density integral), the secant reaches the target, and the force
+// reduces to the analytic -mu*Z*saw' ionic term.
+TEST_F(ConstraintLoopTest, DipoleSawConstraintLoop)
+{
+    ucell->atoms[0].ncpp.zv = 6.0;
+    ucell->atoms[1].ncpp.zv = 1.0;
+    constraint::ConstraintSpec s;
+    s.kind = constraint::ConstraintKind::Dipole;
+    s.chan = constraint::build_channel_profile(s.kind);
+    s.atoms = {0, 1, 2};
+    s.target = 0.5;
+    s.mu_max = 2.0;
+    s.dipole_frame = "saw";
+    s.dipole_axis = 2;
+    s.dipole_saw_pos = 0.9; // decay [0.9, 0.95], atoms at z_frac 0.5
+    s.dipole_saw_pos_dec = 0.05;
+    constraint::ConstraintConfig cfg;
+    cfg.enabled = true;
+    cfg.type = "dipole";
+    cfg.weight_type = "becke";
+    cfg.target_mode = "delta";
+    cfg.mu_max = 2.0;
+    cfg.thr = 1e-6;
+    cfg.step_max = 1.0;
+    cfg.step_probe = 0.0;
+
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    loop.init(*ucell, rhopw, cfg, {s}, radii, 10.0, 0);
+    ASSERT_TRUE(loop.enabled());
+    ASSERT_TRUE(loop.dipole_constraint());
+    ASSERT_EQ(loop.weight_grid().nconstraint(), 1);
+    const double* ref_ptr[1] = {rho_ref.data()};
+    loop.observe(1, ref_ptr, 1);
+    const double q_ref = loop.charges()[0];
+    EXPECT_NEAR(q_ref, constraint::DipoleObserver::saw_dipole(
+                           *ucell, rhopw, ref_ptr, 1, 0.9, 0.05), 1e-9);
+    bool conv = true;
+    loop.on_scf_converged(2, conv);
+    ASSERT_FALSE(conv);
+
+    const double chi = -1.0;
+    const constraint::WeightGrid& g = loop.weight_grid();
+    const std::vector<double>& w = g.constraint_weight(0);
+    double S = 0.0;
+    for (int ir = 0; ir < rhopw->nrxx; ++ir)
+    {
+        S += w[ir] * w[ir];
+    }
+    S *= dV;
+    ASSERT_GT(S, 0.0);
+    auto fill = [&](const std::vector<double>& mu,
+                    std::vector<double>& rho) {
+        rho = rho_ref;
+        for (int ir = 0; ir < rhopw->nrxx; ++ir)
+        {
+            rho[ir] += chi * mu[0] * w[ir] / S;
+        }
+    };
+    int iter = 3;
+    int guard = 0;
+    std::vector<double> rho;
+    while (loop.status() == constraint::MuStatus::RUNNING && guard < 20)
+    {
+        fill(loop.mu(), rho);
+        const double* rp[1] = {rho.data()};
+        loop.observe(iter, rp, 1);
+        conv = true;
+        loop.on_scf_converged(iter, conv);
+        ++iter;
+        ++guard;
+    }
+    ASSERT_EQ(loop.status(), constraint::MuStatus::CONVERGED);
+    EXPECT_NEAR(loop.charges()[0], loop.targets()[0], cfg.thr);
+    EXPECT_NEAR(loop.mu()[0], (loop.targets()[0] - q_ref) / chi, 1e-5);
+    EXPECT_NE(loop.last_audit_line().find("kind=dipole"), std::string::npos);
+    EXPECT_NE(loop.final_status_line().find("e*Bohr"), std::string::npos);
+
+    fill(loop.mu(), rho);
+    const double* rp[1] = {rho.data()};
+    ModuleBase::matrix F(ucell->nat, 3);
+    loop.compute_force(rp, 1, F);
+    EXPECT_NEAR(F(0, 2), -loop.mu()[0] * 6.0, 1e-12);
+    EXPECT_NEAR(F(1, 2), -loop.mu()[0] * 1.0, 1e-12);
+    EXPECT_NEAR(F(2, 2), -loop.mu()[0] * 1.0, 1e-12);
+    EXPECT_DOUBLE_EQ(F(0, 0), 0.0);
+    EXPECT_DOUBLE_EQ(F(0, 1), 0.0);
+}
+
+// Automatic saw placement is resolved from the first density, before the
+// reference Q is integrated, and the WeightGrid is rebuilt in place.
+TEST_F(ConstraintLoopTest, DipoleSawAutoPlaneResolvedOnFirstObservation)
+{
+    ucell->atoms[0].ncpp.zv = 6.0;
+    ucell->atoms[1].ncpp.zv = 1.0;
+    constraint::ConstraintSpec s;
+    s.kind = constraint::ConstraintKind::Dipole;
+    s.chan = constraint::build_channel_profile(s.kind);
+    s.atoms = {0, 1, 2};
+    s.target = 0.0;
+    s.mu_max = 2.0;
+    s.dipole_frame = "saw";
+    s.dipole_axis = 2;
+    s.dipole_saw_pos = -1.0; // auto
+    s.dipole_saw_pos_dec = 0.1;
+    constraint::ConstraintConfig cfg;
+    cfg.enabled = true;
+    cfg.type = "dipole";
+    cfg.target_mode = "delta";
+    cfg.thr = 1e-6;
+
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    loop.init(*ucell, rhopw, cfg, {s}, radii, 10.0, 0);
+    ASSERT_TRUE(loop.dipole_constraint());
+    const double* rp[1] = {rho_ref.data()};
+    loop.observe(1, rp, 1);
+    const double resolved = loop.weight_grid().dipole_saw_pos();
+    const double expected_plane = constraint::DipoleObserver::lowest_density_plane(
+        rhopw, rp, 1);
+    EXPECT_DOUBLE_EQ(resolved, expected_plane);
+    EXPECT_NEAR(loop.charges()[0],
+                constraint::DipoleObserver::saw_dipole(
+                    *ucell, rhopw, rp, 1, resolved, s.dipole_saw_pos_dec),
+                1e-9);
+}
+
 // Saw frame: only p_z is physical.  The fragment centers carry a lateral
 // offset (dx = -4, dz = -5 Bohr); init must project them onto the z axis so
 // q_dip = dp_z / d_z, not the diluted 3D value dp.d/|d|^2.
@@ -2332,6 +2459,9 @@ TEST_F(ConstraintLoopTest, AlmConvergedLabelIncludesPenaltyTerm)
     // Reference close armed the cold probe at the zero-sum pattern.
     ASSERT_FALSE(loop.alm_armed());
     ASSERT_NE(loop.mu()[0], 0.0);
+    // The reference close deliberately held the SCF open (conv = false); the
+    // probe below models the NEXT converged SCF, so reset the incoming flag.
+    conv = true;
 
     // Probe close at the measured response: arms k and seeds the Newton mu.
     const constraint::WeightGrid& g = loop.weight_grid();

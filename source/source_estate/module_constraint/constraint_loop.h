@@ -167,6 +167,7 @@ class ConstraintLoop
     LoopPhase phase() const { return phase_; }
     MuStatus status() const { return status_; }
     bool fixed_mu_mode() const { return fixed_mu_; }
+    bool dipole_constraint() const { return dipole_constraint_; }
     int outer_steps() const { return outer_steps_; }
     // M4 scheduling pack B diagnostics: the SCF converged on the last frame
     // but mu was frozen because another update could not fit scf_nmax.
@@ -400,6 +401,12 @@ class ConstraintLoop
     ModuleBase::Vector3<double> frag_a_{0.0, 0.0, 0.0};
     ModuleBase::Vector3<double> frag_b_{0.0, 0.0, 0.0};
     bool frag_valid_ = false;
+    // M5 dipole-coordinate state.  The WeightGrid itself carries the frame;
+    // these flags only govern lazy auto plane resolution and the log/report.
+    bool dipole_constraint_ = false;
+    bool dipole_constraint_auto_saw_ = false;
+    bool dipole_constraint_saw_resolved_ = true;
+    double dipole_constraint_saw_live_ = 0.5;
     // Experiment switch (default off): when ABA_CONSTRAINT_FIXED_MU is set,
     // the multiplier is frozen at the env value and the outer secant loop
     // is disabled (constraint potential acts as a fixed external potential).
