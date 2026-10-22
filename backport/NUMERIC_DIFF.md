@@ -40,7 +40,10 @@ if regenerated:
 - `9db3ac422`: double host accumulation of k-point rho/tau on GPU single.
   LTS limitation: enabled only for the norm-conserving path
   (`!double_grid && !use_uspp`); USPP keeps the previous behaviour until
-  the accel USPP/charge-density refactor is ported.
+  the accel USPP/charge-density refactor is ported. Measured on the custom
+  PBE/SCAN cases: PBE energy and stress improve; SCAN energy improves but
+  the stress error grows from ~0.11 to ~0.59 kbar (~0.005% of the
+  ~12,500 kbar stress).
 - `f5f86a5a0`: blocked single-precision CGEMM for k > 2048.
 - `4b584d86d`, `e135fb721`: GPU-single reduced Davidson solve in double.
 - `6d1350db8`: float GPU instantiations / FPTYPE lambda.
