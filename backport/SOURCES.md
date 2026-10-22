@@ -106,11 +106,11 @@ GPU integration (4 MPI x 1 OMP, CUDA):
 
 Single precision GPU vs double CPU (custom cases, 1 MPI x 1 OMP):
 - PBE: dE = 0.147 meV/atom, max force error ~0.006 eV/A,
-  max stress error ~0.18 kbar. Baseline LTS errors were 0.150 meV/atom
+  max stress error ~0.24 kbar. Baseline LTS errors were 0.150 meV/atom
   and ~0.48 kbar, so energy/stress improve.
 - SCAN (nspin=1, cal_stress): dE = 0.135 meV/atom (baseline 0.139),
-  max force error ~0.008 eV/A, max stress error ~0.59 kbar
-  (baseline ~0.11 kbar). The larger SCAN stress deviation comes from the
+  max force error ~0.0097 eV/A, max stress error ~0.59 kbar
+  (baseline ~0.22 kbar). The larger SCAN stress deviation comes from the
   double-precision k-point tau accumulation (WP3-2); it is ~0.005% of the
   ~12,500 kbar stress and is recorded here as a known trade-off.
 
