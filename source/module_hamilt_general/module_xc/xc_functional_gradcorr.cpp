@@ -643,6 +643,36 @@ void XC_Functional::grad_wfc(
 	
 	auto porter = std::move(ct::Tensor(
         ct::DataTypeToEnum<T>::value, ct::DeviceTypeToEnum<ct_Device>::value, {wfc_basis->nmaxgr}));
+	// gcar/kvec_c are stored as Vector3<double> on the host. Build
+	// precision-matched host buffers and upload them, so single precision
+	// never reinterprets a double tensor and does not depend on the
+	// device-only PW_Basis_K caches being populated in the stress path.
+	const int gcar_size = wfc_basis->nks * wfc_basis->npwk_max;
+	std::vector<Real> gcar_host(3 * gcar_size);
+	for (int i = 0; i < gcar_size; ++i)
+	{
+		gcar_host[3 * i] = static_cast<Real>(wfc_basis->gcar[i].x);
+		gcar_host[3 * i + 1] = static_cast<Real>(wfc_basis->gcar[i].y);
+		gcar_host[3 * i + 2] = static_cast<Real>(wfc_basis->gcar[i].z);
+	}
+	std::vector<Real> kvec_host(3 * wfc_basis->nks);
+	for (int i = 0; i < wfc_basis->nks; ++i)
+	{
+		kvec_host[3 * i] = static_cast<Real>(wfc_basis->kvec_c[i].x);
+		kvec_host[3 * i + 1] = static_cast<Real>(wfc_basis->kvec_c[i].y);
+		kvec_host[3 * i + 2] = static_cast<Real>(wfc_basis->kvec_c[i].z);
+	}
+	auto gcar = ct::TensorMap(gcar_host.data(),
+	                          ct::DataTypeToEnum<Real>::value,
+	                          ct::DeviceType::CpuDevice,
+	                          {gcar_size, 3})
+	                .to_device<ct_Device>();
+	auto kvec_c = ct::TensorMap(kvec_host.data(),
+	                            ct::DataTypeToEnum<Real>::value,
+	                            ct::DeviceType::CpuDevice,
+	                            {wfc_basis->nks, 3})
+	                  .to_device<ct_Device>();
+
 	auto xc_functional_grad_wfc_solver 
 		= hamilt::xc_functional_grad_wfc_op<T, Device>();
 
@@ -650,8 +680,8 @@ void XC_Functional::grad_wfc(
 		xc_functional_grad_wfc_solver(
             ik, ipol, npw_k, wfc_basis->npwk_max, // Integers
 			tpiba,	// Double
-            wfc_basis->template get_gcar_data<Real>(),   // Array of Real
-            wfc_basis->template get_kvec_c_data<Real>(), // Array of Real
+            gcar.template data<Real>(),   // Array of Real
+            kvec_c.template data<Real>(), // Array of Real
 			rhog, porter.data<T>());    // Array of std::complex<double>
 
 		// bring the gdr from G --> R
