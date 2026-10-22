@@ -218,6 +218,16 @@ void XC_Functional::gradcorr(double &etxc, double &vtxc, ModuleBase::matrix &v,
 	double &local_etxcgc = etxcgc;
 #endif
 
+#ifdef USE_LIBXC
+	// Initialize the LibXC functionals once per OpenMP thread instead of
+	// once per real-space grid point, then reuse them in the loops below.
+	std::vector<xc_func_type> tls_funcs;
+	if(use_libxc)
+	{
+		tls_funcs = XC_Functional_Libxc::init_func(func_id, (nspin0 == 1) ? XC_UNPOLARIZED : XC_POLARIZED);
+	}
+#endif
+
 	double grho2a = 0.0;
 	double grho2b = 0.0;
 	double sxc = 0.0;
@@ -251,11 +261,11 @@ void XC_Functional::gradcorr(double &etxc, double &vtxc, ModuleBase::matrix &v,
 					{
 						double v3xc;
 						double atau = chr->kin_r[0][ir]/2.0;
-						XC_Functional_Libxc::tau_xc( func_id, arho, grho2a, atau, sxc, v1xc, v2xc, v3xc);
+						XC_Functional_Libxc::tau_xc( tls_funcs, arho, grho2a, atau, sxc, v1xc, v2xc, v3xc);
 					}
 					else
 					{
-						XC_Functional_Libxc::gcxc_libxc( func_id, arho, grho2a, sxc, v1xc, v2xc);
+						XC_Functional_Libxc::gcxc_libxc( tls_funcs, arho, grho2a, sxc, v1xc, v2xc);
 					}
 #endif 
 				} // end use_libxc
@@ -312,14 +322,14 @@ void XC_Functional::gradcorr(double &etxc, double &vtxc, ModuleBase::matrix &v,
 					double atau1 = chr->kin_r[0][ir]/2.0;
 					double atau2 = chr->kin_r[1][ir]/2.0;
 					XC_Functional_Libxc::tau_xc_spin(
-						func_id,
+						tls_funcs,
 						rhotmp1[ir], rhotmp2[ir], gdr1[ir], gdr2[ir], 
 						atau1, atau2, sxc, v1xcup, v1xcdw, v2xcup, v2xcdw, v2xcud, v3xcup, v3xcdw);
 				}
 				else
 				{
 					XC_Functional_Libxc::gcxc_spin_libxc(
-						func_id,
+						tls_funcs,
 						rhotmp1[ir], rhotmp2[ir], gdr1[ir], gdr2[ir], 
 						sxc, v1xcup, v1xcdw, v2xcup, v2xcdw, v2xcud);
 				}
@@ -456,6 +466,12 @@ void XC_Functional::gradcorr(double &etxc, double &vtxc, ModuleBase::matrix &v,
 		}// end ir
 
 	}
+#ifdef USE_LIBXC
+	if(use_libxc)
+	{
+		XC_Functional_Libxc::finish_func(tls_funcs);
+	}
+#endif
 #ifdef _OPENMP
 	#pragma omp critical(xc_functional_gradcorr_reduce)
 	{
