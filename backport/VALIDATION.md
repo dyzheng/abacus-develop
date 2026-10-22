@@ -233,3 +233,72 @@ Interpretation:
   large-system benchmark. LTS intentionally keeps most WP6 performance
   changes out, while accel contains additional gint/FFT/bspline
   optimizations, so large-system throughput is not guaranteed to match.
+
+## 10. Precision-error analysis and tests/performance comparison
+
+### 10.1 Performance cases
+
+Small cases from `tests/performance`, CPU Release builds, 4 MPI x 1 OMP,
+3 repetitions, median wall time (includes startup/IO):
+
+| Case | LTS (s) | accel (s) | LTS/accel |
+|---|---|---|---|
+| P010_si2_pw | 55.39 | 56.43 | 0.98 |
+| P000_si16_pw | 39.15 | 39.29 | 1.00 |
+| P109_H2O_lcao | 44.09 | 41.18 | 1.07 |
+| P100_si16_lcao | 16.29 | 15.95 | 1.02 |
+
+The PW cases are indistinguishable within run-to-run noise. The two LCAO
+cases are 2-7% faster on accel, consistent with the additional gint/LCAO
+optimizations that were intentionally left out of LTS. This is not a
+large-system benchmark.
+
+### 10.2 Precision on those cases
+
+`etotref` differences (LTS - accel):
+
+| Case | difference |
+|---|---|
+| P010_si2_pw | 5.7e-14 eV |
+| P000_si16_pw | 2.3e-13 eV |
+| P109_H2O_lcao | 1.6e-12 eV |
+| P100_si16_lcao | 2.7e-12 eV |
+
+Forces (`totalforceref`) are identical in `result.out`; for P100 the
+stress tensor is 42.4949158515 kbar (LTS) vs 42.4949158516 kbar (accel),
+i.e. ~1e-10 kbar. These are double-precision rounding differences from
+different loop/orderings, not physical differences.
+
+### 10.3 LCAO nspin=4 DFT+U/SOC (`260_NO_DJ_PK_PU_SO`)
+
+| Quantity | LTS branch | accel 255a | LTS base ref |
+|---|---|---|---|
+| E (eV) | -6789.28164063 | -6789.27589018 | -6789.28175035 |
+| total force | 11.327294 | 13.133034 (net vector) | 11.329526 |
+| stress tensor (kbar) | 1384.6/-143.3/1139.0/-231.7 | 1385.3/-143.4/1139.9/-231.3 | 4894.9 total metric |
+
+Analysis:
+- The backport changes this case by only 0.11 meV in energy and 0.002 in
+  the force metric; the stress changes substantially because the old
+  reference was produced by the pre-fix Pauli/genelpa code.
+- The remaining difference to accel is **not** a defect of the backported
+  commits: accel contains later work outside this migration plan, notably
+  the DFT+U refactor (`fa14bddd5`) and further nspin=4 LCAO/DeltaSpin sign
+  and force changes. Those were deliberately not ported.
+- The stress tensor already agrees with accel to ~1 kbar, which confirms
+  that the Pauli-to-spinor/genelpa fixes captured the main stress issue.
+
+### 10.4 Single-precision nspin=4
+
+After `1cb7358ba` the calculation completes. The remaining difference is
+solver/state-selection dependent:
+
+- `dav_subspace`: single vs double energy difference is 0.02 meV
+  (CPU: -1678.3522966 vs -1678.3523159 eV); both converge to the same
+  low-moment state.
+- `cg`: single precision converges to a different magnetic local minimum
+  (|M_z| ~ 0.74 uB) than double `cg` (~0.01 uB), giving a 13 meV energy
+  difference. Accel single-precision `cg` gives the same higher-moment
+  state (-1678.36513 vs LTS -1678.36554 eV), so this is a CG convergence
+  characteristic, not an arithmetic error. Use `dav_subspace` when tight
+  single-precision non-collinear energies are required.
