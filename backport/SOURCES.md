@@ -66,8 +66,9 @@ independent and can be backported separately.
 
 ## WP6 - optional performance
 
-Not applied in this batch: `5d2582d72`, `d05769ab7`, `f4af81009`,
-`b5ff54cbe`, `e943b0f9f`, `84ca04b22`, `078df41e8`, `f4548f424`.
+`5d2582d72` (count_pw_st OpenMP) is applied (commit after the WP5 batch).
+Not applied in this batch: `d05769ab7`, `f4af81009`, `b5ff54cbe`,
+`e943b0f9f`, `84ca04b22`, `078df41e8`, `f4548f424`.
 These need benchmark/regression gating.
 
 ## Validation performed
@@ -78,5 +79,6 @@ These need benchmark/regression gating.
   genelpa upper-triangle tests): pass.
 - `hcontainer_test`, `hcontainer_complex_test`, `hcontainer_output_test`,
   `hcontainer_readCSR_test`: pass.
+- `pw_test`, `basis_pw_serial`, `basis_pw_k_serial`: pass.
 
 ROCm was not built in this environment.
