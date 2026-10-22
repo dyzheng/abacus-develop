@@ -6,6 +6,7 @@
 #include "module_base/timer.h"                  // ModuleBase::timer::tick
 #include "module_base/tool_title.h"             // ModuleBase::TITLE
 #include "module_base/module_device/device.h"
+#include "module_base/parallel_reduce.h"
 
 #include "module_hsolver/kernels/dngvd_op.h"
 #include "module_hsolver/kernels/math_kernel_op.h"
@@ -776,9 +777,9 @@ void DiagoDavid<T, Device>::diag_zhegvx(const int& nbase,
         // vcc: nbase * nband
         for (int i = 0; i < nband; i++)
         {
-            MPI_Bcast(&vcc[i * nbase_x], nbase, MPI_DOUBLE_COMPLEX, 0, diag_comm.comm);
+            MPI_Bcast(&vcc[i * nbase_x], nbase, Parallel_Reduce::MPI_Type<T>::value, 0, diag_comm.comm);
         }
-        MPI_Bcast(this->eigenvalue, nband, MPI_DOUBLE, 0, diag_comm.comm);
+        MPI_Bcast(this->eigenvalue, nband, Parallel_Reduce::MPI_Type<Real>::value, 0, diag_comm.comm);
     }
 #endif
 
