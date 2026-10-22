@@ -26,6 +26,10 @@ if regenerated:
 - `03_NAO_multik/scf_angle_spin4`
 - `03_NAO_multik/scf_out_dos_spin4`
 - `03_NAO_multik/scf_u_spin4`
+- `tests/integrate/260_NO_DJ_PK_PU_SO/result.ref` **updated** in this
+  branch: etot -6789.28164063, force 11.327294, stress 4699.487919. The
+  force is unchanged to ~0.002 and the stress tensor now agrees with the
+  accel reference; the old 4894.90 reference came from the pre-fix code.
 - `17_DS_DFTU/14,15,16,19,21,41` (nspin=4 DeltaSpin sign/convention)
 - `17_DS_DFTU/12,18` (nspin=2 DeltaSpin output/force)
 - `tests/08_EXX/01-06` only if WP2-4 is enabled later (not in this batch)
