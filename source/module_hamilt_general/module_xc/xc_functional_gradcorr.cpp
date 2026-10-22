@@ -627,11 +627,6 @@ void XC_Functional::grad_wfc(
 	
 	auto porter = std::move(ct::Tensor(
         ct::DataTypeToEnum<T>::value, ct::DeviceTypeToEnum<ct_Device>::value, {wfc_basis->nmaxgr}));
-	auto gcar = ct::TensorMap(
-		&wfc_basis->gcar[0][0], ct::DataType::DT_DOUBLE, ct::DeviceType::CpuDevice, {wfc_basis->nks * wfc_basis->npwk_max, 3}).to_device<ct_Device>();
-	auto kvec_c = ct::TensorMap(
-		&wfc_basis->kvec_c[0][0],ct::DataType::DT_DOUBLE, ct::DeviceType::CpuDevice, {wfc_basis->nks, 3}).to_device<ct_Device>();
-	
 	auto xc_functional_grad_wfc_solver 
 		= hamilt::xc_functional_grad_wfc_op<T, Device>();
 
@@ -639,8 +634,8 @@ void XC_Functional::grad_wfc(
 		xc_functional_grad_wfc_solver(
             ik, ipol, npw_k, wfc_basis->npwk_max, // Integers
 			tpiba,	// Double
-            gcar.template data<Real>(),   // Array of Real
-            kvec_c.template data<Real>(), // Array of double
+            wfc_basis->template get_gcar_data<Real>(),   // Array of Real
+            wfc_basis->template get_kvec_c_data<Real>(), // Array of Real
 			rhog, porter.data<T>());    // Array of std::complex<double>
 
 		// bring the gdr from G --> R
