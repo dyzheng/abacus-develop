@@ -158,3 +158,38 @@ double-precision k-point tau accumulation (WP3-2).
 - WP2-4 (split GGA/mGGA masks) is not backported, so HSE references stay
   unchanged.
 - Most WP6 performance items are deferred.
+
+## 8. Non-collinear (nspin=4) coverage, excluding DeltaSpin
+
+The non-DeltaSpin non-collinear fixes are complete for double precision:
+
+- `5968babab`: G=0 magnetization contribution in nspin=4 mixing.
+- `359f73459`: Pauli-to-spinor Hamiltonian H(k), spinor->Pauli DMR,
+  DFT+U `transfer_vu`, and the H(-R)=H(R)^dagger fill. These apply to
+  ordinary LCAO non-collinear/DFT+U calculations; the DeltaSpin lambda
+  part is inactive when `sc_mag_switch=0`.
+- `5ea2c233c`: genelpa upper-triangle contract.
+- `0fc1675c7`, `8efdacb13`, `cb4c38e93`: Davidson MPI datatype,
+  near-zero residual handling, Psi offset arithmetic.
+
+Validated on CPU double:
+- `140_PW_15_SO` (PW SOC, nspin=4): modified copy with `cg`, converges,
+  finite forces/stress.
+- `160_PW_DJ_PK_PU_SO` (PW DFT+U SOC): pass.
+- `207_NO_KP_OHS_SPIN4`: pass.
+- `240_NO_KP_15_SO` (LCAO SOC): pass.
+- `260_NO_DJ_PK_PU_SO` (LCAO DFT+U SOC): pass after reference update.
+- `383_NO_GO_SO_HSE` (LCAO SOC HSE): pass.
+
+Validated on GPU double:
+- A copy of `140_PW_15_SO` with `dav_subspace` gives bit-identical
+  energy/force/stress to the unmodified LTS baseline. (CPU and GPU
+  `dav_subspace` already differ in the baseline; that is pre-existing.)
+
+Single-precision non-collinear limitation:
+- PW SOC/non-SOC nspin=4 with `precision single` (CPU or GPU, `cg` or
+  `dav_subspace`) crashes. The **unmodified LTS baseline crashes in the
+  same place**. This backport does not fix it and does not make it worse;
+  it is therefore not claimed as covered.
+- Accel's non-collinear `gga_grad` (mapped-density gradient) is a new
+  input/feature and is intentionally not backported to LTS.
