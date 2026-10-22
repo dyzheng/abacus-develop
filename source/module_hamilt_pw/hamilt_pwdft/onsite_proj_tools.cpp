@@ -1022,6 +1022,7 @@ void Onsite_Proj_tools<FPTYPE, Device>::cal_stress_dspin(int ik,
 template class Onsite_Proj_tools<double, base_device::DEVICE_CPU>;
 #if ((defined __CUDA) || (defined __ROCM))
 template class Onsite_Proj_tools<double, base_device::DEVICE_GPU>;
+template class Onsite_Proj_tools<float, base_device::DEVICE_GPU>;
 #endif
 
 } // namespace hamilt

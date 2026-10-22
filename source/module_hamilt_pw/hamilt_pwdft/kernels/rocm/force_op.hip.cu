@@ -666,6 +666,8 @@ namespace hamilt {
     template void revertVkbValues<double>(const int *gcar_zero_ptrs, std::complex<double> *vkb_ptr, const std::complex<double> *vkb_save_ptr, int nkb, int gcar_zero_count, int npw, int ipol, int npwx, const std::complex<double> coeff);
     // for saveVkbValues functions instantiation
     template void saveVkbValues<double>(const int *gcar_zero_ptrs, const std::complex<double> *vkb_ptr, std::complex<double> *vkb_save_ptr, int nkb, int gcar_zero_count, int npw, int ipol, int npwx);
+template void revertVkbValues<float>(const int *gcar_zero_ptrs, std::complex<float> *vkb_ptr, const std::complex<float> *vkb_save_ptr, int nkb, int gcar_zero_count, int npw, int ipol, int npwx, const std::complex<float> coeff);
+template void saveVkbValues<float>(const int *gcar_zero_ptrs, const std::complex<float> *vkb_ptr, std::complex<float> *vkb_save_ptr, int nkb, int gcar_zero_count, int npw, int ipol, int npwx);
 
 
     // HIP kernels for sincos loops

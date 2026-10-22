@@ -665,4 +665,5 @@ void projectors::OnsiteProjector<T, Device>::cal_occupations(const psi::Psi<std:
 template class projectors::OnsiteProjector<double, base_device::DEVICE_CPU>;
 #if ((defined __CUDA) || (defined __ROCM))
 template class projectors::OnsiteProjector<double, base_device::DEVICE_GPU>;
+template class projectors::OnsiteProjector<float, base_device::DEVICE_GPU>;
 #endif
