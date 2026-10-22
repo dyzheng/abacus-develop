@@ -186,10 +186,19 @@ Validated on GPU double:
   energy/force/stress to the unmodified LTS baseline. (CPU and GPU
   `dav_subspace` already differ in the baseline; that is pre-existing.)
 
-Single-precision non-collinear limitation:
-- PW SOC/non-SOC nspin=4 with `precision single` (CPU or GPU, `cg` or
-  `dav_subspace`) crashes. The **unmodified LTS baseline crashes in the
-  same place**. This backport does not fix it and does not make it worse;
-  it is therefore not claimed as covered.
+Single-precision non-collinear (fixed in `1cb7358ba`):
+- The LTS baseline segfaulted after SCF in `cal_force_nl_op<double>`
+  because `z_deeq_nc`/`z_qq_so` were null for `precision single`. The
+  backport keeps those double buffers valid (host for CPU; device double
+  buffers for GPU single).
+- CPU and GPU single now complete SCF + force + stress for nspin=4 SOC
+  and non-SOC with `cg`, `dav` and `dav_subspace`.
+- `dav_subspace`: CPU single vs CPU double energy difference is 0.02 meV
+  (`-1678.3522966` vs `-1678.3523159` eV); GPU single gives
+  `-1678.3522564` eV.
+- `cg`: single precision gives `-1678.36554` (CPU) / `-1678.36549` (GPU)
+  eV, about 13 meV from double `cg` (`-1678.35229`). Accel single `cg`
+  gives `-1678.36513`, so this is a solver convergence characteristic,
+  not a crash or a backport regression.
 - Accel's non-collinear `gga_grad` (mapped-density gradient) is a new
   input/feature and is intentionally not backported to LTS.

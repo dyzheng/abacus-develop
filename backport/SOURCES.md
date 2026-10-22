@@ -39,6 +39,7 @@ it is an optional numeric change requiring refreshed HSE references.
 | `f5f86a5a0` | `6c102559c` | LTS path `module_hsolver/kernels/cuda/math_kernel_op.cu`; `cublasErrcheck`. |
 | `4b584d86d`, `e135fb721` | `146ebdc4b` | LTS uses `dnevx_op` instead of `ct::kernels::lapack_heevx`; host round trip for the small reduced matrix; type dispatch for real/complex T. |
 | `6d1350db8`, `6333810bb` | `4cc4a9769` | Force/stress/xc float GPU instantiations and FPTYPE lambda; onsite-projector float GPU instantiations deferred because that LTS code is not float-safe. |
+| `1cb7358ba` | `92dc887ca` | Keep double deeq_nc/qq_so valid for the double force/stress path. LTS adaptation: CPU points z pointers at host buffers; GPU single allocates device double buffers and synchronizes them. |
 
 `0232ccfe5` (WP3-5, single-pass CUDA float QR) is **not** applied: LTS has
 no `lapack_geqrf_inplace`/QR kernel. Implementing it would require porting a
@@ -106,6 +107,16 @@ GPU integration (4 MPI x 1 OMP, CUDA):
   `935_NO_Si2_tzdp_ns2_k_GPU`: pass.
 - `102_PW_DA_davidson_GPU` segfaults in cuBLAS in the **unmodified LTS
   baseline** as well; not a regression from this backport.
+
+Single precision non-collinear (custom nspin=4 SOC/non-SOC cases, 1 MPI x 1 OMP):
+- CPU single and GPU single complete SCF + force + stress for `cg`,
+  `dav` and `dav_subspace` (previously segfaulted in the double force
+  kernel because z_deeq_nc/z_qq_so were null).
+- `dav_subspace`: CPU single vs CPU double energy differs by 0.02 meV
+  (GPU single agrees with CPU single). `cg` single converges to a state
+  ~13 meV away from double `cg`, but matches accel's single-precision
+  `cg` result; use `dav_subspace` when tight single-precision energies
+  are required.
 
 Single precision GPU vs double CPU (custom cases, 1 MPI x 1 OMP):
 - PBE: dE = 0.147 meV/atom, max force error ~0.006 eV/A,
