@@ -169,11 +169,10 @@ void pseudopot_cell_vnl::init(const UnitCell& ucell,
                 resmem_cd_op()(c_deeq_nc, PARAM.inp.nspin * ucell.nat * this->nhm * this->nhm);
                 resmem_cd_op()(c_qq_so, ntype * 4 * this->nhm * this->nhm);
             }
-            if (PARAM.globalv.has_double_data)
-            {
-                resmem_zd_op()(z_deeq_nc, PARAM.inp.nspin * ucell.nat * this->nhm * this->nhm);
-                resmem_zd_op()(z_qq_so, ntype * 4 * this->nhm * this->nhm);
-            }
+            // The double-precision force/stress path always reads these
+            // buffers, even when the SCF runs in single precision.
+            resmem_zd_op()(z_deeq_nc, PARAM.inp.nspin * ucell.nat * this->nhm * this->nhm);
+            resmem_zd_op()(z_qq_so, ntype * 4 * this->nhm * this->nhm);
             resmem_dd_op()(d_deeq, PARAM.inp.nspin * ucell.nat * this->nhm * this->nhm);
             resmem_dd_op()(d_indv, ntype * this->nhm);
             resmem_dd_op()(d_nhtol, ntype * this->nhm);
