@@ -1015,8 +1015,9 @@ __global__ void cal_stress_onsite(
     for (int ia = 0; ia < atom_na[it]; ia++)
     {
         const thrust::complex<FPTYPE> coefficients0(lambda[iat*3+2], 0.0);
-        const thrust::complex<FPTYPE> coefficients1(lambda[iat*3] , lambda[iat*3+1]);
-        const thrust::complex<FPTYPE> coefficients2(lambda[iat*3] , -1 * lambda[iat*3+1]);
+        // dbb1 = conj(d becp_up) * becp_down requires H_up,down = lambda_x - i lambda_y.
+        const thrust::complex<FPTYPE> coefficients1(lambda[iat*3], -lambda[iat*3+1]);
+        const thrust::complex<FPTYPE> coefficients2(lambda[iat*3], lambda[iat*3+1]);
         const thrust::complex<FPTYPE> coefficients3(-1 * lambda[iat*3+2], 0.0);
         for (int ip = threadIdx.x; ip < nprojs; ip += blockDim.x) {
             const int inkb = sum + ip + ib2 * nkb;
