@@ -302,3 +302,49 @@ solver/state-selection dependent:
   state (-1678.36513 vs LTS -1678.36554 eV), so this is a CG convergence
   characteristic, not an arithmetic error. Use `dav_subspace` when tight
   single-precision non-collinear energies are required.
+
+## 11. Solver coverage and LCAO gint optimization assessment
+
+### 11.1 Solvers used in the performance comparison
+
+- `P010_si2_pw` has no `ks_solver` in INPUT; the output shows
+  `DiagoCG` -> **CG**.
+- `P000_si16_pw` sets `ks_solver dav`; the output shows `DiagoDavid`
+  -> **DAV**.
+- No `dav_subspace` case exists in `tests/performance`; it was not part of
+  the timing table (it was exercised separately in the non-collinear
+  single-precision tests).
+- `P100_si16_lcao` / `P109_H2O_lcao` use the default LCAO solver,
+  `DiagoElpa` (genelpa).
+
+### 11.2 Can LCAO gint be optimized with an acceptable patch?
+
+Accel's gint work is not a drop-in patch for LTS:
+
+- `b5ff54cbe` (fp64 accumulators) changes 17 files (+231/-227) and is
+  built around accel's `PhiOperator` (phi_operator.{h,hpp}); LTS still
+  has the monolithic `gint_rho.cpp` / `gint_vl.cpp` / `gint_tau.cpp`
+  layout. Porting it means re-implementing the accumulator changes inside
+  the LTS layout, or first backporting the PhiOperator refactor.
+- `e943b0f9f` and `078df41e8` are GPU gint kernel rewrites
+  (phi_operator_gpu / dgemm_vbatch / gemm_{nn,tn}_vbatch / gint_helper),
+  about 0.2k and 1.0k changed lines respectively, and depend on accel's
+  GPU gint infrastructure. They are medium/large projects, not an
+  acceptable-risk LTS patch.
+- `84ca04b22` is a PW structure-factor optimization, not gint.
+
+Measured potential on the small CPU cases:
+- P100: gint (`Gint_interface::cal_gint`) is 11.97 s of 16.03 s (75%),
+  but LTS vs accel total time differs by only 2%.
+- P109: gint is 1.42 s of 44 s (3%), and the 6.6% total difference comes
+  from non-gint work/noise.
+So the small-case CPU data does not show a large untapped gint gain.
+
+Recommendation:
+- Do not port the accel gint GPU kernel stack wholesale into LTS.
+- A focused CPU-only follow-up (fp64 accumulators in gint_rho/gint_vl/
+  gint_tau, with regression refs) is feasible but is a precision fix more
+  than a speedup, and needs its own validation.
+- Large-scale GPU gint speedups require the kernel refactor and a GPU
+  benchmark/CI gate; treat as a separate project rather than an LTS
+  backport.
