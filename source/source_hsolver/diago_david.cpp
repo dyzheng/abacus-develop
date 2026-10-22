@@ -172,7 +172,7 @@ int DiagoDavid<T, Device>::diag_once(const HSOperator<T, Device>& op,
             syncmem_complex_op()(basis + dim*m, psi_in + m*ld_psi, dim);
         // Form the basis without subtracting nearly equal norm estimates.
         ct::kernels::lapack_geqrf_inplace<T, ct_Device>()(dim, nband, basis, dim);
-        spsi_func(basis, spsi, dim, nband);
+        op.spsi(basis, spsi, dim, nband);
     }
     else
 #endif
@@ -584,7 +584,7 @@ void DiagoDavid<T, Device>::cal_grad(const HSOperator<T, Device>& op,
             this->one, basis + dim*nbase, dim);
         ct::kernels::lapack_geqrf_inplace<T, ct_Device>()(
             dim, notconv, basis + dim*nbase, dim);
-        spsi_func(basis + dim*nbase, spsi + dim*nbase, dim, notconv);
+        op.spsi(basis + dim*nbase, spsi + dim*nbase, dim, notconv);
     }
     else
 #endif
