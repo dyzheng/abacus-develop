@@ -202,3 +202,34 @@ Single-precision non-collinear (fixed in `1cb7358ba`):
   not a crash or a backport regression.
 - Accel's non-collinear `gga_grad` (mapped-density gradient) is a new
   input/feature and is intentionally not backported to LTS.
+
+## 9. LTS vs accel: precision and efficiency
+
+Measured on the same machine, CPU, Release builds, LibXC enabled:
+
+| Case | LTS | accel (255a78048) | Difference |
+|---|---|---|---|
+| PW PBE energy | -4869.7470519303 eV | -4869.7470519303 eV | < 1e-11 eV |
+| PW PBE stress | -12196.09715526 kbar | -12196.09715525 kbar | ~1e-8 kbar |
+| PW SCAN energy | -4932.1083705398 eV | -4932.1083705398 eV | < 1e-11 eV |
+| LCAO 201 energy | -212.4543800202 eV | -212.4543800202 eV | ~1e-13 eV |
+| LCAO 201 force | -0.0284320540 ... | -0.0284320540 ... | identical |
+| LCAO DFT+U SOC 260 energy | -6789.28164063 eV | -6789.27589018 eV | 5.9 meV |
+| LCAO DFT+U SOC 260 force | 11.327294 | 13.133034 (net vector) | different |
+| LCAO DFT+U SOC 260 stress tensor | 1384.6/-143.3/1139.0 | 1385.3/-143.4/1139.9 | ~1 kbar |
+| nspin=4 single CPU cg energy | -1678.36554 eV | -1678.36513 eV | 0.4 meV |
+
+Interpretation:
+- Common PW (PBE/SCAN) and ordinary LCAO double-precision results are
+  numerically identical between this LTS branch and accel.
+- LCAO nspin=4 DFT+U/SOC is **not** identical: accel contains a later
+  DFT+U refactor and further sign/weight changes that are outside the
+  migration plan. The stress tensor already agrees, but the total force
+  and energy differ.
+- Single-precision non-collinear now works on both; `dav_subspace`
+  matches LTS double to 0.02 meV.
+- Efficiency on small cases is comparable (LCAO 201: 0.70 s both;
+  PW PBE: 2.71 s LTS vs 2.63 s accel for 1 MPI). This is not a
+  large-system benchmark. LTS intentionally keeps most WP6 performance
+  changes out, while accel contains additional gint/FFT/bspline
+  optimizations, so large-system throughput is not guaranteed to match.
