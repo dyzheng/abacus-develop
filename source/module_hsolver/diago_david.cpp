@@ -7,6 +7,7 @@
 #include "module_base/tool_title.h"             // ModuleBase::TITLE
 #include "module_base/module_device/device.h"
 #include "module_base/parallel_reduce.h"
+#include "module_parameter/parameter.h"
 
 #include "module_hsolver/kernels/dngvd_op.h"
 #include "module_hsolver/kernels/math_kernel_op.h"
@@ -16,6 +17,22 @@
 #endif
 
 using namespace hsolver;
+
+namespace
+{
+inline std::complex<double> to_complex_double(const std::complex<double>& v) { return v; }
+inline std::complex<double> to_complex_double(const std::complex<float>& v)
+{
+    return std::complex<double>(static_cast<double>(v.real()), static_cast<double>(v.imag()));
+}
+inline std::complex<double> to_complex_double(const double& v) { return std::complex<double>(v, 0.0); }
+inline void from_complex_double(const std::complex<double>& v, double& out) { out = v.real(); }
+inline void from_complex_double(const std::complex<double>& v, std::complex<double>& out) { out = v; }
+inline void from_complex_double(const std::complex<double>& v, std::complex<float>& out)
+{
+    out = std::complex<float>(static_cast<float>(v.real()), static_cast<float>(v.imag()));
+}
+} // namespace
 
 
 template <typename T, typename Device>
@@ -721,11 +738,11 @@ void DiagoDavid<T, Device>::diag_zhegvx(const int& nbase,
                 base_device::memory::resize_memory_op<double, Device>()(this->ctx, e64, nbase_x, "DAV::e64");
 
                 std::vector<T> hbuf(mat_size);
-                syncmem_var_d2h_op()(this->cpu_ctx, this->ctx, hbuf.data(), hcc, mat_size);
+                syncmem_d2h_op()(this->cpu_ctx, this->ctx, hbuf.data(), hcc, mat_size);
                 std::vector<Z> hbuf64(mat_size);
                 for (size_t i = 0; i < mat_size; ++i)
                 {
-                    hbuf64[i] = Z(static_cast<double>(hbuf[i].real()), static_cast<double>(hbuf[i].imag()));
+                    hbuf64[i] = to_complex_double(hbuf[i]);
                 }
                 base_device::memory::synchronize_memory_op<Z, Device, base_device::DEVICE_CPU>()(
                     this->ctx, this->cpu_ctx, h64, hbuf64.data(), mat_size);
@@ -738,9 +755,9 @@ void DiagoDavid<T, Device>::diag_zhegvx(const int& nbase,
                 std::vector<T> vbuf(mat_size);
                 for (size_t i = 0; i < mat_size; ++i)
                 {
-                    vbuf[i] = T(static_cast<Real>(vbuf64[i].real()), static_cast<Real>(vbuf64[i].imag()));
+                    from_complex_double(vbuf64[i], vbuf[i]);
                 }
-                syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, vcc, vbuf.data(), mat_size);
+                syncmem_h2d_op()(this->ctx, this->cpu_ctx, vcc, vbuf.data(), mat_size);
 
                 std::vector<double> ebuf(nbase_x, 0.0);
                 base_device::memory::synchronize_memory_op<double, base_device::DEVICE_CPU, Device>()(
