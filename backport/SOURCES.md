@@ -73,6 +73,9 @@ These need benchmark/regression gating.
 
 ## Validation performed
 
+See `backport/VALIDATION.md` for the full matrix, numbers and
+limitations. Summary:
+
 Builds:
 - CPU (`build_nspin4`, LCAO+ELPA, tests ON): pass.
 - CPU full (`ENABLE_LIBXC=ON`, `ENABLE_LIBRI=ON`): pass, including a clean
