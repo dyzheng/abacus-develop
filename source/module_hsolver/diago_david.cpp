@@ -1,5 +1,8 @@
 #include "diago_david.h"
 
+#include <type_traits>
+#include <vector>
+
 #include "module_base/timer.h"                  // ModuleBase::timer::tick
 #include "module_base/tool_title.h"             // ModuleBase::TITLE
 #include "module_base/module_device/device.h"
@@ -703,7 +706,59 @@ void DiagoDavid<T, Device>::diag_zhegvx(const int& nbase,
             resmem_var_op()(this->ctx, eigenvalue_gpu, nbase_x);
             syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, eigenvalue_gpu, this->eigenvalue, nbase_x);
 
-            dnevx_op<T, Device>()(this->ctx, nbase, nbase_x, hcc, nband, eigenvalue_gpu, vcc);
+            if (std::is_same<Real, float>::value && !PARAM.globalv.use_uspp)
+            {
+                // Solve this single reduced problem in double precision and
+                // return the requested eigenpairs in single precision.
+                using Z = std::complex<double>;
+                const size_t mat_size = static_cast<size_t>(nbase_x) * nbase_x;
+                Z* h64 = nullptr;
+                Z* v64 = nullptr;
+                double* e64 = nullptr;
+                base_device::memory::resize_memory_op<Z, Device>()(this->ctx, h64, mat_size, "DAV::h64");
+                base_device::memory::resize_memory_op<Z, Device>()(this->ctx, v64, mat_size, "DAV::v64");
+                base_device::memory::resize_memory_op<double, Device>()(this->ctx, e64, nbase_x, "DAV::e64");
+
+                std::vector<T> hbuf(mat_size);
+                syncmem_var_d2h_op()(this->cpu_ctx, this->ctx, hbuf.data(), hcc, mat_size);
+                std::vector<Z> hbuf64(mat_size);
+                for (size_t i = 0; i < mat_size; ++i)
+                {
+                    hbuf64[i] = Z(static_cast<double>(hbuf[i].real()), static_cast<double>(hbuf[i].imag()));
+                }
+                base_device::memory::synchronize_memory_op<Z, Device, base_device::DEVICE_CPU>()(
+                    this->ctx, this->cpu_ctx, h64, hbuf64.data(), mat_size);
+
+                dnevx_op<Z, Device>()(this->ctx, nbase, nbase_x, h64, nband, e64, v64);
+
+                std::vector<Z> vbuf64(mat_size);
+                base_device::memory::synchronize_memory_op<Z, base_device::DEVICE_CPU, Device>()(
+                    this->cpu_ctx, this->ctx, vbuf64.data(), v64, mat_size);
+                std::vector<T> vbuf(mat_size);
+                for (size_t i = 0; i < mat_size; ++i)
+                {
+                    vbuf[i] = T(static_cast<Real>(vbuf64[i].real()), static_cast<Real>(vbuf64[i].imag()));
+                }
+                syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, vcc, vbuf.data(), mat_size);
+
+                std::vector<double> ebuf(nbase_x, 0.0);
+                base_device::memory::synchronize_memory_op<double, base_device::DEVICE_CPU, Device>()(
+                    this->cpu_ctx, this->ctx, ebuf.data(), e64, nbase_x);
+                std::vector<Real> ebuf_real(nbase_x, Real(0));
+                for (int i = 0; i < nbase_x; ++i)
+                {
+                    ebuf_real[i] = static_cast<Real>(ebuf[i]);
+                }
+                syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, eigenvalue_gpu, ebuf_real.data(), nbase_x);
+
+                base_device::memory::delete_memory_op<Z, Device>()(this->ctx, h64);
+                base_device::memory::delete_memory_op<Z, Device>()(this->ctx, v64);
+                base_device::memory::delete_memory_op<double, Device>()(this->ctx, e64);
+            }
+            else
+            {
+                dnevx_op<T, Device>()(this->ctx, nbase, nbase_x, hcc, nband, eigenvalue_gpu, vcc);
+            }
 
             syncmem_var_d2h_op()(this->cpu_ctx, this->ctx, this->eigenvalue, eigenvalue_gpu, nbase_x);
             delmem_var_op()(this->ctx, eigenvalue_gpu);
