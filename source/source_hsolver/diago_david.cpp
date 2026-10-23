@@ -6,6 +6,7 @@
 #include <string>
 
 #include "source_base/parallel_cell.h"
+#include "source_base/parallel_device.h"
 #include "source_base/timer.h"                  // ModuleBase::timer::tick
 #include "source_base/tool_title.h"
 #include "source_base/tool_quit.h"             // ModuleBase::TITLE
@@ -756,9 +757,9 @@ void DiagoDavid<T, Device>::diag_zhegvx(const int& nbase,
         // vcc: nbase * nband
         for (int i = 0; i < nband; i++)
         {
-            MPI_Bcast(&vcc[i * nbase_x], nbase, Parallel_Reduce::MPI_Type<T>::value, 0, diag_comm.comm);
+            Parallel_Common::bcast_data(&vcc[i * nbase_x], nbase, diag_comm.comm, 0);
         }
-        MPI_Bcast(this->eigenvalue, nband, Parallel_Reduce::MPI_Type<Real>::value, 0, diag_comm.comm);
+        Parallel_Common::bcast_data(this->eigenvalue, nband, diag_comm.comm, 0);
     }
 #endif
 
