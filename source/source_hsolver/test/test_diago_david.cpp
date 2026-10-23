@@ -124,7 +124,7 @@ TYPED_TEST(DavidsonOwnershipTest, PhysicalEmptyAndUnevenBlocks)
             DiagonalOperator<T> op(offset, local_size);
             if (method == 0)
             {
-                hsolver::DiagoDavid<T> solver(precondition.data(), bands, local_size, 3, comm);
+                hsolver::DiagoDavid<T> solver(precondition.data(), bands, local_size, 3, false, comm);
                 solver.diag(op, local_size, vectors.data(), energies, thresholds, 300, 5, 0);
             }
             else if (method == 1)

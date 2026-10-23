@@ -2,7 +2,6 @@
 #include "diago_david.h"
 #include <ATen/core/tensor_map.h>
 #include <type_traits>
-#include "source_io/module_parameter/parameter.h"
 
 #include "source_base/parallel_cell.h"
 #include "source_base/timer.h"                  // ModuleBase::timer::tick
@@ -22,8 +21,10 @@ DiagoDavid<T, Device>::DiagoDavid(const Real* precondition_in,
                                   const int nband_in,
                                   const int dim_in,
                                   const int david_ndim_in,
+                                  const bool use_uspp_in,
                                   const diag_comm_info& diag_comm_in)
-    : nband(nband_in), dim(dim_in), nbase_x(david_ndim_in * nband_in), david_ndim(david_ndim_in), diag_comm(diag_comm_in)
+    : nband(nband_in), dim(dim_in), nbase_x(david_ndim_in * nband_in), david_ndim(david_ndim_in),
+      use_uspp(use_uspp_in), diag_comm(diag_comm_in)
 {
     this->device = base_device::get_device_type(this->ctx);
     this->precondition = precondition_in;
@@ -163,9 +164,7 @@ int DiagoDavid<T, Device>::diag_once(const HSOperator<T, Device>& op,
     this->planSchmidtOrth(nband, pre_matrix_mm_m, pre_matrix_mv_m);
 
 #if defined(__CUDA)
-    const bool block_qr = this->device == base_device::GpuDevice
-                          && std::is_same<Real, float>::value && !PARAM.globalv.use_uspp
-                          && diag_comm.nproc == 1;
+    const bool block_qr = this->use_block_qr();
     if (block_qr)
     {
         for (int m = 0; m < nband; ++m)
@@ -573,9 +572,7 @@ void DiagoDavid<T, Device>::cal_grad(const HSOperator<T, Device>& op,
     }
 
 #if defined(__CUDA)
-    const bool block_qr = this->device == base_device::GpuDevice
-                          && std::is_same<Real, float>::value && !PARAM.globalv.use_uspp
-                          && diag_comm.nproc == 1;
+    const bool block_qr = this->use_block_qr();
     if (block_qr)
     {
         // Project the new block once and orthogonalize its columns together.
@@ -705,7 +702,7 @@ void DiagoDavid<T, Device>::diag_zhegvx(const int& nbase,
             syncmem_var_h2d_op()(eigenvalue_gpu, this->eigenvalue, nbase_x);
 
             // heevx_op<T, Device>()(this->ctx, nbase, nbase_x, hcc, nband, eigenvalue_gpu, vcc);
-            if (std::is_same<Real, float>::value && !PARAM.globalv.use_uspp)
+            if (std::is_same<Real, float>::value && !this->use_uspp)
             {
                 // Use double only for this single reduced eigensolve.
                 auto h64 = ct::TensorMap(const_cast<T*>(hcc), ct::DataTypeToEnum<T>::value,
@@ -1096,6 +1093,15 @@ int DiagoDavid<T, Device>::diag(const HSOperator<T, Device>& op,
     return sum_dav_iter;
 }
 
+
+template <typename T, typename Device>
+inline bool DiagoDavid<T, Device>::use_block_qr() const
+{
+    return this->device == base_device::GpuDevice
+           && std::is_same<Real, float>::value
+           && !this->use_uspp
+           && this->diag_comm.nproc == 1;
+}
 
 template <typename T, typename Device>
 inline bool DiagoDavid<T, Device>::check_block_conv(const int& ntry,
