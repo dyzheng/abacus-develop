@@ -168,7 +168,7 @@ void ElecStatePW<T, Device>::psiToRho(const psi::Psi<T, Device>& psi)
                 accumulate_k(this->kin_r, this->charge->kin_r, ik == 0);
         }
     }
-    
+
     if ((!sum_k_in_double || psi.get_nk() == 0)
         && (PARAM.inp.device == "gpu" || PARAM.inp.precision == "single"))
     {
