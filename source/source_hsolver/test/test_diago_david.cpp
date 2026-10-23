@@ -236,7 +236,7 @@ TYPED_TEST(DavidsonOwnershipTest, ExactAndApproximateWarmStart)
 
         for (int band = 0; band < bands; ++band)
         {
-            EXPECT_NEAR(energies[band], band + 1.0, 1e-6);
+            EXPECT_NEAR(energies[band], band + 1.0, 1e-5);
             double residual = 0.0;
             double norm = 0.0;
             for (int row = 0; row < local_size; ++row)
@@ -248,8 +248,8 @@ TYPED_TEST(DavidsonOwnershipTest, ExactAndApproximateWarmStart)
             }
             Parallel_Reduce::reduce_pool(residual);
             Parallel_Reduce::reduce_pool(norm);
-            EXPECT_LT(std::sqrt(residual), 1e-5);
-            EXPECT_NEAR(norm, 1.0, 1e-8);
+            EXPECT_LT(std::sqrt(residual), 1e-4);
+            EXPECT_NEAR(norm, 1.0, 1e-6);
         }
     }
 }

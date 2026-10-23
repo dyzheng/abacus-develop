@@ -988,6 +988,8 @@ bool DiagoDavid<T, Device>::SchmidtOrth(const int& dim,
     if (dim == 0)
     {
         // GEMV quick-returns on zero rows without overwriting the projection.
+        // Do not return early: every rank, including empty local blocks, must
+        // reach the pool reduction below with the same collective sequence.
         const int projection_size = m + 1;
         setmem_complex_op()(lagrange_m, 0, projection_size);
     }
