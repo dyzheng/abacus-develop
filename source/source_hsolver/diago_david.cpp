@@ -2,10 +2,13 @@
 #include "diago_david.h"
 #include <ATen/core/tensor_map.h>
 #include <type_traits>
+#include <atomic>
+#include <string>
 
 #include "source_base/parallel_cell.h"
 #include "source_base/timer.h"                  // ModuleBase::timer::tick
-#include "source_base/tool_title.h"             // ModuleBase::TITLE
+#include "source_base/tool_title.h"
+#include "source_base/tool_quit.h"             // ModuleBase::TITLE
 #include "source_base/module_device/device.h"
 
 #include "source_hsolver/kernels/hegvd_op.h"
@@ -14,6 +17,22 @@
 
 
 using namespace hsolver;
+
+namespace
+{
+void warn_skip_degenerate_direction(const int band)
+{
+    static std::atomic<bool> warned(false);
+    bool expected = false;
+    if (warned.compare_exchange_strong(expected, true))
+    {
+        ModuleBase::WARNING("DiagoDavid::SchmidtOrth",
+                            "Skipping a degenerate residual direction (band "
+                                + std::to_string(band)
+                                + ") with non-positive norm; treating it as converged.");
+    }
+}
+} // namespace
 
 
 template <typename T, typename Device>
@@ -954,6 +973,7 @@ void DiagoDavid<T, Device>::SchmidtOrth(const int& dim,
         // precision the residual H*c - lambda*S*c suffers catastrophic
         // cancellation and collapses to numerical noise. Treat it as converged
         // and leave the (near-zero) direction untouched instead of aborting.
+        warn_skip_degenerate_direction(m);
         ModuleBase::timer::end("DiagoDavid", "SchmidtOrth");
         return;
     }
@@ -978,6 +998,7 @@ void DiagoDavid<T, Device>::SchmidtOrth(const int& dim,
     if (psi_norm <= 0.0)
     {
         // Nearly rank-deficient direction after orthogonalization: skip it.
+        warn_skip_degenerate_direction(m);
         ModuleBase::timer::end("DiagoDavid", "SchmidtOrth");
         return;
     }
@@ -987,6 +1008,7 @@ void DiagoDavid<T, Device>::SchmidtOrth(const int& dim,
     if (psi_norm < 1.0e-12)
     {
         // Nearly rank-deficient direction: skip instead of aborting.
+        warn_skip_degenerate_direction(m);
         ModuleBase::timer::end("DiagoDavid", "SchmidtOrth");
         return;
     }
