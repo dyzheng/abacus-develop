@@ -233,7 +233,7 @@ class DiagoDavid
      * @param mm_size The size of the square matrix for future lagranges.
      * @param mv_size The size of the lagrange_m array.
      */
-    void SchmidtOrth(const int& dim,
+    bool SchmidtOrth(const int& dim,
                      const int nband,
                      const int m,
                      const T* spsi,

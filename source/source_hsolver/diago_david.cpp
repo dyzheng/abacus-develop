@@ -3,6 +3,7 @@
 #include <ATen/core/tensor_map.h>
 #include <type_traits>
 #include <atomic>
+#include <cmath>
 #include <string>
 
 #include "source_base/parallel_cell.h"
@@ -208,13 +209,18 @@ int DiagoDavid<T, Device>::diag_once(const HSOperator<T, Device>& op,
     {
         syncmem_complex_op()(basis + dim*m, psi_in + m*ld_psi, dim);
 
-        this->SchmidtOrth(dim,
-                         nband,
-                         m,
-                         this->spsi,
-                         &this->lagrange_matrix[m * nband],
-                         pre_matrix_mm_m[m],
-                         pre_matrix_mv_m[m]);
+        if (!this->SchmidtOrth(dim,
+                               nband,
+                               m,
+                               this->spsi,
+                               &this->lagrange_matrix[m * nband],
+                               pre_matrix_mm_m[m],
+                               pre_matrix_mv_m[m]))
+        {
+            ModuleBase::WARNING_QUIT("DiagoDavid",
+                                     "initial trial wavefunction is linearly dependent; "
+                                     "cannot construct an orthonormal Davidson basis.");
+        }
         {
             // phm_in->sPsi(basis + dim*m, &this->spsi[m * dim], dim, dim, 1);
             op.spsi(basis + dim*m, &this->spsi[m * dim], dim, 1);
@@ -592,34 +598,99 @@ void DiagoDavid<T, Device>::cal_grad(const HSOperator<T, Device>& op,
     }
 
 #if defined(__CUDA)
+    bool qr_used = false;
     const bool block_qr = this->use_block_qr();
     if (block_qr)
     {
+        // Keep a copy of the unprojected block so a rank-deficient QR can
+        // restore it and fall back to the regular Schmidt path.
+        T* qr_backup = nullptr;
+        resmem_complex_op()(qr_backup, dim * notconv);
+        syncmem_complex_op()(qr_backup, basis + dim * nbase, dim * notconv);
+
         // Project the new block once and orthogonalize its columns together.
         ModuleBase::gemm_op<T, Device>()('N', 'N', dim, notconv, nbase,
             this->neg_one, basis, dim, lagrange, nbase + notconv,
             this->one, basis + dim*nbase, dim);
+
         ct::kernels::lapack_geqrf_inplace<T, ct_Device>()(
-            dim, notconv, basis + dim*nbase, dim);
-        op.spsi(basis + dim*nbase, spsi + dim*nbase, dim, notconv);
+            dim, notconv, basis + dim * nbase, dim);
+
+        bool full_rank = true;
+        double max_diag = 0.0;
+        std::vector<T> rdiag(notconv);
+        for (int j = 0; j < notconv; ++j)
+        {
+            syncmem_d2h_op()(&rdiag[j], basis + (nbase + j) * dim + j, 1);
+            const double abs_diag = std::abs(rdiag[j]);
+            if (!std::isfinite(abs_diag))
+            {
+                full_rank = false;
+            }
+            if (abs_diag > max_diag)
+            {
+                max_diag = abs_diag;
+            }
+        }
+        const double rank_tol = 1e-6 * max_diag;
+        for (int j = 0; j < notconv && full_rank; ++j)
+        {
+            if (std::abs(rdiag[j]) <= rank_tol)
+            {
+                full_rank = false;
+            }
+        }
+
+        if (full_rank)
+        {
+            op.spsi(basis + dim * nbase, spsi + dim * nbase, dim, notconv);
+            qr_used = true;
+        }
+        else
+        {
+            syncmem_complex_op()(basis + dim * nbase, qr_backup, dim * notconv);
+            ModuleBase::WARNING("DiagoDavid::cal_grad",
+                                "CUDA float QR block is rank deficient; falling back to "
+                                "Schmidt orthogonalization.");
+        }
+        delmem_complex_op()(qr_backup);
     }
-    else
+    if (!qr_used)
 #endif
     {
-    for (int m = 0; m < notconv; m++)
-    {
-        this->SchmidtOrth(dim,
-                         nbase + notconv,
-                         nbase + m,
-                         spsi,
-                         &lagrange[m * (nbase + notconv)],
-                         pre_matrix_mm_m[m],
-                         pre_matrix_mv_m[m]);
+        std::vector<int> valid_indices;
+        valid_indices.reserve(notconv);
+        for (int m = 0; m < notconv; m++)
         {
-            // phm_in->sPsi(basis + dim*(nbase + m), &spsi[(nbase + m) * dim], dim, dim, 1);
-            op.spsi(basis + dim*(nbase + m), &spsi[(nbase + m) * dim], dim, 1);
+            if (this->SchmidtOrth(dim,
+                                  nbase + notconv,
+                                  nbase + m,
+                                  spsi,
+                                  &lagrange[m * (nbase + notconv)],
+                                  pre_matrix_mm_m[m],
+                                  pre_matrix_mv_m[m]))
+            {
+                valid_indices.push_back(m);
+                // phm_in->sPsi(basis + dim*(nbase + m), &spsi[(nbase + m) * dim], dim, dim, 1);
+                op.spsi(basis + dim * (nbase + m), &spsi[(nbase + m) * dim], dim, 1);
+            }
         }
-    }
+
+        // Drop rejected directions and compact the remaining columns so that
+        // cal_elem() does not see zero columns or enlarge the basis with them.
+        if (static_cast<int>(valid_indices.size()) < notconv)
+        {
+            for (int k = 0; k < static_cast<int>(valid_indices.size()); ++k)
+            {
+                const int src = valid_indices[k];
+                if (src != k)
+                {
+                    syncmem_complex_op()(basis + dim * (nbase + k), basis + dim * (nbase + src), dim);
+                    syncmem_complex_op()(spsi + (nbase + k) * dim, spsi + (nbase + src) * dim, dim);
+                }
+            }
+            this->notconv = static_cast<int>(valid_indices.size());
+        }
     }
 
     // calculate H|psi> for not convergence bands
@@ -628,7 +699,7 @@ void DiagoDavid<T, Device>::cal_grad(const HSOperator<T, Device>& op,
     //                       &hpsi[nbase * dim]); // &hp(nbase, 0)
     // phm_in->ops->hPsi(dav_hpsi_in);
     // hpsi[:, nbase:nbase+notcnv] = H basis[:, nbase:nbase+notcnv]
-    op.hpsi(basis + nbase * dim, hpsi + nbase * dim, dim, notconv);
+    op.hpsi(basis + nbase * dim, hpsi + nbase * dim, dim, this->notconv);
 
     delmem_complex_op()(lagrange);
     delmem_complex_op()(vc_ev_vector);
@@ -892,7 +963,7 @@ void DiagoDavid<T, Device>::refresh(const int& dim,
 
 
 template <typename T, typename Device>
-void DiagoDavid<T, Device>::SchmidtOrth(const int& dim,
+bool DiagoDavid<T, Device>::SchmidtOrth(const int& dim,
                                             const int nband,
                                             const int m,
                                             const T* spsi,
@@ -976,7 +1047,7 @@ void DiagoDavid<T, Device>::SchmidtOrth(const int& dim,
         // and leave the (near-zero) direction untouched instead of aborting.
         warn_skip_degenerate_direction(m);
         ModuleBase::timer::end("DiagoDavid", "SchmidtOrth");
-        return;
+        return false;
     }
 
     // / psi_m = psi_m - \sum_{i < m} \langle psi(i)|S|psi(m) \rangle psi(i)
@@ -1001,7 +1072,7 @@ void DiagoDavid<T, Device>::SchmidtOrth(const int& dim,
         // Nearly rank-deficient direction after orthogonalization: skip it.
         warn_skip_degenerate_direction(m);
         ModuleBase::timer::end("DiagoDavid", "SchmidtOrth");
-        return;
+        return false;
     }
 
     psi_norm = sqrt(psi_norm);
@@ -1011,7 +1082,7 @@ void DiagoDavid<T, Device>::SchmidtOrth(const int& dim,
         // Nearly rank-deficient direction: skip instead of aborting.
         warn_skip_degenerate_direction(m);
         ModuleBase::timer::end("DiagoDavid", "SchmidtOrth");
-        return;
+        return false;
     }
 
     // psi_m = psi_m / psi_norm
@@ -1019,7 +1090,7 @@ void DiagoDavid<T, Device>::SchmidtOrth(const int& dim,
 
     // delete[] lagrange;
     ModuleBase::timer::end("DiagoDavid", "SchmidtOrth");
-    return;
+    return true;
 }
 
 
