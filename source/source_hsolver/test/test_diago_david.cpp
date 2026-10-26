@@ -25,6 +25,7 @@ class DiagonalOperator final : public hsolver::HSOperator<T>
     void hpsi(const T* x, T* hx, const int ld, const int nvec) const override
     {
         EXPECT_EQ(ld, size_);
+        EXPECT_GT(nvec, 0);
 
         for (int band = 0; band < nvec; ++band)
         {
@@ -37,6 +38,7 @@ class DiagonalOperator final : public hsolver::HSOperator<T>
     void spsi(const T* x, T* sx, const int ld, const int nvec) const override
     {
         EXPECT_EQ(ld, size_);
+        EXPECT_GT(nvec, 0);
         const int count = size_ * nvec;
         std::copy_n(x, count, sx);
     }
@@ -175,7 +177,9 @@ TYPED_TEST(DavidsonOwnershipTest, ExactAndApproximateWarmStart)
     const int rank = domain.rank();
     const int processes = domain.size();
     const int bands = 2;
-    const int dimension = std::max(4, 2 * processes);
+    // david_ndim=3 gives nbase_x=6; keep the asserted global dimension above it
+    // even when the test runs serially with a single process.
+    const int dimension = std::max(8, 2 * processes);
 #ifdef __MPI
     const hsolver::diag_comm_info comm = {POOL_WORLD, rank, processes};
 #else

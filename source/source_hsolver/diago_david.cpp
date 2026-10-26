@@ -191,7 +191,39 @@ int DiagoDavid<T, Device>::diag_once(const HSOperator<T, Device>& op,
         for (int m = 0; m < nband; ++m)
             syncmem_complex_op()(basis + dim*m, psi_in + m*ld_psi, dim);
         // Form the basis without subtracting nearly equal norm estimates.
-        ct::kernels::lapack_geqrf_inplace<T, ct_Device>()(dim, nband, basis, dim);
+        std::vector<T> rdiag(nband, T(0));
+        ct::kernels::lapack_geqrf_inplace<T, ct_Device>()(dim, nband, basis, dim, rdiag.data());
+
+        const int rdiag_size = std::min(dim, nband);
+        bool full_rank = rdiag_size == nband;
+        double max_diag = 0.0;
+        for (int m = 0; m < rdiag_size; ++m)
+        {
+            const double abs_diag = std::abs(rdiag[m]);
+            if (!std::isfinite(abs_diag))
+            {
+                full_rank = false;
+            }
+            if (abs_diag > max_diag)
+            {
+                max_diag = abs_diag;
+            }
+        }
+        const double rank_tol = 1e-6 * max_diag;
+        for (int m = 0; m < rdiag_size && full_rank; ++m)
+        {
+            if (std::abs(rdiag[m]) <= rank_tol)
+            {
+                full_rank = false;
+            }
+        }
+        if (!full_rank)
+        {
+            ModuleBase::WARNING_QUIT("DiagoDavid",
+                                     "initial trial wavefunction is linearly dependent; "
+                                     "cannot construct an orthonormal Davidson basis.");
+        }
+
         op.spsi(basis, spsi, dim, nband);
     }
     else
@@ -599,7 +631,7 @@ void DiagoDavid<T, Device>::cal_grad(const HSOperator<T, Device>& op,
 
 #if defined(__CUDA)
     bool qr_used = false;
-    const bool block_qr = this->use_block_qr();
+    const bool block_qr = this->use_block_qr() && notconv > 0;
     if (block_qr)
     {
         // Keep a copy of the unprojected block so a rank-deficient QR can
@@ -613,15 +645,15 @@ void DiagoDavid<T, Device>::cal_grad(const HSOperator<T, Device>& op,
             this->neg_one, basis, dim, lagrange, nbase + notconv,
             this->one, basis + dim*nbase, dim);
 
+        std::vector<T> rdiag(notconv, T(0));
         ct::kernels::lapack_geqrf_inplace<T, ct_Device>()(
-            dim, notconv, basis + dim * nbase, dim);
+            dim, notconv, basis + dim * nbase, dim, rdiag.data());
 
-        bool full_rank = true;
+        const int rdiag_size = std::min(dim, notconv);
+        bool full_rank = rdiag_size == notconv;
         double max_diag = 0.0;
-        std::vector<T> rdiag(notconv);
-        for (int j = 0; j < notconv; ++j)
+        for (int j = 0; j < rdiag_size; ++j)
         {
-            syncmem_d2h_op()(&rdiag[j], basis + (nbase + j) * dim + j, 1);
             const double abs_diag = std::abs(rdiag[j]);
             if (!std::isfinite(abs_diag))
             {
@@ -633,7 +665,7 @@ void DiagoDavid<T, Device>::cal_grad(const HSOperator<T, Device>& op,
             }
         }
         const double rank_tol = 1e-6 * max_diag;
-        for (int j = 0; j < notconv && full_rank; ++j)
+        for (int j = 0; j < rdiag_size && full_rank; ++j)
         {
             if (std::abs(rdiag[j]) <= rank_tol)
             {
@@ -699,7 +731,12 @@ void DiagoDavid<T, Device>::cal_grad(const HSOperator<T, Device>& op,
     //                       &hpsi[nbase * dim]); // &hp(nbase, 0)
     // phm_in->ops->hPsi(dav_hpsi_in);
     // hpsi[:, nbase:nbase+notcnv] = H basis[:, nbase:nbase+notcnv]
-    op.hpsi(basis + nbase * dim, hpsi + nbase * dim, dim, this->notconv);
+    // An all-rejected block leaves no new direction; asking the operator for
+    // zero vectors would build an invalid [0, -1] range.
+    if (this->notconv > 0)
+    {
+        op.hpsi(basis + nbase * dim, hpsi + nbase * dim, dim, this->notconv);
+    }
 
     delmem_complex_op()(lagrange);
     delmem_complex_op()(vc_ev_vector);

@@ -495,11 +495,21 @@ void Diago_DavSubspace<T, Device>::cal_grad(const HSOperator<T, Device>& op,
         for (int i = 0; i < notconv; i++)
         {
             const bool finite = std::isfinite(psi_norm[i]);
-            if (!finite || psi_norm[i] <= 1.0e-12)
+            if (!finite)
             {
-                std::cout << "Diago_DavSubspace::cal_grad: norm of new direction for band " << i
-                          << (finite ? " is too small" : " is not finite")
-                          << ", treating as converged." << std::endl;
+                ModuleBase::WARNING("Diago_DavSubspace::cal_grad",
+                                    "Non-finite norm for new direction of band "
+                                        + std::to_string(i)
+                                        + "; skipping the direction instead of "
+                                          "reporting a converged eigenpair.");
+                continue;
+            }
+            if (psi_norm[i] <= 1.0e-12)
+            {
+                ModuleBase::WARNING("Diago_DavSubspace::cal_grad",
+                                    "Near-zero norm for new direction of band "
+                                        + std::to_string(i)
+                                        + "; treating the direction as converged.");
                 continue;
             }
             valid_indices.push_back(i);
@@ -527,8 +537,13 @@ void Diago_DavSubspace<T, Device>::cal_grad(const HSOperator<T, Device>& op,
 
     // update hpsi[:, nbase:nbase+notconv]
     // hpsi[:, nbase:nbase+notconv] = H * psi_iter[:, nbase:nbase+notconv]
-    op.hpsi(psi_iter + nbase * dim, hpsi + nbase * this->dim, this->dim, this->notconv);
-    op.spsi(psi_iter + nbase * dim, spsi + nbase * this->dim, this->dim, this->notconv);
+    // An all-rejected block leaves no new direction; asking the operator for
+    // zero vectors would build an invalid [0, -1] range.
+    if (this->notconv > 0)
+    {
+        op.hpsi(psi_iter + nbase * dim, hpsi + nbase * this->dim, this->dim, this->notconv);
+        op.spsi(psi_iter + nbase * dim, spsi + nbase * this->dim, this->dim, this->notconv);
+    }
 
     ModuleBase::timer::end("Diago_DavSubspace", "cal_grad");
     return;
