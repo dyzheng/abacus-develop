@@ -58,6 +58,28 @@ bool cal_alloc_constraint_dS_force(
     ModuleBase::matrix& force,
     std::string& error);
 
+/**
+ * @brief Add the explicit target-orbital derivative to the constraint stress.
+ *
+ * The S4.1 adjoint matrix E satisfies Tr(D dK_i) = sum_{mu,nu} E dS at fixed
+ * weight, so the S-dependent part of the constraint energy has
+ * dE_S/d eps = Tr(E dS/d eps).  ABACUS defines stress as
+ * -(1/Omega) dE/d eps; the two-center Overlap kernel returns
+ * +Tr(E dS/d eps)/Omega, hence this routine subtracts its result.  It only
+ * acts on the Gamma-only real allocation state and accumulates into
+ * `stress` (Ry/Bohr^3).
+ */
+bool cal_alloc_constraint_dS_stress(
+    const UnitCell& ucell,
+    const Grid_Driver& gd,
+    const LCAO_Orbitals& orb,
+    const TwoCenterBundle& two_center_bundle,
+    const std::vector<const HContainer<double>*>& dmr,
+    const int nspin,
+    const std::vector<double>& mu,
+    ModuleBase::matrix& stress,
+    std::string& error);
+
 } // namespace hamilt
 
 #endif

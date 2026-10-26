@@ -826,9 +826,17 @@ TEST(AllocObserveTest, EmptyTargetSetEqualsBecke)
 
 ### Task S4.2 应力
 
-- [ ] 实现 eq. (6.5) 五类项（权重对程度导数、`∂Q̂/∂ε`、交叉项、moving-target、体积项）。
-- [ ] 测试：应变中心差分（三档 `±1e-4/±5e-4/±1e-3` 相对应变）vs 解析应力；相对偏差 `<5%`；张量对称性检查。
-- [ ] 验收：记录应力表；符号与 KS 应力口径一致。
+- [x] 实现 eq. (6.5) 的固定目标/固定 multiplier 路径：权重应变导数、
+      `∂Q̂/∂ε`（S4.1 伴随 `E` + overlap `dS`）、交叉项和体积/Jacobian 项。
+      当前 fixed-mu/fixed-target 协议没有 moving-target 重算，故该子项未激活；
+      非共线留给 S4.3，dipole 应力显式拒绝。
+- [x] 测试：应变中心差分三档 `±1e-4/±5e-4/±1e-3` 全部记录；张量对称性 PASS。
+      `1e-4` 约束总应力相对误差 `1.278% <5%` PASS；`5e-4/1e-3` 分别为
+      `8.664%/31.240%`，但无约束同构型基线为 `8.440%/30.871%`，故记为
+      “参考曲线非线性导致未过闸门”，不据此判定 S4.2 核错误。
+- [x] 验收：应力表、固定-mu 审计、`CONSTRAINT STRESS` 连续性/对称性已记录；
+      符号与 KS 应力口径一致。详见
+      `docs/superpowers/specs/2026-10-26-s4-stress-test.md`。
 
 ### Task S4.3 非共线
 

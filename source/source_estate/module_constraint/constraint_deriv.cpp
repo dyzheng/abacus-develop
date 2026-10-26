@@ -7,6 +7,68 @@
 
 namespace constraint
 {
+namespace
+{
+
+// Build the canonical combined density buffers a per-constraint channel list
+// needs.  Factory profiles are charge (+1,+1) and spin (+1,-1), so two
+// contiguous arrays cover every alpha without an O(nalpha x nrxx) temporary.
+void build_combined_densities(const double* const* rho,
+                              const int nspin,
+                              const int nrxx,
+                              const std::vector<ChannelProfile>& channels,
+                              std::vector<double>& dens_charge,
+                              std::vector<double>& dens_spin)
+{
+    bool need_charge = false;
+    bool need_spin = false;
+    for (const ChannelProfile& ch : channels)
+    {
+        // Branch A: spin-like profile (split read signs).
+        if (ch.read_dn != ch.read_up)
+        {
+            need_spin = true;
+        }
+        else
+        {
+            // Branch B: charge-like profile (symmetric read signs).
+            need_charge = true;
+        }
+    }
+    if (nspin == 2)
+    {
+        // Branch: two-channel density; build only the combined arrays the
+        // constraint list actually reads.
+        if (need_charge)
+        {
+            dens_charge.assign(nrxx, 0.0);
+            for (int ir = 0; ir < nrxx; ++ir)
+            {
+                dens_charge[ir] = rho[0][ir] + rho[1][ir];
+            }
+        }
+        if (need_spin)
+        {
+            dens_spin.assign(nrxx, 0.0);
+            for (int ir = 0; ir < nrxx; ++ir)
+            {
+                dens_spin[ir] = rho[0][ir] - rho[1][ir];
+            }
+        }
+    }
+    else if (need_charge)
+    {
+        // Branch: nspin == 1 stores the total density in rho[0]; the caller
+        // has already rejected spin-like profiles in this case.
+        dens_charge.assign(nrxx, 0.0);
+        for (int ir = 0; ir < nrxx; ++ir)
+        {
+            dens_charge[ir] = rho[0][ir];
+        }
+    }
+}
+
+} // namespace
 
 void constraint_force(const WeightGrid& wg,
                       const double* const* rho,
@@ -80,60 +142,10 @@ void constraint_force(const WeightGrid& wg,
                                  "force buffer must be nat x 3");
     }
 
-    // Scan which combined densities the list needs.  Factory profiles are
-    // charge (+1,+1) and spin (+1,-1), so a profile with read_dn == read_up
-    // folds rho_up + rho_dn (charge) and one with read_dn != read_up folds
-    // rho_up - rho_dn (spin); building at most the two canonical buffers
-    // keeps the inner loop over one contiguous array per alpha without an
-    // O(nalpha x nrxx) intermediate.
-    bool need_charge = false;
-    bool need_spin = false;
-    for (const ChannelProfile& ch : channels)
-    {
-        // Branch A: spin-like profile (split read signs).
-        if (ch.read_dn != ch.read_up)
-        {
-            need_spin = true;
-        }
-        else
-        {
-            // Branch B: charge-like profile (symmetric read signs).
-            need_charge = true;
-        }
-    }
     std::vector<double> dens_charge;
     std::vector<double> dens_spin;
-    if (nspin == 2)
-    {
-        // Branch: two-channel density; build the combined arrays the list
-        // needs (charge = total, spin = magnetization).
-        if (need_charge)
-        {
-            dens_charge.assign(nrxx, 0.0);
-            for (int ir = 0; ir < nrxx; ++ir)
-            {
-                dens_charge[ir] = rho[0][ir] + rho[1][ir];
-            }
-        }
-        if (need_spin)
-        {
-            dens_spin.assign(nrxx, 0.0);
-            for (int ir = 0; ir < nrxx; ++ir)
-            {
-                dens_spin[ir] = rho[0][ir] - rho[1][ir];
-            }
-        }
-    }
-    else if (need_charge)
-    {
-        // Branch: nspin == 1 stores the total density in rho[0]; only
-        // charge-like profiles survive the guard above.
-        dens_charge.assign(nrxx, 0.0);
-        for (int ir = 0; ir < nrxx; ++ir)
-        {
-            dens_charge[ir] = rho[0][ir];
-        }
-    }
+    build_combined_densities(rho, nspin, nrxx, channels, dens_charge,
+                             dens_spin);
 
     // Local accumulation buffer (nat*3, the PW force layout iat*3+ipol).
     std::vector<double> f(static_cast<size_t>(nat) * 3, 0.0);
@@ -194,6 +206,130 @@ void constraint_force(const WeightGrid& wg,
     for (int i = 0; i < nat * 3; ++i)
     {
         force.c[i] += f[i];
+    }
+}
+
+void constraint_stress(const WeightGrid& wg,
+                       const double* const* rho,
+                       const int nspin,
+                       const std::vector<ChannelProfile>& channels,
+                       const std::vector<double>& mu,
+                       ModuleBase::matrix& stress)
+{
+    const ModulePW::PW_Basis* rho_basis = wg.rho_basis();
+    const double dV = rho_basis->omega / static_cast<double>(rho_basis->nxyz);
+    const int nrxx = rho_basis->nrxx;
+    const int nalpha = wg.nconstraint();
+
+    // Guard: the strain derivative is built from the position-derivative
+    // cache, so an unbuilt cache would silently report a zero stress.
+    if (!wg.derivatives_built())
+    {
+        ModuleBase::WARNING_QUIT("constraint_stress",
+                                 "weight derivative grid not built "
+                                 "(call build_derivatives)");
+    }
+    // Guard: a dipole density weight is a coordinate function with a
+    // different strain derivative; the Becke contraction below does not
+    // represent it, so refuse instead of returning a wrong tensor.
+    if (wg.is_dipole())
+    {
+        ModuleBase::WARNING_QUIT("constraint_stress",
+                                 "dipole constraint stress is not implemented");
+    }
+    // Guard: one multiplier and one channel profile per constraint.
+    if (static_cast<int>(mu.size()) != nalpha
+        || static_cast<int>(channels.size()) != nalpha)
+    {
+        ModuleBase::WARNING_QUIT("constraint_stress",
+                                 "mu/channel count != nconstraint");
+    }
+    // Guard: a spin-like profile needs both spin channels, exactly as in the
+    // force kernel.
+    for (const ChannelProfile& ch : channels)
+    {
+        if (nspin != 2 && ch.read_dn != ch.read_up)
+        {
+            ModuleBase::WARNING_QUIT("constraint_stress",
+                                     "spin channel requires nspin == 2");
+        }
+    }
+    // Guard: the caller supplies the full stress accumulator.
+    if (stress.nr != 3 || stress.nc != 3)
+    {
+        ModuleBase::WARNING_QUIT("constraint_stress",
+                                 "stress buffer must be 3 x 3");
+    }
+
+    std::vector<double> dens_charge;
+    std::vector<double> dens_spin;
+    build_combined_densities(rho, nspin, nrxx, channels, dens_charge,
+                             dens_spin);
+
+    // Local 3 x 3 accumulation.  The full (a,b) square is filled before the
+    // final symmetrization so a tiny round-off asymmetry cannot survive.
+    std::vector<double> s(9, 0.0);
+    for (int alpha = 0; alpha < nalpha; ++alpha)
+    {
+        const double mua = mu[alpha];
+        // Branch: a zero multiplier contributes no stress from this alpha.
+        if (mua == 0.0)
+        {
+            continue;
+        }
+        const bool spinlike = channels[alpha].read_dn != channels[alpha].read_up;
+        const double* dens = spinlike ? dens_spin.data() : dens_charge.data();
+        for (int a = 0; a < 3; ++a)
+        {
+            for (int b = 0; b < 3; ++b)
+            {
+                double acc = 0.0;
+                for (int ir = 0; ir < nrxx; ++ir)
+                {
+                    acc += dens[ir]
+                           * wg.weight_strain_derivative(alpha, a, b, ir);
+                }
+                // sigma_ab -= mu_alpha * int rho d w_alpha/d eps_ab dr / Omega
+                s[a * 3 + b] -= mua * acc * dV;
+            }
+        }
+        // Volume/Jacobian term.  The weight matrix is an integral over the
+        // cell, so d(int rho w dV)/d eps_ab carries rho*w*delta_ab in
+        // addition to the explicit weight derivative.  The target projector
+        // is dimensionless and its volume dependence is already carried by
+        // the S adjoint, so this term uses only the weight-field density.
+        double q_weight = 0.0;
+        const std::vector<double>& w_alpha = wg.constraint_weight(alpha);
+        for (int ir = 0; ir < nrxx; ++ir)
+        {
+            q_weight += dens[ir] * w_alpha[ir] * dV;
+        }
+        for (int a = 0; a < 3; ++a)
+        {
+            s[a * 3 + a] -= mua * q_weight;
+        }
+    }
+
+#ifdef __MPI
+    Parallel_Reduce::reduce_pool(s.data(), static_cast<int>(s.size()));
+#endif
+    const double inv_omega = 1.0 / rho_basis->omega;
+    for (int a = 0; a < 3; ++a)
+    {
+        for (int b = a; b < 3; ++b)
+        {
+            // Symmetric strain: the physical stress is the symmetric part of
+            // the chain-rule tensor.  Store the same value on both triangles.
+            const double value
+                = 0.5 * (s[a * 3 + b] + s[b * 3 + a]) * inv_omega;
+            stress(a, b) += value;
+            // Branch: off-diagonal entries must mirror to keep the tensor
+            // symmetric for the total-stress consumer.
+            if (a != b)
+            {
+                stress(b, a) += value;
+            }
+        }
     }
 }
 

@@ -330,6 +330,7 @@ TEST_F(PartitionTest, BeckeDerivFD)
     // 解析导数
     auto eval_geometry = [](const Vec3& rp, const Vec3* Rc) {
         std::vector<double> drR(3), dRR(9, 0.0), eR(9, 0.0);
+        std::vector<double> pair_dir(27, 0.0);
         for (int I = 0; I < 3; ++I)
         {
             drR[I] = norm(rp - Rc[I]);
@@ -341,24 +342,32 @@ TEST_F(PartitionTest, BeckeDerivFD)
             {
                 dRR[I*3 + J] = norm(Rc[I] - Rc[J]);
                 dRR[J*3 + I] = dRR[I*3 + J];
+                const Vec3 rij = Rc[I] - Rc[J];
+                for (int dd = 0; dd < 3; ++dd)
+                {
+                    pair_dir[(I*3 + J)*3 + dd] = rij[dd] / dRR[I*3 + J];
+                    pair_dir[(J*3 + I)*3 + dd] = -rij[dd] / dRR[I*3 + J];
+                }
             }
         }
-        return std::make_tuple(drR, dRR, eR);
+        return std::make_tuple(drR, dRR, eR, pair_dir);
     };
 
-    auto [drR, dRR, eR] = eval_geometry(r, R);
+    auto [drR, dRR, eR, pair_dir] = eval_geometry(r, R);
     double dw[3];
-    Grid::Partition::w_becke_adjusted_deriv(3, drR.data(), dRR.data(), radii, eR.data(), 3, iR, 0, 1, dw);
+    Grid::Partition::w_becke_adjusted_deriv(
+        3, drR.data(), dRR.data(), radii, eR.data(), pair_dir.data(), 3, iR,
+        0, 1, dw);
 
     // 中心差分：扰动 R_1 的每个分量
     for (int d = 0; d < 3; ++d)
     {
         Vec3 Rp[3] = {R[0], R[1], R[2]};
         Rp[1][d] += delta;
-        auto [drRp, dRRp, eRp] = eval_geometry(r, Rp);
+        auto [drRp, dRRp, eRp, pair_dirp] = eval_geometry(r, Rp);
         double wp = Grid::Partition::w_becke_adjusted(3, drRp.data(), dRRp.data(), radii, 3, iR, 0);
         Rp[1][d] -= 2.0 * delta;
-        auto [drRm, dRRm, eRm] = eval_geometry(r, Rp);
+        auto [drRm, dRRm, eRm, pair_dirm] = eval_geometry(r, Rp);
         double wm = Grid::Partition::w_becke_adjusted(3, drRm.data(), dRRm.data(), radii, 3, iR, 0);
         double fd = (wp - wm) / (2.0 * delta);
         EXPECT_NEAR(dw[d], fd, 1e-6) << "component " << d;
@@ -366,6 +375,7 @@ TEST_F(PartitionTest, BeckeDerivFD)
 
     // 对不在 iR 中的中心（J=3 在 nR0=4 全集内但不在 iR 中）导数必须为零
     std::vector<double> drR4(4), dRR4(16, 0.0), eR4(12, 0.0);
+    std::vector<double> pair_dir4(48, 0.0);
     for (int I = 0; I < 3; ++I)
     {
         drR4[I] = drR[I];
@@ -377,11 +387,18 @@ TEST_F(PartitionTest, BeckeDerivFD)
         {
             dRR4[I*4 + J] = dRR[I*3 + J];
             dRR4[J*4 + I] = dRR4[I*4 + J];
+            for (int dd = 0; dd < 3; ++dd)
+            {
+                pair_dir4[(I*4 + J)*3 + dd] = pair_dir[(I*3 + J)*3 + dd];
+                pair_dir4[(J*4 + I)*3 + dd] = pair_dir[(J*3 + I)*3 + dd];
+            }
         }
     }
     drR4[3] = 3.0; // 任意占位（J=3 不参与权重）
     double dw0[3] = {9.9, 9.9, 9.9};
-    Grid::Partition::w_becke_adjusted_deriv(4, drR4.data(), dRR4.data(), radii, eR4.data(), 3, iR, 0, 3, dw0);
+    Grid::Partition::w_becke_adjusted_deriv(
+        4, drR4.data(), dRR4.data(), radii, eR4.data(), pair_dir4.data(), 3,
+        iR, 0, 3, dw0);
     EXPECT_DOUBLE_EQ(dw0[0], 0.0);
     EXPECT_DOUBLE_EQ(dw0[1], 0.0);
     EXPECT_DOUBLE_EQ(dw0[2], 0.0);

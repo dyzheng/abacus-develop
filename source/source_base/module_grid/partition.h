@@ -79,9 +79,14 @@ double w_becke_adjusted(
  * Computes dw[0..2] = d w_c / d R_J (3 cartesian components), where J is a
  * global center index in [0, nR0).  eR[3*I+d] is the d-th cartesian
  * component of the unit vector pointing from the grid point toward center I
- * (direction cosine).  The chain rule runs through mu'_ij = mu_ij + a_ij
- * (1 - mu_ij^2), the geometric derivatives of drR and dRR, and the analytic
- * derivative of the iterated Becke polynomial.
+ * (direction cosine).  pair_dir[3*(I*nR0+K)+d] is the d-th Cartesian
+ * component of the unit vector from center K toward center I,
+ * (R_I - R_K)/dRR[I*nR0+K].  It must be supplied explicitly: in a periodic
+ * cell the nearest image of I to the grid point and that of K can differ by a
+ * lattice translation, so (drR[I]*eR[I] - drR[K]*eR[K]) need not be the
+ * minimum-image pair vector used by dRR.  The chain rule runs through
+ * mu'_ij = mu_ij + a_ij (1 - mu_ij^2), the geometric derivatives of drR and
+ * dRR, and the analytic derivative of the iterated Becke polynomial.
  *
  * @see w_becke_adjusted
  */
@@ -91,10 +96,39 @@ void w_becke_adjusted_deriv(
     const double* dRR,
     const double* radii,
     const double* eR,
+    const double* pair_dir,
     int nR,
     const int* iR,
     int c,
     int J,
+    double* dw
+);
+
+/**
+ * @brief Analytic strain derivative of the adjusted Becke weight.
+ *
+ * Computes dw[3*a+b] = d w_c / d eps_{a b} for a homogeneous deformation
+ * x -> (I + eps) x with fixed fractional grid and atomic coordinates.  The
+ * grid-centered distances use the grid-nearest atom images encoded by
+ * (drR, eR), while dRR uses the minimum-image pair direction pair_dir.  These
+ * image choices can differ in a periodic cell, so the strain derivative must
+ * be accumulated from both terms directly rather than by contracting
+ * w_becke_adjusted_deriv() with a single atom-position lever.
+ *
+ * dw must have space for nine entries; entries are indexed a*3+b.
+ *
+ * @see w_becke_adjusted_deriv
+ */
+void w_becke_adjusted_strain_deriv(
+    int nR0,
+    const double* drR,
+    const double* dRR,
+    const double* radii,
+    const double* eR,
+    const double* pair_dir,
+    int nR,
+    const int* iR,
+    int c,
     double* dw
 );
 

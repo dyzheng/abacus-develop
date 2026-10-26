@@ -558,6 +558,47 @@ void Force_Stress_LCAO<T>::getForceStress(UnitCell& ucell,
         }
     }
 
+    // S4.2: strain counterpart of the real-space weight constraint force.
+    // The grid kernel supplies the explicit d w/d eps term (with the
+    // complementary density Q_c D Q_c in allocation mode); the LCAO overlap
+    // kernel below adds the target-space dS/d eps term through the same S4.1
+    // adjoint E used by the force.
+    ModuleBase::matrix stresscon;
+    if (PARAM.inp.constraint && isstress)
+    {
+        stresscon.create(3, 3);
+        constraint::ConstraintLoop& cloop
+            = constraint::ConstraintLoop::instance();
+        cloop.compute_stress(pelec->charge->rho, PARAM.inp.nspin, stresscon);
+        if (cloop.allocation_mode())
+        {
+            // Guard: the adjoint contraction is defined on the real Gamma
+            // density matrices that the allocation build consumed.
+            if (dmat.dm == nullptr)
+            {
+                ModuleBase::WARNING_QUIT("Force_Stress_LCAO::getForceStress",
+                    "allocation dS stress requires an initialized DMR");
+            }
+            std::vector<const hamilt::HContainer<double>*> dmr_channels;
+            for (auto* dmr : dmat.dm->get_DMR_vector())
+            {
+                dmr_channels.push_back(dmr);
+            }
+            std::string alloc_stress_error;
+            // Branch: a failed adjoint/layout step must abort rather than
+            // silently report the frozen weight stress as the full
+            // derivative.
+            if (!hamilt::cal_alloc_constraint_dS_stress(
+                    ucell, gd, orb, two_center_bundle, dmr_channels,
+                    PARAM.inp.nspin, cloop.mu_eff(), stresscon,
+                    alloc_stress_error))
+            {
+                ModuleBase::WARNING_QUIT(
+                    "Force_Stress_LCAO::getForceStress", alloc_stress_error);
+            }
+        }
+    }
+
     // NOTE: finish_ftable is no longer needed as we don't use ForceStressArrays for overlap/kinetic
     // if (!PARAM.globalv.gamma_only_local)
     // {
@@ -845,6 +886,13 @@ void Force_Stress_LCAO<T>::getForceStress(UnitCell& ucell,
                              + sigmaxc(i, j)   // exchange corretion stress
                              + sigmahar(i, j); // hartree stress
 
+                // Branch: add the constraint stress only when the loop is
+                // actually enabled; stresscon stays zero otherwise.
+                if (PARAM.inp.constraint)
+                {
+                    scs(i, j) += stresscon(i, j);
+                }
+
                 // VDW stress from linpz and jiyy
                 if (vdw_solver != nullptr)
                 {
@@ -945,6 +993,10 @@ void Force_Stress_LCAO<T>::getForceStress(UnitCell& ucell,
             if (PARAM.inp.sc_mag_switch)
             {
                 ModuleIO::print_stress("DeltaSpin  STRESS", stress_dspin, screen, ry, GlobalV::ofs_running);
+            }
+            if (PARAM.inp.constraint)
+            {
+                ModuleIO::print_stress("CONSTRAINT STRESS", stresscon, screen, ry, GlobalV::ofs_running);
             }
             ModuleIO::print_stress("TOTAL    STRESS", scs, screen, ry, GlobalV::ofs_running);
         } // end of test

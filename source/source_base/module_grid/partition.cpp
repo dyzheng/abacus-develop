@@ -209,6 +209,7 @@ void w_becke_adjusted_deriv(
     const double* dRR,
     const double* radii,
     const double* eR,
+    const double* pair_dir,
     int nR,
     const int* iR,
     int c,
@@ -254,16 +255,17 @@ void w_becke_adjusted_deriv(
             // Geometric derivative of mu w.r.t. R_J:
             //   dmu = (1/d)*(delta_{J,I}*e_I - delta_{J,K}*e_K)
             //         - (mu/d)*(R_I - R_K)/d  * (delta_{J,I} - delta_{J,K})
-            // with (R_I - R_K) reconstructed from drR and eR as
-            // drR[I]*eR[I] - drR[K]*eR[K].
+            // The pair direction is supplied explicitly because the atom
+            // images nearest to the grid point are not necessarily the same
+            // periodic images used for the minimum-image distance dRR.
             double dmu_dRJ[3] = {0.0, 0.0, 0.0};
             const double dII = (J == I) ? 1.0 : 0.0;
             const double dKK = (J == K) ? 1.0 : 0.0;
             const double del = dII - dKK;
             for (int dd = 0; dd < 3; ++dd) {
-                // dRR geometric derivative: (R_I - R_K)_dd / d, built from
-                // the direction cosines of the two centers.
-                const double RIK_dd = (drR[I] * eR[3*I + dd] - drR[K] * eR[3*K + dd]) / d;
+                // dRR geometric derivative: (R_I - R_K)_dd / d using the
+                // same minimum-image pair as dRR.
+                const double RIK_dd = pair_dir[3 * (I * nR0 + K) + dd];
                 dmu_dRJ[dd] = (dII * eR[3*I + dd] - dKK * eR[3*K + dd]) / d
                               - (mu / d) * del * RIK_dd;
             }
@@ -307,6 +309,88 @@ void w_becke_adjusted_deriv(
             dS += P[A] * dlnP[A*3 + d];
         }
         dw[d] = (dPc * S - P[c] * dS) / (S * S);
+    }
+}
+
+void w_becke_adjusted_strain_deriv(
+    int nR0,
+    const double* drR,
+    const double* dRR,
+    const double* radii,
+    const double* eR,
+    const double* pair_dir,
+    int nR,
+    const int* iR,
+    int c,
+    double* dw
+) {
+    assert(nR > 0 && nR0 >= nR);
+    for (int k = 0; k < 9; ++k) {
+        dw[k] = 0.0;
+    }
+
+    // Unnormalized weights P_A and their strain log-derivatives dlnP_A.
+    // The pair loop is shared across all nine strain components.
+    std::vector<double> P(nR, 1.0);
+    std::vector<double> dlnP(nR * 9, 0.0);
+    for (int i = 0; i < nR; ++i) {
+        int I = iR[i];
+        for (int j = i + 1; j < nR; ++j) {
+            int K = iR[j];
+            const double d = dRR[I*nR0 + K];
+            const double mu = (drR[I] - drR[K]) / d;
+            const double a = becke_size_adjust(radii[I], radii[K]);
+            const double mu_p = mu_adjusted(mu, a);
+            const double s = s_becke(mu_p);
+            const double sp = s_becke_deriv(mu_p);
+            const double dmup_dmu = 1.0 - 2.0 * a * mu;
+
+            // Strain derivative of mu:
+            //   d(drR_I)/d eps_ab = drR_I e_Ia e_Ib,
+            //   d(dRR_IK)/d eps_ab = dRR_IK q_a q_b,
+            // where e_I is the grid-to-atom direction and q is the
+            // minimum-image pair direction.  Both images deform with the
+            // cell, independently of the other center's grid-nearest image.
+            double dmu_deps[9];
+            for (int ia = 0; ia < 3; ++ia) {
+                for (int ib = 0; ib < 3; ++ib) {
+                    const int k = ia * 3 + ib;
+                    const double dnumer
+                        = drR[I] * eR[3*I + ia] * eR[3*I + ib]
+                          - drR[K] * eR[3*K + ia] * eR[3*K + ib];
+                    const double dden
+                        = dRR[I*nR0 + K] * pair_dir[3*(I*nR0 + K) + ia]
+                          * pair_dir[3*(I*nR0 + K) + ib];
+                    dmu_deps[k] = (dnumer - mu * dden) / d;
+                }
+            }
+
+            for (int k = 0; k < 9; ++k) {
+                const double dmu_p = dmup_dmu * dmu_deps[k];
+                // Guard the singular factors exactly as in the position
+                // derivative; zero factors with zero slope contribute zero.
+                if (s != 0.0) {
+                    dlnP[i*9 + k] += (sp / s) * dmu_p;
+                }
+                // The partner center carries 1 - s, whose slope is -s'.
+                if (1.0 - s != 0.0) {
+                    dlnP[j*9 + k] += (sp / (1.0 - s)) * (-dmu_p);
+                }
+            }
+            P[i] *= s;
+            P[j] *= (1.0 - s);
+        }
+    }
+
+    // Normalized weight derivative dw_c = (dP_c S - P_c dS) / S^2.
+    const double S = std::accumulate(P.begin(), P.end(), 0.0);
+    for (int k = 0; k < 9; ++k) {
+        double dPc = P[c] * dlnP[c*9 + k];
+        double dS = 0.0;
+        for (int A = 0; A < nR; ++A) {
+            dS += P[A] * dlnP[A*9 + k];
+        }
+        dw[k] = (dPc * S - P[c] * dS) / (S * S);
     }
 }
 

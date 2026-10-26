@@ -436,6 +436,7 @@ struct PointGeom
     std::vector<double> drR;
     std::vector<double> eR;
     std::vector<double> dRR;
+    std::vector<double> pair_dir;
 };
 static PointGeom eval_geom(const std::vector<std::array<double, 3>>& taud,
                            const std::array<double, 3>& rfrac)
@@ -445,6 +446,7 @@ static PointGeom eval_geom(const std::vector<std::array<double, 3>>& taud,
     g.drR.assign(nat, 0.0);
     g.eR.assign(3 * nat, 0.0);
     g.dRR.assign(nat * nat, 0.0);
+    g.pair_dir.assign(3 * nat * nat, 0.0);
     for (int I = 0; I < nat; ++I)
     {
         // Direction cosines must point from the grid point toward the atom
@@ -474,6 +476,12 @@ static PointGeom eval_geom(const std::vector<std::array<double, 3>>& taud,
                                          + dij[2] * dij[2]);
             g.dRR[I * nat + J] = dIJ;
             g.dRR[J * nat + I] = dIJ;
+            for (int d = 0; d < 3; ++d)
+            {
+                const double dir = dij[d] / dIJ;
+                g.pair_dir[(I * nat + J) * 3 + d] = dir;
+                g.pair_dir[(J * nat + I) * 3 + d] = -dir;
+            }
         }
     }
     return g;
@@ -544,7 +552,7 @@ TEST_F(WeightGridTest, DerivGridAnalytic)
             double dw[3] = {0.0, 0.0, 0.0};
             Grid::Partition::w_becke_adjusted_deriv(
                 3, g.drR.data(), g.dRR.data(), radii.data(), g.eR.data(),
-                3, iR_all.data(), 0, J, dw);
+                g.pair_dir.data(), 3, iR_all.data(), 0, J, dw);
             for (int d = 0; d < 3; ++d)
             {
                 EXPECT_NEAR(wg.weight_derivative(0, J, d, ir), dw[d], 1e-12)
@@ -554,6 +562,120 @@ TEST_F(WeightGridTest, DerivGridAnalytic)
         ++checked;
     }
     EXPECT_GT(checked, 10);
+}
+
+TEST_F(WeightGridTest, PeriodicImagePositionDerivative)
+{
+    // Regression for the periodic-image mismatch: at this grid point the
+    // grid-nearest images of O and H are not the minimum-image atom pair, so
+    // reconstructing (R_I - R_K) from drR/eR gives the wrong dRR direction.
+    // The kernel must consume the explicit pair direction and still match a
+    // finite difference with respect to each atom position.
+    constraint::WeightGrid wg(*ucell, rhopw, radii,
+                              constraint::WeightType::Becke);
+    wg.build();
+    wg.build_derivatives();
+
+    const auto taud = cell_taud(*ucell);
+    const int ir = 1659; // r = (0.25, 0.25, 4.75) Bohr on this 40^3 grid
+    const auto rfrac = grid_frac(*rhopw, ir);
+    const PointGeom g = eval_geom(taud, rfrac);
+    const std::vector<int> iR_all = {0, 1, 2};
+
+    double max_image_mismatch = 0.0;
+    for (int I = 0; I < 3; ++I)
+    {
+        for (int K = I + 1; K < 3; ++K)
+        {
+            for (int d = 0; d < 3; ++d)
+            {
+                const double reconstructed
+                    = (g.drR[I] * g.eR[3 * I + d]
+                       - g.drR[K] * g.eR[3 * K + d])
+                      / g.dRR[I * 3 + K];
+                max_image_mismatch
+                    = std::max(max_image_mismatch,
+                               std::abs(reconstructed
+                                        - g.pair_dir[(I * 3 + K) * 3 + d]));
+            }
+        }
+    }
+    // Guard: the fixture must actually exercise the cross-image branch.
+    EXPECT_GT(max_image_mismatch, 0.1);
+
+    const double h = 1e-4; // Bohr
+    for (int J = 0; J < 3; ++J)
+    {
+        auto plus = taud;
+        plus[J][0] += h / 10.0; // this fixture has Cartesian = frac * 10
+        auto minus = taud;
+        minus[J][0] -= h / 10.0;
+        const PointGeom gp = eval_geom(plus, rfrac);
+        const PointGeom gm = eval_geom(minus, rfrac);
+        const double wp = Grid::Partition::w_becke_adjusted(
+            3, gp.drR.data(), gp.dRR.data(), radii.data(), 3, iR_all.data(), 0);
+        const double wm = Grid::Partition::w_becke_adjusted(
+            3, gm.drR.data(), gm.dRR.data(), radii.data(), 3, iR_all.data(), 0);
+        const double fd = (wp - wm) / (2.0 * h);
+
+        double dw[3] = {0.0, 0.0, 0.0};
+        Grid::Partition::w_becke_adjusted_deriv(
+            3, g.drR.data(), g.dRR.data(), radii.data(), g.eR.data(),
+            g.pair_dir.data(), 3, iR_all.data(), 0, J, dw);
+        EXPECT_NEAR(dw[0], fd, 1e-7) << "atom " << J;
+        EXPECT_NEAR(wg.weight_derivative(0, J, 0, ir), fd, 1e-7)
+            << "cached atom " << J;
+    }
+
+    // The strain kernel also consumes pair_dir, so exercise the same
+    // cross-image point under a homogeneous lattice deformation.  Scaling
+    // Cartesian coordinates inside a fixed box would not transform the
+    // periodic images consistently, hence rebuild the weight field on the
+    // strained lattice with fixed fractional coordinates.
+    const ModuleBase::Matrix3 base_latvec = ucell->latvec;
+    auto base_element = [&base_latvec](const int row, const int col) {
+        return (&base_latvec.e11)[3 * row + col];
+    };
+    auto cell_element = [this](const int row, const int col) -> double& {
+        return (&ucell->latvec.e11)[3 * row + col];
+    };
+    const double strain_step = 1e-6;
+    const std::array<std::array<int, 2>, 3> strain_components = {{
+        {0, 0}, {0, 2}, {2, 2}}};
+    for (const auto& component : strain_components)
+    {
+        const int a = component[0];
+        const int b = component[1];
+        auto strained_weight = [&](const double step) {
+            ucell->latvec = base_latvec;
+            for (int row = 0; row < 3; ++row)
+            {
+                // Branch: perturb one deformation-gradient component of the
+                // row-vector lattice matrix.
+                for (int col = 0; col < 3; ++col)
+                {
+                    if (col == a)
+                    {
+                        cell_element(row, col)
+                            += base_element(row, b) * step;
+                    }
+                }
+            }
+            constraint::WeightGrid strained(*ucell, rhopw, radii,
+                                            constraint::WeightType::Becke);
+            strained.build();
+            const double value = strained.constraint_weight(0)[ir];
+            ucell->latvec = base_latvec;
+            return value;
+        };
+        const double wp = strained_weight(strain_step);
+        const double wm = strained_weight(-strain_step);
+        const double strain_fd = (wp - wm) / (2.0 * strain_step);
+
+        EXPECT_NEAR(wg.weight_strain_derivative(0, a, b, ir), strain_fd,
+                    1e-7)
+            << "cached strain component " << a << b;
+    }
 }
 
 TEST_F(WeightGridTest, DerivGridCoincidentPointZero)
@@ -664,6 +786,104 @@ TEST_F(WeightGridTest, DerivGridTranslationInvariance)
         ++checked;
     }
     EXPECT_GT(checked, 10);
+}
+
+TEST_F(WeightGridTest, StrainDerivativeMatchesFiniteDifference)
+{
+    // The S4.2 weight stress uses
+    //   d w/d eps_{ab} = sum_J (R_J - r)_b d w/d R_{J,a}
+    // for a homogeneous deformation with fixed fractional coordinates.
+    // Check it against a central difference of w at the same local grid
+    // points, rebuilding the weight field on the strained cell.
+    constraint::WeightGrid wg(*ucell, rhopw, radii,
+                              constraint::WeightType::Becke);
+    wg.build();
+    wg.build_derivatives();
+
+    const ModuleBase::Matrix3 base = ucell->latvec;
+    auto base_element = [&base](const int row, const int col) {
+        return (&base.e11)[3 * row + col];
+    };
+    auto cell_element = [this](const int row, const int col) -> double& {
+        return (&ucell->latvec.e11)[3 * row + col];
+    };
+    const double eps = 1e-6;
+    // One diagonal, one mixed, and one diagonal on the last axis: this
+    // catches an index transpose without paying for all nine components.
+    const std::array<std::array<int, 2>, 4> components = {{
+        {0, 0}, {0, 1}, {1, 2}, {2, 2}}};
+
+    auto make_strained_weights = [&](const int a, const int b,
+                                     const double step) {
+        ucell->latvec = base;
+        for (int row = 0; row < 3; ++row)
+        {
+            // Branch: a single deformation-gradient component changes only
+            // the a-th Cartesian column by step times the b-th base column.
+            for (int col = 0; col < 3; ++col)
+            {
+                if (col == a)
+                {
+                    cell_element(row, col) += base_element(row, b) * step;
+                }
+            }
+        }
+        constraint::WeightGrid strained(*ucell, rhopw, radii,
+                                        constraint::WeightType::Becke);
+        strained.build();
+        // Copy: constraint_weight() returns a reference into `strained`,
+        // which dies at the end of this lambda.
+        return std::vector<double>(strained.constraint_weight(0));
+    };
+
+    int checked = 0;
+    for (const auto& comp : components)
+    {
+        const int a = comp[0];
+        const int b = comp[1];
+        int component_checks = 0;
+        const std::vector<double> w_plus
+            = make_strained_weights(a, b, eps);
+        const std::vector<double> w_minus
+            = make_strained_weights(a, b, -eps);
+        // Restore the base cell before the analytic evaluation (the cached
+        // derivative grid was built there).
+        ucell->latvec = base;
+
+        for (int probe = 0; probe < 400 && component_checks < 6; ++probe)
+        {
+            const int ir = (probe * 811 + 37) % rhopw->nrxx;
+            // Skip points within 0.05 Bohr of an atom or close to a
+            // minimum-image switch plane where the weight is non-smooth.
+            bool skip = false;
+            const auto rf = grid_frac(*rhopw, ir);
+            const auto taud = cell_taud(*ucell);
+            for (int I = 0; I < wg.nat(); ++I)
+            {
+                double dr2 = 0.0;
+                for (int d = 0; d < 3; ++d)
+                {
+                    const double df = wrap_frac(rf[d] - taud[I][d]);
+                    dr2 += df * df;
+                    skip = skip || std::abs(df) >= 0.49;
+                }
+                skip = skip || std::sqrt(dr2) * 10.0 < 0.05;
+            }
+            if (skip)
+            {
+                continue;
+            }
+            const double fd = (w_plus[ir] - w_minus[ir]) / (2.0 * eps);
+            const double analytic
+                = wg.weight_strain_derivative(0, a, b, ir);
+            EXPECT_NEAR(analytic, fd, 1e-7)
+                << "component " << a << b << " probe " << probe;
+            ++checked;
+            ++component_checks;
+        }
+    }
+    ucell->latvec = base;
+    EXPECT_GT(checked, 20);
 }
 
 TEST_F(WeightGridTest, DerivFragmentConstraint)

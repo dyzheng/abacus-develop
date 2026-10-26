@@ -167,6 +167,16 @@ class ConstraintLoop
                        const int nspin,
                        ModuleBase::matrix& forcecon);
 
+    // Grid-based constraint stress (S4.2), the strain counterpart of
+    // compute_force(): the same per-constraint density channels and the
+    // WeightGrid strain derivative.  Allocation mode consumes the
+    // complementary density Q_c D Q_c stored by the esolver; the target-space
+    // S derivative is added separately by the LCAO overlap kernel.
+    // Accumulates into stresscon (3 x 3, Ry/Bohr^3).  No-op when disabled.
+    void compute_stress(const double* const* rho,
+                        const int nspin,
+                        ModuleBase::matrix& stresscon);
+
     // Allocation-mode force density: the esolver stores the complementary
     // Q_c D Q_c density here before FORCE_STRESS calls compute_force().
     void set_allocation_force_density(std::vector<std::vector<double>> rho);

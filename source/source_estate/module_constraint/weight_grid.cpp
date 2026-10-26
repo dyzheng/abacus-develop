@@ -83,16 +83,11 @@ ModuleBase::Vector3<double> WeightGrid::grid_position(const int ir) const
     return grid_fraction(ir) * ucell_.latvec * ucell_.lat0;
 }
 
-void WeightGrid::build()
+std::vector<ModuleBase::Vector3<double>>
+WeightGrid::atom_fractional_positions() const
 {
-    // Branch: a dipole coordinate has its own analytic weight source; it
-    // does not partition the density and must not run the Becke loop.
-    if (is_dipole())
-    {
-        build_dipole();
-        return;
-    }
-    // Per-atom fractional (direct) coordinates.
+    // UnitCell stores taud per species; flatten it into the global atom order
+    // used by build(), build_derivatives(), and the stress contraction.
     std::vector<ModuleBase::Vector3<double>> taud(nat_);
     int iat_glob = 0;
     for (int it = 0; it < ucell_.ntype; ++it)
@@ -103,6 +98,37 @@ void WeightGrid::build()
             ++iat_glob;
         }
     }
+    return taud;
+}
+
+double WeightGrid::weight_strain_derivative(const int alpha,
+                                            const int a,
+                                            const int b,
+                                            const int ir) const
+{
+    // Guard: the strain derivative needs its derivative cache and two valid
+    // Cartesian components.
+    if (dwe_.empty() || alpha < 0
+        || alpha >= static_cast<int>(dwe_.size()) || a < 0 || a > 2 || b < 0
+        || b > 2 || ir < 0 || ir >= nrxx_)
+    {
+        return 0.0;
+    }
+    return dwe_[alpha][(a * 3 + b) * nrxx_ + ir];
+}
+
+void WeightGrid::build()
+{
+    // Branch: a dipole coordinate has its own analytic weight source; it
+    // does not partition the density and must not run the Becke loop.
+    if (is_dipole())
+    {
+        build_dipole();
+        return;
+    }
+    // Per-atom fractional (direct) coordinates.
+    const std::vector<ModuleBase::Vector3<double>> taud
+        = atom_fractional_positions();
 
     std::vector<double> dRR(nat_ * nat_, 0.0);
     for (int I = 0; I < nat_; ++I)
@@ -267,30 +293,35 @@ void WeightGrid::build_derivatives()
     if (is_dipole())
     {
         dw_.assign(1, std::vector<double>(nat_ * 3 * nrxx_, 0.0));
+        dwe_.clear();
         return;
     }
     // Per-atom fractional (direct) coordinates — same geometry setup as
     // build(): the derivative grid is a pure function of the geometry and
     // must be recomputed together with the weights.
-    std::vector<ModuleBase::Vector3<double>> taud(nat_);
-    int iat_glob = 0;
-    for (int it = 0; it < ucell_.ntype; ++it)
-    {
-        for (int ia = 0; ia < ucell_.atoms[it].na; ++ia)
-        {
-            taud[iat_glob] = ucell_.atoms[it].taud[ia];
-            ++iat_glob;
-        }
-    }
+    const std::vector<ModuleBase::Vector3<double>> taud
+        = atom_fractional_positions();
 
     std::vector<double> dRR(nat_ * nat_, 0.0);
+    std::vector<double> pair_dir(nat_ * nat_ * 3, 0.0);
     for (int I = 0; I < nat_; ++I)
     {
         for (int J = I + 1; J < nat_; ++J)
         {
-            const double d = min_image_displacement(taud[I], taud[J]).norm();
+            // pair_dir is R_I - R_K for the minimum-image pair, matching the
+            // dRR scalar.  It cannot be reconstructed from the grid-centered
+            // drR/eR at a periodic boundary.
+            const ModuleBase::Vector3<double> disp
+                = min_image_displacement(taud[J], taud[I]);
+            const double d = disp.norm();
             dRR[I * nat_ + J] = d;
             dRR[J * nat_ + I] = d;
+            for (int dd = 0; dd < 3; ++dd)
+            {
+                const double dir = disp[dd] / d;
+                pair_dir[(I * nat_ + J) * 3 + dd] = dir;
+                pair_dir[(J * nat_ + I) * 3 + dd] = -dir;
+            }
         }
     }
 
@@ -299,9 +330,22 @@ void WeightGrid::build_derivatives()
     std::vector<int> iR(nat_);
     std::iota(iR.begin(), iR.end(), 0);
 
+    // Reverse map atom -> constraints, used to distribute each atom center's
+    // strain derivative to every fragment constraint that contains it.
+    std::vector<std::vector<int>> atom_to_constraint(nat_);
+    for (size_t alpha = 0; alpha < constraint_atoms_.size(); ++alpha)
+    {
+        for (const int iat : constraint_atoms_[alpha])
+        {
+            atom_to_constraint[iat].push_back(static_cast<int>(alpha));
+        }
+    }
+
     // Per-atom derivative cache (zero-initialized; coincident grid points
     // stay zero by the exact argument above).
     wat_deriv_.assign(nat_, std::vector<double>(nat_ * 3 * nrxx_, 0.0));
+    dwe_.assign(constraint_atoms_.size(),
+                std::vector<double>(9 * nrxx_, 0.0));
     std::vector<double> drR(nat_);
     std::vector<double> eR(nat_ * 3, 0.0);
     std::vector<int> neigh;
@@ -379,11 +423,25 @@ void WeightGrid::build_derivatives()
                 double dw[3] = {0.0, 0.0, 0.0};
                 Grid::Partition::w_becke_adjusted_deriv(
                     nat_, drR.data(), dRR.data(), radii_.data(), eR.data(),
+                    pair_dir.data(),
                     static_cast<int>(neigh.size()), neigh.data(),
                     static_cast<int>(ic), J, dw);
                 for (int d = 0; d < 3; ++d)
                 {
                     wat_deriv_[iat][(J * 3 + d) * nrxx_ + ir] = dw[d];
+                }
+            }
+            double dwe[9] = {0.0, 0.0, 0.0, 0.0, 0.0,
+                             0.0, 0.0, 0.0, 0.0};
+            Grid::Partition::w_becke_adjusted_strain_deriv(
+                nat_, drR.data(), dRR.data(), radii_.data(), eR.data(),
+                pair_dir.data(), static_cast<int>(neigh.size()), neigh.data(),
+                static_cast<int>(ic), dwe);
+            for (const int alpha : atom_to_constraint[iat])
+            {
+                for (int k = 0; k < 9; ++k)
+                {
+                    dwe_[alpha][k * nrxx_ + ir] += dwe[k];
                 }
             }
         }

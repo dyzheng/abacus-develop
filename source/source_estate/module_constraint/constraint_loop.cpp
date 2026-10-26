@@ -2228,4 +2228,64 @@ void ConstraintLoop::compute_force(const double* const* rho,
     constraint::constraint_force(*wg_, rho, nspin, channels_, mu_eff_, forcecon);
 }
 
+void ConstraintLoop::compute_stress(const double* const* rho,
+                                    const int nspin,
+                                    ModuleBase::matrix& stresscon)
+{
+    if (!enabled() || !wg_)
+    {
+        return; // constraint off: no constraint stress
+    }
+    // M4: the stress path consumes the same refreshed effective multiplier
+    // as the force path (mu itself on every non-ALM schedule).
+    if (!alm_armed_)
+    {
+        mu_eff_ = mu_;
+    }
+    // Build the position/strain derivative cache lazily; the loop is
+    // one-per-geometry, so this happens once per stress evaluation.
+    if (!wg_->derivatives_built())
+    {
+        wg_->build_derivatives();
+    }
+    // Stationary-point guard (same envelope-theorem premise as the force):
+    // report a transient multiplier/branch state instead of presenting the
+    // stress as an exact derivative of the constrained energy.
+    if (status_ == MuStatus::BRANCH_FLIP)
+    {
+        ModuleBase::WARNING("ConstraintLoop::compute_stress",
+                            "constraint stress from a BRANCH_FLIP run: the "
+                            "SCF left the reference branch, the stress is not "
+                            "the derivative of the intended constrained energy");
+    }
+    else if (mu_norm() > 0.0 && status_ != MuStatus::CONVERGED)
+    {
+        ModuleBase::WARNING("ConstraintLoop::compute_stress",
+                            "constraint stress from an unconverged outer loop: "
+                            "residual O(|Q - t|)");
+    }
+    // S3 allocation: freeze the target orbitals and read the complementary
+    // density Q_c D Q_c, exactly as the frozen force does.  A missing or
+    // wrong-sized buffer would silently turn this into the full-density
+    // Becke stress, so abort loudly.
+    if (allocation_mode_)
+    {
+        if (static_cast<int>(allocation_force_rho_.size()) != nspin)
+        {
+            ModuleBase::WARNING_QUIT("ConstraintLoop::compute_stress",
+                "allocation stress requires the complementary density for every spin channel");
+        }
+        std::vector<const double*> rho_c(nspin, nullptr);
+        for (int is = 0; is < nspin; ++is)
+        {
+            rho_c[is] = allocation_force_rho_[is].data();
+        }
+        constraint::constraint_stress(*wg_, rho_c.data(), nspin, channels_,
+                                      mu_eff_, stresscon);
+        return;
+    }
+    constraint::constraint_stress(*wg_, rho, nspin, channels_, mu_eff_,
+                                  stresscon);
+}
+
 } // namespace constraint

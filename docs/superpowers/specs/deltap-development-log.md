@@ -5755,3 +5755,58 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
      与张量对称性检查（相对 `<5%`）。
   2. S4.3：补非共线 `λ_i·σ` 与无 SOC 整体自旋旋转不变性。
   3. S4 全闸门通过后再进入 S5 PW 平价。
+
+## 2026-10-26 (S4.2): 统一分配约束应力
+
+- **完成内容**：
+  1. 修复周期镜像下的原子对方向：`w_becke_adjusted_deriv()` 显式接收
+     `pair_dir=(R_I-R_K)/dRR`，不再从网格最近的 `drR/eR` 重建；新增
+     `w_becke_adjusted_strain_deriv()`，直接传播 `drR e_a e_b` 与
+     `dRR q_a q_b`。
+  2. `WeightGrid` 新增 `dwe_[alpha][(a*3+b)*nrxx+ir]` 应变导数缓存和
+     `weight_strain_derivative()`；片段约束按原子归属累加。
+  3. `constraint_stress()` 实现权重应变项、通道/自旋组合、体积 Jacobian
+     `-mu Q delta_ab`、MPI pool 归约与张量对称化；dipole 权重显式拒绝。
+  4. `ConstraintLoop::compute_stress()` 复用 S3 的互补密度
+     `Q_c D Q_c`；`FORCE_STRESS` 加 `stresscon`、allocation `dS` 应力核和
+     `CONSTRAINT STRESS` 输出；esolver 在只算应力时也构造互补密度。
+  5. `alloc_constraint_lcao_operator` 抽出共享 `fill_alloc_energy_dm()`，
+     新增 `cal_alloc_constraint_dS_stress()`，与力共用 S4.1 伴随 `E`。
+- **验证**：
+  - `MODULE_ESTATE_constraint_weight_grid` 16/16 PASS；新增跨镜像
+    位置/应变导数回归 PASS。
+  - `MODULE_ESTATE_constraint_deriv` PASS；网格观测 `Q=int rho w dV` 的
+    应变 FD 对 `constraint_stress()` 在 `2e-8` 内一致。
+  - 完整 constraint 回归 19/19 PASS；`abacus_basic_para` 构建 PASS；
+    `git diff --check` PASS。
+  - 集成 H2O，固定 `mu=-0.01221724241 Ry`，`eps=1e-4/5e-4/1e-3` 总应力
+    FD 相对误差为 `1.278%/8.664%/31.240%`；无约束同构型基线为
+    `1.255%/8.440%/30.871%`。三档所有 SCF 均收敛，`scf_nmax=100`。
+  - `CONSTRAINT STRESS` 非对角差 `<=1e-10 kbar`；固定-mu 六次扰动中
+    `q` 变化 `1e-6~1.3e-5`，`mu` 未漂移。
+- **Bug/fix list**：
+  1. 旧位置导数从 `drR/eR` 重建原子对向量，跨镜像点错误；改为显式
+     `pair_dir` 后位置/应变两条路径同时修复。
+  2. 只算 `cal_stress` 时 allocation 互补密度原先不会构造；条件改为
+     `cal_force || cal_stress`。
+  3. 新跨镜像应变测试首版在固定盒中缩放坐标，未一致变换周期镜像；改为
+     应变晶格 + 固定分数坐标后通过。这是测试构造错误，不是生产核错误。
+  4. `5e-4/1e-3` 大应变未过 `<5%`：无约束基线同样失败且误差近乎重合，
+     判为 LCAO 总能/基组有限应变非线性；按纪律保留未过状态并记录。
+- **文件**：
+  `source_base/module_grid/{partition.h,partition.cpp,test/test_partition.cpp}`、
+  `source_estate/module_constraint/{weight_grid.h,weight_grid.cpp,
+  constraint_deriv.h,constraint_deriv.cpp,constraint_loop.h,
+  constraint_loop.cpp,test/weight_grid_test.cpp,
+  test/constraint_deriv_test.cpp}`、
+  `source_lcao/{FORCE_STRESS.cpp,
+  module_operator_lcao/alloc_constraint_lcao_operator.h,
+  module_operator_lcao/alloc_constraint_lcao_operator.cpp}`、
+  `source_esolver/esolver_ks_lcao.cpp`、
+  `2026-10-26-s4-stress-test.md`（新建）、执行方案、本日志。
+- **下一步**：
+  1. 提交 S4.2。
+  2. S4.3：非共线 `lambda_i.sigma`，覆盖观测、能量注入、力/应力与无 SOC
+     整体自旋旋转不变性。
+  3. S4 闸门复核时始终并列无约束基线；若需解决大应变 `<5%`，先改 LCAO
+     总能应变参考质量，不在约束核中做经验补偿。

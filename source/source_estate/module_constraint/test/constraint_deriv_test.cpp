@@ -279,6 +279,7 @@ class ConstraintDerivTest : public ::testing::Test
         Grid::Radial::baker(300, 14.0, r_rad, w_rad, 2);
 
         std::vector<double> dRR(nat * nat, 0.0);
+        std::vector<double> pair_dir(nat * nat * 3, 0.0);
         for (int I = 0; I < nat; ++I)
         {
             for (int J = I + 1; J < nat; ++J)
@@ -288,6 +289,14 @@ class ConstraintDerivTest : public ::testing::Test
                                            + dij[2] * dij[2]);
                 dRR[I * nat + J] = d;
                 dRR[J * nat + I] = d;
+                // min_image_disp(I,J) is R_J - R_I, while the kernel expects
+                // (R_I - R_J)/dRR for pair_dir[I,J].
+                for (int dd = 0; dd < 3; ++dd)
+                {
+                    const double dir = -dij[dd] / d;
+                    pair_dir[(I * nat + J) * 3 + dd] = dir;
+                    pair_dir[(J * nat + I) * 3 + dd] = -dir;
+                }
             }
         }
 
@@ -335,7 +344,8 @@ class ConstraintDerivTest : public ::testing::Test
                         double dw[3] = {0.0, 0.0, 0.0};
                         Grid::Partition::w_becke_adjusted_deriv(
                             nat, drR.data(), dRR.data(), radii.data(),
-                            eR.data(), nat, iR.data(), alpha, J, dw);
+                            eR.data(), pair_dir.data(), nat, iR.data(), alpha,
+                            J, dw);
                         for (int d = 0; d < 3; ++d)
                         {
                             F[J * 3 + d] -= mu[alpha] * rho_val * dw[d] * wq;
@@ -403,6 +413,129 @@ TEST_F(ConstraintDerivTest, ForceOnSyntheticDensity)
                 << "M0-quadrature reference J " << J << " d " << d;
             EXPECT_NEAR(F(J, d), fd_reference(J, d, sigma, mu), 1e-8)
                 << "FD-of-Q reference J " << J << " d " << d;
+        }
+    }
+}
+
+TEST_F(ConstraintDerivTest, StressMatchesStrainFiniteDifference)
+{
+    // The S4.2 grid stress is the strain derivative of the weight observable
+    //   Q_alpha(eps) = Omega(eps)/nxyz * sum_g rho_g w_alpha(eps; g).
+    // Hold the density values fixed on fractional grid points, rebuild the
+    // weight field on a homogeneously strained cell, and compare
+    // -dQ/deps/Omega with the analytic kernel.  This independently checks
+    // both the chain-rule contraction and the Jacobian (volume) term.
+    ModulePW::PW_Basis local_pw;
+    local_pw.initgrids(1.0, ucell->latvec, 64, 64, 64);
+    local_pw.distribute_r();
+    std::vector<double> rho;
+    fill_rho_basis(local_pw, 1.5, rho);
+    const double* rho_ptr = rho.data();
+    const double* rho_arr[2] = {rho_ptr, rho_ptr};
+
+    constraint::WeightGrid wg(*ucell, &local_pw, radii,
+                              constraint::WeightType::Becke);
+    wg.build();
+    wg.build_derivatives();
+    const std::vector<double> mu = {0.1, 0.0, 0.0};
+    const std::vector<constraint::ChannelProfile> channels
+        = {constraint::build_channel_profile(constraint::ConstraintKind::Charge),
+           constraint::build_channel_profile(constraint::ConstraintKind::Charge),
+           constraint::build_channel_profile(constraint::ConstraintKind::Charge)};
+
+    ModuleBase::matrix stress(3, 3);
+    constraint::constraint_stress(wg, rho_arr, 1, channels, mu, stress);
+
+    const ModuleBase::Matrix3 base = ucell->latvec;
+    auto base_element = [&base](const int row, const int col) {
+        return (&base.e11)[3 * row + col];
+    };
+    auto cell_element = [this](const int row, const int col) -> double& {
+        return (&ucell->latvec.e11)[3 * row + col];
+    };
+    const double eps = 1e-5;
+    const double nxyz = static_cast<double>(local_pw.nxyz);
+
+    auto strained_observable = [&](const int a, const int b,
+                                   const double step) {
+        ucell->latvec = base;
+        for (int row = 0; row < 3; ++row)
+        {
+            // Branch: apply the symmetric strain pair for an off-diagonal
+            // component, or the single diagonal component otherwise.
+            for (int col = 0; col < 3; ++col)
+            {
+                if (col == a)
+                {
+                    cell_element(row, col) += base_element(row, b) * step;
+                }
+                if (a != b && col == b)
+                {
+                    cell_element(row, col) += base_element(row, a) * step;
+                }
+            }
+        }
+        const double omega = std::abs(ucell->latvec.Det()) * ucell->lat0
+                             * ucell->lat0 * ucell->lat0;
+        constraint::WeightGrid strained(*ucell, &local_pw, radii,
+                                        constraint::WeightType::Becke);
+        strained.build();
+        double q = 0.0;
+        const std::vector<double>& w = strained.constraint_weight(0);
+        for (int ir = 0; ir < local_pw.nrxx; ++ir)
+        {
+            q += rho[ir] * w[ir];
+        }
+        q *= omega / nxyz;
+        ucell->latvec = base;
+        return q;
+    };
+
+    const std::array<std::array<int, 2>, 3> components = {{
+        {0, 0}, {0, 1}, {2, 2}}};
+    const double omega0 = std::abs(base.Det()) * ucell->lat0
+                          * ucell->lat0 * ucell->lat0;
+    for (const auto& comp : components)
+    {
+        const int a = comp[0];
+        const int b = comp[1];
+        const double q_plus = strained_observable(a, b, eps);
+        const double q_minus = strained_observable(a, b, -eps);
+        // For an off-diagonal symmetric strain the parameter moves both
+        // eps_ab and eps_ba, so the physical stress carries the extra 1/2.
+        const double strain_factor = (a == b) ? 1.0 : 2.0;
+        const double fd = -mu[0] * (q_plus - q_minus)
+                          / (2.0 * eps * strain_factor * omega0);
+        EXPECT_NEAR(stress(a, b), fd, 2e-8)
+            << "stress component " << a << b;
+    }
+
+    // Symmetry, linearity in mu, and the exact zero at mu = 0.
+    for (int a = 0; a < 3; ++a)
+    {
+        for (int b = 0; b < 3; ++b)
+        {
+            EXPECT_NEAR(stress(a, b), stress(b, a), 1e-14);
+        }
+    }
+    ModuleBase::matrix stress2(3, 3);
+    const std::vector<double> mu2 = {0.2, 0.0, 0.0};
+    constraint::constraint_stress(wg, rho_arr, 1, channels, mu2, stress2);
+    for (int a = 0; a < 3; ++a)
+    {
+        for (int b = 0; b < 3; ++b)
+        {
+            EXPECT_NEAR(stress2(a, b), 2.0 * stress(a, b), 1e-14);
+        }
+    }
+    ModuleBase::matrix zero(3, 3);
+    constraint::constraint_stress(wg, rho_arr, 1, channels,
+                                  {0.0, 0.0, 0.0}, zero);
+    for (int a = 0; a < 3; ++a)
+    {
+        for (int b = 0; b < 3; ++b)
+        {
+            EXPECT_DOUBLE_EQ(zero(a, b), 0.0);
         }
     }
 }

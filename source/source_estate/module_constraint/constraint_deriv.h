@@ -73,6 +73,45 @@ void constraint_force(const WeightGrid& wg,
                       const std::vector<double>& mu,
                       ModuleBase::matrix& force);
 
+/**
+ * @brief Grid-based constraint stress kernel (architecture layer M6/S4.2).
+ *
+ *   sigma_{a b} = -(1/Omega) sum_alpha mu_alpha
+ *                 * int d_alpha(g) d w_alpha(g)/d eps_{a b} dV
+ *
+ * with the direct Becke strain derivative
+ *
+ *   d(drR_I)/d eps_{a b} = drR_I e_{I,a} e_{I,b},
+ *   d(dRR_IK)/d eps_{a b} = dRR_IK q_{IK,a} q_{IK,b},
+ *
+ * propagated through the same normalized pair-product weight as the
+ * position kernel.  The grid-nearest image e_I and the minimum-image pair
+ * direction q_IK are kept separate because they can differ in a periodic
+ * cell.  The cell-integral Jacobian contributes -mu Q delta_{a b}, with Q the
+ * corresponding constraint weight integral.
+ *
+ * This is the explicit weight-field part of the constraint stress.  The
+ * target-space S derivative is added separately by the LCAO overlap kernel
+ * (`cal_alloc_constraint_dS_stress`), mirroring the force decomposition.
+ * Units: mu in Ry, rho in e/Bohr^3, d w/d eps in e/Bohr^3 per unit strain,
+ * dV/Omega dimensionless -> stress in Ry/Bohr^3.
+ *
+ * @param wg      Weight field with build_derivatives() already called.
+ * @param rho     Per-spin densities on the weight grid.
+ * @param nspin   1 or 2.
+ * @param channels Per-constraint channel profiles, parallel to mu/wg.
+ * @param mu      Per-constraint multipliers (Ry).
+ * @param stress  Accumulated into (3 x 3).  The kernel symmetrizes its
+ *                tensor before adding so an asymmetric round-off cannot
+ *                leak into the total stress.
+ */
+void constraint_stress(const WeightGrid& wg,
+                       const double* const* rho,
+                       const int nspin,
+                       const std::vector<ChannelProfile>& channels,
+                       const std::vector<double>& mu,
+                       ModuleBase::matrix& stress);
+
 } // namespace constraint
 
 #endif

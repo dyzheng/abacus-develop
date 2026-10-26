@@ -439,12 +439,12 @@ void ESolver_KS_LCAO<TK, TR>::cal_force(UnitCell& ucell, ModuleBase::matrix& for
         }
     }
 
-    // S3 allocation force: the frozen-target derivative uses Q_c D Q_c,
-    // not the full KS density.  Build that density here while the DMR and
-    // the Gint grid are both available, then let FORCE_STRESS consume it
-    // through the shared weight-derivative kernel.
+    // S3/S4.2 allocation force+stress: the frozen-target derivative uses
+    // Q_c D Q_c, not the full KS density.  Build that density here while the
+    // DMR and the Gint grid are both available, then let FORCE_STRESS consume
+    // it through the shared weight position/strain derivative kernels.
     if (PARAM.inp.constraint && PARAM.inp.constraint_alloc_switch
-        && PARAM.inp.cal_force)
+        && (PARAM.inp.cal_force || PARAM.inp.cal_stress))
     {
         // Branch: only real LCAO density matrices can be expanded into the
         // complementary density expected by the Gint force kernel.
@@ -455,12 +455,12 @@ void ESolver_KS_LCAO<TK, TR>::cal_force(UnitCell& ucell, ModuleBase::matrix& for
             alloc::AllocConstraintLcao& astate
                 = alloc::AllocConstraintLcao::instance();
             // Guard: an inactive allocation state would leave the stale
-            // full-density force path armed for a constrained run.
+            // full-density force/stress path armed for a constrained run.
             if (!cloop.allocation_mode() || !astate.active()
                 || this->dmat.dm == nullptr || this->pw_rhod == nullptr)
             {
                 ModuleBase::WARNING_QUIT("ESolver_KS_LCAO::cal_force",
-                    "allocation force requires an initialized allocation state and density grid");
+                    "allocation force/stress requires an initialized allocation state and density grid");
             }
             std::vector<const hamilt::HContainer<double>*> dmr_channels;
             for (auto* dmr : this->dmat.dm->get_DMR_vector())
@@ -470,7 +470,7 @@ void ESolver_KS_LCAO<TK, TR>::cal_force(UnitCell& ucell, ModuleBase::matrix& for
             std::vector<std::vector<double>> rho_c;
             std::string alloc_error;
             // Branch: construction failure must stop before FORCE_STRESS can
-            // fall back to the full-density force.
+            // fall back to the full-density force/stress.
             if (!astate.complement_density(
                     ucell, dmr_channels, PARAM.inp.nspin,
                     this->pw_rhod->nrxx, rho_c, alloc_error))

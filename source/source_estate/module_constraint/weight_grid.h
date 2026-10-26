@@ -132,12 +132,30 @@ class WeightGrid
     // Cartesian position (Bohr) of local grid point ir.
     ModuleBase::Vector3<double> grid_position(const int ir) const;
 
+    // Strain derivative d w_alpha / d eps_{a b} at a local grid point for a
+    // homogeneous deformation with fixed fractional grid and atomic
+    // coordinates.  This is a pure geometry derivative: it needs
+    // build_derivatives() but no density.  It is accumulated directly by the
+    // Becke strain kernel because the grid-nearest atom image (used by drR)
+    // and the minimum-image atom pair (used by dRR) can differ in a periodic
+    // cell, so a single atom-position contraction is not sufficient.
+    // Dipole weights are coordinate functions rather than Becke partitions;
+    // their strain derivative is not represented by this formula and the
+    // constraint stress kernel rejects that combination explicitly.
+    double weight_strain_derivative(const int alpha,
+                                    const int a,
+                                    const int b,
+                                    const int ir) const;
+
     // The density grid this weight field lives on.
     const ModulePW::PW_Basis* rho_basis() const { return rho_basis_; }
 
   private:
     // Fractional (direct) coordinates of local grid point ir.
     ModuleBase::Vector3<double> grid_fraction(const int ir) const;
+    // Global atom order fractional (direct) coordinates used by every weight
+    // and derivative loop.
+    std::vector<ModuleBase::Vector3<double>> atom_fractional_positions() const;
     // Minimum-image displacement vector (Bohr) from 'from' to 'to', where
     // both are fractional coordinates inside the cell.
     ModuleBase::Vector3<double> min_image_displacement(
@@ -163,6 +181,9 @@ class WeightGrid
     // and the derived per-constraint derivative grid dw_ (same layout).
     std::vector<std::vector<double>> wat_deriv_;
     std::vector<std::vector<double>> dw_;
+    // Per-constraint strain-derivative cache
+    // dwe_[alpha][(a*3+b)*nrxx_+ir].
+    std::vector<std::vector<double>> dwe_;
     std::vector<std::vector<int>> constraint_atoms_;
 
     // M5: build the single global dipole weight and its ionic offset.
