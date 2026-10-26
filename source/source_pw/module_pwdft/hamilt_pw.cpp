@@ -10,6 +10,7 @@
 #include "op_pw_meta.h"
 #include "op_pw_nl.h"
 #include "op_pw_proj.h"
+#include "op_pw_alloc.h"
 #include "op_pw_exx.h"
 #include "source_hamilt/module_xc/exx_info.h" // use GlobalC::exx_info
 
@@ -129,6 +130,23 @@ HamiltPW<T, Device>::HamiltPW(elecstate::Potential* pot_in,
                     PARAM.inp.deltap_switch && PARAM.inp.deltap_corr);
         this->ops->add(onsite_proj);
     }
+    // Unified local-moment allocation enters through a PW-native low-rank
+    // operator.  It is registered even before the target space is built; the
+    // first band application activates it once ConstraintLoop is armed.
+    if (PARAM.inp.constraint && PARAM.inp.constraint_alloc_switch)
+    {
+        Operator<T, Device>* alloc_constraint
+            = new AllocConstraintPW<OperatorPW<T, Device>>(isk, ucell,
+                                                            wfc_basis);
+        if (this->ops == nullptr)
+        {
+            this->ops = alloc_constraint;
+        }
+        else
+        {
+            this->ops->add(alloc_constraint);
+        }
+    }
     if (GlobalC::exx_info.info_global.cal_exx)
     {
         auto exx = new OperatorEXXPW<T, Device>(isk, wfc_basis, pot_in->get_rho_basis(), pkv, ucell);
@@ -229,6 +247,17 @@ HamiltPW<T, Device>::HamiltPW(const HamiltPW<T_in, Device_in> *hamilt)
             }
             else {
                 this->ops->add(onsite_proj);
+            }
+        }
+        else if (node->classname == "AllocConstraintPW") {
+            Operator<T, Device>* alloc_constraint =
+                    new AllocConstraintPW<OperatorPW<T, Device>>(
+                            reinterpret_cast<const AllocConstraintPW<OperatorPW<T_in, Device_in>>*>(node));
+            if(this->ops == nullptr) {
+                this->ops = alloc_constraint;
+            }
+            else {
+                this->ops->add(alloc_constraint);
             }
         }
         else {

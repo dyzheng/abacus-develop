@@ -37,6 +37,7 @@
 #include "source_base/tool_quit.h"
 #include "source_estate/module_constraint/constraint_loop.h"
 #include "source_pw/module_pwdft/alloc_pw_report.h"
+#include "source_pw/module_pwdft/op_pw_alloc.h"
 
 #include "source_hamilt/module_xc/exx_info.h" // use GlobalC::exx_info
 
@@ -198,17 +199,6 @@ void ESolver_KS_PW<T, Device>::before_scf(UnitCell& ucell, const int istep)
     // the shared weight field (M1) and arm the outer loop.
     if (PARAM.inp.constraint)
     {
-        // Guard: the unified-allocation PW Hamiltonian operator is not yet
-        // registered.  Running with allocation_mode would suppress the grid
-        // potential while nothing replaces it, so refuse rather than silently
-        // relaxing the requested constraint.  The read-only report remains
-        // available with constraint_alloc_report.
-        if (PARAM.inp.constraint_alloc_switch)
-        {
-            ModuleBase::WARNING_QUIT("ESolver_KS_PW::before_scf",
-                "constraint_alloc_switch is not yet implemented for PW; "
-                "use constraint_alloc_report for the read-only S5 audit");
-        }
         constraint::ConstraintConfig cfg;
         std::vector<constraint::ConstraintSpec> specs;
         std::vector<double> radii;
@@ -218,6 +208,45 @@ void ESolver_KS_PW<T, Device>::before_scf(UnitCell& ucell, const int istep)
         if (st == constraint::ConfigStatus::ERROR)
         {
             ModuleBase::WARNING_QUIT("ESolver_KS_PW::before_scf", error);
+        }
+        if (PARAM.inp.constraint_alloc_switch)
+        {
+            // Guard: the first PW allocation closure is collinear and uses
+            // the scalar band contraction implemented by the onsite operator.
+            if (PARAM.inp.nspin != 1 && PARAM.inp.nspin != 2)
+            {
+                ModuleBase::WARNING_QUIT("ESolver_KS_PW::before_scf",
+                    "constraint_alloc_switch currently supports only "
+                    "nspin = 1 or 2 for PW");
+            }
+            // Guard: allocation forces are not wired yet.  Refuse MD/relax
+            // rather than letting the force path consume an uninitialised
+            // complementary density.
+            if (PARAM.inp.calculation != "scf")
+            {
+                ModuleBase::WARNING_QUIT("ESolver_KS_PW::before_scf",
+                    "constraint_alloc_switch currently supports calculation "
+                    "= scf only for PW (force/stress wiring is pending)");
+            }
+            // Guard: the PW target operator needs a selected shell and at
+            // least one constraint; otherwise there is no Q_i to project on.
+            if (specs.empty() || PARAM.inp.constraint_alloc_target_l < 0)
+            {
+                ModuleBase::WARNING_QUIT("ESolver_KS_PW::before_scf",
+                    "constraint_alloc_switch requires constraints and a "
+                    "non-negative constraint_alloc_target_l");
+            }
+            for (const constraint::ConstraintSpec& spec : specs)
+            {
+                // Branch: dipole coordinates use a global analytic weight
+                // and have no per-atom target shell to orthogonalize.
+                if (spec.kind == constraint::ConstraintKind::Dipole)
+                {
+                    ModuleBase::WARNING_QUIT("ESolver_KS_PW::before_scf",
+                        "PW allocation does not support dipole constraints");
+                }
+            }
+            cfg.allocation_mode = true;
         }
         constraint::ConstraintLoop::instance().init(
             ucell, this->pw_rhod, cfg, specs, radii, PARAM.inp.nelec, istep);
@@ -360,7 +389,29 @@ void ESolver_KS_PW<T, Device>::iter_finish(UnitCell& ucell, const int istep, int
     {
         constraint::ConstraintLoop& cloop
             = constraint::ConstraintLoop::instance();
-        cloop.observe(iter, this->chr.rho, PARAM.inp.nspin);
+        // Branch A: allocation mode reads the same low-rank K_i operator that
+        // entered H, so the outer loop's observable matches its injection.
+        if (cloop.allocation_mode())
+        {
+            std::vector<double> n_alloc;
+            std::vector<double> m_alloc;
+            std::string alloc_error;
+            if (!alloc::compute_pw_alloc_observables(
+                    ucell, this->stp.psi_cpu, this->pelec->wg, this->kv,
+                    *this->pw_wfc, PARAM.inp.nspin, cloop.weight_grid(),
+                    PARAM.inp.constraint_alloc_target_l, n_alloc, m_alloc,
+                    alloc_error))
+            {
+                ModuleBase::WARNING_QUIT("ESolver_KS_PW::iter_finish",
+                                         alloc_error);
+            }
+            cloop.observe_allocation(iter, n_alloc, m_alloc);
+        }
+        // Branch B: the legacy grid mode keeps the real-space Becke reading.
+        else
+        {
+            cloop.observe(iter, this->chr.rho, PARAM.inp.nspin);
+        }
         // Energy branch guard input: the plain KS total energy of this SCF
         // iteration (etot still carries the cc_escon of the PREVIOUS outer
         // step, so subtract it to hand over a constraint-correction-free

@@ -9,6 +9,7 @@ list(APPEND objects
     op_pw_vel.cpp
     op_pw.cpp
     op_pw_proj.cpp
+    op_pw_alloc.cpp
     op_pw_exx.cpp
     op_pw_exx_ace.cpp
     op_pw_exx_pot.cpp

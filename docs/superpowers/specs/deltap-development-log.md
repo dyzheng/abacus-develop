@@ -6043,3 +6043,41 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   1. 接 PW `DeltaH` 到 Hamiltonian 算子链并做固定目标 SCF + 位置 FD 力。
   2. 在 `KPAR>1` 上复跑 parity，确认 all-pool 归约与目标空间指标。
   3. 生成 Becke/Hirshfeld 三量对照表，继续推进 S5.2。
+
+## 2026-10-26 (S5.1 WIP): PW allocation operator and observable wiring
+
+- **完成内容（仅代码与编译，未完成运行验收）**：
+  1. 新增 `source_pw/module_pwdft/op_pw_alloc.{h,cpp}`，把设计 §5.2 的
+     `V - P V - V P + P V P + sum_i lambda_i Q_i` 接成 PW 专用
+     `AllocConstraintPW` 算子；直接修改 `H|psi>`，不再依赖 `v_eff` 网格注入。
+  2. `HamiltPW` 在 `constraint_alloc_switch` 打开时注册该算子，并补齐复制
+     构造路径。
+  3. `ESolver_KS_PW::before_scf()` 设置 `cfg.allocation_mode`，首个闭环限制
+     为 `nspin=1/2`、`calculation=scf`，拒绝 dipole 约束。
+  4. `iter_finish()` 在 allocation 模式改用
+     `compute_pw_alloc_observables()`，从真实波函数计算 `Tr(D K_i)`。
+  5. `apply_pw_alloc_delta_h()` 的 `braw` 增加 MPI pool 归约。
+- **验证**：
+  - `cmake --build build --target abacus_basic_para -j 14` PASS；有一个
+    C++14 下 `if constexpr` 扩展警告。
+  - 固定 `fixed_mu=0.01 Ry` 的 H2O PW SCF 运行到 CG3 后被人工中断，
+    无最终收敛、无 `ALLOC`/`FINAL_ETOT`。
+  - 已观察到 allocation 算子改变了总能轨迹；CG1--CG3 耗时约
+    `34.7/11.8/12.3 s`，只读基线约 `3.8/2.0/1.9 s`。
+- **Bug/fix list**：
+  1. 修正 MPI 下 `braw` 只做 rank-local 平面波点积的问题。
+  2. 尚未发现新的生产数值 bug；算子正确性仍缺独立测试。
+  3. 已知性能缺陷：观测量逐 SCF 迭代重复构造目标空间并做多次 FFT。
+- **文件**：
+  `source_pw/module_pwdft/{op_pw_alloc.h,op_pw_alloc.cpp,hamilt_pw.cpp,
+  CMakeLists.txt}`、`source_esolver/esolver_ks_pw.cpp`、
+  `source_estate/module_constraint/alloc_pw.cpp`、
+  `2026-10-26-s5-pw-allocation-operator.md`（新建）、本日志。
+- **未完成/边界**：
+  - SCF 未收敛，PW allocation `DeltaH` 未验收。
+  - `Tr(D K_i)` 逐迭代开销约 4--9 倍，需要缓存/收敛帧计算。
+  - `KPAR>1`、FD 力、应力均未验证。
+- **下一步**：
+  1. 优化目标空间/观测量缓存并重跑固定 `fixed_mu` SCF 至收敛。
+  2. 补 PW allocation 单测与开关关闭回归。
+  3. SCF 通过后做三点位置 FD 力 `<0.0129 eV/A`。

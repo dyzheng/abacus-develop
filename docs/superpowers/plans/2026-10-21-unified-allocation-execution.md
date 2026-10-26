@@ -875,7 +875,8 @@ TEST(AllocObserveTest, EmptyTargetSetEqualsBecke)
       同电子态数据已接线：H2O/O-d、固定 `fixed_mu=0.01 Ry` 下
       `|Δm^T|=1.19e-4 μB`、`|ΔM|=1.75e-3 μB`；两边
       `|Σm-tot_mag|<1e-15 μB`。FD 力仍待 PW allocation 算符接线。
-- [ ] 验收：平价表已通过；PW FD 力 `<0.0129 eV/Å` 尚未完成。
+- [ ] 验收：平价表已通过；PW allocation 算符已接入 `HamiltPW` 并通过编译，
+      固定 `fixed_mu` SCF 仍在进行中；FD 力 `<0.0129 eV/Å` 尚未完成。
 
 ### Task S5.2 周期 Hirshfeld 权重后端
 

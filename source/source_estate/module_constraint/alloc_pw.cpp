@@ -357,6 +357,13 @@ void apply_pw_alloc_delta_h(
             braw[a] += std::conj(vphi[a][i]) * psi[i];
         }
     }
+    // braw is a full-basis overlap <alpha_a|V|psi>.  In PW runs the plane-
+    // wave coefficients are rank-local, so the dot product must be pooled;
+    // otherwise each rank would orthogonalize a partial overlap and the
+    // subsequent low-rank correction would differ between ranks.
+#ifdef __MPI
+    Parallel_Reduce::reduce_pool(braw.data(), r);
+#endif
     std::vector<std::complex<double>> borth;
     orthogonalize_pw_overlaps(space, raw_overlap, o);
     orthogonalize_pw_overlaps(space, braw, borth);
