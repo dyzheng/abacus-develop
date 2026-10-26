@@ -5635,3 +5635,25 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - **关键结论**：现有 onsite 约束约束的是原子总自旋矩，不能把其目标值
   当作 `m_T`；S3 必须直接约束 S2 的 `d` 子空间投影矩。
 - **下一步**：S3.1 `ΔH` 注入与 ALM；S3.2 冻结力与 FD 验收。
+
+## 2026-10-26 (S3 基础层): 统一分配约束核
+
+- **完成内容**：
+  1. `alloc_constraint.{h,cpp}`：稠密低秩核
+     `K_i=W_i-PS^{-1}W_i-W_iS^{-1}P+PS^{-1}W_iS^{-1}P+Q_i`，
+     用 `PS^{-1}=SBB^T` 避免显式逆矩阵；含 `sum_i K_i=S` 与零乘子测试。
+  2. `alloc_lcao_report.{h,cpp}`：抽出生产级
+     `build_lcao_target_from_container` 与
+     `observe_lcao_target_from_container`，S2 报告和 S3 共用同一目标空间。
+  3. `alloc_constraint_lcao.{h,cpp}`：由 Gamma-only `S(R)`、权重场和
+     Hamiltonian 布局预计算每个约束的 `K_i` HContainer，并按 DMR 投影
+     `m_T`；尚未接 Hamiltonian operator 与 `ConstraintLoop`。
+- **验证**：`abacus_basic_para` 构建/链接 PASS；
+  `MODULE_ESTATE_constraint_alloc_constraint` 1/1 PASS（内部 3 项）、
+  `MODULE_ESTATE_constraint_alloc_lcao` 1/1 PASS；`git diff --check` PASS。
+- **文件**：`alloc_constraint.{h,cpp}`、`alloc_constraint_lcao.{h,cpp}`、
+  `alloc_lcao_report.{h,cpp}`、`test/alloc_constraint_test.cpp`、
+  `source_estate/CMakeLists.txt`、`module_constraint/test/CMakeLists.txt`、
+  `2026-10-26-s3-allocation-constraint-test.md`（新建）、本日志。
+- **下一步**：新增 LCAO 分配算子与 INPUT 开关，接入 `ConstraintLoop` 的
+  `m_T` 观测/ALM 和互补密度冻结力，再执行 S3 闸门测试。

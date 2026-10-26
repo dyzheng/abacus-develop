@@ -78,6 +78,36 @@ LcaoAllocReport report_lcao_alloc(
     const int frame,
     const int target_l);
 
+/**
+ * @brief Build the orthonormalized target space from the production S(R).
+ *
+ * The target orbitals are all NAO shells with angular momentum `target_l`
+ * on atoms that carry such a shell.  Only Gamma-only, real HContainers are
+ * accepted; every stored S(R) block must be R=(0,0,0).
+ */
+LcaoTargetSpace build_lcao_target_from_container(
+    const UnitCell& ucell,
+    const hamilt::HContainer<double>& S,
+    const int target_l,
+    const double rank_tol = 1e-10);
+
+/**
+ * @brief Project one DMR channel set onto every target orbital.
+ *
+ * `dmr` contains one real Gamma-only HContainer per spin channel, in
+ * up/down order for nspin=2.  The output arrays are one entry per target
+ * orbital: n_T = Tr[D_total Q_a], m_T = Tr[D_diff Q_a].  This is the shared
+ * production projection used by the S2 report and the S3 ALM observable.
+ */
+void observe_lcao_target_from_container(
+    const UnitCell& ucell,
+    const hamilt::HContainer<double>& S,
+    const LcaoTargetSpace& target,
+    const std::vector<const hamilt::HContainer<double>*>& dmr,
+    const int nspin,
+    std::vector<double>& n_T_target,
+    std::vector<double>& m_T_target);
+
 // Emit the ALLOC block to the running log.  Call on rank 0 after the report
 // has been assembled from pool-reduced values.
 void print_lcao_alloc_report(const LcaoAllocReport& report, std::ostream& os);

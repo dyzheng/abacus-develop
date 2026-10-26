@@ -58,6 +58,7 @@ list(APPEND objects
     module_constraint/alloc_operator.cpp
     module_constraint/alloc_observe.cpp
     module_constraint/alloc_lcao.cpp
+    module_constraint/alloc_constraint.cpp
 )
 
 if(ENABLE_LCAO)
@@ -71,6 +72,7 @@ if(ENABLE_LCAO)
       module_dm/cal_edm_tddft.cpp
       module_constraint/constraint_inject_lcao.cpp
       module_constraint/alloc_lcao_report.cpp
+      module_constraint/alloc_constraint_lcao.cpp
   )
 endif()
 

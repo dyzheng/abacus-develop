@@ -8,6 +8,7 @@
 #include <cmath>
 #include <iomanip>
 #include <limits>
+#include <stdexcept>
 #include <string>
 
 namespace alloc
@@ -152,6 +153,128 @@ std::vector<int> atom_labels(const std::vector<int>& target_orbital,
 
 } // namespace
 
+LcaoTargetSpace build_lcao_target_from_container(
+    const UnitCell& ucell,
+    const hamilt::HContainer<double>& S,
+    const int target_l,
+    const double rank_tol)
+{
+    const Parallel_Orbitals* pv = S.get_paraV();
+    // Branch: the production S(R) must carry the AO distribution before any
+    // global target index can be formed.
+    if (pv == nullptr)
+    {
+        throw std::invalid_argument("S(R) has no Parallel_Orbitals layout");
+    }
+    // Branch: the dense S_T formula is only valid for the Gamma R=0 block.
+    if (!all_blocks_are_gamma(S))
+    {
+        throw std::invalid_argument("periodic multi-k S(R) is not supported");
+    }
+
+    const int norb = pv->get_global_row_size();
+    const std::vector<int> orbital = select_targets(ucell, target_l);
+    const std::vector<int> atom = atom_labels(orbital, ucell);
+    const int ntarget = static_cast<int>(orbital.size());
+
+    std::vector<int> target_pos(norb, -1);
+    for (int a = 0; a < ntarget; ++a)
+    {
+        target_pos[orbital[a]] = a;
+    }
+
+    // S_T[a,b] = <phi_a|S|phi_b> for the selected AO columns.  The pool
+    // reduction makes the small R x R matrix identical on every rank.
+    std::vector<double> ST(static_cast<size_t>(ntarget) * ntarget, 0.0);
+    for_each_gamma_block(S, ucell, [&](const int gi, const int gj,
+                                       const double value) {
+        const int a = target_pos[gi];
+        const int b = target_pos[gj];
+        // Branch: only target-target blocks enter S_T.
+        if (a >= 0 && b >= 0)
+        {
+            ST[static_cast<size_t>(a) * ntarget + b] += value;
+        }
+    });
+    reduce_pool(ST);
+
+    LcaoTargetSpace target;
+    finalize_lcao_target(norb, orbital, atom, ST, target, rank_tol);
+    return target;
+}
+
+void observe_lcao_target_from_container(
+    const UnitCell& ucell,
+    const hamilt::HContainer<double>& S,
+    const LcaoTargetSpace& target,
+    const std::vector<const hamilt::HContainer<double>*>& dmr,
+    const int nspin,
+    std::vector<double>& n_T_target,
+    std::vector<double>& m_T_target)
+{
+    // Branch: the projection contract is the same collinear Gamma-only one
+    // used by the report; reject unsupported channel counts before reading.
+    if (nspin != 1 && nspin != 2)
+    {
+        throw std::invalid_argument("target projection supports nspin 1/2");
+    }
+    if (static_cast<int>(dmr.size()) != nspin)
+    {
+        throw std::invalid_argument("DMR spin-channel count does not match nspin");
+    }
+    for (const hamilt::HContainer<double>* d : dmr)
+    {
+        // Branch: every channel must share the Gamma R=0 contract.
+        if (d == nullptr || !all_blocks_are_gamma(*d))
+        {
+            throw std::invalid_argument("periodic multi-k DMR is not supported");
+        }
+    }
+
+    std::vector<int> target_pos(target.norb, -1);
+    for (int a = 0; a < target.ntarget; ++a)
+    {
+        target_pos[target.orbital[a]] = a;
+    }
+
+    n_T_target.assign(target.ntarget, 0.0);
+    m_T_target.assign(target.ntarget, 0.0);
+    for (int a = 0; a < target.ntarget; ++a)
+    {
+        // u_a = S c'_a.  Building u once per target keeps the DMR contraction
+        // independent of the AO layout and mirrors the dense S2.1 formula.
+        std::vector<double> u(target.norb, 0.0);
+        for_each_gamma_block(S, ucell, [&](const int gi, const int gj,
+                                           const double value) {
+            const int b = target_pos[gj];
+            // Branch: only columns in the selected target space contribute
+            // to S c'_a.
+            if (b >= 0)
+            {
+                u[gi] += value * target.Cprime[static_cast<size_t>(gj)
+                                                   * target.ntarget + a];
+            }
+        });
+        reduce_pool(u);
+
+        for (int spin = 0; spin < nspin; ++spin)
+        {
+            double local = 0.0;
+            for_each_gamma_block(*dmr[spin], ucell,
+                [&](const int gi, const int gj, const double value) {
+                    local += u[gi] * value * u[gj];
+                });
+            reduce_pool(local);
+            n_T_target[a] += local;
+            // Branch: collinear spin difference is up minus down.
+            if (nspin == 2)
+            {
+                m_T_target[a] += (spin == 0 ? local : -local);
+            }
+        }
+    }
+}
+
 LcaoAllocReport report_lcao_alloc(
     const UnitCell& ucell,
     const hamilt::HContainer<double>& S,
@@ -230,77 +353,21 @@ LcaoAllocReport report_lcao_alloc(
         return report;
     }
 
-    const Parallel_Orbitals* pv = S.get_paraV();
-    report.norb = pv->get_global_row_size();
-    report.target_orbital = select_targets(ucell, target_l);
-    report.target_atom = atom_labels(report.target_orbital, ucell);
-    report.ntarget = static_cast<int>(report.target_orbital.size());
-
-    std::vector<int> target_pos(report.norb, -1);
-    for (int a = 0; a < report.ntarget; ++a)
-    {
-        target_pos[report.target_orbital[a]] = a;
-    }
-
-    // S_T[a,b] = <phi_a|S|phi_b> for the selected AO columns.  Each local
-    // block contributes its own elements; the pool reduction makes the small
-    // R x R matrix identical on every rank.
-    std::vector<double> ST(static_cast<size_t>(report.ntarget) * report.ntarget,
-                           0.0);
-    for_each_gamma_block(S, ucell, [&](const int gi, const int gj,
-                                       const double value) {
-        const int a = target_pos[gi];
-        const int b = target_pos[gj];
-        // Branch: only target-target blocks enter S_T.
-        if (a >= 0 && b >= 0)
-        {
-            ST[static_cast<size_t>(a) * report.ntarget + b] += value;
-        }
-    });
-    reduce_pool(ST);
-
-    LcaoTargetSpace target;
-    finalize_lcao_target(report.norb, report.target_orbital,
-                         report.target_atom, ST, target);
+    const LcaoTargetSpace target
+        = build_lcao_target_from_container(ucell, S, target_l);
+    report.norb = target.norb;
+    report.target_orbital = target.orbital;
+    report.target_atom = target.atom;
+    report.ntarget = target.ntarget;
     report.cond = target.cond;
     report.rank = target.rank;
 
-    std::vector<double> n_T_target(report.ntarget, 0.0);
-    std::vector<double> m_T_target(report.ntarget, 0.0);
+    std::vector<double> n_T_target;
+    std::vector<double> m_T_target;
+    observe_lcao_target_from_container(ucell, S, target, dmr, nspin,
+                                       n_T_target, m_T_target);
     for (int a = 0; a < report.ntarget; ++a)
     {
-        // u_a = S c'_a, gated by the target coefficient support.  Building u
-        // once per target keeps the DMR contraction independent of the AO
-        // layout and directly mirrors the dense S2.1 formula.
-        std::vector<double> u(report.norb, 0.0);
-        for_each_gamma_block(S, ucell, [&](const int gi, const int gj,
-                                           const double value) {
-            const int b = target_pos[gj];
-            // Branch: only columns in the selected target space contribute
-            // to S c'_a.
-            if (b >= 0)
-            {
-                u[gi] += value * target.Cprime[static_cast<size_t>(gj)
-                                                   * report.ntarget + a];
-            }
-        });
-        reduce_pool(u);
-
-        for (int spin = 0; spin < nspin; ++spin)
-        {
-            double local = 0.0;
-            for_each_gamma_block(*dmr[spin], ucell,
-                [&](const int gi, const int gj, const double value) {
-                    local += u[gi] * value * u[gj];
-                });
-            reduce_pool(local);
-            n_T_target[a] += local;
-            // Branch: collinear spin difference is up minus down.
-            if (nspin == 2)
-            {
-                m_T_target[a] += (spin == 0 ? local : -local);
-            }
-        }
         report.n_T[report.target_atom[a]] += n_T_target[a];
         report.m_T[report.target_atom[a]] += m_T_target[a];
     }
