@@ -5559,3 +5559,45 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - **遗留风险/下一步**：补跑最终全量 constraint 回归；0.05 e*Bohr 单点如仍需
   闭合，优先改 ALM 末段阻尼/初值，不提高 100 步预算；继续覆盖界面场景的
   saw 平面真空区与 warm/fixed 限制。
+
+## 2026-10-26 (S0): 统一分配基线审计
+
+- **完成内容**：按 `2026-10-21-unified-allocation-execution.md` 完成 S0。
+  修正对比文档 Becke 公式为
+  `mu_IJ=(|r-R_I|-|r-R_J|)/|R_I-R_J|`、显式归一化
+  `w_I=p_I/sum_J p_J`，补充等边三中心 `sum p=3/4` 反例；新增
+  `ThreeCentrePartitionOfUnity` 与 `DerivativeSumRule`。
+- **验证**：`ctest --test-dir build -R '^MODULE_ESTATE_constraint_weight_grid$'`
+  14/14 PASS。三中心 `maxdev<1e-12`；未归一化反例 `sum_raw=0.75`；
+  导数求和 `max_dsum=8.882e-16`、违约点 0。
+- **首轮问题**：原水分子三原子共线，不能实现到三点等距的 `3/4` 反例；改用
+  等边三角形构型后通过。该修正只影响测试几何，不改生产权重代码。
+- **文件**：`source/source_estate/module_constraint/test/weight_grid_test.cpp`、
+  `docs/superpowers/specs/2026-10-21-local-moment-algorithms-comparison.md`、
+  `docs/superpowers/specs/2026-10-21-s0-baseline-audit-test.md`（新建）、本日志。
+- **下一步**：S1.1 Jacobi 特征分解；随后 S1.2 分配算子与 S1.3 网格观测。
+
+## 2026-10-26 (S1): 统一分配算子核心与网格观测
+
+- **完成内容**：按执行方案完成 S1.1–S1.3。
+  1. `alloc_linalg.{h,cpp}`：无 Eigen 的 cyclic Jacobi 对称特征分解、
+     R×R 对称逆平方根与秩截断。
+  2. `alloc_operator.{h,cpp}`：网格目标轨道正交化，`A_i=Q_i+Qc W_i Qc`、
+     `P/Qc/Qi` 应用、条件数审计；空目标集退化为 `diag(w_i)`。
+  3. `alloc_observe.{h,cpp}`：逐带投影残差三量分解，输出 `n_T/m_T/n_c/m_c/
+     n_tot/m_tot/n_c_grid/cond`；残差范数直接累加保证 `n_c>=0`。
+- **验证**：
+  - 新目标 `alloc_linalg` 4/4、`alloc_operator` 3/3、`alloc_observe` 2/2 PASS。
+  - `max_sum_error=3.109e-15`；`cond=5.615422`；2-target `24^3` 构建
+    0.551 ms；`Σn` 与参考相等，`Σm` 差 `2.34e-16`；toys state
+    `m_c=(-2.093e-3,-7.297e-4,-5.969e-3)`。
+  - `ctest -R constraint` 16/16 PASS（49.45 s）；`abacus_basic_para` 构建/链接
+    PASS。
+- **设计口径**：S1 网格原型要求 `WeightGrid` 为每原子 singleton 约束映射；
+  片段/重叠映射显式拒绝，避免静默使用错误权重。
+- **文件**：`module_constraint/alloc_{linalg,operator,observe}.{h,cpp}`；
+  `test/alloc_{linalg,operator,observe}_test.cpp`；
+  `source_estate/CMakeLists.txt`、`module_constraint/test/CMakeLists.txt`；
+  `2026-10-21-s1-allocation-core-test.md`（新建）；本日志。
+- **下一步**：S2.1 LCAO 目标轨道/重叠子块与 DMR 对拍；S2.2 默认关闭的
+  `constraint_alloc_report` 与 h2o_dimer 三量对照。S2 闸门未过不进入 S3。

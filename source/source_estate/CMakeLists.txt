@@ -54,6 +54,9 @@ list(APPEND objects
     module_constraint/constraint_alm.cpp
     module_constraint/constraint_deriv.cpp
     module_constraint/constraint_dipole.cpp
+    module_constraint/alloc_linalg.cpp
+    module_constraint/alloc_operator.cpp
+    module_constraint/alloc_observe.cpp
 )
 
 if(ENABLE_LCAO)

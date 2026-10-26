@@ -61,6 +61,26 @@ static std::unique_ptr<UnitCell> make_h2o_ucell()
     return utp.SetUcellInfo();
 }
 
+// Cartesian (Bohr) atomic positions in the same global atom order used by
+// WeightGrid.  Kept local because this file defines its own 10 Bohr H2O
+// fixture instead of using the shared 20 Bohr constraint test helper.
+static std::vector<std::array<double, 3>> h2o_test_positions(const UnitCell& ucell)
+{
+    std::vector<std::array<double, 3>> pos(ucell.nat);
+    int iat = 0;
+    for (int it = 0; it < ucell.ntype; ++it)
+    {
+        for (int ia = 0; ia < ucell.atoms[it].na; ++ia)
+        {
+            const ModuleBase::Vector3<double> p =
+                ucell.atoms[it].taud[ia] * ucell.latvec * ucell.lat0;
+            pos[iat] = {p.x, p.y, p.z};
+            ++iat;
+        }
+    }
+    return pos;
+}
+
 class WeightGridTest : public ::testing::Test
 {
   protected:
@@ -125,6 +145,109 @@ TEST_F(WeightGridTest, PartitionOfUnity)
            rhopw->nrxx, wg.nat(),
            std::chrono::duration<double>(dur).count(),
            std::chrono::duration<double>(dur).count() / rhopw->nrxx);
+}
+
+// Three-centre partition: the normalized Becke product must sum to one at
+// every grid point.  The pairwise identity s(mu)+s(-mu)=1 is not enough for
+// more than two centres; normalization is what makes it a partition.
+TEST_F(WeightGridTest, ThreeCentrePartitionOfUnity)
+{
+    // Move the two H atoms to an equilateral triangle around O.  The three
+    // original H2O atoms are collinear, so no point is equidistant from all
+    // of them and the 3/4 counterexample cannot be realized there.
+    const double ox = 5.0;
+    const double oy = 5.0;
+    const double oz = 5.0;
+    const double side = 1.5; // O-H distance, Bohr
+    const std::array<std::array<double, 3>, 2> h_cart = {{
+        {ox + side, oy, oz},
+        {ox + 0.5 * side, oy + 0.5 * std::sqrt(3.0) * side, oz}
+    }};
+    for (int ia = 0; ia < 2; ++ia)
+    {
+        // The 10 Bohr cubic fixture has lat0=1, so direct = Cartesian/10.
+        ucell->atoms[1].taud[ia] = ModuleBase::Vector3<double>(
+            h_cart[ia][0] / 10.0, h_cart[ia][1] / 10.0, h_cart[ia][2] / 10.0);
+    }
+
+    constraint::WeightGrid wg(*ucell, rhopw, radii, constraint::WeightType::Becke);
+    wg.build();
+    EXPECT_LT(wg.max_partition_deviation(), 1e-12);
+
+    // Counter-check at the equilateral centroid, which is equidistant from
+    // all three atoms.  Every pair then has mu=0 and s(mu)=1/2, so the
+    // unnormalized three-centre product sums to 3/4; normalization is what
+    // turns it into a partition.
+    const std::vector<std::array<double, 3>> pos = h2o_test_positions(*ucell);
+    const double px = (pos[0][0] + pos[1][0] + pos[2][0]) / 3.0;
+    const double py = (pos[0][1] + pos[1][1] + pos[2][1]) / 3.0;
+    const double pz = (pos[0][2] + pos[1][2] + pos[2][2]) / 3.0;
+    double sum_raw = 0.0;
+    for (int I = 0; I < 3; ++I)
+    {
+        double p = 1.0;
+        for (int J = 0; J < 3; ++J)
+        {
+            // Branch: a centre does not exclude itself from the product.
+            if (J == I)
+            {
+                continue;
+            }
+            const double rI = std::sqrt(std::pow(px - pos[I][0], 2)
+                + std::pow(py - pos[I][1], 2)
+                + std::pow(pz - pos[I][2], 2));
+            const double rJ = std::sqrt(std::pow(px - pos[J][0], 2)
+                + std::pow(py - pos[J][1], 2)
+                + std::pow(pz - pos[J][2], 2));
+            const double RIJ = std::sqrt(std::pow(pos[I][0] - pos[J][0], 2)
+                + std::pow(pos[I][1] - pos[J][1], 2)
+                + std::pow(pos[I][2] - pos[J][2], 2));
+            p *= Grid::Partition::s_becke((rI - rJ) / RIJ);
+        }
+        sum_raw += p;
+    }
+    // The equilateral-centre limit is exactly 3/4 before normalization.
+    EXPECT_NEAR(sum_raw, 0.75, 1e-12);
+}
+
+// Sum over atoms of the analytic weight derivative must vanish at every
+// target atom/axis/grid point because sum_i w_i = 1 identically.  This is
+// the derivative counterpart of the partition-of-unity audit.
+TEST_F(WeightGridTest, DerivativeSumRule)
+{
+    constraint::WeightGrid wg(*ucell, rhopw, radii, constraint::WeightType::Becke);
+    wg.build();
+    wg.build_derivatives();
+    const int nat = wg.nat();
+    const int nrxx = wg.nrxx();
+    double max_dsum = 0.0;
+    int violations = 0;
+    for (int J = 0; J < nat; ++J)
+    {
+        for (int d = 0; d < 3; ++d)
+        {
+            for (int ir = 0; ir < nrxx; ++ir)
+            {
+                double s = 0.0;
+                for (int a = 0; a < nat; ++a)
+                {
+                    s += wg.weight_derivative(a, J, d, ir);
+                }
+                max_dsum = std::max(max_dsum, std::abs(s));
+                // Branch: count any point that breaks the analytic sum rule.
+                // Counting (rather than aborting on the first point) makes
+                // the mirror-switch-plane baseline quantifiable.
+                if (std::abs(s) > 1e-10)
+                {
+                    ++violations;
+                }
+            }
+        }
+    }
+    printf("weight_grid derivative sum rule: max_dsum=%.3e violations=%d\n",
+           max_dsum, violations);
+    EXPECT_EQ(violations, 0);
+    EXPECT_LT(max_dsum, 1e-10);
 }
 
 // M5: the dipole density weight plus its ionic offset must reproduce the

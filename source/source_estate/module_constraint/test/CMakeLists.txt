@@ -5,6 +5,35 @@ remove_definitions(-D__ROCM)
 remove_definitions(-D__MLALGO)
 
 AddTest(
+  TARGET MODULE_ESTATE_constraint_alloc_linalg
+  LIBS parameter ${math_libs} base device
+  SOURCES alloc_linalg_test.cpp ../alloc_linalg.cpp
+)
+
+AddTest(
+  TARGET MODULE_ESTATE_constraint_alloc_operator
+  LIBS parameter ${math_libs} base device planewave_serial cell_info
+  SOURCES alloc_operator_test.cpp
+    ../alloc_operator.cpp
+    ../alloc_linalg.cpp
+    ../weight_grid.cpp
+    ../constraint_dipole.cpp
+    ../../../source_io/module_output/output.cpp
+)
+
+AddTest(
+  TARGET MODULE_ESTATE_constraint_alloc_observe
+  LIBS parameter ${math_libs} base device planewave_serial cell_info
+  SOURCES alloc_observe_test.cpp
+    ../alloc_observe.cpp
+    ../alloc_operator.cpp
+    ../alloc_linalg.cpp
+    ../weight_grid.cpp
+    ../constraint_dipole.cpp
+    ../../../source_io/module_output/output.cpp
+)
+
+AddTest(
   TARGET MODULE_ESTATE_constraint_weight_grid
   LIBS parameter ${math_libs} base device planewave_serial cell_info
   SOURCES weight_grid_test.cpp
