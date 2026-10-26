@@ -51,6 +51,16 @@ AddTest(
 )
 
 AddTest(
+  TARGET MODULE_ESTATE_constraint_alloc_spin
+  LIBS parameter ${math_libs} base device
+  SOURCES alloc_spin_test.cpp
+    ../alloc_spin.cpp
+    ../alloc_constraint.cpp
+    ../alloc_lcao.cpp
+    ../alloc_linalg.cpp
+)
+
+AddTest(
   TARGET MODULE_ESTATE_constraint_weight_grid
   LIBS parameter ${math_libs} base device planewave_serial cell_info
   SOURCES weight_grid_test.cpp

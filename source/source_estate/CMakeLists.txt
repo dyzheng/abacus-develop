@@ -59,6 +59,7 @@ list(APPEND objects
     module_constraint/alloc_observe.cpp
     module_constraint/alloc_lcao.cpp
     module_constraint/alloc_constraint.cpp
+    module_constraint/alloc_spin.cpp
 )
 
 if(ENABLE_LCAO)

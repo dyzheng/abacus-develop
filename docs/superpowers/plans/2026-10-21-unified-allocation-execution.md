@@ -840,9 +840,18 @@ TEST(AllocObserveTest, EmptyTargetSetEqualsBecke)
 
 ### Task S4.3 非共线
 
-- [ ] `λ_i` 三分量、`ΔH = ΣÂ_i(λ_i·σ)`；`m_i = μ_B Tr(ρ̂Â_iσ)`。
-- [ ] 测试：无 SOC 时整体自旋旋转 `|ΔE|<1e-6 Ry`；三分量协同变换；有 SOC 时不要求（记录）。
-- [ ] 验收：旋转变性 + FD 力。
+- [x] 稠密核心：`λ_i` 三分量、`ΔH = ΣÂ_i(λ_i·σ)`；
+      `m_i = μ_B Tr(ρ̂Â_iσ)` 的 Pauli/ spinor 两种读数与
+      `dS` 伴随已实现于 `alloc_spin.{h,cpp}`。
+- [x] 稠密测试：无 SOC 模型整体旋转 `|ΔE|=0 <1e-6 Ry`；三分量协同变换；
+      伴随力 FD 差 `2.395e-9 <2e-7`。详见
+      `docs/superpowers/specs/2026-10-26-s4-noncollinear-test.md`。
+- [ ] 生产接线：LCAO `nspin=4` 的 target/kernel 构建、spinor 注入、
+      DMK/DMR 读数、向量 multiplier 调度与审计尚未实现；输入层目前还禁止
+      `nspin=4 + gamma_only`，且 allocation build 仅接受 Gamma-only 实
+      `HContainer`。
+- [ ] 验收：SCF 级无 SOC 旋转不变性 + 位置 FD 力。完成生产接线后再勾选；
+      本轮 dense algebra 通过不能替代该闸门。
 
 **S4 验收**：上述三条全过；写 dated 测试文档。
 

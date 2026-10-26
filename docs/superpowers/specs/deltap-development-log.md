@@ -5810,3 +5810,40 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
      整体自旋旋转不变性。
   3. S4 闸门复核时始终并列无约束基线；若需解决大应变 `<5%`，先改 LCAO
      总能应变参考质量，不在约束核中做经验补偿。
+
+## 2026-10-26 (S4.3 core): 非共线分配三分量核心
+
+- **完成内容**：
+  1. 新增 `alloc_spin.{h,cpp}`：标量 `K_i` 到
+     `K_i tensor (lambda_i.sigma)` 的 spinor 展开、Pauli 分量读数、
+     直接 spinor 求迹交叉校验。
+  2. `build_alloc_spin_s_adjoint()` 把三分量约束能
+     `sum_i lambda_i . m_i` 的 overlap 导数逐分量归约到 S4.1 标量伴随。
+  3. 新增 `MODULE_ESTATE_constraint_alloc_spin`，覆盖 Pauli/spinor 读数一致、
+     无 SOC 整体旋转和 `dS` 伴随 FD。
+- **验证**：
+  - `SpinorAndPauliReadoutsAgree`：最大读数差 `1.776e-15`。
+  - `NoSocGlobalSpinRotationInvariant`：三分量矩最大差 `4.441e-16`，
+    总能量差 `0.000e+00 Ry`。
+  - `SAdjointMatchesSpinFiniteDifference`：解析 `-6.154833622048`，FD
+    `-6.154833619654`，差 `2.395e-09`。
+  - 相关既有回归 7/7 PASS；`git diff --check` PASS。
+- **边界/未完成**：
+  - 尚未接 LCAO `nspin=4`。当前输入层禁止 `nspin=4 + gamma_only=1`，
+    allocation target/kernel build 只接受 Gamma-only 实 `HContainer`；
+    `AllocConstraintLcaoOperator<complex,complex>` 仍是 no-op。
+  - `ConstraintLoop`/ALM 仍是每约束标量 multiplier；向量 residual、
+    收敛与审计规则未定义。
+  - 因此 SCF 级旋转不变性和位置 FD 仍未完成，S4 闸门不能提前关闭。
+- **文件**：
+  `source_estate/module_constraint/{alloc_spin.h,alloc_spin.cpp,
+  test/alloc_spin_test.cpp}`、`source_estate/CMakeLists.txt`、
+  `module_constraint/test/CMakeLists.txt`、
+  `2026-10-26-s4-noncollinear-test.md`（新建）、执行方案、本日志。
+- **下一步**：
+  1. LCAO `nspin=4` 单 k/Gamma 生产闭环：spinor `S(R)` 标量提取、
+     `Gint_vl_nspin4` 权重、complex kernel 注入、DMK 读数。
+  2. 固定三分量 `lambda` 做 SCF 能量旋转与位置 FD；通过后再设计向量
+     multiplier 的外部循环。
+  3. 生产接线完成前保持 `constraint_alloc_switch` 对 `nspin=4` 的显式拒绝，
+     避免静默走空算符。
