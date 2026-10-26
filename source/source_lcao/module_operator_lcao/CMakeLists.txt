@@ -14,6 +14,7 @@ add_library(
     td_pot_hybrid.cpp
     dspin_lcao.cpp
     deltap_lcao.cpp
+    alloc_constraint_lcao_operator.cpp
     dftu_lcao.cpp
     operator_force_stress_utils.cpp
 )

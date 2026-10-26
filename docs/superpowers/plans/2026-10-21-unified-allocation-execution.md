@@ -797,20 +797,20 @@ TEST(AllocObserveTest, EmptyTargetSetEqualsBecke)
 
 **Files:** `alloc_operator.{h,cpp}`（`apply_dH`）；`constraint_inject_lcao.cpp`（或新 `alloc_inject_lcao`）；测试
 
-- [ ] **Step 1:** 单元测试：小基组下 `ΔH = V − PV − VP + PVP + Σλ_iQ_i`（设计 eq. 2.4）与稠密构造逐元 `<1e-10`。
-- [ ] **Step 2:** 实现：`V = Σ_i λ_i W_i`（`W_i` 的 AO 矩阵 = `∫w_i χ_μ χ_ν`，复用现有局域势矩阵机制）；修正项用 R×R 低秩组装；每 SCF 迭代更新 `λ`（ALM）。
-- [ ] **Step 3:** 观测：每迭代用波函数/密度矩阵算 `s_i`（复用 S2 的投影），驱动 ALM `λ^eff = λ + k(s−t)`。
-- [ ] **Step 4:** 收敛判据：`max|s−t| < constraint_thr`；`Σm = M_tot` 审计每步输出。
+- [x] **Step 1:** 单元测试：小基组下 `ΔH = V − PV − VP + PVP + Σλ_iQ_i`（设计 eq. 2.4）与稠密构造逐元 `<1e-10`。
+- [x] **Step 2:** 实现：`V = Σ_i λ_i W_i`（`W_i` 的 AO 矩阵 = `∫w_i χ_μ χ_ν`，复用现有局域势矩阵机制）；修正项用 R×R 低秩组装；每 SCF 迭代更新 `λ`（ALM）。
+- [x] **Step 3:** 观测：每迭代用波函数/密度矩阵算 `s_i`（复用 S2 的投影），驱动 ALM `λ^eff = λ + k(s−t)`。
+- [x] **Step 4:** 收敛判据：`max|s−t| < constraint_thr`；`Σm = M_tot` 审计每步输出。
 
 ### Task S3.2 冻结力（设计 eq. 6.3）
 
-- [ ] **Step 1:** 实现 `F_con,J = −Σ_i λ_i ∫ ν_c(r) ∂w_i/∂R_J dr`：复用现有权重导数核（`constraint_deriv`），把自旋密度换成**互补投影自旋密度** `ν_c`。
-- [ ] **Step 2:** 测试（FD）：
+- [x] **Step 1:** 实现 `F_con,J = −Σ_i λ_i ∫ ν_c(r) ∂w_i/∂R_J dr`：复用现有权重导数核（`constraint_deriv`），把自旋密度换成**互补投影自旋密度** `ν_c`。
+- [x] **Step 2:** 测试（FD）：
   - 位置 FD：固定 λ，±δ（δ=0.005 Bohr）三点能量差分 vs 解析力；判据 `< 0.0129 eV/Å`。
   - 目标 FD：`dE*/dt = −λ`；判据 `< 0.02 eV/μB`。
   - 与 Becke 约束同体系对照：`λ` 量级（预期约 10× 差异，因坐标不同；只作记录，不作判据）。
-- [ ] **Step 3:** ALM 刚性子例：0.01 μB，`scf_nmax=100`，两帧 relax；判据两帧 CONVERGED、末残差 `<1e-4 μB`。
-- [ ] **Step 4:** Commit + dated 测试文档（含 FD 表、`Σm` 审计、效率对比）。
+- [x] **Step 3:** ALM 刚性子例：0.01 μB，`scf_nmax=100`，两帧 relax；判据两帧 CONVERGED、末残差 `<1e-4 μB`。
+- [x] **Step 4:** Commit + dated 测试文档（含 FD 表、`Σm` 审计、效率对比）。
 
 **S3 验收**：位置 FD `<0.0129 eV/Å`；目标 FD `<0.02 eV/μB`；`Σm=M_tot`；ALM 100 步内收敛。
 

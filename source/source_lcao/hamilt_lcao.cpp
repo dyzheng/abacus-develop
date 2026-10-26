@@ -30,6 +30,7 @@
 #include "module_operator_lcao/dftu_lcao.h"
 #include "module_operator_lcao/dspin_lcao.h"
 #include "module_operator_lcao/deltap_lcao.h"
+#include "module_operator_lcao/alloc_constraint_lcao_operator.h"
 #include "module_operator_lcao/ekinetic.h"
 #include "module_operator_lcao/meta_lcao.h"
 #include "module_operator_lcao/nonlocal.h"
@@ -238,6 +239,19 @@ HamiltLCAO<TK, TR>::HamiltLCAO(const UnitCell& ucell,
                                                       p_dftu);
             }
             this->getOperator()->add(plus_u);
+        }
+        if (PARAM.inp.constraint && PARAM.inp.constraint_alloc_switch)
+        {
+            // Branch: the allocation operator is compiled only for the real
+            // Gamma-only HContainer; the esolver guard refuses every other
+            // LCAO combination before this constructor runs.
+            if constexpr (std::is_same<TR, double>::value)
+            {
+                Operator<TK>* alloc_op
+                    = new AllocConstraintLcaoOperator<TK, TR>(
+                        this->hsk, this->kv->kvec_d, this->hR);
+                this->getOperator()->add(alloc_op);
+            }
         }
     }
     // multi-k-points case to initialize HamiltLCAO, ops will be used

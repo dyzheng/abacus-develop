@@ -19,6 +19,7 @@
 #include "source_hsolver/hsolver_lcao.h"
 #include <iomanip>
 #include <cmath>
+#include <utility>
 #ifdef __EXX
 #include "../source_lcao/module_ri/exx_opt_orb.h"
 #endif
@@ -35,6 +36,7 @@
 #include "source_estate/module_constraint/constraint_inject_lcao.h"
 #include "source_estate/module_constraint/constraint_loop.h"
 #include "source_estate/module_constraint/alloc_lcao_report.h"
+#include "source_estate/module_constraint/alloc_constraint_lcao.h"
 
 namespace ModuleESolver
 {
@@ -271,9 +273,74 @@ void ESolver_KS_LCAO<TK, TR>::before_scf(UnitCell& ucell, const int istep)
         {
             ModuleBase::WARNING_QUIT("ESolver_KS_LCAO::before_scf", error);
         }
+        const bool allocate = PARAM.inp.constraint_alloc_switch;
+        // Branch: S3 allocation requires the same Gamma-only collinear LCAO
+        // contract as the S2 read-out.  Refuse unsupported combinations at
+        // configuration time instead of silently falling back to grid μw.
+        if (allocate)
+        {
+            bool has_spin = false;
+            bool has_dipole = false;
+            for (const constraint::ConstraintSpec& spec : specs)
+            {
+                has_spin = has_spin
+                           || spec.kind == constraint::ConstraintKind::Spin;
+                has_dipole = has_dipole
+                             || spec.kind == constraint::ConstraintKind::Dipole;
+            }
+            // Guard: the S3 kernel is assembled from the single Gamma-point
+            // S(R) block; a multi-k run has no equivalent dense contraction.
+            if (!PARAM.globalv.gamma_only_local)
+            {
+                ModuleBase::WARNING_QUIT("ESolver_KS_LCAO::before_scf",
+                    "constraint_alloc_switch requires gamma_only = 1");
+            }
+            // Guard: non-collinear/other spin representations need a
+            // different channel algebra than the implemented up/down maps.
+            if (PARAM.inp.nspin != 1 && PARAM.inp.nspin != 2)
+            {
+                ModuleBase::WARNING_QUIT("ESolver_KS_LCAO::before_scf",
+                    "constraint_alloc_switch supports only nspin = 1 or 2");
+            }
+            // Guard: a spin allocation constraint has no magnetization
+            // channel to observe when nspin is one.
+            if (has_spin && PARAM.inp.nspin != 2)
+            {
+                ModuleBase::WARNING_QUIT("ESolver_KS_LCAO::before_scf",
+                    "spin allocation constraints require nspin = 2");
+            }
+            // Guard: dipole weights include an ionic-coordinate offset that
+            // is not part of the target-space allocation operator.
+            if (has_dipole)
+            {
+                ModuleBase::WARNING_QUIT("ESolver_KS_LCAO::before_scf",
+                    "dipole constraints cannot use the allocation observable");
+            }
+            // Guard: without a constraint the allocation loop has no target
+            // or multiplier to advance.
+            if (specs.empty())
+            {
+                ModuleBase::WARNING_QUIT("ESolver_KS_LCAO::before_scf",
+                    "constraint_alloc_switch requires at least one constraint");
+            }
+            // Guard: a negative shell index cannot select a target subspace.
+            if (PARAM.inp.constraint_alloc_target_l < 0)
+            {
+                ModuleBase::WARNING_QUIT("ESolver_KS_LCAO::before_scf",
+                    "constraint_alloc_target_l must be non-negative");
+            }
+        }
+        cfg.allocation_mode = allocate;
+        alloc::AllocConstraintLcao::instance().reset();
         constraint::ConstraintLoop::instance().init(
             ucell, this->pw_rhod, cfg, specs, radii, PARAM.inp.nelec, istep);
         constraint_audit_done_ = false;
+    }
+    else
+    {
+        // Branch: no constraint on this geometry; drop any allocation state
+        // left by a previous frame.
+        alloc::AllocConstraintLcao::instance().reset();
     }
 
     ModuleBase::timer::end("ESolver_KS_LCAO", "before_scf");
@@ -369,6 +436,56 @@ void ESolver_KS_LCAO<TK, TR>::cal_force(UnitCell& ucell, ModuleBase::matrix& for
                     }
                 }
             }
+        }
+    }
+
+    // S3 allocation force: the frozen-target derivative uses Q_c D Q_c,
+    // not the full KS density.  Build that density here while the DMR and
+    // the Gint grid are both available, then let FORCE_STRESS consume it
+    // through the shared weight-derivative kernel.
+    if (PARAM.inp.constraint && PARAM.inp.constraint_alloc_switch
+        && PARAM.inp.cal_force)
+    {
+        // Branch: only real LCAO density matrices can be expanded into the
+        // complementary density expected by the Gint force kernel.
+        if constexpr (std::is_same<TR, double>::value)
+        {
+            constraint::ConstraintLoop& cloop
+                = constraint::ConstraintLoop::instance();
+            alloc::AllocConstraintLcao& astate
+                = alloc::AllocConstraintLcao::instance();
+            // Guard: an inactive allocation state would leave the stale
+            // full-density force path armed for a constrained run.
+            if (!cloop.allocation_mode() || !astate.active()
+                || this->dmat.dm == nullptr || this->pw_rhod == nullptr)
+            {
+                ModuleBase::WARNING_QUIT("ESolver_KS_LCAO::cal_force",
+                    "allocation force requires an initialized allocation state and density grid");
+            }
+            std::vector<const hamilt::HContainer<double>*> dmr_channels;
+            for (auto* dmr : this->dmat.dm->get_DMR_vector())
+            {
+                dmr_channels.push_back(dmr);
+            }
+            std::vector<std::vector<double>> rho_c;
+            std::string alloc_error;
+            // Branch: construction failure must stop before FORCE_STRESS can
+            // fall back to the full-density force.
+            if (!astate.complement_density(
+                    ucell, dmr_channels, PARAM.inp.nspin,
+                    this->pw_rhod->nrxx, rho_c, alloc_error))
+            {
+                ModuleBase::WARNING_QUIT("ESolver_KS_LCAO::cal_force",
+                    alloc_error);
+            }
+            cloop.set_allocation_force_density(std::move(rho_c));
+        }
+        else
+        {
+            // Branch: complex TR storage has no real complementary density
+            // path, so this unsupported combination is rejected explicitly.
+            ModuleBase::WARNING_QUIT("ESolver_KS_LCAO::cal_force",
+                "allocation constraints require real LCAO DMR storage");
         }
     }
 
@@ -768,8 +885,17 @@ void ESolver_KS_LCAO<TK, TR>::hamilt2rho_single(UnitCell& ucell, int istep, int 
     // Hamiltonian is built.
     if (PARAM.inp.constraint && !skip_solve)
     {
-        constraint::ConstraintLoop::instance().inject_potential_lcao(
-            iter, this->pelec->pot->get_eff_v());
+        constraint::ConstraintLoop& cloop
+            = constraint::ConstraintLoop::instance();
+        cloop.inject_potential_lcao(iter,
+                                    this->pelec->pot->get_eff_v());
+        // Branch: allocation mode injects sparse K_i kernels in the
+        // Hamiltonian operator; keep their multipliers in sync with the
+        // loop's most recent observation.
+        if (cloop.allocation_mode())
+        {
+            alloc::AllocConstraintLcao::instance().set_mu_eff(cloop.mu_eff());
+        }
     }
 
     // 3) run Hsolver
@@ -929,7 +1055,81 @@ void ESolver_KS_LCAO<TK, TR>::iter_finish(UnitCell& ucell, const int istep, int&
     {
         constraint::ConstraintLoop& cloop
             = constraint::ConstraintLoop::instance();
-        cloop.observe(iter, this->chr.rho, PARAM.inp.nspin);
+        // Branch: S3 reads the target-space n_T/m_T from the DMR instead of
+        // the Becke grid charges.  The adapter is built on the first finished
+        // SCF iteration, after the overlap operator has populated S(R).
+        if (cloop.allocation_mode())
+        {
+            // Branch: the allocation adapter is real-valued and built from
+            // the real Gamma-only DMR containers.
+            if constexpr (std::is_same<TR, double>::value)
+            {
+                alloc::AllocConstraintLcao& astate
+                    = alloc::AllocConstraintLcao::instance();
+                std::string alloc_error;
+                // Branch: first observed iteration builds the geometry-fixed
+                // target spaces and K_i kernels from the current S(R).
+                if (!astate.active())
+                {
+                    const constraint::WeightGrid& wg = cloop.weight_grid();
+                    const std::vector<std::vector<double>>& cw
+                        = wg.constraint_weights();
+                    const std::vector<std::vector<int>>& atoms
+                        = wg.constraint_atoms();
+                    // Branch: a failed target/kernel build must abort rather
+                    // than observe an empty allocation state.
+                    if (!astate.build(ucell, *hamilt_lcao->getSR(),
+                                      *hamilt_lcao->getHR(), cw, atoms,
+                                      this->gint_info_.get(), &this->pv,
+                                      PARAM.inp.constraint_alloc_target_l,
+                                      1e-10, alloc_error))
+                    {
+                        ModuleBase::WARNING_QUIT(
+                            "ESolver_KS_LCAO::iter_finish", alloc_error);
+                    }
+                    std::vector<double> sign_up;
+                    std::vector<double> sign_down;
+                    sign_up.reserve(cloop.channels().size());
+                    sign_down.reserve(cloop.channels().size());
+                    for (const constraint::ChannelProfile& chan
+                         : cloop.channels())
+                    {
+                        sign_up.push_back(chan.inj_up);
+                        sign_down.push_back(chan.inj_dn);
+                    }
+                    astate.set_injection_signs(sign_up, sign_down);
+                }
+                std::vector<const hamilt::HContainer<double>*> dmr_channels;
+                for (auto* dmr : this->dmat.dm->get_DMR_vector())
+                {
+                    dmr_channels.push_back(dmr);
+                }
+                std::vector<double> n_alloc;
+                std::vector<double> m_alloc;
+                // Branch: a trace/layout failure would silently mix kernels
+                // and DMR channels, so it must abort the SCF.
+                if (!astate.project_allocations(
+                        dmr_channels, PARAM.inp.nspin, n_alloc, m_alloc,
+                        alloc_error))
+                {
+                    ModuleBase::WARNING_QUIT(
+                        "ESolver_KS_LCAO::iter_finish", alloc_error);
+                }
+                cloop.observe_allocation(iter, n_alloc, m_alloc);
+                astate.set_mu_eff(cloop.mu_eff());
+            }
+            else
+            {
+                // Branch: complex TR storage has no real allocation trace.
+                ModuleBase::WARNING_QUIT("ESolver_KS_LCAO::iter_finish",
+                    "allocation constraints require real LCAO DMR storage");
+            }
+        }
+        else
+        {
+            // Branch: legacy grid-density constraints keep the Becke read-out.
+            cloop.observe(iter, this->chr.rho, PARAM.inp.nspin);
+        }
         // Energy branch guard input: the plain KS total energy of this SCF
         // iteration (etot still carries the cc_escon of the PREVIOUS outer
         // step, so subtract it to hand over a constraint-correction-free
@@ -984,51 +1184,68 @@ void ESolver_KS_LCAO<TK, TR>::iter_finish(UnitCell& ucell, const int istep, int&
         if (!constraint_audit_done_ && cloop.enabled() && cloop.done())
         {
             constraint_audit_done_ = true;
-            std::vector<std::vector<double>> cw;
-            const constraint::WeightGrid& wg = cloop.weight_grid();
-            cw.reserve(wg.nconstraint());
-            for (int a = 0; a < wg.nconstraint(); ++a)
-            {
-                cw.push_back(wg.constraint_weight(a));
-            }
-            // Channel -> DM mode: charge reads the total density matrix,
-            // spin reads the magnetization density matrix (m = up - dn),
-            // mirroring the observable the loop observes.
-            const bool spin = (cloop.type() == "spin");
-            if (PARAM.inp.nspin == 2)
-            {
-                this->dmat.dm->switch_dmr(spin ? 2 : 1);
-            }
-            const hamilt::HContainer<double>* dmr
-                = this->dmat.dm->get_DMR_pointer(1);
-            // The matrix trace represents only the density-weight term.
-            // A dipole coordinate also carries a rank-independent ionic
-            // offset in Q; subtract it before the cross-check (zero for all
-            // historical charge/spin constraints).
-            std::vector<double> q_grid = cloop.charges();
-            for (size_t a = 0; a < q_grid.size(); ++a)
-            {
-                q_grid[a] -= wg.observable_offset(static_cast<int>(a));
-            }
-            const double dev = constraint::ConstraintInjectLCAO::
-                audit_weighted_trace(cw, this->gint_info_.get(), dmr,
-                                     q_grid, &this->pv);
-            if (PARAM.inp.nspin == 2)
-            {
-                this->dmat.dm->switch_dmr(0);
-            }
-            if (dev < 0.0)
+            // Branch: allocation mode observes Tr[K_i DMR], not the legacy
+            // Tr[W_i DMR], so the M3b grid-weight comparison would compare
+            // two different observables.  State that explicitly instead of
+            // printing a meaningless nonzero "wiring error".
+            if (cloop.allocation_mode())
             {
                 GlobalV::ofs_running
-                    << "[constraint] M3b runtime audit: SKIPPED "
-                       "(W/DM layout or count mismatch)" << std::endl;
+                    << "[constraint] M3b runtime audit: SKIPPED in allocation "
+                       "mode (the observable is Tr[K_i.DMR], not Tr[W_i.DMR])\n";
             }
             else
             {
-                GlobalV::ofs_running
-                    << "[constraint] M3b runtime audit: max |Tr[W.DM] - "
-                       "int w rho| = " << std::setprecision(12) << dev
-                    << " e" << std::endl;
+                // Branch: legacy grid constraints retain the exact matrix/grid
+                // cross-check, which shares the same observable by design.
+                std::vector<std::vector<double>> cw;
+                const constraint::WeightGrid& wg = cloop.weight_grid();
+                cw.reserve(wg.nconstraint());
+                for (int a = 0; a < wg.nconstraint(); ++a)
+                {
+                    cw.push_back(wg.constraint_weight(a));
+                }
+                // Channel -> DM mode: charge reads the total density matrix,
+                // spin reads the magnetization density matrix (m = up - dn),
+                // mirroring the observable the loop observes.
+                const bool spin = (cloop.type() == "spin");
+                if (PARAM.inp.nspin == 2)
+                {
+                    this->dmat.dm->switch_dmr(spin ? 2 : 1);
+                }
+                const hamilt::HContainer<double>* dmr
+                    = this->dmat.dm->get_DMR_pointer(1);
+                // The matrix trace represents only the density-weight term.
+                // A dipole coordinate also carries a rank-independent ionic
+                // offset in Q; subtract it before the cross-check (zero for all
+                // historical charge/spin constraints).
+                std::vector<double> q_grid = cloop.charges();
+                for (size_t a = 0; a < q_grid.size(); ++a)
+                {
+                    q_grid[a] -= wg.observable_offset(static_cast<int>(a));
+                }
+                const double dev = constraint::ConstraintInjectLCAO::
+                    audit_weighted_trace(cw, this->gint_info_.get(), dmr,
+                                         q_grid, &this->pv);
+                if (PARAM.inp.nspin == 2)
+                {
+                    this->dmat.dm->switch_dmr(0);
+                }
+                // Branch: a negative return marks an unsupported layout or
+                // count mismatch, not a numerical residual.
+                if (dev < 0.0)
+                {
+                    GlobalV::ofs_running
+                        << "[constraint] M3b runtime audit: SKIPPED "
+                           "(W/DM layout or count mismatch)" << std::endl;
+                }
+                else
+                {
+                    GlobalV::ofs_running
+                        << "[constraint] M3b runtime audit: max |Tr[W.DM] - "
+                           "int w rho| = " << std::setprecision(12) << dev
+                        << " e" << std::endl;
+                }
             }
         }
     }

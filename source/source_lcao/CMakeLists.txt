@@ -23,6 +23,7 @@ if(ENABLE_LCAO)
         module_operator_lcao/td_pot_hybrid.cpp
         module_operator_lcao/dspin_lcao.cpp
         module_operator_lcao/deltap_lcao.cpp
+        module_operator_lcao/alloc_constraint_lcao_operator.cpp
         module_operator_lcao/dftu_lcao.cpp
         module_operator_lcao/operator_force_stress_utils.cpp
         dftu_lcao.cpp

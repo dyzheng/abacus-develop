@@ -198,6 +198,17 @@ void OperatorLCAO<TK, TR>::init(const int ik_in) {
             this->contributeHk(ik_in);
             break;
         }
+        case calculation_type::lcao_alloc_lambda:
+        {
+            // Unified-allocation lambda operator: contribute once per fresh
+            // H(R) build.  The chain's hr_done flag is false whenever the
+            // Hamiltonian was refreshed or the collinear spin channel moved.
+            if (!this->hr_done)
+            {
+                this->contributeHR();
+            }
+            break;
+        }
         case calculation_type::lcao_exx:
         {
             //update HR first

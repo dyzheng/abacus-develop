@@ -102,6 +102,14 @@ class ConstraintLoop
     // Read the constraint charges Q from the (mixed) rho of iteration 'iter'.
     void observe(const int iter, const double* const* rho, const int nspin);
 
+    // S3 allocation observation: n_alloc/m_alloc are per constraint and are
+    // the full allocation readings Tr(DMR K_i).  Charge constraints read
+    // n_alloc, spin constraints read m_alloc; the remaining reference/
+    // target/ALM bookkeeping is shared with observe().
+    void observe_allocation(const int iter,
+                            const std::vector<double>& n_alloc,
+                            const std::vector<double>& m_alloc);
+
     // SCF-convergence bookkeeping.  May override conv_esolver to false so
     // the SCF continues with the updated mu; leaves it true when the outer
     // loop is done (CONVERGED / UNREACHABLE / BRANCH_FLIP) or inactive.
@@ -159,6 +167,10 @@ class ConstraintLoop
                        const int nspin,
                        ModuleBase::matrix& forcecon);
 
+    // Allocation-mode force density: the esolver stores the complementary
+    // Q_c D Q_c density here before FORCE_STRESS calls compute_force().
+    void set_allocation_force_density(std::vector<std::vector<double>> rho);
+
     // Reset all state (unit tests / re-init).
     void reset();
 
@@ -167,6 +179,8 @@ class ConstraintLoop
     LoopPhase phase() const { return phase_; }
     MuStatus status() const { return status_; }
     bool fixed_mu_mode() const { return fixed_mu_; }
+    bool allocation_mode() const { return allocation_mode_; }
+    const std::vector<ChannelProfile>& channels() const { return channels_; }
     bool dipole_constraint() const { return dipole_constraint_; }
     int outer_steps() const { return outer_steps_; }
     // M4 scheduling pack B diagnostics: the SCF converged on the last frame
@@ -277,6 +291,8 @@ class ConstraintLoop
     // One INNER-schedule mu update from the current observation.  Returns true
     // when mu actually changed (the caller must reset the mixing history).
     bool take_inner_step(const int iter);
+    // Shared ALM/effective-multiplier update after Q_ has been refreshed.
+    void finish_observation();
     // Log once and hand the remainder of the run back to the OUTER schedule
     // (used when the inner budget is exhausted or the settle check bounced
     // twice).  Never silently continues: the reason is printed.
@@ -412,6 +428,8 @@ class ConstraintLoop
     // is disabled (constraint potential acts as a fixed external potential).
     bool fixed_mu_ = false;
     bool json_fixed_source_ = false; // fixed_mu came from the v2 target file
+    bool allocation_mode_ = false;
+    std::vector<std::vector<double>> allocation_force_rho_;
 };
 
 } // namespace constraint

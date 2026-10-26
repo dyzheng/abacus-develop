@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <numeric>
 #include <sstream>
+#include <utility>
 
 #include "constraint_deriv.h"
 #include "constraint_dipole.h"
@@ -146,6 +147,8 @@ void ConstraintLoop::reset()
     dipole_constraint_auto_saw_ = false;
     dipole_constraint_saw_resolved_ = true;
     dipole_constraint_saw_live_ = 0.5;
+    allocation_mode_ = false;
+    allocation_force_rho_.clear();
 }
 
 void ConstraintLoop::init(const UnitCell& ucell,
@@ -218,6 +221,7 @@ void ConstraintLoop::init(const UnitCell& ucell,
     cfg_ = cfg;
     specs_ = specs;
     nelec_ = nelec;
+    allocation_mode_ = cfg_.allocation_mode;
     // Dual-iteration schedule (plan 2026-09-11-dual-iteration-strategy.md):
     // the config switch is mirrored into live state.  inner_active_ is what
     // on_iteration() gates on, so a degrade can switch the run back to OUTER
@@ -594,6 +598,7 @@ void ConstraintLoop::warm_reinit(
     cfg_ = cfg;
     specs_ = specs;
     nelec_ = nelec;
+    allocation_mode_ = cfg_.allocation_mode;
     inner_schedule_ = (cfg_.mu_schedule == "inner");
     inner_thr_ = cfg_.inner_thr;
     inner_nmax_ = cfg_.inner_nmax;
@@ -794,6 +799,19 @@ void ConstraintLoop::inject_potential(const int iter,
     {
         return;
     }
+    // S3 allocation constraints enter through sparse K_i HContainers in the
+    // Hamiltonian operator, not through v_eff.  Keep the multiplier state in
+    // sync and leave the grid potential untouched.
+    if (allocation_mode_)
+    {
+        // Branch: outside the ALM the effective multiplier is exactly mu;
+        // the sparse operator consumes it on the next Hamiltonian build.
+        if (!alm_armed_)
+        {
+            mu_eff_ = mu_;
+        }
+        return;
+    }
     // M4 compatibility: outside the armed ALM, the effective multiplier is
     // exactly mu.  Refresh it here as well as in observe() so a legacy outer
     // step that just moved mu is injected without a one-iteration lag.
@@ -832,6 +850,18 @@ void ConstraintLoop::inject_potential_lcao(const int iter,
     {
         return;
     }
+    // S3 allocation constraints are added as Σ μ_i K_i by the LCAO operator;
+    // injecting μw here as well would double count the local term.
+    if (allocation_mode_)
+    {
+        // Branch: mirror the same multiplier refresh used for the grid path
+        // without injecting any potential into v_eff.
+        if (!alm_armed_)
+        {
+            mu_eff_ = mu_;
+        }
+        return;
+    }
     // M4: same legacy lag guard as the PW injector.
     if (!alm_armed_)
     {
@@ -862,7 +892,7 @@ void ConstraintLoop::inject_potential_lcao(const int iter,
 
 void ConstraintLoop::add_back_constraint_potential(ModuleBase::matrix& veff) const
 {
-    if (!enabled() || !wg_ || mu_eff_.empty())
+    if (!enabled() || allocation_mode_ || !wg_ || mu_eff_.empty())
     {
         return; // constraint off or not armed: nothing was injected
     }
@@ -915,6 +945,56 @@ void ConstraintLoop::observe(const int iter, const double* const* rho,
     // Stage-A reading: every alpha reads with its own channel signs, so a
     // mixed charge+spin list is observed in one integral (A2 core).
     ConstraintObserver::observe(*wg_, rho, nspin, channels_, Q_);
+    finish_observation();
+    // Module A (M1): passive dipole observation; never feeds the loop.
+    if (dipole_report_)
+    {
+        update_dipole(rho, nspin);
+    }
+    (void)iter;
+}
+
+void ConstraintLoop::observe_allocation(const int iter,
+                                        const std::vector<double>& n_alloc,
+                                        const std::vector<double>& m_alloc)
+{
+    // Branch: a disabled loop has no target/multiplier bookkeeping to update.
+    if (!enabled())
+    {
+        return;
+    }
+    // Guard: allocation observations are one value per constraint; a size
+    // mismatch would pair a target with the wrong fragment.
+    if (n_alloc.size() != mu_.size() || m_alloc.size() != mu_.size())
+    {
+        ModuleBase::WARNING_QUIT("ConstraintLoop::observe_allocation",
+            "allocation observable count does not match the constraint list");
+    }
+    Q_.resize(mu_.size(), 0.0);
+    for (size_t a = 0; a < Q_.size(); ++a)
+    {
+        // Branch: charge constraints track the full allocation charge, spin
+        // constraints track the full allocation magnetization.
+        if (kinds_[a] == ConstraintKind::Charge)
+        {
+            Q_[a] = n_alloc[a];
+        }
+        else if (kinds_[a] == ConstraintKind::Spin)
+        {
+            Q_[a] = m_alloc[a];
+        }
+        else
+        {
+            ModuleBase::WARNING_QUIT("ConstraintLoop::observe_allocation",
+                "dipole constraints cannot use the allocation observable");
+        }
+    }
+    finish_observation();
+    (void)iter;
+}
+
+void ConstraintLoop::finish_observation()
+{
     // M4 ALM: keep the effective multiplier in sync with the observation.
     // The penalty potential is updated with a damped fixed-point step: the
     // raw map v <- mu + k(Q(v)-t) has derivative k*chi ~ -0.5 by design and
@@ -966,12 +1046,6 @@ void ConstraintLoop::observe(const int iter, const double* const* rho,
     {
         mu_eff_ = mu_;
     }
-    // Module A (M1): passive dipole observation; never feeds the loop.
-    if (dipole_report_)
-    {
-        update_dipole(rho, nspin);
-    }
-    (void)iter;
 }
 
 void ConstraintLoop::update_dipole(const double* const* rho, const int nspin)
@@ -1953,7 +2027,11 @@ void ConstraintLoop::final_report()
         {
             GlobalV::ofs_running << " " << kv;
         }
-        GlobalV::ofs_running << " Ry/e\n";
+        // Branch: the gain is per unit of the constrained observable; spin
+        // targets are in mu_B while charge/dipole use e (dipole e*Bohr).
+        const bool spin_target = !kinds_.empty()
+                                 && kinds_[0] == ConstraintKind::Spin;
+        GlobalV::ofs_running << (spin_target ? " Ry/mu_B\n" : " Ry/e\n");
     }
     // M5: dipole-coordinate frame summary.  The audit line above already
     // carries Q/t/residual; this line makes the frame and the saw plane
@@ -2011,11 +2089,13 @@ std::string ConstraintLoop::final_status_line() const
     }
     else if (status_ == MuStatus::CONVERGED)
     {
-        // Branch: the dipole target is a dipole moment in e*Bohr, not a
-        // charge in e; keep the status line unit-honest.
+        // Branch: dipole targets are e*Bohr and spin targets are mu_B, not a
+        // charge in e; keep the status line unit-honest for every kind.
         const bool dipole = !kinds_.empty()
                             && kinds_[0] == ConstraintKind::Dipole;
-        const char* unit = dipole ? "e*Bohr" : "e";
+        const bool spin = !kinds_.empty()
+                          && kinds_[0] == ConstraintKind::Spin;
+        const char* unit = dipole ? "e*Bohr" : (spin ? "mu_B" : "e");
         os << "CONVERGED (targets reached within " << cfg_.thr << " "
            << unit << ")";
     }
@@ -2068,6 +2148,12 @@ double ConstraintLoop::mu_norm() const
                            });
 }
 
+void ConstraintLoop::set_allocation_force_density(
+    std::vector<std::vector<double>> rho)
+{
+    allocation_force_rho_ = std::move(rho);
+}
+
 void ConstraintLoop::compute_force(const double* const* rho,
                                    const int nspin,
                                    ModuleBase::matrix& forcecon)
@@ -2117,6 +2203,28 @@ void ConstraintLoop::compute_force(const double* const* rho,
     // aborts loudly on a mu/channel/buffer mismatch.
     // M4: the force kernel must see the same multiplier the SCF felt; under
     // ALM that is mu_eff_, which equals mu_ on every legacy schedule.
+    // S3 allocation: freeze the target orbitals and use the complementary
+    // density Q_c D Q_c supplied by the esolver, not the full KS density.
+    if (allocation_mode_)
+    {
+        // Guard: a missing or wrong-sized complement density would silently
+        // turn the frozen force back into the full-density Becke force.
+        if (static_cast<int>(allocation_force_rho_.size()) != nspin)
+        {
+            ModuleBase::WARNING_QUIT("ConstraintLoop::compute_force",
+                "allocation force requires the complementary density for every spin channel");
+        }
+        std::vector<const double*> rho_c(nspin, nullptr);
+        // Branch: expose each spin channel separately to the same weight-
+        // derivative kernel used by the legacy Becke force.
+        for (int is = 0; is < nspin; ++is)
+        {
+            rho_c[is] = allocation_force_rho_[is].data();
+        }
+        constraint::constraint_force(*wg_, rho_c.data(), nspin, channels_,
+                                     mu_eff_, forcecon);
+        return;
+    }
     constraint::constraint_force(*wg_, rho, nspin, channels_, mu_eff_, forcecon);
 }
 

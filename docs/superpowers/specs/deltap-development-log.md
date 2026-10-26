@@ -5657,3 +5657,56 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   `2026-10-26-s3-allocation-constraint-test.md`（新建）、本日志。
 - **下一步**：新增 LCAO 分配算子与 INPUT 开关，接入 `ConstraintLoop` 的
   `m_T` 观测/ALM 和互补密度冻结力，再执行 S3 闸门测试。
+
+## 2026-10-26 (S3 集成): 分配约束算子、ALM 与冻结力验收
+
+- **完成内容**：
+  1. 新增 `AllocConstraintLcaoOperator`，在 Gamma-only `HamiltLCAO`
+     构造函数中注册 `Σ_i μ_i sign_{i,σ} K_i`；multi-k/复数 TR 在配置期
+     拒绝，避免静默退回网格势。
+  2. 新增 `constraint_alloc_switch`，并完成 Gamma-only、共线
+     `nspin=1/2`、非 dipole 的配置期守卫。
+  3. `ConstraintLoop::observe_allocation()` 改为读取完整分配量
+     `n_i=Tr[(D_up+D_dn)K_i]`、`m_i=Tr[(D_up-D_dn)K_i]`；`n_T/m_T` 仅作
+     诊断，不再驱动 ALM。
+  4. 冻结力在 `ESolver_KS_LCAO::cal_force()` 中构造
+     `Q_c D Q_c` 并交给现有权重导数核；allocation 模式下旧 M3b 审计
+     显式打印 `SKIPPED`。
+  5. 自旋状态行与 ALM 增益单位改为 `mu_B`、`Ry/mu_B`。
+- **验证**：
+  - `abacus_basic_para` 构建/链接 PASS；`ctest -R constraint` 18/18 PASS
+    （51.50 s）；`git diff --check` PASS。
+  - 0.01 μB 单帧第 63 步 CONVERGED，末残差 `5.3605e-7`，μ
+    `-0.01221724227 Ry`。
+  - 两帧 relax 均 CONVERGED；帧 2 残差 `1.7711e-11`，末能量
+    `-466.4054020750246 eV`。
+  - 位置 FD：`F_FD=-1.1990159004 eV/A` vs 解析
+    `-1.2069823210 eV/A`，差 `0.0079664206 <0.0129`。
+  - 目标 FD：`dE*/dt=0.1662241087 eV/μB` vs `-μ=0.1662240491`，差
+    `5.96e-8 <0.02`。
+  - 三自旋约束全原子求和（细网格 `60/240`）：
+    `|ΣQ-M_tot|=8.33e-10 <1e-8`；粗网格差 `2.18e-8`，为 `W_i` 求积误差。
+  - Becke 对照：μ `-0.0082825615 Ry`、k `0.4141280767 Ry/μB`；
+    allocation 的 μ/k 分别约 1.47 倍；耗时 42.1 s vs 40.4 s。
+- **文件**：
+  `source_esolver/esolver_ks_lcao.cpp`、
+  `module_constraint/alloc_constraint_lcao.{h,cpp}`、
+  `module_constraint/constraint_{io.h,loop.h,loop.cpp}`、
+  `module_operator_lcao/alloc_constraint_lcao_operator.{h,cpp}`、
+  `module_operator_lcao/operator_lcao.cpp`、`source_lcao/hamilt_lcao.cpp`、
+  `source_hamilt/operator.h`、`input_parameter.h`、
+  `read_input_item_other.cpp`、三个 `CMakeLists.txt`、
+  `2026-10-26-s3-allocation-constraint-test.md`、
+  `2026-10-26-s3-allocation-integration-test.md`（新建）、执行方案、本日志。
+- **Bug/fix list**：
+  1. 分配算子误注册在 multi-k 分支 -> 移到 Gamma-only 主链。
+  2. ALM 误读 `n_T/m_T` -> 改为完整分配迹 `Tr(K_i DMR)`。
+  3. 冻结力缺互补密度接线 -> `cal_force()` 生成 `Q_c D Q_c` 后注入。
+  4. 自旋单位混用 `e`/`Ry/e` -> 状态与增益改为 `mu_B`/`Ry/mu_B`。
+  5. 固定 μ FD 的 `constraint_branch_tol=1e-3` 会拒绝运行 -> FD INPUT 显式
+     设 0，并在文档记录协议。
+  6. 全原子求和粗网格超差 -> 细网格复核为求积误差，不是 `ΣK_i=S` 失败。
+- **下一步**：
+  1. 进入 S4.1：实现完整 `∂Q̂`，与 S3 冻结力比较，目标 `<0.005 eV/A`。
+  2. S4.2 做应力 FD（相对 `<5%`）；S4.3 补非共线通道。
+  3. 后续求和审计固定细网格或改进 `W_i` 矩阵积分口径，避免粗网格误判。

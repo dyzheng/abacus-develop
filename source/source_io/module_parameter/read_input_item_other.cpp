@@ -1805,6 +1805,18 @@ Manual override is allowed: if sc_acceleration_mode is explicitly set, it takes 
         this->add_item(item);
     }
     {
+        Input_Item item("constraint_alloc_switch");
+        item.annotation = "enable the LCAO unified-allocation constraint";
+        item.category = "Constraint";
+        item.type = "Boolean";
+        item.description = "When true, constrain the selected NAO target-space moments with the unified allocation operator A_i = Q_i + Q_c W_i Q_c. The ALM observable is the full allocation trace n_i = Tr[(D_up+D_dn)K_i] for charge constraints and m_i = Tr[(D_up-D_dn)K_i] for spin constraints; n_T/m_T remain read-only diagnostics. Requires gamma-only collinear LCAO. The target shell is selected by constraint_alloc_target_l; constraint targets use the usual delta/absolute semantics and the existing outer/ALM schedules.";
+        item.default_value = "False";
+        item.unit = "";
+        item.availability = "constraint is true and basis_type = lcao";
+        read_sync_bool(input.constraint_alloc_switch);
+        this->add_item(item);
+    }
+    {
         Input_Item item("constraint_alloc_report");
         item.annotation = "print the LCAO unified-allocation target/complement audit";
         item.category = "Constraint";
@@ -1824,7 +1836,7 @@ Manual override is allowed: if sc_acceleration_mode is explicitly set, it takes 
         item.description = "NAO angular momentum selected as the unified-allocation target set on every atom that carries such a shell (default 2 = d orbitals). The actual selected atom:orbital list is printed next to the ALLOC result.";
         item.default_value = "2";
         item.unit = "";
-        item.availability = "constraint_alloc_report is true";
+        item.availability = "constraint_alloc_report or constraint_alloc_switch is true";
         read_sync_int(input.constraint_alloc_target_l);
         this->add_item(item);
     }

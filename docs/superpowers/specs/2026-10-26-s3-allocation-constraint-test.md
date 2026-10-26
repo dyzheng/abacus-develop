@@ -9,6 +9,8 @@
 - 验证 S2 报告与 S3 约束共享同一套 `C'=C S_T^{-1/2}` 目标空间和 DMR 投影。
 - 本阶段先确认代数核、共享读数接口和 LCAO 适配器可独立编译；随后才接入
   Hamiltonian 算子、ALM 和冻结力。
+- 明确观测口径：S3 约束量是完整分配读数
+  `Tr[(D_up ± D_dn) K_i]`，不是只读阶段的 `n_T/m_T`。
 
 ## 2. 测试设置
 
@@ -37,16 +39,15 @@
 - S2 报告已改为调用共享的生产目标空间与 DMR 投影函数，避免 S2 读数与
   S3 约束出现两套口径。
 - LCAO 适配器已能由 Gamma-only `S(R)`、权重网格和 Hamiltonian 布局预计算
-  `K_i`；尚未注册到 Hamiltonian operator，也尚未接入 `ConstraintLoop`。
-  因此本记录只证明 S3 基础层可编译，不构成 S3 闸门验收。
+  `K_i`。Hamiltonian operator、`ConstraintLoop` 观测和冻结力的后续集成见
+  `2026-10-26-s3-allocation-integration-test.md`；本记录只覆盖基础层。
 
-## 5. 下一步
+## 5. 后续集成结果
 
-- 新增 `alloc_constraint_lcao_operator`，把 `sum_i mu_i K_i` 注入 LCAO
-  Hamiltonian。
-- 新增 `constraint_alloc_switch` INPUT，并加入 Gamma-only、共线、
-  `basis_type=lcao` 的配置期守卫。
-- 在 `ConstraintLoop` 中切换观测到 `m_T`、同步 `mu_eff`，禁止旧权重势
-  与 `K_i` 重复注入。
-- 完成冻结互补密度力、位置/目标有限差分与 100 步 ALM 刚性验收后，
-  再更新本记录的 S3 闸门结果。
+- `alloc_constraint_lcao_operator` 已加入 Gamma-only Hamiltonian 主链，
+  `constraint_alloc_switch` 已接入配置期守卫和 ALM。
+- `ConstraintLoop::observe_allocation()` 读取完整分配量
+  `Tr(DMR K_i)`；旧的 `n_T/m_T` 只保留为诊断量。
+- 冻结力使用互补密度 `Q_c D Q_c`；位置 FD、目标 FD、两帧 ALM 和
+  `Σm=M_tot` 均已通过，原始数据见
+  `2026-10-26-s3-allocation-integration-test.md`。

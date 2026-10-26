@@ -68,6 +68,10 @@ struct ConstraintConfig
     bool trust_carry_jacobian = false;
     bool budget_freeze = true;
     bool warm_start_running = true;
+    // S3: replace the grid-density observable/injection with the LCAO
+    // target-space allocation operator.  Set by the LCAO esolver after its
+    // basis-specific guards; the loop still owns the reference/ALM schedule.
+    bool allocation_mode = false;
 };
 
 enum class ConfigStatus
