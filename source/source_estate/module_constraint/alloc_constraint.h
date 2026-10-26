@@ -30,6 +30,7 @@ struct AllocConstraintAlgebra
     LcaoTargetSpace target;
     std::vector<int> target_constraint; // target orbital -> constraint index
     std::vector<double> SB;             // norb x ntarget, S*B
+    double rank_tol = 1e-10;            // target-overlap truncation threshold
 };
 
 /**
@@ -61,6 +62,28 @@ void build_alloc_constraint_kernel(
     const std::vector<double>& W,
     const int constraint,
     std::vector<double>& K);
+
+/**
+ * @brief Adjoint of the fixed-weight geometry derivative Tr(D dK_i).
+ *
+ * Returns a symmetric matrix E_i such that, for every symmetric variation
+ * dS of the overlap matrix at fixed W_i,
+ *
+ *   Tr(D dK_i) = sum_{mu,nu} E_i[mu,nu] dS[mu,nu].
+ *
+ * Only the explicit S dependence of K_i is differentiated here; the weight
+ * derivative dW_i is handled by the real-space force kernel.  The routine
+ * uses reverse-mode matrix calculus and an R x R Frechet derivative of
+ * S_T^{-1/2}, so its cost stays at the same dense-contraction order as one
+ * K_i build.
+ */
+void build_alloc_constraint_s_adjoint(
+    const AllocConstraintAlgebra& space,
+    const std::vector<double>& S,
+    const std::vector<double>& W,
+    const int constraint,
+    const std::vector<double>& D,
+    std::vector<double>& E);
 
 /**
  * @brief Sum lambda_i K_i into a dense Hamiltonian correction.

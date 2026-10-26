@@ -2,6 +2,7 @@
 
 #include "source_base/parallel_reduce.h"
 #include "source_cell/unitcell.h"
+#include "source_estate/module_constraint/alloc_constraint.h"
 #include "source_estate/module_constraint/alloc_lcao_report.h"
 #include "source_estate/module_constraint/constraint_inject_lcao.h"
 #include "source_lcao/module_hcontainer/hcontainer.h"
@@ -113,6 +114,9 @@ void AllocConstraintLcao::reset()
     target_ = LcaoTargetSpace{};
     target_constraint_.clear();
     SB_.clear();
+    S_dense_.clear();
+    W_dense_.clear();
+    rank_tol_ = 1e-10;
     kernels_.clear();
     mu_eff_.clear();
     injection_up_.clear();
@@ -206,8 +210,10 @@ bool AllocConstraintLcao::build(
     // SB = S B, with B the orthonormal target coefficients.  This is the
     // only full-basis contraction required by the low-rank kernels.
     SB_.assign(static_cast<size_t>(norb_) * ntarget_, 0.0);
+    S_dense_.assign(static_cast<size_t>(norb_) * norb_, 0.0);
     for_each_gamma_block(S, ucell, [&](const int gi, const int gj,
                                        const double value) {
+        S_dense_[static_cast<size_t>(gi) * norb_ + gj] += value;
         for (int a = 0; a < ntarget_; ++a)
         {
             SB_[static_cast<size_t>(gi) * ntarget_ + a]
@@ -216,6 +222,7 @@ bool AllocConstraintLcao::build(
         }
     });
     reduce_pool(SB_);
+    reduce_pool(S_dense_);
 
     std::vector<hamilt::HContainer<double>> weights;
     try
@@ -236,6 +243,9 @@ bool AllocConstraintLcao::build(
 
     kernels_.clear();
     kernels_.reserve(nconstraint_);
+    W_dense_.assign(nconstraint_,
+                    std::vector<double>(static_cast<size_t>(norb_) * norb_,
+                                        0.0));
     for (int alpha = 0; alpha < nconstraint_; ++alpha)
     {
         std::vector<double> BtW(static_cast<size_t>(ntarget_) * norb_, 0.0);
@@ -255,9 +265,12 @@ bool AllocConstraintLcao::build(
                                                     * ntarget_ + b];
                     }
                 }
+                W_dense_[alpha][static_cast<size_t>(gi) * norb_ + gj]
+                    += value;
             });
         reduce_pool(BtW);
         reduce_pool(BtWB);
+        reduce_pool(W_dense_[alpha]);
 
         hamilt::HContainer<double> K(h_layout);
         K.set_zero();
@@ -331,6 +344,7 @@ bool AllocConstraintLcao::build(
     injection_up_.assign(nconstraint_, 1.0);
     injection_down_.assign(nconstraint_, -1.0);
     gint_info_ = gint_info;
+    rank_tol_ = rank_tol;
     active_ = true;
     return true;
 }
@@ -634,6 +648,109 @@ bool AllocConstraintLcao::complement_density(
         rho_pointers[spin] = rho[spin].data();
     }
     ModuleGint::cal_gint_rho(density_pointers, nspin, rho_pointers.data());
+    return true;
+}
+
+bool AllocConstraintLcao::s_derivative_force_density(
+    const UnitCell& ucell,
+    const std::vector<const hamilt::HContainer<double>*>& dmr,
+    const int nspin,
+    const std::vector<double>& mu,
+    std::vector<double>& energy_density,
+    std::string& error) const
+{
+    // Branch: the adjoint needs the overlap/weight matrices and target space
+    // cached by build() on this geometry.
+    if (!active_ || S_dense_.empty()
+        || static_cast<int>(W_dense_.size()) != nconstraint_)
+    {
+        error = "allocation dS force density is not initialized";
+        return false;
+    }
+    // Guard: only the collinear Gamma path defines the allocation operator.
+    if (nspin != 1 && nspin != 2)
+    {
+        error = "allocation dS force supports nspin 1/2";
+        return false;
+    }
+    if (static_cast<int>(dmr.size()) != nspin)
+    {
+        error = "DMR spin-channel count does not match nspin";
+        return false;
+    }
+    if (static_cast<int>(mu.size()) != nconstraint_)
+    {
+        error = "allocation multiplier count does not match constraints";
+        return false;
+    }
+
+    AllocConstraintAlgebra space;
+    try
+    {
+        build_alloc_constraint_algebra(
+            S_dense_, norb_, target_.orbital, target_.atom,
+            target_constraint_, target_.ST, nconstraint_, space, rank_tol_);
+    }
+    catch (const std::exception& e)
+    {
+        error = e.what();
+        return false;
+    }
+
+    std::vector<std::vector<double>> D_spin(
+        nspin, std::vector<double>(static_cast<size_t>(norb_) * norb_, 0.0));
+    for (int spin = 0; spin < nspin; ++spin)
+    {
+        // Branch: a non-Gamma or missing channel cannot be represented by the
+        // dense S/W contraction used here.
+        if (dmr[spin] == nullptr || !all_blocks_are_gamma(*dmr[spin]))
+        {
+            error = "allocation dS force needs Gamma-only real DMR channels";
+            return false;
+        }
+        for_each_gamma_block(*dmr[spin], ucell,
+            [&](const int gi, const int gj, const double value) {
+                D_spin[spin][static_cast<size_t>(gi) * norb_ + gj] += value;
+            });
+        reduce_pool(D_spin[spin]);
+    }
+
+    energy_density.assign(static_cast<size_t>(norb_) * norb_, 0.0);
+    for (int alpha = 0; alpha < nconstraint_; ++alpha)
+    {
+        // Branch: a zero multiplier contributes no dS force term.
+        if (mu[alpha] == 0.0)
+        {
+            continue;
+        }
+        std::vector<double> D_alpha(
+            static_cast<size_t>(norb_) * norb_, 0.0);
+        for (int spin = 0; spin < nspin; ++spin)
+        {
+            const double sign = (nspin == 1)
+                                    ? 1.0
+                                    : injection_sign(alpha, spin);
+            for (size_t i = 0; i < D_alpha.size(); ++i)
+            {
+                D_alpha[i] += sign * D_spin[spin][i];
+            }
+        }
+        std::vector<double> E_alpha;
+        try
+        {
+            build_alloc_constraint_s_adjoint(
+                space, S_dense_, W_dense_[alpha], alpha, D_alpha, E_alpha);
+        }
+        catch (const std::exception& e)
+        {
+            error = e.what();
+            return false;
+        }
+        for (size_t i = 0; i < energy_density.size(); ++i)
+        {
+            energy_density[i] += mu[alpha] * E_alpha[i];
+        }
+    }
     return true;
 }
 

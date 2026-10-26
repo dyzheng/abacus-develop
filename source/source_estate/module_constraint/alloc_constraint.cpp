@@ -1,5 +1,9 @@
 #include "source_estate/module_constraint/alloc_constraint.h"
 
+#include "source_estate/module_constraint/alloc_linalg.h"
+
+#include <algorithm>
+#include <cmath>
 #include <stdexcept>
 #include <string>
 
@@ -70,6 +74,7 @@ void build_alloc_constraint_algebra(
     out.norb = norb;
     out.ntarget = ntarget;
     out.nconstraint = nconstraint;
+    out.rank_tol = rank_tol;
     out.target_constraint = target_constraint;
     finalize_lcao_target(norb, target_orbital, target_atom, ST, out.target,
                          rank_tol);
@@ -170,6 +175,300 @@ void build_alloc_constraint_kernel(
                 }
             }
             K[static_cast<size_t>(mu) * norb + nu] = value;
+        }
+    }
+}
+
+void build_alloc_constraint_s_adjoint(
+    const AllocConstraintAlgebra& space,
+    const std::vector<double>& S,
+    const std::vector<double>& W,
+    const int constraint,
+    const std::vector<double>& D,
+    std::vector<double>& E)
+{
+    const int norb = space.norb;
+    const int ntarget = space.ntarget;
+    check_square(S, norb, "S");
+    check_square(W, norb, "W");
+    check_square(D, norb, "D");
+    // Branch: the adjoint belongs to one constrained component and uses the
+    // target-space data built with it.
+    if (constraint < 0 || constraint >= space.nconstraint)
+    {
+        throw std::invalid_argument("constraint index out of range");
+    }
+    // Guard: this reverse-mode derivation assumes the selection form of C,
+    // where target.orbital names each orthonormalized column.
+    if (static_cast<int>(space.target.orbital.size()) != ntarget
+        || static_cast<int>(space.target.Cprime.size()) != norb * ntarget
+        || static_cast<int>(space.SB.size()) != norb * ntarget)
+    {
+        throw std::invalid_argument("target space is not in selection form");
+    }
+
+    const auto idx = [](const int row, const int col, const int ncols) {
+        return static_cast<size_t>(row) * ncols + col;
+    };
+    std::vector<double> C(static_cast<size_t>(norb) * ntarget, 0.0);
+    for (int a = 0; a < ntarget; ++a)
+    {
+        const int orbital = space.target.orbital[a];
+        // Branch: every selected target must address a full-basis AO.
+        if (orbital < 0 || orbital >= norb)
+        {
+            throw std::invalid_argument("target orbital index out of range");
+        }
+        C[idx(orbital, a, ntarget)] = 1.0;
+    }
+
+    const std::vector<double>& B = space.target.Cprime;
+    const std::vector<double>& U = space.SB;
+
+    // H_i = B^T W B + diag(owner == i).  This is the small matrix that
+    // multiplies U from both sides in the target-projector part of K_i.
+    std::vector<double> BtW(static_cast<size_t>(ntarget) * norb, 0.0);
+    for (int a = 0; a < ntarget; ++a)
+    {
+        for (int nu = 0; nu < norb; ++nu)
+        {
+            for (int mu = 0; mu < norb; ++mu)
+            {
+                BtW[idx(a, nu, norb)]
+                    += B[idx(mu, a, ntarget)] * W[idx(mu, nu, norb)];
+            }
+        }
+    }
+    std::vector<double> H(static_cast<size_t>(ntarget) * ntarget, 0.0);
+    for (int a = 0; a < ntarget; ++a)
+    {
+        for (int b = 0; b < ntarget; ++b)
+        {
+            double value = 0.0;
+            for (int nu = 0; nu < norb; ++nu)
+            {
+                value += BtW[idx(a, nu, norb)] * B[idx(nu, b, ntarget)];
+            }
+            // Branch: only targets owned by this constraint enter Q_i.
+            if (a == b && space.target_constraint[a] == constraint)
+            {
+                value += 1.0;
+            }
+            H[idx(a, b, ntarget)] = value;
+        }
+    }
+
+    // Reverse pass through K_i = W - U B^T W - W B U^T + U H_i U^T.
+    // G_U/G_B are the adjoints of U and B, while G_M is the adjoint of the
+    // small matrix M_i = B^T W B.  The two cross terms contribute equally,
+    // hence the factors of two below.
+    std::vector<double> WB(static_cast<size_t>(norb) * ntarget, 0.0);
+    std::vector<double> DU(static_cast<size_t>(norb) * ntarget, 0.0);
+    for (int mu = 0; mu < norb; ++mu)
+    {
+        for (int a = 0; a < ntarget; ++a)
+        {
+            double wb = 0.0;
+            double du = 0.0;
+            for (int nu = 0; nu < norb; ++nu)
+            {
+                wb += W[idx(mu, nu, norb)] * B[idx(nu, a, ntarget)];
+                du += D[idx(mu, nu, norb)] * U[idx(nu, a, ntarget)];
+            }
+            WB[idx(mu, a, ntarget)] = wb;
+            DU[idx(mu, a, ntarget)] = du;
+        }
+    }
+
+    std::vector<double> DWB(static_cast<size_t>(norb) * ntarget, 0.0);
+    std::vector<double> DUH(static_cast<size_t>(norb) * ntarget, 0.0);
+    std::vector<double> WDU(static_cast<size_t>(norb) * ntarget, 0.0);
+    for (int mu = 0; mu < norb; ++mu)
+    {
+        for (int a = 0; a < ntarget; ++a)
+        {
+            double dwb = 0.0;
+            double duh = 0.0;
+            double wdu = 0.0;
+            for (int nu = 0; nu < norb; ++nu)
+            {
+                dwb += D[idx(mu, nu, norb)] * WB[idx(nu, a, ntarget)];
+                wdu += W[idx(mu, nu, norb)] * DU[idx(nu, a, ntarget)];
+            }
+            for (int b = 0; b < ntarget; ++b)
+            {
+                duh += DU[idx(mu, b, ntarget)] * H[idx(b, a, ntarget)];
+            }
+            DWB[idx(mu, a, ntarget)] = dwb;
+            DUH[idx(mu, a, ntarget)] = duh;
+            WDU[idx(mu, a, ntarget)] = wdu;
+        }
+    }
+
+    std::vector<double> G_U(static_cast<size_t>(norb) * ntarget, 0.0);
+    for (size_t i = 0; i < G_U.size(); ++i)
+    {
+        G_U[i] = 2.0 * (DUH[i] - DWB[i]);
+    }
+
+    // G_M = U^T D U.  The M term adds B^T W B to H, so its adjoint enters
+    // G_B through both B positions.
+    std::vector<double> G_M(static_cast<size_t>(ntarget) * ntarget, 0.0);
+    for (int a = 0; a < ntarget; ++a)
+    {
+        for (int b = 0; b < ntarget; ++b)
+        {
+            double value = 0.0;
+            for (int mu = 0; mu < norb; ++mu)
+            {
+                value += U[idx(mu, a, ntarget)] * DU[idx(mu, b, ntarget)];
+            }
+            G_M[idx(a, b, ntarget)] = value;
+        }
+    }
+
+    std::vector<double> WBGM(static_cast<size_t>(norb) * ntarget, 0.0);
+    for (int mu = 0; mu < norb; ++mu)
+    {
+        for (int a = 0; a < ntarget; ++a)
+        {
+            double value = 0.0;
+            for (int b = 0; b < ntarget; ++b)
+            {
+                value += WB[idx(mu, b, ntarget)] * G_M[idx(b, a, ntarget)];
+            }
+            WBGM[idx(mu, a, ntarget)] = value;
+        }
+    }
+
+    std::vector<double> G_B(static_cast<size_t>(norb) * ntarget, 0.0);
+    for (int mu = 0; mu < norb; ++mu)
+    {
+        for (int a = 0; a < ntarget; ++a)
+        {
+            double value = -2.0 * WDU[idx(mu, a, ntarget)]
+                           + 2.0 * WBGM[idx(mu, a, ntarget)];
+            for (int nu = 0; nu < norb; ++nu)
+            {
+                value += S[idx(mu, nu, norb)] * G_U[idx(nu, a, ntarget)];
+            }
+            G_B[idx(mu, a, ntarget)] = value;
+        }
+    }
+
+    std::vector<double> G_G(static_cast<size_t>(ntarget) * ntarget, 0.0);
+    for (int a = 0; a < ntarget; ++a)
+    {
+        for (int b = 0; b < ntarget; ++b)
+        {
+            double value = 0.0;
+            for (int mu = 0; mu < norb; ++mu)
+            {
+                value += C[idx(mu, a, ntarget)] * G_B[idx(mu, b, ntarget)];
+            }
+            G_G[idx(a, b, ntarget)] = value;
+        }
+    }
+
+    // Frechet adjoint of G = S_T^{-1/2}: with S_T = V diag(w) V^T,
+    // dG = V [F o (V^T dS_T V)] V^T.  F is the divided difference of
+    // f(w)=w^{-1/2}; truncated directions have zero derivative because the
+    // current rank-truncation rule is piecewise constant there.
+    std::vector<double> eig;
+    std::vector<double> eigvec;
+    sym_eig(space.target.ST, ntarget, eig, eigvec);
+    std::vector<double> G_G_eig(static_cast<size_t>(ntarget) * ntarget, 0.0);
+    for (int a = 0; a < ntarget; ++a)
+    {
+        for (int b = 0; b < ntarget; ++b)
+        {
+            double value = 0.0;
+            for (int i = 0; i < ntarget; ++i)
+            {
+                for (int j = 0; j < ntarget; ++j)
+                {
+                    value += eigvec[idx(i, a, ntarget)]
+                             * G_G[idx(i, j, ntarget)]
+                             * eigvec[idx(j, b, ntarget)];
+                }
+            }
+            double factor = 0.0;
+            const bool retained = eig[a] > space.rank_tol && eig[b] > space.rank_tol;
+            // Branch: both directions must survive the same truncation used
+            // to build C'.  Otherwise the piecewise-constant branch has zero
+            // derivative.
+            if (retained)
+            {
+                const double scale = std::max(std::abs(eig[a]), std::abs(eig[b]));
+                // Branch: coincident eigenvalues need the derivative limit,
+                // not the divided difference (which is 0/0).
+                if (std::abs(eig[a] - eig[b]) <= 1e-12 * std::max(1.0, scale))
+                {
+                    factor = -0.5 * std::pow(eig[a], -1.5);
+                }
+                else
+                {
+                    factor = (std::pow(eig[a], -0.5) - std::pow(eig[b], -0.5))
+                             / (eig[a] - eig[b]);
+                }
+            }
+            G_G_eig[idx(a, b, ntarget)] = factor * value;
+        }
+    }
+
+    std::vector<double> G_ST(static_cast<size_t>(ntarget) * ntarget, 0.0);
+    for (int a = 0; a < ntarget; ++a)
+    {
+        for (int b = 0; b < ntarget; ++b)
+        {
+            double value = 0.0;
+            for (int i = 0; i < ntarget; ++i)
+            {
+                for (int j = 0; j < ntarget; ++j)
+                {
+                    value += eigvec[idx(a, i, ntarget)]
+                             * G_G_eig[idx(i, j, ntarget)]
+                             * eigvec[idx(b, j, ntarget)];
+                }
+            }
+            G_ST[idx(a, b, ntarget)] = value;
+        }
+    }
+
+    // Direct S dependence of U contributes G_U B^T; the target overlap S_T
+    // contributes through C G_ST C^T.
+    E.assign(static_cast<size_t>(norb) * norb, 0.0);
+    for (int mu = 0; mu < norb; ++mu)
+    {
+        for (int nu = 0; nu < norb; ++nu)
+        {
+            double value = 0.0;
+            for (int a = 0; a < ntarget; ++a)
+            {
+                value += G_U[idx(mu, a, ntarget)] * B[idx(nu, a, ntarget)];
+            }
+            for (int a = 0; a < ntarget; ++a)
+            {
+                for (int b = 0; b < ntarget; ++b)
+                {
+                    value += C[idx(mu, a, ntarget)]
+                             * G_ST[idx(a, b, ntarget)]
+                             * C[idx(nu, b, ntarget)];
+                }
+            }
+            E[idx(mu, nu, norb)] = value;
+        }
+    }
+    // Symmetric variations only: the antisymmetric part cannot be probed by
+    // dS and must not contribute to the force.
+    for (int mu = 0; mu < norb; ++mu)
+    {
+        for (int nu = mu + 1; nu < norb; ++nu)
+        {
+            const double sym = 0.5 * (E[idx(mu, nu, norb)]
+                                      + E[idx(nu, mu, norb)]);
+            E[idx(mu, nu, norb)] = sym;
+            E[idx(nu, mu, norb)] = sym;
         }
     }
 }

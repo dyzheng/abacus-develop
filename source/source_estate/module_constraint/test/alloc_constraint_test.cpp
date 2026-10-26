@@ -236,3 +236,89 @@ TEST(AllocConstraintTest, ZeroMultiplierIsZeroCorrection)
         EXPECT_DOUBLE_EQ(value, 0.0);
     }
 }
+
+TEST(AllocConstraintTest, SAdjointMatchesKernelFiniteDifference)
+{
+    std::mt19937 gen(53);
+    const int norb = 9;
+    const std::vector<int> orbital = {1, 3, 5};
+    const std::vector<int> atom = {0, 1, 2};
+    const std::vector<int> owner = {0, 1, 0};
+    const int ntarget = 3;
+    const int nconstraint = 2;
+    const std::vector<double> S = random_spd(norb, gen);
+
+    const auto target_overlap = [&](const std::vector<double>& Smat) {
+        std::vector<double> ST(static_cast<size_t>(ntarget) * ntarget, 0.0);
+        for (int a = 0; a < ntarget; ++a)
+        {
+            for (int b = 0; b < ntarget; ++b)
+            {
+                ST[static_cast<size_t>(a) * ntarget + b]
+                    = Smat[static_cast<size_t>(orbital[a]) * norb + orbital[b]];
+            }
+        }
+        return ST;
+    };
+
+    alloc::AllocConstraintAlgebra space;
+    alloc::build_alloc_constraint_algebra(S, norb, orbital, atom, owner,
+                                          target_overlap(S), nconstraint,
+                                          space, 1e-12);
+
+    std::normal_distribution<double> nd(0.0, 1.0);
+    std::vector<double> W(static_cast<size_t>(norb) * norb, 0.0);
+    std::vector<double> D(static_cast<size_t>(norb) * norb, 0.0);
+    std::vector<double> dS(static_cast<size_t>(norb) * norb, 0.0);
+    for (int i = 0; i < norb; ++i)
+    {
+        for (int j = 0; j <= i; ++j)
+        {
+            const double w = nd(gen);
+            const double d = nd(gen);
+            const double ds = nd(gen);
+            W[static_cast<size_t>(i) * norb + j] = w;
+            W[static_cast<size_t>(j) * norb + i] = w;
+            D[static_cast<size_t>(i) * norb + j] = d;
+            D[static_cast<size_t>(j) * norb + i] = d;
+            dS[static_cast<size_t>(i) * norb + j] = ds;
+            dS[static_cast<size_t>(j) * norb + i] = ds;
+        }
+    }
+
+    std::vector<double> E;
+    alloc::build_alloc_constraint_s_adjoint(space, S, W, 0, D, E);
+
+    const double eps = 1e-6;
+    std::vector<double> Sp = S;
+    std::vector<double> Sm = S;
+    for (size_t i = 0; i < S.size(); ++i)
+    {
+        Sp[i] += eps * dS[i];
+        Sm[i] -= eps * dS[i];
+    }
+    alloc::AllocConstraintAlgebra space_p;
+    alloc::AllocConstraintAlgebra space_m;
+    alloc::build_alloc_constraint_algebra(Sp, norb, orbital, atom, owner,
+                                          target_overlap(Sp), nconstraint,
+                                          space_p, 1e-12);
+    alloc::build_alloc_constraint_algebra(Sm, norb, orbital, atom, owner,
+                                          target_overlap(Sm), nconstraint,
+                                          space_m, 1e-12);
+    std::vector<double> Kp;
+    std::vector<double> Km;
+    alloc::build_alloc_constraint_kernel(space_p, W, 0, Kp);
+    alloc::build_alloc_constraint_kernel(space_m, W, 0, Km);
+
+    double tp = 0.0;
+    double tm = 0.0;
+    double predicted = 0.0;
+    for (size_t i = 0; i < S.size(); ++i)
+    {
+        tp += D[i] * Kp[i];
+        tm += D[i] * Km[i];
+        predicted += E[i] * dS[i];
+    }
+    const double fd = (tp - tm) / (2.0 * eps);
+    EXPECT_NEAR(predicted, fd, 2e-7);
+}

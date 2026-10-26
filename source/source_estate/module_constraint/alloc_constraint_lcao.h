@@ -134,6 +134,27 @@ class AllocConstraintLcao
         std::vector<std::vector<double>>& rho,
         std::string& error) const;
 
+    /**
+     * @brief Energy-density matrix for the explicit dK_i/dS force term.
+     *
+     * Returns E = sum_i mu_i E_i, where
+     *   Tr(D_i dK_i) = sum_{mu,nu} E_i[mu,nu] dS[mu,nu]
+     * at fixed weight matrices W_i.  The caller contracts E with the
+     * two-center overlap derivatives, which produces
+     *   F_S = -Tr(E dS).
+     *
+     * D_i is the per-constraint channel combination
+     * read_up * D_up + read_dn * D_down, matching the injected signs for
+     * charge and spin constraints.
+     */
+    bool s_derivative_force_density(
+        const UnitCell& ucell,
+        const std::vector<const hamilt::HContainer<double>*>& dmr,
+        const int nspin,
+        const std::vector<double>& mu,
+        std::vector<double>& energy_density,
+        std::string& error) const;
+
   private:
     AllocConstraintLcao() = default;
 
@@ -146,6 +167,9 @@ class AllocConstraintLcao
     LcaoTargetSpace target_;
     std::vector<int> target_constraint_;
     std::vector<double> SB_; // norb x ntarget
+    std::vector<double> S_dense_; // norb x norb, overlap at build geometry
+    std::vector<std::vector<double>> W_dense_; // per-constraint weight matrices
+    double rank_tol_ = 1e-10;
     std::vector<hamilt::HContainer<double>> kernels_;
     std::vector<double> mu_eff_;
     std::vector<double> injection_up_;

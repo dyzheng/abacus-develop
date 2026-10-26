@@ -1,9 +1,14 @@
 #include "source_lcao/module_operator_lcao/alloc_constraint_lcao_operator.h"
 
+#include "source_basis/module_nao/two_center_bundle.h"
 #include "source_base/tool_quit.h"
+#include "source_cell/module_neighbor/sltk_grid_driver.h"
+#include "source_cell/unitcell.h"
 #include "source_estate/module_constraint/alloc_constraint_lcao.h"
 #include "source_io/module_parameter/parameter.h"
+#include "source_lcao/module_operator_lcao/overlap.h"
 
+#include <cmath>
 #include <type_traits>
 
 namespace hamilt
@@ -74,5 +79,109 @@ void AllocConstraintLcaoOperator<TK, TR>::contributeHR()
 template class AllocConstraintLcaoOperator<double, double>;
 template class AllocConstraintLcaoOperator<std::complex<double>, double>;
 template class AllocConstraintLcaoOperator<std::complex<double>, std::complex<double>>;
+
+bool cal_alloc_constraint_dS_force(
+    const UnitCell& ucell,
+    const Grid_Driver& gd,
+    const LCAO_Orbitals& orb,
+    const TwoCenterBundle& two_center_bundle,
+    const std::vector<const HContainer<double>*>& dmr,
+    const int nspin,
+    const std::vector<double>& mu,
+    ModuleBase::matrix& force,
+    std::string& error)
+{
+    // Branch: no dense target data exists before the first allocation build;
+    // the first reference SCF deliberately has no constraint force either.
+    if (!alloc::AllocConstraintLcao::instance().active())
+    {
+        return true;
+    }
+    // Guard: the two-center path needs the usual Gamma DMR layout.
+    if (dmr.empty() || dmr[0] == nullptr)
+    {
+        error = "allocation dS force has no DMR layout";
+        return false;
+    }
+
+    std::vector<double> energy_density;
+    if (!alloc::AllocConstraintLcao::instance().s_derivative_force_density(
+            ucell, dmr, nspin, mu, energy_density, error))
+    {
+        return false;
+    }
+    // Branch: an all-zero adjoint (all multipliers zero, or a reference SCF)
+    // contributes nothing and need not touch the two-center tables.
+    bool nonzero = false;
+    for (const double value : energy_density)
+    {
+        // Branch: one non-round-off element is enough to run the kernel.
+        if (std::abs(value) > 1e-16)
+        {
+            nonzero = true;
+            break;
+        }
+    }
+    if (!nonzero)
+    {
+        return true;
+    }
+
+    hamilt::HContainer<double> energy_dm(*dmr[0]);
+    energy_dm.set_zero();
+    const int norb = alloc::AllocConstraintLcao::instance().norb();
+    const Parallel_Orbitals* pv = energy_dm.get_paraV();
+    // Branch: the DMR layout must carry its orbital distribution; otherwise
+    // dense indices cannot be mapped into this rank's blocks.
+    if (pv == nullptr)
+    {
+        error = "allocation dS force DMR has no Parallel_Orbitals";
+        return false;
+    }
+    for (size_t iap = 0; iap < energy_dm.size_atom_pairs(); ++iap)
+    {
+        hamilt::AtomPair<double>& pair
+            = energy_dm.get_atom_pair(static_cast<int>(iap));
+        const int iat1 = pair.get_atom_i();
+        const int iat2 = pair.get_atom_j();
+        hamilt::BaseMatrix<double>* matrix = pair.find_matrix(0, 0, 0);
+        // Branch: only R=0 blocks exist in the Gamma allocation path.
+        if (matrix == nullptr)
+        {
+            continue;
+        }
+        const std::vector<int> rows = pv->get_indexes_row(iat1);
+        const std::vector<int> cols = pv->get_indexes_col(iat2);
+        const int base_i = ucell.get_iat2iwt()[iat1];
+        const int base_j = ucell.get_iat2iwt()[iat2];
+        for (int i = 0; i < matrix->get_row_size(); ++i)
+        {
+            const int gi = base_i + rows[i];
+            for (int j = 0; j < matrix->get_col_size(); ++j)
+            {
+                const int gj = base_j + cols[j];
+                matrix->get_value(i, j)
+                    = energy_density[static_cast<size_t>(gi) * norb + gj];
+            }
+        }
+    }
+
+    const std::vector<ModuleBase::Vector3<double>> kvec_d(
+        1, ModuleBase::Vector3<double>(0.0, 0.0, 0.0));
+    hamilt::Overlap<hamilt::OperatorLCAO<double, double>> overlap_force(
+        nullptr, kvec_d, nullptr, nullptr, &ucell, orb.cutoffs(), &gd,
+        two_center_bundle.overlap_orb.get());
+    ModuleBase::matrix force_s(ucell.nat, 3);
+    ModuleBase::matrix stress_s(3, 3);
+    overlap_force.cal_force_stress(true, false, &energy_dm, force_s, stress_s);
+    for (int iat = 0; iat < ucell.nat; ++iat)
+    {
+        for (int dim = 0; dim < 3; ++dim)
+        {
+            force(iat, dim) += force_s(iat, dim);
+        }
+    }
+    return true;
+}
 
 } // namespace hamilt

@@ -5710,3 +5710,48 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   1. 进入 S4.1：实现完整 `∂Q̂`，与 S3 冻结力比较，目标 `<0.005 eV/A`。
   2. S4.2 做应力 FD（相对 `<5%`）；S4.3 补非共线通道。
   3. 后续求和审计固定细网格或改进 `W_i` 矩阵积分口径，避免粗网格误判。
+
+## 2026-10-26 (S4.1): 完整目标轨道导数与约束力
+
+- **完成内容**：
+  1. `alloc_constraint.{h,cpp}` 新增固定 `W_i` 下的 `K_i(S)` 反向模式
+     伴随：`Tr(D∂K_i)=<E_i,∂S>`。`S_T^{-1/2}` 的导数用 `R×R` 谱分解
+     Fréchet 公式，目标空间仍走同一秩截断规则。
+  2. `AllocConstraintLcao` 缓存 `S_dense_/W_dense_`，新增
+     `s_derivative_force_density()`；按约束通道组合
+     `read_up D_up + read_dn D_dn`，返回 `E=Σμ_iE_i`。
+  3. `cal_alloc_constraint_dS_force()` 把 `E` 填成与 DMR 同布局的
+     HContainer，复用 `hamilt::Overlap::cal_force_stress()` 得到
+     `-Tr(E∂S)`；S3 的 `Q_cDQ_c∂W` 冻结力保持不变，避免重复计数。
+  4. `FORCE_STRESS` 在 allocation 模式把该项累加进 `forcecon`。
+- **验证**：
+  - 新增 `SAdjointMatchesKernelFiniteDifference`：`K_i(S±δS)` 中心差分
+    与伴随收缩一致（阈值 `2e-7`）。
+  - `abacus_basic_para` 构建/链接 PASS；`ctest -R constraint` 18/18
+    PASS（52.48 s）；`git diff --check` PASS。
+  - 固定 `μ=-0.01221724241 Ry` 三点位置 FD：
+    `F_FD=-1.1990158728 eV/A`，S4 解析 `-1.2071200771 eV/A`，
+    差 `8.104e-3 < 0.0129 eV/A` PASS。
+  - S3 解析 O-z `-1.2069823210 eV/A`；S4 与其最大分量差
+    `1.378e-4 < 0.005 eV/A` PASS。
+  - 固定 μ JSON v2 的 plus/minus 总能与 S3 记录差 `<5e-11 eV`，
+    证明本轮只改力路径。
+- **Bug/fix list**：
+  1. 首次位置 FD 误用 ALM 重跑，几何变化后 μ 漂移，FD 数据无效；
+     改用 JSON v2 `fixed_mu` 后通过。
+  2. `s_derivative_force_density` 若使用注入符号与观测符号不同会错配；
+     当前 charge/spin 工厂的两组符号一致，代码按注入符号组合并在头文件
+     明确该前提，S4.3 非共线时需改为显式通道表。
+  3. 伴随目标空间必须保留 `target.orbital` 选择形式；已在入口加守卫，
+     防止显式 C 构建时静默产生错误 `∂S`。
+- **文件**：
+  `source_estate/module_constraint/alloc_constraint.{h,cpp}`、
+  `alloc_constraint_lcao.{h,cpp}`、`test/alloc_constraint_test.cpp`、
+  `source_lcao/module_operator_lcao/alloc_constraint_lcao_operator.{h,cpp}`、
+  `source_lcao/FORCE_STRESS.cpp`、
+  `2026-10-26-s4-full-derivative-test.md`（新建）、执行方案、本日志。
+- **下一步**：
+  1. S4.2：实现 eq. (6.5) 应力，复用 `E_i`/overlap 应力核，做三档应变 FD
+     与张量对称性检查（相对 `<5%`）。
+  2. S4.3：补非共线 `λ_i·σ` 与无 SOC 整体自旋旋转不变性。
+  3. S4 全闸门通过后再进入 S5 PW 平价。

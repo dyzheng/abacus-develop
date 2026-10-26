@@ -23,6 +23,7 @@
 #include "source_lcao/module_operator_lcao/dftu_lcao.h"
 #include "source_lcao/module_operator_lcao/dspin_lcao.h"
 #include "source_lcao/module_operator_lcao/deltap_lcao.h"
+#include "source_lcao/module_operator_lcao/alloc_constraint_lcao_operator.h"
 #include "source_lcao/module_operator_lcao/nonlocal.h"
 #include "source_lcao/module_operator_lcao/ekinetic.h"
 #include "source_lcao/module_operator_lcao/overlap.h"
@@ -523,8 +524,38 @@ void Force_Stress_LCAO<T>::getForceStress(UnitCell& ucell,
     if (PARAM.inp.constraint && isforce)
     {
         forcecon.create(nat, 3);
-        constraint::ConstraintLoop::instance().compute_force(
-            pelec->charge->rho, PARAM.inp.nspin, forcecon);
+        constraint::ConstraintLoop& cloop
+            = constraint::ConstraintLoop::instance();
+        cloop.compute_force(pelec->charge->rho, PARAM.inp.nspin, forcecon);
+        // S4.1: allocation mode also needs the explicit target-orbital
+        // derivative.  The S3 kernel above supplies the frozen dW term; this
+        // call adds -Tr(E dS) for the S/B dependence of K_i.
+        if (cloop.allocation_mode())
+        {
+            // Guard: the adjoint contraction is defined on the real Gamma
+            // density matrices that the allocation build consumed.
+            if (dmat.dm == nullptr)
+            {
+                ModuleBase::WARNING_QUIT("Force_Stress_LCAO::getForceStress",
+                    "allocation dS force requires an initialized DMR");
+            }
+            std::vector<const hamilt::HContainer<double>*> dmr_channels;
+            for (auto* dmr : dmat.dm->get_DMR_vector())
+            {
+                dmr_channels.push_back(dmr);
+            }
+            std::string alloc_force_error;
+            // Branch: a failed adjoint/layout step must abort rather than
+            // silently report the frozen S3 force as the full derivative.
+            if (!hamilt::cal_alloc_constraint_dS_force(
+                    ucell, gd, orb, two_center_bundle, dmr_channels,
+                    PARAM.inp.nspin, cloop.mu_eff(), forcecon,
+                    alloc_force_error))
+            {
+                ModuleBase::WARNING_QUIT(
+                    "Force_Stress_LCAO::getForceStress", alloc_force_error);
+            }
+        }
     }
 
     // NOTE: finish_ftable is no longer needed as we don't use ForceStressArrays for overlap/kinetic
