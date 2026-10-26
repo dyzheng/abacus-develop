@@ -60,6 +60,34 @@ void check_bands(const std::vector<std::vector<std::complex<double>>>& becp,
 
 } // namespace
 
+PwTargetShell select_pw_target_shell(const std::vector<int>& nh_per_atom,
+                                     const int target_l)
+{
+    PwTargetShell selection;
+    // Branch: a negative angular momentum cannot select a physical shell.
+    if (target_l < 0)
+    {
+        return selection;
+    }
+    const int width = 2 * target_l + 1;
+    const int offset = target_l * target_l;
+    for (int iat = 0; iat < static_cast<int>(nh_per_atom.size()); ++iat)
+    {
+        // Branch: OnsiteProjector stores a complete (l,m) block per atom, so
+        // the shell exists exactly when offset+width fits in nh_per_atom.
+        if (nh_per_atom[iat] < offset + width)
+        {
+            continue;
+        }
+        for (int m = 0; m < width; ++m)
+        {
+            selection.row.push_back(offset + m);
+            selection.atom.push_back(iat);
+        }
+    }
+    return selection;
+}
+
 void build_pw_target(const std::vector<double>& ST,
                      const int ntarget,
                      const std::vector<int>& target_atom,

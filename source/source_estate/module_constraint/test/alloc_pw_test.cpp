@@ -220,6 +220,36 @@ TEST(AllocPwTest, ReadoutMatchesLcaoTargetSpace)
     EXPECT_LT(max_dm, 0.02);
 }
 
+TEST(AllocPwTest, SelectOnsiteTargetShell)
+{
+    // OnsiteProjector uses nh = (nwl+1)^2 rows per atom.  O (nwl=2) therefore
+    // carries l=0,1,2 while H (nwl=1) carries only l=0,1.
+    const std::vector<int> nh = {9, 4, 4};
+    const alloc::PwTargetShell d_shell
+        = alloc::select_pw_target_shell(nh, 2);
+    ASSERT_EQ(d_shell.row.size(), 5);
+    ASSERT_EQ(d_shell.atom.size(), 5);
+    for (int m = 0; m < 5; ++m)
+    {
+        EXPECT_EQ(d_shell.row[m], 4 + m);
+        EXPECT_EQ(d_shell.atom[m], 0);
+    }
+
+    const alloc::PwTargetShell p_shell
+        = alloc::select_pw_target_shell(nh, 1);
+    ASSERT_EQ(p_shell.row.size(), 9);
+    const std::vector<int> expected_rows = {1, 2, 3, 1, 2, 3, 1, 2, 3};
+    const std::vector<int> expected_atoms = {0, 0, 0, 1, 1, 1, 2, 2, 2};
+    EXPECT_EQ(p_shell.row, expected_rows);
+    EXPECT_EQ(p_shell.atom, expected_atoms);
+
+    // A shell beyond every atom's lmax produces the empty P=0 target set.
+    const alloc::PwTargetShell f_shell
+        = alloc::select_pw_target_shell(nh, 3);
+    EXPECT_TRUE(f_shell.row.empty());
+    EXPECT_TRUE(f_shell.atom.empty());
+}
+
 TEST(AllocPwTest, CompleteTargetSumRules)
 {
     const int norb = 7;

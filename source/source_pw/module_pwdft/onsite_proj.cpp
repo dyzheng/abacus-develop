@@ -125,7 +125,11 @@ void projectors::OnsiteProjector<T, Device>::init(const std::string& orbital_dir
         for(int it=0;it<ntype;++it)
         {
             orb_files[it] = ucell->orbital_fn[it];
-            nproj[it] = ucell->atoms[it].nwl;
+            // nwl stores the maximum angular momentum, not the number of
+            // shells.  The orbital file contains l = 0, 1, ..., nwl, so the
+            // onsite projector must include nwl+1 shells; otherwise the
+            // highest-l channel (for example O-d) is silently absent.
+            nproj[it] = ucell->atoms[it].nwl + 1;
             sum_nproj += nproj[it];
         }
         this->lproj.resize(sum_nproj);
@@ -540,6 +544,7 @@ void projectors::OnsiteProjector<T, Device>::cal_occupations(
 
     // loop over k-points to calculate Mi of \sum_{k,i,l,m}<Psi_{k,i}|alpha_{l,m}><alpha_{l,m}|Psi_{k,i}>
     const int nbands = psi_in->get_nbands();
+    const int npol = psi_in->get_npol();
     for(int ik = 0; ik < psi_in->get_nk(); ik++)
     {
         psi_in->fix_k(ik);
@@ -561,6 +566,13 @@ void projectors::OnsiteProjector<T, Device>::cal_occupations(
         for(int ib = 0;ib<nbands;ib++)
         {
             const double weight = wg_in(ik, ib);
+            double spin_sign = 0.0;
+            // Branch: collinear spin channels are separate k-points, so the
+            // spin label selects the diagonal component of the 2x2 density.
+            if(PARAM.inp.nspin == 2)
+            {
+                spin_sign = (this->isk_ != nullptr && this->isk_[ik] == 1) ? -1.0 : 1.0;
+            }
             int begin_ih = 0;
             for(int iat = 0; iat < this->iat_nh.size(); iat++)
             {
@@ -568,11 +580,24 @@ void projectors::OnsiteProjector<T, Device>::cal_occupations(
                 for(int ih = 0; ih < nh; ih++)
                 {
                     const int occ_index = (begin_ih + ih) * 4;
-                    const int index = ib*2*nkb + begin_ih + ih;
-                    occs[occ_index] += weight * conj(becp_p[index]) * becp_p[index];
-                    occs[occ_index + 1] += weight * conj(becp_p[index]) * becp_p[index + nkb];
-                    occs[occ_index + 2] += weight * conj(becp_p[index + nkb]) * becp_p[index];
-                    occs[occ_index + 3] += weight * conj(becp_p[index + nkb]) * becp_p[index + nkb];
+                    const int index = ib*npol*nkb + begin_ih + ih;
+                    // Branch: non-collinear spinors carry both Pauli
+                    // components in one band and require the full 2x2 block.
+                    if(npol == 2)
+                    {
+                        occs[occ_index] += weight * conj(becp_p[index]) * becp_p[index];
+                        occs[occ_index + 1] += weight * conj(becp_p[index]) * becp_p[index + nkb];
+                        occs[occ_index + 2] += weight * conj(becp_p[index + nkb]) * becp_p[index];
+                        occs[occ_index + 3] += weight * conj(becp_p[index + nkb]) * becp_p[index + nkb];
+                    }
+                    else
+                    {
+                        // Branch: scalar bands contribute only diagonal density;
+                        // spin_sign=0 (nspin=1) gives equal up/down weights.
+                        const double occupation = weight * std::norm(becp_p[index]);
+                        occs[occ_index] += 0.5 * occupation * (1.0 + spin_sign);
+                        occs[occ_index + 3] += 0.5 * occupation * (1.0 - spin_sign);
+                    }
                 }
                 begin_ih += nh;
             }

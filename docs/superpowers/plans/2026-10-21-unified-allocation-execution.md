@@ -872,8 +872,10 @@ TEST(AllocObserveTest, EmptyTargetSetEqualsBecke)
       2/4-rank `reduce_pool` 一致性已测。
 - [ ] 测试：PW vs LCAO 同构型同目标：`|Δm^T|<0.02 μB`、`|ΔM|<0.01 μB`；`Σm` 审计。
       代数同目标平价已过（`max_dmT=1.066e-14`，求和差 0）；真实 PW/LCAO
-      同电子态数据对拍仍待生产接线。
-- [ ] 验收：平价表 + FD 力 `<0.0129 eV/Å`。
+      同电子态数据已接线：H2O/O-d、固定 `fixed_mu=0.01 Ry` 下
+      `|Δm^T|=1.19e-4 μB`、`|ΔM|=1.75e-3 μB`；两边
+      `|Σm-tot_mag|<1e-15 μB`。FD 力仍待 PW allocation 算符接线。
+- [ ] 验收：平价表已通过；PW FD 力 `<0.0129 eV/Å` 尚未完成。
 
 ### Task S5.2 周期 Hirshfeld 权重后端
 

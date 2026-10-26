@@ -5991,3 +5991,55 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   1. 完成 PW 生产接线并跑真实 H2O 同构型平价与 FD 力。
   2. 生成同电子态 Becke/Hirshfeld 三量对照表。
   3. 补 Hirshfeld 应变导数后移除应力守卫。
+
+## 2026-10-26 (S5.1 production): PW allocation read-out and LCAO parity
+
+- **完成内容**：
+  1. 新增 `source_pw/module_pwdft/alloc_pw_report.{h,cpp}`：从真实
+     `OnsiteProjector` 选择目标 `l` shell、读取收敛 `becp`、构建 `S_T`
+     与正交目标空间，并用现有 `WeightGrid` 输出
+     `n_T/m_T/n/m/n_c/m_c` 和 `ALLOC-PW` 审计块。
+  2. `ESolver_KS_PW::after_scf()` 在 `constraint_alloc_report=1` 时调用
+     只读适配器；PW allocation 约束算符尚未接线时，
+     `constraint_alloc_switch=1` 显式拒绝，避免静默关闭网格约束势。
+  3. `n_T/m_T` 增加 k-pool 间 `reduce_double_allpool` 归约。
+  4. 修复 `OnsiteProjector` 的 shell 计数：`nwl` 是最大角动量，projector
+     必须包含 `l=0..nwl`，即 `nwl+1` 个 shell。此前 O-d 目标得到
+     `ntarget=0`。
+  5. 修复 `cal_occupations()` 的 `becp` band stride：由硬编码
+     `ib*2*nkb` 改为 `ib*npol*nkb`，共线通道按 spin label 组装对角密度，
+     非共线 spinor 保留完整 2x2 密度；消除轨道电荷表 NaN。
+- **验证**：
+  - `MODULE_ESTATE_constraint_alloc_pw` 4/4 PASS；完整
+    `ctest -R constraint` 23/23 PASS（109.38 s）。
+  - PW `11_PW_DFTU_S2_FeO` MPI 4 集成例 2/2 PASS（3.354 s）。
+  - H2O、O-d、Becke、`fixed_mu=0.01 Ry`：PW `n_T=0.124622917`、
+    `m_T=0.0019057505`；LCAO `n_T=0.1224672456`、
+    `m_T=0.0017863015`。`|Delta n_T|=2.156e-3 e`、
+    `|Delta m_T|=1.195e-4 uB`、`|Delta M_O|=1.752e-3 uB`，后两者远低于
+    S5 的 `0.02/0.01 uB` 阈值。
+  - PW/LCAO 均 `#SCF IS CONVERGED#`；`sum(n)=8`，`|dsum_n|` 分别为
+    `1.93e-12/9.68e-14`，`|dsum_m|` 分别为 `3.79e-15/1.06e-16`。
+- **Bug/fix list**：
+  1. `OnsiteProjector::init()` 将 `nwl` 错作 shell 数，漏掉最高角动量；
+     改为 `nwl+1`。这也是真实 PW d-shell 读数为空的原因。
+  2. `cal_occupations()` 对 `nspin=2` 使用 `2*nkb` band stride，越界读取
+     并输出 NaN；改为按实际 `npol` 分派。
+  3. PW `n_T/m_T` 只做 pool 内归约；补 all-pool 归约以支持 `KPAR>1`。
+- **文件**：
+  `source_pw/module_pwdft/{alloc_pw_report.h,alloc_pw_report.cpp,
+  onsite_proj.cpp,CMakeLists.txt}`、`source_esolver/esolver_ks_pw.cpp`、
+  `source_estate/module_constraint/{alloc_pw.h,alloc_pw.cpp,
+  test/alloc_pw_test.cpp}`、`tests/constraint_s5_parity/`、
+  `2026-10-26-s5-pw-readout-parity.md`（新建）、执行方案、本日志。
+- **未完成/边界**：
+  - PW allocation `DeltaH` 尚未接入 `HamiltPW`，因此 `ALLOC-PW` 仍是
+    只读诊断，PW FD 力闸门未关闭。
+  - PW 使用 `smoothgen(onsite_radius)` 目标轨道，LCAO 报告仍使用 NAO
+    shell；`n_T` 的 `2.2e-3 e` 差异是该口径差与基组表示差的组合。
+  - Becke/Hirshfeld 同电子态三量对照、Hirshfeld 应力仍未完成。
+  - 旧 v1 JSON 的历史 segfault 未在本轮覆盖，测试统一使用 v2 `fixed_mu`。
+- **下一步**：
+  1. 接 PW `DeltaH` 到 Hamiltonian 算子链并做固定目标 SCF + 位置 FD 力。
+  2. 在 `KPAR>1` 上复跑 parity，确认 all-pool 归约与目标空间指标。
+  3. 生成 Becke/Hirshfeld 三量对照表，继续推进 S5.2。

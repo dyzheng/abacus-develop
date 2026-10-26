@@ -28,6 +28,24 @@ struct PwTargetSpace
 };
 
 /**
+ * @brief Select one angular-momentum shell from the onsite projectors.
+ *
+ * OnsiteProjector stores, for each atom, the rows of l = 0, 1, ..., lmax in
+ * the ABACUS real-spherical-harmonic order.  The row offset of shell l is
+ * therefore l^2 and its width is 2*l+1.  nh_per_atom is the total number of
+ * onsite rows on each atom ((nwl+1)^2); an atom without the requested shell is
+ * skipped.
+ */
+struct PwTargetShell
+{
+    std::vector<int> row;  // compact target -> onsite-projector row
+    std::vector<int> atom; // compact target -> global atom
+};
+
+PwTargetShell select_pw_target_shell(const std::vector<int>& nh_per_atom,
+                                     const int target_l);
+
+/**
  * @brief Build the PW target space from projector-projector overlaps.
  *
  * ST is symmetrized (projector overlaps are real symmetric) and truncated by

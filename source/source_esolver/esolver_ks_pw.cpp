@@ -36,6 +36,7 @@
 #include "source_base/constants.h"
 #include "source_base/tool_quit.h"
 #include "source_estate/module_constraint/constraint_loop.h"
+#include "source_pw/module_pwdft/alloc_pw_report.h"
 
 #include "source_hamilt/module_xc/exx_info.h" // use GlobalC::exx_info
 
@@ -197,6 +198,17 @@ void ESolver_KS_PW<T, Device>::before_scf(UnitCell& ucell, const int istep)
     // the shared weight field (M1) and arm the outer loop.
     if (PARAM.inp.constraint)
     {
+        // Guard: the unified-allocation PW Hamiltonian operator is not yet
+        // registered.  Running with allocation_mode would suppress the grid
+        // potential while nothing replaces it, so refuse rather than silently
+        // relaxing the requested constraint.  The read-only report remains
+        // available with constraint_alloc_report.
+        if (PARAM.inp.constraint_alloc_switch)
+        {
+            ModuleBase::WARNING_QUIT("ESolver_KS_PW::before_scf",
+                "constraint_alloc_switch is not yet implemented for PW; "
+                "use constraint_alloc_report for the read-only S5 audit");
+        }
         constraint::ConstraintConfig cfg;
         std::vector<constraint::ConstraintSpec> specs;
         std::vector<double> radii;
@@ -415,6 +427,49 @@ void ESolver_KS_PW<T, Device>::after_scf(UnitCell& ucell, const int istep, const
     }
 
     ESolver_KS::after_scf(ucell, istep, conv_esolver);
+
+    // S5 PW read-out: project the converged wavefunctions onto the same
+    // onsite orbital shell used by the LCAO allocation target.  This is a
+    // pure diagnostic and does not alter the constraint potential or SCF.
+    if (PARAM.inp.constraint && PARAM.inp.constraint_alloc_report)
+    {
+        constraint::ConstraintLoop& cloop
+            = constraint::ConstraintLoop::instance();
+        // Branch: the shared WeightGrid is built by the constraint loop; a
+        // missing loop has no per-atom partition for the complement block.
+        if (!cloop.enabled())
+        {
+            if (GlobalV::MY_RANK == 0)
+            {
+                GlobalV::ofs_running
+                    << "[constraint] ALLOC-PW skipped frame=" << istep
+                    << " reason=\"constraint loop is not initialized\"\n";
+            }
+        }
+        else if (std::is_same<T, std::complex<double>>::value
+                 && std::is_same<Device, base_device::DEVICE_CPU>::value)
+        {
+            const alloc::PwAllocReport report = alloc::report_pw_alloc(
+                ucell, this->stp.psi_cpu, this->pelec->wg, this->kv,
+                PARAM.inp.nspin, &cloop.weight_grid(), this->chr.rho,
+                PARAM.inp.nelec, istep, PARAM.inp.constraint_alloc_target_l);
+            if (GlobalV::MY_RANK == 0)
+            {
+                alloc::print_pw_alloc_report(report, GlobalV::ofs_running);
+            }
+        }
+        else
+        {
+            // Branch: the onsite-projector table is a host array in the S5
+            // adapter; GPU and single-precision instances report a skip.
+            if (GlobalV::MY_RANK == 0)
+            {
+                GlobalV::ofs_running
+                    << "[constraint] ALLOC-PW skipped frame=" << istep
+                    << " reason=\"S5 PW report requires double CPU\"\n";
+            }
+        }
+    }
 
     // Output quantities
     ModuleIO::ctrl_scf_pw<T, Device>(istep, ucell, this->pelec, this->chr, this->kv, this->pw_wfc,

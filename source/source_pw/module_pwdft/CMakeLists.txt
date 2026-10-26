@@ -51,6 +51,7 @@ list(APPEND objects
     onsite_proj.cpp
     onsite_proj_tools.cpp
     onsite_proj_print.cpp
+    alloc_pw_report.cpp
     vsep_pw.cpp
 )
 
