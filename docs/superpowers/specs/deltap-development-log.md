@@ -5601,3 +5601,37 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   `2026-10-21-s1-allocation-core-test.md`（新建）；本日志。
 - **下一步**：S2.1 LCAO 目标轨道/重叠子块与 DMR 对拍；S2.2 默认关闭的
   `constraint_alloc_report` 与 h2o_dimer 三量对照。S2 闸门未过不进入 S3。
+
+## 2026-10-26 (S2): LCAO 只读分配读数与 ALLOC 审计
+
+- **完成内容**：按执行方案完成 S2.1–S2.2。
+  1. `alloc_lcao.{h,cpp}`：稠密 `S_T=C^TSC`、秩截断
+     `C'=CS_T^{-1/2}`、`n_T/m_T` 投影，以及与逐态求和的对拍接口。
+  2. `alloc_lcao_report.{h,cpp}`：生产 `S(R)`/DMR 的 Gamma-only 适配；
+     按 `constraint_alloc_target_l` 选取每个原子的 NAO shell，输出
+     `n_T/n_c/n/m_T/m_c/m` 与求和审计；多 k、非共线、复数 TR、dipole
+     权重显式 skip。
+  3. `esolver_ks_lcao.cpp::after_scf` 默认关闭的只读钩子；
+     新增 INPUT `constraint_alloc_report=False`、
+     `constraint_alloc_target_l=2`。
+  4. `WeightGrid::atom_weight()` 暴露物理原子 Becke 权重，供片段/偶极
+     约束下仍按原子读取 `n/m`。
+- **验证**：
+  - `MODULE_ESTATE_constraint_alloc_lcao` 3/3 PASS；
+    `ctest -R constraint` 17/17 PASS（51.28 s）；`abacus_basic_para` 构建 PASS。
+  - h2o_dimer 非磁单帧：`ntarget=10, cond=1.0579, rank=10`，
+    `dsum_n=-1.98e-12`、`dsum_m=0`。
+  - 两帧 warm relax 均 CONVERGED，`FINAL_ETOT=-903.9374066604 eV`；
+    两帧 `dsum_n` 为 `-2.19e-12/-2.49e-12`，`dsum_m=0`。
+  - 自旋 O onsite `delta=0.02/0.1`：总矩达到目标；`m_T` 分别为
+    `-0.002963/-0.014765`，与总矩反向、幅值约 15%。两例 100 步内
+    RUNNING，按纪律未提高上限。
+  - 默认关闭时 `ALLOC` 行数 0，SCF 数值与开启算例一致。
+- **文件**：`module_constraint/alloc_lcao.{h,cpp}`、
+  `alloc_lcao_report.{h,cpp}`、`test/alloc_lcao_test.cpp`、
+  `weight_grid.h`、`esolver_ks_lcao.cpp`、`input_parameter.h`、
+  `read_input_item_other.cpp`、两个 `CMakeLists.txt`、
+  `2026-10-26-s2-lcao-alloc-report-test.md`（新建）、执行方案、本日志。
+- **关键结论**：现有 onsite 约束约束的是原子总自旋矩，不能把其目标值
+  当作 `m_T`；S3 必须直接约束 S2 的 `d` 子空间投影矩。
+- **下一步**：S3.1 `ΔH` 注入与 ALM；S3.2 冻结力与 FD 验收。

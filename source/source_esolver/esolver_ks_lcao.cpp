@@ -34,6 +34,7 @@
 #include "source_psi/setup_psi.h" // use Setup_Psi for deallocate_psi
 #include "source_estate/module_constraint/constraint_inject_lcao.h"
 #include "source_estate/module_constraint/constraint_loop.h"
+#include "source_estate/module_constraint/alloc_lcao_report.h"
 
 namespace ModuleESolver
 {
@@ -1093,6 +1094,56 @@ void ESolver_KS_LCAO<TK, TR>::after_scf(UnitCell& ucell, const int istep, const 
 
     //! 1) call after_scf() of ESolver_KS
     ESolver_KS::after_scf(ucell, istep, conv_esolver);
+
+    // S2 unified-allocation read-out.  This is a pure diagnostic hook: it
+    // reads the already converged DMR/S(R) and the current density, never
+    // changes the constraint potential or the SCF state.  The default-off
+    // branch must not emit anything, preserving historical logs byte-for-byte.
+    if (PARAM.inp.constraint && PARAM.inp.constraint_alloc_report)
+    {
+        constraint::ConstraintLoop& cloop
+            = constraint::ConstraintLoop::instance();
+        // Branch: report only after the constraint loop has built its shared
+        // per-atom weight field; otherwise there is no n/m partition to read.
+        if (!cloop.enabled())
+        {
+            if (GlobalV::MY_RANK == 0)
+            {
+                GlobalV::ofs_running
+                    << "[constraint] ALLOC skipped frame=" << istep
+                    << " reason=\"constraint loop is not initialized\"\n";
+            }
+        }
+        else if constexpr (std::is_same<TR, double>::value)
+        {
+            std::vector<const hamilt::HContainer<double>*> dmr_channels;
+            for (auto* dmr : this->dmat.dm->get_DMR_vector())
+            {
+                dmr_channels.push_back(dmr);
+            }
+            const alloc::LcaoAllocReport report = alloc::report_lcao_alloc(
+                ucell, *hamilt_lcao->getSR(), dmr_channels,
+                cloop.weight_grid(), this->chr.rho, PARAM.inp.nspin,
+                PARAM.inp.nelec, istep,
+                PARAM.inp.constraint_alloc_target_l);
+            if (GlobalV::MY_RANK == 0)
+            {
+                alloc::print_lcao_alloc_report(report, GlobalV::ofs_running);
+            }
+        }
+        else
+        {
+            // Branch: the S2 read-out is wired for the real (double) DMR
+            // storage used by the production LCAO path.  Complex-TR EXX
+            // storage is outside this observation stage.
+            if (GlobalV::MY_RANK == 0)
+            {
+                GlobalV::ofs_running
+                    << "[constraint] ALLOC skipped frame=" << istep
+                    << " reason=\"S2 LCAO report requires real DMR storage\"\n";
+            }
+        }
+    }
 
     //! 2) output of lcao every few ionic steps
     ModuleIO::ctrl_scf_lcao<TK, TR>(ucell,

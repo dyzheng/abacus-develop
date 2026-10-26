@@ -95,6 +95,13 @@ class WeightGrid
     {
         return cw_[alpha];
     }
+    // Per-atom Becke weight w_iat(g), independent of the fragment map.  Used
+    // by the S2 allocation read-out to split a grid density among physical
+    // atoms even when the active constraint maps are fragments or dipoles.
+    const std::vector<double>& atom_weight(const int iat) const
+    {
+        return w_[iat];
+    }
     // Constraint -> atom mapping (default: one atom per constraint).
     const std::vector<std::vector<int>>& constraint_atoms() const
     {

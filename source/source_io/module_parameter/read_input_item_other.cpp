@@ -1805,6 +1805,30 @@ Manual override is allowed: if sc_acceleration_mode is explicitly set, it takes 
         this->add_item(item);
     }
     {
+        Input_Item item("constraint_alloc_report");
+        item.annotation = "print the LCAO unified-allocation target/complement audit";
+        item.category = "Constraint";
+        item.type = "Boolean";
+        item.description = "When true, after each SCF frame print the read-only ALLOC block: the selected NAO target orbitals (constraint_alloc_target_l), n_T/m_T, the complementary n_c/m_c, and the sum-rule audit. Requires a gamma-only collinear LCAO density matrix; periodic multi-k and non-collinear runs are reported as skipped. Pure observation; default false keeps the historical output byte-identical.";
+        item.default_value = "False";
+        item.unit = "";
+        item.availability = "constraint is true";
+        read_sync_bool(input.constraint_alloc_report);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("constraint_alloc_target_l");
+        item.annotation = "angular momentum of the LCAO allocation target orbitals";
+        item.category = "Constraint";
+        item.type = "Integer";
+        item.description = "NAO angular momentum selected as the unified-allocation target set on every atom that carries such a shell (default 2 = d orbitals). The actual selected atom:orbital list is printed next to the ALLOC result.";
+        item.default_value = "2";
+        item.unit = "";
+        item.availability = "constraint_alloc_report is true";
+        read_sync_int(input.constraint_alloc_target_l);
+        this->add_item(item);
+    }
+    {
         Input_Item item("deltap_branch_write");
         item.annotation = "persist deltap_branch.dat: true or false";
         item.category = "DeltaP";

@@ -796,6 +796,10 @@ struct Input_para
     double constraint_dipole_saw_pos_max = -1.0;  ///< saw maximum (fractional z); -1 = auto lowest-density plane
     double constraint_dipole_saw_pos_dec = 0.1;   ///< saw decay width (fractional z)
 
+    // S2 unified-allocation read-out (pure observation, default off).
+    bool constraint_alloc_report = false;   ///< print the LCAO ALLOC target/complement block
+    int constraint_alloc_target_l = 2;       ///< NAO angular momentum selected as allocation targets
+
     // ==============   #Parameters (25.uncommon hardware) ==================
     int dsp_count = 4;           ///< count of DSP hardwares in one node
 };
