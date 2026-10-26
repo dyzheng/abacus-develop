@@ -867,18 +867,23 @@ TEST(AllocObserveTest, EmptyTargetSetEqualsBecke)
 
 ### Task S5.1 PW 后端
 
-- [ ] 新增 projector–projector 重叠 `⟨α_a|α_b⟩`（两中心或实空间积分）；R×R 正交化；`apply_dH` 按设计 §5.2 算法（becp + 局域乘）。
+- [x] 新增 projector–projector 重叠 `⟨α_a|α_b⟩`（两中心或实空间积分）；R×R 正交化；`apply_dH` 按设计 §5.2 算法（becp + 局域乘）。
+      核心已实现于 `alloc_pw.{h,cpp}`；projector tabulation overlap/becp 的
+      2/4-rank `reduce_pool` 一致性已测。
 - [ ] 测试：PW vs LCAO 同构型同目标：`|Δm^T|<0.02 μB`、`|ΔM|<0.01 μB`；`Σm` 审计。
+      代数同目标平价已过（`max_dmT=1.066e-14`，求和差 0）；真实 PW/LCAO
+      同电子态数据对拍仍待生产接线。
 - [ ] 验收：平价表 + FD 力 `<0.0129 eV/Å`。
 
 ### Task S5.2 周期 Hirshfeld 权重后端
 
-- [ ] `WeightType::HirshfeldPeriodic`：参考密度 `q_Z^0`（正系数高斯拟合或孤立原子密度）、晶格平移求和、`w_i=q_i/Σq_j`；`C²` 窗口（设计 Eq. 11）与**显式余量通道**（覆盖失败时）。
-- [ ] 测试：
+- [x] `WeightType::HirshfeldPeriodic`：参考密度 `q_Z^0`（正系数高斯拟合或孤立原子密度）、晶格平移求和、`w_i=q_i/Σq_j`；`C²` 窗口（设计 Eq. 11）与**显式余量通道**（覆盖失败时）。
+- [x] 测试：
   - `maxdev<1e-10`；`Σ_i ∂w_i/∂R=0`（S0.3 审计降为 0 违约）；
   - 大真空盒覆盖失败：余量通道被启用且 `原子+余量=全局`；
   - 镜像切换面附近权重导数的 FD 连续性（相对误差 `<1e-6`，对比 Becke 的最小镜像后端）。
 - [ ] 验收：上述测试全过；Becke 与 Hirshfeld 两后端在同一电子态的三量对照。
+      测试已全过；同电子态三量对照尚未生成，且 Hirshfeld 应变导数/应力仍显式拒绝。
 
 **S5 验收**：PW≡LCAO 平价；Hirshfeld 审计与光滑性；两后端对照表。
 

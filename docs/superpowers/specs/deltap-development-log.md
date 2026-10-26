@@ -5942,3 +5942,52 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   2. 增加 Pauli/kernel adapter 回归（block 原点、spin-off-diagonal）。
   3. 单独处理 x 取向 `scf_thr=1e-8` 的磁密度混合极限环。
   4. 评估自适应向量 multiplier/ALM，仍不纳入当前固定 `fixed_mu` 闸门。
+
+## 2026-10-26 (S5 core): PW allocation backend and periodic Hirshfeld
+
+- **完成内容**：
+  1. 新增 `alloc_pw.{h,cpp}`：`PwTargetSpace`、projector overlap
+     `ST=<alpha|alpha>` 与 `ST^{-1/2}` 正交化、`becp` 读数、完整目标集
+     电荷/磁矩求和，以及设计 §5.2 的 `apply_pw_alloc_delta_h()` 低秩修正。
+  2. projector tabulation 的 overlap/becp helper 使用
+     `Parallel_Reduce::reduce_pool`，新增 2/4 rank 的切片一致性测试。
+  3. 新增 `WeightType::HirshfeldPeriodic`：周期高斯 promolecule 参考密度、
+     倒格矢界生成的镜像表、C2 compact window、显式余量通道
+     `q_rem=qfloor*(1-smoothstep5(denom/qfloor))`，以及商法则位置导数。
+  4. 输入层接受 `constraint_weight_type=hirshfeld|hirshfeld_periodic`；
+     `ConstraintLoop::build_geometry()` 选择 Hirshfeld 后端。未知类型仍拒绝。
+  5. Hirshfeld 应变导数尚未实现；应力入口显式拒绝，避免静默报零。
+- **验证**：
+  - `MODULE_ESTATE_constraint_alloc_pw` 4/4 PASS：
+    `max_dnT=3.553e-14`、`max_dmT=1.066e-14`、`dsum=0`、
+    `apply max_diff=2.082e-17`。
+  - `MODULE_ESTATE_constraint_alloc_pw_mpi{,_2np,_4np}` 3/3 PASS；
+    `ST`/`becp` 与全局参考差 `<1e-12`。
+  - Hirshfeld partition `maxdev=2.220e-16`，位置 FD `max_abs=1.000e-11`，
+    跨边界 FD `max_abs=6.972e-08`（1393 点）。
+  - `abacus_basic_para` 构建 PASS；完整 `ctest -R constraint`
+    23/23 PASS（101.91 s）；`git diff --check` PASS。
+- **Bug/fix list**：
+  1. 本轮未发现生产数值 bug。
+  2. MPI 新测试首版直接访问 `PARAM.input`，因 `Parameter::input` 为私有而
+     编译失败；改为只读 `PARAM.inp`。
+  3. Hirshfeld 应力路径没有可用的应变导数，新增显式守卫而非返回零。
+- **文件**：
+  `source_estate/module_constraint/{alloc_pw.h,alloc_pw.cpp,
+  weight_grid.h,weight_grid.cpp,constraint_deriv.cpp,constraint_io.cpp,
+  constraint_io.h,constraint_loop.cpp}`、
+  `source_estate/module_constraint/test/{alloc_pw_test.cpp,
+  weight_grid_test.cpp,constraint_io_test.cpp,constraint_loop_test.cpp}`、
+  `source_estate/test_mpi/{alloc_pw_mpi_test.cpp,CMakeLists.txt}`、
+  `source_estate/CMakeLists.txt`、
+  `source_io/module_parameter/{input_parameter.h,read_input_item_other.cpp}`、
+  `2026-10-26-s5-pw-hirshfeld-test.md`（新建）、执行方案、本日志。
+- **未完成/边界**：
+  - `alloc_pw` 尚未接入 PW esolver 的实际 projector/波函数/`veff` 路径。
+  - 尚未生成真实 PW/LCAO 同电子态平价表、PW FD 力与 Becke/Hirshfeld
+    三量对照表。
+  - Hirshfeld 应力显式拒绝；应变导数留待后续。
+- **下一步**：
+  1. 完成 PW 生产接线并跑真实 H2O 同构型平价与 FD 力。
+  2. 生成同电子态 Becke/Hirshfeld 三量对照表。
+  3. 补 Hirshfeld 应变导数后移除应力守卫。

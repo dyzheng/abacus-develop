@@ -250,6 +250,197 @@ TEST_F(WeightGridTest, DerivativeSumRule)
     EXPECT_LT(max_dsum, 1e-10);
 }
 
+TEST_F(WeightGridTest, HirshfeldPeriodicPartitionAndRemainder)
+{
+    constraint::WeightGrid wg(*ucell, rhopw, radii,
+                              constraint::WeightType::HirshfeldPeriodic);
+    wg.build();
+    ASSERT_TRUE(wg.is_hirshfeld());
+    ASSERT_EQ(wg.nconstraint(), ucell->nat);
+
+    double local_max = 0.0;
+    double max_rem = 0.0;
+    for (int ir = 0; ir < rhopw->nrxx; ++ir)
+    {
+        double sum = wg.remainder_weight(ir);
+        for (int iat = 0; iat < wg.nat(); ++iat)
+        {
+            sum += wg.atom_weight(iat)[ir];
+        }
+        local_max = std::max(local_max, std::abs(sum - 1.0));
+        max_rem = std::max(max_rem, wg.remainder_weight(ir));
+    }
+    printf("hirshfeld partition: maxdev=%.3e max_remainder=%.6f\n",
+           local_max, max_rem);
+    EXPECT_LT(local_max, 1e-12);
+    EXPECT_LT(wg.max_partition_deviation(), 1e-12);
+    EXPECT_NEAR(max_rem, wg.max_remainder_weight(), 0.0);
+    // The 10 Bohr box has vacuum corners farther than every compact window;
+    // there the explicit remainder must take the whole weight.
+    EXPECT_GT(max_rem, 0.99);
+}
+
+TEST_F(WeightGridTest, HirshfeldDerivativeSumAndFiniteDifference)
+{
+    constraint::WeightGrid wg(*ucell, rhopw, radii,
+                              constraint::WeightType::HirshfeldPeriodic);
+    wg.build();
+    wg.build_derivatives();
+    ASSERT_TRUE(wg.derivatives_built());
+
+    double max_total = 0.0;
+    double max_covered_atoms = 0.0;
+    for (int J = 0; J < wg.nat(); ++J)
+    {
+        for (int d = 0; d < 3; ++d)
+        {
+            for (int ir = 0; ir < rhopw->nrxx; ++ir)
+            {
+                double sum = wg.remainder_derivative(J, d, ir);
+                for (int iat = 0; iat < wg.nat(); ++iat)
+                {
+                    sum += wg.weight_derivative(iat, J, d, ir);
+                }
+                max_total = std::max(max_total, std::abs(sum));
+                // Branch: in the fully covered region q_rem is exactly zero,
+                // so the atom-only quotient derivative must also sum to zero.
+                if (wg.remainder_weight(ir) == 0.0)
+                {
+                    double atom_sum = 0.0;
+                    for (int iat = 0; iat < wg.nat(); ++iat)
+                    {
+                        atom_sum += wg.weight_derivative(iat, J, d, ir);
+                    }
+                    max_covered_atoms
+                        = std::max(max_covered_atoms, std::abs(atom_sum));
+                }
+            }
+        }
+    }
+    printf("hirshfeld derivative sum: total=%.3e covered_atoms=%.3e\n",
+           max_total, max_covered_atoms);
+    EXPECT_LT(max_total, 1e-10);
+    EXPECT_LT(max_covered_atoms, 1e-10);
+
+    // Central-difference one atom in Cartesian z.  The periodic sum and the
+    // C2 window are smooth, so the analytic derivative must agree across the
+    // old minimum-image switch planes rather than jump there.
+    const double delta = 1.0e-5;
+    const double dz_frac
+        = delta / (ucell->latvec.e33 * ucell->lat0);
+    const int J = 0;
+    const double z0 = ucell->atoms[0].taud[0].z;
+    ucell->atoms[0].taud[0].z = z0 + dz_frac;
+    constraint::WeightGrid plus(*ucell, rhopw, radii,
+                                constraint::WeightType::HirshfeldPeriodic);
+    plus.build();
+    const auto w_plus = plus.atom_weight(0);
+    ucell->atoms[0].taud[0].z = z0 - dz_frac;
+    constraint::WeightGrid minus(*ucell, rhopw, radii,
+                                 constraint::WeightType::HirshfeldPeriodic);
+    minus.build();
+    const auto w_minus = minus.atom_weight(0);
+    ucell->atoms[0].taud[0].z = z0;
+
+    double max_abs = 0.0;
+    double max_fd = 0.0;
+    int max_ir = 0;
+    double max_fd_value = 0.0;
+    double max_analytic = 0.0;
+    const auto& w_base = wg.atom_weight(0);
+    for (int ir = 0; ir < rhopw->nrxx; ++ir)
+    {
+        // Branch: skip the compact-window endpoint and the pure-vacuum
+        // remainder region.  Both have a vanishing atomic density, where the
+        // quotient is dominated by the numerical floor rather than by the
+        // smooth physical window.  Interior points exercise the same smooth
+        // derivative across periodic images.
+        if (w_base[ir] < 1e-9 || w_base[ir] > 1.0 - 1e-9
+            || w_plus[ir] < 1e-9 || w_minus[ir] < 1e-9)
+        {
+            continue;
+        }
+        const double fd = (w_plus[ir] - w_minus[ir]) / (2.0 * delta);
+        const double analytic = wg.weight_derivative(0, J, 2, ir);
+        if (std::abs(fd - analytic) > max_abs)
+        {
+            max_abs = std::abs(fd - analytic);
+            max_ir = ir;
+            max_fd_value = fd;
+            max_analytic = analytic;
+        }
+        max_fd = std::max(max_fd, std::abs(fd));
+    }
+    printf("hirshfeld position FD: max_abs=%.3e max_deriv=%.3e ir=%d "
+           "fd=%.9e analytic=%.9e\n",
+           max_abs, max_fd, max_ir, max_fd_value, max_analytic);
+    {
+        const int i = max_ir / (rhopw->ny * rhopw->nplane);
+        const int j = max_ir / rhopw->nplane - i * rhopw->ny;
+        const int k = max_ir % rhopw->nplane + rhopw->startz_current;
+        printf("  max point ijk=(%d,%d,%d) wplus=%.9e wminus=%.9e\n",
+               i, j, k, w_plus[max_ir], w_minus[max_ir]);
+        printf("  plus weights=(%.6e %.6e %.6e) rem=%.6e; minus weights="
+               "(%.6e %.6e %.6e) rem=%.6e\n",
+               plus.atom_weight(0)[max_ir], plus.atom_weight(1)[max_ir],
+               plus.atom_weight(2)[max_ir], plus.remainder_weight(max_ir),
+               minus.atom_weight(0)[max_ir], minus.atom_weight(1)[max_ir],
+               minus.atom_weight(2)[max_ir], minus.remainder_weight(max_ir));
+    }
+    EXPECT_LT(max_abs, 1e-6 * std::max(1.0, max_fd));
+}
+
+TEST_F(WeightGridTest, HirshfeldDerivativeAcrossPeriodicBoundary)
+{
+    // Put O close to the x=0/10 periodic boundary.  The nearest Beeke image
+    // would switch at the cell face, whereas the Hirshfeld lattice sum keeps
+    // the reference density and its derivative continuous there.
+    const double x0 = ucell->atoms[0].taud[0].x;
+    ucell->atoms[0].taud[0].x = 0.98;
+    constraint::WeightGrid base(*ucell, rhopw, radii,
+                                constraint::WeightType::HirshfeldPeriodic);
+    base.build();
+    base.build_derivatives();
+
+    const double delta = 1.0e-5;
+    const double dx_frac = delta / (ucell->latvec.e11 * ucell->lat0);
+    ucell->atoms[0].taud[0].x = 0.98 + dx_frac;
+    constraint::WeightGrid plus(*ucell, rhopw, radii,
+                                constraint::WeightType::HirshfeldPeriodic);
+    plus.build();
+    ucell->atoms[0].taud[0].x = 0.98 - dx_frac;
+    constraint::WeightGrid minus(*ucell, rhopw, radii,
+                                 constraint::WeightType::HirshfeldPeriodic);
+    minus.build();
+    ucell->atoms[0].taud[0].x = x0;
+
+    const auto& w_base = base.atom_weight(0);
+    const auto& w_plus = plus.atom_weight(0);
+    const auto& w_minus = minus.atom_weight(0);
+    double max_abs = 0.0;
+    double max_fd = 0.0;
+    int checked = 0;
+    for (int ir = 0; ir < rhopw->nrxx; ++ir)
+    {
+        // Branch: only interior points avoid the compact-window endpoint,
+        // where the analytic density itself vanishes to high order.
+        if (w_base[ir] < 1e-9 || w_base[ir] > 1.0 - 1e-9
+            || w_plus[ir] < 1e-9 || w_minus[ir] < 1e-9)
+        {
+            continue;
+        }
+        const double fd = (w_plus[ir] - w_minus[ir]) / (2.0 * delta);
+        const double analytic = base.weight_derivative(0, 0, 0, ir);
+        max_abs = std::max(max_abs, std::abs(fd - analytic));
+        max_fd = std::max(max_fd, std::abs(fd));
+        ++checked;
+    }
+    printf("hirshfeld boundary FD: checked=%d max_abs=%.3e max_deriv=%.3e\n",
+           checked, max_abs, max_fd);
+    EXPECT_GT(checked, 0);
+    EXPECT_LT(max_abs, 1e-6 * std::max(1.0, max_fd));
+}
+
 // M5: the dipole density weight plus its ionic offset must reproduce the
 // passive DipoleObserver's saw dipole exactly (same saw function, same grid
 // quadrature).  A uniform toy density keeps the check independent of any

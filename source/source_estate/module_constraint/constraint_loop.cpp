@@ -476,7 +476,11 @@ void ConstraintLoop::build_geometry(
     // map exactly as before.
     else
     {
-        wg_.reset(new WeightGrid(ucell, rho_basis, radii, WeightType::Becke));
+        const WeightType wt = (cfg_.weight_type == "hirshfeld"
+                               || cfg_.weight_type == "hirshfeld_periodic")
+                                  ? WeightType::HirshfeldPeriodic
+                                  : WeightType::Becke;
+        wg_.reset(new WeightGrid(ucell, rho_basis, radii, wt));
         std::vector<std::vector<int>> atom_map;
         for (const ConstraintSpec& spec : specs)
         {

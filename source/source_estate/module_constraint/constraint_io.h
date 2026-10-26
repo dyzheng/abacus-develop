@@ -22,7 +22,7 @@ struct ConstraintConfig
 {
     bool enabled = false;
     std::string type = "charge";        // phase 1: only "charge"
-    std::string weight_type = "becke";  // phase 1: only "becke"
+    std::string weight_type = "becke";  // "becke" | "hirshfeld"
     std::string target_mode = "delta";  // "delta" | "absolute"
     double mu_max = 5.0;                // Ry, cap on |mu|
     double thr = 1e-4;                  // e, per-constraint convergence
@@ -85,7 +85,7 @@ enum class ConfigStatus
  * @brief Build and guard the constraint configuration (M7).
  *
  * Semantic guards (never silently run a wrong calculation):
- *  - weight_type != "becke" -> ERROR ("not implemented in phase 1")
+ *  - weight_type outside becke/hirshfeld -> ERROR
  *  - type != "charge"/"spin" -> ERROR (legacy v1 target files only: a v2
  *    file carries a per-constraint "type" and the run-level type only warns)
  *  - type == "spin" && nspin != 2 -> ERROR (the spin channel reads and

@@ -237,6 +237,13 @@ void constraint_stress(const WeightGrid& wg,
         ModuleBase::WARNING_QUIT("constraint_stress",
                                  "dipole constraint stress is not implemented");
     }
+    // Guard: the S5.2 Hirshfeld backend supplies the position derivative but
+    // not yet the strain derivative; refuse instead of reporting zero.
+    if (wg.is_hirshfeld())
+    {
+        ModuleBase::WARNING_QUIT("constraint_stress",
+                                 "Hirshfeld constraint stress is not implemented");
+    }
     // Guard: one multiplier and one channel profile per constraint.
     if (static_cast<int>(mu.size()) != nalpha
         || static_cast<int>(channels.size()) != nalpha)
@@ -450,6 +457,12 @@ void constraint_stress_densities(
         ModuleBase::WARNING_QUIT("constraint_stress_densities",
                                  "dipole constraints are not supported by the "
                                  "non-collinear allocation stress");
+    }
+    // Guard: the Hirshfeld strain derivative is not part of S5.2.
+    if (wg.is_hirshfeld())
+    {
+        ModuleBase::WARNING_QUIT("constraint_stress_densities",
+                                 "Hirshfeld constraint stress is not implemented");
     }
     // Guard: the caller supplies the full stress accumulator.
     if (stress.nr != 3 || stress.nc != 3)

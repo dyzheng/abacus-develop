@@ -32,3 +32,21 @@ add_test(NAME MODULE_ESTATE_constraint_weight_grid_mpi_4np
       COMMAND mpirun -np 4 ./MODULE_ESTATE_constraint_weight_grid_mpi;
       WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
 )
+
+AddTest(
+  TARGET MODULE_ESTATE_constraint_alloc_pw_mpi
+  LIBS parameter ${math_libs} base device
+  SOURCES alloc_pw_mpi_test.cpp
+    ../module_constraint/alloc_pw.cpp
+    ../module_constraint/alloc_linalg.cpp
+)
+
+add_test(NAME MODULE_ESTATE_constraint_alloc_pw_mpi_2np
+      COMMAND mpirun -np 2 ./MODULE_ESTATE_constraint_alloc_pw_mpi;
+      WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+)
+
+add_test(NAME MODULE_ESTATE_constraint_alloc_pw_mpi_4np
+      COMMAND mpirun -np 4 ./MODULE_ESTATE_constraint_alloc_pw_mpi;
+      WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+)

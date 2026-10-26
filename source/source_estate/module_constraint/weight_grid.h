@@ -11,9 +11,10 @@ namespace constraint
 
 enum class WeightType
 {
-    Becke, // Becke partition with heteronuclear size adjustment (M0)
-    DipoleSaw,      // M5: dipole weight -Lz*saw(z/Lz), global one-constraint
-    DipoleMolecular // M5: dipole weight -r_axis, global one-constraint
+    Becke,             // Becke partition with heteronuclear size adjustment (M0)
+    DipoleSaw,         // M5: dipole weight -Lz*saw(z/Lz), global one-constraint
+    DipoleMolecular,   // M5: dipole weight -r_axis, global one-constraint
+    HirshfeldPeriodic  // S5: periodic promolecule density ratio with C2 window
 };
 
 /**
@@ -36,10 +37,12 @@ class WeightGrid
      * @param rho_basis    PW density grid (rank-local domain decomposition).
      * @param radii        Partition radius (Bohr) of every atom, indexed by
      *                     global atom index iat.
-     * @param type         Weight recipe; only Becke is implemented in phase 1.
+     * @param type         Weight recipe: Becke, periodic Hirshfeld, or dipole.
      * @param screening_radius  Involve only atoms within this distance (Bohr)
      *                     of a grid point.  <= 0 involves all atoms at every
-     *                     grid point (exact partition of unity).
+     *                     grid point (exact partition of unity).  For the
+     *                     Hirshfeld backend it is the compact reference-density
+     *                     cutoff instead; <= 0 means three Gaussian widths.
      */
     WeightGrid(const UnitCell& ucell,
                const ModulePW::PW_Basis* rho_basis,
@@ -116,6 +119,20 @@ class WeightGrid
         return type_ == WeightType::DipoleSaw
                || type_ == WeightType::DipoleMolecular;
     }
+    bool is_hirshfeld() const { return type_ == WeightType::HirshfeldPeriodic; }
+
+    // S5.2 explicit remainder channel.  Atom weights are q_i/(sum q + q_rem);
+    // the remainder weight closes the partition even in vacuum regions where
+    // every compact atomic reference density is zero.  The remainder is not a
+    // physical atom and is not part of the default constraint map.
+    const std::vector<double>& remainder_weight() const { return rem_; }
+    double remainder_weight(const int ir) const { return rem_[ir]; }
+    double max_remainder_weight() const { return max_rem_; }
+    // d w_rem / d R_{J,d} on the same layout as weight_derivative().
+    double remainder_derivative(const int J, const int d, const int ir) const
+    {
+        return drem_[(J * 3 + d) * nrxx_ + ir];
+    }
     double observable_offset(const int alpha) const
     {
         return observable_offset_.empty() ? 0.0
@@ -188,6 +205,29 @@ class WeightGrid
 
     // M5: build the single global dipole weight and its ionic offset.
     void build_dipole();
+
+    // S5.2: periodic Hirshfeld value and derivative builders.
+    void prepare_hirshfeld_geometry();
+    void build_hirshfeld();
+    void build_hirshfeld_derivatives();
+    double hirshfeld_atom_density(const int iat,
+                                  const ModuleBase::Vector3<double>& rfrac,
+                                  ModuleBase::Vector3<double>* grad) const;
+
+    // Per-atom Gaussian reference-density parameters and the finite image
+    // list used by the periodic lattice sum.
+    std::vector<double> hirshfeld_sigma_;
+    std::vector<double> hirshfeld_cutoff_;
+    std::vector<double> hirshfeld_charge_;
+    std::vector<ModuleBase::Vector3<double>> hirshfeld_atom_frac_;
+    std::vector<ModuleBase::Vector3<double>> hirshfeld_images_;
+    // The remainder floor is only a numerical coverage guard.  It must stay
+    // far below the smallest meaningful promolecule density so the smooth
+    // compact window, rather than a large floor, controls the weight.
+    double hirshfeld_qfloor_ = 1e-20;
+    std::vector<double> rem_;
+    std::vector<double> drem_;
+    double max_rem_ = 0.0;
 
     // Partition-of-unity audit result (global max over ranks).
     double maxdev_ = 0.0;

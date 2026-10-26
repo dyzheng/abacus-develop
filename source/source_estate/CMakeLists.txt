@@ -60,6 +60,7 @@ list(APPEND objects
     module_constraint/alloc_lcao.cpp
     module_constraint/alloc_constraint.cpp
     module_constraint/alloc_spin.cpp
+    module_constraint/alloc_pw.cpp
 )
 
 if(ENABLE_LCAO)

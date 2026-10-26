@@ -98,12 +98,23 @@ TEST(ConstraintIOTest, Guards)
 {
     std::string error;
     constraint::ConstraintConfig cfg;
-    // hirshfeld weight: not implemented, never silently run.
+    // The periodic Hirshfeld backend is accepted; an unknown recipe still
+    // aborts instead of silently falling back to Becke.
     EXPECT_EQ(constraint::configure_constraint(cfg, true, "charge", "hirshfeld",
                                                "delta", "{}", 5.0, 1e-4, 3, 1,
                                                error),
               constraint::ConfigStatus::ERROR);
-    EXPECT_NE(error.find("hirshfeld"), std::string::npos);
+    EXPECT_NE(error.find("target"), std::string::npos);
+    const std::string json = R"({"targets": [0.1]})";
+    EXPECT_EQ(constraint::configure_constraint(cfg, true, "charge", "hirshfeld",
+                                               "delta", json, 5.0, 1e-4, 3, 1,
+                                               error),
+              constraint::ConfigStatus::OK) << error;
+    EXPECT_EQ(cfg.weight_type, "hirshfeld");
+    EXPECT_EQ(constraint::configure_constraint(cfg, true, "charge", "unknown",
+                                               "delta", json, 5.0, 1e-4, 3, 1,
+                                               error),
+              constraint::ConfigStatus::ERROR);
     // wrong type.
     EXPECT_EQ(constraint::configure_constraint(cfg, true, "magnet", "becke",
                                                "delta", "{}", 5.0, 1e-4, 3, 1,

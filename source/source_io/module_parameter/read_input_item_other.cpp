@@ -1521,7 +1521,7 @@ Manual override is allowed: if sc_acceleration_mode is explicitly set, it takes 
         item.annotation = "partition weight recipe";
         item.category = "Constraint";
         item.type = "String";
-        item.description = "Weight recipe for the real-space partition. Phase 1 supports only becke (heteronuclear size-adjusted Becke partition).";
+        item.description = "Weight recipe for the real-space partition: becke (heteronuclear size-adjusted Becke) or hirshfeld (periodic promolecule-density ratio with a C2 window and an explicit remainder channel).";
         item.default_value = "becke";
         item.unit = "";
         item.availability = "constraint is true";

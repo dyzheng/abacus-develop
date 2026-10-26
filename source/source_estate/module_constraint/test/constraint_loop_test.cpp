@@ -394,6 +394,23 @@ TEST_F(ConstraintLoopTest, ReferenceThenConstrained)
     EXPECT_EQ(loop.outer_steps(), 1);
 }
 
+// S5.2: the configured weight recipe must reach the loop's shared WeightGrid,
+// so observation, injection and force all use the same periodic Hirshfeld
+// partition rather than silently falling back to Becke.
+TEST_F(ConstraintLoopTest, HirshfeldWeightTypeReachesLoop)
+{
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    constraint::ConstraintConfig cfg = make_cfg(0.1);
+    cfg.weight_type = "hirshfeld_periodic";
+    loop.init(*ucell, rhopw, cfg, radii, 10.0, 0);
+
+    ASSERT_TRUE(loop.enabled());
+    const constraint::WeightGrid& g = loop.weight_grid();
+    EXPECT_TRUE(g.is_hirshfeld());
+    EXPECT_LT(g.max_partition_deviation(), 1e-10);
+    EXPECT_GT(g.max_remainder_weight(), 0.99);
+}
+
 TEST_F(ConstraintLoopTest, ConvergesOnLinearResponse)
 {
     constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();

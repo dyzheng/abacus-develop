@@ -11,6 +11,67 @@
 
 namespace constraint
 {
+namespace
+{
+
+// C2 smootherstep on [0,1] with zero first and second derivatives at both
+// ends.  It is used for the finite Hirshfeld image window and for the smooth
+// hand-over to the explicit remainder channel.
+double smoothstep5(const double x, double* deriv)
+{
+    // Branch: clamp outside the transition interval so the window is exactly
+    // constant in the fully covered and fully empty regions.
+    if (x <= 0.0)
+    {
+        if (deriv != nullptr)
+        {
+            *deriv = 0.0;
+        }
+        return 0.0;
+    }
+    if (x >= 1.0)
+    {
+        if (deriv != nullptr)
+        {
+            *deriv = 0.0;
+        }
+        return 1.0;
+    }
+    const double x2 = x * x;
+    const double x3 = x2 * x;
+    if (deriv != nullptr)
+    {
+        *deriv = 30.0 * x2 * (1.0 - x) * (1.0 - x);
+    }
+    return x3 * (10.0 + x * (-15.0 + 6.0 * x));
+}
+
+// Invert a row-major 3x3 matrix.  The Hirshfeld image bounds need the
+// reciprocal lattice vectors; a singular cell has no periodic image list.
+bool invert3(const double a[9], double inv[9])
+{
+    const double det = a[0] * (a[4] * a[8] - a[5] * a[7])
+                       - a[1] * (a[3] * a[8] - a[5] * a[6])
+                       + a[2] * (a[3] * a[7] - a[4] * a[6]);
+    // Branch: a singular lattice cannot define reciprocal bounds.
+    if (std::abs(det) < 1e-30)
+    {
+        return false;
+    }
+    const double id = 1.0 / det;
+    inv[0] = (a[4] * a[8] - a[5] * a[7]) * id;
+    inv[1] = (a[2] * a[7] - a[1] * a[8]) * id;
+    inv[2] = (a[1] * a[5] - a[2] * a[4]) * id;
+    inv[3] = (a[5] * a[6] - a[3] * a[8]) * id;
+    inv[4] = (a[0] * a[8] - a[2] * a[6]) * id;
+    inv[5] = (a[2] * a[3] - a[0] * a[5]) * id;
+    inv[6] = (a[3] * a[7] - a[4] * a[6]) * id;
+    inv[7] = (a[1] * a[6] - a[0] * a[7]) * id;
+    inv[8] = (a[0] * a[4] - a[1] * a[3]) * id;
+    return true;
+}
+
+} // namespace
 
 WeightGrid::WeightGrid(const UnitCell& ucell,
                        const ModulePW::PW_Basis* rho_basis,
@@ -44,6 +105,222 @@ WeightGrid::WeightGrid(const UnitCell& ucell,
         for (int iat = 0; iat < nat_; ++iat)
         {
             constraint_atoms_[iat] = {iat};
+        }
+    }
+}
+
+void WeightGrid::prepare_hirshfeld_geometry()
+{
+    hirshfeld_atom_frac_ = atom_fractional_positions();
+    hirshfeld_sigma_.assign(nat_, 0.0);
+    hirshfeld_cutoff_.assign(nat_, 0.0);
+    hirshfeld_charge_.assign(nat_, 0.0);
+
+    double max_cutoff = 0.0;
+    int iat = 0;
+    for (int it = 0; it < ucell_.ntype; ++it)
+    {
+        for (int ia = 0; ia < ucell_.atoms[it].na; ++ia)
+        {
+            // The partition radius supplies the reference-density width.  A
+            // floor avoids a zero-width Gaussian for malformed radius input.
+            const double sigma = std::max(radii_[iat], 0.25);
+            hirshfeld_sigma_[iat] = sigma;
+            // Branch A: the common screening radius doubles as a user cutoff
+            // for every atom species.
+            if (screening_radius_ > 0.0)
+            {
+                hirshfeld_cutoff_[iat] = screening_radius_;
+            }
+            // Branch B: default cutoff is three Gaussian widths per atom.
+            else
+            {
+                hirshfeld_cutoff_[iat] = 3.0 * sigma;
+            }
+            // The pseudo/atomic charge only weights the relative promolecule
+            // density; a missing zv falls back to one positive unit.
+            hirshfeld_charge_[iat] = std::max(ucell_.atoms[it].ncpp.zv, 1.0);
+            max_cutoff = std::max(max_cutoff, hirshfeld_cutoff_[iat]);
+            ++iat;
+        }
+    }
+
+    // Image bounds from the reciprocal lattice: for any translation L,
+    // n_i = (L.b_i)/(2 pi), so |n_i| is bounded by
+    // (cell span + cutoff) |b_i|/(2 pi).  The extra layer is harmless and
+    // makes the sum safe for skewed cells.
+    double a[9] = {ucell_.latvec.e11, ucell_.latvec.e12,
+                   ucell_.latvec.e13, ucell_.latvec.e21,
+                   ucell_.latvec.e22, ucell_.latvec.e23,
+                   ucell_.latvec.e31, ucell_.latvec.e32,
+                   ucell_.latvec.e33};
+    for (double& value : a)
+    {
+        value *= ucell_.lat0;
+    }
+    double inv[9];
+    int nbound[3] = {1, 1, 1};
+    double cell_span = 0.0;
+    // Branch: a valid cell gives reciprocal-derived image bounds; a singular
+    // cell can only use the nearest image plus a small safety shell.
+    if (invert3(a, inv))
+    {
+        const double twopi = 2.0 * std::acos(-1.0);
+        for (int i = 0; i < 8; ++i)
+        {
+            const int sx = (i & 1) ? 1 : 0;
+            const int sy = (i & 2) ? 1 : 0;
+            const int sz = (i & 4) ? 1 : 0;
+            const double x = sx * a[0] + sy * a[3] + sz * a[6];
+            const double y = sx * a[1] + sy * a[4] + sz * a[7];
+            const double z = sx * a[2] + sy * a[5] + sz * a[8];
+            cell_span = std::max(cell_span, std::sqrt(x * x + y * y + z * z));
+        }
+        for (int i = 0; i < 3; ++i)
+        {
+            // B = 2 pi (A^{-1})^T, hence row i of B is column i of inv.
+            const double bx = inv[i];
+            const double by = inv[3 + i];
+            const double bz = inv[6 + i];
+            const double bnorm = std::sqrt(bx * bx + by * by + bz * bz);
+            nbound[i] = static_cast<int>(
+                            std::ceil((2.0 * cell_span + max_cutoff)
+                                      * bnorm / twopi))
+                        + 2;
+        }
+    }
+
+    hirshfeld_images_.clear();
+    for (int n1 = -nbound[0]; n1 <= nbound[0]; ++n1)
+    {
+        for (int n2 = -nbound[1]; n2 <= nbound[1]; ++n2)
+        {
+            for (int n3 = -nbound[2]; n3 <= nbound[2]; ++n3)
+            {
+                const double x = n1 * a[0] + n2 * a[3] + n3 * a[6];
+                const double y = n1 * a[1] + n2 * a[4] + n3 * a[7];
+                const double z = n1 * a[2] + n2 * a[5] + n3 * a[8];
+                // Keep the translation table across all atomic cutoffs.
+                if (std::sqrt(x * x + y * y + z * z)
+                    <= 2.0 * cell_span + max_cutoff + 1e-12)
+                {
+                    hirshfeld_images_.push_back(
+                        ModuleBase::Vector3<double>(x, y, z));
+                }
+            }
+        }
+    }
+}
+
+double WeightGrid::hirshfeld_atom_density(
+    const int iat,
+    const ModuleBase::Vector3<double>& rfrac,
+    ModuleBase::Vector3<double>* grad) const
+{
+    const ModuleBase::Vector3<double> rcart
+        = rfrac * ucell_.latvec * ucell_.lat0;
+    const ModuleBase::Vector3<double> ratom
+        = hirshfeld_atom_frac_[iat] * ucell_.latvec * ucell_.lat0;
+    const double alpha = 1.0 / (2.0 * hirshfeld_sigma_[iat]
+                               * hirshfeld_sigma_[iat]);
+    const double rc = hirshfeld_cutoff_[iat];
+    const double r0 = 0.5 * rc;
+    const double width = rc - r0;
+
+    double q = 0.0;
+    // Branch: the caller requested the position derivative cache.
+    if (grad != nullptr)
+    {
+        grad->x = 0.0;
+        grad->y = 0.0;
+        grad->z = 0.0;
+    }
+    for (const ModuleBase::Vector3<double>& image : hirshfeld_images_)
+    {
+        const ModuleBase::Vector3<double> d
+            = rcart - ratom - image;
+        const double r2 = d.norm2();
+        // Branch: this periodic image lies outside the compact window.
+        if (r2 >= rc * rc)
+        {
+            continue;
+        }
+        const double r = std::sqrt(r2);
+        double ds = 0.0;
+        // Window = 1 - smootherstep((r-r0)/(rc-r0)); its sign is chosen so
+        // the density is exactly one inside r0 and exactly zero at rc.
+        const double step = smoothstep5((r - r0) / width, &ds);
+        const double window = 1.0 - step;
+        const double dwindow_dr = -ds / width;
+        const double g = std::exp(-alpha * r2);
+        q += hirshfeld_charge_[iat] * g * window;
+        // Branch: derivative accumulation is requested and the image is not
+        // coincident with the grid point (the vector derivative vanishes at
+        // r=0 by symmetry).
+        if (grad != nullptr && r > 1e-14)
+        {
+            const double radial = g * (2.0 * alpha * window
+                                       - dwindow_dr / r);
+            grad->x += hirshfeld_charge_[iat] * radial * d.x;
+            grad->y += hirshfeld_charge_[iat] * radial * d.y;
+            grad->z += hirshfeld_charge_[iat] * radial * d.z;
+        }
+    }
+    return q;
+}
+
+void WeightGrid::build_hirshfeld()
+{
+    prepare_hirshfeld_geometry();
+    w_.assign(nat_, std::vector<double>(nrxx_, 0.0));
+    rem_.assign(nrxx_, 0.0);
+
+    double local_maxdev = 0.0;
+    double local_maxrem = 0.0;
+    std::vector<double> q(nat_, 0.0);
+    for (int ir = 0; ir < nrxx_; ++ir)
+    {
+        double denom = 0.0;
+        for (int iat = 0; iat < nat_; ++iat)
+        {
+            q[iat] = hirshfeld_atom_density(iat, grid_fraction(ir), nullptr);
+            denom += q[iat];
+        }
+        // Explicit remainder: q_rem/qfloor = 1 - smootherstep(denom/qfloor).
+        // It is one in vacuum and exactly zero once the atomic promolecule
+        // density reaches the floor, so covered regions keep an atom-only
+        // partition of unity.
+        const double t = denom / hirshfeld_qfloor_;
+        const double rem_fraction = 1.0 - smoothstep5(t, nullptr);
+        const double qrem = hirshfeld_qfloor_ * rem_fraction;
+        const double total = denom + qrem;
+        for (int iat = 0; iat < nat_; ++iat)
+        {
+            w_[iat][ir] = q[iat] / total;
+        }
+        rem_[ir] = qrem / total;
+        local_maxrem = std::max(local_maxrem, rem_[ir]);
+        local_maxdev = std::max(local_maxdev,
+                                std::abs(denom / total + rem_[ir] - 1.0));
+    }
+
+    max_rem_ = local_maxrem;
+    maxdev_ = local_maxdev;
+#ifdef __MPI
+    Parallel_Reduce::reduce_max_pool(rho_basis_->poolnproc, max_rem_);
+    Parallel_Reduce::reduce_max_pool(rho_basis_->poolnproc, maxdev_);
+#endif
+
+    // Derive fragment-constraint weights exactly as in the Becke backend.
+    cw_.assign(constraint_atoms_.size(), std::vector<double>(nrxx_, 0.0));
+    for (size_t alpha = 0; alpha < constraint_atoms_.size(); ++alpha)
+    {
+        for (const int iat : constraint_atoms_[alpha])
+        {
+            for (int ir = 0; ir < nrxx_; ++ir)
+            {
+                cw_[alpha][ir] += w_[iat][ir];
+            }
         }
     }
 }
@@ -124,6 +401,13 @@ void WeightGrid::build()
     if (is_dipole())
     {
         build_dipole();
+        return;
+    }
+    // Branch: periodic Hirshfeld has its own promolecule-density source and
+    // an explicit remainder channel; it must not enter the Becke kernel.
+    if (is_hirshfeld())
+    {
+        build_hirshfeld();
         return;
     }
     // Per-atom fractional (direct) coordinates.
@@ -218,6 +502,88 @@ void WeightGrid::build()
     }
 }
 
+void WeightGrid::build_hirshfeld_derivatives()
+{
+    prepare_hirshfeld_geometry();
+    wat_deriv_.assign(nat_, std::vector<double>(nat_ * 3 * nrxx_, 0.0));
+    drem_.assign(nat_ * 3 * nrxx_, 0.0);
+    // The Hirshfeld strain derivative is not part of S5.2.  Clear the cache so
+    // the stress caller cannot mistake an absent derivative for a zero one.
+    dwe_.clear();
+
+    std::vector<double> q(nat_, 0.0);
+    std::vector<ModuleBase::Vector3<double>> dq(nat_);
+    for (int ir = 0; ir < nrxx_; ++ir)
+    {
+        const ModuleBase::Vector3<double> rfrac = grid_fraction(ir);
+        double denom = 0.0;
+        for (int iat = 0; iat < nat_; ++iat)
+        {
+            q[iat] = hirshfeld_atom_density(iat, rfrac, &dq[iat]);
+            denom += q[iat];
+        }
+
+        const double t = denom / hirshfeld_qfloor_;
+        double dstep = 0.0;
+        const double rem_fraction = 1.0 - smoothstep5(t, &dstep);
+        const double qrem = hirshfeld_qfloor_ * rem_fraction;
+        // d q_rem / d denom = -smoothstep'(t); outside the transition this is
+        // exactly zero, so the remainder leaves the atom derivative intact.
+        const double dqrem_ddenom = -dstep;
+        const double total = denom + qrem;
+        const double inv_total = 1.0 / total;
+        const double inv_total2 = inv_total * inv_total;
+
+        for (int J = 0; J < nat_; ++J)
+        {
+            // Only atom J's own promolecule density responds directly to
+            // R_J; all other atoms respond through the shared denominator.
+            const ModuleBase::Vector3<double>& ddenom = dq[J];
+            const ModuleBase::Vector3<double> dD
+                = (1.0 + dqrem_ddenom) * ddenom;
+            for (int iat = 0; iat < nat_; ++iat)
+            {
+                ModuleBase::Vector3<double> dw(0.0, 0.0, 0.0);
+                // Branch: only atom J's own promolecule density responds
+                // directly to moving R_J; every atom still responds through
+                // the shared denominator.
+                if (iat == J)
+                {
+                    dw = dq[iat] * inv_total;
+                }
+                dw -= dD * (q[iat] * inv_total2);
+                for (int d = 0; d < 3; ++d)
+                {
+                    wat_deriv_[iat][(J * 3 + d) * nrxx_ + ir] = dw[d];
+                }
+            }
+            ModuleBase::Vector3<double> drem
+                = ddenom * (dqrem_ddenom * inv_total)
+                  - dD * (qrem * inv_total2);
+            for (int d = 0; d < 3; ++d)
+            {
+                drem_[(J * 3 + d) * nrxx_ + ir] = drem[d];
+            }
+        }
+    }
+
+    // Derive per-constraint derivative grids from the per-atom cache.
+    dw_.assign(constraint_atoms_.size(),
+               std::vector<double>(nat_ * 3 * nrxx_, 0.0));
+    for (size_t alpha = 0; alpha < constraint_atoms_.size(); ++alpha)
+    {
+        for (const int iat : constraint_atoms_[alpha])
+        {
+            const std::vector<double>& wd = wat_deriv_[iat];
+            std::vector<double>& dalpha = dw_[alpha];
+            for (size_t k = 0; k < dalpha.size(); ++k)
+            {
+                dalpha[k] += wd[k];
+            }
+        }
+    }
+}
+
 void WeightGrid::build_dipole()
 {
     cw_.assign(1, std::vector<double>(nrxx_, 0.0));
@@ -294,6 +660,13 @@ void WeightGrid::build_derivatives()
     {
         dw_.assign(1, std::vector<double>(nat_ * 3 * nrxx_, 0.0));
         dwe_.clear();
+        return;
+    }
+    // Branch: the periodic Hirshfeld backend has its own smooth quotient
+    // derivative; using the Becke minimum-image kernel here would be wrong.
+    if (is_hirshfeld())
+    {
+        build_hirshfeld_derivatives();
         return;
     }
     // Per-atom fractional (direct) coordinates — same geometry setup as

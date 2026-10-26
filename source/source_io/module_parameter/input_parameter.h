@@ -754,7 +754,7 @@ struct Input_para
     // ==============   #Parameters (26.real-space weight constraint) ======
     bool constraint = false;      ///< switch for real-space charge constraint
     std::string constraint_type = "charge";  ///< constraint type: charge (phase 1)
-    std::string constraint_weight_type = "becke";  ///< weight recipe: becke (phase 1)
+    std::string constraint_weight_type = "becke";  ///< weight recipe: becke | hirshfeld
     std::string constraint_target_file = "";  ///< JSON file with per-fragment targets
     std::string constraint_target_mode = "delta";  ///< "delta" or "absolute"
     double constraint_mu_max = 5.0;  ///< cap on |mu| in Ry

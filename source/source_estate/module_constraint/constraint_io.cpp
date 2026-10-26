@@ -1237,12 +1237,13 @@ ConfigStatus configure_constraint(ConstraintConfig& cfg,
     cfg.inner_thr = inner_thr;
     cfg.inner_nmax = inner_nmax;
 
-    // Guard: phase-1/2 recipes only.  A wrong recipe must abort loudly
+    // Guard: validated recipes only.  A wrong recipe must abort loudly
     // rather than silently run an unvalidated partition.
-    if (weight_type != "becke")
+    if (weight_type != "becke" && weight_type != "hirshfeld"
+        && weight_type != "hirshfeld_periodic")
     {
         error = "constraint_weight_type=\"" + weight_type
-                + "\" is not implemented in phase 1 (only \"becke\")";
+                + "\" is not implemented (use \"becke\" or \"hirshfeld\")";
         return ConfigStatus::ERROR;
     }
     if (target_mode != "delta" && target_mode != "absolute")
