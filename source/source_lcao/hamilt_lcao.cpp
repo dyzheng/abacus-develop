@@ -242,16 +242,14 @@ HamiltLCAO<TK, TR>::HamiltLCAO(const UnitCell& ucell,
         }
         if (PARAM.inp.constraint && PARAM.inp.constraint_alloc_switch)
         {
-            // Branch: the allocation operator is compiled only for the real
-            // Gamma-only HContainer; the esolver guard refuses every other
-            // LCAO combination before this constructor runs.
-            if constexpr (std::is_same<TR, double>::value)
-            {
-                Operator<TK>* alloc_op
-                    = new AllocConstraintLcaoOperator<TK, TR>(
-                        this->hsk, this->kv->kvec_d, this->hR);
-                this->getOperator()->add(alloc_op);
-            }
+            // Branch: real TR is the S3 collinear Gamma path; complex TR is
+            // the S4.3 single-Gamma non-collinear path.  The esolver guard
+            // refuses every other LCAO combination before this constructor
+            // runs, so both instantiations are safe to register here.
+            Operator<TK>* alloc_op
+                = new AllocConstraintLcaoOperator<TK, TR>(
+                    this->hsk, this->kv->kvec_d, this->hR);
+            this->getOperator()->add(alloc_op);
         }
     }
     // multi-k-points case to initialize HamiltLCAO, ops will be used
@@ -435,6 +433,17 @@ HamiltLCAO<TK, TR>::HamiltLCAO(const UnitCell& ucell,
             this->getOperator()->add(dp_op);
             this->dp_operator = dynamic_cast<DeltaPOperator<TK, TR>*>(dp_op);
             this->dp_operator->set_gdir(PARAM.inp.deltap_gdir);
+        }
+        if (PARAM.inp.constraint && PARAM.inp.constraint_alloc_switch)
+        {
+            // Branch: the non-collinear S4.3 allocation operator lives in
+            // the complex multi-k operator chain (nspin=4 uses TK=complex
+            // even for a single Gamma point).  Its kernels are R=0-only, so
+            // before_scf restricts this path to exactly one Gamma k-point.
+            Operator<TK>* alloc_op
+                = new AllocConstraintLcaoOperator<TK, TR>(
+                    this->hsk, this->kv->kvec_d, this->hR);
+            this->getOperator()->add(alloc_op);
         }
     }
 

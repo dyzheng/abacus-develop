@@ -37,6 +37,7 @@
 #include "source_estate/module_constraint/constraint_loop.h"
 #include "source_estate/module_constraint/alloc_lcao_report.h"
 #include "source_estate/module_constraint/alloc_constraint_lcao.h"
+#include "source_estate/module_constraint/alloc_spin_lcao.h"
 
 namespace ModuleESolver
 {
@@ -288,26 +289,91 @@ void ESolver_KS_LCAO<TK, TR>::before_scf(UnitCell& ucell, const int istep)
                 has_dipole = has_dipole
                              || spec.kind == constraint::ConstraintKind::Dipole;
             }
-            // Guard: the S3 kernel is assembled from the single Gamma-point
-            // S(R) block; a multi-k run has no equivalent dense contraction.
-            if (!PARAM.globalv.gamma_only_local)
+            // Branch A: collinear (nspin 1/2) uses the real Gamma-only
+            // kernels assembled from the single Gamma S(R) block.
+            if (PARAM.inp.nspin != 4)
             {
-                ModuleBase::WARNING_QUIT("ESolver_KS_LCAO::before_scf",
-                    "constraint_alloc_switch requires gamma_only = 1");
+                // Guard: a multi-k collinear run has no equivalent dense
+                // Gamma contraction.
+                if (!PARAM.globalv.gamma_only_local)
+                {
+                    ModuleBase::WARNING_QUIT("ESolver_KS_LCAO::before_scf",
+                        "constraint_alloc_switch requires gamma_only = 1 "
+                        "for nspin = 1 or 2");
+                }
+                // Guard: other spin representations have no scalar channel
+                // algebra.
+                if (PARAM.inp.nspin != 1 && PARAM.inp.nspin != 2)
+                {
+                    ModuleBase::WARNING_QUIT("ESolver_KS_LCAO::before_scf",
+                        "constraint_alloc_switch supports only nspin = 1, 2 "
+                        "or 4");
+                }
             }
-            // Guard: non-collinear/other spin representations need a
-            // different channel algebra than the implemented up/down maps.
-            if (PARAM.inp.nspin != 1 && PARAM.inp.nspin != 2)
+            // Branch B: non-collinear nspin=4 uses the spinor path.  The
+            // first closure is deliberately the single Gamma point with no
+            // SOC; multi-k and SOC need the full k-dependent K_i(k) backend
+            // and are refused rather than silently using the wrong block.
+            else
             {
-                ModuleBase::WARNING_QUIT("ESolver_KS_LCAO::before_scf",
-                    "constraint_alloc_switch supports only nspin = 1 or 2");
+                if (PARAM.inp.lspinorb)
+                {
+                    ModuleBase::WARNING_QUIT("ESolver_KS_LCAO::before_scf",
+                        "constraint_alloc_switch nspin = 4 currently "
+                        "supports no-SOC runs only");
+                }
+                if (this->kv.get_nks() != 1
+                    || this->kv.kvec_d[0].norm() > 1e-12)
+                {
+                    ModuleBase::WARNING_QUIT("ESolver_KS_LCAO::before_scf",
+                        "constraint_alloc_switch nspin = 4 currently "
+                        "supports a single Gamma k-point only");
+                }
+                // Branch: without noncolin ABACUS collapses nspin=4 to the
+                // z-magnetization channel (domag=false, domag_z=true), so an
+                // x/y constraint would inject a spinor kernel but receive no
+                // x/y exchange-correlation response.  Reject that silent
+                // asymmetry and keep z-only collinear runs available.
+                if (!PARAM.inp.noncolin)
+                {
+                    for (const constraint::ConstraintSpec& spec : specs)
+                    {
+                        // Branch: only spin constraints carry a transverse
+                        // multiplier or target.
+                        if (spec.kind != constraint::ConstraintKind::Spin)
+                        {
+                            continue;
+                        }
+                        const double target_x
+                            = spec.target_vector ? spec.target_vec.x : 0.0;
+                        const double target_y
+                            = spec.target_vector ? spec.target_vec.y : 0.0;
+                        const double mu_x = spec.fixed_mu_vector
+                                                ? spec.fixed_mu_vec.x
+                                                : 0.0;
+                        const double mu_y = spec.fixed_mu_vector
+                                                ? spec.fixed_mu_vec.y
+                                                : 0.0;
+                        // Branch: any transverse component needs the full
+                        // non-collinear density/potential channel.
+                        if (std::abs(target_x) + std::abs(target_y)
+                                + std::abs(mu_x) + std::abs(mu_y)
+                            > 1e-12)
+                        {
+                            ModuleBase::WARNING_QUIT(
+                                "ESolver_KS_LCAO::before_scf",
+                                "transverse spin allocation constraints require "
+                                "noncolin = 1 with nspin = 4");
+                        }
+                    }
+                }
             }
             // Guard: a spin allocation constraint has no magnetization
             // channel to observe when nspin is one.
-            if (has_spin && PARAM.inp.nspin != 2)
+            if (has_spin && PARAM.inp.nspin != 2 && PARAM.inp.nspin != 4)
             {
                 ModuleBase::WARNING_QUIT("ESolver_KS_LCAO::before_scf",
-                    "spin allocation constraints require nspin = 2");
+                    "spin allocation constraints require nspin = 2 or 4");
             }
             // Guard: dipole weights include an ionic-coordinate offset that
             // is not part of the target-space allocation operator.
@@ -1060,8 +1126,7 @@ void ESolver_KS_LCAO<TK, TR>::iter_finish(UnitCell& ucell, const int istep, int&
         // SCF iteration, after the overlap operator has populated S(R).
         if (cloop.allocation_mode())
         {
-            // Branch: the allocation adapter is real-valued and built from
-            // the real Gamma-only DMR containers.
+            // Branch A: collinear real Gamma-only allocation adapter.
             if constexpr (std::is_same<TR, double>::value)
             {
                 alloc::AllocConstraintLcao& astate
@@ -1118,11 +1183,62 @@ void ESolver_KS_LCAO<TK, TR>::iter_finish(UnitCell& ucell, const int istep, int&
                 cloop.observe_allocation(iter, n_alloc, m_alloc);
                 astate.set_mu_eff(cloop.mu_eff());
             }
-            else
+            // Branch B: non-collinear nspin=4 (complex spinor H/S storage,
+            // real Pauli DMR).  Only the single-Gamma fixed-vector closure
+            // reaches this branch; before_scf/config reject everything else.
+            else if constexpr (std::is_same<TR, std::complex<double>>::value)
             {
-                // Branch: complex TR storage has no real allocation trace.
-                ModuleBase::WARNING_QUIT("ESolver_KS_LCAO::iter_finish",
-                    "allocation constraints require real LCAO DMR storage");
+                // Guard: this compile-time complex branch is only valid for
+                // the non-collinear representation.
+                if (PARAM.inp.nspin != 4)
+                {
+                    ModuleBase::WARNING_QUIT(
+                        "ESolver_KS_LCAO::iter_finish",
+                        "complex allocation storage is only defined for "
+                        "nspin = 4");
+                }
+                alloc::AllocSpinConstraintLcao& astate
+                    = alloc::AllocSpinConstraintLcao::instance();
+                std::string alloc_error;
+                // Branch: first observed iteration builds the scalar target
+                // space, W_i and the spinor kernels from the current S(R).
+                if (!astate.active())
+                {
+                    const constraint::WeightGrid& wg = cloop.weight_grid();
+                    const std::vector<std::vector<double>>& cw
+                        = wg.constraint_weights();
+                    const std::vector<std::vector<int>>& atoms
+                        = wg.constraint_atoms();
+                    if (!astate.build(ucell, *hamilt_lcao->getSR(),
+                                      *hamilt_lcao->getHR(), cw, atoms,
+                                      cloop.kinds(), cloop.mu_vec(),
+                                      this->gint_info_.get(), &this->pv,
+                                      PARAM.inp.constraint_alloc_target_l,
+                                      1e-10, alloc_error))
+                    {
+                        ModuleBase::WARNING_QUIT(
+                            "ESolver_KS_LCAO::iter_finish", alloc_error);
+                    }
+                }
+                else if (!astate.set_lambda(cloop.mu_vec(), alloc_error))
+                {
+                    ModuleBase::WARNING_QUIT(
+                        "ESolver_KS_LCAO::iter_finish", alloc_error);
+                }
+                std::vector<const hamilt::HContainer<double>*> dmr_channels;
+                for (auto* dmr : this->dmat.dm->get_DMR_vector())
+                {
+                    dmr_channels.push_back(dmr);
+                }
+                std::vector<double> n_alloc;
+                std::vector<ModuleBase::Vector3<double>> m_alloc;
+                if (!astate.project(ucell, dmr_channels, n_alloc, m_alloc,
+                                    alloc_error))
+                {
+                    ModuleBase::WARNING_QUIT(
+                        "ESolver_KS_LCAO::iter_finish", alloc_error);
+                }
+                cloop.observe_allocation_spin(iter, n_alloc, m_alloc);
             }
         }
         else

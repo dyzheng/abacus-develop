@@ -846,12 +846,15 @@ TEST(AllocObserveTest, EmptyTargetSetEqualsBecke)
 - [x] 稠密测试：无 SOC 模型整体旋转 `|ΔE|=0 <1e-6 Ry`；三分量协同变换；
       伴随力 FD 差 `2.395e-9 <2e-7`。详见
       `docs/superpowers/specs/2026-10-26-s4-noncollinear-test.md`。
-- [ ] 生产接线：LCAO `nspin=4` 的 target/kernel 构建、spinor 注入、
-      DMK/DMR 读数、向量 multiplier 调度与审计尚未实现；输入层目前还禁止
-      `nspin=4 + gamma_only`，且 allocation build 仅接受 Gamma-only 实
-      `HContainer`。
-- [ ] 验收：SCF 级无 SOC 旋转不变性 + 位置 FD 力。完成生产接线后再勾选；
-      本轮 dense algebra 通过不能替代该闸门。
+- [x] 生产接线（固定向量部分）：LCAO `nspin=4` 单 Γ 点、无 SOC 的
+      target/kernel 构建、spinor 注入、Pauli DMR 读数与向量审计已实现。
+      输入层要求 `constraint_alloc_switch=1`、所有约束 `fixed_mu`；横向
+      x/y 分量要求 `noncolin=1`，多 k、SOC 和自适应向量 multiplier 仍显式
+      拒绝。详见 `docs/superpowers/specs/2026-10-26-s4-noncollinear-production.md`。
+- [ ] 验收：SCF 级无 SOC 旋转不变性 + 位置 FD 力。固定 μ 的 z/x 旋转能量差
+      已测为 `1.3e-9 Ry < 1e-6 Ry`，MPI 1/2 逐迭代一致；但 x 方向在
+      `scf_thr=1e-8` 下存在密度混合极限环，且 complex `TR` 位置力尚未接线，
+      因此保留本项未勾选。
 
 **S4 验收**：上述三条全过；写 dated 测试文档。
 

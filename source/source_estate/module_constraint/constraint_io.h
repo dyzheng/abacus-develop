@@ -171,12 +171,21 @@ struct ConstraintSpec
     ChannelProfile chan;    // == build_channel_profile(kind) (factory only)
     double target = 0.0;    // delta/absolute semantics set by the run-level
                             // target_mode (A0 D1: target_mode stays run-level)
+    // Non-collinear spin targets are vectors.  The scalar `target` above is
+    // kept as the z-component (and as the legacy mirror for collinear runs)
+    // so every pre-existing scalar consumer stays valid.
+    ModuleBase::Vector3<double> target_vec{0.0, 0.0, 0.0};
+    bool target_vector = false; // true when the file supplied a 3-vector
     double mu_max = 5.0;    // per-constraint cap; omitted -> run-level cap
     // M2 C4 (fixed-mu productization): "fixed_mu" in a v2 file pins this
     // component; the outer loop does not run.  The field is all-or-none
     // across the list (configure guard), so mixed dynamics can not happen.
     bool fixed_mu = false;
     double fixed_mu_value = 0.0; // Ry
+    // Non-collinear fixed multipliers are three-vectors.  fixed_mu_value is
+    // the z-component mirror, exactly as for target above.
+    ModuleBase::Vector3<double> fixed_mu_vec{0.0, 0.0, 0.0};
+    bool fixed_mu_vector = false; // true when the file supplied a 3-vector
     // Module B (M5): dipole-coordinate frame.  Only meaningful for
     // kind == Dipole.  The target is in e*Bohr after configure_from_inputs
     // has resolved an optional unit="V" through the cell area.

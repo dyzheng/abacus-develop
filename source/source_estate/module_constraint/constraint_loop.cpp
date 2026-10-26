@@ -79,6 +79,7 @@ void ConstraintLoop::reset()
     wg_.reset();
     mu_solver_.reset();
     mu_.clear();
+    mu_vec_.clear();
     alm_ = AlmController();
     alm_mode_ = false;
     alm_armed_ = false;
@@ -90,8 +91,11 @@ void ConstraintLoop::reset()
     mu_eff_.clear();
     drho_trend_.clear();
     Q_.clear();
+    Q_vec_.clear();
     Q_ref_.clear();
     targets_.clear();
+    target_vec_.clear();
+    spin_vector_mode_ = false;
     nelec_ = 0.0;
     fixed_mu_ = false;
     json_fixed_source_ = false;
@@ -222,6 +226,26 @@ void ConstraintLoop::init(const UnitCell& ucell,
     specs_ = specs;
     nelec_ = nelec;
     allocation_mode_ = cfg_.allocation_mode;
+    // S4.3: warm-start state is only defined for the scalar caches, but keep
+    // the vector workspaces sized so the audit helpers never index stale
+    // containers after a geometry rebuild.
+    spin_vector_mode_ = (PARAM.inp.nspin == 4);
+    if (mu_vec_.size() != mu_.size())
+    {
+        mu_vec_.assign(mu_.size(), ModuleBase::Vector3<double>(0.0, 0.0, 0.0));
+    }
+    if (target_vec_.size() != specs_.size())
+    {
+        target_vec_.assign(specs_.size(),
+                           ModuleBase::Vector3<double>(0.0, 0.0, 0.0));
+    }
+    for (size_t a = 0; a < specs_.size(); ++a)
+    {
+        target_vec_[a] = specs_[a].target_vector
+                             ? specs_[a].target_vec
+                             : ModuleBase::Vector3<double>(0.0, 0.0,
+                                                           specs_[a].target);
+    }
     // Dual-iteration schedule (plan 2026-09-11-dual-iteration-strategy.md):
     // the config switch is mirrored into live state.  inner_active_ is what
     // on_iteration() gates on, so a degrade can switch the run back to OUTER
@@ -254,6 +278,20 @@ void ConstraintLoop::init(const UnitCell& ucell,
 
     // mu starts at zero: the first SCF is the unconstrained reference.
     mu_.assign(specs_.size(), 0.0);
+    // S4.3: mirror every component into the vector workspace.  Charge (and
+    // collinear spin) targets stay on the z axis, which is exactly the
+    // limit in which the vector path reduces to the historical scalar one.
+    spin_vector_mode_ = (PARAM.inp.nspin == 4);
+    mu_vec_.assign(specs_.size(), ModuleBase::Vector3<double>(0.0, 0.0, 0.0));
+    target_vec_.assign(specs_.size(),
+                       ModuleBase::Vector3<double>(0.0, 0.0, 0.0));
+    for (size_t a = 0; a < specs_.size(); ++a)
+    {
+        target_vec_[a] = specs_[a].target_vector
+                             ? specs_[a].target_vec
+                             : ModuleBase::Vector3<double>(0.0, 0.0,
+                                                           specs_[a].target);
+    }
     // M4 ALM: the controller lives in the same component space as mu.  The
     // default (non-alm) schedule keeps it unarmed, so mu_eff_ == mu_ and the
     // injection/force paths are bit-identical to the legacy behaviour.
@@ -311,6 +349,17 @@ void ConstraintLoop::init(const UnitCell& ucell,
         {
             mu_[a] = specs_[a].fixed_mu_value;
             targets_[a] = specs_[a].target;
+            // S4.3: keep the vector multiplier/target in sync with the
+            // scalar mirror so the non-collinear operator and audit read the
+            // exact fixed values supplied by the file.
+            mu_vec_[a] = specs_[a].fixed_mu_vector
+                             ? specs_[a].fixed_mu_vec
+                             : ModuleBase::Vector3<double>(0.0, 0.0,
+                                                           specs_[a].fixed_mu_value);
+            target_vec_[a] = specs_[a].target_vector
+                                 ? specs_[a].target_vec
+                                 : ModuleBase::Vector3<double>(0.0, 0.0,
+                                                               specs_[a].target);
         }
         fixed_mu_ = true;
         json_fixed_source_ = true;
@@ -991,6 +1040,73 @@ void ConstraintLoop::observe_allocation(const int iter,
     }
     finish_observation();
     (void)iter;
+}
+
+void ConstraintLoop::observe_allocation_spin(
+    const int iter,
+    const std::vector<double>& n_alloc,
+    const std::vector<ModuleBase::Vector3<double>>& m_alloc)
+{
+    // Branch: a disabled loop has no target/multiplier bookkeeping.
+    if (!enabled())
+    {
+        return;
+    }
+    // Guard: every vector reading is one entry per constraint; a mismatch
+    // would pair a vector moment with the wrong fragment.
+    if (n_alloc.size() != mu_.size() || m_alloc.size() != mu_.size())
+    {
+        ModuleBase::WARNING_QUIT("ConstraintLoop::observe_allocation_spin",
+            "non-collinear allocation observable count does not match the "
+            "constraint list");
+    }
+    Q_.resize(mu_.size(), 0.0);
+    Q_vec_.assign(mu_.size(), ModuleBase::Vector3<double>(0.0, 0.0, 0.0));
+    for (size_t a = 0; a < Q_.size(); ++a)
+    {
+        // Branch: charge constraints read their scalar allocation charge;
+        // spin constraints read the full three-vector moment.
+        if (kinds_[a] == ConstraintKind::Charge)
+        {
+            Q_[a] = n_alloc[a];
+            Q_vec_[a] = ModuleBase::Vector3<double>(n_alloc[a], 0.0, 0.0);
+        }
+        else if (kinds_[a] == ConstraintKind::Spin)
+        {
+            Q_vec_[a] = m_alloc[a];
+            // Scalar bookkeeping mirror: the vector norm is the only scalar
+            // that preserves the "distance from zero" meaning for a moment.
+            Q_[a] = m_alloc[a].norm();
+        }
+        else
+        {
+            ModuleBase::WARNING_QUIT(
+                "ConstraintLoop::observe_allocation_spin",
+                "dipole constraints cannot use the non-collinear allocation "
+                "observable");
+        }
+    }
+    finish_observation();
+    // Non-collinear audit: keep every component explicit so the fixed-vector
+    // closure can be verified against the injected operator without parsing
+    // the scalar mirror.
+    if (GlobalV::MY_RANK == 0)
+    {
+        GlobalV::ofs_running
+            << "\n[constraint] allocation-spin observation after SCF "
+               "iteration " << iter << "\n";
+        for (size_t a = 0; a < Q_vec_.size(); ++a)
+        {
+            GlobalV::ofs_running
+                << "  c[" << a << "] kind="
+                << (kinds_[a] == ConstraintKind::Spin ? "spin" : "charge")
+                << " q=(" << Q_vec_[a].x << ", " << Q_vec_[a].y << ", "
+                << Q_vec_[a].z << ") target=(" << target_vec_[a].x << ", "
+                << target_vec_[a].y << ", " << target_vec_[a].z
+                << ") lambda=(" << mu_vec_[a].x << ", " << mu_vec_[a].y
+                << ", " << mu_vec_[a].z << ")\n";
+        }
+    }
 }
 
 void ConstraintLoop::finish_observation()
@@ -1978,6 +2094,28 @@ void ConstraintLoop::print_audit_line(const int iter, const int step,
     // Becke-weighted q (II-1b instrument).
     audit_ = ConstraintAccounting::audit(*wg_, mu_, Q_, targets_, nelec_,
                                          kinds_, onsite_atom_);
+    // S4.3: the non-collinear constraint energy is the vector contraction
+    // sum_a lambda_a . (q_a - t_a).  Charge entries reduce to the historical
+    // scalar product because their vector mirrors live on the z axis.
+    if (spin_vector_mode_ && Q_vec_.size() == mu_vec_.size()
+        && target_vec_.size() == mu_vec_.size())
+    {
+        double e_con = 0.0;
+        for (size_t a = 0; a < mu_vec_.size(); ++a)
+        {
+            // Branch: spin components carry the full vector; a charge entry
+            // keeps the scalar accounting formula.
+            if (kinds_[a] == ConstraintKind::Spin)
+            {
+                e_con += mu_vec_[a] * (Q_vec_[a] - target_vec_[a]);
+            }
+            else
+            {
+                e_con += mu_[a] * (Q_[a] - targets_[a]);
+            }
+        }
+        audit_.e_con = e_con;
+    }
     // M4 ALM: the energy correction carries the penalty term
     // sum_a (k_a/2)(Q_a - t_a)^2 on top of the accounting's sum_a mu(Q-t);
     // the branch guard (G2) consumes the same helper, never its own formula.

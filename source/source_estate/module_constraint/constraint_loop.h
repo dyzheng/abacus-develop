@@ -110,6 +110,17 @@ class ConstraintLoop
                             const std::vector<double>& n_alloc,
                             const std::vector<double>& m_alloc);
 
+    // S4.3 non-collinear allocation observation.  Spin components arrive as
+    // one three-vector per constraint; charge components keep using the
+    // scalar n_alloc entry.  Fixed-vector mode is the currently supported
+    // production closure (adaptive vector scheduling is refused at config
+    // time), so this updates the audit/accounting state without advancing a
+    // scalar secant step.
+    void observe_allocation_spin(
+        const int iter,
+        const std::vector<double>& n_alloc,
+        const std::vector<ModuleBase::Vector3<double>>& m_alloc);
+
     // SCF-convergence bookkeeping.  May override conv_esolver to false so
     // the SCF continues with the updated mu; leaves it true when the outer
     // loop is done (CONVERGED / UNREACHABLE / BRANCH_FLIP) or inactive.
@@ -243,8 +254,21 @@ class ConstraintLoop
     int settle_failures() const { return settle_fail_; }
     double mu_norm() const;
     const std::vector<double>& mu() const { return mu_; }
+    const std::vector<ModuleBase::Vector3<double>>& mu_vec() const
+    {
+        return mu_vec_;
+    }
     const std::vector<double>& targets() const { return targets_; }
+    const std::vector<ModuleBase::Vector3<double>>& target_vec() const
+    {
+        return target_vec_;
+    }
     const std::vector<double>& charges() const { return Q_; }
+    const std::vector<ConstraintKind>& kinds() const { return kinds_; }
+    const std::vector<ModuleBase::Vector3<double>>& charge_vec() const
+    {
+        return Q_vec_;
+    }
     // ---- M4 ALM schedule (module D) ---------------------------------------
     // mu_eff is the multiplier the injector/force actually apply:
     // mu_a + k_a(Q_a - t_a) when the ALM is armed, else plain mu (probe or
@@ -323,6 +347,9 @@ class ConstraintLoop
     std::unique_ptr<WeightGrid> wg_;
     MuSolver mu_solver_;
     std::vector<double> mu_;
+    // S4.3: non-collinear spin constraints carry a three-vector multiplier
+    // and observable.  Charge entries keep their vector mirror at zero.
+    std::vector<ModuleBase::Vector3<double>> mu_vec_;
     // M4 ALM state.
     AlmController alm_;
     bool alm_mode_ = false;          // cfg_.mu_schedule == "alm"
@@ -351,8 +378,11 @@ class ConstraintLoop
     std::vector<double> mu_eff_;     // injector / force multiplier
     std::vector<double> drho_trend_; // last drho values for the dampen guard
     std::vector<double> Q_;
+    std::vector<ModuleBase::Vector3<double>> Q_vec_;
     std::vector<double> Q_ref_;
     std::vector<double> targets_;
+    std::vector<ModuleBase::Vector3<double>> target_vec_;
+    bool spin_vector_mode_ = false;
     double nelec_ = 0.0;
     LoopPhase phase_ = LoopPhase::IDLE;
     MuStatus status_ = MuStatus::RUNNING;

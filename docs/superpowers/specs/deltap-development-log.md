@@ -5847,3 +5847,55 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
      multiplier 的外部循环。
   3. 生产接线完成前保持 `constraint_alloc_switch` 对 `nspin=4` 的显式拒绝，
      避免静默走空算符。
+
+## 2026-10-26 (S4.3 production): LCAO 非共线固定向量分配闭环
+
+- **完成内容**：
+  1. 新增 `alloc_spin_lcao.{h,cpp}`：从 spinor `S(R)` 提取标量 overlap，
+     用 Gint 标量权重构建 `W_i/K_i`，再展开为
+     `K_i tensor (lambda_i.sigma)` 或 `K_i tensor I` 的 complex kernel。
+  2. `AllocSpinConstraintLcao` 从 `nspin=4` Pauli DMR 读取
+     `rho0/rho_x/rho_y/rho_z`，复用 `observe_alloc_spin_moments()` 得到
+     三分量约束观测量；Pauli 槽位与 kernel 局部映射全部改用
+     `get_indexes_row/col`，支持 2D block-cyclic 的非零 spinor 起始偏移。
+  3. `ConstraintLoop` 增加向量 multiplier/target/observable 工作区，
+     非共线审计能量为 `sum_i lambda_i.(q_i-t_i)`；固定向量模式不做自适应
+     外循环，config 层继续拒绝自适应向量调度。
+  4. `AllocConstraintLcaoOperator<complex,complex>` 和 `HamiltLCAO` 的
+     complex 算子链接 allocation kernel；`before_scf` 要求
+     `nspin=4` 单 Γ、无 SOC、所有约束 `fixed_mu`。未设 `noncolin=1` 时只允许
+     z 分量，横向 x/y 约束显式拒绝，避免注入横向核但关闭 x/y 势通道。
+- **验证**：
+  - 构建 `MODULE_ESTATE_constraint_alloc_spin abacus_basic_para` PASS；
+    `ctest -R constraint` 19/19 PASS（82.73 s）。
+  - H2O、`nspin=4`、`noncolin=1`、单 Γ、`fixed_mu=0.1`、
+    `scf_thr=1e-8`、MPI 2 进程：z 方向 38 步 CONVERGED，
+    `q_z=-0.1799185831`，`e_con=-0.06799185831 Ry`，
+    `E_KohnSham=-34.2888147117 Ry`，`FINAL_ETOT=-467.448334436218 eV`。
+  - x 方向同一构型：`q_x=-0.179919`，`E_KohnSham=-34.2888147104 Ry`，
+    z/x 差 `1.3e-9 Ry <1e-6 Ry`。x 在 100 步内密度残差约 `4e-6`，
+    出现混合极限环，故未标记 SCF CONVERGED。
+  - MPI 1/2 的 10 步成对运行逐迭代 `E_KohnSham` 最大差 `1e-10 Ry`，
+    `q` 完全相同；布局映射修复有效。
+  - 早期 x/z 约 `0.093 eV` 差异归因于遗漏 `noncolin=1`：默认
+    `domag_z=true` 关闭 x/y 势响应；补上后旋转能量闭合。
+- **Bug/fix list**：
+  1. Pauli DMR 和 kernel 旧实现把本地矩阵索引直接除以 2，假设块从
+     spinor 0 对齐；改为通过 `Parallel_Orbitals` 的全局索引映射。
+  2. `nspin=4, noncolin=0` 下横向约束会静默丢失 x/y 势响应；增加
+     before_scf 守卫。
+  3. z/x 早期冒烟使用错误输入组合；本轮把输入 `noncolin=1` 作为非共线
+     旋转测试的强制设置并记录。
+- **文件**：
+  `source_estate/module_constraint/{alloc_spin_lcao.h,alloc_spin_lcao.cpp,
+  constraint_io.h,constraint_io.cpp,constraint_loop.h,constraint_loop.cpp}`、
+  `source_estate/CMakeLists.txt`、
+  `source_lcao/module_operator_lcao/alloc_constraint_lcao_operator.cpp`、
+  `source_lcao/hamilt_lcao.cpp`、`source_esolver/esolver_ks_lcao.cpp`、
+  `2026-10-26-s4-noncollinear-production.md`（新建）、执行方案、本日志。
+- **下一步**：
+  1. 接 complex `TR` 的 allocation 位置导数力，完成 S4.3 位置 FD 验收。
+  2. 增加 Pauli/kernel adapter 单元测试与 spin-off-diagonal overlap 测试。
+  3. 调整非共线磁密度混合，消除 x 取向的 SCF 密度极限环。
+  4. 自适应向量 multiplier/ALM 仍留给后续阶段；当前生产闭环只承诺固定
+     `fixed_mu`。

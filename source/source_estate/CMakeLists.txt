@@ -74,6 +74,7 @@ if(ENABLE_LCAO)
       module_constraint/constraint_inject_lcao.cpp
       module_constraint/alloc_lcao_report.cpp
       module_constraint/alloc_constraint_lcao.cpp
+      module_constraint/alloc_spin_lcao.cpp
   )
 endif()
 

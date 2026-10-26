@@ -70,6 +70,63 @@ bool parse_number(const std::string& s, size_t& pos, double& out)
     return true;
 }
 
+// Parse either a scalar number or a three-component JSON array.  A scalar is
+// mirrored onto the z component (the collinear limit of a spin vector), while
+// is_vector records which form the file actually supplied.
+bool parse_number_or_vector(const std::string& s,
+                            size_t& pos,
+                            ModuleBase::Vector3<double>& out,
+                            bool& is_vector)
+{
+    skip_ws(s, pos);
+    // Branch: a leading '[' selects the vector form; anything else must be a
+    // plain scalar so a malformed vector can not silently degrade to z-only.
+    if (pos < s.size() && s[pos] == '[')
+    {
+        ++pos;
+        double values[3] = {0.0, 0.0, 0.0};
+        for (int a = 0; a < 3; ++a)
+        {
+            skip_ws(s, pos);
+            // Guard: every component of the vector must be a valid number.
+            if (!parse_number(s, pos, values[a]))
+            {
+                return false;
+            }
+            skip_ws(s, pos);
+            // Branch: the first two components require a comma separator;
+            // the third requires the closing bracket.
+            if (a < 2)
+            {
+                if (pos >= s.size() || s[pos] != ',')
+                {
+                    return false;
+                }
+                ++pos;
+            }
+        }
+        skip_ws(s, pos);
+        // Guard: an unclosed vector would consume the following JSON fields.
+        if (pos >= s.size() || s[pos] != ']')
+        {
+            return false;
+        }
+        ++pos;
+        out = ModuleBase::Vector3<double>(values[0], values[1], values[2]);
+        is_vector = true;
+        return true;
+    }
+    double value = 0.0;
+    // Branch: scalar form -> collinear z-axis target/multiplier.
+    if (!parse_number(s, pos, value))
+    {
+        return false;
+    }
+    out = ModuleBase::Vector3<double>(0.0, 0.0, value);
+    is_vector = false;
+    return true;
+}
+
 // Parse an integer from position pos; advances pos past the number.
 bool parse_int(const std::string& s, size_t& pos, int& out)
 {
@@ -445,11 +502,15 @@ bool parse_constraint_object(const std::string& obj,
         return false;
     }
     spec.chan = build_channel_profile(spec.kind);
-    if (spec.kind == ConstraintKind::Spin && nspin != 2)
+    // Branch: collinear spin constraints use the two-channel density, while
+    // non-collinear runs carry a full spin vector.  Other spin counts have no
+    // spin channel at all and are refused.
+    if (spec.kind == ConstraintKind::Spin && nspin != 2 && nspin != 4)
     {
         error = "constraint c[" + std::to_string(index)
-                + "]: type=spin requires nspin=2 (the spin channel reads and "
-                  "injects the spin-difference density rho_up - rho_dn)";
+                + "]: type=spin requires nspin=2 or nspin=4 (the spin channel "
+                  "reads and injects a collinear difference or a non-collinear "
+                  "vector moment)";
         return false;
     }
 
@@ -470,12 +531,24 @@ bool parse_constraint_object(const std::string& obj,
     }
     ++pos;
     skip_ws(obj, pos);
-    if (!parse_number(obj, pos, spec.target))
+    if (!parse_number_or_vector(obj, pos, spec.target_vec,
+                                spec.target_vector))
     {
         error = "constraint c[" + std::to_string(index)
-                + "]: malformed number in \"target\"";
+                + "]: malformed number or [x,y,z] vector in \"target\"";
         return false;
     }
+    // Guard: only a non-collinear spin constraint can consume a vector
+    // target; keeping the scalar mirror avoids a silent reinterpretation in
+    // every pre-existing charge/collinear consumer.
+    if (spec.target_vector
+        && !(spec.kind == ConstraintKind::Spin && nspin == 4))
+    {
+        error = "constraint c[" + std::to_string(index)
+                + "]: vector \"target\" requires type=spin with nspin=4";
+        return false;
+    }
+    spec.target = spec.target_vec.z;
 
     // Branch B2: dipole-only frame fields.  They are parsed here, before the
     // atom-list branch, so a dipole can never silently acquire a fragment
@@ -742,12 +815,23 @@ bool parse_constraint_object(const std::string& obj,
         }
         ++pos;
         skip_ws(obj, pos);
-        if (!parse_number(obj, pos, spec.fixed_mu_value))
+        if (!parse_number_or_vector(obj, pos, spec.fixed_mu_vec,
+                                    spec.fixed_mu_vector))
         {
             error = "constraint c[" + std::to_string(index)
-                    + "]: malformed number in \"fixed_mu\"";
+                    + "]: malformed number or [x,y,z] vector in \"fixed_mu\"";
             return false;
         }
+        // Guard: vector multipliers are meaningful only for the
+        // non-collinear spin channel.
+        if (spec.fixed_mu_vector
+            && !(spec.kind == ConstraintKind::Spin && nspin == 4))
+        {
+            error = "constraint c[" + std::to_string(index)
+                    + "]: vector \"fixed_mu\" requires type=spin with nspin=4";
+            return false;
+        }
+        spec.fixed_mu_value = spec.fixed_mu_vec.z;
         spec.fixed_mu = true;
     }
 
@@ -937,10 +1021,14 @@ bool parse_v2_list(const std::string& content,
     // was never applied).
     for (const ConstraintSpec& s : specs)
     {
-        if (s.fixed_mu && std::abs(s.fixed_mu_value) > s.mu_max)
+        const double fixed_norm = s.fixed_mu_vector ? s.fixed_mu_vec.norm()
+                                                    : std::abs(s.fixed_mu_value);
+        // Branch: the per-component cap must bound the actual injected vector
+        // norm, not only its z mirror.
+        if (s.fixed_mu && fixed_norm > s.mu_max)
         {
             error = "constraint file: |fixed_mu| = "
-                    + std::to_string(std::abs(s.fixed_mu_value))
+                    + std::to_string(fixed_norm)
                     + " exceeds the component mu_max = "
                     + std::to_string(s.mu_max);
             return false;
@@ -1027,11 +1115,13 @@ bool parse_constraint_file(const std::string& content,
                       "channel)";
             return false;
         }
-        if (run_type == "spin" && nspin != 2)
+        // Branch: non-collinear runs accept the legacy scalar spin target as
+        // the z-component; v2 files can carry the full vector instead.
+        if (run_type == "spin" && nspin != 2 && nspin != 4)
         {
-            error = "constraint_type=spin requires nspin=2 (the spin channel "
-                    "reads and injects the spin-difference density rho_up - "
-                    "rho_dn)";
+            error = "constraint_type=spin requires nspin=2 or nspin=4 (the "
+                    "spin channel reads and injects a collinear difference or "
+                    "a non-collinear vector moment)";
             return false;
         }
         std::vector<ConstraintTarget> targets;
@@ -1049,6 +1139,8 @@ bool parse_constraint_file(const std::string& content,
             spec.chan = build_channel_profile(kind);
             spec.atoms = targets[i].atoms;
             spec.target = targets[i].value;
+            spec.target_vec = ModuleBase::Vector3<double>(0.0, 0.0,
+                                                          targets[i].value);
             spec.mu_max = run_mu_max;
             if (spec.atoms.empty())
             {
@@ -1255,11 +1347,13 @@ ConfigStatus configure_constraint(ConstraintConfig& cfg,
                       "\"spin\")";
             return ConfigStatus::ERROR;
         }
-        if (type == "spin" && nspin != 2)
+        // Branch: the legacy run-level type also allows nspin=4, where its
+        // scalar target denotes the z-component.
+        if (type == "spin" && nspin != 2 && nspin != 4)
         {
-            error = "constraint_type=spin requires nspin=2 (the spin channel "
-                    "reads and injects the spin-difference density rho_up - "
-                    "rho_dn)";
+            error = "constraint_type=spin requires nspin=2 or nspin=4 (the "
+                    "spin channel reads and injects a collinear difference or "
+                    "a non-collinear vector moment)";
             return ConfigStatus::ERROR;
         }
     }
@@ -1484,6 +1578,34 @@ ConfigStatus configure_from_inputs(ConstraintConfig& cfg,
     for (const std::string& w : warnings)
     {
         ModuleBase::WARNING("ConstraintIO", w);
+    }
+
+    // Branch: the non-collinear production closure is the fixed-vector
+    // allocation path.  Adaptive vector-multiplier scheduling has not been
+    // defined yet, so refuse it explicitly instead of falling through to a
+    // scalar loop whose residual/target semantics do not apply.
+    if (PARAM.inp.nspin == 4)
+    {
+        if (!PARAM.inp.constraint_alloc_switch)
+        {
+            error = "nspin = 4 constraints require "
+                    "constraint_alloc_switch = true (the grid observer is "
+                    "collinear-only)";
+            return ConfigStatus::ERROR;
+        }
+        for (const ConstraintSpec& spec : specs)
+        {
+            // Branch: the non-collinear closure currently fixes every
+            // multiplier.  A mixed fixed/free list would run the scalar
+            // outer loop against vector spin targets, which is undefined.
+            if (!spec.fixed_mu)
+            {
+                error = "nspin = 4 constraints currently require fixed_mu "
+                        "(a vector for spin, scalar for charge); adaptive "
+                        "vector-multiplier scheduling is not implemented yet";
+                return ConfigStatus::ERROR;
+            }
+        }
     }
 
     // M5 dipole coordinate: frame/unit/cell guards and the V -> e*Bohr

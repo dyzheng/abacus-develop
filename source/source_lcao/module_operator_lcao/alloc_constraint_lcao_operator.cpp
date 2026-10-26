@@ -5,6 +5,7 @@
 #include "source_cell/module_neighbor/sltk_grid_driver.h"
 #include "source_cell/unitcell.h"
 #include "source_estate/module_constraint/alloc_constraint_lcao.h"
+#include "source_estate/module_constraint/alloc_spin_lcao.h"
 #include "source_io/module_parameter/parameter.h"
 #include "source_lcao/module_operator_lcao/overlap.h"
 
@@ -69,17 +70,11 @@ bool fill_alloc_energy_dm(const UnitCell& ucell,
 template <typename TK, typename TR>
 void AllocConstraintLcaoOperator<TK, TR>::contributeHR()
 {
-    // Branch: S3 supports only the real Gamma-only HContainer storage.  The
-    // input guard refuses other combinations, so complex instantiations are
-    // compiled as explicit no-ops rather than carrying a silent alternative.
-    if constexpr (!std::is_same<TR, double>::value)
+    // Branch A: S3 collinear path -- real Gamma-only HContainer storage.
+    // The kernels are scalar and shared by both spin channels with an
+    // explicit injection sign.
+    if constexpr (std::is_same<TR, double>::value)
     {
-        return;
-    }
-    else
-    {
-        // Branch: real Gamma-only storage applies the sparse kernels directly
-        // to the flat H(R) wrapper.
         alloc::AllocConstraintLcao& state
             = alloc::AllocConstraintLcao::instance();
         // Branch: before the first reference SCF the target space and kernels
@@ -120,6 +115,37 @@ void AllocConstraintLcaoOperator<TK, TR>::contributeHR()
             for (size_t i = 0; i < this->hR->get_nnr(); ++i)
             {
                 h[i] += coefficient * k[i];
+            }
+        }
+    }
+    // Branch B: S4.3 non-collinear path -- complex spinor HContainer.  Each
+    // kernel already carries K_i tensor (lambda_i.sigma) (or K_i tensor I for
+    // a charge constraint), so the contribution is a plain flat add at the
+    // single Gamma point.
+    else if constexpr (std::is_same<TR, std::complex<double>>::value)
+    {
+        alloc::AllocSpinConstraintLcao& state
+            = alloc::AllocSpinConstraintLcao::instance();
+        // Branch: before the first allocation build there is no kernel and
+        // the unconstrained Hamiltonian is used.
+        if (!state.active() || state.kernels().empty())
+        {
+            return;
+        }
+        std::complex<double>* h = this->hR->get_wrapper();
+        for (const HContainer<std::complex<double>>& kernel : state.kernels())
+        {
+            // Guard: a layout mismatch would pair unrelated spinor blocks.
+            if (kernel.get_nnr() != this->hR->get_nnr())
+            {
+                ModuleBase::WARNING_QUIT(
+                    "AllocConstraintLcaoOperator::contributeHR",
+                    "non-collinear allocation kernel/H(R) layout mismatch");
+            }
+            const std::complex<double>* k = kernel.get_wrapper();
+            for (size_t i = 0; i < this->hR->get_nnr(); ++i)
+            {
+                h[i] += k[i];
             }
         }
     }
