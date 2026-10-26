@@ -322,3 +322,75 @@ TEST(AllocConstraintTest, SAdjointMatchesKernelFiniteDifference)
     const double fd = (tp - tm) / (2.0 * eps);
     EXPECT_NEAR(predicted, fd, 2e-7);
 }
+
+TEST(AllocConstraintTest, ComplementDensityMatchesKernelWeightDerivative)
+{
+    std::mt19937 gen(59);
+    const int norb = 8;
+    const std::vector<int> orbital = {1, 4, 6};
+    const std::vector<int> atom = {0, 1, 2};
+    const std::vector<int> owner = {0, 1, 0};
+    const int ntarget = 3;
+    const int nconstraint = 2;
+    const std::vector<double> S = random_spd(norb, gen);
+    std::vector<double> ST(static_cast<size_t>(ntarget) * ntarget, 0.0);
+    for (int a = 0; a < ntarget; ++a)
+    {
+        for (int b = 0; b < ntarget; ++b)
+        {
+            ST[static_cast<size_t>(a) * ntarget + b]
+                = S[static_cast<size_t>(orbital[a]) * norb + orbital[b]];
+        }
+    }
+
+    alloc::AllocConstraintAlgebra space;
+    alloc::build_alloc_constraint_algebra(S, norb, orbital, atom, owner, ST,
+                                          nconstraint, space, 1e-12);
+
+    std::normal_distribution<double> nd(0.0, 1.0);
+    std::vector<double> W(static_cast<size_t>(norb) * norb, 0.0);
+    std::vector<double> D(static_cast<size_t>(norb) * norb, 0.0);
+    std::vector<double> dW(static_cast<size_t>(norb) * norb, 0.0);
+    for (int i = 0; i < norb; ++i)
+    {
+        for (int j = 0; j <= i; ++j)
+        {
+            const double w = nd(gen);
+            const double d = nd(gen);
+            const double dw = nd(gen);
+            W[static_cast<size_t>(i) * norb + j] = w;
+            W[static_cast<size_t>(j) * norb + i] = w;
+            D[static_cast<size_t>(i) * norb + j] = d;
+            D[static_cast<size_t>(j) * norb + i] = d;
+            dW[static_cast<size_t>(i) * norb + j] = dw;
+            dW[static_cast<size_t>(j) * norb + i] = dw;
+        }
+    }
+
+    std::vector<double> C;
+    alloc::build_alloc_constraint_complement_density(space, D, C);
+    const double eps = 1e-6;
+    std::vector<double> Wp = W;
+    std::vector<double> Wm = W;
+    for (size_t i = 0; i < W.size(); ++i)
+    {
+        Wp[i] += eps * dW[i];
+        Wm[i] -= eps * dW[i];
+    }
+    std::vector<double> Kp;
+    std::vector<double> Km;
+    alloc::build_alloc_constraint_kernel(space, Wp, 0, Kp);
+    alloc::build_alloc_constraint_kernel(space, Wm, 0, Km);
+
+    double tp = 0.0;
+    double tm = 0.0;
+    double predicted = 0.0;
+    for (size_t i = 0; i < W.size(); ++i)
+    {
+        tp += D[i] * Kp[i];
+        tm += D[i] * Km[i];
+        predicted += C[i] * dW[i];
+    }
+    const double fd = (tp - tm) / (2.0 * eps);
+    EXPECT_NEAR(predicted, fd, 2e-7);
+}

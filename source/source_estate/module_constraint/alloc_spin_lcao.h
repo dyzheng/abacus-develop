@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "source_base/matrix.h"
 #include "source_base/vector3.h"
 #include "source_estate/module_constraint/alloc_constraint.h"
 #include "source_estate/module_constraint/constraint_io.h"
@@ -105,6 +106,54 @@ class AllocSpinConstraintLcao
         std::vector<ModuleBase::Vector3<double>>& m_alloc,
         std::string& error) const;
 
+    /**
+     * @brief Build one complementary grid density per constraint.
+     *
+     * The scalar density of constraint alpha is
+     *
+     *   D_alpha = lambda_alpha . (rho_x, rho_y, rho_z)   (spin)
+     *   D_alpha = lambda_alpha.z * rho_0                 (charge)
+     *
+     * and the returned grid field is sum_R Q_c D_alpha(R) Q_c.  The spinor
+     * DMR retains one block per periodic image, so every block is projected
+     * at its own R before Gint folds the real-space density; projecting only
+     * the Gamma-folded sum would lose the periodic decomposition.  lambda is
+     * already folded into the density, so the grid force/stress kernel must
+     * use a unit coefficient for every entry.  dmr[0] is the real nspin=4
+     * Pauli DMR; the four output functions are cheap to consume in the shared
+     * weight-derivative kernels without going through a collinear channel
+     * profile.
+     *
+     * The complementary density is the contraction coefficient of dW_i in
+     * Tr(D dK_i), so W_i also contributes through the basis-function
+     * derivative at fixed weight values.  That Pulay term is the local
+     * potential force of w_i acting on the same complementary density; it is
+     * returned in weight_pulay_force and must be added to the grid
+     * weight-derivative force.
+     */
+    bool complement_densities(
+        const UnitCell& ucell,
+        const std::vector<const hamilt::HContainer<double>*>& dmr,
+        const int nrxx,
+        std::vector<std::vector<double>>& rho,
+        ModuleBase::matrix& weight_pulay_force,
+        std::string& error) const;
+
+    /**
+     * @brief Energy-density adjoint of the non-collinear allocation energy.
+     *
+     * Returns E = sum_alpha E_alpha with
+     * Tr(D_alpha dK_alpha) = sum_{mu,nu} E[mu,nu] dS[mu,nu] at fixed W.
+     * D_alpha uses the same lambda-folded Pauli combination as the grid
+     * density above.  The result is contracted with the two-center overlap
+     * derivative by cal_alloc_constraint_dS_force/stress().
+     */
+    bool s_derivative_force_density(
+        const UnitCell& ucell,
+        const std::vector<const hamilt::HContainer<double>*>& dmr,
+        std::vector<double>& energy_density,
+        std::string& error) const;
+
   private:
     AllocSpinConstraintLcao() = default;
 
@@ -118,8 +167,16 @@ class AllocSpinConstraintLcao
     const UnitCell* ucell_ = nullptr;
     AllocConstraintAlgebra space_;
     std::vector<constraint::ConstraintKind> kinds_;
+    // Scalar overlap at the build geometry.  The dS adjoint differentiates
+    // only this matrix; the weight matrices W_i are fixed in the frozen
+    // target-space force/stress term.
+    std::vector<double> S_dense_;
     std::vector<std::vector<double>> W_dense_;
     std::vector<std::vector<double>> K_dense_;
+    // Constraint weight fields and the Gint layout used by the W_i Pulay
+    // force.  Both are geometry-fixed and set by build().
+    std::vector<std::vector<double>> cw_;
+    ModuleGint::GintInfo* gint_info_ = nullptr;
     std::vector<ModuleBase::Vector3<double>> lambda_;
     std::vector<int> scalar_iat2iwt_;
     // Zeroed complex layout used as the template for every spinor kernel.

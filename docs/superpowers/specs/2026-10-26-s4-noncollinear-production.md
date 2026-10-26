@@ -139,3 +139,20 @@ x 取向在 `scf_thr=1e-8` 下的密度残差在 `4e-6` 附近振荡，但能量
 4. 单独处理非共线 SCF 密度极限环（`mixing_angle`/磁密度混合），使 x 方向
    在 `scf_thr=1e-8` 内达到 CONVERGED。
 5. 向量 multiplier 的外部调度/ALM 仍保持未实现；当前只支持固定 `fixed_mu`。
+
+## 6. 后续完成：位置力验收
+
+后续轮次已接 complex `TR` 的 allocation 位置导数力，并补齐 W 权重的
+基函数（Pulay）项与 MPI pool 归约。H2O 固定 `lambda` 三点 FD：
+
+```text
+F_FD(O-z)       = -1.4171907516 eV/A
+F_analytic(O-z) = -1.4205728783 eV/A
+|difference|    = 0.0033821267 eV/A < 0.0129 eV/A  PASS
+```
+
+S4.1 `dS` 伴随的符号同时修正为 `force -= force_s`。完整约束回归
+19/19 PASS。详细数据与分解见
+`docs/superpowers/specs/2026-10-26-s4-noncollinear-force.md`。x 取向的
+`scf_thr=1e-8` 密度混合极限环仍是独立限制，不影响本轮固定-`lambda`
+位置力与旋转能量闸门。

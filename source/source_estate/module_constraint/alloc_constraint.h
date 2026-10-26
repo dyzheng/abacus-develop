@@ -64,6 +64,26 @@ void build_alloc_constraint_kernel(
     std::vector<double>& K);
 
 /**
+ * @brief Coefficient matrix multiplying dW in Tr(D dK_i).
+ *
+ * At fixed S and B, the weight-dependent part of K_i is
+ *
+ *   R_L W R_R,   R_L = I - S B B^T,   R_R = I - B B^T S.
+ *
+ * Therefore Tr(D R_L dW R_R) = Tr(C dW) with
+ *
+ *   C = R_R D R_L = Q_c D Q_c^T,   Q_c = I - B B^T S.
+ *
+ * The returned C is the matrix that must be integrated with Gint for the
+ * frozen-weight grid force/stress.  It is not the overlap-metric projector
+ * (S B)(S B)^T used by the target read-out.
+ */
+void build_alloc_constraint_complement_density(
+    const AllocConstraintAlgebra& space,
+    const std::vector<double>& D,
+    std::vector<double>& C);
+
+/**
  * @brief Adjoint of the fixed-weight geometry derivative Tr(D dK_i).
  *
  * Returns a symmetric matrix E_i such that, for every symmetric variation

@@ -909,6 +909,65 @@ TEST_F(ConstraintDerivTest, MixedForceNewtonThirdLaw)
     }
 }
 
+// S4.3 non-collinear allocation: the fold of lambda.sigma and the scalar
+// multiplier into one density per constraint must reproduce the channel
+// kernel exactly.  The direct-density entry is what the spinor force path
+// uses, so this pins its force and stress semantics without a Gint/LCAO
+// round trip.
+TEST_F(ConstraintDerivTest, FoldedDensityForceStressMatchChannelKernel)
+{
+    std::vector<double> rho_up;
+    std::vector<double> rho_dn;
+    fill_rho_spin_resolved(*rhopw, 1.5, {6.0, 0.8, 0.9},
+                           {2.0, 0.2, 0.1}, rho_up, rho_dn);
+    const double* rho_arr[2] = {rho_up.data(), rho_dn.data()};
+
+    constraint::WeightGrid wg(*ucell, rhopw, radii,
+                              constraint::WeightType::Becke);
+    wg.set_constraint_atoms({{0}, {1, 2}});
+    wg.build();
+    wg.build_derivatives();
+    std::vector<constraint::ChannelProfile> channels;
+    fill_mixed_channels(channels);
+    const std::vector<double> mu{0.1, -0.05};
+
+    ModuleBase::matrix F_ref(ucell->nat, 3);
+    ModuleBase::matrix S_ref(3, 3);
+    constraint::constraint_force(wg, rho_arr, 2, channels, mu, F_ref);
+    constraint::constraint_stress(wg, rho_arr, 2, channels, mu, S_ref);
+
+    std::vector<std::vector<double>> folded(
+        2, std::vector<double>(rhopw->nrxx, 0.0));
+    for (int ir = 0; ir < rhopw->nrxx; ++ir)
+    {
+        // Branch: fragment 0 is charge; fragment 1 is spin.  Both multipliers
+        // and the spin channel sign are folded into the density.
+        folded[0][ir] = mu[0] * (rho_up[ir] + rho_dn[ir]);
+        folded[1][ir] = mu[1] * (rho_up[ir] - rho_dn[ir]);
+    }
+
+    ModuleBase::matrix F(ucell->nat, 3);
+    ModuleBase::matrix S(3, 3);
+    constraint::constraint_force_densities(wg, folded, F);
+    constraint::constraint_stress_densities(wg, folded, S);
+    for (int J = 0; J < ucell->nat; ++J)
+    {
+        for (int d = 0; d < 3; ++d)
+        {
+            EXPECT_NEAR(F(J, d), F_ref(J, d), 1e-12)
+                << "force J " << J << " d " << d;
+        }
+    }
+    for (int a = 0; a < 3; ++a)
+    {
+        for (int b = 0; b < 3; ++b)
+        {
+            EXPECT_NEAR(S(a, b), S_ref(a, b), 1e-12)
+                << "stress a " << a << " b " << b;
+        }
+    }
+}
+
 // M5: a saw dipole force is the ionic term -mu*Z*saw' on top of the density
 // derivative term.  Its density weight is grid-fixed, so with a nonzero
 // uniform density the result still has to be exactly -mu*Z on the ramp.

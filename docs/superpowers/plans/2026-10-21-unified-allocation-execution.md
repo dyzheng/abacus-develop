@@ -851,10 +851,13 @@ TEST(AllocObserveTest, EmptyTargetSetEqualsBecke)
       输入层要求 `constraint_alloc_switch=1`、所有约束 `fixed_mu`；横向
       x/y 分量要求 `noncolin=1`，多 k、SOC 和自适应向量 multiplier 仍显式
       拒绝。详见 `docs/superpowers/specs/2026-10-26-s4-noncollinear-production.md`。
-- [ ] 验收：SCF 级无 SOC 旋转不变性 + 位置 FD 力。固定 μ 的 z/x 旋转能量差
-      已测为 `1.3e-9 Ry < 1e-6 Ry`，MPI 1/2 逐迭代一致；但 x 方向在
-      `scf_thr=1e-8` 下存在密度混合极限环，且 complex `TR` 位置力尚未接线，
-      因此保留本项未勾选。
+- [x] 验收：SCF 级无 SOC 旋转不变性 + 位置 FD 力。固定 μ 的 z/x 旋转能量差
+      已测为 `1.3e-9 Ry < 1e-6 Ry`，MPI 1/2 逐迭代一致；complex `TR`
+      位置力已接线，H2O 三点 FD
+      `F_FD=-1.4171907516 eV/A` 对解析 `-1.4205728783 eV/A`，
+      差 `0.0033821267 < 0.0129 eV/A`。x 方向 `scf_thr=1e-8` 的磁密度
+      混合极限环作为独立已知限制记录，不阻塞旋转能量与固定-`lambda`
+      位置力闸门。
 
 **S4 验收**：上述三条全过；写 dated 测试文档。
 

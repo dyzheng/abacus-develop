@@ -900,6 +900,34 @@ TEST_F(ConstraintLoopTest, BranchGuardDefaultOffDoesNotFuse)
     EXPECT_EQ(loop.phase(), constraint::LoopPhase::DONE);
 }
 
+TEST_F(ConstraintLoopTest, AllocationOutputCorrectionSubtractsTargetTermOnly)
+{
+    // Allocation inserts sum mu K into H, so eband already carries sum mu Q.
+    // The value appended as cc_escon must therefore be -sum mu t, while the
+    // audit keeps reporting the physical functional sum mu (Q - t).
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    constraint::ConstraintConfig cfg = make_cfg(0.1);
+    cfg.allocation_mode = true;
+    loop.init(*ucell, rhopw, cfg, radii, 10.0);
+
+    const std::vector<double> q_ref = {Q_of(rho_ref)};
+    const std::vector<double> m_ref = {0.0};
+    loop.observe_allocation(1, q_ref, m_ref);
+    loop.set_scf_energy(-50.0);
+    bool conv = true;
+    loop.on_scf_converged(1, conv);
+    ASSERT_EQ(loop.phase(), constraint::LoopPhase::CONSTRAINED);
+    ASSERT_EQ(loop.mu().size(), 1u);
+    ASSERT_EQ(loop.targets().size(), 1u);
+
+    const double expected_output = -loop.mu()[0] * loop.targets()[0];
+    const double expected_audit
+        = loop.mu()[0] * (loop.charges()[0] - loop.targets()[0]);
+    EXPECT_NEAR(loop.output_energy_correction(), expected_output, 1e-12);
+    EXPECT_NEAR(loop.last_audit().e_con, expected_audit, 1e-12);
+    EXPECT_NE(loop.output_energy_correction(), loop.last_audit().e_con);
+}
+
 // Synthetic energy feed: place the guard's E_tot exactly de_target above the
 // reference by subtracting the constraint term the loop will add back.
 static void feed_guard_energy(constraint::ConstraintLoop& loop,

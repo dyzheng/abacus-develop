@@ -179,6 +179,81 @@ void build_alloc_constraint_kernel(
     }
 }
 
+void build_alloc_constraint_complement_density(
+    const AllocConstraintAlgebra& space,
+    const std::vector<double>& D,
+    std::vector<double>& C)
+{
+    const int norb = space.norb;
+    const int ntarget = space.ntarget;
+    check_square(D, norb, "D");
+    // Guard: the cached target-space factors must describe the same norb x R
+    // contraction as D.
+    if (static_cast<int>(space.target.Cprime.size()) != norb * ntarget
+        || static_cast<int>(space.SB.size()) != norb * ntarget)
+    {
+        throw std::invalid_argument("complement density has mismatched target space");
+    }
+
+    const auto idx = [](const int row, const int col, const int ncols) {
+        return static_cast<size_t>(row) * ncols + col;
+    };
+    const std::vector<double>& B = space.target.Cprime;
+    const std::vector<double>& U = space.SB;
+
+    // Factor Q_c D Q_c^T through the R-dimensional target space:
+    //   Y = U^T D, X = D U, Z = U^T D U,
+    //   C = D - B Y - X B^T + B Z B^T.
+    // This avoids forming the dense norb x norb projectors and keeps the
+    // cost linear in ntarget.
+    std::vector<double> Y(static_cast<size_t>(ntarget) * norb, 0.0);
+    std::vector<double> X(static_cast<size_t>(norb) * ntarget, 0.0);
+    for (int i = 0; i < norb; ++i)
+    {
+        for (int j = 0; j < norb; ++j)
+        {
+            const double d = D[idx(i, j, norb)];
+            for (int a = 0; a < ntarget; ++a)
+            {
+                Y[idx(a, j, norb)] += U[idx(i, a, ntarget)] * d;
+                X[idx(i, a, ntarget)] += d * U[idx(j, a, ntarget)];
+            }
+        }
+    }
+    std::vector<double> Z(static_cast<size_t>(ntarget) * ntarget, 0.0);
+    for (int a = 0; a < ntarget; ++a)
+    {
+        for (int b = 0; b < ntarget; ++b)
+        {
+            for (int i = 0; i < norb; ++i)
+            {
+                Z[idx(a, b, ntarget)] += U[idx(i, a, ntarget)]
+                                         * X[idx(i, b, ntarget)];
+            }
+        }
+    }
+
+    C.assign(static_cast<size_t>(norb) * norb, 0.0);
+    for (int i = 0; i < norb; ++i)
+    {
+        for (int j = 0; j < norb; ++j)
+        {
+            double value = D[idx(i, j, norb)];
+            for (int a = 0; a < ntarget; ++a)
+            {
+                value -= B[idx(i, a, ntarget)] * Y[idx(a, j, norb)];
+                value -= X[idx(i, a, ntarget)] * B[idx(j, a, ntarget)];
+                for (int b = 0; b < ntarget; ++b)
+                {
+                    value += B[idx(i, a, ntarget)] * Z[idx(a, b, ntarget)]
+                             * B[idx(j, b, ntarget)];
+                }
+            }
+            C[idx(i, j, norb)] = value;
+        }
+    }
+}
+
 void build_alloc_constraint_s_adjoint(
     const AllocConstraintAlgebra& space,
     const std::vector<double>& S,

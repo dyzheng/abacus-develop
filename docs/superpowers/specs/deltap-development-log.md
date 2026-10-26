@@ -5899,3 +5899,46 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   3. 调整非共线磁密度混合，消除 x 取向的 SCF 密度极限环。
   4. 自适应向量 multiplier/ALM 仍留给后续阶段；当前生产闭环只承诺固定
      `fixed_mu`。
+
+## 2026-10-26 (S4.3 force): 非共线分配位置力闭环
+
+- **完成内容**：
+  1. `AllocSpinConstraintLcao::complement_densities()` 现在按每个周期块
+     `C_R=Q_c D_R Q_c^T` 构造互补密度，并在传入 Gint 前取对称部分；
+     同时调用 `Gint_fvl` 计算固定权重场下 W 权重的基函数 Pulay 力。
+  2. 修正 S4.1 `dS` 力符号：overlap 核返回 `+Tr(E dS/dR)`，约束能进入
+     总力的贡献必须为 `force -= force_s`。
+  3. Pulay 力在全部约束累加后做一次 `Parallel_Reduce::reduce_pool`；
+     通过 `ConstraintLoop::set_allocation_spin_pulay_force()` 并入
+     `forcecon`，保证在 `TOTAL-FORCE` 打印和后续弛豫之前生效。
+  4. 清理 `alloc_dbg_*`/`alloc_debug_*` dump 与 `ALLOC_DIAG_*` 临时输出。
+- **验证**：
+  - H2O、`nspin=4`、`noncolin=1`、单 Γ、`fixed_mu=[0,0,0.1]`、MPI 2：
+    `F_FD(O-z)=-1.4171907516 eV/A`，解析 `-1.4205728783 eV/A`，
+    差 `0.0033821267 < 0.0129 eV/A` PASS。
+  - 固定 D 分解：`dS=-0.00209137`、`grid=+0.00027509`、
+    `Pulay=-0.00331023 Ry/Bohr`；`grid+Pulay` 对 W-only
+    `-0.00303502` 一致。
+  - 总能仍为 `-467.1747301069827 eV`，与力修正前逐位一致。
+  - `abacus_basic_para` 构建 PASS；完整 `ctest -R constraint`
+    19/19 PASS（95.89 s）；`git diff --check` PASS。
+- **Bug/fix list**：
+  1. `dS` 力符号与 ABACUS overlap 核口径相反；改为减号。
+  2. W 权重缺基函数 Pulay 项；补 Gint `phi_dot_dphi` 半项。
+  3. Pulay 局域贡献未做 MPI pool 归约；补齐后 rank-local 伪总量消失。
+  4. 单周期 `Q_c D_R Q_c^T` 可含反对称部分；Gint Hermitian 2 倍收缩前
+     显式对称化。
+  5. Pulay 力最初在 `getForceStress()` 返回后才加入，未进入打印总力；
+     改为在 `forcecon` 汇总阶段加入。
+- **文件**：
+  `source_esolver/esolver_ks_lcao.cpp`、
+  `source_estate/module_constraint/{alloc_spin_lcao.h,
+  alloc_spin_lcao.cpp,constraint_loop.h,constraint_loop.cpp}`、
+  `source_lcao/module_operator_lcao/alloc_constraint_lcao_operator.cpp`、
+  `2026-10-26-s4-noncollinear-force.md`（新建）、
+  `2026-10-26-s4-noncollinear-production.md`、执行方案、本日志。
+- **下一步**：
+  1. 补非共线约束应力的 Pulay 对应项并做应变 FD。
+  2. 增加 Pauli/kernel adapter 回归（block 原点、spin-off-diagonal）。
+  3. 单独处理 x 取向 `scf_thr=1e-8` 的磁密度混合极限环。
+  4. 评估自适应向量 multiplier/ALM，仍不纳入当前固定 `fixed_mu` 闸门。

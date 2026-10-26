@@ -154,6 +154,13 @@ class ConstraintLoop
     // supplied the loop WARNING_QUITs rather than running unguarded.
     void set_scf_energy(const double etot_ks);
 
+    // Constraint energy added to the KS total energy by the esolver.  In the
+    // legacy/ALM paths this is the audited functional mu.(Q-t) (plus the ALM
+    // penalty); in allocation mode the Hamiltonian already contributes
+    // +sum mu.Q to eband, so only -sum mu.target is added here.  The audit
+    // line always reports mu.(Q-t), independently of this output correction.
+    double output_energy_correction() const;
+
     // Optional per-atom on-site projected moments (indexed by global atom,
     // supplied by the esolver from the DFT+U occupation matrices).  When
     // non-empty the audit line adds `onsite=` per constraint: the fragment sum
@@ -191,6 +198,18 @@ class ConstraintLoop
     // Allocation-mode force density: the esolver stores the complementary
     // Q_c D Q_c density here before FORCE_STRESS calls compute_force().
     void set_allocation_force_density(std::vector<std::vector<double>> rho);
+
+    // Non-collinear allocation force densities.  Each entry already carries
+    // its constraint multiplier and lambda.sigma contraction, so the grid
+    // kernel uses a unit coefficient per entry.
+    void set_allocation_spin_force_density(
+        std::vector<std::vector<double>> rho);
+
+    // Non-collinear allocation W_i Pulay force.  complement_densities()
+    // evaluates the basis-derivative half on the already lambda-folded
+    // complementary density; it must join forcecon before FORCE_STRESS
+    // prints TOTAL-FORCE and before a relaxation consumes the force.
+    void set_allocation_spin_pulay_force(const ModuleBase::matrix& force);
 
     // Reset all state (unit tests / re-init).
     void reset();
@@ -318,6 +337,7 @@ class ConstraintLoop
                      const double nelec);
     void finish_warm_start();
     void finish_warm_start_alm();
+    double constraint_energy_functional() const;
     void alm_arm(const std::vector<double>& chi);
     void alm_adjudicate(const int iter, bool& conv_esolver);
     // Run one outer step from the current charges Q_ against targets_.
@@ -470,6 +490,8 @@ class ConstraintLoop
     bool json_fixed_source_ = false; // fixed_mu came from the v2 target file
     bool allocation_mode_ = false;
     std::vector<std::vector<double>> allocation_force_rho_;
+    std::vector<std::vector<double>> allocation_spin_force_rho_;
+    ModuleBase::matrix allocation_spin_pulay_force_;
 };
 
 } // namespace constraint

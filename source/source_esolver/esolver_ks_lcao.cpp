@@ -546,12 +546,47 @@ void ESolver_KS_LCAO<TK, TR>::cal_force(UnitCell& ucell, ModuleBase::matrix& for
             }
             cloop.set_allocation_force_density(std::move(rho_c));
         }
-        else
+        else if constexpr (std::is_same<TR, std::complex<double>>::value)
         {
-            // Branch: complex TR storage has no real complementary density
-            // path, so this unsupported combination is rejected explicitly.
-            ModuleBase::WARNING_QUIT("ESolver_KS_LCAO::cal_force",
-                "allocation constraints require real LCAO DMR storage");
+            // Branch: complex TR is the non-collinear spinor path.  Build
+            // one lambda-folded complementary density per constraint for the
+            // shared grid derivative kernel.
+            if (PARAM.inp.nspin != 4)
+            {
+                ModuleBase::WARNING_QUIT("ESolver_KS_LCAO::cal_force",
+                    "complex allocation force/stress is only defined for nspin = 4");
+            }
+            constraint::ConstraintLoop& cloop
+                = constraint::ConstraintLoop::instance();
+            alloc::AllocSpinConstraintLcao& astate
+                = alloc::AllocSpinConstraintLcao::instance();
+            // Guard: an inactive non-collinear state would leave the stale
+            // full-density force path armed.
+            if (!cloop.allocation_mode() || !astate.active()
+                || this->dmat.dm == nullptr || this->pw_rhod == nullptr)
+            {
+                ModuleBase::WARNING_QUIT("ESolver_KS_LCAO::cal_force",
+                    "non-collinear allocation force/stress requires an initialized state and density grid");
+            }
+            std::vector<const hamilt::HContainer<double>*> dmr_channels;
+            for (auto* dmr : this->dmat.dm->get_DMR_vector())
+            {
+                dmr_channels.push_back(dmr);
+            }
+            std::vector<std::vector<double>> rho_alpha;
+            ModuleBase::matrix weight_pulay_force;
+            std::string alloc_error;
+            // Branch: a failed projection or Gint contraction must abort
+            // before FORCE_STRESS can consume a stale density.
+            if (!astate.complement_densities(
+                    ucell, dmr_channels, this->pw_rhod->nrxx, rho_alpha,
+                    weight_pulay_force, alloc_error))
+            {
+                ModuleBase::WARNING_QUIT("ESolver_KS_LCAO::cal_force",
+                    alloc_error);
+            }
+            cloop.set_allocation_spin_force_density(std::move(rho_alpha));
+            cloop.set_allocation_spin_pulay_force(weight_pulay_force);
         }
     }
 
@@ -1284,9 +1319,10 @@ void ESolver_KS_LCAO<TK, TR>::iter_finish(UnitCell& ucell, const int istep, int&
         {
             this->p_chgmix->mix_reset();
         }
-        // Refresh the total energy with the constraint correction
-        // (cc_escon), mirroring the dp_escon path.
-        this->pelec->f_en.cc_escon = cloop.last_audit().e_con;
+        // Refresh the total energy with the constraint output correction.
+        // Allocation mode subtracts only mu.target because eband already
+        // contains mu.Q; the legacy path keeps the audited functional.
+        this->pelec->f_en.cc_escon = cloop.output_energy_correction();
         if (cloop.enabled())
         {
             this->pelec->f_en.calculate_etot();

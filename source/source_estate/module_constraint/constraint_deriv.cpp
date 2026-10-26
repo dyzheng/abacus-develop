@@ -333,4 +333,183 @@ void constraint_stress(const WeightGrid& wg,
     }
 }
 
+void constraint_force_densities(
+    const WeightGrid& wg,
+    const std::vector<std::vector<double>>& rho,
+    ModuleBase::matrix& force)
+{
+    const ModulePW::PW_Basis* rho_basis = wg.rho_basis();
+    const double dV = rho_basis->omega / static_cast<double>(rho_basis->nxyz);
+    const int nrxx = rho_basis->nrxx;
+    const int nat = wg.nat();
+    const int nalpha = wg.nconstraint();
+
+    // Guard: the force needs the position-derivative grid.
+    if (!wg.derivatives_built())
+    {
+        ModuleBase::WARNING_QUIT("constraint_force_densities",
+                                 "weight derivative grid not built "
+                                 "(call build_derivatives)");
+    }
+    // Guard: one already folded density per constraint; a mismatch would
+    // silently pair a density with another fragment's weight derivative.
+    if (static_cast<int>(rho.size()) != nalpha)
+    {
+        ModuleBase::WARNING_QUIT("constraint_force_densities",
+                                 "density count != nconstraint");
+    }
+    for (const std::vector<double>& density : rho)
+    {
+        // Guard: every density must live on the same dense grid as wg.
+        if (static_cast<int>(density.size()) != nrxx)
+        {
+            ModuleBase::WARNING_QUIT("constraint_force_densities",
+                                     "density grid size mismatch");
+        }
+    }
+    // Guard: a dipole weight has an additional ionic coordinate derivative;
+    // the allocation closure currently excludes it, so refuse instead of
+    // returning an incomplete force.
+    if (wg.is_dipole())
+    {
+        ModuleBase::WARNING_QUIT("constraint_force_densities",
+                                 "dipole constraints are not supported by the "
+                                 "non-collinear allocation force");
+    }
+    if (force.nr != nat || force.nc != 3)
+    {
+        ModuleBase::WARNING_QUIT("constraint_force_densities",
+                                 "force buffer must be nat x 3");
+    }
+
+    std::vector<double> f(static_cast<size_t>(nat) * 3, 0.0);
+    const auto& dw = wg.weight_derivatives();
+    for (int alpha = 0; alpha < nalpha; ++alpha)
+    {
+        const double* density = rho[alpha].data();
+        for (int J = 0; J < nat; ++J)
+        {
+            for (int d = 0; d < 3; ++d)
+            {
+                const double* dwd = &dw[alpha][(J * 3 + d) * nrxx];
+                double acc = 0.0;
+                for (int ir = 0; ir < nrxx; ++ir)
+                {
+                    acc += density[ir] * dwd[ir];
+                }
+                f[J * 3 + d] -= acc * dV;
+            }
+        }
+    }
+
+#ifdef __MPI
+    Parallel_Reduce::reduce_pool(f.data(), static_cast<int>(f.size()));
+#endif
+    for (int i = 0; i < nat * 3; ++i)
+    {
+        force.c[i] += f[i];
+    }
+}
+
+void constraint_stress_densities(
+    const WeightGrid& wg,
+    const std::vector<std::vector<double>>& rho,
+    ModuleBase::matrix& stress)
+{
+    const ModulePW::PW_Basis* rho_basis = wg.rho_basis();
+    const double dV = rho_basis->omega / static_cast<double>(rho_basis->nxyz);
+    const int nrxx = rho_basis->nrxx;
+    const int nalpha = wg.nconstraint();
+
+    // Guard: the strain derivative is built from the same cache as the
+    // position kernel.
+    if (!wg.derivatives_built())
+    {
+        ModuleBase::WARNING_QUIT("constraint_stress_densities",
+                                 "weight derivative grid not built "
+                                 "(call build_derivatives)");
+    }
+    // Guard: one folded density per constraint.
+    if (static_cast<int>(rho.size()) != nalpha)
+    {
+        ModuleBase::WARNING_QUIT("constraint_stress_densities",
+                                 "density count != nconstraint");
+    }
+    for (const std::vector<double>& density : rho)
+    {
+        // Guard: every density must live on the weight grid.
+        if (static_cast<int>(density.size()) != nrxx)
+        {
+            ModuleBase::WARNING_QUIT("constraint_stress_densities",
+                                     "density grid size mismatch");
+        }
+    }
+    // Guard: the dipole strain derivative is a different coordinate term.
+    if (wg.is_dipole())
+    {
+        ModuleBase::WARNING_QUIT("constraint_stress_densities",
+                                 "dipole constraints are not supported by the "
+                                 "non-collinear allocation stress");
+    }
+    // Guard: the caller supplies the full stress accumulator.
+    if (stress.nr != 3 || stress.nc != 3)
+    {
+        ModuleBase::WARNING_QUIT("constraint_stress_densities",
+                                 "stress buffer must be 3 x 3");
+    }
+
+    std::vector<double> s(9, 0.0);
+    for (int alpha = 0; alpha < nalpha; ++alpha)
+    {
+        const double* density = rho[alpha].data();
+        for (int a = 0; a < 3; ++a)
+        {
+            for (int b = 0; b < 3; ++b)
+            {
+                double acc = 0.0;
+                for (int ir = 0; ir < nrxx; ++ir)
+                {
+                    acc += density[ir]
+                           * wg.weight_strain_derivative(alpha, a, b, ir);
+                }
+                s[a * 3 + b] -= acc * dV;
+            }
+        }
+        // Cell-integral Jacobian: d(int rho w dV)/d eps_ab carries the
+        // isotropic rho*w term in addition to the explicit weight strain
+        // derivative.
+        double q_weight = 0.0;
+        const std::vector<double>& w_alpha = wg.constraint_weight(alpha);
+        for (int ir = 0; ir < nrxx; ++ir)
+        {
+            q_weight += density[ir] * w_alpha[ir] * dV;
+        }
+        for (int a = 0; a < 3; ++a)
+        {
+            s[a * 3 + a] -= q_weight;
+        }
+    }
+
+#ifdef __MPI
+    Parallel_Reduce::reduce_pool(s.data(), static_cast<int>(s.size()));
+#endif
+    const double inv_omega = 1.0 / rho_basis->omega;
+    for (int a = 0; a < 3; ++a)
+    {
+        for (int b = a; b < 3; ++b)
+        {
+            // Symmetric strain: store the symmetrized tensor on both
+            // triangles so the total-stress consumer sees one convention.
+            const double value
+                = 0.5 * (s[a * 3 + b] + s[b * 3 + a]) * inv_omega;
+            stress(a, b) += value;
+            // Branch: mirror the off-diagonal entry.
+            if (a != b)
+            {
+                stress(b, a) += value;
+            }
+        }
+    }
+}
+
 } // namespace constraint

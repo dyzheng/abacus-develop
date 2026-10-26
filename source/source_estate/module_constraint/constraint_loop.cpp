@@ -153,6 +153,8 @@ void ConstraintLoop::reset()
     dipole_constraint_saw_live_ = 0.5;
     allocation_mode_ = false;
     allocation_force_rho_.clear();
+    allocation_spin_force_rho_.clear();
+    allocation_spin_pulay_force_ = ModuleBase::matrix();
 }
 
 void ConstraintLoop::init(const UnitCell& ucell,
@@ -1632,9 +1634,11 @@ void ConstraintLoop::on_scf_converged(const int iter, bool& conv_esolver)
             // evaluated at the multiplier the SCF actually felt.  mu_ is
             // still the in-SCF value here (outer_step advances it below),
             // and Q_ was read from the just-converged density, so
-            //   E_tot = E_KS + sum_a mu_a (Q_a - t_a)
+            //   E_tot = E_band + output_energy_correction()
             // is the energy the SCF minimized; e_ref_ uses the same
-            // convention (its correction term is zero).
+            // convention (its correction term is zero).  In allocation mode
+            // E_band already contains sum mu.Q, so the output correction is
+            // -sum mu.t rather than the audited functional mu.(Q-t).
             if (Q_.size() != targets_.size())
             {
                 // Defensive (wiring bug): indexing one of the two parallel
@@ -1643,19 +1647,9 @@ void ConstraintLoop::on_scf_converged(const int iter, bool& conv_esolver)
                     "branch guard: observed-charge/target size mismatch");
             }
             double e_con = 0.0;
-            // Branch: ALM -- the correction includes the penalty term and is
-            // computed by the same helper as the audit (single source).
-            if (alm_armed_)
-            {
-                e_con = alm_.energy_correction(mu_, Q_, targets_);
-            }
-            else
-            {
-                for (size_t a = 0; a < mu_.size(); ++a)
-                {
-                    e_con += mu_[a] * (Q_[a] - targets_[a]);
-                }
-            }
+            // Branch: the output helper owns the allocation/legacy split and
+            // the ALM penalty, so the guard cannot drift from cc_escon.
+            e_con = output_energy_correction();
             e_guard_ = scf_energy_ + e_con;
             const double de = e_guard_ - e_ref_;
             GlobalV::ofs_running
@@ -1891,6 +1885,66 @@ void ConstraintLoop::set_scf_energy(const double etot_ks)
     scf_energy_set_ = true;
 }
 
+double ConstraintLoop::output_energy_correction() const
+{
+    // Branch: allocation inserts Delta H = sum mu_i K_i into the Hamiltonian,
+    // so eband already contains sum mu_i Q_i.  The energy appended to the
+    // printed total must therefore remove only the target term.
+    if (allocation_mode_)
+    {
+        double correction = 0.0;
+        const bool vector = spin_vector_mode_ && mu_vec_.size() == mu_.size()
+                            && target_vec_.size() == mu_.size();
+        for (size_t a = 0; a < mu_.size(); ++a)
+        {
+            // Branch: a non-collinear spin component contracts both vectors;
+            // charge (and collinear spin) keep the scalar product.
+            if (vector && a < kinds_.size()
+                && kinds_[a] == ConstraintKind::Spin)
+            {
+                correction -= mu_vec_[a] * target_vec_[a];
+            }
+            else
+            {
+                correction -= mu_[a] * targets_[a];
+            }
+        }
+        return correction;
+    }
+
+    // Branch: the legacy real-space potential and ALM path add the audited
+    // constraint functional on top of the unconstrained eband.  This is the
+    // historical cc_escon convention and must stay bit-identical.
+    return constraint_energy_functional();
+}
+
+double ConstraintLoop::constraint_energy_functional() const
+{
+    // Branch: ALM's audited functional includes the quadratic penalty term;
+    // its controller is the single source for that convention.
+    if (alm_armed_)
+    {
+        return alm_.energy_correction(mu_, Q_, targets_);
+    }
+    double correction = 0.0;
+    const bool vector = spin_vector_mode_ && Q_vec_.size() == mu_.size()
+                        && target_vec_.size() == mu_.size();
+    for (size_t a = 0; a < mu_.size(); ++a)
+    {
+        // Branch: mirror the audit's vector contraction for nspin=4 spin
+        // entries; charge entries stay scalar.
+        if (vector && a < kinds_.size() && kinds_[a] == ConstraintKind::Spin)
+        {
+            correction += mu_vec_[a] * (Q_vec_[a] - target_vec_[a]);
+        }
+        else
+        {
+            correction += mu_[a] * (Q_[a] - targets_[a]);
+        }
+    }
+    return correction;
+}
+
 void ConstraintLoop::set_onsite_moments(const std::vector<double>& per_atom)
 {
     // Informational instrument (II-1b): stored verbatim and folded into the
@@ -2094,35 +2148,10 @@ void ConstraintLoop::print_audit_line(const int iter, const int step,
     // Becke-weighted q (II-1b instrument).
     audit_ = ConstraintAccounting::audit(*wg_, mu_, Q_, targets_, nelec_,
                                          kinds_, onsite_atom_);
-    // S4.3: the non-collinear constraint energy is the vector contraction
-    // sum_a lambda_a . (q_a - t_a).  Charge entries reduce to the historical
-    // scalar product because their vector mirrors live on the z axis.
-    if (spin_vector_mode_ && Q_vec_.size() == mu_vec_.size()
-        && target_vec_.size() == mu_vec_.size())
-    {
-        double e_con = 0.0;
-        for (size_t a = 0; a < mu_vec_.size(); ++a)
-        {
-            // Branch: spin components carry the full vector; a charge entry
-            // keeps the scalar accounting formula.
-            if (kinds_[a] == ConstraintKind::Spin)
-            {
-                e_con += mu_vec_[a] * (Q_vec_[a] - target_vec_[a]);
-            }
-            else
-            {
-                e_con += mu_[a] * (Q_[a] - targets_[a]);
-            }
-        }
-        audit_.e_con = e_con;
-    }
-    // M4 ALM: the energy correction carries the penalty term
-    // sum_a (k_a/2)(Q_a - t_a)^2 on top of the accounting's sum_a mu(Q-t);
-    // the branch guard (G2) consumes the same helper, never its own formula.
-    if (alm_armed_)
-    {
-        audit_.e_con = alm_.energy_correction(mu_, Q_, targets_);
-    }
+    // S4.3/M4: the vector contraction and the ALM penalty share one helper
+    // with the output/guard correction, so the audit can never drift from
+    // the energy the SCF actually used.
+    audit_.e_con = constraint_energy_functional();
     last_audit_line_ = ConstraintAccounting::audit_line(audit_);
     // Branch: trust diagnostics are opt-in.  Appending them to the stored
     // line (rather than printing a separate line) keeps one machine-readable
@@ -2290,6 +2319,22 @@ void ConstraintLoop::set_allocation_force_density(
     std::vector<std::vector<double>> rho)
 {
     allocation_force_rho_ = std::move(rho);
+    allocation_spin_force_rho_.clear();
+    allocation_spin_pulay_force_ = ModuleBase::matrix();
+}
+
+void ConstraintLoop::set_allocation_spin_force_density(
+    std::vector<std::vector<double>> rho)
+{
+    allocation_spin_force_rho_ = std::move(rho);
+    allocation_force_rho_.clear();
+    allocation_spin_pulay_force_ = ModuleBase::matrix();
+}
+
+void ConstraintLoop::set_allocation_spin_pulay_force(
+    const ModuleBase::matrix& force)
+{
+    allocation_spin_pulay_force_ = force;
 }
 
 void ConstraintLoop::compute_force(const double* const* rho,
@@ -2345,6 +2390,36 @@ void ConstraintLoop::compute_force(const double* const* rho,
     // density Q_c D Q_c supplied by the esolver, not the full KS density.
     if (allocation_mode_)
     {
+        // Branch: nspin=4 stores one already lambda-folded density per
+        // constraint.  Its density channel is not a collinear up/down spin
+        // profile, so it bypasses the channel kernel and uses the direct
+        // per-density contraction.
+        if (nspin == 4)
+        {
+            // Guard: one density per constraint is required; otherwise a
+            // multiplier/weight could be silently paired with the wrong
+            // fragment.
+            if (static_cast<int>(allocation_spin_force_rho_.size())
+                != wg_->nconstraint())
+            {
+                ModuleBase::WARNING_QUIT("ConstraintLoop::compute_force",
+                    "non-collinear allocation force requires one density per constraint");
+            }
+            constraint::constraint_force_densities(
+                *wg_, allocation_spin_force_rho_, forcecon);
+            // The W_i grid derivative and its basis (Pulay) derivative are
+            // two halves of one dK contraction.  Join them here, before the
+            // caller folds forcecon into the printed total force.
+            if (allocation_spin_pulay_force_.nr == forcecon.nr
+                && allocation_spin_pulay_force_.nc == forcecon.nc)
+            {
+                for (int i = 0; i < forcecon.nr * forcecon.nc; ++i)
+                {
+                    forcecon.c[i] += allocation_spin_pulay_force_.c[i];
+                }
+            }
+            return;
+        }
         // Guard: a missing or wrong-sized complement density would silently
         // turn the frozen force back into the full-density Becke force.
         if (static_cast<int>(allocation_force_rho_.size()) != nspin)
@@ -2408,6 +2483,20 @@ void ConstraintLoop::compute_stress(const double* const* rho,
     // Becke stress, so abort loudly.
     if (allocation_mode_)
     {
+        // Branch: nspin=4 uses the same per-constraint folded densities as
+        // the force path.
+        if (nspin == 4)
+        {
+            if (static_cast<int>(allocation_spin_force_rho_.size())
+                != wg_->nconstraint())
+            {
+                ModuleBase::WARNING_QUIT("ConstraintLoop::compute_stress",
+                    "non-collinear allocation stress requires one density per constraint");
+            }
+            constraint::constraint_stress_densities(
+                *wg_, allocation_spin_force_rho_, stresscon);
+            return;
+        }
         if (static_cast<int>(allocation_force_rho_.size()) != nspin)
         {
             ModuleBase::WARNING_QUIT("ConstraintLoop::compute_stress",

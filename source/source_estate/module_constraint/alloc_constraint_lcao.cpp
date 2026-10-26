@@ -555,38 +555,30 @@ bool AllocConstraintLcao::complement_density(
             });
         reduce_pool(D);
 
-        // P = (S B)(S B)^T.  Accumulate X = B^T S D and
-        // Y = D S B once, then P D P through the R x R matrix Z.
-        std::vector<double> X(static_cast<size_t>(ntarget_) * norb_, 0.0);
-        std::vector<double> Y(static_cast<size_t>(norb_) * ntarget_, 0.0);
-        for (int i = 0; i < norb_; ++i)
+        // The frozen-weight grid coefficient is Q_c D Q_c^T, where
+        // Q_c = I - B B^T S.  Build the same algebra object as the S-adjoint
+        // path so both force channels share one target-space definition.
+        AllocConstraintAlgebra space;
+        try
         {
-            for (int j = 0; j < norb_; ++j)
-            {
-                const double d = D[static_cast<size_t>(i) * norb_ + j];
-                for (int a = 0; a < ntarget_; ++a)
-                {
-                    const double sb_i
-                        = SB_[static_cast<size_t>(i) * ntarget_ + a];
-                    const double sb_j
-                        = SB_[static_cast<size_t>(j) * ntarget_ + a];
-                    X[static_cast<size_t>(a) * norb_ + j] += sb_i * d;
-                    Y[static_cast<size_t>(i) * ntarget_ + a] += d * sb_j;
-                }
-            }
+            build_alloc_constraint_algebra(
+                S_dense_, norb_, target_.orbital, target_.atom,
+                target_constraint_, target_.ST, nconstraint_, space, rank_tol_);
         }
-        std::vector<double> Z(static_cast<size_t>(ntarget_) * ntarget_, 0.0);
-        for (int a = 0; a < ntarget_; ++a)
+        catch (const std::exception& e)
         {
-            for (int b = 0; b < ntarget_; ++b)
-            {
-                for (int j = 0; j < norb_; ++j)
-                {
-                    Z[static_cast<size_t>(a) * ntarget_ + b]
-                        += X[static_cast<size_t>(a) * norb_ + j]
-                           * SB_[static_cast<size_t>(j) * ntarget_ + b];
-                }
-            }
+            error = e.what();
+            return false;
+        }
+        std::vector<double> Dc_coeff;
+        try
+        {
+            build_alloc_constraint_complement_density(space, D, Dc_coeff);
+        }
+        catch (const std::exception& e)
+        {
+            error = e.what();
+            return false;
         }
 
         density_complement.emplace_back(*dmr[spin]);
@@ -620,21 +612,8 @@ bool AllocConstraintLcao::complement_density(
                 for (int j = 0; j < matrix->get_col_size(); ++j)
                 {
                     const int gj = base_j + cols[j];
-                    double value = D[static_cast<size_t>(gi) * norb_ + gj];
-                    for (int a = 0; a < ntarget_; ++a)
-                    {
-                        value -= SB_[static_cast<size_t>(gi) * ntarget_ + a]
-                                 * X[static_cast<size_t>(a) * norb_ + gj];
-                        value -= Y[static_cast<size_t>(gi) * ntarget_ + a]
-                                 * SB_[static_cast<size_t>(gj) * ntarget_ + a];
-                        for (int b = 0; b < ntarget_; ++b)
-                        {
-                            value += SB_[static_cast<size_t>(gi) * ntarget_ + a]
-                                     * Z[static_cast<size_t>(a) * ntarget_ + b]
-                                     * SB_[static_cast<size_t>(gj) * ntarget_ + b];
-                        }
-                    }
-                    matrix->get_value(i, j) = value;
+                    matrix->get_value(i, j)
+                        = Dc_coeff[static_cast<size_t>(gi) * norb_ + gj];
                 }
             }
         }

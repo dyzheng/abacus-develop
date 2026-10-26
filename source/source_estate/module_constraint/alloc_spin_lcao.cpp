@@ -7,6 +7,7 @@
 #include "source_estate/module_constraint/alloc_lcao.h"
 #include "source_estate/module_constraint/alloc_spin.h"
 #include "source_estate/module_constraint/constraint_inject_lcao.h"
+#include "source_lcao/module_gint/gint_interface.h"
 #include "source_lcao/module_gint/gint_info.h"
 #include "source_lcao/module_hcontainer/hcontainer.h"
 
@@ -198,6 +199,275 @@ std::complex<double> pauli_entry(const ModuleBase::Vector3<double>& lambda,
     return std::complex<double>(lambda.x, lambda.y);
 }
 
+std::vector<double> project_complement_density(
+    const AllocConstraintAlgebra& space,
+    const std::vector<double>& D)
+{
+    std::vector<double> Dc;
+    build_alloc_constraint_complement_density(space, D, Dc);
+    return Dc;
+}
+
+struct PauliBlock
+{
+    std::vector<double> rho0;
+    std::vector<double> rhox;
+    std::vector<double> rhoy;
+    std::vector<double> rhoz;
+};
+
+bool same_R(const ModuleBase::Vector3<int>& lhs,
+            const ModuleBase::Vector3<int>& rhs)
+{
+    return lhs.x == rhs.x && lhs.y == rhs.y && lhs.z == rhs.z;
+}
+
+bool less_R(const ModuleBase::Vector3<int>& lhs,
+            const ModuleBase::Vector3<int>& rhs)
+{
+    // Branch: sort lexicographically so every MPI rank reduces the same R
+    // blocks in the same order.
+    if (lhs.x != rhs.x)
+    {
+        return lhs.x < rhs.x;
+    }
+    // Branch: x is tied, so compare the y component next.
+    if (lhs.y != rhs.y)
+    {
+        return lhs.y < rhs.y;
+    }
+    return lhs.z < rhs.z;
+}
+
+std::vector<ModuleBase::Vector3<int>> global_R_union(
+    const hamilt::HContainer<double>& dmr,
+    const Parallel_Orbitals& pv)
+{
+    std::vector<ModuleBase::Vector3<int>> local;
+    for (size_t iap = 0; iap < dmr.size_atom_pairs(); ++iap)
+    {
+        const hamilt::AtomPair<double>& pair
+            = dmr.get_atom_pair(static_cast<int>(iap));
+        for (int iR = 0; iR < pair.get_R_size(); ++iR)
+        {
+            const ModuleBase::Vector3<int> R = pair.get_R_index(iR);
+            // Branch: keep only the first occurrence on this rank; the union
+            // across ranks is built below.
+            if (std::find_if(local.begin(), local.end(),
+                             [&](const ModuleBase::Vector3<int>& value) {
+                                 return same_R(value, R);
+                             })
+                == local.end())
+            {
+                local.push_back(R);
+            }
+        }
+    }
+    std::sort(local.begin(), local.end(), less_R);
+
+#ifdef __MPI
+    const MPI_Comm comm = pv.comm();
+    int nproc = 1;
+    MPI_Comm_size(comm, &nproc);
+    std::vector<int> counts(nproc, 0);
+    const int local_count = static_cast<int>(local.size() * 3);
+    MPI_Allgather(&local_count, 1, MPI_INT, counts.data(), 1, MPI_INT, comm);
+    std::vector<int> displs(nproc, 0);
+    int total_count = 0;
+    for (int rank = 0; rank < nproc; ++rank)
+    {
+        displs[rank] = total_count;
+        total_count += counts[rank];
+    }
+    std::vector<int> flat_local(local_count, 0);
+    for (size_t i = 0; i < local.size(); ++i)
+    {
+        flat_local[3 * i] = local[i].x;
+        flat_local[3 * i + 1] = local[i].y;
+        flat_local[3 * i + 2] = local[i].z;
+    }
+    std::vector<int> flat_global(total_count, 0);
+    MPI_Allgatherv(flat_local.data(), local_count, MPI_INT, flat_global.data(),
+                   counts.data(), displs.data(), MPI_INT, comm);
+    local.clear();
+    for (int i = 0; i + 2 < total_count; i += 3)
+    {
+        local.emplace_back(flat_global[i], flat_global[i + 1],
+                           flat_global[i + 2]);
+    }
+    std::sort(local.begin(), local.end(), less_R);
+    local.erase(std::unique(local.begin(), local.end(),
+                            [](const ModuleBase::Vector3<int>& lhs,
+                               const ModuleBase::Vector3<int>& rhs) {
+                                return same_R(lhs, rhs);
+                            }),
+                local.end());
+#endif
+    return local;
+}
+
+void reduce_pauli_block(PauliBlock& block, const Parallel_Orbitals& pv)
+{
+#ifdef __MPI
+    const MPI_Comm comm = pv.comm();
+    MPI_Allreduce(MPI_IN_PLACE, block.rho0.data(),
+                  static_cast<int>(block.rho0.size()), MPI_DOUBLE, MPI_SUM,
+                  comm);
+    MPI_Allreduce(MPI_IN_PLACE, block.rhox.data(),
+                  static_cast<int>(block.rhox.size()), MPI_DOUBLE, MPI_SUM,
+                  comm);
+    MPI_Allreduce(MPI_IN_PLACE, block.rhoy.data(),
+                  static_cast<int>(block.rhoy.size()), MPI_DOUBLE, MPI_SUM,
+                  comm);
+    MPI_Allreduce(MPI_IN_PLACE, block.rhoz.data(),
+                  static_cast<int>(block.rhoz.size()), MPI_DOUBLE, MPI_SUM,
+                  comm);
+#else
+    (void)pv;
+#endif
+}
+
+bool extract_pauli_block(const UnitCell& ucell,
+                         const hamilt::HContainer<double>& dmr,
+                         const int norb,
+                         const ModuleBase::Vector3<int>& R,
+                         PauliBlock& block,
+                         std::string& error)
+{
+    const Parallel_Orbitals* pv = dmr.get_paraV();
+    // Guard: a layout-less DMR cannot be mapped to global scalar orbitals.
+    if (pv == nullptr)
+    {
+        error = "Pauli DMR has no Parallel_Orbitals layout";
+        return false;
+    }
+    const int npol = ucell.get_npol();
+    // Guard: the Pauli packing is defined only for the two-spinor case.
+    if (npol != 2)
+    {
+        error = "Pauli density extraction requires npol = 2";
+        return false;
+    }
+    const std::vector<int> base = scalar_iat2iwt(ucell, npol);
+    const size_t size = static_cast<size_t>(norb) * norb;
+    block.rho0.assign(size, 0.0);
+    block.rhox.assign(size, 0.0);
+    block.rhoy.assign(size, 0.0);
+    block.rhoz.assign(size, 0.0);
+
+    for (size_t iap = 0; iap < dmr.size_atom_pairs(); ++iap)
+    {
+        const hamilt::AtomPair<double>& pair
+            = dmr.get_atom_pair(static_cast<int>(iap));
+        const int iat1 = pair.get_atom_i();
+        const int iat2 = pair.get_atom_j();
+        const hamilt::BaseMatrix<double>* matrix = pair.find_matrix(R);
+        // Branch: this rank does not own this R block; other ranks contribute
+        // the missing pieces through the all-reduce below.
+        if (matrix == nullptr)
+        {
+            continue;
+        }
+        const std::vector<int> rows = pv->get_indexes_row(iat1);
+        const std::vector<int> cols = pv->get_indexes_col(iat2);
+        // Guard: the local maps must cover this distributed block exactly.
+        if (rows.size() != static_cast<size_t>(matrix->get_row_size())
+            || cols.size() != static_cast<size_t>(matrix->get_col_size()))
+        {
+            error = "Pauli DMR block/local index mismatch";
+            return false;
+        }
+        for (int i = 0; i < matrix->get_row_size(); ++i)
+        {
+            const int s = rows[i] % npol;
+            const int mu = base[iat1] + rows[i] / npol;
+            for (int j = 0; j < matrix->get_col_size(); ++j)
+            {
+                const int t = cols[j] % npol;
+                const int nu = base[iat2] + cols[j] / npol;
+                const size_t index = static_cast<size_t>(mu) * norb + nu;
+                // Branch (s,t): the interleaved spinor slot selects one Pauli
+                // component, independent of the local block origin.
+                if (s == 0 && t == 0)
+                {
+                    block.rho0[index] += matrix->get_value(i, j);
+                }
+                else if (s == 0 && t == 1)
+                {
+                    block.rhox[index] += matrix->get_value(i, j);
+                }
+                else if (s == 1 && t == 0)
+                {
+                    block.rhoy[index] += matrix->get_value(i, j);
+                }
+                else
+                {
+                    block.rhoz[index] += matrix->get_value(i, j);
+                }
+            }
+        }
+    }
+    reduce_pauli_block(block, *pv);
+    return true;
+}
+
+bool write_scalar_density_block(const UnitCell& ucell,
+                                const int norb,
+                                const std::vector<int>& base,
+                                const Parallel_Orbitals& pv,
+                                const ModuleBase::Vector3<int>& R,
+                                const std::vector<double>& density,
+                                hamilt::HContainer<double>& layout,
+                                std::string& error)
+{
+    const int npol = ucell.get_npol();
+    for (size_t iap = 0; iap < layout.size_atom_pairs(); ++iap)
+    {
+        hamilt::AtomPair<double>& pair
+            = layout.get_atom_pair(static_cast<int>(iap));
+        const int iat1 = pair.get_atom_i();
+        const int iat2 = pair.get_atom_j();
+        hamilt::BaseMatrix<double>* matrix = pair.find_matrix(R);
+        // Branch: this rank has no local part of this R block.
+        if (matrix == nullptr)
+        {
+            continue;
+        }
+        const std::vector<int> rows = pv.get_indexes_row(iat1);
+        const std::vector<int> cols = pv.get_indexes_col(iat2);
+        // Guard: the local maps must cover this distributed block exactly.
+        if (rows.size() != static_cast<size_t>(matrix->get_row_size())
+            || cols.size() != static_cast<size_t>(matrix->get_col_size()))
+        {
+            error = "spin allocation density block/index mismatch";
+            return false;
+        }
+        for (int i = 0; i < matrix->get_row_size(); ++i)
+        {
+            // Branch: only spinor component zero belongs to the scalar
+            // density slot consumed by Gint.
+            if (rows[i] % npol != 0)
+            {
+                continue;
+            }
+            const int gi = base[iat1] + rows[i] / npol;
+            for (int j = 0; j < matrix->get_col_size(); ++j)
+            {
+                // Branch: the complementary scalar matrix is spin diagonal;
+                // all off-diagonal spinor entries stay zero.
+                if (cols[j] % npol != 0)
+                {
+                    continue;
+                }
+                const int gj = base[iat2] + cols[j] / npol;
+                matrix->get_value(i, j)
+                    = density[static_cast<size_t>(gi) * norb + gj];
+            }
+        }
+    }
+    return true;
+}
+
 } // namespace
 
 bool extract_spinor_scalar_overlap(
@@ -224,10 +494,12 @@ bool extract_spinor_scalar_overlap(
                 const std::complex<double>& value) {
                 const int s = r % npol;
                 const int t = c % npol;
-                // Branch: only the spin-diagonal (s == t) channel is the
-                // scalar overlap; the off-diagonal blocks are zero for a
-                // spin-independent overlap operator.
-                if (s == t)
+                // Branch: the spin-independent overlap is S tensor I, so
+                // both diagonal spin blocks equal the scalar S.  Taking only
+                // (s=0,t=0) avoids summing the two identical copies, which
+                // would scale S, the target orthonormalization and every
+                // allocation kernel by two.
+                if (s == 0 && t == 0)
                 {
                     const int mu = base[iat1] + r / npol;
                     const int nu = base[iat2] + c / npol;
@@ -453,8 +725,11 @@ void AllocSpinConstraintLcao::reset()
     ucell_ = nullptr;
     space_ = AllocConstraintAlgebra{};
     kinds_.clear();
+    S_dense_.clear();
     W_dense_.clear();
     K_dense_.clear();
+    cw_.clear();
+    gint_info_ = nullptr;
     lambda_.clear();
     scalar_iat2iwt_.clear();
     layout_template_.reset();
@@ -514,6 +789,8 @@ bool AllocSpinConstraintLcao::build(
         nconstraint_ = static_cast<int>(cw.size());
         ucell_ = &ucell;
         kinds_ = kinds;
+        cw_ = cw;
+        gint_info_ = gint_info;
         lambda_ = lambda;
         rank_tol_ = rank_tol;
         norb_ = scalar_norb(ucell);
@@ -524,6 +801,7 @@ bool AllocSpinConstraintLcao::build(
         {
             return false;
         }
+        S_dense_ = S_scalar;
 
         std::vector<int> target_atom;
         const std::vector<int> target_orbital
@@ -628,7 +906,6 @@ bool AllocSpinConstraintLcao::build(
             build_alloc_constraint_kernel(space_, W_dense_[alpha], alpha, K);
             K_dense_.push_back(std::move(K));
         }
-
         layout_template_
             = std::make_unique<hamilt::HContainer<std::complex<double>>>(
                 h_layout);
@@ -743,6 +1020,245 @@ bool AllocSpinConstraintLcao::project(
     {
         error = e.what();
         return false;
+    }
+    return true;
+}
+
+bool AllocSpinConstraintLcao::complement_densities(
+    const UnitCell& ucell,
+    const std::vector<const hamilt::HContainer<double>*>& dmr,
+    const int nrxx,
+    std::vector<std::vector<double>>& rho,
+    ModuleBase::matrix& weight_pulay_force,
+    std::string& error) const
+{
+    // Guard: the complementary density is only meaningful after the target
+    // space, W_i and S were built on this geometry.
+    if (!active_ || S_dense_.empty())
+    {
+        error = "spin allocation constraint is not initialized for force";
+        return false;
+    }
+    // Guard: nspin=4 owns exactly one real Pauli DMR container.
+    if (dmr.size() != 1 || dmr[0] == nullptr)
+    {
+        error = "spin allocation force needs exactly one Pauli DMR";
+        return false;
+    }
+    // Guard: an unallocated grid cannot receive the Gint density.
+    if (nrxx <= 0)
+    {
+        error = "spin allocation force needs a positive density-grid size";
+        return false;
+    }
+
+    const Parallel_Orbitals* pv = dmr[0]->get_paraV();
+    // Guard: a layout-less DMR cannot be mapped into this rank's blocks.
+    if (pv == nullptr)
+    {
+        error = "Pauli DMR has no Parallel_Orbitals layout";
+        return false;
+    }
+    // Guard: the W_i basis derivative needs the weight field and Gint layout
+    // cached by build() on this geometry.
+    if (gint_info_ == nullptr
+        || static_cast<int>(cw_.size()) != nconstraint_)
+    {
+        error = "spin allocation W Pulay force is not initialized";
+        return false;
+    }
+    const int npol = ucell.get_npol();
+    const std::vector<int> base = scalar_iat2iwt(ucell, npol);
+    const std::vector<ModuleBase::Vector3<int>> all_R
+        = global_R_union(*dmr[0], *pv);
+    std::vector<PauliBlock> pauli_R(all_R.size());
+    for (size_t iR = 0; iR < all_R.size(); ++iR)
+    {
+        // The spinor DMR retains every periodic image, while the target-space
+        // projector is built from S(k=Gamma) = sum_R S_R.  Project each D_R
+        // separately and later let Gint sum the resulting real-space blocks.
+        if (!extract_pauli_block(ucell, *dmr[0], norb_, all_R[iR],
+                                 pauli_R[iR], error))
+        {
+            return false;
+        }
+    }
+    rho.assign(nconstraint_, std::vector<double>(nrxx, 0.0));
+    weight_pulay_force.create(ucell.nat, 3);
+    weight_pulay_force.zero_out();
+
+    for (int alpha = 0; alpha < nconstraint_; ++alpha)
+    {
+        // Reuse the Pauli DMR layout but keep only the (s=0,t=0) spinor slot.
+        // Gint maps that slot to rho[0] in the nspin=4 four-component output;
+        // the other three slots stay zero and are discarded below.
+        hamilt::HContainer<double> density_layout(*dmr[0]);
+        density_layout.set_zero();
+        for (size_t iR = 0; iR < all_R.size(); ++iR)
+        {
+            const PauliBlock& block = pauli_R[iR];
+            std::vector<double> D_alpha(static_cast<size_t>(norb_) * norb_,
+                                        0.0);
+            // Branch: spin constraints fold the full lambda vector into the
+            // Pauli density; charge constraints use the scalar z-mirror
+            // multiplier.
+            if (kinds_[alpha] == constraint::ConstraintKind::Spin)
+            {
+                for (size_t i = 0; i < D_alpha.size(); ++i)
+                {
+                    D_alpha[i] = lambda_[alpha].x * block.rhox[i]
+                                 + lambda_[alpha].y * block.rhoy[i]
+                                 + lambda_[alpha].z * block.rhoz[i];
+                }
+            }
+            else
+            {
+                for (size_t i = 0; i < D_alpha.size(); ++i)
+                {
+                    D_alpha[i] = lambda_[alpha].z * block.rho0[i];
+                }
+            }
+            std::vector<double> Dc;
+            try
+            {
+                Dc = project_complement_density(space_, D_alpha);
+            }
+            catch (const std::exception& e)
+            {
+                error = e.what();
+                return false;
+            }
+            // C = Q_c D Q_c^T is generally not symmetric.  The scalar grid
+            // density is invariant under replacing C by its symmetric part,
+            // but Gint's basis-derivative kernel assumes a Hermitian DMR and
+            // applies the factor-two contraction 2 * C.  Symmetrizing here
+            // removes the antisymmetric part, which contributes nothing to
+            // the energy but would otherwise create a spurious Pulay force.
+            for (int row = 0; row < norb_; ++row)
+            {
+                for (int col = row + 1; col < norb_; ++col)
+                {
+                    const size_t upper
+                        = static_cast<size_t>(row) * norb_ + col;
+                    const size_t lower
+                        = static_cast<size_t>(col) * norb_ + row;
+                    const double average = 0.5 * (Dc[upper] + Dc[lower]);
+                    Dc[upper] = average;
+                    Dc[lower] = average;
+                }
+            }
+            if (!write_scalar_density_block(ucell, norb_, base, *pv, all_R[iR],
+                                            Dc, density_layout, error))
+            {
+                return false;
+            }
+        }
+
+        std::vector<std::vector<double>> rho4(
+            4, std::vector<double>(nrxx, 0.0));
+        std::vector<double*> rho_pointers(4, nullptr);
+        for (int component = 0; component < 4; ++component)
+        {
+            rho_pointers[component] = rho4[component].data();
+        }
+        std::vector<hamilt::HContainer<double>*> dm_gint{&density_layout};
+        ModuleGint::cal_gint_rho(dm_gint, 4, rho_pointers.data());
+        rho[alpha] = std::move(rho4[0]);
+        // W_i depends on the basis functions as well as the weight values.
+        // The grid kernel above supplies -int rho_C d w_i; the remaining
+        // -int w_i d rho_C is the local-potential Pulay force at fixed w_i.
+        // Gint_fvl returns that force with the same sign convention as the
+        // production local-potential term, so it is accumulated directly.
+        std::vector<const double*> vr_eff(4, nullptr);
+        std::vector<double> zero_grid(cw_[alpha].size(), 0.0);
+        vr_eff[0] = cw_[alpha].data();
+        for (int component = 1; component < 4; ++component)
+        {
+            vr_eff[component] = zero_grid.data();
+        }
+        ModuleGint::cal_gint_fvl(4, vr_eff, dm_gint, true, false,
+                                 &weight_pulay_force, nullptr);
+    }
+    // Gint returns only this rank's local biggrid contribution.  The grid
+    // force kernel and the standard local-potential Pulay force are both
+    // pooled explicitly, so reduce the basis-derivative half once after all
+    // per-constraint contributions have been accumulated.
+#ifdef __MPI
+    Parallel_Reduce::reduce_pool(weight_pulay_force.c,
+                                 weight_pulay_force.nr * weight_pulay_force.nc);
+#endif
+    return true;
+}
+
+bool AllocSpinConstraintLcao::s_derivative_force_density(
+    const UnitCell& ucell,
+    const std::vector<const hamilt::HContainer<double>*>& dmr,
+    std::vector<double>& energy_density,
+    std::string& error) const
+{
+    // Branch: the adjoint needs the overlap, target space and weight matrices
+    // cached by build() on this geometry.
+    if (!active_ || S_dense_.empty()
+        || static_cast<int>(W_dense_.size()) != nconstraint_)
+    {
+        error = "spin allocation dS force density is not initialized";
+        return false;
+    }
+    // Guard: nspin=4 owns exactly one real Pauli DMR container.
+    if (dmr.size() != 1 || dmr[0] == nullptr)
+    {
+        error = "spin allocation dS force needs exactly one Pauli DMR";
+        return false;
+    }
+
+    std::vector<double> rho0;
+    std::vector<double> rhox;
+    std::vector<double> rhoy;
+    std::vector<double> rhoz;
+    if (!extract_pauli_density(ucell, *dmr[0], norb_, rho0, rhox, rhoy, rhoz,
+                               error))
+    {
+        return false;
+    }
+
+    energy_density.assign(static_cast<size_t>(norb_) * norb_, 0.0);
+    for (int alpha = 0; alpha < nconstraint_; ++alpha)
+    {
+        std::vector<double> D_alpha(static_cast<size_t>(norb_) * norb_, 0.0);
+        // Branch: spin constraints contract the full lambda vector with the
+        // Pauli density; charge constraints use the scalar multiplier.
+        if (kinds_[alpha] == constraint::ConstraintKind::Spin)
+        {
+            for (size_t i = 0; i < D_alpha.size(); ++i)
+            {
+                D_alpha[i] = lambda_[alpha].x * rhox[i]
+                             + lambda_[alpha].y * rhoy[i]
+                             + lambda_[alpha].z * rhoz[i];
+            }
+        }
+        else
+        {
+            for (size_t i = 0; i < D_alpha.size(); ++i)
+            {
+                D_alpha[i] = lambda_[alpha].z * rho0[i];
+            }
+        }
+
+        std::vector<double> E_alpha;
+        try
+        {
+            build_alloc_constraint_s_adjoint(space_, S_dense_, W_dense_[alpha],
+                                             alpha, D_alpha, E_alpha);
+        }
+        catch (const std::exception& e)
+        {
+            error = e.what();
+            return false;
+        }
+        for (size_t i = 0; i < energy_density.size(); ++i)
+        {
+            energy_density[i] += E_alpha[i];
+        }
     }
     return true;
 }

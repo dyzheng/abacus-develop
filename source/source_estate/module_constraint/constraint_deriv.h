@@ -112,6 +112,33 @@ void constraint_stress(const WeightGrid& wg,
                        const std::vector<double>& mu,
                        ModuleBase::matrix& stress);
 
+/**
+ * @brief Grid force for already channel-folded, per-constraint densities.
+ *
+ * This is the non-collinear allocation entry.  Each rho[alpha] already
+ * contains the multiplier and the spin-vector contraction lambda_alpha.sigma
+ * (and the target-space complement projection), so the kernel applies no
+ * additional channel profile or mu factor:
+ *
+ *   F_J^d = -sum_alpha int rho_alpha(g) d w_alpha(g)/d R_J^d dV.
+ */
+void constraint_force_densities(
+    const WeightGrid& wg,
+    const std::vector<std::vector<double>>& rho,
+    ModuleBase::matrix& force);
+
+/**
+ * @brief Strain counterpart of constraint_force_densities().
+ *
+ * Every rho[alpha] already carries its constraint multiplier.  The kernel
+ * adds the explicit weight strain derivative and the cell-volume Jacobian
+ * term, then symmetrizes the resulting 3 x 3 tensor.
+ */
+void constraint_stress_densities(
+    const WeightGrid& wg,
+    const std::vector<std::vector<double>>& rho,
+    ModuleBase::matrix& stress);
+
 } // namespace constraint
 
 #endif

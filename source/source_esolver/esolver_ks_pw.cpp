@@ -387,9 +387,10 @@ void ESolver_KS_PW<T, Device>::iter_finish(UnitCell& ucell, const int istep, int
         {
             this->p_chgmix->mix_reset();
         }
-        // Refresh the total energy with the constraint correction
-        // (cc_escon), mirroring the dp_escon path.
-        this->pelec->f_en.cc_escon = cloop.last_audit().e_con;
+        // Refresh the total energy with the shared constraint output
+        // correction.  Allocation subtracts only mu.target; the legacy PW
+        // path keeps the audited functional.
+        this->pelec->f_en.cc_escon = cloop.output_energy_correction();
         if (cloop.enabled())
         {
             this->pelec->f_en.calculate_etot();
