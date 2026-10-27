@@ -2,6 +2,7 @@
 
 #include "source_estate/cal_ux.h"
 #include "source_estate/elecstate_pw.h"
+#include "source_estate/elecstate_tools.h"
 #include "source_estate/module_charge/symmetry_rho.h"
 
 #include "source_hsolver/diago_iter_assist.h"
@@ -41,7 +42,10 @@
 
 #include "source_hamilt/module_xc/exx_info.h" // use GlobalC::exx_info
 
+#include <algorithm>
+#include <type_traits>
 #include <utility>
+#include <vector>
 
 namespace ModuleESolver
 {
@@ -298,8 +302,130 @@ void ESolver_KS_PW<T, Device>::hamilt2rho_single(UnitCell& ucell, const int iste
             this->pelec->pot->get_veff_smooth());
     }
 
+    bool skip_solve = false;
+    // Branch: PW allocation fast path (opt-in).  After an outer/inner mu move
+    // the constraint loop arms one fixed-density subspace rotation.  Rotating
+    // psi in the current nbands x nbands subspace and rebuilding the density
+    // costs one batched hPsi per k-point, whereas a full HSolver restart can
+    // spend several Davidson sweeps re-discovering the moved potential.  This
+    // mirrors DeltaSpin's update_psi_charge_pw_cpu(stage 1/2).
+    if (PARAM.inp.constraint && PARAM.inp.constraint_alloc_subspace_rotation
+        && std::is_same<T, std::complex<double>>::value
+        && std::is_same<Device, base_device::DEVICE_CPU>::value
+        && constraint::ConstraintLoop::instance().allocation_mode()
+        && constraint::ConstraintLoop::instance()
+               .consume_alloc_subspace_rotation())
+    {
+        auto* psi_cpu = this->stp.psi_cpu;
+        auto* hamilt_cpu = reinterpret_cast<
+            hamilt::Hamilt<std::complex<double>,
+                           base_device::DEVICE_CPU>*>(this->p_hamilt);
+        auto* pelec_pw = reinterpret_cast<elecstate::ElecStatePW<
+            std::complex<double>, base_device::DEVICE_CPU>*>(this->pelec);
+        // Guard: the fast path only owns the CPU double closure; any missing
+        // object falls back to the normal HSolver instead of silently
+        // skipping the diagonalization.
+        if (psi_cpu != nullptr && hamilt_cpu != nullptr && pelec_pw != nullptr)
+        {
+            constraint::ConstraintLoop& cloop
+                = constraint::ConstraintLoop::instance();
+            const int nbands = psi_cpu->get_nbands();
+            std::vector<std::complex<double>> hcc(
+                static_cast<size_t>(nbands) * nbands, 0.0);
+            std::vector<std::complex<double>> scc(
+                static_cast<size_t>(nbands) * nbands, 0.0);
+            // The fixed-density loop is the DeltaSpin inner-lambda analogue:
+            // rotate in the current nbands subspace, measure the allocation
+            // observable, and advance mu before the density is rebuilt.  It
+            // stops at the constraint threshold or the user budget.
+            const int max_inner = std::max(
+                1, std::min(8, PARAM.inp.constraint_alloc_subspace_iterations));
+            // The multi-iteration branch is still experimental: on Fe2 a
+            // second fixed-density update over-corrects before the density
+            // responds and the run lands on the wrong magnetic branch.  Warn
+            // once so a production input cannot enable it silently.
+            static bool inner_budget_warned = false;
+            if (max_inner > 1 && !inner_budget_warned)
+            {
+                inner_budget_warned = true;
+                GlobalV::ofs_running
+                    << "[constraint] WARNING: constraint_alloc_subspace_"
+                       "iterations > 1 is experimental; Fe2 may over-correct "
+                       "and flip magnetic branches\n";
+            }
+            int inner_done = 0;
+            for (int inner = 0; inner < max_inner; ++inner)
+            {
+                for (int ik = 0; ik < psi_cpu->get_nk(); ++ik)
+                {
+                    psi_cpu->fix_k(ik);
+                    hamilt_cpu->updateHk(ik);
+                    hsolver::DiagoIterAssist<std::complex<double>,
+                                             base_device::DEVICE_CPU>::
+                        cal_hs_subspace(hamilt_cpu, *psi_cpu, hcc.data(),
+                                        scc.data());
+                    hsolver::DiagoIterAssist<std::complex<double>,
+                                             base_device::DEVICE_CPU>::
+                        diag_subspace_psi(hcc.data(), scc.data(), nbands,
+                                          *psi_cpu,
+                                          &this->pelec->ekb(ik, 0));
+                }
+                elecstate::calculate_weights(
+                    this->pelec->ekb, this->pelec->wg, this->pelec->klist,
+                    this->pelec->eferm, this->pelec->f_en,
+                    this->pelec->nelec_spin, this->pelec->skip_weights);
+                ++inner_done;
+                // Branch: the last allowed rotation has no following mu
+                // update; the density is rebuilt below from this state.
+                if (inner + 1 >= max_inner)
+                {
+                    break;
+                }
+                std::vector<double> n_alloc;
+                std::vector<double> m_alloc;
+                std::string alloc_error;
+                if (!alloc::compute_pw_alloc_observables(
+                        ucell, psi_cpu, this->pelec->wg, this->kv,
+                        *this->pw_wfc, PARAM.inp.nspin, cloop.weight_grid(),
+                        PARAM.inp.constraint_alloc_target_l, n_alloc,
+                        m_alloc, alloc_error))
+                {
+                    ModuleBase::WARNING_QUIT(
+                        "ESolver_KS_PW::hamilt2rho_single", alloc_error);
+                }
+                const constraint::MuStatus inner_status
+                    = cloop.subspace_mu_step(n_alloc, m_alloc);
+                // Branch: CONVERGED/UNREACHABLE freezes mu for this density;
+                // another rotation would only repeat the same subspace.
+                if (inner_status != constraint::MuStatus::RUNNING)
+                {
+                    break;
+                }
+            }
+            // The final rotated bands must update the energy and density
+            // before the next iteration observes the constrained moment.
+            elecstate::calEBand(this->pelec->ekb, this->pelec->wg,
+                                this->pelec->f_en);
+            pelec_pw->psiToRho(*psi_cpu);
+            skip_solve = true;
+            GlobalV::ofs_running
+                << "[constraint] ALLOC-PW subspace rotation at SCF iteration "
+                << iter << " (nbands=" << nbands
+                << ", inner rotations=" << inner_done << ")\n";
+        }
+        else
+        {
+            GlobalV::ofs_running
+                << "[constraint] ALLOC-PW subspace rotation skipped: only "
+                   "the CPU complex<double> PW closure is supported\n";
+        }
+    }
     // run the inner lambda loop to contrain atomic moments with the DeltaSpin method
-    bool skip_solve = pw::run_deltaspin_lambda_loop(iter - 1, this->drho, PARAM.inp);
+    if (!skip_solve)
+    {
+        skip_solve = pw::run_deltaspin_lambda_loop(iter - 1, this->drho,
+                                                   PARAM.inp);
+    }
 
     // DeltaP (Phase A): no inner lambda loop in PW — lambda is updated
     // synchronously in iter_finish (deltap_iter_finish) after charge

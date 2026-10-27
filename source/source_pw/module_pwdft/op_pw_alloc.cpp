@@ -57,6 +57,28 @@ void reduce_pool(std::vector<std::complex<double>>& values)
 #endif
 }
 
+void apply_local_potential_reuse(
+    const ModulePW::PW_Basis_K& pw,
+    const int ik,
+    const std::vector<double>& potential,
+    const std::complex<double>* input,
+    const int npw,
+    std::vector<std::complex<double>>& porter,
+    std::complex<double>* output)
+{
+    // The PW transform reads only the first npw reciprocal coefficients and
+    // overwrites all nrxx real-space values.  Keeping the input and output in
+    // place therefore avoids two nmaxgr-sized clears plus a full copy per band.
+    pw.template recip_to_real<std::complex<double>, base_device::DEVICE_CPU>(
+        input, porter.data(), ik);
+    for (int ir = 0; ir < pw.nrxx; ++ir)
+    {
+        porter[ir] *= potential[ir];
+    }
+    pw.template real_to_recip<std::complex<double>, base_device::DEVICE_CPU>(
+        porter.data(), output, ik);
+}
+
 std::vector<std::complex<double>> apply_local_potential(
     const ModulePW::PW_Basis_K& pw,
     const int ik,
@@ -64,28 +86,12 @@ std::vector<std::complex<double>> apply_local_potential(
     const std::complex<double>* input,
     const int npw)
 {
-    std::vector<std::complex<double>> work(pw.nmaxgr,
-                                           std::complex<double>(0.0, 0.0));
     std::vector<std::complex<double>> porter(pw.nmaxgr,
                                              std::complex<double>(0.0, 0.0));
-    for (int ig = 0; ig < npw; ++ig)
-    {
-        work[ig] = input[ig];
-    }
-    pw.template recip_to_real<std::complex<double>, base_device::DEVICE_CPU>(
-        work.data(), porter.data(), ik);
-    for (int ir = 0; ir < pw.nrxx; ++ir)
-    {
-        porter[ir] *= potential[ir];
-    }
-    pw.template real_to_recip<std::complex<double>, base_device::DEVICE_CPU>(
-        porter.data(), work.data(), ik);
     std::vector<std::complex<double>> result(npw,
                                              std::complex<double>(0.0, 0.0));
-    for (int ig = 0; ig < npw; ++ig)
-    {
-        result[ig] = work[ig];
-    }
+    apply_local_potential_reuse(pw, ik, potential, input, npw, porter,
+                                result.data());
     return result;
 }
 
@@ -210,12 +216,11 @@ bool build_target_context(
     return true;
 }
 
-bool build_mu_potential(const constraint::WeightGrid& weight_grid,
-                        const constraint::ConstraintLoop& loop,
-                        const int spin,
-                        std::vector<double>& potential,
-                        std::vector<double>& lambda,
-                        std::string& error)
+bool build_mu_coefficients(const constraint::WeightGrid& weight_grid,
+                           const constraint::ConstraintLoop& loop,
+                           const int spin,
+                           std::vector<double>& lambda,
+                           std::string& error)
 {
     const int nconstraint = weight_grid.nconstraint();
     const std::vector<double>& mu = loop.mu_eff();
@@ -228,9 +233,7 @@ bool build_mu_potential(const constraint::WeightGrid& weight_grid,
         return false;
     }
 
-    potential.assign(weight_grid.nrxx(), 0.0);
     lambda.assign(nconstraint, 0.0);
-    const auto& weights = weight_grid.constraint_weights();
     for (int alpha = 0; alpha < nconstraint; ++alpha)
     {
         // Branch A: spin-up (or the single nspin=1 channel) uses inj_up.
@@ -238,14 +241,29 @@ bool build_mu_potential(const constraint::WeightGrid& weight_grid,
         // spin constraint and the same sign for a charge constraint.
         const double sign = (spin == 0) ? channels[alpha].inj_up
                                        : channels[alpha].inj_dn;
-        const double coefficient = mu[alpha] * sign;
-        lambda[alpha] = coefficient;
-        for (int ir = 0; ir < weight_grid.nrxx(); ++ir)
-        {
-            potential[ir] += coefficient * weights[alpha][ir];
-        }
+        lambda[alpha] = mu[alpha] * sign;
     }
     return true;
+}
+
+void build_mu_potential(const constraint::WeightGrid& weight_grid,
+                        const std::vector<double>& lambda,
+                        std::vector<double>& potential)
+{
+    potential.assign(weight_grid.nrxx(), 0.0);
+    const auto& weights = weight_grid.constraint_weights();
+    for (int alpha = 0; alpha < weight_grid.nconstraint(); ++alpha)
+    {
+        // Branch: a zero multiplier leaves the accumulated potential unchanged.
+        if (lambda[alpha] == 0.0)
+        {
+            continue;
+        }
+        for (int ir = 0; ir < weight_grid.nrxx(); ++ir)
+        {
+            potential[ir] += lambda[alpha] * weights[alpha][ir];
+        }
+    }
 }
 
 bool build_target_products(
@@ -263,10 +281,14 @@ bool build_target_products(
                                                   std::complex<double>(0.0, 0.0)));
     m_raw.assign(static_cast<size_t>(r) * r,
                  std::complex<double>(0.0, 0.0));
+    // All target FFTs use the same real-space work array; allocating it once
+    // avoids R repeated nmaxgr allocations and clears on every lambda change.
+    std::vector<std::complex<double>> porter(pw.nmaxgr,
+                                             std::complex<double>(0.0, 0.0));
     for (int a = 0; a < r; ++a)
     {
-        vphi[a] = apply_local_potential(pw, ik, potential,
-                                        context.phi[a].data(), context.npw);
+        apply_local_potential_reuse(pw, ik, potential, context.phi[a].data(),
+                                    context.npw, porter, vphi[a].data());
     }
     for (int a = 0; a < r; ++a)
     {
@@ -299,9 +321,9 @@ bool build_target_products(
     return true;
 }
 
-void build_raw_overlap(const PwTargetContext& context,
-                       const std::complex<double>* psi,
-                       std::vector<std::complex<double>>& raw)
+void build_raw_overlap_local(const PwTargetContext& context,
+                             const std::complex<double>* psi,
+                             std::vector<std::complex<double>>& raw)
 {
     raw.assign(context.space.ntarget, std::complex<double>(0.0, 0.0));
     for (int a = 0; a < context.space.ntarget; ++a)
@@ -313,6 +335,13 @@ void build_raw_overlap(const PwTargetContext& context,
         }
         raw[a] = value;
     }
+}
+
+void build_raw_overlap(const PwTargetContext& context,
+                       const std::complex<double>* psi,
+                       std::vector<std::complex<double>>& raw)
+{
+    build_raw_overlap_local(context, psi, raw);
     // One collective for the whole raw target overlap vector.
     {
         std::vector<double> packed(2 * raw.size(), 0.0);
@@ -325,6 +354,22 @@ void build_raw_overlap(const PwTargetContext& context,
         for (size_t i = 0; i < raw.size(); ++i)
         {
             raw[i] = std::complex<double>(packed[2 * i], packed[2 * i + 1]);
+        }
+    }
+}
+
+void build_vphi_overlap_local(
+    const std::vector<std::vector<std::complex<double>>>& vphi,
+    const std::complex<double>* psi,
+    const int npw,
+    std::vector<std::complex<double>>& braw)
+{
+    braw.assign(vphi.size(), std::complex<double>(0.0, 0.0));
+    for (size_t a = 0; a < vphi.size(); ++a)
+    {
+        for (int ig = 0; ig < npw; ++ig)
+        {
+            braw[a] += std::conj(vphi[a][ig]) * psi[ig];
         }
     }
 }
@@ -803,57 +848,104 @@ bool compute_pw_alloc_observables(
         {
             return false;
         }
+        // The normalized target basis is independent of the constrained
+        // channel.  Build it once per k and reuse it for every band and every
+        // alpha; the old observable loop rebuilt the full target products for
+        // each alpha separately.
+        std::vector<std::vector<std::complex<double>>> phi_orth;
+        try
+        {
+            build_pw_alloc_orthogonal_phi(context.space, context.phi,
+                                          phi_orth);
+        }
+        catch (const std::invalid_argument& exc)
+        {
+            error = std::string("PW allocation observable: ") + exc.what();
+            return false;
+        }
         const int spin_sign = (kv.isk[ik] == 1) ? -1 : 1;
         const std::complex<double>* psi_k = psi->get_pointer();
-        for (int alpha = 0; alpha < nconstraint; ++alpha)
+        const int npw = context.npw;
+        // The complementary state is transformed to real space once per band.
+        // Every constraint then reduces to a weighted norm on that same grid,
+        // instead of paying one FFT pair per constraint.
+        std::vector<std::complex<double>> complement_real(
+            wfcpw.nmaxgr, std::complex<double>(0.0, 0.0));
+        const double inverse_grid_size = 1.0 / static_cast<double>(wfcpw.nxyz);
+        for (int band = 0; band < nband; ++band)
         {
-            const std::vector<double>& potential
-                = weight_grid.constraint_weight(alpha);
-            std::vector<std::vector<std::complex<double>>> vphi;
-            std::vector<std::complex<double>> m_raw;
-            if (!build_target_products(wfcpw, ik, potential,
-                                       context, vphi, m_raw, error))
+            const double occupation = occupations(ik, band);
+            // Branch: an empty band contributes nothing to q.
+            if (occupation == 0.0)
             {
-                return false;
+                continue;
             }
-            PwAllocOrthogonalContext orthogonal;
-            build_pw_alloc_orthogonal_context(context.space, context.phi,
-                                              vphi, m_raw, orthogonal);
-            std::vector<double> lambda(nconstraint, 0.0);
-            lambda[alpha] = 1.0;
-            for (int band = 0; band < nband; ++band)
+            const std::complex<double>* band_ptr
+                = psi_k + static_cast<size_t>(band) * ld_psi;
+            std::vector<std::complex<double>> raw;
+            build_raw_overlap(context, band_ptr, raw);
+            std::vector<std::complex<double>> overlap;
+            orthogonalize_pw_overlaps(context.space, raw, overlap);
+
+            // Q_c|psi> = |psi> - sum_a |phi_a><phi_a|psi>.
+            std::vector<std::complex<double>> complement(
+                npw, std::complex<double>(0.0, 0.0));
+            for (int ig = 0; ig < npw; ++ig)
             {
-                const double occupation = occupations(ik, band);
-                // Branch: an empty band contributes nothing to Tr(D K_i).
-                if (occupation == 0.0)
+                complement[ig] = band_ptr[ig];
+            }
+            for (int a = 0; a < context.space.ntarget; ++a)
+            {
+                for (int ig = 0; ig < npw; ++ig)
                 {
-                    continue;
+                    complement[ig] -= phi_orth[a][ig] * overlap[a];
                 }
-                const std::complex<double>* band_ptr
-                    = psi_k + static_cast<size_t>(band) * ld_psi;
-                std::vector<std::complex<double>> raw;
-                build_raw_overlap(context, band_ptr, raw);
-                const std::vector<std::complex<double>> vpsi
-                    = apply_local_potential(wfcpw, ik, potential,
-                                            band_ptr, context.npw);
-                std::vector<std::complex<double>> delta;
-                apply_pw_alloc_delta_h_orthogonal(
-                    context.space, orthogonal, vphi,
-                    std::vector<std::complex<double>>(band_ptr,
-                                                      band_ptr + context.npw),
-                    raw, vpsi, lambda, delta);
-                std::complex<double> trace(0.0, 0.0);
-                for (int ig = 0; ig < context.npw; ++ig)
+            }
+
+            std::vector<double> q_alpha(nconstraint, 0.0);
+            std::vector<double> qc_alpha(nconstraint, 0.0);
+            for (int a = 0; a < context.space.ntarget; ++a)
+            {
+                const int owner = context.space.constraint[a];
+                // Branch: unowned target projectors belong to P but not to a
+                // constrained Q_i, so they do not enter any q_alpha.  The raw
+                // overlap was already pool-reduced, hence this contribution is
+                // global and must not enter the later collective reduction.
+                if (owner >= 0)
                 {
-                    trace += std::conj(band_ptr[ig]) * delta[ig];
+                    q_alpha[owner] += std::norm(overlap[a]);
                 }
-                reduce_pool(trace);
-                n_alloc[alpha] += occupation * trace.real();
+            }
+            // |Q_c psi(r)|^2 carries all the band dependence; the constraint
+            // weights are diagonal in real space, so one transform suffices.
+            wfcpw.template recip_to_real<std::complex<double>,
+                                         base_device::DEVICE_CPU>(
+                complement.data(), complement_real.data(), ik);
+            for (int alpha = 0; alpha < nconstraint; ++alpha)
+            {
+                const std::vector<double>& weight
+                    = weight_grid.constraint_weight(alpha);
+                double qc = 0.0;
+                for (int ir = 0; ir < wfcpw.nrxx; ++ir)
+                {
+                    qc += std::norm(complement_real[ir]) * weight[ir];
+                }
+                qc_alpha[alpha] += qc * inverse_grid_size;
+            }
+            // The Q_c contribution is rank-local, so reduce it separately
+            // from the already global Q_i contribution.  This keeps the
+            // collective count at one per band without double counting Q_i.
+            reduce_pool(qc_alpha);
+            for (int alpha = 0; alpha < nconstraint; ++alpha)
+            {
+                q_alpha[alpha] += qc_alpha[alpha];
+                n_alloc[alpha] += occupation * q_alpha[alpha];
                 // Branch: only a two-channel collinear run has a spin
                 // difference observable.
                 if (nspin == 2)
                 {
-                    m_alloc[alpha] += spin_sign * occupation * trace.real();
+                    m_alloc[alpha]
+                        += spin_sign * occupation * q_alpha[alpha];
                 }
             }
         }
@@ -1360,8 +1452,17 @@ class AllocPwCache
         alloc::PwAllocOrthogonalContext orthogonal;
     };
 
+    struct LocalPotential
+    {
+        bool valid = false;
+        const constraint::WeightGrid* weight_grid = nullptr;
+        std::vector<double> lambda;
+        std::vector<double> values;
+    };
+
     Target target;
     Product product;
+    LocalPotential local_potential;
 };
 
 template <typename T, typename Device>
@@ -1476,14 +1577,43 @@ void AllocConstraintPW<OperatorPW<T, Device>>::act(
             "PW allocation weight and wavefunction grids differ");
     }
 
-    std::vector<double> potential;
-    std::vector<double> lambda;
+    // Branch: an identically zero multiplier vector makes every A_i term
+    // vanish.  Test mu before building the full real-space potential, which is
+    // the dominant no-op cost on large FFT grids such as LiCl.
+    const std::vector<double>& mu = loop.mu_eff();
+    if (static_cast<int>(mu.size()) == wg.nconstraint() && !mu.empty()
+        && std::all_of(mu.begin(), mu.end(),
+                       [](const double value) { return value == 0.0; }))
+    {
+        return;
+    }
     std::string error;
-    if (!alloc::build_mu_potential(wg, loop, spin, potential, lambda,
-                                   error))
+    std::vector<double> lambda;
+    if (!alloc::build_mu_coefficients(wg, loop, spin, lambda, error))
     {
         ModuleBase::WARNING_QUIT("AllocConstraintPW::act", error);
     }
+    // Branch: channel signs can also make every effective multiplier zero.
+    // Return before allocating the potential or entering the target algebra.
+    if (std::all_of(lambda.begin(), lambda.end(),
+                    [](const double value) { return value == 0.0; }))
+    {
+        return;
+    }
+    // The potential depends only on the weight grid and effective lambda.  A
+    // fixed-mu frame reuses the same FFT-grid array across every band and every
+    // Hamiltonian application instead of rebuilding it in each call.
+    if (!cache->local_potential.valid
+        || cache->local_potential.weight_grid != &wg
+        || cache->local_potential.lambda != lambda)
+    {
+        alloc::build_mu_potential(wg, lambda,
+                                  cache->local_potential.values);
+        cache->local_potential.valid = true;
+        cache->local_potential.weight_grid = &wg;
+        cache->local_potential.lambda = lambda;
+    }
+    const std::vector<double>& potential = cache->local_potential.values;
     auto* onsite_p
         = projectors::OnsiteProjector<double,
                                       base_device::DEVICE_CPU>::get_instance();
@@ -1544,27 +1674,93 @@ void AllocConstraintPW<OperatorPW<T, Device>>::act(
         cache->product.lambda = lambda;
     }
 
-    for (int ib = 0; ib < nbands; ++ib)
+    const int ntarget = context.space.ntarget;
+    // Keep the batched V|psi> storage bounded for large band counts.  Eight
+    // bands still cut two reductions per band down to one reduction per chunk.
+    const int band_chunk = std::min(nbands, 8);
+    std::vector<std::vector<std::complex<double>>> raw_chunk(band_chunk);
+    std::vector<std::vector<std::complex<double>>> braw_chunk(band_chunk);
+    std::vector<std::vector<std::complex<double>>> vpsi_chunk(band_chunk);
+    std::vector<std::complex<double>> fft_porter(this->wfcpw->nmaxgr,
+                                                 std::complex<double>(0.0, 0.0));
+    std::vector<std::complex<double>> delta;
+    for (int band_start = 0; band_start < nbands; band_start += band_chunk)
     {
-        const std::complex<double>* psi_band
-            = reinterpret_cast<const std::complex<double>*>(tmpsi_in)
-              + static_cast<size_t>(ib) * nbasis;
-        std::complex<double>* hpsi_band
-            = reinterpret_cast<std::complex<double>*>(tmhpsi)
-              + static_cast<size_t>(ib) * nbasis;
-        std::vector<std::complex<double>> raw;
-        alloc::build_raw_overlap(context, psi_band, raw);
-        const std::vector<std::complex<double>> vpsi
-            = alloc::apply_local_potential(*this->wfcpw, this->ik,
-                                           potential, psi_band, npw);
-        std::vector<std::complex<double>> delta;
-        alloc::apply_pw_alloc_delta_h_orthogonal(
-            context.space, cache->product.orthogonal, cache->product.vphi,
-            std::vector<std::complex<double>>(psi_band, psi_band + npw),
-            raw, vpsi, lambda, delta);
-        for (int ig = 0; ig < npw; ++ig)
+        const int chunk_bands = std::min(band_chunk, nbands - band_start);
+        const size_t overlap_count = static_cast<size_t>(chunk_bands) * ntarget;
+        for (int local_band = 0; local_band < chunk_bands; ++local_band)
         {
-            hpsi_band[ig] += delta[ig];
+            const int ib = band_start + local_band;
+            const std::complex<double>* psi_band
+                = reinterpret_cast<const std::complex<double>*>(tmpsi_in)
+                  + static_cast<size_t>(ib) * nbasis;
+            alloc::build_raw_overlap_local(context, psi_band,
+                                           raw_chunk[local_band]);
+            vpsi_chunk[local_band].assign(npw,
+                                          std::complex<double>(0.0, 0.0));
+            alloc::apply_local_potential_reuse(
+                *this->wfcpw, this->ik, potential, psi_band, npw, fft_porter,
+                vpsi_chunk[local_band].data());
+            alloc::build_vphi_overlap_local(cache->product.vphi, psi_band, npw,
+                                            braw_chunk[local_band]);
+        }
+        // Pack the chunk's <phi|psi> and <Vphi|psi> into one collective.  The
+        // old path paid two pool reductions per band, which dominates small-R
+        // PW operator applications with many bands.
+        {
+            std::vector<double> packed(4 * overlap_count, 0.0);
+            for (int local_band = 0; local_band < chunk_bands; ++local_band)
+            {
+                for (int a = 0; a < ntarget; ++a)
+                {
+                    const size_t index
+                        = static_cast<size_t>(local_band) * ntarget + a;
+                    packed[2 * index] = raw_chunk[local_band][a].real();
+                    packed[2 * index + 1] = raw_chunk[local_band][a].imag();
+                }
+            }
+            const size_t braw_offset = 2 * overlap_count;
+            for (int local_band = 0; local_band < chunk_bands; ++local_band)
+            {
+                for (int a = 0; a < ntarget; ++a)
+                {
+                    const size_t index
+                        = static_cast<size_t>(local_band) * ntarget + a;
+                    packed[braw_offset + 2 * index]
+                        = braw_chunk[local_band][a].real();
+                    packed[braw_offset + 2 * index + 1]
+                        = braw_chunk[local_band][a].imag();
+                }
+            }
+            alloc::reduce_pool(packed);
+            for (int local_band = 0; local_band < chunk_bands; ++local_band)
+            {
+                for (int a = 0; a < ntarget; ++a)
+                {
+                    const size_t index
+                        = static_cast<size_t>(local_band) * ntarget + a;
+                    raw_chunk[local_band][a] = std::complex<double>(
+                        packed[2 * index], packed[2 * index + 1]);
+                    braw_chunk[local_band][a] = std::complex<double>(
+                        packed[braw_offset + 2 * index],
+                        packed[braw_offset + 2 * index + 1]);
+                }
+            }
+        }
+        for (int local_band = 0; local_band < chunk_bands; ++local_band)
+        {
+            const int ib = band_start + local_band;
+            std::complex<double>* hpsi_band
+                = reinterpret_cast<std::complex<double>*>(tmhpsi)
+                  + static_cast<size_t>(ib) * nbasis;
+            alloc::apply_pw_alloc_delta_h_orthogonal_reduced(
+                context.space, cache->product.orthogonal, cache->product.vphi,
+                npw, raw_chunk[local_band], braw_chunk[local_band],
+                vpsi_chunk[local_band], lambda, delta);
+            for (int ig = 0; ig < npw; ++ig)
+            {
+                hpsi_band[ig] += delta[ig];
+            }
         }
     }
 }

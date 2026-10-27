@@ -255,6 +255,24 @@ class ConstraintLoop
         trust_rollback_pending_ = false;
         return pending;
     }
+    // Consume the one-shot request to rotate the occupied PW subspace after
+    // an allocation multiplier move.  The esolver replaces one full HSolver
+    // call with a fixed-density subspace diagonalization (the DeltaSpin
+    // lineage), so the new mu is felt by psi before the density is rebuilt.
+    // Only outer/inner mu moves in allocation mode arm this flag.
+    bool consume_alloc_subspace_rotation()
+    {
+        const bool pending = alloc_subspace_rotation_pending_;
+        alloc_subspace_rotation_pending_ = false;
+        return pending;
+    }
+    // Apply one multiplier update from an allocation observable measured on
+    // a rotated (fixed-density) subspace.  This is the inner half of the
+    // DeltaSpin-style fast path: the caller alternates subspace rotation and
+    // this step until the target is reached or the iteration budget expires.
+    // Returns the solver status; targets_ is only valid in CONSTRAINED phase.
+    MuStatus subspace_mu_step(const std::vector<double>& n_alloc,
+                              const std::vector<double>& m_alloc);
     // M3 E1 diagnostics: number of steps rejected because the total
     // magnetization jumped away from the reference branch.
     int mag_rejections() const { return mag_rejections_; }
@@ -454,6 +472,9 @@ class ConstraintLoop
     // Set by outer_step()/take_inner_step() when the trust solver rejected a
     // trial; consumed once by the esolver to reset the mixing history.
     bool trust_rollback_pending_ = false;
+    // Set by outer_step()/take_inner_step() when an allocation multiplier
+    // changed; the esolver may consume it for one subspace rotation.
+    bool alloc_subspace_rotation_pending_ = false;
     // M3 C3 progressive-SCF state: tighten_pending_ is set when the outer
     // residual is close enough to the target that the next SCF must use the
     // strict threshold; tighten_notice_done_ keeps the log one-shot.

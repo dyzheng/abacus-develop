@@ -124,6 +124,7 @@ void ConstraintLoop::reset()
     inner_step_this_iter_ = false;
     last_reset_iter_ = 0;
     trust_rollback_pending_ = false;
+    alloc_subspace_rotation_pending_ = false;
     tighten_pending_ = false;
     tighten_notice_done_ = false;
     budget_frozen_ = false;
@@ -715,6 +716,7 @@ void ConstraintLoop::warm_reinit(
     settle_armed_ = false;
     inner_step_this_iter_ = false;
     last_reset_iter_ = 0;
+    alloc_subspace_rotation_pending_ = false;
     // The first SCF of the new geometry is a probe at the carried mu: no
     // inner updates may move mu before Q(mu_prev) is observed.
     inner_active_ = false;
@@ -1059,6 +1061,52 @@ void ConstraintLoop::observe_allocation(const int iter,
     (void)iter;
 }
 
+MuStatus ConstraintLoop::subspace_mu_step(
+    const std::vector<double>& n_alloc,
+    const std::vector<double>& m_alloc)
+{
+    // Guard: the subspace fast path is only meaningful after the reference
+    // phase has built the targets and while mu is not externally frozen.
+    if (!enabled() || phase_ != LoopPhase::CONSTRAINED || fixed_mu_
+        || alm_armed_
+        || n_alloc.size() != targets_.size()
+        || m_alloc.size() != targets_.size())
+    {
+        return status_;
+    }
+    Q_.assign(targets_.size(), 0.0);
+    for (size_t a = 0; a < Q_.size(); ++a)
+    {
+        // Branch: charge constraints read the allocation charge; spin
+        // constraints read the allocation magnetization.
+        if (kinds_[a] == ConstraintKind::Charge)
+        {
+            Q_[a] = n_alloc[a];
+        }
+        else if (kinds_[a] == ConstraintKind::Spin)
+        {
+            Q_[a] = m_alloc[a];
+        }
+        else
+        {
+            return status_;
+        }
+    }
+    const int rejects_before = mu_solver_.trust_reject_count();
+    status_ = mu_solver_.step(Q_, targets_, mu_);
+    mu_eff_ = mu_;
+    // Branch: a rejected trust trial restored an older multiplier.  The next
+    // subspace rotation must use that anchor, so request a mixing reset only
+    // after the fast path finishes (the caller consumes the flag once).
+    if (mu_solver_.trust_reject_count() > rejects_before)
+    {
+        trust_rollback_pending_ = true;
+    }
+    // The caller owns the outer rotation schedule; this method only advances
+    // mu from the fixed-density observation.
+    return status_;
+}
+
 void ConstraintLoop::observe_allocation_spin(
     const int iter,
     const std::vector<double>& n_alloc,
@@ -1366,6 +1414,7 @@ void ConstraintLoop::outer_step(const int iter, bool& conv_esolver)
         // secant step immediately.  A delta = 0 target converges here and
         // the run ends; otherwise the SCF continues into the constrained
         // phase with the updated mu.
+        const std::vector<double> mu_before = mu_;
         const int rejects_before = mu_solver_.trust_reject_count();
         status_ = mu_solver_.step(Q_, targets_, mu_);
         // Branch: the solver rejected this trial and re-walked it with a
@@ -1373,6 +1422,14 @@ void ConstraintLoop::outer_step(const int iter, bool& conv_esolver)
         if (mu_solver_.trust_reject_count() > rejects_before)
         {
             trust_rollback_pending_ = true;
+        }
+        // Branch: allocation changed its multiplier.  Arm one fixed-density
+        // subspace rotation so the new potential is absorbed by psi before
+        // the next density rebuild (DeltaSpin lineage).  The legacy grid
+        // backend has no such fast path and leaves the flag unset.
+        if (allocation_mode_ && mu_ != mu_before)
+        {
+            alloc_subspace_rotation_pending_ = true;
         }
         print_audit(iter);
         if (status_ == MuStatus::CONVERGED || status_ == MuStatus::UNREACHABLE)
@@ -1402,6 +1459,12 @@ void ConstraintLoop::outer_step(const int iter, bool& conv_esolver)
     if (mu_ != mu_before)
     {
         tighten_pending_ = false;
+        // Branch: an allocation multiplier move arms the subspace rotation
+        // consumed by ESolver_KS_PW at the next hamilt2rho_single().
+        if (allocation_mode_)
+        {
+            alloc_subspace_rotation_pending_ = true;
+        }
     }
     print_audit(iter);
     if (status_ == MuStatus::CONVERGED || status_ == MuStatus::UNREACHABLE)
@@ -2026,6 +2089,7 @@ bool ConstraintLoop::take_inner_step(const int iter)
     // M4 secant step on the freshly observed Q at the current mu.  The same
     // solver, caps and guards as the outer path (this is a schedule change,
     // not a solver change).
+    const std::vector<double> mu_before = mu_;
     const int rejects_before = mu_solver_.trust_reject_count();
     status_ = mu_solver_.step(Q_, targets_, mu_);
     // Branch: a rejected trust trial changed the fixed-point map; the caller
@@ -2033,6 +2097,13 @@ bool ConstraintLoop::take_inner_step(const int iter)
     if (mu_solver_.trust_reject_count() > rejects_before)
     {
         trust_rollback_pending_ = true;
+    }
+    // Branch: an allocation inner step changed mu.  Arm the fixed-density
+    // subspace rotation so the next SCF iteration can absorb the potential
+    // without a full eigensolver restart.
+    if (allocation_mode_ && mu_ != mu_before)
+    {
+        alloc_subspace_rotation_pending_ = true;
     }
     print_audit_line(iter, inner_steps_, "inner");
     // Branch A: the inner solver reached the target.  mu is frozen from now

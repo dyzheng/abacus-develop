@@ -1841,6 +1841,30 @@ Manual override is allowed: if sc_acceleration_mode is explicitly set, it takes 
         this->add_item(item);
     }
     {
+        Input_Item item("constraint_alloc_subspace_rotation");
+        item.annotation = "PW allocation: rotate psi in the occupied subspace after a mu move";
+        item.category = "Constraint";
+        item.type = "Boolean";
+        item.description = "When true, a change of the PW allocation multiplier triggers one fixed-density diagonalization of the current nbands x nbands subspace before the next SCF eigensolve (the DeltaSpin lineage). The rotated psi is written back with updated eigenvalues, occupations and density, so the new multiplier is absorbed without restarting Davidson from the old state. This costs one batched hPsi per k-point, not a full SCF re-convergence; default false keeps the historical outer-only behaviour.";
+        item.default_value = "False";
+        item.unit = "";
+        item.availability = "constraint is true and basis_type = pw";
+        read_sync_bool(input.constraint_alloc_subspace_rotation);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("constraint_alloc_subspace_iterations");
+        item.annotation = "PW allocation: fixed-density mu iterations per rotation";
+        item.category = "Constraint";
+        item.type = "Integer";
+        item.description = "Maximum number of (subspace rotation, allocation observable, multiplier update) cycles executed at fixed density after a PW allocation mu move. 1 is the single warm-start rotation; 2-8 emulate the DeltaSpin inner lambda loop and can remove several full SCF restarts. The loop stops early when the residual reaches constraint_thr. Ignored when constraint_alloc_subspace_rotation is false.";
+        item.default_value = "1";
+        item.unit = "";
+        item.availability = "constraint is true and basis_type = pw";
+        read_sync_int(input.constraint_alloc_subspace_iterations);
+        this->add_item(item);
+    }
+    {
         Input_Item item("deltap_branch_write");
         item.annotation = "persist deltap_branch.dat: true or false";
         item.category = "DeltaP";

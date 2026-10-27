@@ -250,6 +250,25 @@ void apply_pw_alloc_delta_h_orthogonal(
     const std::vector<double>& lambda,
     std::vector<std::complex<double>>& delta);
 
+/**
+ * @brief Per-band stage with both projector overlaps already pool-reduced.
+ *
+ * This variant lets a multi-band Hamiltonian application collect a block of
+ * <phi|psi> and <Vphi|psi> overlaps into one packed collective.  braw must
+ * therefore contain the globally reduced <Vphi|psi> values; no reduction is
+ * performed here.
+ */
+void apply_pw_alloc_delta_h_orthogonal_reduced(
+    const PwTargetSpace& space,
+    const PwAllocOrthogonalContext& context,
+    const std::vector<std::vector<std::complex<double>>>& vphi,
+    const int nbasis,
+    const std::vector<std::complex<double>>& raw_overlap,
+    const std::vector<std::complex<double>>& braw_overlap,
+    const std::vector<std::complex<double>>& vpsi,
+    const std::vector<double>& lambda,
+    std::vector<std::complex<double>>& delta);
+
 } // namespace alloc
 
 #endif

@@ -6408,3 +6408,250 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   2. 将 Fe2 `±3.8 μB` 对照固化为自动回归，并加入残差/能量阈值。
   3. 优化 allocation 目标空间与互补密度的重建成本；当前比 native 慢约一个
      数量级。
+
+## 2026-10-27 (S5.3 批判性评审): allocation 与 DeltaSpin 的取舍
+
+- **完成内容**：
+  1. 新增 `docs/superpowers/specs/2026-10-27-allocation-critical-review.md`，
+     系统比较 unified allocation、native DeltaSpin 与 Becke。
+  2. 将求和一致性拆成三层审计：代数恒等式 `ΣA_i=I`、单测 `max_sum_error`、
+     真实 PW 的 `sum_n/sum_m`。
+  3. 将 Fe2 的慢速分解为“迭代数增加”和“单次 hPsi 变贵”两部分，并补测
+     `alloc_operator/alloc_observe` 的求和输出。
+- **验证/结论**：
+  - 求和：`max_sum_error=3.109e-15`；LiCl `dsum_n=-2.19e-12`；Fe2
+    `dsum_n=1.33e-11`、`Σq-M_tot=1.9e-10 μB`，一致性成立。
+  - 但 `ALLOC-PW` 的 `sum_n/sum_m` 主要是实空间审计，并非所有场景的
+    `Σq_i`；全原子 charge q 求和仍缺集成测试。
+  - Fe2：allocation 81 次电子迭代/84 s，DeltaSpin 13 次/4 s；单次 hPsi
+    `20.82 ms` 对 `7.06 ms`，总墙钟约慢 `24x`。
+  - LiCl：同为 19 次电子迭代，allocation `385 s` 对 Becke `169 s`；
+    `mu=0` 仍进入 allocation 算符，说明缺零乘子快路径。
+  - 语义：Fe2 同靶时 allocation 的传统 orbital-sum 仅约 `±2.93 μB`，
+    不能与 DeltaSpin 的 `±3.80 μB` 混为一谈。
+- **决策**：
+  - 不直接放弃；但停止功能扩张，只做一个限时性能/语义收口冲刺。
+  - 若 LiCl 额外开销不能降到 `<1.3x`、Fe2 墙钟不能降到 DeltaSpin 的
+    `<3x`，或 `q` 的物理口径仍无法闭合，则放弃生产约束路径，只保留只读
+    allocation 诊断；若目标仅为 Fe 自旋约束，当前直接用 DeltaSpin。
+- **Bug/风险 list**：
+  1. `AllocConstraintPW::act()` 无全 lambda 零快路径，只读/参考 SCF 仍付出
+     allocation 成本。
+  2. 观测路径仍在 `alpha × band × k` 上逐项归约；Hamiltonian 的 R×R
+     目标矩阵已批量化，但每 band 的 R 维重叠与 trace 尚未跨 band 合并。
+  3. `Q(mu)` 分支陡峭，普通 outer secant 不可靠，必须 trust-region。
+  4. `S^{-1/2}` 目标泄漏、目标集/半径敏感性和非共线 q 求和尚未系统验证。
+- **文件**：
+  `docs/superpowers/specs/2026-10-27-allocation-critical-review.md`（新建）、
+  本日志。
+- **下一步**：
+  1. 零乘子短路 + 归约批量化 + 目标乘积复用，重测 LiCl/Fe2。
+  2. 复用 DeltaSpin 内层 lambda/warm-start，压缩外层重新收敛成本。
+  3. 补全 `Σq=N/M_tot` 的全原子、非共线、`kpar>1` 审计。
+  4. 按评审门槛做正式 go/no-go。
+
+## 2026-10-27 (S5.4 性能空间): 外层重建、预存与冻结算符的边界
+
+- **完成内容**：
+  1. 在批判性评审中新增第 9 节，把总成本拆成“电子迭代数 × 每迭代 hPsi 数
+     × 单次 hPsi 成本”，并区分可预存量、只能按波函数重算的量和不可形成的
+     稠密算符。
+  2. 复核“不反复重建电子态”的现有实现：`constraint_mu_schedule=inner`
+     与 `alm` 均已存在，但 Fe2 allocation 直接切换后在默认参数下不能稳定
+     收敛。并明确 allocation 的 `ConstraintLoop::take_inner_step()` 不是
+     native DeltaSpin 的 `run_lambda_loop()` + \(nbands\times nbands\)
+     子空间对角化；前者只更新 mu，不调用 `SpinConstrain` 的子空间路径。
+  3. 明确“固定投影修正”的三种含义：固定 \(A_i\) 是精确的；固定 V 应按
+     lambda 线性重组；固定 \(A_i\psi\)/ΔH 只能作为 lagged 近似或预条件器。
+  4. 给出激进方案排序：零 lambda 快路径、按约束预存 \(W_i\phi\)、多 band
+     BLAS-3 优先；联合固定点/直接约束最小化才可能进入 DeltaSpin 量级。
+- **验证/结果**：
+  - `/tmp` 中复制 Fe2 输入，只把 `constraint_mu_schedule` 从 `outer` 改为
+    `inner` 或 `alm`，`scf_nmax=300`，4 MPI、单线程。
+  - `inner`：198 次电子迭代、5261 次 hPsi、hPsi 95.04 s；残差
+    `1.15e-3 μB`，trust radius 降到 `1e-8`、27 次拒绝，未收敛退出。
+  - `alm`：300 次电子迭代、6820 次 hPsi、hPsi 151.44 s、墙钟 223 s；
+    残差 `6.54e-2 μB`，状态 RUNNING，未达到目标。
+  - 结论：直接取消外层重建不是无损加速；必须联合求解 \((\rho,\mu)\)、
+    做 warm start/密度外推，并对 ALM 罚参数和全局化做专门设计。
+- **文件**：
+  `docs/superpowers/specs/2026-10-27-allocation-critical-review.md`、本日志。
+- **未完成/边界**：
+  - 尚未实现零 lambda 快路径、按约束 \(W_i\phi\) 预存和多 band BLAS-3，
+    因此第 9.6 节的 5–8x 是待验证估计而非实测结论。
+  - `inner/alm` 的负结果只代表当前默认参数；不能据此断言联合固定点不可行。
+- **下一步**：
+  1. 实现并基准测试零 lambda 快路径。
+  2. 预存 \(W_i\phi\)/\(\Phi^\dagger W_i\Phi\)，换 lambda 时线性组装。
+  3. 将逐 band trace 和目标重叠改为跨 band BLAS-3/单次归约。
+  4. 若常数优化后仍达不到门槛，再评估联合固定点求解或停止生产路径。
+
+## 2026-10-27 (S5.5 性能优化): 零乘子快路径、势场缓存与观测批量化
+
+- **完成内容**：
+  1. `AllocConstraintPW::act()` 在构造实空间势场前识别 `mu_eff()` 全零并
+     直接返回；同时保留 `lambda=mu*sign` 全零的二次检查。
+  2. 拆分 `build_mu_coefficients()` 与 `build_mu_potential()`，在
+     `AllocPwCache` 中按 weight-grid 和 lambda 缓存完整 FFT 网格势场。
+  3. 重写 `compute_pw_alloc_observables()`：每个 k 只构造一次 `phi_orth`，
+     每个 band 用
+     `q_alpha=sum_owned |<phi_a|psi>|^2 + Re<Q_c psi|W_alpha|Q_c psi>`
+     一次算出全部约束，并把 alpha 合并成一次池归约。
+  4. 修复首轮改写的重复归约：`Q_i` 来自已归约的 raw overlap，必须保持全局；
+     只对 rank-local 的 `Q_c W_i Q_c` 做池归约。
+- **验证**（全部 `OMP_NUM_THREADS=1`，只用 MPI 多进程）：
+  - 构建：`abacus_basic_para`、`alloc_observe`、`alloc_operator` PASS。
+  - `ctest -R MODULE_ESTATE_constraint`：23/23 PASS。
+  - Fe2：84 次电子迭代、2924 次 hPsi、墙钟 59–63 s（基线 81 次、2723 次、
+    84 s）；最终 `q=-3.799952058/+3.799963386 μB`，总能
+    `-6370.6101511917359 eV`。单次 hPsi `15.19–16.19 ms`，基线
+    `20.82 ms`。
+  - LiCl：19 次电子迭代、809 次 hPsi、墙钟 183 s（原 allocation 385 s，
+    Becke 169 s）；hPsi 总时间 `102.59 s`（原 allocation `291.78 s`，
+    Becke `99.23 s`）。`q=2.947887372 e`、总能
+    `-643.97565238003517 eV` 与优化前逐位一致。
+- **Bug/fix list**：
+  1. 首轮观测改写将 `build_raw_overlap()` 已做池归约的 `Q_i` 项再次归约；
+     Fe2 的 2-rank k-pool 中读数约翻倍（首步约 `-7.61/+7.58 μB`），200 步
+     不收敛。改为分离全局 `q_alpha` 与 rank-local `qc_alpha` 后恢复。
+  2. 原零 lambda 检查位于完整势场构造之后；LiCl 的 `mu=0` 仍每次 hPsi 处理
+     `192^3` 网格。提前检查 `mu_eff()` 后消除该成本。
+- **文件**：`source/source_pw/module_pwdft/op_pw_alloc.cpp`、
+  `docs/superpowers/specs/2026-10-27-allocation-performance-optimization.md`
+  （新建）、`docs/superpowers/specs/2026-10-27-allocation-critical-review.md`、
+  本日志。
+- **结论**：LiCl 的只读/参考 SCF 额外成本已降至 Becke 的 `1.08x`，满足
+  `<1.3x` 门槛；Fe2 单次 hPsi 从基线 `2.95x` DeltaSpin 降到 `2.2–2.3x`，
+  总墙钟仍约 `17–18x`，未达到 `<3x`。继续有限优化，但不进入生产默认路径。
+- **下一步**：
+  1. 将 operator 的逐 band raw/`<Vphi|psi>` 归约合并为每次 `act()` 一次，
+     并复用 FFT/向量 workspace。
+  2. 按约束预存 `W_i phi`、`Phi^dagger W_i Phi`，换 lambda 时线性组装。
+  3. 研究复用 DeltaSpin 的 `nbands x nbands` 子空间旋转和 warm start，压缩
+     Fe2 的 84 次电子迭代。
+  4. 以本轮为新基线做 go/no-go；若联合求解后仍高于 DeltaSpin `5x`，停止
+     allocation 生产约束路径并保留只读诊断。
+
+## 2026-10-27 (S5.6 批处理): band 归约合并与 FFT workspace 复用
+
+- **完成内容**：
+  1. 新增 `apply_pw_alloc_delta_h_orthogonal_reduced()`，接收已池归约的
+     `<phi|psi>` 与 `<Vphi|psi>`，把 Hamiltonian 路径从每 band 两次归约改为
+     每 8-band block 一次打包归约。
+  2. 新增 `apply_local_potential_reuse()`，复用每次 `act()` 的 FFT
+     work/porter 缓冲；每 band 仍做必要的局域势 FFT，但不再重复分配大数组。
+  3. 按 8-band 分块，限制一次缓存的 `V|psi>` 为 `8 * npw`，避免大 nbands
+     的内存线性放大。
+  4. 合并 `P V P` 与 owned-\(Q_i\) 的 `phi_orth` 系数，删除每 band 的四个
+     `nbasis` 临时向量，只保留一个 `delta` 缓冲。
+- **验证**（4 MPI、OpenMP/OpenBLAS/MKL 单线程）：
+  - Fe2：85 次电子迭代、3089 次 hPsi、hPsi 40.55–42.73 s、单次
+    13.13–13.83 ms、墙钟 56–61 s。S5.5 为 84 次、2924 次、
+    44.42–47.35 s、15.19–16.19 ms、59–63 s。范围包含机器频率/负载波动；
+    同机 A/B 中 persistent scratch 的 hPsi 为 46.21–46.82 s，慢于局部
+    scratch 的 42.73 s，因此最终不跨调用缓存 scratch。
+  - 最终 `q=-3.799950937/+3.799961892 μB`，残差 `4.91e-5 μB`，总能
+    `-6370.6101512006135 eV`。相对 S5.5 能量差 `8.9e-9 eV`，来自求和次序
+    导致的 84→85 步浮点分支。
+  - 不限内存的一次归约版本与最终 8-band 分块版本逐位一致；分块开销约 1.4%。
+  - LiCl 未重跑：`mu=0` 在进入本轮修改路径前返回，S5.5 的 183 s 与电荷/
+    能量结果仍有效。
+  - `ctest -R MODULE_ESTATE_constraint`：23/23 PASS；PW allocation MPI
+    1/2/4 rank：3/3 PASS。
+- **Bug/fix list**：本轮无新增数值 bug。实现中先出现匿名命名空间
+  `reduce_pool` 在模板成员中的限定查找编译错误，改为 `alloc::reduce_pool`；
+  另一次直接合并 `delta` 时曾误把 `V|psi>` 放进 alpha 循环，编译测试前
+  已改为先复制 `delta=vpsi` 再累加。
+- **文件**：`source/source_pw/module_pwdft/op_pw_alloc.cpp`、
+  `source/source_estate/module_constraint/alloc_pw.{h,cpp}`、
+  `docs/superpowers/specs/2026-10-27-allocation-band-batching.md`（新建）、
+  `docs/superpowers/specs/2026-10-27-allocation-critical-review.md`、本日志。
+- **结论**：Fe2 单次 hPsi 已从基线 DeltaSpin 的 `2.95x` 降到 `1.86x`，
+  总墙钟 `84 → 56–61 s`；但电子迭代仍为 85 对 13，总墙钟约 `16–17x`。继续优化
+  的下一主战场是子空间旋转/warm start，而不是继续削减 per-band 常数。
+- **下一步**：
+  1. 按约束预存 `W_i phi` 与 `Phi^dagger W_i Phi`，lambda 变化时线性组装。
+  2. 复用 DeltaSpin 的 `nbands x nbands` 子空间旋转，并与 allocation 的
+     `q` 可观测量对齐。
+  3. 在 `nbands=100+` 体系测 8-band 分块的内存峰值和最佳 block 大小。
+  4. 子空间优化后重做 go/no-go；仍高于 DeltaSpin `5x` 则停止生产路径。
+
+## 2026-10-28 (S5.7 带宽): FFT 缓冲裁剪与实空间观测
+
+- **完成内容**：
+  1. `apply_local_potential_reuse()` 不再清零/拷贝 `nmaxgr` 的 work 数组，
+     直接把 band 系数送入 `recip_to_real`，并把 `real_to_recip` 的结果写回
+     band 输出；每次 `act()` 只保留一个 `porter` 缓冲。
+  2. `build_target_products()` 共用一块 `porter`，避免 lambda 变化时重复
+     分配 R 块大数组。
+  3. 观测路径每个 band 只把互补态 \(Q_c|\psi\rangle\) 变换到实空间一次，
+     再对每个约束权重做 `w_alpha |Q_c psi|^2 / nxyz` 积分，替代逐约束 FFT。
+  4. 临时交叉检查确认新旧观测公式在同一全局态上差 `6.8e-14`；调试代码已删除。
+- **验证**（4 MPI、OpenMP/OpenBLAS/MKL 单线程）：
+  - Fe2：91 次电子迭代、3342 次 hPsi、hPsi 42.47 s、单次 12.71 ms、
+    墙钟 56.45 s；S5.6 为 85 次、3089 次、40.55–42.73 s、13.13–13.83 ms、
+    56–61 s。迭代分支变化来自观测舍入，总能差 `2.2e-8 eV`，约束差
+    `<1e-5 μB`。
+  - LiCl：19 次电子迭代、809 次 hPsi、hPsi 92.21 s、墙钟 160 s；
+    修改前同输入为 111.93 s / 202.36 s。`q=2.947887372 e`、总能
+    `-643.97565238003517 eV` 和 `dsum_n=-2.18847163e-12` 逐位不变。
+  - `ctest -R MODULE_ESTATE_constraint`：23/23 PASS；allocation
+    operator/observe 2/2 PASS；PW allocation MPI 1/2/4 rank 3/3 PASS。
+- **Bug/fix list**：本轮无新增数值 bug。实空间观测首次只比较了未归约的
+  rank-local 值，误以为与旧全局值不一致；补做全局交叉检查后确认等价。
+- **文件**：`source/source_pw/module_pwdft/op_pw_alloc.cpp`、
+  `docs/superpowers/specs/2026-10-28-allocation-fft-buffer-trim.md`（新建）、本日志。
+- **结论**：per-band FFT 常数和观测集合通信已进一步压缩；Fe2 的单次 hPsi
+  降到 `12.71 ms`，但 91 次电子迭代仍是主瓶颈。继续做常数优化收益有限，
+  下一阶段应转向子空间旋转/warm start。
+- **下一步**：
+  1. 按约束预存 `W_i phi` 与 `Phi^dagger W_i phi`，供 inner/ALM 频繁换
+     lambda 时线性组装。
+  2. 复用 DeltaSpin 的 `nbands x nbands` 子空间旋转/warm start，压缩 Fe2
+     电子迭代。
+  3. 在 `nbands=100+` 体系复测 block size、内存峰值和本轮的带宽收益。
+
+## 2026-10-28 (S5.8 warm start): 外层 A/B 与固定密度子空间旋转
+
+- **完成内容**：
+  1. 完成 Fe2 外层策略 A/B：trust=0、step_max=0.01/0.005、
+     step_probe=0.001、inner_thr=0.1/0.5。除 step_max=0.01 外均未收敛或
+     落到错误磁支；step_max=0.01 也只在该输入上有效，不能作为稳健默认。
+  2. 在 `ESolver_KS_PW::hamilt2rho_single()` 增加可开关的固定密度子空间
+     fast path：mu 改变后对每个 k 调 `cal_hs_subspace()` +
+     `diag_subspace_psi()`，更新本征值/占据数并 `psiToRho()`，跳过该次
+     HSolver。
+  3. `ConstraintLoop` 在 allocation outer/inner 的 mu 实际改变时置
+     `alloc_subspace_rotation_pending_`，由 esolver 一次消费；新增
+     `subspace_mu_step()` 支持固定密度 mu 更新。
+  4. 新增输入 `constraint_alloc_subspace_rotation`（默认 false）和
+     `constraint_alloc_subspace_iterations`（默认 1）。
+- **验证**（4 MPI、单线程 BLAS/FFT）：
+  - Fe2 基线：91 次迭代、3342 次 hPsi、42.47 s hPsi、56.45 s 墙钟，
+    `q=-3.799950/+3.799957 μB`，ETOT `-6370.610151222 eV`。
+  - Fe2 单次旋转：82 次迭代、1983 次 hPsi、28.99–31.29 s hPsi、39–42 s 墙钟，
+    `q=-3.800014/+3.799903 μB`，ETOT `-6370.610151197 eV`，残差
+    `9.73e-5 μB`。
+  - `constraint_alloc_subspace_iterations=2/4`：固定密度多次 mu 更新过冲，
+    Fe2 在 72/55 次迭代后触发磁支翻转和 trust 半径收缩，未收敛；默认保持 1。
+  - LiCl `mu=0`：19 次迭代、809 次 hPsi、hPsi 98.92 s、墙钟 169 s，
+    `q=2.947887372 e`，快路径不触发，输出与 S5.7 一致。
+  - `ctest -R MODULE_ESTATE_constraint`：23/23 PASS。
+- **Bug/fix list**：本轮无新增数值 bug。首版 fast path 的 2/4 次内循环在
+  Fe2 上失稳，已通过默认 1 次和文档标注限制为实验开关。
+- **文件**：`source/source_esolver/esolver_ks_pw.cpp`、
+  `source/source_estate/module_constraint/constraint_loop.{h,cpp}`、
+  `source/source_io/module_parameter/input_parameter.h`、
+  `source/source_io/module_parameter/read_input_item_other.cpp`、
+  `docs/superpowers/specs/2026-10-28-allocation-subspace-warm-start.md`、
+  本日志。
+- **结论**：单次固定密度子空间旋转是当前最有效的 SCF 层优化，Fe2 墙钟约
+  `56→42 s`，hPsi 次数 `3342→1983`，物理结果在数值误差内一致。但外层
+  迭代仍为 82 对 DeltaSpin 的 13，下一步必须构造 \(A_i\) 子空间矩阵并做
+  真正的受约束子空间求解，而不是继续增加固定密度 mu 更新次数。
+- **下一步**：
+  1. 预计算 \(\langle\psi_m|A_i|\psi_n\rangle\)，去掉 inner 观测的重复 FFT。
+  2. 实现 allocation 版受约束子空间对角化/线搜索，限制 mu 每次密度内只走
+     一个可信步。
+  3. 在 force/stress 与 `nbands=100+` 体系上验证 warm start 的密度和内存
+     一致性。
