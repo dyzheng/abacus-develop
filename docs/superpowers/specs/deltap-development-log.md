@@ -169,13 +169,13 @@
 | `deltap_common.h` | 纯函数库（R2 起 6 个函数全部被 DeltapScfSolver 使用） | 2026-08-01 |
 | `deltap_solver.h` | deprecated 死文件，全仓库 0 引用，计划删除 | 2026-07-31 |
 | `deltap_pw.cpp` | PW 数值 + 状态机实例（R3 起：7 全局 → 2 算子状态 + DeltapScfSolver 实例 + PW backend） | 2026-08-01 |
-| `esolver_ks_pw.cpp` | PW esolver 接线；allocation 力在 `cal_force()` 前构造 `rho_c` 与完整目标导数 | 2026-10-27 |
+| `esolver_ks_pw.cpp` | PW esolver 接线；allocation 力在 `cal_force()` 前构造 `rho_c` 与完整目标导数，仅保留 `bndpar > 1` 守卫 | 2026-10-27 |
 | `deltap_scf.h/.cpp`（新增） | DeltapScfSolver 状态机（basis-independent 控制流，LCAO + PW 均已接入；含 unwrap_branch_2pi / gamma_report） | 2026-08-01 |
 | `source_esolver/test/deltap_common_test.cpp`（新增） | deltap_common 纯函数单测（10 用例） | 2026-08-01 |
 | `source/source_estate/module_constraint/`（M1–M8） | 统一实空间权重约束框架（权重网格/读数/注入/秒差求解/记账/力/总控） | 2026-09-14 |
 | `constraint_loop.cpp` | M8 总控状态机 + 双迭代调度 + allocation 冻结网格力/目标导数叠加 | 2026-10-27 |
 | `source_estate/module_constraint/{alloc_linalg,alloc_pw}.{h,cpp}` | PW allocation overlap、rank-truncated `S^{-1/2}` 及其 Fréchet 导数 | 2026-10-27 |
-| `source_pw/module_pwdft/{onsite_proj_tools,op_pw_alloc}.{h,cpp}` | projector 几何导数 custom GEMM 与 PW allocation 目标力 | 2026-10-27 |
+| `source_pw/module_pwdft/{onsite_proj_tools,op_pw_alloc}.{h,cpp}` | projector 几何导数 custom GEMM、PW allocation 目标力、跨 k-pool 互补密度 | 2026-10-27 |
 | `constraint_io.{h,cpp}` | M7 配置 + 语义守卫（含 `constraint_mu_schedule`/`inner_thr`/`inner_nmax` 三条新守卫） | 2026-09-14 |
 | `esolver_ks_pw.cpp` / `esolver_ks_lcao.cpp` | 约束钩子接线（`observe → set_scf_energy → [on_iteration+mix_reset] → on_scf_converged`） | 2026-09-14 |
 | `source_io/module_chgpot/rhog_io.cpp` | 重启电荷读取（C-29 修复：补 `ig < 0` 守卫，防跨基组重启越界写） | 2026-09-14 |
@@ -6231,3 +6231,40 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   1. 对每个自旋通道的 `rho_c` 做 all-pool 求和/平均，移除单 pool 力守卫。
   2. 用 `kpar=2`、`np=4` 对能量、约束力和总力做跨池验收。
   3. 扩展复数 Hermitian `ST`、PW allocation 应力与完整 `kpar=2` 回归。
+
+## 2026-10-27 (S5.1 kpar force): PW 互补密度跨 k-pool 汇总
+
+- **完成内容**：
+  1. `compute_pw_alloc_complement_density()` 在每个自旋通道累计完成后，通过
+     `KP_WORLD` 对相同本地实空间片的 k-pool 贡献做 `MPI_SUM`。
+  2. `ESolver_KS_PW::cal_force()` 的单 pool 守卫从 `KPAR * bndpar > 1` 收窄为
+     `bndpar > 1`；能带并行尚未验证，继续显式拒绝。
+  3. 相同 `1×1×2` k 网格下完成 `kpar=1/2`、`np=4` 的完整 SCF + 力对照。
+- **验证**：
+  - `abacus_basic_para` 构建 PASS；allocation 单测 2/2 PASS。
+  - 总能：`-442.114230442330/-442.114230442402 eV`，差 `7.128e-11 eV`。
+  - `e_con` 同为 `-0.005100037926 Ry`；`q` 差 `1e-14`。
+  - 约束力 O-z：`-0.0005615148/-0.0005615160 Ry/Bohr`，差 `1.2e-9`。
+  - 总力 O-z：`-5.6821171917/-5.6821172101 eV/A`，差 `1.84e-8`。
+  - `sum_n=8`；`dsum_n` 为 `-5.17e-13/-1.06e-12`；`dsum_m` 为
+    `1.48e-16/9.05e-16`。
+- **Bug/fix list**：
+  1. `rho_c` 是 z 方向实空间分片，不是 pool 内副本一致的标量。计划的
+     `reduce_double_allpool(npool, NPROC_IN_POOL, rho, nrxx)` 会错误地混合不同
+     网格片并除以 pool 大小。
+  2. 修复为 `KP_WORLD` 上直接 `MPI_SUM`：该通信子只改变 k 点，保持平面波、
+     能带和实空间分片索引一致。
+  3. 不整除的 k-pool 划分没有 `KP_WORLD`；函数显式报错，避免静默生成错误密度。
+- **文件**：
+  `source/source_esolver/esolver_ks_pw.cpp`、
+  `source/source_pw/module_pwdft/op_pw_alloc.cpp`、
+  `docs/superpowers/specs/2026-10-27-s5-pw-kpar-force.md`（新建）、
+  执行方案、本日志。
+- **未完成/边界**：
+  - `bndpar > 1` 的能带归属未验证，力路径继续拒绝。
+  - `PwTargetSpace::ST` 仍为实对称投影，非 Gamma k 点需复数 Hermitian 扩展。
+  - PW allocation 应力与完整 k 网格收敛回归待补。
+- **下一步**：
+  1. 扩展复数 Hermitian `ST` 并补非 Gamma k 点测试。
+  2. 补 PW allocation 应力。
+  3. 验证 `bndpar > 1` 后再解除剩余守卫；补完整 k 网格回归。

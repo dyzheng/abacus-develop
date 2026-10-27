@@ -555,14 +555,13 @@ void ESolver_KS_PW<T, Device>::cal_force(UnitCell& ucell, ModuleBase::matrix& fo
     {
         constraint::ConstraintLoop& loop
             = constraint::ConstraintLoop::instance();
-        // Guard: the frozen density is accumulated per k-pool.  The legacy
-        // force kernel only reduces within a pool, so a multi-pool force would
-        // silently omit the other k-points; keep this closure to one pool
-        // until a global density reduction is wired.
-        if (GlobalV::KPAR * PARAM.inp.bndpar > 1)
+        // Guard: the complement density is now summed across k-point pools,
+        // but band-parallel ownership has not been validated for this force
+        // path.  Refuse instead of silently omitting bands from other groups.
+        if (PARAM.inp.bndpar > 1)
         {
             ModuleBase::WARNING_QUIT("ESolver_KS_PW::cal_force",
-                "PW allocation frozen force currently requires KPAR * bndpar = 1");
+                "PW allocation force currently requires bndpar = 1");
         }
         // Guard: the force density is meaningful only after the allocation
         // loop has built its target space and weight field.

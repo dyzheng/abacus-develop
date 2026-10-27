@@ -1,6 +1,7 @@
 #include "op_pw_alloc.h"
 
 #include "source_base/parallel_reduce.h"
+#include "source_base/parallel_comm.h"
 #include "source_base/tool_quit.h"
 #include "source_base/global_variable.h"
 #include "source_cell/klist.h"
@@ -889,6 +890,30 @@ bool compute_pw_alloc_complement_density(
                 rho_c[spin][ir] += weight * std::norm(porter[ir]);
             }
         }
+    }
+    // Each k-pool owns a disjoint set of k-points while the real-space grid
+    // partition is identical across pools.  KP_WORLD therefore connects the
+    // same local grid slice in every k-pool; summing there yields the global
+    // complement density without dividing by the number of pool ranks.
+    if (GlobalV::KPAR > 1)
+    {
+#ifdef __MPI
+        // Guard: an uneven k-pool split has no KP_WORLD, so the local grid
+        // slices cannot be matched safely across pools.
+        if (KP_WORLD == MPI_COMM_NULL)
+        {
+            error = "PW allocation force requires evenly divided KPAR pools";
+            return false;
+        }
+        for (int spin = 0; spin < nspin; ++spin)
+        {
+            MPI_Allreduce(MPI_IN_PLACE, rho_c[spin].data(), wfcpw.nrxx,
+                          MPI_DOUBLE, MPI_SUM, KP_WORLD);
+        }
+#else
+        error = "PW allocation force cannot combine KPAR without MPI";
+        return false;
+#endif
     }
     return true;
 }

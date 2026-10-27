@@ -878,7 +878,7 @@ TEST(AllocObserveTest, EmptyTargetSetEqualsBecke)
 - [x] 冻结目标位置力：由最终 PW 能带形成 `Q_c D Q_c`，交给共享
       `constraint_force()` 权重导数核；三点位置 FD 为
       `-5.6679144 vs -5.6632941 eV/Å`，误差 `0.0046203 eV/Å < 0.0129`。
-      `KPAR * bndpar > 1` 暂显式拒绝。
+      互补密度已通过 `KP_WORLD` 汇总跨 k-pool；`bndpar > 1` 仍显式拒绝。
 - [x] 完整 PW `∂Q̂`：实现 projector 位移导数、`ST^{-1/2}` Fréchet 导数与
       正交目标转动项，并叠加到冻结 `Q_c ∂W Q_c` 网格力之后。`np=2` 三点总力
       FD 为 `F_FD=-5.667912284` 对解析 `-5.669041444` eV/Å，差
@@ -894,7 +894,9 @@ TEST(AllocObserveTest, EmptyTargetSetEqualsBecke)
       `e_con` 边界见
       `docs/superpowers/specs/2026-10-27-s5-pw-frozen-force.md`；完整目标导数
       与总力 FD 见
-      `docs/superpowers/specs/2026-10-27-s5-pw-target-force.md`。
+      `docs/superpowers/specs/2026-10-27-s5-pw-target-force.md`；跨 k-pool 力
+      对照见
+      `docs/superpowers/specs/2026-10-27-s5-pw-kpar-force.md`。
 
 ### Task S5.2 周期 Hirshfeld 权重后端
 
