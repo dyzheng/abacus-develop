@@ -639,6 +639,111 @@ void accumulate_target_force_direction(
     (void)nkb;
 }
 
+void accumulate_target_stress_component(
+    const PwTargetContext& context,
+    const PwAllocBandForceData& data,
+    const std::vector<std::complex<double>>& derivative_overlap,
+    const int ipol,
+    const int jpol,
+    const int spin,
+    const std::vector<double>& mu,
+    const std::vector<constraint::ChannelProfile>& channels,
+    std::vector<double>& stress_energy)
+{
+    const int r = context.space.ntarget;
+    const int index = ipol * 3 + jpol;
+    const auto out = [&](const int a, const int vec) {
+        return derivative_overlap[static_cast<size_t>(context.target_row[a])
+                                      * data.nvec + vec];
+    };
+
+    // A homogeneous strain moves every projector, so this D matrix contains
+    // all target rows rather than the single atom used by the force path.
+    std::vector<std::complex<double>> D(static_cast<size_t>(r) * r,
+                                        std::complex<double>(0.0, 0.0));
+    for (int a = 0; a < r; ++a)
+    {
+        for (int b = 0; b < r; ++b)
+        {
+            D[static_cast<size_t>(a) * r + b]
+                = out(a, data.target_offset + b);
+        }
+    }
+    std::vector<std::complex<double>> dST_inv_root;
+    build_pw_target_derivative(context.space, D, dST_inv_root);
+
+    for (int s = 0; s < data.nocc; ++s)
+    {
+        std::vector<std::complex<double>> d_raw(
+            r, std::complex<double>(0.0, 0.0));
+        for (int a = 0; a < r; ++a)
+        {
+            d_raw[a] = out(a, s);
+        }
+        std::vector<std::complex<double>> orth;
+        std::vector<std::complex<double>> d_orth;
+        orthogonalize_pw_overlaps_derivative(
+            context.space, dST_inv_root, data.raw_overlap[s], d_raw, orth,
+            d_orth);
+
+        for (int alpha = 0; alpha < data.nconstraint; ++alpha)
+        {
+            // Branch: a zero multiplier contributes no target strain term.
+            if (mu[alpha] == 0.0)
+            {
+                continue;
+            }
+            std::vector<std::complex<double>> z(
+                r, std::complex<double>(0.0, 0.0));
+            std::vector<std::complex<double>> dz(
+                r, std::complex<double>(0.0, 0.0));
+            for (int a = 0; a < r; ++a)
+            {
+                z[a] = data.wq_overlap[(static_cast<size_t>(alpha)
+                                            * data.nocc + s)
+                                           * r + a];
+                dz[a] = out(a, data.nocc + alpha * data.nocc + s);
+            }
+            std::vector<std::complex<double>> orth_wq;
+            std::vector<std::complex<double>> d_orth_wq;
+            orthogonalize_pw_overlaps_derivative(context.space,
+                                                 dST_inv_root, z, dz,
+                                                 orth_wq, d_orth_wq);
+
+            std::complex<double> cross(0.0, 0.0);
+            for (int a = 0; a < r; ++a)
+            {
+                cross += std::conj(data.orth_overlap[s][a])
+                             * d_orth_wq[a]
+                         + std::conj(d_orth[a]) * orth_wq[a];
+            }
+            const double cross_derivative = -2.0 * cross.real();
+            double dq_derivative = 0.0;
+
+            // Branch: Q_alpha contains exactly the orthonormal targets owned
+            // by this constraint.  Every target still contributes through the
+            // dP cross term above.
+            for (int a = 0; a < r; ++a)
+            {
+                if (context.space.constraint[a] == alpha)
+                {
+                    dq_derivative += 2.0
+                                     * (std::conj(d_orth[a])
+                                        * data.orth_overlap[s][a])
+                                           .real();
+                }
+            }
+            const double channel
+                = (spin == 0) ? channels[alpha].inj_up
+                              : channels[alpha].inj_dn;
+            const double prefactor
+                = data.occupation[s] * mu[alpha] * channel;
+            stress_energy[index] -= prefactor
+                                    * (dq_derivative + cross_derivative);
+        }
+    }
+}
+
 } // namespace
 
 bool compute_pw_alloc_observables(
@@ -1056,6 +1161,172 @@ bool compute_pw_alloc_target_force(
     for (int i = 0; i < ucell.nat * 3; ++i)
     {
         force.c[i] = force_local[i];
+    }
+    return true;
+}
+
+bool compute_pw_alloc_target_stress(
+    const UnitCell& ucell,
+    const psi::Psi<std::complex<double>>* psi,
+    const ModuleBase::matrix& occupations,
+    const K_Vectors& kv,
+    const ModulePW::PW_Basis_K& wfcpw,
+    const int nspin,
+    const constraint::WeightGrid& weight_grid,
+    const int target_l,
+    const std::vector<double>& mu,
+    const std::vector<constraint::ChannelProfile>& channels,
+    ModuleBase::matrix& stress,
+    std::string& error)
+{
+    // Branch: this closure is the collinear scalar-band stress channel.
+    if (nspin != 1 && nspin != 2)
+    {
+        error = "PW allocation target stress supports only nspin 1/2";
+        return false;
+    }
+    // Branch: spinor strain derivatives need a Pauli contraction which is not
+    // part of the collinear closure.
+    if (psi == nullptr || psi->get_npol() != 1)
+    {
+        error = "PW allocation target stress requires scalar CPU wavefunctions";
+        return false;
+    }
+    const int nconstraint = weight_grid.nconstraint();
+    // Guard: multipliers and density-channel signs define the same operator
+    // as the Hamiltonian/stress kernel; a mismatch is a wiring bug.
+    if (static_cast<int>(mu.size()) != nconstraint
+        || static_cast<int>(channels.size()) != nconstraint)
+    {
+        error = "PW allocation target stress has a constraint-count mismatch";
+        return false;
+    }
+    const int nks = psi->get_nk();
+    // Branch: no k-point means no occupied target-state strain derivative.
+    if (nks <= 0)
+    {
+        error = "PW allocation target stress has no k-points";
+        return false;
+    }
+    // Guard: the volume-normalized stress needs a positive cell volume.
+    if (wfcpw.omega <= 0.0)
+    {
+        error = "PW allocation target stress has a non-positive cell volume";
+        return false;
+    }
+
+    stress.create(3, 3);
+    std::fill(stress.c, stress.c + 9, 0.0);
+    std::vector<double> stress_energy(9, 0.0);
+    auto* onsite_p
+        = projectors::OnsiteProjector<double,
+                                      base_device::DEVICE_CPU>::get_instance();
+    try
+    {
+        for (int ik = 0; ik < nks; ++ik)
+        {
+            // Branch: every k-point carries the spin label selecting the
+            // Hamiltonian channel's multiplier sign.
+            if (static_cast<int>(kv.isk.size()) <= ik)
+            {
+                error = "PW allocation target stress has no k-point spin label";
+                return false;
+            }
+            const int spin = (nspin == 2) ? kv.isk[ik] : 0;
+            // Guard: an unexpected spin label has no channel coefficient.
+            if (spin < 0 || spin >= nspin)
+            {
+                error = "PW allocation target stress has an invalid spin label";
+                return false;
+            }
+            const int nband = psi->get_nbands();
+            const int ld_psi = psi->get_nbasis();
+            psi->fix_k(ik);
+            const std::complex<double>* psi_k = psi->get_pointer();
+            PwTargetContext context;
+            if (!build_target_context(onsite_p, weight_grid, ik, target_l,
+                                      psi_k, nband, ld_psi, context, error))
+            {
+                return false;
+            }
+            PwAllocBandForceData data;
+            if (!build_band_force_data(wfcpw, ik, psi_k, occupations, nband,
+                                       ld_psi, weight_grid, context, data,
+                                       error))
+            {
+                return false;
+            }
+            // Branch: an empty occupied spectrum has no strain derivative.
+            if (data.nvec == 0)
+            {
+                continue;
+            }
+            auto* fs_tools = onsite_p->get_fs_tools();
+            // Guard: the custom derivative path needs the same projector
+            // table that built the target context.
+            if (fs_tools == nullptr || fs_tools->get_nkb() <= 0)
+            {
+                error = "PW allocation target stress has no onsite VKB table";
+                return false;
+            }
+            const int nkb = fs_tools->get_nkb();
+            std::vector<std::complex<double>> derivative_overlap(
+                static_cast<size_t>(nkb) * data.nvec,
+                std::complex<double>(0.0, 0.0));
+            for (int ipol = 0; ipol < 3; ++ipol)
+            {
+                for (int jpol = 0; jpol < 3; ++jpol)
+                {
+                    // Each component reuses the same custom-vector GEMM.
+                    // Both off-diagonal directions are evaluated so the
+                    // final tensor is explicitly symmetrized.
+                    fs_tools->cal_dbecp_s_custom(
+                        ik, data.nvec, ipol, jpol, data.custom_vectors.data(),
+                        ld_psi, derivative_overlap.data());
+                    // The projector derivative is plane-wave-partition
+                    // local; pool it before contracting with the small target
+                    // space so every rank forms the same strain derivative.
+                    reduce_pool(derivative_overlap);
+                    accumulate_target_stress_component(
+                        context, data, derivative_overlap, ipol, jpol, spin,
+                        mu, channels, stress_energy);
+                }
+            }
+        }
+    }
+    catch (const std::exception& exc)
+    {
+        error = std::string("PW allocation target stress: ") + exc.what();
+        return false;
+    }
+
+    // Every rank in a pool has the same reduced wavefunction contractions;
+    // average those copies and sum the disjoint k-point sets of all pools.
+    const int npool = GlobalV::KPAR * PARAM.inp.bndpar;
+    Parallel_Reduce::reduce_double_allpool(
+        npool, GlobalV::NPROC_IN_POOL, stress_energy.data(), 9);
+
+    const double inv_omega = 1.0 / wfcpw.omega;
+    for (int a = 0; a < 3; ++a)
+    {
+        for (int b = a; b < 3; ++b)
+        {
+            // ABACUS reports stress as -(1/Omega) dE/d eps.  The accumulator
+            // stores s = -dE/d eps (the same convention as the grid kernel),
+            // so the physical symmetrized tensor is +sym[s]/Omega.  The
+            // off-diagonal derivative is already the symmetric-strain one.
+            const double value
+                = 0.5
+                  * (stress_energy[a * 3 + b] + stress_energy[b * 3 + a])
+                  * inv_omega;
+            stress(a, b) = value;
+            // Branch: mirror the off-diagonal entry for the total-stress
+            // consumer, matching the grid constraint kernel.
+            if (a != b)
+            {
+                stress(b, a) = value;
+            }
+        }
     }
     return true;
 }

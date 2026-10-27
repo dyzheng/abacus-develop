@@ -6309,3 +6309,54 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   1. 补 PW allocation 应力。
   2. 验证 `bndpar > 1` 的能带归属后再解除守卫。
   3. 做更密 k 网格与完整 `kpar=2` 回归。
+
+## 2026-10-27 (S5.1 PW stress): PW allocation 目标应力
+
+- **完成内容**：
+  1. `select_pw_target_shell()` 改为返回全局 onsite-projector 行号；修复
+     `l=0/1` 时所有原子误读第一个原子目标、目标空间塌缩的问题。
+  2. `Onsite_Proj_tools` 新增 `cal_dbecp_s_custom()`，对任意 band/target/WQ
+     向量计算 projector 应变导数。
+  3. `compute_pw_alloc_target_stress()` 实现 `dST`、`S^{-1/2}` Fréchet 应变
+     导数、owner `dQ_T` 与目标转动交叉项；累加器最终按 `+sym(s)/Omega`
+     输出物理应力。
+  4. `ConstraintLoop::{set_allocation_target_stress,compute_stress}` 与
+     `Stress_PW::cal_stress(extra_stress)` 接通网格应力与目标应力的合并。
+  5. 清理双次 `compute_stress` 与临时 `ALLOC-TARGET-RAW` /
+     `ALLOC-STRESS-SPLIT` 诊断。
+- **验证**：
+  - `ctest -R 'MODULE_ESTATE_constraint_alloc_(pw|operator|linalg)$'`：3/3 PASS。
+  - `ctest -R 'MODULE_ESTATE_constraint_alloc'`：10/10 PASS。
+  - 中心 `np=2/4`：总能差 `2.4e-11 eV`，总应力 xy 差 `1e-10 kbar`；
+    `ntarget=3/rank=3/cond=4.6175`，`dsum_n=-1.05e-13`。
+  - H2O/H-s 剪切 `±5e-5/±1e-4/±2e-4/±5e-4` 的两侧解析平均对总能 FD
+    相对差分别为 `0.883%/0.878%/0.864%/2.110%`。
+  - 等容 `±1e-4` 的总应力迹：FD `-33.324 kbar` 对中心 `-33.454 kbar`，
+    相对差 `0.39%`。
+  - H2O/O-d `l=2`、`np=4`：总能 `-442.1587883739077256 eV` 与符号修正前
+    完全一致；约束应力符号已修正。
+- **Bug/fix list**：
+  1. 目标 shell 行号误用原子内局部偏移，导致 H/O 目标在 `l=0/1` 时混叠；
+     改为逐原子累加全局 `row_base`。
+  2. 目标应力最终符号初版为负；按 `s=-dE/d eps` 约定改为
+     `+0.5*sym(s)/Omega`。
+  3. `cal_dbecp_s_custom()` 的平面波分片输出在收缩前必须 `reduce_pool`，
+     与目标力路径一致。
+- **文件**：
+  `source/source_esolver/esolver_ks_pw.cpp`、
+  `source/source_estate/module_constraint/{alloc_pw,constraint_loop}.{h,cpp}`、
+  `source/source_estate/module_constraint/test/alloc_pw_test.cpp`、
+  `source/source_pw/module_pwdft/{onsite_proj_tools,op_pw_alloc,stress_pw}.{h,cpp}`、
+  `docs/superpowers/specs/2026-10-27-s5-pw-stress.md`（新建）、
+  执行方案、本日志。
+- **未完成/边界**：
+  - 精确零应变立方构型的解析 `sigma_xy=0.7938876 kbar` 相对 FD 偏低 `5.70%`；
+    `1e-5` 应变即恢复为 `0.8344 kbar`，疑为高对称点 projector 应变导数的残余
+    数值/缓存边界，尚需独立核对 `cal_dbecp_s_custom()` 与 overlap FD。
+  - `bndpar > 1` 的 PW allocation 应力仍显式拒绝。
+  - 更密 k 网格、完整 `kpar=2` 与非共线应力待补。
+- **下一步**：
+  1. 定位精确零应变点的残余偏差；优先检查轴对称 G 向量的 Ylm/径向数值导数。
+  2. 做更密 k 网格与 `kpar=2` 的应力回归。
+  3. 验证 `bndpar > 1` 能带归属后解除守卫。
+  4. 补 `nspin=4` Pauli 收缩与目标应力。

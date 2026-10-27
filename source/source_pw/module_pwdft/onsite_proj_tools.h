@@ -91,6 +91,25 @@ class Onsite_Proj_tools
                             int npwx,
                             std::complex<FPTYPE>* becp_out);
 
+    /**
+     * @brief Strain derivative of projector overlaps against custom vectors.
+     *
+     * Returns overlap[row, vec] = <d beta_row/d eps_{ipol,jpol}|vec> for one
+     * symmetric strain component.  The vector layout matches
+     * cal_dbecp_f_custom().  cal_becp(ik, ...) must have populated the VKB
+     * table before the first strain component; subsequent components at the
+     * same k-point reuse the cached G+k/Ylm data.  The caller must invoke
+     * cal_becp again before switching k-points because this routine reuses
+     * the VKB workspace for the projector derivative.
+     */
+    void cal_dbecp_s_custom(int ik,
+                            int nvec,
+                            int ipol,
+                            int jpol,
+                            const std::complex<FPTYPE>* ppsi_in,
+                            int npwx,
+                            std::complex<FPTYPE>* becp_out);
+
     void cal_force_dftu(
         int ik,
         int npm,
@@ -191,6 +210,8 @@ class Onsite_Proj_tools
     void save_vkb(int npw, int ipol);
     /// @brief revert the 0-value dvkbs for calculating the dbecp_i in the force calculation
     void revert_vkb(int npw, int ipol);
+    /// @brief Build <G+k|d beta/d eps_{ipol,jpol}> into the VKB workspace.
+    void build_vkb_derivative_strain(int ik, int ipol, int jpol);
     /// ---------------------------------------------------------------------
 
     /// pointers to access the data without memory arrangement

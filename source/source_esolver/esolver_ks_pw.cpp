@@ -605,13 +605,65 @@ void ESolver_KS_PW<T, Device>::cal_force(UnitCell& ucell, ModuleBase::matrix& fo
 template <typename T, typename Device>
 void ESolver_KS_PW<T, Device>::cal_stress(UnitCell& ucell, ModuleBase::matrix& stress)
 {
+    // S5.1 PW allocation stress: the grid kernel consumes Q_c D Q_c and the
+    // PW target derivative supplies the explicit projector strain term.  The
+    // combined tensor joins the standard KS stress before symmetrization and
+    // printing inside Stress_PW.
+    ModuleBase::matrix constraint_stress;
+    const ModuleBase::matrix* constraint_stress_ptr = nullptr;
+    if (PARAM.inp.constraint && PARAM.inp.constraint_alloc_switch)
+    {
+        constraint::ConstraintLoop& loop
+            = constraint::ConstraintLoop::instance();
+        // Guard: k-point pools are supported, but band-parallel ownership has
+        // not been validated for the allocation density/derivative path.
+        if (PARAM.inp.bndpar > 1)
+        {
+            ModuleBase::WARNING_QUIT("ESolver_KS_PW::cal_stress",
+                "PW allocation stress currently requires bndpar = 1");
+        }
+        // Guard: the stress density is meaningful only after the allocation
+        // loop has built its target space and weight field.
+        if (!loop.enabled() || !loop.allocation_mode())
+        {
+            ModuleBase::WARNING_QUIT("ESolver_KS_PW::cal_stress",
+                "PW allocation stress requires an initialized allocation loop");
+        }
+        std::vector<std::vector<double>> rho_c;
+        std::string error;
+        if (!alloc::compute_pw_alloc_complement_density(
+                this->stp.psi_cpu, this->pelec->wg, this->kv, *this->pw_wfc,
+                PARAM.inp.nspin, loop.weight_grid(),
+                PARAM.inp.constraint_alloc_target_l, rho_c, error))
+        {
+            ModuleBase::WARNING_QUIT("ESolver_KS_PW::cal_stress", error);
+        }
+        ModuleBase::matrix target_stress;
+        if (!alloc::compute_pw_alloc_target_stress(
+                ucell, this->stp.psi_cpu, this->pelec->wg, this->kv,
+                *this->pw_wfc, PARAM.inp.nspin, loop.weight_grid(),
+                PARAM.inp.constraint_alloc_target_l, loop.mu_eff(),
+                loop.channels(), target_stress, error))
+        {
+            ModuleBase::WARNING_QUIT("ESolver_KS_PW::cal_stress", error);
+        }
+        loop.set_allocation_force_density(std::move(rho_c));
+        loop.set_allocation_target_stress(target_stress);
+        constraint_stress.create(3, 3);
+        loop.compute_stress(this->pelec->charge->rho, PARAM.inp.nspin,
+                            constraint_stress);
+        constraint_stress_ptr = &constraint_stress;
+    }
+
     Stress_PW<double, Device> ss(this->pelec);
 
     // mohan add 2025-10-12
     this->stp.update_psi_d();
 
     ss.cal_stress(stress, ucell, this->dftu, this->locpp, this->ppcell, this->pw_rhod,
-                  &ucell.symm, &this->sf, &this->kv, this->pw_wfc, this->stp.template get_psi_d<T, Device>());
+                  &ucell.symm, &this->sf, &this->kv, this->pw_wfc,
+                  this->stp.template get_psi_d<T, Device>(),
+                  constraint_stress_ptr);
 
     // external stress
     double unit_transform = 0.0;

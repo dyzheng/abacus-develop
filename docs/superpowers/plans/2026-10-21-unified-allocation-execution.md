@@ -887,6 +887,13 @@ TEST(AllocObserveTest, EmptyTargetSetEqualsBecke)
       `3e-10 eV/Å`。单独 `e_con` 差分不是完整约束能量且不满足电子驻点条件，
       不再作为独立力门；详见
       `docs/superpowers/specs/2026-10-27-s5-pw-target-force.md`。
+- [x] 完整 PW `∂Q̂/∂ε`：实现 projector 应变导数、`ST^{-1/2}` Fréchet 应变
+      导数与目标转动交叉项，叠加到 `Q_c ∂W Q_c` 网格应力之后；修正目标 shell
+      的全局 projector 行号和 `+sym(s)/Omega` 符号。H2O/H-s 剪切 `±5e-5`
+      两侧解析平均对总能 FD 差 `0.883%`，等容迹差 `0.39%`，`np=2/4` 中心
+      一致到 `1e-10 kbar`；H2O/O-d `l=2` 能量无回归。精确零应变高对称点仍有
+      `5.70%` 残余偏差，已列为下一轮待查边界。详见
+      `docs/superpowers/specs/2026-10-27-s5-pw-stress.md`。
 - [x] 验收：平价表已通过；PW allocation 算符已接入 `HamiltPW`，固定
       `fixed_mu` SCF 在 MPI 2/4 进程收敛且读数一致，`kpar=2` 跨池短跑无
       死锁；冻结目标 FD 力 `<0.0129 eV/Å` 已通过。缓存、批量归约与
@@ -899,7 +906,8 @@ TEST(AllocObserveTest, EmptyTargetSetEqualsBecke)
       对照见
       `docs/superpowers/specs/2026-10-27-s5-pw-kpar-force.md`；复数 Hermitian
       目标空间见
-      `docs/superpowers/specs/2026-10-27-s5-pw-complex-st.md`。
+      `docs/superpowers/specs/2026-10-27-s5-pw-complex-st.md`；目标应力与有限
+      差分见 `docs/superpowers/specs/2026-10-27-s5-pw-stress.md`。
 
 ### Task S5.2 周期 Hirshfeld 权重后端
 

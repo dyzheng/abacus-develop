@@ -238,7 +238,10 @@ TEST(AllocPwTest, SelectOnsiteTargetShell)
     const alloc::PwTargetShell p_shell
         = alloc::select_pw_target_shell(nh, 1);
     ASSERT_EQ(p_shell.row.size(), 9);
-    const std::vector<int> expected_rows = {1, 2, 3, 1, 2, 3, 1, 2, 3};
+    // Rows are global onsite-projector indices: O starts at 0, the first H at
+    // 9 and the second H at 13.  Local (l,m) offsets alone would alias every
+    // atom onto O's p shell.
+    const std::vector<int> expected_rows = {1, 2, 3, 10, 11, 12, 14, 15, 16};
     const std::vector<int> expected_atoms = {0, 0, 0, 1, 1, 1, 2, 2, 2};
     EXPECT_EQ(p_shell.row, expected_rows);
     EXPECT_EQ(p_shell.atom, expected_atoms);

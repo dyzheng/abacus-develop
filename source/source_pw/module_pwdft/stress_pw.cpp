@@ -2,6 +2,7 @@
 
 #include "source_base/timer.h"
 #include "source_base/global_variable.h" // use GlobalC
+#include "source_base/tool_quit.h"
 #include "source_hamilt/module_vdw/vdw.h"
 #include "source_io/module_output/output_log.h"
 #include "source_hamilt/module_xc/xc_functional.h"
@@ -18,7 +19,8 @@ void Stress_PW<FPTYPE, Device>::cal_stress(ModuleBase::matrix& sigmatot,
                                            Structure_Factor* p_sf,
                                            K_Vectors* p_kv,
                                            ModulePW::PW_Basis_K* wfc_basis,
-                                           const psi::Psi <std::complex<FPTYPE>, Device>* d_psi_in)
+                                           const psi::Psi <std::complex<FPTYPE>, Device>* d_psi_in,
+                                           const ModuleBase::matrix* extra_stress)
 {
     ModuleBase::TITLE("Stress_PW", "cal_stress");
     ModuleBase::timer::start("Stress_PW", "cal_stress");
@@ -143,6 +145,26 @@ void Stress_PW<FPTYPE, Device>::cal_stress(ModuleBase::matrix& sigmatot,
         }
     }
 
+    // Branch: the caller may supply an independent constraint-stress tensor
+    // (PW allocation).  Add it before symmetrization so the printed total and
+    // relaxation/ stress consumers see one consistent tensor.
+    if (extra_stress != nullptr)
+    {
+        // Guard: the external accumulator must be a full stress tensor.
+        if (extra_stress->nr != 3 || extra_stress->nc != 3)
+        {
+            ModuleBase::WARNING_QUIT("Stress_PW::cal_stress",
+                                     "extra stress must be 3 x 3");
+        }
+        for (int ipol = 0; ipol < 3; ++ipol)
+        {
+            for (int jpol = 0; jpol < 3; ++jpol)
+            {
+                sigmatot(ipol, jpol) += (*extra_stress)(ipol, jpol);
+            }
+        }
+    }
+
     if (ModuleSymmetry::Symmetry::symm_flag == 1)
     {
         p_symm->symmetrize_mat3(sigmatot, ucell.lat);
@@ -172,6 +194,12 @@ void Stress_PW<FPTYPE, Device>::cal_stress(ModuleBase::matrix& sigmatot,
         if (GlobalC::exx_info.info_global.cal_exx)
         {
             ModuleIO::print_stress("EXX    STRESS", sigmaexx, screen, ry, GlobalV::ofs_running);
+        }
+        // Branch: only allocation runs provide this auxiliary tensor.
+        if (extra_stress != nullptr)
+        {
+            ModuleIO::print_stress("CONSTRAINT STRESS", *extra_stress, screen,
+                                   ry, GlobalV::ofs_running);
         }
         ModuleIO::print_stress("TOTAL    STRESS", sigmatot, screen, ry, GlobalV::ofs_running);
     }

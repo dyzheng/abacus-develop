@@ -204,6 +204,10 @@ class ConstraintLoop
     // Ry/Bohr and is added after the frozen Q_c dW Q_c grid kernel.
     void set_allocation_target_force(const ModuleBase::matrix& force);
 
+    // Complete target-projector strain derivative for the PW allocation
+    // stress, in Ry/Bohr^3.  It is added after the Q_c dW Q_c grid kernel.
+    void set_allocation_target_stress(const ModuleBase::matrix& stress);
+
     // Non-collinear allocation force densities.  Each entry already carries
     // its constraint multiplier and lambda.sigma contraction, so the grid
     // kernel uses a unit coefficient per entry.
@@ -496,6 +500,7 @@ class ConstraintLoop
     bool allocation_mode_ = false;
     std::vector<std::vector<double>> allocation_force_rho_;
     ModuleBase::matrix allocation_target_force_;
+    ModuleBase::matrix allocation_target_stress_;
     std::vector<std::vector<double>> allocation_spin_force_rho_;
     ModuleBase::matrix allocation_spin_pulay_force_;
 };

@@ -154,6 +154,7 @@ void ConstraintLoop::reset()
     allocation_mode_ = false;
     allocation_force_rho_.clear();
     allocation_target_force_ = ModuleBase::matrix();
+    allocation_target_stress_ = ModuleBase::matrix();
     allocation_spin_force_rho_.clear();
     allocation_spin_pulay_force_ = ModuleBase::matrix();
 }
@@ -2335,6 +2336,12 @@ void ConstraintLoop::set_allocation_target_force(
     allocation_target_force_ = force;
 }
 
+void ConstraintLoop::set_allocation_target_stress(
+    const ModuleBase::matrix& stress)
+{
+    allocation_target_stress_ = stress;
+}
+
 void ConstraintLoop::set_allocation_spin_force_density(
     std::vector<std::vector<double>> rho)
 {
@@ -2517,6 +2524,16 @@ void ConstraintLoop::compute_stress(const double* const* rho,
             }
             constraint::constraint_stress_densities(
                 *wg_, allocation_spin_force_rho_, stresscon);
+            // Branch: a future non-collinear target-strain closure can attach
+            // its explicit projector term through the same accumulator.
+            if (allocation_target_stress_.nr == 3
+                && allocation_target_stress_.nc == 3)
+            {
+                for (int i = 0; i < 9; ++i)
+                {
+                    stresscon.c[i] += allocation_target_stress_.c[i];
+                }
+            }
             return;
         }
         if (static_cast<int>(allocation_force_rho_.size()) != nspin)
@@ -2531,6 +2548,16 @@ void ConstraintLoop::compute_stress(const double* const* rho,
         }
         constraint::constraint_stress(*wg_, rho_c.data(), nspin, channels_,
                                       mu_eff_, stresscon);
+        // The grid kernel above owns Q_c dW_i Q_c.  Add the target-projector
+        // strain derivative computed by the PW backend.
+        if (allocation_target_stress_.nr == 3
+            && allocation_target_stress_.nc == 3)
+        {
+            for (int i = 0; i < 9; ++i)
+            {
+                stresscon.c[i] += allocation_target_stress_.c[i];
+            }
+        }
         return;
     }
     constraint::constraint_stress(*wg_, rho, nspin, channels_, mu_eff_,

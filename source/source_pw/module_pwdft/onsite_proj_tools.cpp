@@ -465,134 +465,157 @@ void Onsite_Proj_tools<FPTYPE, Device>::cal_becp(int ik,
     ModuleBase::timer::end("Onsite_Proj_tools", "cal_becp");
 }
 
-// cal_dbecp
+// Build the projector strain derivative <G+k|d beta/d eps_{ipol,jpol}>.
+// The caller starts from the normal VKB table produced by cal_becp().  This
+// helper deliberately invalidates current_ik because ppcell_vkb is reused as
+// the derivative workspace, so a subsequent cal_becp(ik) must rebuild it.
 template <typename FPTYPE, typename Device>
-void Onsite_Proj_tools<FPTYPE, Device>::cal_dbecp_s(int ik, int npm, int ipol, int jpol)
+void Onsite_Proj_tools<FPTYPE, Device>::build_vkb_derivative_strain(
+    int ik, int ipol, int jpol)
 {
-    ModuleBase::TITLE("Onsite_Proj_tools", "cal_dbecp_s");
-    ModuleBase::timer::start("Onsite_Proj_tools", "cal_dbecp_s");
-    this->current_ik = -1; // reset the current ik, vkb has been reused to save dvkb
+    this->current_ik = -1;
     const int npol = this->ucell_->get_npol();
-    const int size_becp = this->nbands * npol * this->nkb;
-    const int npm_npol = npm * npol;
-    if (this->dbecp == nullptr)
-    {
-        resmem_complex_op()(dbecp, size_becp);
-    }
-
-    // prepare math tools
-    Nonlocal_maths<FPTYPE, Device> maths(*(this->nhtol), this->lprojmax, this->ucell_);
-
-    const std::complex<FPTYPE>* ppsi = &(this->psi_[0](ik, 0, 0));
     const int npw = this->wfc_basis_->npwk[ik];
     std::complex<FPTYPE>* vkb_deri_ptr = this->ppcell_vkb;
 
+    // Branch: a new k-point needs the strain-derivative spherical harmonics;
+    // the value harmonics and G+k table were cached by cal_becp().
     if (this->pre_ik_s != ik)
-    { // k point has changed, we need to recalculate the g_plus_k
-        // this->g_plus_k = maths.cal_gk(ik, this->wfc_basis_); //has been calculated by cal_becp
-
-        const int lmax_ = this->lprojmax;
-        // prepare ylm，size: (lmax+1)^2 * this->max_npw
-        // maths.cal_ylm(lmax_, npw, g_plus_k.data(), hd_ylm); //has been calculated by cal_becp
-        maths.cal_ylm_deri(lmax_, npw, g_plus_k.data(), hd_ylm_deri);
+    {
+        Nonlocal_maths<FPTYPE, Device> maths(*(this->nhtol), this->lprojmax,
+                                             this->ucell_);
+        maths.cal_ylm_deri(this->lprojmax, npw, g_plus_k.data(), hd_ylm_deri);
         this->pre_ik_s = ik;
     }
-    FPTYPE *gk = g_plus_k.data(), *vq_tb = this->tabtpr->ptr;
+    Nonlocal_maths<FPTYPE, Device> maths(*(this->nhtol), this->lprojmax,
+                                         this->ucell_);
+    FPTYPE* gk = g_plus_k.data();
+    FPTYPE* vq_tb = this->tabtpr->ptr;
     std::complex<FPTYPE>* d_sk = this->hd_sk;
+    // Branch: GPU workspaces are not part of the CPU allocation closure, but
+    // keep the same pointer selection as the regular onsite stress path.
     if (this->device == base_device::GpuDevice)
     {
         gk = d_g_plus_k;
         vq_tb = d_vq_tab;
     }
 
-    for (int it = 0; it < this->ucell_->ntype; it++) // loop all elements
+    for (int it = 0; it < this->ucell_->ntype; ++it)
     {
-        cal_vq_op()(this->ctx,
-                    vq_tb,
-                    it,
-                    gk,
-                    npw,
-                    this->tabtpr->getBound2(),
-                    this->tabtpr->getBound3(),
-                    PARAM.globalv.dq,
-                    this->nproj[it],
-                    hd_vq);
-        cal_vq_deri_op()(this->ctx,
-                         vq_tb,
-                         it,
-                         gk,
-                         npw,
+        cal_vq_op()(this->ctx, vq_tb, it, gk, npw,
+                    this->tabtpr->getBound2(), this->tabtpr->getBound3(),
+                    PARAM.globalv.dq, this->nproj[it], hd_vq);
+        cal_vq_deri_op()(this->ctx, vq_tb, it, gk, npw,
                          this->tabtpr->getBound2(),
-                         this->tabtpr->getBound3(),
-                         PARAM.globalv.dq,
-                         this->nproj[it],
-                         hd_vq_deri);
+                         this->tabtpr->getBound3(), PARAM.globalv.dq,
+                         this->nproj[it], hd_vq_deri);
 
-        // prepare（-i）^l, size: nh
-        std::vector<std::complex<double>> pref = maths.cal_pref(it, h_atom_nh[it]);
-        int nh = pref.size();
-        // prepare indexes for calculate vkb_deri
+        std::vector<std::complex<double>> pref
+            = maths.cal_pref(it, h_atom_nh[it]);
+        const int nh = static_cast<int>(pref.size());
         this->dvkb_indexes.resize(nh * 4);
-        maths.cal_dvkb_index(this->nproj[it],
-                             this->nhtol->c,
-                             this->nhtol->nc,
-                             npw,
-                             it,
-                             ipol,
-                             jpol,
+        maths.cal_dvkb_index(this->nproj[it], this->nhtol->c, this->nhtol->nc,
+                             npw, it, ipol, jpol,
                              this->dvkb_indexes.data());
+        // Branch: the derivative kernels consume device copies on GPU and
+        // host views on CPU.
         if (this->device == base_device::GpuDevice)
         {
             syncmem_int_h2d_op()(d_dvkb_indexes, dvkb_indexes.data(), nh * 4);
             syncmem_complex_h2d_op()(d_pref_in, pref.data(), nh);
         }
-        for (int ia = 0; ia < h_atom_na[it]; ia++)
+        else
         {
-            // 2. calculate dbecp：
-            // 2.a. calculate dbecp_noevc, repeat use the memory of ppcell.vkb
-
-            if (this->device == base_device::CpuDevice)
-            {
-                d_dvkb_indexes = dvkb_indexes.data();
-                d_pref_in = pref.data();
-                d_g_plus_k = g_plus_k.data();
-            }
-            cal_vkb_deri_op()(this->ctx,
-                              nh,
-                              npw,
-                              ipol,
-                              jpol,
-                              d_dvkb_indexes,
-                              hd_vq,
-                              hd_vq_deri,
-                              hd_ylm,
-                              hd_ylm_deri,
-                              d_sk,
-                              d_pref_in,
-                              d_g_plus_k,
-                              vkb_deri_ptr);
+            d_dvkb_indexes = dvkb_indexes.data();
+            d_pref_in = pref.data();
+            d_g_plus_k = g_plus_k.data();
+        }
+        for (int ia = 0; ia < h_atom_na[it]; ++ia)
+        {
+            cal_vkb_deri_op()(this->ctx, nh, npw, ipol, jpol, d_dvkb_indexes,
+                              hd_vq, hd_vq_deri, hd_ylm, hd_ylm_deri, d_sk,
+                              d_pref_in, d_g_plus_k, vkb_deri_ptr);
             d_sk += npw;
             vkb_deri_ptr += nh * npw;
         }
     }
-    // 2.b calculate dbecp = dbecp_noevc * psi
+    (void)npol;
+}
+
+// cal_dbecp
+template <typename FPTYPE, typename Device>
+void Onsite_Proj_tools<FPTYPE, Device>::cal_dbecp_s(int ik,
+                                                    int npm,
+                                                    int ipol,
+                                                    int jpol)
+{
+    ModuleBase::TITLE("Onsite_Proj_tools", "cal_dbecp_s");
+    ModuleBase::timer::start("Onsite_Proj_tools", "cal_dbecp_s");
+    const int npol = this->ucell_->get_npol();
+    const int size_becp = this->nbands * npol * this->nkb;
+    const int npm_npol = npm * npol;
+    // Branch: the standard stress path owns its fixed-size dbecp scratch.
+    if (this->dbecp == nullptr)
+    {
+        resmem_complex_op()(dbecp, size_becp);
+    }
+
+    const std::complex<FPTYPE>* ppsi = &(this->psi_[0](ik, 0, 0));
+    const int npw = this->wfc_basis_->npwk[ik];
+    build_vkb_derivative_strain(ik, ipol, jpol);
+
     const char transa = 'C';
     const char transb = 'N';
-
-    gemm_op()(transa,
-              transb,
-              nkb,
-              npm_npol,
-              npw,
-              &ModuleBase::ONE,
-              ppcell_vkb,
-              npw,
-              ppsi,
-              this->max_npw,
-              &ModuleBase::ZERO,
-              dbecp,
+    gemm_op()(transa, transb, nkb, npm_npol, npw, &ModuleBase::ONE,
+              ppcell_vkb, npw, ppsi, this->max_npw, &ModuleBase::ZERO, dbecp,
               nkb);
     ModuleBase::timer::end("Onsite_Proj_tools", "cal_dbecp_s");
+}
+
+template <typename FPTYPE, typename Device>
+void Onsite_Proj_tools<FPTYPE, Device>::cal_dbecp_s_custom(
+    int ik,
+    int nvec,
+    int ipol,
+    int jpol,
+    const std::complex<FPTYPE>* ppsi_in,
+    int npwx,
+    std::complex<FPTYPE>* becp_out)
+{
+    ModuleBase::TITLE("Onsite_Proj_tools", "cal_dbecp_s_custom");
+    ModuleBase::timer::start("Onsite_Proj_tools", "cal_dbecp_s_custom");
+
+    // Guard: this allocation-stress contraction is the scalar CPU closure.
+    if (this->device != base_device::CpuDevice || ppsi_in == nullptr
+        || becp_out == nullptr || nvec < 0 || npwx <= 0)
+    {
+        throw std::runtime_error(
+            "custom projector strain derivative requires scalar CPU vectors");
+    }
+    // Guard: spinor bands require a separate Pauli contraction.
+    if (this->ucell_->get_npol() != 1)
+    {
+        throw std::runtime_error(
+            "custom projector strain derivative requires npol == 1");
+    }
+    // Guard: cal_becp() must have initialized G+k, Ylm and structure-factor
+    // caches before the VKB workspace can be replaced by its derivative.
+    if (this->ppcell_vkb == nullptr || this->hd_sk == nullptr
+        || this->g_plus_k.empty())
+    {
+        throw std::runtime_error(
+            "custom projector strain derivative called before cal_becp");
+    }
+
+    const int npw = this->wfc_basis_->npwk[ik];
+    build_vkb_derivative_strain(ik, ipol, jpol);
+
+    const char transa = 'C';
+    const char transb = 'N';
+    gemm_op()(transa, transb, this->nkb, nvec, npw, &ModuleBase::ONE,
+              this->ppcell_vkb, npw, ppsi_in, npwx, &ModuleBase::ZERO,
+              becp_out, this->nkb);
+    ModuleBase::timer::end("Onsite_Proj_tools", "cal_dbecp_s_custom");
 }
 
 // cal_dbecp_f

@@ -93,6 +93,29 @@ bool compute_pw_alloc_target_force(
     ModuleBase::matrix& force,
     std::string& error);
 
+/**
+ * @brief Complete geometric strain derivative of the PW target projectors.
+ *
+ * The strain counterpart of compute_pw_alloc_target_force(): it contracts
+ * the onsite-projector strain derivative with the occupied bands and the
+ * W_i Q_c vectors, adds the ST^{-1/2} Fréchet strain derivative, and returns
+ * the missing dQ/deps target contribution in Ry/Bohr^3.  The explicit
+ * Q_c dW_i/deps Q_c part is supplied by ConstraintLoop::compute_stress().
+ */
+bool compute_pw_alloc_target_stress(
+    const UnitCell& ucell,
+    const psi::Psi<std::complex<double>>* psi,
+    const ModuleBase::matrix& occupations,
+    const K_Vectors& kv,
+    const ModulePW::PW_Basis_K& wfcpw,
+    const int nspin,
+    const constraint::WeightGrid& weight_grid,
+    const int target_l,
+    const std::vector<double>& mu,
+    const std::vector<constraint::ChannelProfile>& channels,
+    ModuleBase::matrix& stress,
+    std::string& error);
+
 } // namespace alloc
 
 namespace hamilt

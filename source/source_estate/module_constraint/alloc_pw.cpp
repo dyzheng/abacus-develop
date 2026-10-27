@@ -71,19 +71,24 @@ PwTargetShell select_pw_target_shell(const std::vector<int>& nh_per_atom,
     }
     const int width = 2 * target_l + 1;
     const int offset = target_l * target_l;
+    // The Projector/onsite tables store every atom's (l,m) block
+    // consecutively, so a shell row must carry the atom's global row base.
+    // Returning the local offset would make every atom read the first
+    // atom's projector and collapse the target space to that single atom.
+    int row_base = 0;
     for (int iat = 0; iat < static_cast<int>(nh_per_atom.size()); ++iat)
     {
         // Branch: OnsiteProjector stores a complete (l,m) block per atom, so
         // the shell exists exactly when offset+width fits in nh_per_atom.
-        if (nh_per_atom[iat] < offset + width)
+        if (nh_per_atom[iat] >= offset + width)
         {
-            continue;
+            for (int m = 0; m < width; ++m)
+            {
+                selection.row.push_back(row_base + offset + m);
+                selection.atom.push_back(iat);
+            }
         }
-        for (int m = 0; m < width; ++m)
-        {
-            selection.row.push_back(offset + m);
-            selection.atom.push_back(iat);
-        }
+        row_base += nh_per_atom[iat];
     }
     return selection;
 }
