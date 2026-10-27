@@ -73,6 +73,24 @@ class Onsite_Proj_tools
      */
     void cal_dbecp_f(int ik, int npm, int ipol);
 
+    /**
+     * @brief Derivative projector overlaps against caller-supplied vectors.
+     *
+     * Returns overlap[row, vec] = <d beta_row|vec> for the atomic-centre
+     * displacement in Cartesian direction ipol.  The layout of ppsi_in is
+     * vector-major with leading dimension npwx, and becp_out is row-major
+     * with leading dimension nkb.  cal_becp(ik, ...) must have populated the
+     * current VKB table first.  This is the allocation-force entry that
+     * contracts target-projector derivatives with arbitrary band vectors
+     * without materializing the plane-wave derivative vectors.
+     */
+    void cal_dbecp_f_custom(int ik,
+                            int nvec,
+                            int ipol,
+                            const std::complex<FPTYPE>* ppsi_in,
+                            int npwx,
+                            std::complex<FPTYPE>* becp_out);
+
     void cal_force_dftu(
         int ik,
         int npm,
@@ -112,6 +130,7 @@ class Onsite_Proj_tools
 
     std::complex<FPTYPE>* get_becp() const { return becp; }
     std::complex<FPTYPE>* get_dbecp() const { return dbecp; }
+    int get_nkb() const { return nkb; }
 
   private:
     /**

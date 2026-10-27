@@ -113,6 +113,42 @@ TEST(AllocLinalgTest, RankTruncationDropsNullDirection)
     EXPECT_NEAR(Si[3], 0.0, 1e-15);
 }
 
+TEST(AllocLinalgTest, InvSqrtDerivativeMatchesFiniteDifference)
+{
+    std::mt19937 gen(19);
+    const int n = 5;
+    const std::vector<double> S = random_spd(n, gen);
+    std::vector<double> dS = random_spd(n, gen);
+    for (int i = 0; i < n; ++i)
+    {
+        for (int j = 0; j < n; ++j)
+        {
+            dS[i * n + j] = 0.5 * (dS[i * n + j] + dS[j * n + i]);
+        }
+    }
+
+    std::vector<double> analytic;
+    alloc::sym_inv_sqrt_derivative(S, dS, n, analytic, 1e-10);
+
+    const double h = 1e-5;
+    std::vector<double> Sp(S.size());
+    std::vector<double> Sm(S.size());
+    for (size_t i = 0; i < S.size(); ++i)
+    {
+        Sp[i] = S[i] + h * dS[i];
+        Sm[i] = S[i] - h * dS[i];
+    }
+    std::vector<double> Gp;
+    std::vector<double> Gm;
+    alloc::sym_inv_sqrt(Sp, n, Gp, 1e-10);
+    alloc::sym_inv_sqrt(Sm, n, Gm, 1e-10);
+    for (int i = 0; i < n * n; ++i)
+    {
+        const double fd = (Gp[i] - Gm[i]) / (2.0 * h);
+        EXPECT_NEAR(analytic[i], fd, 2e-8);
+    }
+}
+
 TEST(AllocLinalgTest, EmptyAndScalarInputs)
 {
     std::vector<double> w;

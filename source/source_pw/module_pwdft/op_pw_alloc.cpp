@@ -28,6 +28,8 @@ struct PwTargetContext
     int npw = 0;
     PwTargetSpace space;
     std::vector<std::vector<std::complex<double>>> phi;
+    // compact target -> global onsite-projector row
+    std::vector<int> target_row;
 };
 
 namespace
@@ -173,6 +175,7 @@ bool build_target_context(
         ntarget,
         std::vector<std::complex<double>>(npw,
                                           std::complex<double>(0.0, 0.0)));
+    context.target_row = selection.row;
     for (int a = 0; a < ntarget; ++a)
     {
         for (int ig = 0; ig < npw; ++ig)
@@ -323,6 +326,314 @@ void build_raw_overlap(const PwTargetContext& context,
             raw[i] = std::complex<double>(packed[2 * i], packed[2 * i + 1]);
         }
     }
+}
+
+struct PwAllocBandForceData
+{
+    int nocc = 0;
+    int ntarget = 0;
+    int nconstraint = 0;
+    int npw = 0;
+    int ld = 0;
+    int nvec = 0;
+    int target_offset = 0;
+    std::vector<int> band;
+    std::vector<double> occupation;
+    std::vector<std::vector<std::complex<double>>> raw_overlap;
+    std::vector<std::vector<std::complex<double>>> orth_overlap;
+    // [occupied band / W_i q_band / raw target] vectors, padded to ld
+    std::vector<std::complex<double>> custom_vectors;
+    // [W_i q_band][target] raw overlap, indexed (i*nocc + s)*ntarget + a
+    std::vector<std::complex<double>> wq_overlap;
+};
+
+bool build_band_force_data(
+    const ModulePW::PW_Basis_K& wfcpw,
+    const int ik,
+    const std::complex<double>* psi_k,
+    const ModuleBase::matrix& occupations,
+    const int nband,
+    const int ld,
+    const constraint::WeightGrid& weight_grid,
+    const PwTargetContext& context,
+    PwAllocBandForceData& data,
+    std::string& error)
+{
+    const int r = context.space.ntarget;
+    const int nconstraint = context.space.nconstraint;
+    data.ntarget = r;
+    data.nconstraint = nconstraint;
+    data.npw = context.npw;
+    data.ld = ld;
+    for (int band = 0; band < nband; ++band)
+    {
+        // Branch: only occupied bands contribute to the density matrix.
+        if (occupations(ik, band) != 0.0)
+        {
+            data.band.push_back(band);
+            data.occupation.push_back(occupations(ik, band));
+        }
+    }
+    data.nocc = static_cast<int>(data.band.size());
+    data.target_offset = data.nocc + nconstraint * data.nocc;
+    data.nvec = data.target_offset + r;
+    data.custom_vectors.assign(static_cast<size_t>(data.nvec) * ld,
+                               std::complex<double>(0.0, 0.0));
+    data.raw_overlap.assign(
+        data.nocc, std::vector<std::complex<double>>(
+                       r, std::complex<double>(0.0, 0.0)));
+    data.orth_overlap.assign(
+        data.nocc, std::vector<std::complex<double>>(
+                       r, std::complex<double>(0.0, 0.0)));
+    data.wq_overlap.assign(
+        static_cast<size_t>(nconstraint) * data.nocc * r,
+        std::complex<double>(0.0, 0.0));
+    // Branch: no occupied bands means no derivative contraction to form.
+    if (data.nocc == 0)
+    {
+        return true;
+    }
+    // Guard: the caller's leading dimension must hold every local G vector.
+    if (ld < context.npw)
+    {
+        error = "PW allocation force wavefunction stride is too small";
+        return false;
+    }
+
+    for (int s = 0; s < data.nocc; ++s)
+    {
+        const std::complex<double>* band_ptr
+            = psi_k + static_cast<size_t>(data.band[s]) * ld;
+        build_raw_overlap(context, band_ptr, data.raw_overlap[s]);
+        for (int a = 0; a < r; ++a)
+        {
+            for (int b = 0; b < r; ++b)
+            {
+                data.orth_overlap[s][a]
+                    += context.space.ST_inv_root[static_cast<size_t>(a) * r + b]
+                       * data.raw_overlap[s][b];
+            }
+        }
+
+        // Q_c|psi> = |psi> - sum_a |phi_a> <phi_a|psi>.
+        std::vector<std::complex<double>> complement(
+            context.npw, std::complex<double>(0.0, 0.0));
+        for (int ig = 0; ig < context.npw; ++ig)
+        {
+            complement[ig] = band_ptr[ig];
+        }
+        for (int a = 0; a < r; ++a)
+        {
+            for (int ig = 0; ig < context.npw; ++ig)
+            {
+                complement[ig] -= context.phi[a][ig]
+                                  * data.orth_overlap[s][a];
+            }
+        }
+        for (int ig = 0; ig < context.npw; ++ig)
+        {
+            data.custom_vectors[static_cast<size_t>(s) * ld + ig]
+                = band_ptr[ig];
+        }
+
+        // W_i Q_c|psi> is needed both for the value overlap and for the
+        // derivative contraction against it.
+        for (int alpha = 0; alpha < nconstraint; ++alpha)
+        {
+            const std::vector<std::complex<double>> wq
+                = apply_local_potential(wfcpw, ik,
+                                        weight_grid.constraint_weight(alpha),
+                                        complement.data(), context.npw);
+            const int vec_index = data.nocc + alpha * data.nocc + s;
+            for (int ig = 0; ig < context.npw; ++ig)
+            {
+                data.custom_vectors[static_cast<size_t>(vec_index) * ld + ig]
+                    = wq[ig];
+            }
+            std::vector<std::complex<double>> overlap(
+                r, std::complex<double>(0.0, 0.0));
+            for (int a = 0; a < r; ++a)
+            {
+                for (int ig = 0; ig < context.npw; ++ig)
+                {
+                    overlap[a] += std::conj(context.phi[a][ig]) * wq[ig];
+                }
+            }
+            reduce_pool(overlap);
+            for (int a = 0; a < r; ++a)
+            {
+                data.wq_overlap[(static_cast<size_t>(alpha) * data.nocc + s)
+                                    * r + a] = overlap[a];
+            }
+        }
+    }
+    // Raw target vectors are the right-hand sides for dST and dG.
+    for (int a = 0; a < r; ++a)
+    {
+        const int vec_index = data.target_offset + a;
+        for (int ig = 0; ig < context.npw; ++ig)
+        {
+            data.custom_vectors[static_cast<size_t>(vec_index) * ld + ig]
+                = context.phi[a][ig];
+        }
+    }
+    return true;
+}
+
+void accumulate_target_force_direction(
+    const PwTargetContext& context,
+    const PwAllocBandForceData& data,
+    const std::vector<std::complex<double>>& derivative_overlap,
+    const int nkb,
+    const int atom,
+    const int ipol,
+    const int spin,
+    const std::vector<double>& mu,
+    const std::vector<constraint::ChannelProfile>& channels,
+    const double tpiba,
+    std::vector<double>& force)
+{
+    const int r = context.space.ntarget;
+    // Branch: an atom without selected target projectors has no target-space
+    // derivative contribution.
+    bool owns_target = false;
+    for (int a = 0; a < r; ++a)
+    {
+        // Branch: only projectors centred on the displaced atom move.
+        if (context.space.atom[a] == atom)
+        {
+            owns_target = true;
+            break;
+        }
+    }
+    if (!owns_target)
+    {
+        return;
+    }
+
+    const auto out = [&](const int a, const int vec) {
+        return derivative_overlap[static_cast<size_t>(context.target_row[a])
+                                      * data.nvec + vec];
+    };
+
+    // D[a,b] = <d alpha_a|alpha_b>.  Rows outside the displaced atom are
+    // zero by construction, so dST = D + D^dagger contains every projector
+    // on this atom exactly once.
+    std::vector<std::complex<double>> D(static_cast<size_t>(r) * r,
+                                        std::complex<double>(0.0, 0.0));
+    for (int a = 0; a < r; ++a)
+    {
+        // Branch: a projector on another atom does not move here.
+        if (context.space.atom[a] != atom)
+        {
+            continue;
+        }
+        for (int b = 0; b < r; ++b)
+        {
+            D[static_cast<size_t>(a) * r + b]
+                = out(a, data.target_offset + b);
+        }
+    }
+    std::vector<double> dST_inv_root;
+    build_pw_target_derivative(context.space, D, dST_inv_root);
+
+    int owner = -1;
+    for (int a = 0; a < r; ++a)
+    {
+        // Branch: all targets on one atom share the same optional constraint
+        // (build_target_context rejects a duplicate owner).
+        if (context.space.atom[a] == atom)
+        {
+            owner = context.space.constraint[a];
+            break;
+        }
+    }
+
+    for (int s = 0; s < data.nocc; ++s)
+    {
+        std::vector<std::complex<double>> d_raw(
+            r, std::complex<double>(0.0, 0.0));
+        for (int a = 0; a < r; ++a)
+        {
+            // Branch: keep only derivatives of projectors on this atom.
+            if (context.space.atom[a] == atom)
+            {
+                d_raw[a] = out(a, s);
+            }
+        }
+        std::vector<std::complex<double>> orth;
+        std::vector<std::complex<double>> d_orth;
+        orthogonalize_pw_overlaps_derivative(
+            context.space, dST_inv_root, data.raw_overlap[s], d_raw, orth,
+            d_orth);
+
+        double dQ_owner = 0.0;
+        for (int a = 0; a < r; ++a)
+        {
+            // Branch: Q_i contains every orthonormal target owned by this
+            // constraint.  Even targets centred on other atoms rotate when
+            // dG changes, so the sum must not be restricted to this atom.
+            if (owner >= 0 && context.space.constraint[a] == owner)
+            {
+                dQ_owner += (std::conj(d_orth[a])
+                             * data.orth_overlap[s][a]).real();
+            }
+        }
+        dQ_owner *= 2.0;
+
+        for (int alpha = 0; alpha < data.nconstraint; ++alpha)
+        {
+            // Branch: a zero multiplier contributes no constraint force.
+            if (mu[alpha] == 0.0)
+            {
+                continue;
+            }
+            std::vector<std::complex<double>> z(
+                r, std::complex<double>(0.0, 0.0));
+            std::vector<std::complex<double>> dz(
+                r, std::complex<double>(0.0, 0.0));
+            for (int a = 0; a < r; ++a)
+            {
+                z[a] = data.wq_overlap[(static_cast<size_t>(alpha)
+                                            * data.nocc + s)
+                                           * r + a];
+                // Branch: d alpha_a is nonzero only on the displaced atom.
+                if (context.space.atom[a] == atom)
+                {
+                    dz[a] = out(a, data.nocc + alpha * data.nocc + s);
+                }
+            }
+            std::vector<std::complex<double>> orth_wq;
+            std::vector<std::complex<double>> d_orth_wq;
+            orthogonalize_pw_overlaps_derivative(context.space,
+                                                 dST_inv_root, z, dz,
+                                                 orth_wq, d_orth_wq);
+
+            // -2 Re <dP psi|W_i Q_c|psi>.  dP rotates every orthonormal
+            // target, not only projectors centred on the displaced atom.
+            std::complex<double> cross(0.0, 0.0);
+            for (int a = 0; a < r; ++a)
+            {
+                cross += std::conj(data.orth_overlap[s][a])
+                             * d_orth_wq[a]
+                         + std::conj(d_orth[a]) * orth_wq[a];
+            }
+            double derivative = -2.0 * cross.real();
+            // Branch: only the constraint owning this atom receives the
+            // explicit dQ_i term; every W_i still feels the dP cross term.
+            if (owner == alpha)
+            {
+                derivative += dQ_owner;
+            }
+            const double channel
+                = (spin == 0) ? channels[alpha].inj_up
+                              : channels[alpha].inj_dn;
+            force[static_cast<size_t>(atom) * 3 + ipol]
+                -= data.occupation[s] * mu[alpha] * channel * derivative
+                   * tpiba;
+        }
+    }
+    (void)nkb;
 }
 
 } // namespace
@@ -578,6 +889,146 @@ bool compute_pw_alloc_complement_density(
                 rho_c[spin][ir] += weight * std::norm(porter[ir]);
             }
         }
+    }
+    return true;
+}
+
+bool compute_pw_alloc_target_force(
+    const UnitCell& ucell,
+    const psi::Psi<std::complex<double>>* psi,
+    const ModuleBase::matrix& occupations,
+    const K_Vectors& kv,
+    const ModulePW::PW_Basis_K& wfcpw,
+    const int nspin,
+    const constraint::WeightGrid& weight_grid,
+    const int target_l,
+    const std::vector<double>& mu,
+    const std::vector<constraint::ChannelProfile>& channels,
+    ModuleBase::matrix& force,
+    std::string& error)
+{
+    // Branch: this closure is the collinear scalar-band force channel.
+    if (nspin != 1 && nspin != 2)
+    {
+        error = "PW allocation target force supports only nspin 1/2";
+        return false;
+    }
+    // Branch: spinor derivatives need a Pauli contraction which is not part
+    // of the collinear closure.
+    if (psi == nullptr || psi->get_npol() != 1)
+    {
+        error = "PW allocation target force requires scalar CPU wavefunctions";
+        return false;
+    }
+    const int nconstraint = weight_grid.nconstraint();
+    // Guard: multipliers and density-channel signs define the same operator
+    // as the Hamiltonian/force kernel; a mismatch is a wiring bug.
+    if (static_cast<int>(mu.size()) != nconstraint
+        || static_cast<int>(channels.size()) != nconstraint)
+    {
+        error = "PW allocation target force has a constraint-count mismatch";
+        return false;
+    }
+    const int nks = psi->get_nk();
+    // Branch: no k-point means no occupied target-state derivative.
+    if (nks <= 0)
+    {
+        error = "PW allocation target force has no k-points";
+        return false;
+    }
+
+    force.create(ucell.nat, 3);
+    std::fill(force.c, force.c + ucell.nat * 3, 0.0);
+    std::vector<double> force_local(static_cast<size_t>(ucell.nat) * 3, 0.0);
+    auto* onsite_p
+        = projectors::OnsiteProjector<double,
+                                      base_device::DEVICE_CPU>::get_instance();
+    try
+    {
+        for (int ik = 0; ik < nks; ++ik)
+        {
+            // Branch: every k-point carries the spin label selecting the
+            // Hamiltonian channel's multiplier sign.
+            if (static_cast<int>(kv.isk.size()) <= ik)
+            {
+                error = "PW allocation target force has no k-point spin label";
+                return false;
+            }
+            const int spin = (nspin == 2) ? kv.isk[ik] : 0;
+            // Guard: an unexpected spin label has no channel coefficient.
+            if (spin < 0 || spin >= nspin)
+            {
+                error = "PW allocation target force has an invalid spin label";
+                return false;
+            }
+            const int nband = psi->get_nbands();
+            const int ld_psi = psi->get_nbasis();
+            psi->fix_k(ik);
+            const std::complex<double>* psi_k = psi->get_pointer();
+            PwTargetContext context;
+            if (!build_target_context(onsite_p, weight_grid, ik, target_l,
+                                      psi_k, nband, ld_psi, context, error))
+            {
+                return false;
+            }
+            PwAllocBandForceData data;
+            if (!build_band_force_data(wfcpw, ik, psi_k, occupations, nband,
+                                       ld_psi, weight_grid, context, data,
+                                       error))
+            {
+                return false;
+            }
+            // Branch: an empty spectrum has no target-direction derivative.
+            if (data.nvec == 0)
+            {
+                continue;
+            }
+            auto* fs_tools = onsite_p->get_fs_tools();
+            // Guard: the custom derivative path needs the same projector
+            // table that built the target context.
+            if (fs_tools == nullptr || fs_tools->get_nkb() <= 0)
+            {
+                error = "PW allocation target force has no onsite VKB table";
+                return false;
+            }
+            const int nkb = fs_tools->get_nkb();
+            std::vector<std::complex<double>> derivative_overlap(
+                static_cast<size_t>(nkb) * data.nvec,
+                std::complex<double>(0.0, 0.0));
+            for (int ipol = 0; ipol < 3; ++ipol)
+            {
+                // One derivative GEMM provides d<alpha|psi>, the dST
+                // matrix and the d<alpha|W_i Q_c psi> contractions.
+                fs_tools->cal_dbecp_f_custom(
+                    ik, data.nvec, ipol, data.custom_vectors.data(), ld_psi,
+                    derivative_overlap.data());
+                // The projector derivative GEMM is plane-wave-partition local.
+                // Pool all rows and vectors once before any contraction so
+                // every rank forms the same target-space derivative.
+                reduce_pool(derivative_overlap);
+                for (int atom = 0; atom < ucell.nat; ++atom)
+                {
+                    accumulate_target_force_direction(
+                        context, data, derivative_overlap, nkb, atom, ipol,
+                        spin, mu, channels, ucell.tpiba, force_local);
+                }
+            }
+        }
+    }
+    catch (const std::exception& exc)
+    {
+        error = std::string("PW allocation target force: ") + exc.what();
+        return false;
+    }
+
+    // Every rank in a pool has the same reduced wavefunction contractions;
+    // average those copies and sum the disjoint k-point sets of all pools.
+    const int npool = GlobalV::KPAR * PARAM.inp.bndpar;
+    Parallel_Reduce::reduce_double_allpool(
+        npool, GlobalV::NPROC_IN_POOL, force_local.data(), ucell.nat * 3);
+    for (int i = 0; i < ucell.nat * 3; ++i)
+    {
+        force.c[i] = force_local[i];
     }
     return true;
 }

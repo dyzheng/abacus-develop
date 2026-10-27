@@ -879,16 +879,22 @@ TEST(AllocObserveTest, EmptyTargetSetEqualsBecke)
       `constraint_force()` 权重导数核；三点位置 FD 为
       `-5.6679144 vs -5.6632941 eV/Å`，误差 `0.0046203 eV/Å < 0.0129`。
       `KPAR * bndpar > 1` 暂显式拒绝。
-- [ ] 完整 PW `∂Q̂`：当前只验证冻结近似 `Q_c ∂W Q_c`。`e_con` 三点直接
-      差分与约束力相差 `0.0026745 eV/Å`，说明 onsite projector/目标旋转项
-      不可忽略；需实现 PW 目标导数后才能把该差值单独闭合。
+- [x] 完整 PW `∂Q̂`：实现 projector 位移导数、`ST^{-1/2}` Fréchet 导数与
+      正交目标转动项，并叠加到冻结 `Q_c ∂W Q_c` 网格力之后。`np=2` 三点总力
+      FD 为 `F_FD=-5.667912284` 对解析 `-5.669041444` eV/Å，差
+      `0.00112916 < 0.0129 eV/Å`；`np=4` 约束力/总力与 `np=2` 一致到
+      `3e-10 eV/Å`。单独 `e_con` 差分不是完整约束能量且不满足电子驻点条件，
+      不再作为独立力门；详见
+      `docs/superpowers/specs/2026-10-27-s5-pw-target-force.md`。
 - [x] 验收：平价表已通过；PW allocation 算符已接入 `HamiltPW`，固定
       `fixed_mu` SCF 在 MPI 2/4 进程收敛且读数一致，`kpar=2` 跨池短跑无
       死锁；冻结目标 FD 力 `<0.0129 eV/Å` 已通过。缓存、批量归约与
       `tab_atomic_` 首次消费初始化见
       `docs/superpowers/specs/2026-10-27-s5-pw-cache-mpi.md`；冻结力与
       `e_con` 边界见
-      `docs/superpowers/specs/2026-10-27-s5-pw-frozen-force.md`。
+      `docs/superpowers/specs/2026-10-27-s5-pw-frozen-force.md`；完整目标导数
+      与总力 FD 见
+      `docs/superpowers/specs/2026-10-27-s5-pw-target-force.md`。
 
 ### Task S5.2 周期 Hirshfeld 权重后端
 

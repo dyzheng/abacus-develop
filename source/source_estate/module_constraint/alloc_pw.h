@@ -95,6 +95,37 @@ void orthogonalize_pw_overlaps(const PwTargetSpace& space,
                                const std::vector<std::complex<double>>& raw,
                                std::vector<std::complex<double>>& orth);
 
+/**
+ * @brief Derivative of the target inverse-square-root overlap.
+ *
+ * derivative_overlap[a,b] is <d alpha_a|alpha_b> for one atomic
+ * displacement direction.  The raw overlap perturbation is
+ * dST = Re(D + D^dagger) (the current PW target space stores the real
+ * symmetric projection of the projector overlap), and the returned matrix
+ * is d(ST^{-1/2}) from the Fréchet derivative with the target space's rank
+ * cutoff.
+ */
+void build_pw_target_derivative(
+    const PwTargetSpace& space,
+    const std::vector<std::complex<double>>& derivative_overlap,
+    std::vector<double>& dST_inv_root);
+
+/**
+ * @brief Rotate both a raw overlap and its atomic-displacement derivative
+ * into the orthonormal target basis.
+ *
+ * raw[b] = <alpha_b|v> and d_raw[b] = <d alpha_b|v>.  With phi = alpha G,
+ * the returned derivative is <d phi_a|v> = sum_b G_ab d_raw[b]
+ *                                        + sum_b dG_ab raw[b].
+ */
+void orthogonalize_pw_overlaps_derivative(
+    const PwTargetSpace& space,
+    const std::vector<double>& dST_inv_root,
+    const std::vector<std::complex<double>>& raw,
+    const std::vector<std::complex<double>>& d_raw,
+    std::vector<std::complex<double>>& orth,
+    std::vector<std::complex<double>>& d_orth);
+
 struct PwTargetMoments
 {
     std::vector<double> n_T_target;

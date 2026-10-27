@@ -580,7 +580,17 @@ void ESolver_KS_PW<T, Device>::cal_force(UnitCell& ucell, ModuleBase::matrix& fo
         {
             ModuleBase::WARNING_QUIT("ESolver_KS_PW::cal_force", error);
         }
+        ModuleBase::matrix target_force;
+        if (!alloc::compute_pw_alloc_target_force(
+                ucell, this->stp.psi_cpu, this->pelec->wg, this->kv,
+                *this->pw_wfc, PARAM.inp.nspin, loop.weight_grid(),
+                PARAM.inp.constraint_alloc_target_l, loop.mu_eff(),
+                loop.channels(), target_force, error))
+        {
+            ModuleBase::WARNING_QUIT("ESolver_KS_PW::cal_force", error);
+        }
         loop.set_allocation_force_density(std::move(rho_c));
+        loop.set_allocation_target_force(target_force);
     }
     Forces<double, Device> ff(ucell.nat);
 

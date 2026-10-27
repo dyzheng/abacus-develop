@@ -479,3 +479,370 @@ TEST(AllocPwTest, ProjectorTabulationBuildsOverlapAndBecp)
         }
     }
 }
+
+TEST(AllocPwTest, TargetDerivativeMatchesFiniteDifference)
+{
+    const int ntarget = 4;
+    const int nbasis = 7;
+    std::mt19937 gen(97);
+    std::normal_distribution<double> nd(0.0, 1.0);
+    std::vector<std::vector<std::complex<double>>> phi(
+        ntarget, std::vector<std::complex<double>>(nbasis));
+    std::vector<std::vector<std::complex<double>>> dphi(
+        ntarget, std::vector<std::complex<double>>(nbasis));
+    for (int a = 0; a < ntarget; ++a)
+    {
+        for (int i = 0; i < nbasis; ++i)
+        {
+            // The current target representation is the real Gamma-point
+            // overlap, so both the projector and its displacement are real.
+            phi[a][i] = std::complex<double>(nd(gen), 0.0);
+            dphi[a][i] = std::complex<double>(nd(gen), 0.0);
+        }
+    }
+
+    std::vector<std::complex<double>> derivative_overlap(ntarget * ntarget,
+                                                        std::complex<double>(0.0, 0.0));
+    for (int a = 0; a < ntarget; ++a)
+    {
+        for (int b = 0; b < ntarget; ++b)
+        {
+            for (int i = 0; i < nbasis; ++i)
+            {
+                derivative_overlap[a * ntarget + b]
+                    += std::conj(dphi[a][i]) * phi[b][i];
+            }
+        }
+    }
+
+    std::vector<std::complex<double>> flat(ntarget * nbasis);
+    for (int a = 0; a < ntarget; ++a)
+    {
+        for (int i = 0; i < nbasis; ++i)
+        {
+            flat[a * nbasis + i] = phi[a][i];
+        }
+    }
+    std::vector<double> ST;
+    alloc::build_pw_projector_overlap(flat.data(), nbasis, ntarget, ST);
+    alloc::PwTargetSpace space;
+    alloc::build_pw_target(ST, ntarget, {0, 0, 1, 1}, {0, 0, 1, 1}, 2,
+                           space);
+
+    std::vector<double> dG;
+    alloc::build_pw_target_derivative(space, derivative_overlap, dG);
+
+    std::vector<std::complex<double>> raw(ntarget);
+    std::vector<std::complex<double>> d_raw(ntarget);
+    std::vector<std::complex<double>> z(nbasis);
+    for (int i = 0; i < nbasis; ++i)
+    {
+        z[i] = std::complex<double>(nd(gen), nd(gen));
+    }
+    for (int a = 0; a < ntarget; ++a)
+    {
+        for (int i = 0; i < nbasis; ++i)
+        {
+            raw[a] += std::conj(phi[a][i]) * z[i];
+            d_raw[a] += std::conj(dphi[a][i]) * z[i];
+        }
+    }
+    std::vector<std::complex<double>> orth;
+    std::vector<std::complex<double>> d_orth;
+    alloc::orthogonalize_pw_overlaps_derivative(space, dG, raw, d_raw, orth,
+                                                 d_orth);
+
+    const double h = 1e-6;
+    std::vector<std::vector<std::complex<double>>> phi_p = phi;
+    std::vector<std::vector<std::complex<double>>> phi_m = phi;
+    for (int a = 0; a < ntarget; ++a)
+    {
+        for (int i = 0; i < nbasis; ++i)
+        {
+            phi_p[a][i] += h * dphi[a][i];
+            phi_m[a][i] -= h * dphi[a][i];
+        }
+    }
+    auto orthogonal_fd = [&](const std::vector<std::vector<std::complex<double>>>& f,
+                             std::vector<std::complex<double>>& out) {
+        std::vector<std::complex<double>> tab(ntarget * nbasis);
+        for (int a = 0; a < ntarget; ++a)
+        {
+            for (int i = 0; i < nbasis; ++i)
+            {
+                tab[a * nbasis + i] = f[a][i];
+            }
+        }
+        std::vector<double> st;
+        alloc::build_pw_projector_overlap(tab.data(), nbasis, ntarget, st);
+        alloc::PwTargetSpace sp;
+        alloc::build_pw_target(st, ntarget, {0, 0, 1, 1}, {0, 0, 1, 1}, 2,
+                               sp);
+        std::vector<std::vector<std::complex<double>>> ph;
+        alloc::build_pw_alloc_orthogonal_phi(sp, f, ph);
+        out.assign(ntarget, std::complex<double>(0.0, 0.0));
+        for (int a = 0; a < ntarget; ++a)
+        {
+            for (int i = 0; i < nbasis; ++i)
+            {
+                out[a] += std::conj(ph[a][i]) * z[i];
+            }
+        }
+    };
+    std::vector<std::complex<double>> p_plus;
+    std::vector<std::complex<double>> p_minus;
+    orthogonal_fd(phi_p, p_plus);
+    orthogonal_fd(phi_m, p_minus);
+    double max_diff = 0.0;
+    for (int a = 0; a < ntarget; ++a)
+    {
+        const std::complex<double> fd = (p_plus[a] - p_minus[a]) / (2.0 * h);
+        max_diff = std::max(max_diff, std::abs(fd - d_orth[a]));
+    }
+    printf("alloc_pw target derivative: max_diff=%.3e\n", max_diff);
+    EXPECT_LT(max_diff, 1e-8);
+}
+
+TEST(AllocPwTest, AllocationOperatorDerivativeDecomposition)
+{
+    const int ntarget = 3;
+    const int nbasis = 6;
+    const int nconstraint = 2;
+    const std::vector<int> atom = {0, 0, 1};
+    const std::vector<int> owner = {0, 0, 1};
+    std::mt19937 gen(113);
+    std::normal_distribution<double> nd(0.0, 1.0);
+    std::vector<std::vector<std::complex<double>>> f(
+        ntarget, std::vector<std::complex<double>>(nbasis));
+    std::vector<std::vector<std::complex<double>>> df(
+        ntarget, std::vector<std::complex<double>>(nbasis));
+    std::vector<std::complex<double>> psi(nbasis);
+    for (int a = 0; a < ntarget; ++a)
+    {
+        for (int i = 0; i < nbasis; ++i)
+        {
+            f[a][i] = std::complex<double>(nd(gen), 0.0);
+            df[a][i] = std::complex<double>(nd(gen), 0.0);
+            // Branch: this test displaces only the first atom, so projectors
+            // centred on the second atom have zero raw derivative.
+            if (atom[a] != 0)
+            {
+                df[a][i] = std::complex<double>(0.0, 0.0);
+            }
+        }
+    }
+    for (int i = 0; i < nbasis; ++i)
+    {
+        psi[i] = std::complex<double>(nd(gen), nd(gen));
+    }
+    std::vector<double> W(static_cast<size_t>(nconstraint) * nbasis * nbasis,
+                          0.0);
+    for (int alpha = 0; alpha < nconstraint; ++alpha)
+    {
+        for (int i = 0; i < nbasis; ++i)
+        {
+            W[(alpha * nbasis + i) * nbasis + i]
+                = 0.5 + 0.1 * (alpha * nbasis + i + 1);
+        }
+    }
+
+    std::vector<std::complex<double>> flat(ntarget * nbasis);
+    for (int a = 0; a < ntarget; ++a)
+    {
+        for (int i = 0; i < nbasis; ++i)
+        {
+            flat[a * nbasis + i] = f[a][i];
+        }
+    }
+    std::vector<double> ST;
+    alloc::build_pw_projector_overlap(flat.data(), nbasis, ntarget, ST);
+    alloc::PwTargetSpace space;
+    alloc::build_pw_target(ST, ntarget, atom, owner, nconstraint, space);
+    std::vector<std::vector<std::complex<double>>> phi;
+    alloc::build_pw_alloc_orthogonal_phi(space, f, phi);
+
+    std::vector<std::complex<double>> D(ntarget * ntarget,
+                                       std::complex<double>(0.0, 0.0));
+    for (int a = 0; a < ntarget; ++a)
+    {
+        // Branch: only projectors on the displaced atom move.
+        if (atom[a] != 0)
+        {
+            continue;
+        }
+        for (int b = 0; b < ntarget; ++b)
+        {
+            for (int i = 0; i < nbasis; ++i)
+            {
+                D[a * ntarget + b] += std::conj(df[a][i]) * f[b][i];
+            }
+        }
+    }
+    std::vector<double> dG;
+    alloc::build_pw_target_derivative(space, D, dG);
+
+    std::vector<std::complex<double>> raw(ntarget);
+    std::vector<std::complex<double>> d_raw(ntarget);
+    for (int a = 0; a < ntarget; ++a)
+    {
+        for (int i = 0; i < nbasis; ++i)
+        {
+            // raw is the overlap with the un-orthogonalized projector.  Using
+            // phi here would apply the inverse square root a second time.
+            raw[a] += std::conj(f[a][i]) * psi[i];
+            d_raw[a] += std::conj(df[a][i]) * psi[i];
+        }
+    }
+    std::vector<std::complex<double>> orth;
+    std::vector<std::complex<double>> d_orth;
+    alloc::orthogonalize_pw_overlaps_derivative(space, dG, raw, d_raw, orth,
+                                                 d_orth);
+
+    std::vector<std::complex<double>> q = psi;
+    for (int a = 0; a < ntarget; ++a)
+    {
+        for (int i = 0; i < nbasis; ++i)
+        {
+            q[i] -= phi[a][i] * orth[a];
+        }
+    }
+    // dP psi = sum_a (o_a dphi_a + d_o_a phi_a); build dphi from
+    // dphi = f G, so dphi = df G + f dG.  The rotation G changes every
+    // orthonormal target, including those centred on the other atom.
+    std::vector<std::complex<double>> dPpsi(nbasis,
+                                            std::complex<double>(0.0, 0.0));
+    for (int a = 0; a < ntarget; ++a)
+    {
+        std::vector<std::complex<double>> dphi(nbasis,
+                                               std::complex<double>(0.0, 0.0));
+        for (int b = 0; b < ntarget; ++b)
+        {
+            for (int i = 0; i < nbasis; ++i)
+            {
+                dphi[i] += space.ST_inv_root[a * ntarget + b] * df[b][i];
+                dphi[i] += dG[a * ntarget + b] * f[b][i];
+            }
+        }
+        for (int i = 0; i < nbasis; ++i)
+        {
+            dPpsi[i] += orth[a] * dphi[i] + d_orth[a] * phi[a][i];
+        }
+    }
+
+    for (int alpha = 0; alpha < nconstraint; ++alpha)
+    {
+        std::complex<double> cross(0.0, 0.0);
+        for (int i = 0; i < nbasis; ++i)
+        {
+            std::complex<double> wq(0.0, 0.0);
+            for (int j = 0; j < nbasis; ++j)
+            {
+                wq += W[(alpha * nbasis + i) * nbasis + j] * q[j];
+            }
+            cross += std::conj(dPpsi[i]) * wq;
+        }
+        double dQ = 0.0;
+        for (int a = 0; a < ntarget; ++a)
+        {
+            // Branch: Q_i contains every orthonormal target owned by this
+            // constraint, including targets rotated indirectly by dG.
+            if (owner[a] == alpha)
+            {
+                dQ += (std::conj(d_orth[a]) * orth[a]).real();
+            }
+        }
+        dQ *= 2.0;
+        const double analytic = dQ - 2.0 * cross.real();
+
+        auto expectation = [&](const std::vector<std::vector<std::complex<double>>>& ph) {
+            std::vector<std::complex<double>> P(
+                nbasis * nbasis, std::complex<double>(0.0, 0.0));
+            for (int a = 0; a < ntarget; ++a)
+            {
+                for (int i = 0; i < nbasis; ++i)
+                {
+                    for (int j = 0; j < nbasis; ++j)
+                    {
+                        P[i * nbasis + j] += ph[a][i] * std::conj(ph[a][j]);
+                    }
+                }
+            }
+            std::vector<std::complex<double>> A(
+                nbasis * nbasis, std::complex<double>(0.0, 0.0));
+            for (int i = 0; i < nbasis; ++i)
+            {
+                for (int j = 0; j < nbasis; ++j)
+                {
+                    std::complex<double> val = 0.0;
+                    for (int a = 0; a < ntarget; ++a)
+                    {
+                        // Branch: Q_i contains only constraint alpha's targets.
+                        if (owner[a] == alpha)
+                        {
+                            val += ph[a][i] * std::conj(ph[a][j]);
+                        }
+                    }
+                    // Q_c W Q_c = W - P W - W P + P W P.
+                    const double wij = W[(alpha * nbasis + i) * nbasis + j];
+                    val += wij;
+                    for (int k = 0; k < nbasis; ++k)
+                    {
+                        val -= P[i * nbasis + k] * W[(alpha * nbasis + k) * nbasis + j];
+                        val -= W[(alpha * nbasis + i) * nbasis + k] * P[k * nbasis + j];
+                        for (int l = 0; l < nbasis; ++l)
+                        {
+                            val += P[i * nbasis + k]
+                                   * W[(alpha * nbasis + k) * nbasis + l]
+                                   * P[l * nbasis + j];
+                        }
+                    }
+                    A[i * nbasis + j] = val;
+                }
+            }
+            std::complex<double> e(0.0, 0.0);
+            for (int i = 0; i < nbasis; ++i)
+            {
+                for (int j = 0; j < nbasis; ++j)
+                {
+                    e += std::conj(psi[i]) * A[i * nbasis + j] * psi[j];
+                }
+            }
+            return e.real();
+        };
+
+        const double h = 1e-6;
+        std::vector<std::vector<std::complex<double>>> fp = f;
+        std::vector<std::vector<std::complex<double>>> fm = f;
+        for (int a = 0; a < ntarget; ++a)
+        {
+            for (int i = 0; i < nbasis; ++i)
+            {
+                fp[a][i] += h * df[a][i];
+                fm[a][i] -= h * df[a][i];
+            }
+        }
+        auto phi_fd = [&](const std::vector<std::vector<std::complex<double>>>& ff) {
+            std::vector<std::complex<double>> tab(ntarget * nbasis);
+            for (int a = 0; a < ntarget; ++a)
+            {
+                for (int i = 0; i < nbasis; ++i)
+                {
+                    tab[a * nbasis + i] = ff[a][i];
+                }
+            }
+            std::vector<double> st;
+            alloc::build_pw_projector_overlap(tab.data(), nbasis, ntarget, st);
+            alloc::PwTargetSpace sp;
+            alloc::build_pw_target(st, ntarget, atom, owner, nconstraint, sp);
+            std::vector<std::vector<std::complex<double>>> ph;
+            alloc::build_pw_alloc_orthogonal_phi(sp, ff, ph);
+            return ph;
+        };
+        const double fd = (expectation(phi_fd(fp)) - expectation(phi_fd(fm)))
+                          / (2.0 * h);
+        printf("alloc_pw operator derivative alpha=%d: analytic=%.6e "
+               "fd=%.6e diff=%.3e\n",
+               alpha, analytic, fd, analytic - fd);
+        EXPECT_NEAR(analytic, fd, 2e-7);
+    }
+}

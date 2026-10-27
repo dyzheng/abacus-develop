@@ -153,6 +153,7 @@ void ConstraintLoop::reset()
     dipole_constraint_saw_live_ = 0.5;
     allocation_mode_ = false;
     allocation_force_rho_.clear();
+    allocation_target_force_ = ModuleBase::matrix();
     allocation_spin_force_rho_.clear();
     allocation_spin_pulay_force_ = ModuleBase::matrix();
 }
@@ -2323,8 +2324,15 @@ void ConstraintLoop::set_allocation_force_density(
     std::vector<std::vector<double>> rho)
 {
     allocation_force_rho_ = std::move(rho);
+    allocation_target_force_ = ModuleBase::matrix();
     allocation_spin_force_rho_.clear();
     allocation_spin_pulay_force_ = ModuleBase::matrix();
+}
+
+void ConstraintLoop::set_allocation_target_force(
+    const ModuleBase::matrix& force)
+{
+    allocation_target_force_ = force;
 }
 
 void ConstraintLoop::set_allocation_spin_force_density(
@@ -2440,6 +2448,16 @@ void ConstraintLoop::compute_force(const double* const* rho,
         }
         constraint::constraint_force(*wg_, rho_c.data(), nspin, channels_,
                                      mu_eff_, forcecon);
+        // The grid kernel above owns only Q_c dW_i Q_c.  Add the complete
+        // dQ/dP and target-rotation derivative computed by the PW backend.
+        if (allocation_target_force_.nr == forcecon.nr
+            && allocation_target_force_.nc == forcecon.nc)
+        {
+            for (int i = 0; i < forcecon.nr * forcecon.nc; ++i)
+            {
+                forcecon.c[i] += allocation_target_force_.c[i];
+            }
+        }
         return;
     }
     constraint::constraint_force(*wg_, rho, nspin, channels_, mu_eff_, forcecon);

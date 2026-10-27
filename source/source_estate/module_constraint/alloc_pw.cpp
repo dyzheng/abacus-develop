@@ -269,6 +269,77 @@ void orthogonalize_pw_overlaps(const PwTargetSpace& space,
     }
 }
 
+void build_pw_target_derivative(
+    const PwTargetSpace& space,
+    const std::vector<std::complex<double>>& derivative_overlap,
+    std::vector<double>& dST_inv_root)
+{
+    check_space(space);
+    const int r = space.ntarget;
+    // Guard: one derivative overlap per raw target pair is required.
+    if (static_cast<int>(derivative_overlap.size()) != r * r)
+    {
+        throw std::invalid_argument("PW target derivative has wrong dimensions");
+    }
+    // Branch: an empty target set has no inverse-root derivative.
+    if (r == 0)
+    {
+        dST_inv_root.clear();
+        return;
+    }
+
+    std::vector<double> dST(static_cast<size_t>(r) * r, 0.0);
+    for (int a = 0; a < r; ++a)
+    {
+        for (int b = 0; b < r; ++b)
+        {
+            const std::complex<double> value
+                = derivative_overlap[static_cast<size_t>(a) * r + b]
+                  + std::conj(derivative_overlap[static_cast<size_t>(b) * r + a]);
+            // The current target backend stores only the real symmetric
+            // projection of alpha^dagger alpha.  Differentiating that same
+            // truncated matrix means taking the real part here; a general
+            // non-Gamma backend must instead carry the Hermitian imaginary
+            // part through the inverse-root derivative.
+            dST[static_cast<size_t>(a) * r + b] = value.real();
+        }
+    }
+    sym_inv_sqrt_derivative(space.ST, dST, r, dST_inv_root, 1e-10);
+}
+
+void orthogonalize_pw_overlaps_derivative(
+    const PwTargetSpace& space,
+    const std::vector<double>& dST_inv_root,
+    const std::vector<std::complex<double>>& raw,
+    const std::vector<std::complex<double>>& d_raw,
+    std::vector<std::complex<double>>& orth,
+    std::vector<std::complex<double>>& d_orth)
+{
+    check_space(space);
+    const int r = space.ntarget;
+    // Guard: the value, its derivative and dG must all describe the same
+    // target space before any contraction is formed.
+    if (static_cast<int>(raw.size()) != r
+        || static_cast<int>(d_raw.size()) != r
+        || static_cast<int>(dST_inv_root.size()) != r * r)
+    {
+        throw std::invalid_argument(
+            "PW target derivative vectors have wrong dimensions");
+    }
+    orth.assign(r, std::complex<double>(0.0, 0.0));
+    d_orth.assign(r, std::complex<double>(0.0, 0.0));
+    for (int a = 0; a < r; ++a)
+    {
+        for (int b = 0; b < r; ++b)
+        {
+            const double g = space.ST_inv_root[static_cast<size_t>(a) * r + b];
+            const double dg = dST_inv_root[static_cast<size_t>(a) * r + b];
+            orth[a] += g * raw[b];
+            d_orth[a] += g * d_raw[b] + dg * raw[b];
+        }
+    }
+}
+
 PwTargetMoments observe_pw_target_moments(
     const PwTargetSpace& space,
     const std::vector<std::vector<std::complex<double>>>& becp_up,

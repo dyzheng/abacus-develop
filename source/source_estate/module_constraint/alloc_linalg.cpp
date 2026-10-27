@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <numeric>
+#include <stdexcept>
 
 namespace alloc
 {
@@ -135,6 +136,104 @@ void sym_inv_sqrt(const std::vector<double>& S, const int n,
                 Sinv_root[row * n + col]
                     += V[row * n + i] * f * V[col * n + i];
             }
+        }
+    }
+}
+
+void sym_inv_sqrt_derivative(const std::vector<double>& S,
+                             const std::vector<double>& dS,
+                             const int n,
+                             std::vector<double>& dSinv_root,
+                             const double rank_tol)
+{
+    // Branch: the derivative of an empty matrix is empty.
+    if (n <= 0)
+    {
+        dSinv_root.clear();
+        return;
+    }
+    // Guard: the perturbation must describe the same symmetric space as S.
+    if (static_cast<int>(S.size()) != n * n
+        || static_cast<int>(dS.size()) != n * n)
+    {
+        throw std::invalid_argument("inverse-sqrt derivative dimensions differ");
+    }
+
+    std::vector<double> w;
+    std::vector<double> V;
+    sym_eig(S, n, w, V);
+
+    // C = V^T dS V in the eigenbasis.  Symmetrizing dS here makes the
+    // derivative insensitive to round-off from its producer.
+    std::vector<double> C(static_cast<size_t>(n) * n, 0.0);
+    for (int i = 0; i < n; ++i)
+    {
+        for (int j = 0; j < n; ++j)
+        {
+            double value = 0.0;
+            for (int a = 0; a < n; ++a)
+            {
+                for (int b = 0; b < n; ++b)
+                {
+                    const double ds = 0.5
+                        * (dS[static_cast<size_t>(a) * n + b]
+                           + dS[static_cast<size_t>(b) * n + a]);
+                    value += V[static_cast<size_t>(a) * n + i] * ds
+                             * V[static_cast<size_t>(b) * n + j];
+                }
+            }
+            C[static_cast<size_t>(i) * n + j] = value;
+        }
+    }
+
+    std::vector<double> F(static_cast<size_t>(n) * n, 0.0);
+    for (int i = 0; i < n; ++i)
+    {
+        for (int j = 0; j < n; ++j)
+        {
+            // Branch: truncated directions are outside the represented
+            // subspace, exactly as in sym_inv_sqrt().
+            if (w[i] <= rank_tol || w[j] <= rank_tol)
+            {
+                continue;
+            }
+            const double fi = 1.0 / std::sqrt(w[i]);
+            const double fj = 1.0 / std::sqrt(w[j]);
+            // Branch: a degenerate pair needs the limit of the divided
+            // difference, not a numerically unstable ratio.
+            if (i == j
+                || std::abs(w[i] - w[j])
+                       <= 1e-14 * (std::abs(w[i]) + std::abs(w[j])))
+            {
+                const double midpoint = 0.5 * (w[i] + w[j]);
+                F[static_cast<size_t>(i) * n + j]
+                    = -0.5 / (midpoint * std::sqrt(midpoint));
+            }
+            else
+            {
+                F[static_cast<size_t>(i) * n + j]
+                    = (fi - fj) / (w[i] - w[j]);
+            }
+        }
+    }
+
+    dSinv_root.assign(static_cast<size_t>(n) * n, 0.0);
+    for (int i = 0; i < n; ++i)
+    {
+        for (int j = 0; j < n; ++j)
+        {
+            double value = 0.0;
+            for (int a = 0; a < n; ++a)
+            {
+                for (int b = 0; b < n; ++b)
+                {
+                    value += V[static_cast<size_t>(i) * n + a]
+                             * F[static_cast<size_t>(a) * n + b]
+                             * C[static_cast<size_t>(a) * n + b]
+                             * V[static_cast<size_t>(j) * n + b];
+                }
+            }
+            dSinv_root[static_cast<size_t>(i) * n + j] = value;
         }
     }
 }

@@ -199,6 +199,11 @@ class ConstraintLoop
     // Q_c D Q_c density here before FORCE_STRESS calls compute_force().
     void set_allocation_force_density(std::vector<std::vector<double>> rho);
 
+    // Complete target-projector derivative contribution (dQ/dP and the
+    // S^{-1/2} Fréchet term) for the PW allocation force.  The matrix is in
+    // Ry/Bohr and is added after the frozen Q_c dW Q_c grid kernel.
+    void set_allocation_target_force(const ModuleBase::matrix& force);
+
     // Non-collinear allocation force densities.  Each entry already carries
     // its constraint multiplier and lambda.sigma contraction, so the grid
     // kernel uses a unit coefficient per entry.
@@ -490,6 +495,7 @@ class ConstraintLoop
     bool json_fixed_source_ = false; // fixed_mu came from the v2 target file
     bool allocation_mode_ = false;
     std::vector<std::vector<double>> allocation_force_rho_;
+    ModuleBase::matrix allocation_target_force_;
     std::vector<std::vector<double>> allocation_spin_force_rho_;
     ModuleBase::matrix allocation_spin_pulay_force_;
 };

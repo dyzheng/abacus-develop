@@ -169,11 +169,13 @@
 | `deltap_common.h` | 纯函数库（R2 起 6 个函数全部被 DeltapScfSolver 使用） | 2026-08-01 |
 | `deltap_solver.h` | deprecated 死文件，全仓库 0 引用，计划删除 | 2026-07-31 |
 | `deltap_pw.cpp` | PW 数值 + 状态机实例（R3 起：7 全局 → 2 算子状态 + DeltapScfSolver 实例 + PW backend） | 2026-08-01 |
-| `esolver_ks_pw.cpp` | PW esolver 接线（R3 起：init 20 行 → `deltap_init` 6 行） | 2026-08-01 |
+| `esolver_ks_pw.cpp` | PW esolver 接线；allocation 力在 `cal_force()` 前构造 `rho_c` 与完整目标导数 | 2026-10-27 |
 | `deltap_scf.h/.cpp`（新增） | DeltapScfSolver 状态机（basis-independent 控制流，LCAO + PW 均已接入；含 unwrap_branch_2pi / gamma_report） | 2026-08-01 |
 | `source_esolver/test/deltap_common_test.cpp`（新增） | deltap_common 纯函数单测（10 用例） | 2026-08-01 |
 | `source/source_estate/module_constraint/`（M1–M8） | 统一实空间权重约束框架（权重网格/读数/注入/秒差求解/记账/力/总控） | 2026-09-14 |
-| `constraint_loop.cpp` | M8 总控状态机 + **双迭代调度（`on_iteration`/`take_inner_step`/settle Branch S）** | 2026-09-14 |
+| `constraint_loop.cpp` | M8 总控状态机 + 双迭代调度 + allocation 冻结网格力/目标导数叠加 | 2026-10-27 |
+| `source_estate/module_constraint/{alloc_linalg,alloc_pw}.{h,cpp}` | PW allocation overlap、rank-truncated `S^{-1/2}` 及其 Fréchet 导数 | 2026-10-27 |
+| `source_pw/module_pwdft/{onsite_proj_tools,op_pw_alloc}.{h,cpp}` | projector 几何导数 custom GEMM 与 PW allocation 目标力 | 2026-10-27 |
 | `constraint_io.{h,cpp}` | M7 配置 + 语义守卫（含 `constraint_mu_schedule`/`inner_thr`/`inner_nmax` 三条新守卫） | 2026-09-14 |
 | `esolver_ks_pw.cpp` / `esolver_ks_lcao.cpp` | 约束钩子接线（`observe → set_scf_energy → [on_iteration+mix_reset] → on_scf_converged`） | 2026-09-14 |
 | `source_io/module_chgpot/rhog_io.cpp` | 重启电荷读取（C-29 修复：补 `ig < 0` 守卫，防跨基组重启越界写） | 2026-09-14 |
@@ -6182,4 +6184,50 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - **下一步**：
   1. 实现 PW `dQ` 与 moving-target 项，并用 `e_con` FD 直接闭合。
   2. 补互补密度 all-pool 归约，解除 `KPAR * bndpar = 1` 守卫。
+  3. 扩展复数 Hermitian `ST`、PW allocation 应力与完整 `kpar=2` 回归。
+
+## 2026-10-27 (S5.1 target force): PW 完整目标投影几何导数
+
+- **完成内容**：
+  1. `alloc_linalg` 新增 rank-truncated `S^{-1/2}` 的 Fréchet 导数。
+  2. `alloc_pw` 新增 `build_pw_target_derivative()` 与
+     `orthogonalize_pw_overlaps_derivative()`，同时转动 raw overlap 及其几何导数。
+  3. `onsite_proj_tools` 新增 `cal_dbecp_f_custom()`，对任意 band 向量计算
+     `<d alpha|vec>`，避免显式构造平面波导数向量。
+  4. `op_pw_alloc` 新增 `compute_pw_alloc_target_force()`，实现 `dP`、owner `dQ`
+     与交叉项，并在 `constraint_loop` 中叠加到冻结网格力。
+  5. O-z 三点总力 FD 与 `np=2/4` 一致性验证通过。
+- **验证**：
+  - `ctest -R 'MODULE_ESTATE_constraint_alloc_(linalg|pw)$'`：2/2 PASS。
+  - `TargetDerivativeMatchesFiniteDifference`：`max_diff=6.994e-10`。
+  - `AllocationOperatorDerivativeDecomposition`：两个约束的解析/FD 差分别为
+    `5.971e-10`、`-3.463e-09`。
+  - `np=2/4` 中心构型：总能 `-442.15878837 eV`，`e_con=-0.005100062102 Ry`，
+    约束力 `-0.0003401300/-0.0003401303 Ry/Bohr`，总力
+    `-5.6690414398/-5.6690414444 eV/A`。
+  - 三点总力 FD：`F_FD=-5.667912284`，`F_analytic=-5.6690414444 eV/A`，
+    差 `0.00112916 < 0.0129 eV/A`；冻结近似误差为 `0.0046203 eV/A`。
+- **Bug/fix list**：
+  1. `dP` 初版遗漏非 owner/非位移原子的目标转动；改为所有正交目标均参与。
+  2. `dQ` 初版只统计位移原子上的目标；改为汇总每个约束 owner 的全部目标。
+  3. 交叉项第二项初版使用 `d_orth` 而非 `conj(d_orth)`；由独立分解测试定位并修正。
+  4. `cal_dbecp_f_custom()` 的 GEMM 输出是平面波分片局部量；`np=4` 目标力错误，
+     在收缩前补 `reduce_pool(derivative_overlap)` 后恢复 rank 一致。
+  5. 测试 `W` 的两个 6×6 块曾被当作单个 12×12 矩阵；改为块对角。
+- **文件**：
+  `source/source_estate/module_constraint/{alloc_linalg,alloc_pw,constraint_loop}.{h,cpp}`、
+  `source/source_estate/module_constraint/test/{alloc_linalg_test,alloc_pw_test}.cpp`、
+  `source/source_pw/module_pwdft/{onsite_proj_tools,op_pw_alloc}.{h,cpp}`、
+  `source/source_esolver/esolver_ks_pw.cpp`、
+  `docs/superpowers/specs/2026-10-27-s5-pw-target-force.md`（新建）、
+  执行方案、本日志。
+- **口径决定**：`e_con = mu(Q-target)` 不是完整约束总能量，且在电子自由度上不
+  满足驻点条件。其上轮“直接 `e_con` FD”结论由本轮总力 FD 验收替代。
+- **未完成/边界**：
+  - 互补密度 `rho_c` 仍是 pool-local；力路径继续拒绝 `KPAR * bndpar > 1`。
+  - `PwTargetSpace::ST` 仍为实对称投影，非 Gamma k 点需复数 Hermitian 扩展。
+  - PW allocation 应力与完整 `kpar=2` 收敛回归待补。
+- **下一步**：
+  1. 对每个自旋通道的 `rho_c` 做 all-pool 求和/平均，移除单 pool 力守卫。
+  2. 用 `kpar=2`、`np=4` 对能量、约束力和总力做跨池验收。
   3. 扩展复数 Hermitian `ST`、PW allocation 应力与完整 `kpar=2` 回归。

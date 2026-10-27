@@ -11,6 +11,7 @@
 #include "nonlocal_maths.hpp"
 
 #include <numeric>
+#include <stdexcept>
 
 namespace hamilt
 {
@@ -672,6 +673,94 @@ void Onsite_Proj_tools<FPTYPE, Device>::cal_dbecp_f(int ik, int npm, int ipol)
     this->revert_vkb(npw, ipol);
     this->pre_ik_f = ik;
     ModuleBase::timer::end("Onsite_Proj_tools", "cal_dbecp_f");
+}
+
+template <typename FPTYPE, typename Device>
+void Onsite_Proj_tools<FPTYPE, Device>::cal_dbecp_f_custom(
+    int ik,
+    int nvec,
+    int ipol,
+    const std::complex<FPTYPE>* ppsi_in,
+    int npwx,
+    std::complex<FPTYPE>* becp_out)
+{
+    ModuleBase::TITLE("Onsite_Proj_tools", "cal_dbecp_f_custom");
+    ModuleBase::timer::start("Onsite_Proj_tools", "cal_dbecp_f_custom");
+
+    // Guard: this allocation-force contraction is a scalar CPU path.  A
+    // GPU/vector-count mismatch would otherwise write the wrong layout.
+    if (this->device != base_device::CpuDevice || ppsi_in == nullptr
+        || becp_out == nullptr || nvec < 0 || npwx <= 0)
+    {
+        throw std::runtime_error(
+            "custom projector derivative requires scalar CPU vectors");
+    }
+    // Guard: every stored vector has one scalar component; spinor bands
+    // need a separate Pauli contraction and are not part of this closure.
+    if (this->ucell_->get_npol() != 1)
+    {
+        throw std::runtime_error(
+            "custom projector derivative requires npol == 1");
+    }
+    // Guard: the ordinary cal_becp pass must have populated the VKB table
+    // for this k-point before its derivative can be formed.
+    if (this->current_ik != ik)
+    {
+        throw std::runtime_error(
+            "custom projector derivative called before cal_becp");
+    }
+
+    const int npw = this->wfc_basis_->npwk[ik];
+    // Branch: the first derivative call allocates the direction scratch.
+    if (this->pre_ik_f == -1)
+    {
+        resmem_var_op()(gcar, 3 * this->wfc_basis_->npwk_max);
+        resmem_int_op()(gcar_zero_indexes, 3 * this->wfc_basis_->npwk_max);
+    }
+    // Branch: a new k-point needs its Cartesian G components (and the
+    // divide-by-zero bookkeeping used by save_vkb/revert_vkb).
+    if (this->pre_ik_f != ik)
+    {
+        this->transfer_gcar(npw,
+                            this->wfc_basis_->npwk_max,
+                            &(this->wfc_basis_->gcar[ik * this->wfc_basis_->npwk_max].x));
+    }
+
+    // The derivative kernel overwrites VKB in place for one direction; save
+    // and restore around the GEMM exactly like the standard force path.
+    this->save_vkb(npw, ipol);
+    const std::complex<double> coeff
+        = ipol == 0 ? ModuleBase::NEG_IMAG_UNIT : ModuleBase::ONE;
+    cal_vkb1_nl_op<FPTYPE, Device>()(this->ctx,
+                                     this->nkb,
+                                     npw,
+                                     npw,
+                                     npw,
+                                     ipol,
+                                     coeff,
+                                     this->ppcell_vkb,
+                                     gcar,
+                                     this->ppcell_vkb);
+
+    const char transa = 'C';
+    const char transb = 'N';
+    gemm_op()(transa,
+              transb,
+              this->nkb,
+              nvec,
+              npw,
+              &ModuleBase::ONE,
+              this->ppcell_vkb,
+              npw,
+              ppsi_in,
+              npwx,
+              &ModuleBase::ZERO,
+              becp_out,
+              this->nkb);
+
+    this->revert_vkb(npw, ipol);
+    this->pre_ik_f = ik;
+    ModuleBase::timer::end("Onsite_Proj_tools", "cal_dbecp_f_custom");
 }
 
 // save_vkb

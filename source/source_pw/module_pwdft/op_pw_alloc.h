@@ -18,6 +18,7 @@ class K_Vectors;
 namespace constraint
 {
 class WeightGrid;
+struct ChannelProfile;
 }
 
 namespace alloc
@@ -64,6 +65,32 @@ bool compute_pw_alloc_complement_density(
     const constraint::WeightGrid& weight_grid,
     const int target_l,
     std::vector<std::vector<double>>& rho_c,
+    std::string& error);
+
+/**
+ * @brief Complete geometric derivative of the allocation target projectors.
+ *
+ * This is the missing dQ/dP half of the PW allocation force.  It contracts
+ * the onsite-projector displacement derivative with the wavefunction and
+ * with W_i Q_c|psi>, adds the Fréchet derivative of ST^{-1/2}, and returns
+ * the force contribution not covered by compute_pw_alloc_complement_density()
+ * (which owns only Q_c dW_i Q_c).
+ *
+ * force is accumulated in Ry/Bohr and reduced over every k/band pool.  The
+ * implementation is the collinear scalar-CPU closure and rejects spinors.
+ */
+bool compute_pw_alloc_target_force(
+    const UnitCell& ucell,
+    const psi::Psi<std::complex<double>>* psi,
+    const ModuleBase::matrix& occupations,
+    const K_Vectors& kv,
+    const ModulePW::PW_Basis_K& wfcpw,
+    const int nspin,
+    const constraint::WeightGrid& weight_grid,
+    const int target_l,
+    const std::vector<double>& mu,
+    const std::vector<constraint::ChannelProfile>& channels,
+    ModuleBase::matrix& force,
     std::string& error);
 
 } // namespace alloc
