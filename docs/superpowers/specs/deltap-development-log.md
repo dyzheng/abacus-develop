@@ -6360,3 +6360,51 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   2. 做更密 k 网格与 `kpar=2` 的应力回归。
   3. 验证 `bndpar > 1` 能带归属后解除守卫。
   4. 补 `nspin=4` Pauli 收缩与目标应力。
+
+## 2026-10-27 (S5.2 体系对照): Fe2-bcc 与 LiCl 结果比较
+
+- **完成内容**：
+  1. 新增 Fe2-bcc `nspin=2`、`2x2x2` k 网格的 unified allocation 与 native
+     DeltaSpin 同靶对照。两者均约束为 Fe0 `-3.8 μB`、Fe1 `+3.8 μB`，
+     `scf_thr=1e-8`。
+  2. 新增 LiCl 的 Becke 空间权重与 allocation 局域电荷对照。两套输入仅差
+     `constraint_alloc_switch`，且 `mu=0`，因此密度与总能严格相同。
+  3. 修复参考 SCF 阶段 `targets_` 未构造时
+     `constraint_energy_functional()` 访问空向量导致的崩溃。
+- **验证**：
+  - Fe2 allocation：`q=-3.800054394/+3.800065059 μB`，残差
+    `6.51e-5 μB`，总能 `-6370.6101496879373 eV`，81 次电子迭代、84 s。
+  - Fe2 native DeltaSpin：`m=-3.8000818583/+3.8000808496 μB`，RMS
+    `8.60e-5 μB`，总能 `-6369.985258222084 eV`，13 次电子迭代、4 s。
+  - 同靶总能差 `-0.624891466 eV`；allocation 的传统 orbital-sum 磁矩约
+    `±2.93 μB`，说明两者约束的是不同算符。
+  - LiCl：Becke Li `3.095906027 e`，allocation Li
+    `2.947887372 e`，差 `-0.148018655 e`（`-4.78%`）；双方总能均为
+    `-643.97565238003517 eV`。
+  - `ctest -R MODULE_ESTATE_constraint_alloc`：10/10 PASS；
+    `ctest -R constraint`：23/23 PASS。
+- **Bug/fix list**：
+  1. 参考 SCF 前 `targets_` 为空，`iter_finish()` 每步调用约束能泛函会
+     segfault；在 `mu_` 初始化后用 spec target 预填，并在尺寸不一致时返回 0。
+  2. Fe2 allocation 在 `±3.5/±3.9/±3.6` 目标附近存在陡峭分支或平台；
+     普通 outer secant 不能稳定到达 `1e-4`。最终采用 trust-region，
+     `±3.8 μB` 在 81 步内正式收敛。
+  3. LiCl 的 allocation 局域电荷必须读 `CONSTRAINT_AUDIT q`；`ALLOC-PW n`
+     是空间电荷读数，`n_T` 是目标壳层占据，二者都不能替代约束观测值。
+- **文件**：
+  `source/source_estate/module_constraint/constraint_loop.cpp`、
+  `tests/constraint_s5_parity/{fe2_bcc_alloc,fe2_bcc_ds,licl_free,licl_alloc}`、
+  `tests/PP_ORB/{Li,Cl}_APNS.upf`、
+  `tests/PP_ORB/{Li_gga_9au_100Ry_4s1p,Cl_gga_6au_100Ry_2s2p1d}.orb`、
+  `docs/superpowers/specs/2026-10-27-fe2-licl-comparison.md`（新建）、本日志。
+- **未完成/边界**：
+  - 两方法的“spin”算符定义不同，当前只能比较同靶收敛性、成本和读数，
+   不能把总能差解释为同一物理态的能量误差。
+  - Fe2 allocation 尚无自动 ctest 回归，当前为手工体系级对照。
+  - trust-region 对 multi-k spin allocation 的必要性尚未转成默认策略。
+- **下一步**：
+  1. 建立 native DeltaSpin 与 allocation `q` 的可观测量映射，在同一算符下
+     比较能量、力和应力。
+  2. 将 Fe2 `±3.8 μB` 对照固化为自动回归，并加入残差/能量阈值。
+  3. 优化 allocation 目标空间与互补密度的重建成本；当前比 native 慢约一个
+     数量级。

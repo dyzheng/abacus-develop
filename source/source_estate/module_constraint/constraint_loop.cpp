@@ -282,6 +282,15 @@ void ConstraintLoop::init(const UnitCell& ucell,
 
     // mu starts at zero: the first SCF is the unconstrained reference.
     mu_.assign(specs_.size(), 0.0);
+    // Provisional scalar targets keep the per-iteration energy correction
+    // well-defined during the reference SCF.  Delta targets are rebuilt from
+    // Q_ref when the reference converges; until then mu is zero, so these
+    // provisional values cannot change the energy.
+    targets_.assign(specs_.size(), 0.0);
+    for (size_t a = 0; a < specs_.size(); ++a)
+    {
+        targets_[a] = specs_[a].target;
+    }
     // S4.3: mirror every component into the vector workspace.  Charge (and
     // collinear spin) targets stay on the z axis, which is exactly the
     // limit in which the vector path reduces to the historical scalar one.
@@ -1926,6 +1935,14 @@ double ConstraintLoop::output_energy_correction() const
 
 double ConstraintLoop::constraint_energy_functional() const
 {
+    // Branch: the reference SCF runs before Q_ref exists and therefore before
+    // delta targets are rebuilt.  Its multiplier is zero, so the correction
+    // is zero; returning here also keeps a malformed empty workspace from
+    // being indexed on every reference iteration.
+    if (targets_.size() != mu_.size())
+    {
+        return 0.0;
+    }
     // Branch: ALM's audited functional includes the quadratic penalty term;
     // its controller is the single source for that convention.
     if (alm_armed_)

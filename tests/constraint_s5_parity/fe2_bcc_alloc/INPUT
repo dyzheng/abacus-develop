@@ -1,0 +1,40 @@
+INPUT_PARAMETERS
+suffix    fe2_bcc_alloc
+calculation    scf
+basis_type    pw
+ecutwfc    20
+ecutrho    80
+gamma_only    0
+nspin    2
+nbands    27
+scf_thr    1.0e-8
+scf_nmax    200
+out_chg    0
+smearing_method    gaussian
+smearing_sigma    0.01
+mixing_type    broyden
+mixing_beta    0.4
+ks_solver    dav_subspace
+symmetry    0
+
+constraint    true
+constraint_type    spin
+constraint_weight_type    becke
+constraint_target_file    constraint_target.json
+constraint_target_mode    absolute
+constraint_mu_schedule    outer
+constraint_trust_region    1
+constraint_mu_max    5.0
+constraint_thr    1.0e-4
+constraint_branch_tol    0.0
+constraint_step_max    0.02
+constraint_step_probe    0.005
+constraint_alloc_switch    1
+constraint_alloc_report    1
+constraint_alloc_target_l    2
+
+kpar    2
+pseudo_dir    ../../PP_ORB
+orbital_dir    ../../PP_ORB
+onsite_radius    5.9
+pw_seed 1
