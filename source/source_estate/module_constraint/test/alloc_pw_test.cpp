@@ -447,7 +447,7 @@ TEST(AllocPwTest, ProjectorTabulationBuildsOverlapAndBecp)
         }
     }
 
-    std::vector<double> ST;
+    std::vector<std::complex<double>> ST;
     alloc::build_pw_projector_overlap(tab.data(), npw, ntarget, ST);
     for (int a = 0; a < ntarget; ++a)
     {
@@ -458,7 +458,7 @@ TEST(AllocPwTest, ProjectorTabulationBuildsOverlapAndBecp)
             {
                 value += std::conj(tab[a * npw + ig]) * tab[b * npw + ig];
             }
-            EXPECT_NEAR(ST[a * ntarget + b], value.real(), 1e-13);
+            EXPECT_NEAR(std::abs(ST[a * ntarget + b] - value), 0.0, 1e-13);
         }
     }
 
@@ -494,10 +494,10 @@ TEST(AllocPwTest, TargetDerivativeMatchesFiniteDifference)
     {
         for (int i = 0; i < nbasis; ++i)
         {
-            // The current target representation is the real Gamma-point
-            // overlap, so both the projector and its displacement are real.
-            phi[a][i] = std::complex<double>(nd(gen), 0.0);
-            dphi[a][i] = std::complex<double>(nd(gen), 0.0);
+            // General k-point projector rows have independent real and
+            // imaginary parts, so keep both in the derivative test.
+            phi[a][i] = std::complex<double>(nd(gen), nd(gen));
+            dphi[a][i] = std::complex<double>(nd(gen), nd(gen));
         }
     }
 
@@ -523,13 +523,13 @@ TEST(AllocPwTest, TargetDerivativeMatchesFiniteDifference)
             flat[a * nbasis + i] = phi[a][i];
         }
     }
-    std::vector<double> ST;
+    std::vector<std::complex<double>> ST;
     alloc::build_pw_projector_overlap(flat.data(), nbasis, ntarget, ST);
     alloc::PwTargetSpace space;
     alloc::build_pw_target(ST, ntarget, {0, 0, 1, 1}, {0, 0, 1, 1}, 2,
                            space);
 
-    std::vector<double> dG;
+    std::vector<std::complex<double>> dG;
     alloc::build_pw_target_derivative(space, derivative_overlap, dG);
 
     std::vector<std::complex<double>> raw(ntarget);
@@ -573,7 +573,7 @@ TEST(AllocPwTest, TargetDerivativeMatchesFiniteDifference)
                 tab[a * nbasis + i] = f[a][i];
             }
         }
-        std::vector<double> st;
+        std::vector<std::complex<double>> st;
         alloc::build_pw_projector_overlap(tab.data(), nbasis, ntarget, st);
         alloc::PwTargetSpace sp;
         alloc::build_pw_target(st, ntarget, {0, 0, 1, 1}, {0, 0, 1, 1}, 2,
@@ -621,8 +621,8 @@ TEST(AllocPwTest, AllocationOperatorDerivativeDecomposition)
     {
         for (int i = 0; i < nbasis; ++i)
         {
-            f[a][i] = std::complex<double>(nd(gen), 0.0);
-            df[a][i] = std::complex<double>(nd(gen), 0.0);
+            f[a][i] = std::complex<double>(nd(gen), nd(gen));
+            df[a][i] = std::complex<double>(nd(gen), nd(gen));
             // Branch: this test displaces only the first atom, so projectors
             // centred on the second atom have zero raw derivative.
             if (atom[a] != 0)
@@ -654,7 +654,7 @@ TEST(AllocPwTest, AllocationOperatorDerivativeDecomposition)
             flat[a * nbasis + i] = f[a][i];
         }
     }
-    std::vector<double> ST;
+    std::vector<std::complex<double>> ST;
     alloc::build_pw_projector_overlap(flat.data(), nbasis, ntarget, ST);
     alloc::PwTargetSpace space;
     alloc::build_pw_target(ST, ntarget, atom, owner, nconstraint, space);
@@ -678,7 +678,7 @@ TEST(AllocPwTest, AllocationOperatorDerivativeDecomposition)
             }
         }
     }
-    std::vector<double> dG;
+    std::vector<std::complex<double>> dG;
     alloc::build_pw_target_derivative(space, D, dG);
 
     std::vector<std::complex<double>> raw(ntarget);
@@ -830,7 +830,7 @@ TEST(AllocPwTest, AllocationOperatorDerivativeDecomposition)
                     tab[a * nbasis + i] = ff[a][i];
                 }
             }
-            std::vector<double> st;
+            std::vector<std::complex<double>> st;
             alloc::build_pw_projector_overlap(tab.data(), nbasis, ntarget, st);
             alloc::PwTargetSpace sp;
             alloc::build_pw_target(st, ntarget, atom, owner, nconstraint, sp);

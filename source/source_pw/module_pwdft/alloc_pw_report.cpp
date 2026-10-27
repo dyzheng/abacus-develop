@@ -150,7 +150,7 @@ bool accumulate_k_point(
                 = tab[static_cast<size_t>(report.target_row[a]) * npw + ig];
         }
     }
-    std::vector<double> ST;
+    std::vector<std::complex<double>> ST;
     build_pw_projector_overlap(compact_tab.data(), npw, ntarget, ST);
     std::vector<int> unowned(ntarget, -1);
     PwTargetSpace space;

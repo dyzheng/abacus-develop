@@ -174,7 +174,7 @@
 | `source_esolver/test/deltap_common_test.cpp`（新增） | deltap_common 纯函数单测（10 用例） | 2026-08-01 |
 | `source/source_estate/module_constraint/`（M1–M8） | 统一实空间权重约束框架（权重网格/读数/注入/秒差求解/记账/力/总控） | 2026-09-14 |
 | `constraint_loop.cpp` | M8 总控状态机 + 双迭代调度 + allocation 冻结网格力/目标导数叠加 | 2026-10-27 |
-| `source_estate/module_constraint/{alloc_linalg,alloc_pw}.{h,cpp}` | PW allocation overlap、rank-truncated `S^{-1/2}` 及其 Fréchet 导数 | 2026-10-27 |
+| `source_estate/module_constraint/{alloc_linalg,alloc_pw}.{h,cpp}` | PW allocation 复数 Hermitian overlap、rank-truncated `S^{-1/2}` 及其 Fréchet 导数 | 2026-10-27 |
 | `source_pw/module_pwdft/{onsite_proj_tools,op_pw_alloc}.{h,cpp}` | projector 几何导数 custom GEMM、PW allocation 目标力、跨 k-pool 互补密度 | 2026-10-27 |
 | `constraint_io.{h,cpp}` | M7 配置 + 语义守卫（含 `constraint_mu_schedule`/`inner_thr`/`inner_nmax` 三条新守卫） | 2026-09-14 |
 | `esolver_ks_pw.cpp` / `esolver_ks_lcao.cpp` | 约束钩子接线（`observe → set_scf_energy → [on_iteration+mix_reset] → on_scf_converged`） | 2026-09-14 |
@@ -6268,3 +6268,44 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   1. 扩展复数 Hermitian `ST` 并补非 Gamma k 点测试。
   2. 补 PW allocation 应力。
   3. 验证 `bndpar > 1` 后再解除剩余守卫；补完整 k 网格回归。
+
+## 2026-10-27 (S5.1 complex ST): PW 目标 overlap 复数 Hermitian 化
+
+- **完成内容**：
+  1. `alloc_linalg` 新增复数 Hermitian 谱分解、逆平方根与 Fréchet 导数，
+     底层调用 LAPACK `zheev`。
+  2. `PwTargetSpace::ST/ST_inv_root` 改为复数 Hermitian；projector overlap
+     保留完整虚部。
+  3. 目标 overlap 的标量旋转改为 `G^H raw` 与 `dG^H raw + G^H d_raw`；
+     目标向量保持 `G phi` 与 `dG phi + G d phi`。
+  4. 随机复数 projector 的导数、算符分解与 MPI 分片测试全部通过。
+- **验证**：
+  - `ctest -R 'MODULE_ESTATE_constraint_alloc'`：10/10 PASS。
+  - 复数 `S^{-1/2}` Fréchet FD PASS。
+  - `TargetDerivativeMatchesFiniteDifference`：`max_diff=3.070e-10`。
+  - 算符分解两个约束差：`-2.557e-09/-7.238e-09`。
+  - Gamma 点 `np=4` 总能/约束力与改动前完全一致，总力差 `2.6e-9 eV/A`。
+  - 非 Gamma `1×1×2`、`kpar=1`、`np=4`：总能差 `7.1e-12 eV`、约束力差
+    `1.0e-9 Ry/Bohr`、总力差 `1.7e-8 eV/A`。
+- **Bug/fix list**：
+  1. 旧 `build_pw_projector_overlap()` 只保存 overlap 实部，非 Gamma k 点会
+     破坏目标正交性；改为保存 `ST[a,b]=conj(ST[b,a])`。
+  2. 旧 `build_pw_target_derivative()` 对 `D+D^H` 再取实部；改为完整 Hermitian
+     Fréchet 导数。
+  3. 复数 `G` 下，overlap 标量必须使用 `G^H`，目标向量使用 `G`；初版统一用
+     `G` 会在虚部非零时产生错误旋转。
+- **文件**：
+  `source/source_estate/module_constraint/{alloc_linalg,alloc_pw}.{h,cpp}`、
+  `source/source_estate/module_constraint/test/{alloc_linalg_test,alloc_pw_test}.cpp`、
+  `source/source_estate/test_mpi/alloc_pw_mpi_test.cpp`、
+  `source/source_pw/module_pwdft/{op_pw_alloc,alloc_pw_report}.cpp`、
+  `docs/superpowers/specs/2026-10-27-s5-pw-complex-st.md`（新建）、
+  执行方案、本日志。
+- **未完成/边界**：
+  - PW allocation 应力尚未实现。
+  - `bndpar > 1` 力路径仍显式拒绝。
+  - 更密 k 网格与完整 `kpar=2` 收敛回归待补。
+- **下一步**：
+  1. 补 PW allocation 应力。
+  2. 验证 `bndpar > 1` 的能带归属后再解除守卫。
+  3. 做更密 k 网格与完整 `kpar=2` 回归。

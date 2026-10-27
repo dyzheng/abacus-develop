@@ -10,7 +10,8 @@ namespace alloc
 /**
  * @brief Orthonormalized target-projector space for the PW backend.
  *
- * The raw projectors alpha_a have an R x R overlap ST_ab = <alpha_a|alpha_b>.
+ * The raw projectors alpha_a have an R x R Hermitian overlap
+ * ST_ab = <alpha_a|alpha_b>.
  * They are orthonormalized with G = ST^{-1/2}; the lower-level PW adapter
  * supplies becp = <alpha_a|psi> and local products V alpha_a.  This mirrors
  * the LCAO target space without ever forming the full plane-wave basis.
@@ -21,8 +22,8 @@ struct PwTargetSpace
     int nconstraint = 0;
     std::vector<int> atom;       // target -> global atom
     std::vector<int> constraint; // target -> constraint, -1 for unowned
-    std::vector<double> ST;      // ntarget x ntarget, row-major
-    std::vector<double> ST_inv_root; // ntarget x ntarget, row-major
+    std::vector<std::complex<double>> ST; // ntarget x ntarget, row-major
+    std::vector<std::complex<double>> ST_inv_root; // ntarget x ntarget
     int rank = 0;
     double cond = 1.0;
 };
@@ -48,10 +49,19 @@ PwTargetShell select_pw_target_shell(const std::vector<int>& nh_per_atom,
 /**
  * @brief Build the PW target space from projector-projector overlaps.
  *
- * ST is symmetrized (projector overlaps are real symmetric) and truncated by
- * the same rank threshold as the LCAO backend.  target_constraint may contain
- * -1 for a target that belongs to the global P but not to a constrained Q_i.
+ * ST is Hermitian-symmetrized and truncated by the same rank threshold as the
+ * LCAO backend.  target_constraint may contain -1 for a target that belongs
+ * to the global P but not to a constrained Q_i.
  */
+void build_pw_target(const std::vector<std::complex<double>>& ST,
+                     const int ntarget,
+                     const std::vector<int>& target_atom,
+                     const std::vector<int>& target_constraint,
+                     const int nconstraint,
+                     PwTargetSpace& out,
+                     const double rank_tol = 1e-10);
+
+/** @brief Real-overlap compatibility overload (Gamma-point inputs). */
 void build_pw_target(const std::vector<double>& ST,
                      const int ntarget,
                      const std::vector<int>& target_atom,
@@ -70,7 +80,7 @@ void build_pw_target(const std::vector<double>& ST,
 void build_pw_projector_overlap(const std::complex<double>* tab_atomic,
                                 const int npw,
                                 const int ntarget,
-                                std::vector<double>& ST);
+                                std::vector<std::complex<double>>& ST);
 
 /**
  * @brief Compute becp[band][target] = <alpha_target|psi_band> from the
@@ -98,17 +108,15 @@ void orthogonalize_pw_overlaps(const PwTargetSpace& space,
 /**
  * @brief Derivative of the target inverse-square-root overlap.
  *
- * derivative_overlap[a,b] is <d alpha_a|alpha_b> for one atomic
- * displacement direction.  The raw overlap perturbation is
- * dST = Re(D + D^dagger) (the current PW target space stores the real
- * symmetric projection of the projector overlap), and the returned matrix
- * is d(ST^{-1/2}) from the Fréchet derivative with the target space's rank
- * cutoff.
+ * derivative_overlap[a,b] is <d alpha_a|alpha_b> for one atomic displacement
+ * direction.  The raw overlap perturbation is dST = D + D^dagger, and the
+ * returned matrix is d(ST^{-1/2}) from the Hermitian Fréchet derivative with
+ * the target space's rank cutoff.
  */
 void build_pw_target_derivative(
     const PwTargetSpace& space,
     const std::vector<std::complex<double>>& derivative_overlap,
-    std::vector<double>& dST_inv_root);
+    std::vector<std::complex<double>>& dST_inv_root);
 
 /**
  * @brief Rotate both a raw overlap and its atomic-displacement derivative
@@ -120,7 +128,7 @@ void build_pw_target_derivative(
  */
 void orthogonalize_pw_overlaps_derivative(
     const PwTargetSpace& space,
-    const std::vector<double>& dST_inv_root,
+    const std::vector<std::complex<double>>& dST_inv_root,
     const std::vector<std::complex<double>>& raw,
     const std::vector<std::complex<double>>& d_raw,
     std::vector<std::complex<double>>& orth,

@@ -89,7 +89,7 @@ TEST(AllocPwMpiTest, ProjectorReductionsMatchGlobalReference)
         }
     }
 
-    std::vector<double> ST;
+    std::vector<std::complex<double>> ST;
     alloc::build_pw_projector_overlap(tab.data(), npw, ntarget, ST);
     std::vector<std::vector<std::complex<double>>> becp;
     alloc::pw_becp_from_projectors(tab.data(), npw, ntarget, psi.data(), npw,
@@ -104,7 +104,7 @@ TEST(AllocPwMpiTest, ProjectorReductionsMatchGlobalReference)
             {
                 expected += std::conj(tab_value(a, ig)) * tab_value(b, ig);
             }
-            EXPECT_NEAR(ST[a * ntarget + b], expected.real(), 1e-12);
+            EXPECT_NEAR(std::abs(ST[a * ntarget + b] - expected), 0.0, 1e-12);
         }
     }
     for (int band = 0; band < nband; ++band)
@@ -160,7 +160,7 @@ TEST(AllocPwMpiTest, OrthogonalPhiIsOrthonormalAcrossRanks)
         }
     }
 
-    std::vector<double> ST;
+    std::vector<std::complex<double>> ST;
     alloc::build_pw_projector_overlap(tab.data(), npw, ntarget, ST);
     alloc::PwTargetSpace space;
     alloc::build_pw_target(ST, ntarget, {0, 0, 0}, {0, 0, 0}, 1, space);

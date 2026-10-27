@@ -869,7 +869,8 @@ TEST(AllocObserveTest, EmptyTargetSetEqualsBecke)
 
 - [x] 新增 projector–projector 重叠 `⟨α_a|α_b⟩`（两中心或实空间积分）；R×R 正交化；`apply_dH` 按设计 §5.2 算法（becp + 局域乘）。
       核心已实现于 `alloc_pw.{h,cpp}`；projector tabulation overlap/becp 的
-      2/4-rank `reduce_pool` 一致性已测。
+      2/4-rank `reduce_pool` 一致性已测；`ST` 已扩展为复数 Hermitian，非 Gamma
+      k 点虚部进入正交化与目标导数。
 - [ ] 测试：PW vs LCAO 同构型同目标：`|Δm^T|<0.02 μB`、`|ΔM|<0.01 μB`；`Σm` 审计。
       代数同目标平价已过（`max_dmT=1.066e-14`，求和差 0）；真实 PW/LCAO
       同电子态数据已接线：H2O/O-d、固定 `fixed_mu=0.01 Ry` 下
@@ -896,7 +897,9 @@ TEST(AllocObserveTest, EmptyTargetSetEqualsBecke)
       与总力 FD 见
       `docs/superpowers/specs/2026-10-27-s5-pw-target-force.md`；跨 k-pool 力
       对照见
-      `docs/superpowers/specs/2026-10-27-s5-pw-kpar-force.md`。
+      `docs/superpowers/specs/2026-10-27-s5-pw-kpar-force.md`；复数 Hermitian
+      目标空间见
+      `docs/superpowers/specs/2026-10-27-s5-pw-complex-st.md`。
 
 ### Task S5.2 周期 Hirshfeld 权重后端
 

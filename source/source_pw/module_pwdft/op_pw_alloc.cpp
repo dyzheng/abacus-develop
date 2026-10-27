@@ -187,7 +187,7 @@ bool build_target_context(
             context.phi[a][ig] = value;
         }
     }
-    std::vector<double> ST;
+    std::vector<std::complex<double>> ST;
     build_pw_projector_overlap(compact_tab.data(), npw, ntarget, ST);
     build_pw_target(ST, ntarget, selection.atom, target_constraint,
                     nconstraint, context.space);
@@ -196,7 +196,7 @@ bool build_target_context(
     if (context.space.rank == 0)
     {
         double max_st = 0.0;
-        for (const double value : context.space.ST)
+        for (const std::complex<double> value : context.space.ST)
         {
             max_st = std::max(max_st, std::abs(value));
         }
@@ -411,7 +411,9 @@ bool build_band_force_data(
             for (int b = 0; b < r; ++b)
             {
                 data.orth_overlap[s][a]
-                    += context.space.ST_inv_root[static_cast<size_t>(a) * r + b]
+                    += std::conj(
+                           context.space.ST_inv_root[static_cast<size_t>(a) * r
+                                                     + b])
                        * data.raw_overlap[s][b];
             }
         }
@@ -535,7 +537,7 @@ void accumulate_target_force_direction(
                 = out(a, data.target_offset + b);
         }
     }
-    std::vector<double> dST_inv_root;
+    std::vector<std::complex<double>> dST_inv_root;
     build_pw_target_derivative(context.space, D, dST_inv_root);
 
     int owner = -1;

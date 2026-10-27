@@ -88,7 +88,7 @@ PwTargetShell select_pw_target_shell(const std::vector<int>& nh_per_atom,
     return selection;
 }
 
-void build_pw_target(const std::vector<double>& ST,
+void build_pw_target(const std::vector<std::complex<double>>& ST,
                      const int ntarget,
                      const std::vector<int>& target_atom,
                      const std::vector<int>& target_constraint,
@@ -111,8 +111,10 @@ void build_pw_target(const std::vector<double>& ST,
     out.constraint = target_constraint;
     out.rank = 0;
     out.cond = 1.0;
-    out.ST.assign(static_cast<size_t>(ntarget) * ntarget, 0.0);
-    out.ST_inv_root.assign(static_cast<size_t>(ntarget) * ntarget, 0.0);
+    out.ST.assign(static_cast<size_t>(ntarget) * ntarget,
+                  std::complex<double>(0.0, 0.0));
+    out.ST_inv_root.assign(static_cast<size_t>(ntarget) * ntarget,
+                           std::complex<double>(0.0, 0.0));
     for (int a = 0; a < ntarget; ++a)
     {
         // Branch: reject an ownership map that cannot be aggregated later.
@@ -123,11 +125,12 @@ void build_pw_target(const std::vector<double>& ST,
         }
         for (int b = 0; b < ntarget; ++b)
         {
-            // The projector overlap is real symmetric by construction; an
+            // The projector overlap is Hermitian by construction; an
             // explicit symmetrization removes numerical skew from the input.
-            const double value = 0.5
-                                 * (ST[static_cast<size_t>(a) * ntarget + b]
-                                    + ST[static_cast<size_t>(b) * ntarget + a]);
+            const std::complex<double> value
+                = 0.5
+                  * (ST[static_cast<size_t>(a) * ntarget + b]
+                     + std::conj(ST[static_cast<size_t>(b) * ntarget + a]));
             out.ST[static_cast<size_t>(a) * ntarget + b] = value;
         }
     }
@@ -138,8 +141,8 @@ void build_pw_target(const std::vector<double>& ST,
     }
 
     std::vector<double> eig;
-    std::vector<double> eigvec;
-    sym_eig(out.ST, ntarget, eig, eigvec);
+    std::vector<std::complex<double>> eigvec;
+    herm_eig(out.ST, ntarget, eig, eigvec);
     for (int i = 0; i < ntarget; ++i)
     {
         // Branch: count only directions retained by the inverse-sqrt cutoff.
@@ -157,21 +160,42 @@ void build_pw_target(const std::vector<double>& ST,
     {
         out.cond = eig.back() / eig.front();
     }
-    sym_inv_sqrt(out.ST, ntarget, out.ST_inv_root, rank_tol);
+    herm_inv_sqrt(out.ST, ntarget, out.ST_inv_root, rank_tol);
+}
+
+void build_pw_target(const std::vector<double>& ST,
+                     const int ntarget,
+                     const std::vector<int>& target_atom,
+                     const std::vector<int>& target_constraint,
+                     const int nconstraint,
+                     PwTargetSpace& out,
+                     const double rank_tol)
+{
+    // Branch: preserve the Gamma-point API by lifting the real symmetric
+    // overlap into the complex Hermitian representation.
+    std::vector<std::complex<double>> complex_st(
+        ST.size(), std::complex<double>(0.0, 0.0));
+    for (size_t i = 0; i < ST.size(); ++i)
+    {
+        complex_st[i] = std::complex<double>(ST[i], 0.0);
+    }
+    build_pw_target(complex_st, ntarget, target_atom, target_constraint,
+                    nconstraint, out, rank_tol);
 }
 
 void build_pw_projector_overlap(const std::complex<double>* tab_atomic,
                                 const int npw,
                                 const int ntarget,
-                                std::vector<double>& ST)
+                                std::vector<std::complex<double>>& ST)
 {
-    // Branch: the tabulation and target count must define a real R x R
+    // Branch: the tabulation and target count must define a Hermitian R x R
     // overlap; an empty target set is a valid P=0 backend.
     if (npw < 0 || ntarget < 0 || (ntarget > 0 && tab_atomic == nullptr))
     {
         throw std::invalid_argument("PW projector overlap input is invalid");
     }
-    ST.assign(static_cast<size_t>(ntarget) * ntarget, 0.0);
+    ST.assign(static_cast<size_t>(ntarget) * ntarget,
+              std::complex<double>(0.0, 0.0));
     std::vector<std::complex<double>> local(
         static_cast<size_t>(ntarget) * ntarget,
         std::complex<double>(0.0, 0.0));
@@ -198,13 +222,14 @@ void build_pw_projector_overlap(const std::complex<double>* tab_atomic,
         for (int b = 0; b < ntarget; ++b)
         {
             // Only the upper triangle was formed locality-by-locality.  Use
-            // the symmetric partner so the reduced matrix is full, not a
+            // the Hermitian partner so the reduced matrix is full, not a
             // triangular matrix with an implicit zero lower half.
             const int row = (a < b) ? a : b;
             const int col = (a < b) ? b : a;
-            const double real
-                = local[static_cast<size_t>(row) * ntarget + col].real();
-            ST[static_cast<size_t>(a) * ntarget + b] = real;
+            const std::complex<double> value
+                = local[static_cast<size_t>(row) * ntarget + col];
+            ST[static_cast<size_t>(a) * ntarget + b]
+                = (a <= b) ? value : std::conj(value);
         }
     }
 }
@@ -262,8 +287,10 @@ void orthogonalize_pw_overlaps(const PwTargetSpace& space,
     {
         for (int b = 0; b < space.ntarget; ++b)
         {
-            orth[a] += space.ST_inv_root[static_cast<size_t>(a)
-                                             * space.ntarget + b]
+            // orth = G^H raw because raw stores <alpha_b|psi>.  The
+            // Hermitian G is not real at a general k-point.
+            orth[a] += std::conj(space.ST_inv_root[static_cast<size_t>(a)
+                                                      * space.ntarget + b])
                        * raw[b];
         }
     }
@@ -272,7 +299,7 @@ void orthogonalize_pw_overlaps(const PwTargetSpace& space,
 void build_pw_target_derivative(
     const PwTargetSpace& space,
     const std::vector<std::complex<double>>& derivative_overlap,
-    std::vector<double>& dST_inv_root)
+    std::vector<std::complex<double>>& dST_inv_root)
 {
     check_space(space);
     const int r = space.ntarget;
@@ -288,28 +315,25 @@ void build_pw_target_derivative(
         return;
     }
 
-    std::vector<double> dST(static_cast<size_t>(r) * r, 0.0);
+    std::vector<std::complex<double>> dST(
+        static_cast<size_t>(r) * r, std::complex<double>(0.0, 0.0));
     for (int a = 0; a < r; ++a)
     {
         for (int b = 0; b < r; ++b)
         {
-            const std::complex<double> value
+            // dST = D + D^dagger.  Keep the full Hermitian perturbation;
+            // dropping the imaginary part is only valid at Gamma.
+            dST[static_cast<size_t>(a) * r + b]
                 = derivative_overlap[static_cast<size_t>(a) * r + b]
                   + std::conj(derivative_overlap[static_cast<size_t>(b) * r + a]);
-            // The current target backend stores only the real symmetric
-            // projection of alpha^dagger alpha.  Differentiating that same
-            // truncated matrix means taking the real part here; a general
-            // non-Gamma backend must instead carry the Hermitian imaginary
-            // part through the inverse-root derivative.
-            dST[static_cast<size_t>(a) * r + b] = value.real();
         }
     }
-    sym_inv_sqrt_derivative(space.ST, dST, r, dST_inv_root, 1e-10);
+    herm_inv_sqrt_derivative(space.ST, dST, r, dST_inv_root, 1e-10);
 }
 
 void orthogonalize_pw_overlaps_derivative(
     const PwTargetSpace& space,
-    const std::vector<double>& dST_inv_root,
+    const std::vector<std::complex<double>>& dST_inv_root,
     const std::vector<std::complex<double>>& raw,
     const std::vector<std::complex<double>>& d_raw,
     std::vector<std::complex<double>>& orth,
@@ -332,10 +356,14 @@ void orthogonalize_pw_overlaps_derivative(
     {
         for (int b = 0; b < r; ++b)
         {
-            const double g = space.ST_inv_root[static_cast<size_t>(a) * r + b];
-            const double dg = dST_inv_root[static_cast<size_t>(a) * r + b];
-            orth[a] += g * raw[b];
-            d_orth[a] += g * d_raw[b] + dg * raw[b];
+            const std::complex<double> g
+                = space.ST_inv_root[static_cast<size_t>(a) * r + b];
+            const std::complex<double> dg
+                = dST_inv_root[static_cast<size_t>(a) * r + b];
+            // Overlap values rotate with G^H, while target vectors rotate
+            // with G itself.
+            orth[a] += std::conj(g) * raw[b];
+            d_orth[a] += std::conj(g) * d_raw[b] + std::conj(dg) * raw[b];
         }
     }
 }
@@ -430,7 +458,8 @@ void build_pw_alloc_orthogonal_phi(
         }
         for (int b = 0; b < r; ++b)
         {
-            const double g = space.ST_inv_root[static_cast<size_t>(a) * r + b];
+            const std::complex<double> g
+                = space.ST_inv_root[static_cast<size_t>(a) * r + b];
             for (int i = 0; i < nbasis; ++i)
             {
                 phi_orth[a][i] += g * phi[b][i];
@@ -479,7 +508,8 @@ void build_pw_alloc_orthogonal_context(
         }
         for (int b = 0; b < r; ++b)
         {
-            const double g = space.ST_inv_root[static_cast<size_t>(a) * r + b];
+            const std::complex<double> g
+                = space.ST_inv_root[static_cast<size_t>(a) * r + b];
             for (int i = 0; i < nbasis; ++i)
             {
                 context.vphi_orth[a][i] += g * vphi[b][i];

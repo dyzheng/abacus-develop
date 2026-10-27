@@ -1,5 +1,7 @@
 #include "source_estate/module_constraint/alloc_linalg.h"
 
+#include "source_base/module_external/lapack_connector.h"
+
 #include <algorithm>
 #include <cmath>
 #include <numeric>
@@ -231,6 +233,201 @@ void sym_inv_sqrt_derivative(const std::vector<double>& S,
                              * F[static_cast<size_t>(a) * n + b]
                              * C[static_cast<size_t>(a) * n + b]
                              * V[static_cast<size_t>(j) * n + b];
+                }
+            }
+            dSinv_root[static_cast<size_t>(i) * n + j] = value;
+        }
+    }
+}
+
+void herm_eig(const std::vector<std::complex<double>>& A,
+              const int n,
+              std::vector<double>& w,
+              std::vector<std::complex<double>>& V)
+{
+    w.assign(n, 0.0);
+    V.assign(static_cast<size_t>(n) * n, std::complex<double>(0.0, 0.0));
+    // Branch: an empty matrix has no eigenpairs.
+    if (n == 0)
+    {
+        return;
+    }
+    // Guard: the input must be a complete row-major square matrix.
+    if (static_cast<int>(A.size()) != n * n)
+    {
+        throw std::invalid_argument("Hermitian eigendecomposition dimensions differ");
+    }
+
+    // LAPACK uses column-major storage.  Copying the Hermitian transpose is
+    // equivalent to copying A itself after Hermitian symmetrization.
+    std::vector<std::complex<double>> work_matrix(static_cast<size_t>(n) * n);
+    for (int row = 0; row < n; ++row)
+    {
+        for (int col = 0; col < n; ++col)
+        {
+            const std::complex<double> value
+                = 0.5 * (A[static_cast<size_t>(row) * n + col]
+                         + std::conj(A[static_cast<size_t>(col) * n + row]));
+            work_matrix[static_cast<size_t>(col) * n + row] = value;
+        }
+    }
+
+    const char jobz = 'V';
+    const char uplo = 'U';
+    int info = 0;
+    int lwork = -1;
+    std::complex<double> query(0.0, 0.0);
+    std::vector<double> rwork(std::max(1, 3 * n - 2), 0.0);
+    zheev_(&jobz, &uplo, &n, work_matrix.data(), &n, w.data(), &query,
+           &lwork, rwork.data(), &info);
+    // Guard: the workspace query itself must succeed.
+    if (info != 0)
+    {
+        throw std::runtime_error("Hermitian eigendecomposition query failed");
+    }
+    lwork = std::max(1, static_cast<int>(query.real()));
+    std::vector<std::complex<double>> work(lwork);
+    zheev_(&jobz, &uplo, &n, work_matrix.data(), &n, w.data(), work.data(),
+           &lwork, rwork.data(), &info);
+    // Guard: a failed diagonalization cannot define a target space.
+    if (info != 0)
+    {
+        throw std::runtime_error("Hermitian eigendecomposition failed");
+    }
+
+    // Eigenvector i is column i in the column-major LAPACK output.  Convert
+    // it to column i of the row-major eigenvector matrix.
+    for (int i = 0; i < n; ++i)
+    {
+        for (int row = 0; row < n; ++row)
+        {
+            V[static_cast<size_t>(row) * n + i]
+                = work_matrix[static_cast<size_t>(i) * n + row];
+        }
+    }
+}
+
+void herm_inv_sqrt(const std::vector<std::complex<double>>& S,
+                   const int n,
+                   std::vector<std::complex<double>>& Sinv_root,
+                   const double rank_tol)
+{
+    std::vector<double> w;
+    std::vector<std::complex<double>> V;
+    herm_eig(S, n, w, V);
+    Sinv_root.assign(static_cast<size_t>(n) * n,
+                     std::complex<double>(0.0, 0.0));
+    for (int i = 0; i < n; ++i)
+    {
+        // Branch: drop directions below the same numerical-rank threshold
+        // used by the real symmetric backend.
+        const double f = (w[i] > rank_tol) ? 1.0 / std::sqrt(w[i]) : 0.0;
+        for (int row = 0; row < n; ++row)
+        {
+            for (int col = 0; col < n; ++col)
+            {
+                Sinv_root[static_cast<size_t>(row) * n + col]
+                    += V[static_cast<size_t>(row) * n + i] * f
+                       * std::conj(V[static_cast<size_t>(col) * n + i]);
+            }
+        }
+    }
+}
+
+void herm_inv_sqrt_derivative(const std::vector<std::complex<double>>& S,
+                              const std::vector<std::complex<double>>& dS,
+                              const int n,
+                              std::vector<std::complex<double>>& dSinv_root,
+                              const double rank_tol)
+{
+    // Branch: the derivative of an empty matrix is empty.
+    if (n <= 0)
+    {
+        dSinv_root.clear();
+        return;
+    }
+    // Guard: S and dS must describe the same Hermitian matrix space.
+    if (static_cast<int>(S.size()) != n * n
+        || static_cast<int>(dS.size()) != n * n)
+    {
+        throw std::invalid_argument(
+            "Hermitian inverse-sqrt derivative dimensions differ");
+    }
+
+    std::vector<double> w;
+    std::vector<std::complex<double>> V;
+    herm_eig(S, n, w, V);
+
+    // C = V^H dS V in the eigenbasis.  Explicit Hermitian symmetrization
+    // removes round-off skew from the projector-derivative producer.
+    std::vector<std::complex<double>> C(static_cast<size_t>(n) * n,
+                                        std::complex<double>(0.0, 0.0));
+    for (int i = 0; i < n; ++i)
+    {
+        for (int j = 0; j < n; ++j)
+        {
+            std::complex<double> value(0.0, 0.0);
+            for (int a = 0; a < n; ++a)
+            {
+                for (int b = 0; b < n; ++b)
+                {
+                    const std::complex<double> ds
+                        = 0.5
+                          * (dS[static_cast<size_t>(a) * n + b]
+                             + std::conj(dS[static_cast<size_t>(b) * n + a]));
+                    value += std::conj(V[static_cast<size_t>(a) * n + i]) * ds
+                             * V[static_cast<size_t>(b) * n + j];
+                }
+            }
+            C[static_cast<size_t>(i) * n + j] = value;
+        }
+    }
+
+    std::vector<double> F(static_cast<size_t>(n) * n, 0.0);
+    for (int i = 0; i < n; ++i)
+    {
+        for (int j = 0; j < n; ++j)
+        {
+            // Branch: truncated directions are outside the represented
+            // subspace, exactly as in herm_inv_sqrt().
+            if (w[i] <= rank_tol || w[j] <= rank_tol)
+            {
+                continue;
+            }
+            const double fi = 1.0 / std::sqrt(w[i]);
+            const double fj = 1.0 / std::sqrt(w[j]);
+            // Branch: a degenerate pair uses the analytic limit.
+            if (i == j
+                || std::abs(w[i] - w[j])
+                       <= 1e-14 * (std::abs(w[i]) + std::abs(w[j])))
+            {
+                const double midpoint = 0.5 * (w[i] + w[j]);
+                F[static_cast<size_t>(i) * n + j]
+                    = -0.5 / (midpoint * std::sqrt(midpoint));
+            }
+            else
+            {
+                F[static_cast<size_t>(i) * n + j]
+                    = (fi - fj) / (w[i] - w[j]);
+            }
+        }
+    }
+
+    dSinv_root.assign(static_cast<size_t>(n) * n,
+                      std::complex<double>(0.0, 0.0));
+    for (int i = 0; i < n; ++i)
+    {
+        for (int j = 0; j < n; ++j)
+        {
+            std::complex<double> value(0.0, 0.0);
+            for (int a = 0; a < n; ++a)
+            {
+                for (int b = 0; b < n; ++b)
+                {
+                    value += V[static_cast<size_t>(i) * n + a]
+                             * F[static_cast<size_t>(a) * n + b]
+                             * C[static_cast<size_t>(a) * n + b]
+                             * std::conj(V[static_cast<size_t>(j) * n + b]);
                 }
             }
             dSinv_root[static_cast<size_t>(i) * n + j] = value;
