@@ -288,11 +288,12 @@ PwAllocReport report_pw_alloc(const UnitCell& ucell,
     // Each k-pool owns a disjoint set of k-points.  n_T/m_T are already
     // identical within a pool after the projector reduction in cal_becp, so
     // divide by the pool size before summing the pool copies globally.
+    const int npool = GlobalV::KPAR * PARAM.inp.bndpar;
     Parallel_Reduce::reduce_double_allpool(
-        PARAM.inp.kpar, GlobalV::NPROC_IN_POOL, report.n_T.data(),
+        npool, GlobalV::NPROC_IN_POOL, report.n_T.data(),
         static_cast<int>(report.n_T.size()));
     Parallel_Reduce::reduce_double_allpool(
-        PARAM.inp.kpar, GlobalV::NPROC_IN_POOL, report.m_T.data(),
+        npool, GlobalV::NPROC_IN_POOL, report.m_T.data(),
         static_cast<int>(report.m_T.size()));
     for (int iat = 0; iat < ucell.nat; ++iat)
     {

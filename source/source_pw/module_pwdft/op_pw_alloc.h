@@ -8,6 +8,7 @@
 #include "source_psi/psi.h"
 
 #include <complex>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -49,6 +50,8 @@ bool compute_pw_alloc_observables(
 namespace hamilt
 {
 
+class AllocPwCache;
+
 #ifndef ALLOCPW_TEMPLATE_H
 #define ALLOCPW_TEMPLATE_H
 
@@ -79,7 +82,7 @@ class AllocConstraintPW<OperatorPW<T, Device>> : public OperatorPW<T, Device>
     explicit AllocConstraintPW(
         const AllocConstraintPW<OperatorPW<T_in, Device_in>>* op);
 
-    virtual ~AllocConstraintPW() = default;
+    virtual ~AllocConstraintPW();
 
     virtual void init(const int ik_in) override;
 
@@ -99,6 +102,9 @@ class AllocConstraintPW<OperatorPW<T, Device>> : public OperatorPW<T, Device>
     const int* isk = nullptr;
     const UnitCell* ucell = nullptr;
     const ModulePW::PW_Basis_K* wfcpw = nullptr;
+    // The cache is mutable because OperatorPW::act is const but must retain
+    // geometry- and multiplier-keyed target products across band applications.
+    mutable std::unique_ptr<AllocPwCache> cache;
 };
 
 } // namespace hamilt

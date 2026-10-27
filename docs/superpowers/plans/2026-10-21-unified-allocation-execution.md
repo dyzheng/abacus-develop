@@ -876,7 +876,10 @@ TEST(AllocObserveTest, EmptyTargetSetEqualsBecke)
       `|Δm^T|=1.19e-4 μB`、`|ΔM|=1.75e-3 μB`；两边
       `|Σm-tot_mag|<1e-15 μB`。FD 力仍待 PW allocation 算符接线。
 - [ ] 验收：平价表已通过；PW allocation 算符已接入 `HamiltPW` 并通过编译，
-      固定 `fixed_mu` SCF 仍在进行中；FD 力 `<0.0129 eV/Å` 尚未完成。
+      固定 `fixed_mu` SCF 已在 MPI 2/4 进程收敛且读数一致，`kpar=2`
+      跨池短跑无死锁；FD 力 `<0.0129 eV/Å` 尚未完成。本轮缓存、批量归约与
+      `tab_atomic_` 首次消费初始化修复见
+      `docs/superpowers/specs/2026-10-27-s5-pw-cache-mpi.md`。
 
 ### Task S5.2 周期 Hirshfeld 权重后端
 

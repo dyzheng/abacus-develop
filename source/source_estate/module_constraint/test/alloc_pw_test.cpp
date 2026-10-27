@@ -401,14 +401,27 @@ TEST(AllocPwTest, ApplyDeltaHMatchesLcaoKernel)
     std::vector<std::complex<double>> delta;
     alloc::apply_pw_alloc_delta_h(pw_space, phi, psi_c, raw_overlap, vpsi_c,
                                   vphi, m_raw, lambda, delta);
+    alloc::PwAllocOrthogonalContext orthogonal;
+    alloc::build_pw_alloc_orthogonal_context(pw_space, phi, vphi, m_raw,
+                                              orthogonal);
+    std::vector<std::complex<double>> delta_orthogonal;
+    alloc::apply_pw_alloc_delta_h_orthogonal(
+        pw_space, orthogonal, vphi, psi_c, raw_overlap, vpsi_c, lambda,
+        delta_orthogonal);
     double max_diff = 0.0;
+    double max_prepared_diff = 0.0;
     for (int i = 0; i < norb; ++i)
     {
         max_diff = std::max(max_diff,
                             std::abs(delta[i] - std::complex<double>(expected[i], 0.0)));
+        max_prepared_diff = std::max(
+            max_prepared_diff,
+            std::abs(delta_orthogonal[i] - delta[i]));
     }
     printf("alloc_pw apply: max_diff=%.3e\n", max_diff);
+    printf("alloc_pw prepared apply: max_diff=%.3e\n", max_prepared_diff);
     EXPECT_LT(max_diff, 1e-10);
+    EXPECT_LT(max_prepared_diff, 1e-13);
 }
 
 TEST(AllocPwTest, ProjectorTabulationBuildsOverlapAndBecp)

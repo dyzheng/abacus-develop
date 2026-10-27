@@ -6081,3 +6081,59 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   1. 优化目标空间/观测量缓存并重跑固定 `fixed_mu` SCF 至收敛。
   2. 补 PW allocation 单测与开关关闭回归。
   3. SCF 通过后做三点位置 FD 力 `<0.0129 eV/A`。
+
+## 2026-10-27 (S5.1 cache/MPI): PW allocation cache and rank-independent target construction
+
+- **完成内容**：
+  1. `op_pw_alloc.cpp` 增加 `AllocPwCache`：target context 按
+     `(ik, weight_grid, target_l)` 缓存，products 按
+     `(ik, spin, target_generation, lambda)` 缓存；缓存覆盖所有 band 和同一
+     SCF 帧内的重复 Hamiltonian 作用。
+  2. `alloc_pw.cpp` 增加预正交化上下文
+     `phi_orth=phi G`、`vphi_orth=V phi G`、`m_orth=G^T m_raw G`，
+     逐 band 路径只计算新的 band overlap 和向量组合；旧
+     `apply_pw_alloc_delta_h()` 保留为兼容包装。
+  3. 投影 overlap、raw overlap 和完整 `R x R` target matrix 改为一次 pool
+     归约；投影 overlap 的三角矩阵在归约后取上三角镜像。
+  4. `build_target_context()` 在读 `tab_atomic_` 前调用
+     `overlap_proj_psi()`，显式触发 `cal_becp()` 填充 VKB workspace，修复
+     allocation 作为首个 onsite consumer 时的未初始化问题。
+  5. all-pool 归约的 pool 数统一为 `GlobalV::KPAR * PARAM.inp.bndpar`。
+- **验证**（PW 全部 `OMP_NUM_THREADS=1`，只用 MPI 多进程）：
+  - `abacus_basic_para` 构建 PASS；`alloc_pw_mpi{,_2np,_4np}` 3/3 PASS。
+  - 单元测试旧路径/预准备路径：`max_diff=2.082e-17`、`0.000e+00`。
+  - H2O/O-d 固定 `fixed_mu=0.01 Ry`、`np=2` 与 `np=4` 都 17 步收敛：
+    总能 `-442.15878835310752/-442.15878835305523 eV`（差 `5.2e-11 eV`），
+    `q=-0.009999076424/-0.009999076422`，`sum_n=8`，
+    `sum_m=3.12e-15/8.70e-16 mu_B`；`np=4` 不再出现零数值秩错误。
+  - `np=2` SCF 总时间 82 s，`np=4` 51 s；迭代时间 2.1--8.2 s / 1.5--3.8 s，
+    相比未缓存 WIP 的 12--35 s/步显著下降。
+  - `kpar=2`、`np=4`、5 步短跑无死锁；`sum_n=8.00000000`，
+    `sum_m` 与 `tot_mag` 一致（`-9.98780202e-03`），`dsum_m=-3.09e-16`。
+- **Bug/fix list**：
+  1. `OnsiteProjector::tabulate_atomic()` 只设置 `npw_/npwx_`，不填
+     `tab_atomic_`；`tab_atomic_` 实际由 `cal_becp()` 通过 VKB buffer 写入。
+     修复前 `np=4` 在 allocation 是首个 onsite consumer 时读到全零目标行，
+     报 `zero numerical rank (max_ST=0.000000)`。
+  2. 批量投影 overlap 归约只计算上三角；归约后必须镜像伙伴元素，否则矩阵
+     下半部为零、条件数和正交化都错误。该问题已修复并由 MPI 单测覆盖。
+  3. 旧逐元素 collective 和逐 band 目标 FFT 造成 12--35 s/步；缓存和批量
+     归约后恢复到秒级。
+- **文件**：
+  `source/source_estate/module_constraint/{alloc_pw.h,alloc_pw.cpp,
+  test/alloc_pw_test.cpp}`、
+  `source/source_pw/module_pwdft/{op_pw_alloc.h,op_pw_alloc.cpp,
+  alloc_pw_report.cpp}`、
+  `docs/superpowers/specs/2026-10-27-s5-pw-cache-mpi.md`（新建）、执行方案、
+  本日志。
+- **未完成/边界**：
+  - PW allocation 位置 FD 力 `<0.0129 eV/A` 仍未完成；当前 `before_scf()`
+    仍只允许 `calculation=scf`。
+  - 缓存失效键尚未包含显式几何版本；启用 relax/MD 前必须补上。
+  - `kpar=2` 只完成 5 步跨池短跑，完整收敛回归待补。
+  - PW/LCAO 原始 shell 口径差约 `2.2e-3 e`，S5.2 Becke/Hirshfeld 三量对照
+    和 Hirshfeld 应变导数/应力仍未完成。
+- **下一步**：
+  1. 实现 PW 冻结目标位置力并做三点 FD。
+  2. 完整 `kpar=2` 回归与缓存失效的几何键。
+  3. 继续 S5.2 三后端对照和 Hirshfeld 应力。

@@ -122,6 +122,35 @@ PwTargetMoments observe_pw_target_moments(
     const std::vector<double>& occ_dn);
 
 /**
+ * @brief Pre-orthogonalized target-space data for repeated band applications.
+ *
+ * phi_orth = phi G, vphi_orth = V phi G, m_orth = G^T m_raw G.  These objects
+ * depend on the target space and the local potential, but not on the band, so
+ * the PW operator can prepare them once per (ik, spin, lambda) and reuse them
+ * for every band and every Hamiltonian application in one SCF frame.
+ */
+struct PwAllocOrthogonalContext
+{
+    std::vector<std::vector<std::complex<double>>> phi_orth;
+    std::vector<std::vector<std::complex<double>>> vphi_orth;
+    std::vector<std::complex<double>> m_orth;
+};
+
+/**
+ * @brief Build the band-independent orthonormal target products.
+ *
+ * The inputs use the raw-projector basis described by apply_pw_alloc_delta_h.
+ * This routine performs the R x R algebra once; apply_pw_alloc_delta_h_orthogonal
+ * then only evaluates the per-band overlaps and vector combinations.
+ */
+void build_pw_alloc_orthogonal_context(
+    const PwTargetSpace& space,
+    const std::vector<std::vector<std::complex<double>>>& phi,
+    const std::vector<std::vector<std::complex<double>>>& vphi,
+    const std::vector<std::complex<double>>& m_raw,
+    PwAllocOrthogonalContext& context);
+
+/**
  * @brief Apply the design eq. (5.2) allocation correction to one PW band.
  *
  * Inputs are in the raw-projector basis:
@@ -148,6 +177,24 @@ void apply_pw_alloc_delta_h(
     const std::vector<std::complex<double>>& vpsi,
     const std::vector<std::vector<std::complex<double>>>& vphi,
     const std::vector<std::complex<double>>& m_raw,
+    const std::vector<double>& lambda,
+    std::vector<std::complex<double>>& delta);
+
+/**
+ * @brief Per-band stage of apply_pw_alloc_delta_h with prepared target data.
+ *
+ * vphi remains the raw V|alpha> vector because <alpha|V|psi> is evaluated for
+ * each band; the P, V P and P V P terms use context.phi_orth, context.vphi_orth
+ * and context.m_orth.  All pool reductions are batched into one collective per
+ * overlap vector instead of one collective per target.
+ */
+void apply_pw_alloc_delta_h_orthogonal(
+    const PwTargetSpace& space,
+    const PwAllocOrthogonalContext& context,
+    const std::vector<std::vector<std::complex<double>>>& vphi,
+    const std::vector<std::complex<double>>& psi,
+    const std::vector<std::complex<double>>& raw_overlap,
+    const std::vector<std::complex<double>>& vpsi,
     const std::vector<double>& lambda,
     std::vector<std::complex<double>>& delta);
 

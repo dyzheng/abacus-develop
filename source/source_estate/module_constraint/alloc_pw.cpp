@@ -172,6 +172,9 @@ void build_pw_projector_overlap(const std::complex<double>* tab_atomic,
         throw std::invalid_argument("PW projector overlap input is invalid");
     }
     ST.assign(static_cast<size_t>(ntarget) * ntarget, 0.0);
+    std::vector<std::complex<double>> local(
+        static_cast<size_t>(ntarget) * ntarget,
+        std::complex<double>(0.0, 0.0));
     for (int a = 0; a < ntarget; ++a)
     {
         for (int b = a; b < ntarget; ++b)
@@ -182,14 +185,26 @@ void build_pw_projector_overlap(const std::complex<double>* tab_atomic,
                 value += std::conj(tab_atomic[a * npw + ig])
                          * tab_atomic[b * npw + ig];
             }
+            local[static_cast<size_t>(a) * ntarget + b] = value;
+        }
+    }
+    // Reduce all R x R elements in one pool collective.  The previous
+    // per-element reductions serialized R(R+1)/2 collectives per k-point.
 #ifdef __MPI
-            Parallel_Reduce::reduce_pool(value);
+    Parallel_Reduce::reduce_pool(local.data(), static_cast<int>(local.size()));
 #endif
-            // Branch: only accumulate the upper triangle and mirror it after
-            // the pool reduction.
-            const double real = value.real();
+    for (int a = 0; a < ntarget; ++a)
+    {
+        for (int b = 0; b < ntarget; ++b)
+        {
+            // Only the upper triangle was formed locality-by-locality.  Use
+            // the symmetric partner so the reduced matrix is full, not a
+            // triangular matrix with an implicit zero lower half.
+            const int row = (a < b) ? a : b;
+            const int col = (a < b) ? b : a;
+            const double real
+                = local[static_cast<size_t>(row) * ntarget + col].real();
             ST[static_cast<size_t>(a) * ntarget + b] = real;
-            ST[static_cast<size_t>(b) * ntarget + a] = real;
         }
     }
 }
@@ -311,33 +326,36 @@ PwTargetMoments observe_pw_target_moments(
     return result;
 }
 
-void apply_pw_alloc_delta_h(
+void build_pw_alloc_orthogonal_context(
     const PwTargetSpace& space,
     const std::vector<std::vector<std::complex<double>>>& phi,
-    const std::vector<std::complex<double>>& psi,
-    const std::vector<std::complex<double>>& raw_overlap,
-    const std::vector<std::complex<double>>& vpsi,
     const std::vector<std::vector<std::complex<double>>>& vphi,
     const std::vector<std::complex<double>>& m_raw,
-    const std::vector<double>& lambda,
-    std::vector<std::complex<double>>& delta)
+    PwAllocOrthogonalContext& context)
 {
     check_space(space);
     const int r = space.ntarget;
-    const int nbasis = static_cast<int>(psi.size());
-    // Branch: every raw/local band object must share one plane-wave basis.
-    if (static_cast<int>(vpsi.size()) != nbasis
-        || static_cast<int>(raw_overlap.size()) != r
-        || static_cast<int>(phi.size()) != r
-        || static_cast<int>(vphi.size()) != r
-        || static_cast<int>(m_raw.size()) != r * r
-        || static_cast<int>(lambda.size()) != space.nconstraint)
+    // Branch: an empty target set has no orthogonalized products to prepare.
+    if (r == 0)
     {
-        throw std::invalid_argument("PW allocation apply input has wrong dimensions");
+        context.phi_orth.clear();
+        context.vphi_orth.clear();
+        context.m_orth.clear();
+        return;
     }
+    // Branch: all raw target vectors and the overlap matrix must describe one
+    // R x R target space and one common plane-wave basis.
+    if (static_cast<int>(phi.size()) != r
+        || static_cast<int>(vphi.size()) != r
+        || static_cast<int>(m_raw.size()) != r * r)
+    {
+        throw std::invalid_argument("PW allocation target input has wrong dimensions");
+    }
+    const int nbasis = static_cast<int>(phi[0].size());
     for (int a = 0; a < r; ++a)
     {
-        // Branch: target and local-product vectors live in the same basis.
+        // Branch: a target vector with a different basis length cannot be
+        // combined with the per-band wavefunction.
         if (static_cast<int>(phi[a].size()) != nbasis
             || static_cast<int>(vphi[a].size()) != nbasis)
         {
@@ -345,33 +363,10 @@ void apply_pw_alloc_delta_h(
         }
     }
 
-    // Raw <alpha|V|psi> and V|alpha> transformed by G.  The raw overlap is
-    // supplied as becp; the local products come from the caller's grid/FFT
-    // multiply and are never reconstructed here.
-    std::vector<std::complex<double>> o;
-    std::vector<std::complex<double>> braw(r, std::complex<double>(0.0, 0.0));
-    for (int a = 0; a < r; ++a)
-    {
-        for (int i = 0; i < nbasis; ++i)
-        {
-            braw[a] += std::conj(vphi[a][i]) * psi[i];
-        }
-    }
-    // braw is a full-basis overlap <alpha_a|V|psi>.  In PW runs the plane-
-    // wave coefficients are rank-local, so the dot product must be pooled;
-    // otherwise each rank would orthogonalize a partial overlap and the
-    // subsequent low-rank correction would differ between ranks.
-#ifdef __MPI
-    Parallel_Reduce::reduce_pool(braw.data(), r);
-#endif
-    std::vector<std::complex<double>> borth;
-    orthogonalize_pw_overlaps(space, raw_overlap, o);
-    orthogonalize_pw_overlaps(space, braw, borth);
-
-    std::vector<std::vector<std::complex<double>>> phi_orth(
+    context.phi_orth.assign(
         r, std::vector<std::complex<double>>(nbasis,
                                              std::complex<double>(0.0, 0.0)));
-    std::vector<std::vector<std::complex<double>>> vphi_orth(
+    context.vphi_orth.assign(
         r, std::vector<std::complex<double>>(nbasis,
                                              std::complex<double>(0.0, 0.0)));
     for (int a = 0; a < r; ++a)
@@ -381,15 +376,16 @@ void apply_pw_alloc_delta_h(
             const double g = space.ST_inv_root[static_cast<size_t>(a) * r + b];
             for (int i = 0; i < nbasis; ++i)
             {
-                phi_orth[a][i] += g * phi[b][i];
-                vphi_orth[a][i] += g * vphi[b][i];
+                context.phi_orth[a][i] += g * phi[b][i];
+                context.vphi_orth[a][i] += g * vphi[b][i];
             }
         }
     }
 
-    // m' = G^T m_raw G in the orthonormal target basis.
-    std::vector<std::complex<double>> m_orth(
-        static_cast<size_t>(r) * r, std::complex<double>(0.0, 0.0));
+    // m' = G^T m_raw G in the orthonormal target basis.  This R x R product is
+    // band independent, so it is formed once per prepared local potential.
+    context.m_orth.assign(static_cast<size_t>(r) * r,
+                          std::complex<double>(0.0, 0.0));
     for (int a = 0; a < r; ++a)
     {
         for (int b = 0; b < r; ++b)
@@ -404,9 +400,64 @@ void apply_pw_alloc_delta_h(
                              * space.ST_inv_root[static_cast<size_t>(d) * r + b];
                 }
             }
-            m_orth[static_cast<size_t>(a) * r + b] = value;
+            context.m_orth[static_cast<size_t>(a) * r + b] = value;
         }
     }
+}
+
+void apply_pw_alloc_delta_h_orthogonal(
+    const PwTargetSpace& space,
+    const PwAllocOrthogonalContext& context,
+    const std::vector<std::vector<std::complex<double>>>& vphi,
+    const std::vector<std::complex<double>>& psi,
+    const std::vector<std::complex<double>>& raw_overlap,
+    const std::vector<std::complex<double>>& vpsi,
+    const std::vector<double>& lambda,
+    std::vector<std::complex<double>>& delta)
+{
+    check_space(space);
+    const int r = space.ntarget;
+    const int nbasis = static_cast<int>(psi.size());
+    // Branch: every per-band vector and prepared target product must share the
+    // current plane-wave basis and constraint count.
+    if (static_cast<int>(vpsi.size()) != nbasis
+        || static_cast<int>(raw_overlap.size()) != r
+        || static_cast<int>(vphi.size()) != r
+        || static_cast<int>(context.phi_orth.size()) != r
+        || static_cast<int>(context.vphi_orth.size()) != r
+        || static_cast<int>(context.m_orth.size()) != r * r
+        || static_cast<int>(lambda.size()) != space.nconstraint)
+    {
+        throw std::invalid_argument("PW allocation apply input has wrong dimensions");
+    }
+    for (int a = 0; a < r; ++a)
+    {
+        // Branch: raw and prepared target vectors all live in the same basis.
+        if (static_cast<int>(vphi[a].size()) != nbasis
+            || static_cast<int>(context.phi_orth[a].size()) != nbasis
+            || static_cast<int>(context.vphi_orth[a].size()) != nbasis)
+        {
+            throw std::invalid_argument("PW target coefficient vector has wrong length");
+        }
+    }
+
+    // Raw <alpha|V|psi> is evaluated once for the whole target vector and then
+    // pooled once.  The old per-target collectives dominated small-R PW runs.
+    std::vector<std::complex<double>> braw(r, std::complex<double>(0.0, 0.0));
+    for (int a = 0; a < r; ++a)
+    {
+        for (int i = 0; i < nbasis; ++i)
+        {
+            braw[a] += std::conj(vphi[a][i]) * psi[i];
+        }
+    }
+#ifdef __MPI
+    Parallel_Reduce::reduce_pool(braw.data(), r);
+#endif
+    std::vector<std::complex<double>> o;
+    std::vector<std::complex<double>> borth;
+    orthogonalize_pw_overlaps(space, raw_overlap, o);
+    orthogonalize_pw_overlaps(space, braw, borth);
 
     std::vector<std::complex<double>> pvpsi(nbasis,
                                              std::complex<double>(0.0, 0.0));
@@ -420,8 +471,8 @@ void apply_pw_alloc_delta_h(
     {
         for (int i = 0; i < nbasis; ++i)
         {
-            pvpsi[i] += phi_orth[a][i] * borth[a];
-            v_ppsi[i] += vphi_orth[a][i] * o[a];
+            pvpsi[i] += context.phi_orth[a][i] * borth[a];
+            v_ppsi[i] += context.vphi_orth[a][i] * o[a];
         }
     }
     for (int b = 0; b < r; ++b)
@@ -429,11 +480,11 @@ void apply_pw_alloc_delta_h(
         std::complex<double> coefficient(0.0, 0.0);
         for (int a = 0; a < r; ++a)
         {
-            coefficient += m_orth[static_cast<size_t>(b) * r + a] * o[a];
+            coefficient += context.m_orth[static_cast<size_t>(b) * r + a] * o[a];
         }
         for (int i = 0; i < nbasis; ++i)
         {
-            pvp[i] += phi_orth[b][i] * coefficient;
+            pvp[i] += context.phi_orth[b][i] * coefficient;
         }
         const int alpha = space.constraint[b];
         // Branch: unowned targets have no Q_i term in the local multiplier.
@@ -441,7 +492,7 @@ void apply_pw_alloc_delta_h(
         {
             for (int i = 0; i < nbasis; ++i)
             {
-                qlambda[i] += lambda[alpha] * phi_orth[b][i] * o[b];
+                qlambda[i] += lambda[alpha] * context.phi_orth[b][i] * o[b];
             }
         }
     }
@@ -451,6 +502,23 @@ void apply_pw_alloc_delta_h(
     {
         delta[i] = vpsi[i] - pvpsi[i] - v_ppsi[i] + pvp[i] + qlambda[i];
     }
+}
+
+void apply_pw_alloc_delta_h(
+    const PwTargetSpace& space,
+    const std::vector<std::vector<std::complex<double>>>& phi,
+    const std::vector<std::complex<double>>& psi,
+    const std::vector<std::complex<double>>& raw_overlap,
+    const std::vector<std::complex<double>>& vpsi,
+    const std::vector<std::vector<std::complex<double>>>& vphi,
+    const std::vector<std::complex<double>>& m_raw,
+    const std::vector<double>& lambda,
+    std::vector<std::complex<double>>& delta)
+{
+    PwAllocOrthogonalContext context;
+    build_pw_alloc_orthogonal_context(space, phi, vphi, m_raw, context);
+    apply_pw_alloc_delta_h_orthogonal(space, context, vphi, psi, raw_overlap,
+                                      vpsi, lambda, delta);
 }
 
 } // namespace alloc

@@ -17,11 +17,10 @@
 #include <complex>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 namespace alloc
-{
-namespace
 {
 
 struct PwTargetContext
@@ -30,6 +29,9 @@ struct PwTargetContext
     PwTargetSpace space;
     std::vector<std::vector<std::complex<double>>> phi;
 };
+
+namespace
+{
 
 void reduce_pool(std::complex<double>& value)
 {
@@ -82,6 +84,9 @@ bool build_target_context(
     const constraint::WeightGrid& weight_grid,
     const int ik,
     const int target_l,
+    const std::complex<double>* psi,
+    const int nband,
+    const int ld_psi,
     PwTargetContext& context,
     std::string& error)
 {
@@ -95,6 +100,14 @@ bool build_target_context(
         return false;
     }
     onsite_p->tabulate_atomic(ik);
+    // tab_atomic_ is the OnsiteProjector vkb workspace and is only filled by
+    // cal_becp.  Allocation may be the first onsite consumer in a PW run, so
+    // explicitly populate it before reading the projector rows.  The result
+    // is cached in context across all later Hamiltonian applications.
+    if (psi != nullptr && nband > 0)
+    {
+        onsite_p->overlap_proj_psi(nband, psi, ld_psi);
+    }
     const std::complex<double>* tab = onsite_p->get_tab_atomic();
     const int npw = onsite_p->get_npw();
     // Branch: a missing tabulation leaves no plane-wave target vectors.
@@ -171,7 +184,15 @@ bool build_target_context(
     // constrain; this is a rank/configuration failure, not a no-op.
     if (context.space.rank == 0)
     {
-        error = "PW allocation target projector has zero numerical rank";
+        double max_st = 0.0;
+        for (const double value : context.space.ST)
+        {
+            max_st = std::max(max_st, std::abs(value));
+        }
+        error = "PW allocation target projector has zero numerical rank "
+                "(npw=" + std::to_string(npw)
+                + ", ntarget=" + std::to_string(ntarget)
+                + ", max_ST=" + std::to_string(max_st) + ")";
         return false;
     }
     context.npw = npw;
@@ -245,8 +266,22 @@ bool build_target_products(
             {
                 value += std::conj(context.phi[a][ig]) * vphi[b][ig];
             }
-            reduce_pool(value);
             m_raw[static_cast<size_t>(a) * r + b] = value;
+        }
+    }
+    // Pool the complete R x R matrix in one collective.  The per-matrix-element
+    // reductions were a major MPI cost for repeated Hamiltonian applications.
+    {
+        std::vector<double> packed(2 * static_cast<size_t>(r) * r, 0.0);
+        for (size_t i = 0; i < m_raw.size(); ++i)
+        {
+            packed[2 * i] = m_raw[i].real();
+            packed[2 * i + 1] = m_raw[i].imag();
+        }
+        reduce_pool(packed);
+        for (size_t i = 0; i < m_raw.size(); ++i)
+        {
+            m_raw[i] = std::complex<double>(packed[2 * i], packed[2 * i + 1]);
         }
     }
     (void)error;
@@ -265,8 +300,21 @@ void build_raw_overlap(const PwTargetContext& context,
         {
             value += std::conj(context.phi[a][ig]) * psi[ig];
         }
-        reduce_pool(value);
         raw[a] = value;
+    }
+    // One collective for the whole raw target overlap vector.
+    {
+        std::vector<double> packed(2 * raw.size(), 0.0);
+        for (size_t i = 0; i < raw.size(); ++i)
+        {
+            packed[2 * i] = raw[i].real();
+            packed[2 * i + 1] = raw[i].imag();
+        }
+        reduce_pool(packed);
+        for (size_t i = 0; i < raw.size(); ++i)
+        {
+            raw[i] = std::complex<double>(packed[2 * i], packed[2 * i + 1]);
+        }
     }
 }
 
@@ -319,15 +367,16 @@ bool compute_pw_alloc_observables(
             error = "PW allocation observable has no k-point spin label";
             return false;
         }
+        const int nband = psi->get_nbands();
+        const int ld_psi = psi->get_nbasis();
         psi->fix_k(ik);
         PwTargetContext context;
         if (!build_target_context(onsite_p, weight_grid, ik, target_l,
+                                  psi->get_pointer(), nband, ld_psi,
                                   context, error))
         {
             return false;
         }
-        const int nband = psi->get_nbands();
-        const int ld_psi = psi->get_nbasis();
         const int spin_sign = (kv.isk[ik] == 1) ? -1 : 1;
         const std::complex<double>* psi_k = psi->get_pointer();
         for (int alpha = 0; alpha < nconstraint; ++alpha)
@@ -341,6 +390,9 @@ bool compute_pw_alloc_observables(
             {
                 return false;
             }
+            PwAllocOrthogonalContext orthogonal;
+            build_pw_alloc_orthogonal_context(context.space, context.phi,
+                                              vphi, m_raw, orthogonal);
             std::vector<double> lambda(nconstraint, 0.0);
             lambda[alpha] = 1.0;
             for (int band = 0; band < nband; ++band)
@@ -359,11 +411,11 @@ bool compute_pw_alloc_observables(
                     = apply_local_potential(wfcpw, ik, potential,
                                             band_ptr, context.npw);
                 std::vector<std::complex<double>> delta;
-                apply_pw_alloc_delta_h(context.space, context.phi, 
-                                        std::vector<std::complex<double>>(
-                                            band_ptr,
-                                            band_ptr + context.npw),
-                                        raw, vpsi, vphi, m_raw, lambda, delta);
+                apply_pw_alloc_delta_h_orthogonal(
+                    context.space, orthogonal, vphi,
+                    std::vector<std::complex<double>>(band_ptr,
+                                                      band_ptr + context.npw),
+                    raw, vpsi, lambda, delta);
                 std::complex<double> trace(0.0, 0.0);
                 for (int ig = 0; ig < context.npw; ++ig)
                 {
@@ -383,10 +435,11 @@ bool compute_pw_alloc_observables(
     // Every rank in a pool owns the same local k list after the pool
     // reductions above.  Average the identical copies and sum the disjoint
     // k-point sets of different pools.
+    const int npool = GlobalV::KPAR * PARAM.inp.bndpar;
     Parallel_Reduce::reduce_double_allpool(
-        PARAM.inp.kpar, GlobalV::NPROC_IN_POOL, n_alloc.data(), nconstraint);
+        npool, GlobalV::NPROC_IN_POOL, n_alloc.data(), nconstraint);
     Parallel_Reduce::reduce_double_allpool(
-        PARAM.inp.kpar, GlobalV::NPROC_IN_POOL, m_alloc.data(), nconstraint);
+        npool, GlobalV::NPROC_IN_POOL, m_alloc.data(), nconstraint);
     (void)ucell;
     return true;
 }
@@ -396,12 +449,41 @@ bool compute_pw_alloc_observables(
 namespace hamilt
 {
 
+class AllocPwCache
+{
+  public:
+    struct Target
+    {
+        bool valid = false;
+        int ik = -1;
+        const constraint::WeightGrid* weight_grid = nullptr;
+        int target_l = -1;
+        long generation = 0;
+        alloc::PwTargetContext context;
+    };
+
+    struct Product
+    {
+        bool valid = false;
+        int ik = -1;
+        int spin = -1;
+        long target_generation = -1;
+        std::vector<double> lambda;
+        std::vector<std::vector<std::complex<double>>> vphi;
+        alloc::PwAllocOrthogonalContext orthogonal;
+    };
+
+    Target target;
+    Product product;
+};
+
 template <typename T, typename Device>
 AllocConstraintPW<OperatorPW<T, Device>>::AllocConstraintPW(
     const int* isk_in,
     const UnitCell* ucell_in,
     const ModulePW::PW_Basis_K* wfcpw_in)
-    : isk(isk_in), ucell(ucell_in), wfcpw(wfcpw_in)
+    : isk(isk_in), ucell(ucell_in), wfcpw(wfcpw_in),
+      cache(new AllocPwCache())
 {
     this->classname = "AllocConstraintPW";
     this->cal_type = calculation_type::pw_onsite;
@@ -413,11 +495,15 @@ AllocConstraintPW<OperatorPW<T, Device>>::AllocConstraintPW(
     const AllocConstraintPW<OperatorPW<T_in, Device_in>>* op)
     : isk(op->get_isk()),
       ucell(op->get_ucell()),
-      wfcpw(op->get_wfcpw())
+      wfcpw(op->get_wfcpw()),
+      cache(new AllocPwCache())
 {
     this->classname = "AllocConstraintPW";
     this->cal_type = calculation_type::pw_onsite;
 }
+
+template <typename T, typename Device>
+AllocConstraintPW<OperatorPW<T, Device>>::~AllocConstraintPW() = default;
 
 template <typename T, typename Device>
 void AllocConstraintPW<OperatorPW<T, Device>>::init(const int ik_in)
@@ -447,113 +533,151 @@ void AllocConstraintPW<OperatorPW<T, Device>>::act(
     const bool is_first_node) const
 {
     (void)is_first_node;
-    if constexpr (std::is_same<T, std::complex<double>>::value
-                  && std::is_same<Device, base_device::DEVICE_CPU>::value)
+    // Branch: only the double-precision CPU path owns the host projector and
+    // FFT workspace used by the PW allocation algebra.  This is a runtime
+    // branch (not if constexpr) to keep the project C++14-compatible.
+    if (!std::is_same<T, std::complex<double>>::value
+        || !std::is_same<Device, base_device::DEVICE_CPU>::value)
     {
-        // Branch: this operator is inert unless the allocation switch is on.
-        if (!PARAM.inp.constraint || !PARAM.inp.constraint_alloc_switch)
-        {
-            return;
-        }
-        constraint::ConstraintLoop& loop
-            = constraint::ConstraintLoop::instance();
-        // Branch: before the loop is armed (or in the legacy grid mode) the
-        // normal Hamiltonian must remain untouched.
-        if (!loop.enabled() || !loop.allocation_mode())
-        {
-            return;
-        }
-        // Guard: the scalar PW allocation algebra has one component per band.
-        if (npol != 1)
-        {
-            ModuleBase::WARNING_QUIT("AllocConstraintPW::act",
-                "PW allocation currently supports only collinear npol = 1");
-        }
-        // Guard: dipole weights are a global coordinate, not per-atom target
-        // ownership; the allocation backend is not defined for them.
-        if (loop.dipole_constraint())
-        {
-            ModuleBase::WARNING_QUIT("AllocConstraintPW::act",
-                "PW allocation does not support dipole constraints");
-        }
-        // Branch: an empty band range is a valid no-op.
-        if (nbands <= 0)
-        {
-            return;
-        }
-        const int spin = (PARAM.inp.nspin == 2) ? this->isk[this->ik] : 0;
-        // Guard: an unexpected spin label would silently apply the wrong
-        // channel sign to a spin constraint.
-        if (spin != 0 && spin != 1)
-        {
-            ModuleBase::WARNING_QUIT("AllocConstraintPW::act",
-                "PW allocation received an invalid spin label");
-        }
-        const constraint::WeightGrid& wg = loop.weight_grid();
-        // Guard: the FFT potential and Wavefunction grids must coincide; the
-        // constraint configuration already rejects double_grid.
-        if (wg.nrxx() != this->wfcpw->nrxx)
-        {
-            ModuleBase::WARNING_QUIT("AllocConstraintPW::act",
-                "PW allocation weight and wavefunction grids differ");
-        }
+        return;
+    }
+    // Branch: this operator is inert unless the allocation switch is on.
+    if (!PARAM.inp.constraint || !PARAM.inp.constraint_alloc_switch)
+    {
+        return;
+    }
+    constraint::ConstraintLoop& loop
+        = constraint::ConstraintLoop::instance();
+    // Branch: before the loop is armed (or in the legacy grid mode) the
+    // normal Hamiltonian must remain untouched.
+    if (!loop.enabled() || !loop.allocation_mode())
+    {
+        return;
+    }
+    // Guard: the scalar PW allocation algebra has one component per band.
+    if (npol != 1)
+    {
+        ModuleBase::WARNING_QUIT("AllocConstraintPW::act",
+            "PW allocation currently supports only collinear npol = 1");
+    }
+    // Guard: dipole weights are a global coordinate, not per-atom target
+    // ownership; the allocation backend is not defined for them.
+    if (loop.dipole_constraint())
+    {
+        ModuleBase::WARNING_QUIT("AllocConstraintPW::act",
+            "PW allocation does not support dipole constraints");
+    }
+    // Branch: an empty band range is a valid no-op.
+    if (nbands <= 0)
+    {
+        return;
+    }
+    const int spin = (PARAM.inp.nspin == 2) ? this->isk[this->ik] : 0;
+    // Guard: an unexpected spin label would silently apply the wrong
+    // channel sign to a spin constraint.
+    if (spin != 0 && spin != 1)
+    {
+        ModuleBase::WARNING_QUIT("AllocConstraintPW::act",
+            "PW allocation received an invalid spin label");
+    }
+    const constraint::WeightGrid& wg = loop.weight_grid();
+    // Guard: the FFT potential and Wavefunction grids must coincide; the
+    // constraint configuration already rejects double_grid.
+    if (wg.nrxx() != this->wfcpw->nrxx)
+    {
+        ModuleBase::WARNING_QUIT("AllocConstraintPW::act",
+            "PW allocation weight and wavefunction grids differ");
+    }
 
-        std::vector<double> potential;
-        std::vector<double> lambda;
-        std::string error;
-        if (!alloc::build_mu_potential(wg, loop, spin, potential, lambda,
-                                       error))
+    std::vector<double> potential;
+    std::vector<double> lambda;
+    std::string error;
+    if (!alloc::build_mu_potential(wg, loop, spin, potential, lambda,
+                                   error))
+    {
+        ModuleBase::WARNING_QUIT("AllocConstraintPW::act", error);
+    }
+    auto* onsite_p
+        = projectors::OnsiteProjector<double,
+                                      base_device::DEVICE_CPU>::get_instance();
+    // The target space is geometry/ik keyed and independent of lambda.  Reuse
+    // it across every band, CG/Davidson application and unchanged SCF frame.
+    if (!cache->target.valid || cache->target.ik != this->ik
+        || cache->target.weight_grid != &wg
+        || cache->target.target_l != PARAM.inp.constraint_alloc_target_l)
+    {
+        if (!alloc::build_target_context(
+                onsite_p, wg, this->ik,
+                PARAM.inp.constraint_alloc_target_l,
+                reinterpret_cast<const std::complex<double>*>(tmpsi_in),
+                nbands, nbasis,
+                cache->target.context, error))
         {
             ModuleBase::WARNING_QUIT("AllocConstraintPW::act", error);
         }
-        auto* onsite_p
-            = projectors::OnsiteProjector<double,
-                                          base_device::DEVICE_CPU>::get_instance();
-        alloc::PwTargetContext context;
-        if (!alloc::build_target_context(onsite_p, wg, this->ik,
-                                         PARAM.inp.constraint_alloc_target_l,
-                                         context, error))
-        {
-            ModuleBase::WARNING_QUIT("AllocConstraintPW::act", error);
-        }
-        const int npw = ngk_ik > 0 ? ngk_ik : context.npw;
-        // Guard: the operator chain and onsite tabulation must describe one
-        // plane-wave partition.
-        if (npw != context.npw || npw > nbasis)
-        {
-            ModuleBase::WARNING_QUIT("AllocConstraintPW::act",
-                "PW allocation plane-wave partition mismatch");
-        }
-        std::vector<std::vector<std::complex<double>>> vphi;
+        cache->target.valid = true;
+        cache->target.ik = this->ik;
+        cache->target.weight_grid = &wg;
+        cache->target.target_l = PARAM.inp.constraint_alloc_target_l;
+        ++cache->target.generation;
+        // A new target space invalidates every multiplier-dependent product.
+        cache->product.valid = false;
+    }
+    const alloc::PwTargetContext& context = cache->target.context;
+    const int npw = ngk_ik > 0 ? ngk_ik : context.npw;
+    // Guard: the operator chain and onsite tabulation must describe one
+    // plane-wave partition.
+    if (npw != context.npw || npw > nbasis)
+    {
+        ModuleBase::WARNING_QUIT("AllocConstraintPW::act",
+            "PW allocation plane-wave partition mismatch");
+    }
+    // V|alpha>, <alpha|V|beta> and the orthonormal products depend only on the
+    // local potential.  In a fixed-mu frame lambda is bitwise constant, so the
+    // expensive FFTs and R x R algebra run once instead of once per band.
+    if (!cache->product.valid || cache->product.ik != this->ik
+        || cache->product.spin != spin
+        || cache->product.target_generation != cache->target.generation
+        || cache->product.lambda != lambda)
+    {
         std::vector<std::complex<double>> m_raw;
         if (!alloc::build_target_products(*this->wfcpw, this->ik, potential,
-                                          context, vphi, m_raw, error))
+                                          context, cache->product.vphi, m_raw,
+                                          error))
         {
             ModuleBase::WARNING_QUIT("AllocConstraintPW::act", error);
         }
+        alloc::build_pw_alloc_orthogonal_context(
+            context.space, context.phi, cache->product.vphi, m_raw,
+            cache->product.orthogonal);
+        cache->product.valid = true;
+        cache->product.ik = this->ik;
+        cache->product.spin = spin;
+        cache->product.target_generation = cache->target.generation;
+        cache->product.lambda = lambda;
+    }
 
-        for (int ib = 0; ib < nbands; ++ib)
+    for (int ib = 0; ib < nbands; ++ib)
+    {
+        const std::complex<double>* psi_band
+            = reinterpret_cast<const std::complex<double>*>(tmpsi_in)
+              + static_cast<size_t>(ib) * nbasis;
+        std::complex<double>* hpsi_band
+            = reinterpret_cast<std::complex<double>*>(tmhpsi)
+              + static_cast<size_t>(ib) * nbasis;
+        std::vector<std::complex<double>> raw;
+        alloc::build_raw_overlap(context, psi_band, raw);
+        const std::vector<std::complex<double>> vpsi
+            = alloc::apply_local_potential(*this->wfcpw, this->ik,
+                                           potential, psi_band, npw);
+        std::vector<std::complex<double>> delta;
+        alloc::apply_pw_alloc_delta_h_orthogonal(
+            context.space, cache->product.orthogonal, cache->product.vphi,
+            std::vector<std::complex<double>>(psi_band, psi_band + npw),
+            raw, vpsi, lambda, delta);
+        for (int ig = 0; ig < npw; ++ig)
         {
-            const std::complex<double>* psi_band
-                = reinterpret_cast<const std::complex<double>*>(tmpsi_in)
-                  + static_cast<size_t>(ib) * nbasis;
-            std::complex<double>* hpsi_band
-                = reinterpret_cast<std::complex<double>*>(tmhpsi)
-                  + static_cast<size_t>(ib) * nbasis;
-            std::vector<std::complex<double>> raw;
-            alloc::build_raw_overlap(context, psi_band, raw);
-            const std::vector<std::complex<double>> vpsi
-                = alloc::apply_local_potential(*this->wfcpw, this->ik,
-                                               potential, psi_band, npw);
-            std::vector<std::complex<double>> delta;
-            alloc::apply_pw_alloc_delta_h(
-                context.space, context.phi,
-                std::vector<std::complex<double>>(psi_band, psi_band + npw),
-                raw, vpsi, vphi, m_raw, lambda, delta);
-            for (int ig = 0; ig < npw; ++ig)
-            {
-                hpsi_band[ig] += delta[ig];
-            }
+            hpsi_band[ig] += delta[ig];
         }
     }
 }
