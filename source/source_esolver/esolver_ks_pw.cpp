@@ -41,6 +41,8 @@
 
 #include "source_hamilt/module_xc/exx_info.h" // use GlobalC::exx_info
 
+#include <utility>
+
 namespace ModuleESolver
 {
 
@@ -545,6 +547,41 @@ double ESolver_KS_PW<T, Device>::cal_energy()
 template <typename T, typename Device>
 void ESolver_KS_PW<T, Device>::cal_force(UnitCell& ucell, ModuleBase::matrix& force)
 {
+    // S5.1 frozen-target force: form Q_c D Q_c from the final PW bands and
+    // hand it to the shared weight-derivative kernel.  The target projector is
+    // treated as geometry-fixed here; the omitted derivative is quantified by
+    // the finite-difference force test.
+    if (PARAM.inp.constraint && PARAM.inp.constraint_alloc_switch)
+    {
+        constraint::ConstraintLoop& loop
+            = constraint::ConstraintLoop::instance();
+        // Guard: the frozen density is accumulated per k-pool.  The legacy
+        // force kernel only reduces within a pool, so a multi-pool force would
+        // silently omit the other k-points; keep this closure to one pool
+        // until a global density reduction is wired.
+        if (GlobalV::KPAR * PARAM.inp.bndpar > 1)
+        {
+            ModuleBase::WARNING_QUIT("ESolver_KS_PW::cal_force",
+                "PW allocation frozen force currently requires KPAR * bndpar = 1");
+        }
+        // Guard: the force density is meaningful only after the allocation
+        // loop has built its target space and weight field.
+        if (!loop.enabled() || !loop.allocation_mode())
+        {
+            ModuleBase::WARNING_QUIT("ESolver_KS_PW::cal_force",
+                "PW allocation force requires an initialized allocation loop");
+        }
+        std::vector<std::vector<double>> rho_c;
+        std::string error;
+        if (!alloc::compute_pw_alloc_complement_density(
+                this->stp.psi_cpu, this->pelec->wg, this->kv, *this->pw_wfc,
+                PARAM.inp.nspin, loop.weight_grid(),
+                PARAM.inp.constraint_alloc_target_l, rho_c, error))
+        {
+            ModuleBase::WARNING_QUIT("ESolver_KS_PW::cal_force", error);
+        }
+        loop.set_allocation_force_density(std::move(rho_c));
+    }
     Forces<double, Device> ff(ucell.nat);
 
     // mohan add 2025-10-12

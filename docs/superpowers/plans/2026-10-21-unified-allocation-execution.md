@@ -874,12 +874,21 @@ TEST(AllocObserveTest, EmptyTargetSetEqualsBecke)
       代数同目标平价已过（`max_dmT=1.066e-14`，求和差 0）；真实 PW/LCAO
       同电子态数据已接线：H2O/O-d、固定 `fixed_mu=0.01 Ry` 下
       `|Δm^T|=1.19e-4 μB`、`|ΔM|=1.75e-3 μB`；两边
-      `|Σm-tot_mag|<1e-15 μB`。FD 力仍待 PW allocation 算符接线。
-- [ ] 验收：平价表已通过；PW allocation 算符已接入 `HamiltPW` 并通过编译，
-      固定 `fixed_mu` SCF 已在 MPI 2/4 进程收敛且读数一致，`kpar=2`
-      跨池短跑无死锁；FD 力 `<0.0129 eV/Å` 尚未完成。本轮缓存、批量归约与
-      `tab_atomic_` 首次消费初始化修复见
-      `docs/superpowers/specs/2026-10-27-s5-pw-cache-mpi.md`。
+      `|Σm-tot_mag|<1e-15 μB`。
+- [x] 冻结目标位置力：由最终 PW 能带形成 `Q_c D Q_c`，交给共享
+      `constraint_force()` 权重导数核；三点位置 FD 为
+      `-5.6679144 vs -5.6632941 eV/Å`，误差 `0.0046203 eV/Å < 0.0129`。
+      `KPAR * bndpar > 1` 暂显式拒绝。
+- [ ] 完整 PW `∂Q̂`：当前只验证冻结近似 `Q_c ∂W Q_c`。`e_con` 三点直接
+      差分与约束力相差 `0.0026745 eV/Å`，说明 onsite projector/目标旋转项
+      不可忽略；需实现 PW 目标导数后才能把该差值单独闭合。
+- [x] 验收：平价表已通过；PW allocation 算符已接入 `HamiltPW`，固定
+      `fixed_mu` SCF 在 MPI 2/4 进程收敛且读数一致，`kpar=2` 跨池短跑无
+      死锁；冻结目标 FD 力 `<0.0129 eV/Å` 已通过。缓存、批量归约与
+      `tab_atomic_` 首次消费初始化见
+      `docs/superpowers/specs/2026-10-27-s5-pw-cache-mpi.md`；冻结力与
+      `e_con` 边界见
+      `docs/superpowers/specs/2026-10-27-s5-pw-frozen-force.md`。
 
 ### Task S5.2 周期 Hirshfeld 权重后端
 

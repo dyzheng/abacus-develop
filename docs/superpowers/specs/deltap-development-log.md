@@ -6137,3 +6137,49 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   1. 实现 PW 冻结目标位置力并做三点 FD。
   2. 完整 `kpar=2` 回归与缓存失效的几何键。
   3. 继续 S5.2 三后端对照和 Hirshfeld 应力。
+
+## 2026-10-27 (S5.1 force): PW 冻结目标位置力
+
+- **完成内容**：
+  1. `alloc_pw.cpp` 新增 `build_pw_alloc_orthogonal_phi()`，从共享目标空间
+     生成 `phi_orth = phi G`；原预正交化 context 改为复用它。
+  2. `op_pw_alloc.cpp` 新增 `compute_pw_alloc_complement_density()`：逐占据
+     band 形成 `Q_c|psi>`，FFT 到实空间后累计
+     `rho_c[spin] += occupation/omega * |Q_c psi|^2`。
+  3. `ESolver_KS_PW::cal_force()` 在 `Forces::cal_force()` 前构造互补密度，
+     并通过 `ConstraintLoop::set_allocation_force_density()` 交给共享权重
+     导数核；当前显式要求 `KPAR * bndpar = 1`。
+  4. MPI 单测增加分片 `phi_orth` 正交性检查。
+- **验证**（PW 全部 `OMP_NUM_THREADS=1`，只用 MPI）：
+  - `abacus_basic_para` 构建 PASS；`alloc_pw_mpi_2np/_4np` 2/2 PASS，
+    `max_dev` 分别为 `1.554e-15/1.554e-15`。
+  - `np=2` 三点总能：plus/center/minus =
+    `-442.1436610734193/-442.15878837395684/-442.17365438467897 eV`；
+    O-z 总力解析值中心为 `-5.6632940742 eV/A`，FD 为
+    `-5.6679143851 eV/A`，差 `0.0046203 eV/A < 0.0129 eV/A`。
+  - `np=4` 中心能量 `-442.158788373908 eV`，O-z 总力
+    `-5.6632940745 eV/A`；与 `np=2` 一致到 `3e-10 eV/A`。
+  - `e_con` 三点为 `-0.005099502584/-0.005100062102/-0.005100591061 Ry`；
+    其 FD 力 `-2.7986e-3 eV/A` 与冻结约束力 `-1.2405e-4 eV/A` 相差
+    `2.6745e-3 eV/A`。
+- **Bug/fix list**：
+  1. 正交性诊断初版使用复投影数据，`build_pw_projector_overlap()` 只保留
+     实部，导致整矩阵实部正交而虚部反称非零。测试改用当前表示支持的实满秩
+     投影；一般非 Gamma k 点的复数 Hermitian `ST` 列为后续缺口。
+  2. 无生产数值 bug；新增力密度在 2/4 rank 一致。
+- **文件**：
+  `source/source_estate/module_constraint/{alloc_pw.h,alloc_pw.cpp}`、
+  `source/source_pw/module_pwdft/{op_pw_alloc.h,op_pw_alloc.cpp}`、
+  `source/source_esolver/esolver_ks_pw.cpp`、
+  `source/source_estate/test_mpi/alloc_pw_mpi_test.cpp`、
+  `2026-10-27-s5-pw-frozen-force.md`（新建）、执行方案、本日志。
+- **未完成/边界**：
+  - 仅实现冻结近似 `Q_c dW Q_c`；`dQ`/目标旋转项未实现。`e_con` 直接
+    差分与冻结约束力差 `2.67e-3 eV/A`，说明该项必须补。
+  - 总力 FD 通过但总 KS 力约 `-5.66 eV/A`，对新增小约束项不敏感；不能用
+    总力误差宣称冻结约束项已精确验证。
+  - `KPAR * bndpar > 1` 的力路径显式拒绝；`PwTargetSpace` 仍为实 ST。
+- **下一步**：
+  1. 实现 PW `dQ` 与 moving-target 项，并用 `e_con` FD 直接闭合。
+  2. 补互补密度 all-pool 归约，解除 `KPAR * bndpar = 1` 守卫。
+  3. 扩展复数 Hermitian `ST`、PW allocation 应力与完整 `kpar=2` 回归。

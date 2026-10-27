@@ -326,6 +326,48 @@ PwTargetMoments observe_pw_target_moments(
     return result;
 }
 
+void build_pw_alloc_orthogonal_phi(
+    const PwTargetSpace& space,
+    const std::vector<std::vector<std::complex<double>>>& phi,
+    std::vector<std::vector<std::complex<double>>>& phi_orth)
+{
+    check_space(space);
+    const int r = space.ntarget;
+    // Branch: an empty target set has no orthogonalized products to prepare.
+    if (r == 0)
+    {
+        phi_orth.clear();
+        return;
+    }
+    // Branch: every target vector must exist before it can be rotated into
+    // the orthonormal basis.
+    if (static_cast<int>(phi.size()) != r)
+    {
+        throw std::invalid_argument("PW allocation target input has wrong dimensions");
+    }
+    const int nbasis = static_cast<int>(phi[0].size());
+    phi_orth.assign(
+        r, std::vector<std::complex<double>>(nbasis,
+                                             std::complex<double>(0.0, 0.0)));
+    for (int a = 0; a < r; ++a)
+    {
+        // Branch: a target vector with a different basis length cannot be
+        // rotated by the common R x R overlap factor.
+        if (static_cast<int>(phi[a].size()) != nbasis)
+        {
+            throw std::invalid_argument("PW target coefficient vector has wrong length");
+        }
+        for (int b = 0; b < r; ++b)
+        {
+            const double g = space.ST_inv_root[static_cast<size_t>(a) * r + b];
+            for (int i = 0; i < nbasis; ++i)
+            {
+                phi_orth[a][i] += g * phi[b][i];
+            }
+        }
+    }
+}
+
 void build_pw_alloc_orthogonal_context(
     const PwTargetSpace& space,
     const std::vector<std::vector<std::complex<double>>>& phi,
@@ -351,32 +393,24 @@ void build_pw_alloc_orthogonal_context(
     {
         throw std::invalid_argument("PW allocation target input has wrong dimensions");
     }
-    const int nbasis = static_cast<int>(phi[0].size());
-    for (int a = 0; a < r; ++a)
-    {
-        // Branch: a target vector with a different basis length cannot be
-        // combined with the per-band wavefunction.
-        if (static_cast<int>(phi[a].size()) != nbasis
-            || static_cast<int>(vphi[a].size()) != nbasis)
-        {
-            throw std::invalid_argument("PW target coefficient vector has wrong length");
-        }
-    }
-
-    context.phi_orth.assign(
-        r, std::vector<std::complex<double>>(nbasis,
-                                             std::complex<double>(0.0, 0.0)));
+    build_pw_alloc_orthogonal_phi(space, phi, context.phi_orth);
+    const int nbasis = static_cast<int>(context.phi_orth[0].size());
     context.vphi_orth.assign(
         r, std::vector<std::complex<double>>(nbasis,
                                              std::complex<double>(0.0, 0.0)));
     for (int a = 0; a < r; ++a)
     {
+        // Branch: V|alpha> must live in the same plane-wave partition as the
+        // raw target that defines phi_orth.
+        if (static_cast<int>(vphi[a].size()) != nbasis)
+        {
+            throw std::invalid_argument("PW target coefficient vector has wrong length");
+        }
         for (int b = 0; b < r; ++b)
         {
             const double g = space.ST_inv_root[static_cast<size_t>(a) * r + b];
             for (int i = 0; i < nbasis; ++i)
             {
-                context.phi_orth[a][i] += g * phi[b][i];
                 context.vphi_orth[a][i] += g * vphi[b][i];
             }
         }

@@ -47,6 +47,13 @@ void reduce_pool(std::vector<double>& values)
 #endif
 }
 
+void reduce_pool(std::vector<std::complex<double>>& values)
+{
+#ifdef __MPI
+    Parallel_Reduce::reduce_pool(values.data(), static_cast<int>(values.size()));
+#endif
+}
+
 std::vector<std::complex<double>> apply_local_potential(
     const ModulePW::PW_Basis_K& pw,
     const int ik,
@@ -441,6 +448,137 @@ bool compute_pw_alloc_observables(
     Parallel_Reduce::reduce_double_allpool(
         npool, GlobalV::NPROC_IN_POOL, m_alloc.data(), nconstraint);
     (void)ucell;
+    return true;
+}
+
+bool compute_pw_alloc_complement_density(
+    const psi::Psi<std::complex<double>>* psi,
+    const ModuleBase::matrix& occupations,
+    const K_Vectors& kv,
+    const ModulePW::PW_Basis_K& wfcpw,
+    const int nspin,
+    const constraint::WeightGrid& weight_grid,
+    const int target_l,
+    std::vector<std::vector<double>>& rho_c,
+    std::string& error)
+{
+    // Branch: the frozen force uses the same collinear scalar-band density
+    // channels as the allocation observable.
+    if (nspin != 1 && nspin != 2)
+    {
+        error = "PW allocation force supports only nspin 1/2";
+        return false;
+    }
+    // Branch: spinor wavefunctions require a Pauli contraction which this
+    // frozen-target PW closure does not form.
+    if (psi == nullptr || psi->get_npol() != 1)
+    {
+        error = "PW allocation force requires scalar CPU wavefunctions";
+        return false;
+    }
+    // Branch: the force density lives on the same real-space partition as the
+    // weight field; an empty grid cannot be integrated.
+    if (wfcpw.nrxx <= 0)
+    {
+        error = "PW allocation force has an empty density grid";
+        return false;
+    }
+    const int nks = psi->get_nk();
+    // Branch: no k-point means there is no occupied complement density.
+    if (nks <= 0)
+    {
+        error = "PW allocation force has no k-points";
+        return false;
+    }
+    rho_c.assign(nspin, std::vector<double>(wfcpw.nrxx, 0.0));
+    auto* onsite_p
+        = projectors::OnsiteProjector<double,
+                                      base_device::DEVICE_CPU>::get_instance();
+    for (int ik = 0; ik < nks; ++ik)
+    {
+        // Branch: each k-point carries the spin label selecting its density
+        // channel.
+        if (static_cast<int>(kv.isk.size()) <= ik)
+        {
+            error = "PW allocation force has no k-point spin label";
+            return false;
+        }
+        const int spin = (nspin == 2) ? kv.isk[ik] : 0;
+        // Guard: an unexpected spin label would write outside rho_c.
+        if (spin < 0 || spin >= nspin)
+        {
+            error = "PW allocation force has an invalid spin label";
+            return false;
+        }
+        const int nband = psi->get_nbands();
+        const int ld_psi = psi->get_nbasis();
+        psi->fix_k(ik);
+        const std::complex<double>* psi_k = psi->get_pointer();
+        PwTargetContext context;
+        if (!build_target_context(onsite_p, weight_grid, ik, target_l,
+                                  psi_k, nband, ld_psi, context, error))
+        {
+            return false;
+        }
+        std::vector<std::vector<std::complex<double>>> phi_orth;
+        try
+        {
+            build_pw_alloc_orthogonal_phi(context.space, context.phi,
+                                          phi_orth);
+        }
+        catch (const std::invalid_argument& exc)
+        {
+            error = exc.what();
+            return false;
+        }
+        const int r = context.space.ntarget;
+        std::vector<std::complex<double>> work(wfcpw.nmaxgr,
+                                               std::complex<double>(0.0, 0.0));
+        std::vector<std::complex<double>> porter(wfcpw.nmaxgr,
+                                                 std::complex<double>(0.0, 0.0));
+        for (int band = 0; band < nband; ++band)
+        {
+            const double occupation = occupations(ik, band);
+            // Branch: an unoccupied band contributes no density.
+            if (occupation == 0.0)
+            {
+                continue;
+            }
+            const std::complex<double>* band_ptr
+                = psi_k + static_cast<size_t>(band) * ld_psi;
+            std::vector<std::complex<double>> overlap(
+                r, std::complex<double>(0.0, 0.0));
+            for (int a = 0; a < r; ++a)
+            {
+                for (int ig = 0; ig < context.npw; ++ig)
+                {
+                    overlap[a] += std::conj(phi_orth[a][ig]) * band_ptr[ig];
+                }
+            }
+            reduce_pool(overlap);
+            std::fill(work.begin(), work.end(),
+                      std::complex<double>(0.0, 0.0));
+            for (int ig = 0; ig < context.npw; ++ig)
+            {
+                work[ig] = band_ptr[ig];
+            }
+            for (int a = 0; a < r; ++a)
+            {
+                for (int ig = 0; ig < context.npw; ++ig)
+                {
+                    work[ig] -= phi_orth[a][ig] * overlap[a];
+                }
+            }
+            wfcpw.template recip_to_real<std::complex<double>,
+                                         base_device::DEVICE_CPU>(
+                work.data(), porter.data(), ik);
+            const double weight = occupation / wfcpw.omega;
+            for (int ir = 0; ir < wfcpw.nrxx; ++ir)
+            {
+                rho_c[spin][ir] += weight * std::norm(porter[ir]);
+            }
+        }
+    }
     return true;
 }
 

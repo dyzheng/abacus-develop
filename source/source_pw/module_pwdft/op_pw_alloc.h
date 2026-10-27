@@ -45,6 +45,27 @@ bool compute_pw_alloc_observables(
     std::vector<double>& m_alloc,
     std::string& error);
 
+/**
+ * @brief Form the frozen-target complement density Q_c D Q_c on the PW grid.
+ *
+ * The returned rho_c[spin][ir] uses the same electron-density normalization as
+ * ElecStatePW::psiToRho (occupation / omega).  It is rank-local in the same
+ * way as the weight grid, so the shared constraint_force() kernel performs the
+ * pool reduction.  This is the S3 frozen-target force approximation for PW:
+ * the target projectors are treated as geometry-fixed and only the weight
+ * derivative enters the force.
+ */
+bool compute_pw_alloc_complement_density(
+    const psi::Psi<std::complex<double>>* psi,
+    const ModuleBase::matrix& occupations,
+    const K_Vectors& kv,
+    const ModulePW::PW_Basis_K& wfcpw,
+    const int nspin,
+    const constraint::WeightGrid& weight_grid,
+    const int target_l,
+    std::vector<std::vector<double>>& rho_c,
+    std::string& error);
+
 } // namespace alloc
 
 namespace hamilt

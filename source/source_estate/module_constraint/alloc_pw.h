@@ -137,6 +137,19 @@ struct PwAllocOrthogonalContext
 };
 
 /**
+ * @brief Form the orthonormal target vectors phi_orth = phi G.
+ *
+ * This is the band-independent half needed by the frozen-target force, where
+ * only Q_c = I - sum_a |phi_orth_a><phi_orth_a| is required.  Keeping it
+ * separate avoids constructing V phi G and the R x R potential matrix when
+ * the caller only needs the complement projector.
+ */
+void build_pw_alloc_orthogonal_phi(
+    const PwTargetSpace& space,
+    const std::vector<std::vector<std::complex<double>>>& phi,
+    std::vector<std::vector<std::complex<double>>>& phi_orth);
+
+/**
  * @brief Build the band-independent orthonormal target products.
  *
  * The inputs use the raw-projector basis described by apply_pw_alloc_delta_h.
