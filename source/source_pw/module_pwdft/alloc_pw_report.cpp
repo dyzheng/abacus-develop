@@ -316,7 +316,13 @@ void print_pw_alloc_report(const PwAllocReport& report, std::ostream& os)
     os << "[constraint] ALLOC-PW frame=" << report.frame
        << " target_l=" << report.target_l << " ntarget=" << report.ntarget
        << " nband=" << report.nband << " cond=" << report.cond
-       << " rank=" << report.rank;
+       << " rank=" << report.rank
+       // Field semantics (semantic closure 2026-10-28): n_T/m_T are the RAW
+       // onsite shell projection, n/m the Becke spatial integral, and
+       // n_c/m_c = n-n_T / m-m_T is the Becke-minus-raw difference.  The
+       // operator-consistent split q=q_T+q_c is printed separately as
+       // ALLOC-SPLIT by the SCF loop.
+       << " (n_T/m_T=raw shell; n/m=Becke; n_c/m_c=Becke-raw)";
     // Branch: a skipped report prints one explicit reason and no per-atom
     // values, so callers cannot mistake zeros for a real measurement.
     if (!report.supported)

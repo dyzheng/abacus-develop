@@ -6996,3 +6996,34 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   本日志。代码改动（观测量门控）已回退，工作树无源码变更。
 - **下一轮**：暂停性能调参；优先语义闭环（Fe2/LiCl 并列 q、onsite、Becke、
   target_l 敏感性）；若通过再时间盒评估 D6/D7 显式响应层。
+
+## 2026-10-28 (S6.1): Allocation 语义闭环——三分解落地 + 电荷归一化缺陷
+
+- **完成内容**：
+  1. `compute_pw_alloc_observables` 增加可选输出 `n_T/n_c/m_T/m_c`（默认 nullptr，
+     旧调用逐位不变），把代码内部已算的 `q_T=Tr(ρQ_i^orth)` 与
+     `q_c=Tr(ρQ_cW_iQ_c)` 暴露出来；在收敛迭代打印 `ALLOC-SPLIT` 与
+     `dsum_n` 分区审计（默认由 `constraint_alloc_report` 开启）。
+  2. `ALLOC-PW` 报告头标注字段口径：`n_T/m_T=raw shell; n/m=Becke;
+     n_c/m_c=Becke-raw`，消除"m 与 q 矛盾"的误导。
+  3. Fe2 `target_l` 扫描与 LiCl 电荷对照，确定 allocation 坐标语义。
+- **验证/结果**（Fe2-bcc，4 MPI，目标 ±3.8 μB）：
+  - l=2：82 步 CONVERGED，ETOT -6370.610151；`ALLOC-SPLIT`：
+    `m_T=-3.59852, m_c=-0.201498, m=-3.80001` = 审计 `q=-3.800013938`；
+    两原子 `sum_m=tot_mag`。`m_T` 与原始投影相同 ⇒ 正交化不改变子空间迹，
+    `q` 与壳层矩的差全部来自互补。
+  - l=0/1/3：原始投影 ≈0，残差 0.6–1.2 μB，200 步 RUNNING ⇒ 目标集必须
+    承载目标量（Fe 自旋须 d）。
+  - LiCl（delta=0，同一自由密度）：Becke=3.0959 固定；allocation q 随
+    l=0/1/2 为 2.948/3.085/3.028；原始 n_T=2.00/0.74/0.00（Li 无 d）。
+  - DeltaSpin 同靶：13 步、ETOT -6369.985258，与 allocation 差 0.625 eV；
+    二者约束不同算符，能量不可直接比较。
+- **Bug/fix list（新发现，未修）**：Fe2 两片段完整划分下
+  `sum_n=32.3764 vs nelec=32`（`dsum_n=+0.376351`），而 `sum_m` 精确；
+  误差自旋对称 ⇒ 互补积分 `∫w|Q_cψ|²` 的归一化与 `⟨φ|ψ⟩` 不一致，
+  电荷通道存在 ~1.9% 系统误差。与 kpar 无关（kpar=1/2 相同）。
+  修复前 charge allocation 不得进入生产；`dsum_n` 已作为回归守卫打印。
+- **回归**：`ctest -R MODULE_ESTATE_constraint` 23/23 PASS（83.9 s）。
+- **文件**：`module_pwdft/op_pw_alloc.{h,cpp}`、`module_pwdft/alloc_pw_report.cpp`、
+  `esolver_ks_pw.cpp`、`docs/superpowers/specs/2026-10-28-allocation-semantic-closure.md`、本日志。
+- **下一轮**：修互补归一化（目标 `|dsum_n|<1e-8`）；之后才评估 charge allocation 与性能。

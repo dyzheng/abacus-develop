@@ -1029,16 +1029,59 @@ void ESolver_KS_PW<T, Device>::iter_finish(UnitCell& ucell, const int istep, int
             std::vector<double> n_alloc;
             std::vector<double> m_alloc;
             std::string alloc_error;
+            // Semantic-closure diagnostic (opt-in): also return the
+            // operator-consistent decomposition q = q_T + q_c, where q_T is
+            // the orthogonalized target-shell part and q_c the true
+            // complement Tr(rho Q_c W_i Q_c).  The summed q stays the
+            // constrained observable either way.
+            const bool want_split = PARAM.inp.constraint_alloc_report;
+            std::vector<double> n_T;
+            std::vector<double> n_c;
+            std::vector<double> m_T;
+            std::vector<double> m_c;
             if (!alloc::compute_pw_alloc_observables(
                     ucell, this->stp.psi_cpu, this->pelec->wg, this->kv,
                     *this->pw_wfc, PARAM.inp.nspin, cloop.weight_grid(),
                     PARAM.inp.constraint_alloc_target_l, n_alloc, m_alloc,
-                    alloc_error))
+                    alloc_error,
+                    want_split ? &n_T : nullptr,
+                    want_split ? &n_c : nullptr,
+                    want_split ? &m_T : nullptr,
+                    want_split ? &m_c : nullptr))
             {
                 ModuleBase::WARNING_QUIT("ESolver_KS_PW::iter_finish",
                                          alloc_error);
             }
             cloop.observe_allocation(iter, n_alloc, m_alloc);
+            // Print the decomposition only on accepted (converged) states, one
+            // line per constraint.  The values are already pool-reduced and
+            // therefore identical on every rank; print once.
+            if (want_split && conv_esolver && GlobalV::MY_RANK == 0)
+            {
+                GlobalV::ofs_running << "[constraint] ALLOC-SPLIT iter="
+                                     << iter << "\n";
+                double nsum = 0.0;
+                double msum = 0.0;
+                for (size_t a = 0; a < n_alloc.size(); ++a)
+                {
+                    nsum += n_alloc[a];
+                    msum += m_alloc[a];
+                    GlobalV::ofs_running
+                        << "ALLOC-SPLIT c[" << a << "] n_T=" << n_T[a]
+                        << " n_c=" << n_c[a] << " n=" << n_alloc[a]
+                        << " m_T=" << m_T[a] << " m_c=" << m_c[a]
+                        << " m=" << m_alloc[a] << "\n";
+                }
+                // Partition audit: for a fragment list that covers every atom
+                // exactly once, sum_a q_a must equal the electron count.  A
+                // nonzero residual points at the complement normalization (the
+                // spin difference cancels it, the charge sum does not).
+                GlobalV::ofs_running
+                    << "ALLOC-SPLIT audit sum_n=" << nsum
+                    << " nelec=" << PARAM.inp.nelec
+                    << " dsum_n=" << nsum - PARAM.inp.nelec
+                    << " sum_m=" << msum << "\n";
+            }
         }
         // Branch B: the legacy grid mode keeps the real-space Becke reading.
         else

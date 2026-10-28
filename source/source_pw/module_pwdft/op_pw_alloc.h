@@ -44,7 +44,16 @@ bool compute_pw_alloc_observables(
     const int target_l,
     std::vector<double>& n_alloc,
     std::vector<double>& m_alloc,
-    std::string& error);
+    std::string& error,
+    // Optional operator-consistent decomposition (semantic closure 2026-10-28).
+    // n_alloc/m_alloc are the full allocation q = Tr(rho A_i); n_T/m_T are the
+    // orthogonalized target part Tr(rho Q_i^orth); n_c/m_c are the true
+    // complement Tr(rho Q_c W_i Q_c).  Null pointers skip the bookkeeping, so
+    // every existing caller keeps its previous behaviour and cost.
+    std::vector<double>* n_T_out = nullptr,
+    std::vector<double>* n_c_out = nullptr,
+    std::vector<double>* m_T_out = nullptr,
+    std::vector<double>* m_c_out = nullptr);
 
 /**
  * @brief Build the constraint operators in the current band subspace.

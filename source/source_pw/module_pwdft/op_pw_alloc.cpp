@@ -1027,11 +1027,21 @@ bool compute_pw_alloc_observables(
     const int target_l,
     std::vector<double>& n_alloc,
     std::vector<double>& m_alloc,
-    std::string& error)
+    std::string& error,
+    std::vector<double>* n_T_out,
+    std::vector<double>* n_c_out,
+    std::vector<double>* m_T_out,
+    std::vector<double>* m_c_out)
 {
     const int nconstraint = weight_grid.nconstraint();
     n_alloc.assign(nconstraint, 0.0);
     m_alloc.assign(nconstraint, 0.0);
+    // Branch: the optional split buffers are sized once; a null pointer means
+    // the caller only needs the summed allocation q.
+    if (n_T_out != nullptr) { n_T_out->assign(nconstraint, 0.0); }
+    if (n_c_out != nullptr) { n_c_out->assign(nconstraint, 0.0); }
+    if (m_T_out != nullptr) { m_T_out->assign(nconstraint, 0.0); }
+    if (m_c_out != nullptr) { m_c_out->assign(nconstraint, 0.0); }
     // Branch: the observable is defined for the collinear scalar-band path.
     if (nspin != 1 && nspin != 2)
     {
@@ -1163,14 +1173,37 @@ bool compute_pw_alloc_observables(
             reduce_pool(qc_alpha);
             for (int alpha = 0; alpha < nconstraint; ++alpha)
             {
-                q_alpha[alpha] += qc_alpha[alpha];
+                // Semantic closure: q_alpha is the orthogonalized target part
+                // and qc_alpha the complement; their sum is the observable the
+                // constraint enforces.  Keep them separable for the audit.
+                const double q_target = q_alpha[alpha];
+                const double q_compl = qc_alpha[alpha];
+                q_alpha[alpha] = q_target + q_compl;
                 n_alloc[alpha] += occupation * q_alpha[alpha];
+                if (n_T_out != nullptr)
+                {
+                    (*n_T_out)[alpha] += occupation * q_target;
+                }
+                if (n_c_out != nullptr)
+                {
+                    (*n_c_out)[alpha] += occupation * q_compl;
+                }
                 // Branch: only a two-channel collinear run has a spin
                 // difference observable.
                 if (nspin == 2)
                 {
                     m_alloc[alpha]
                         += spin_sign * occupation * q_alpha[alpha];
+                    if (m_T_out != nullptr)
+                    {
+                        (*m_T_out)[alpha]
+                            += spin_sign * occupation * q_target;
+                    }
+                    if (m_c_out != nullptr)
+                    {
+                        (*m_c_out)[alpha]
+                            += spin_sign * occupation * q_compl;
+                    }
                 }
             }
         }
@@ -1183,6 +1216,29 @@ bool compute_pw_alloc_observables(
         npool, GlobalV::NPROC_IN_POOL, n_alloc.data(), nconstraint);
     Parallel_Reduce::reduce_double_allpool(
         npool, GlobalV::NPROC_IN_POOL, m_alloc.data(), nconstraint);
+    // The optional split follows exactly the same target-global / complement
+    // rank-local structure as the summed allocation, so it needs the identical
+    // pool reduction.
+    if (n_T_out != nullptr)
+    {
+        Parallel_Reduce::reduce_double_allpool(
+            npool, GlobalV::NPROC_IN_POOL, n_T_out->data(), nconstraint);
+    }
+    if (n_c_out != nullptr)
+    {
+        Parallel_Reduce::reduce_double_allpool(
+            npool, GlobalV::NPROC_IN_POOL, n_c_out->data(), nconstraint);
+    }
+    if (m_T_out != nullptr)
+    {
+        Parallel_Reduce::reduce_double_allpool(
+            npool, GlobalV::NPROC_IN_POOL, m_T_out->data(), nconstraint);
+    }
+    if (m_c_out != nullptr)
+    {
+        Parallel_Reduce::reduce_double_allpool(
+            npool, GlobalV::NPROC_IN_POOL, m_c_out->data(), nconstraint);
+    }
     (void)ucell;
     return true;
 }
