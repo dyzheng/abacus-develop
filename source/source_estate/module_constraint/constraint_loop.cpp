@@ -1107,6 +1107,60 @@ MuStatus ConstraintLoop::subspace_mu_step(
     return status_;
 }
 
+std::vector<double> ConstraintLoop::preview_allocation_mu(
+    const std::vector<double>& n_alloc,
+    const std::vector<double>& m_alloc) const
+{
+    // Guard: the predictor only has meaning in the constrained phase with a
+    // live outer loop and a complete observable list.
+    if (!enabled() || phase_ != LoopPhase::CONSTRAINED || fixed_mu_
+        || alm_armed_ || n_alloc.size() != mu_.size()
+        || m_alloc.size() != mu_.size())
+    {
+        return mu_;
+    }
+    const std::vector<double> q = allocation_observable(n_alloc, m_alloc);
+    // Branch: an unsupported kind or mismatched size leaves mu unchanged;
+    // this method is read-only and must never abort a diagnostic path.
+    if (q.empty())
+    {
+        return mu_;
+    }
+    std::vector<double> candidate = mu_;
+    mu_solver_.preview_step(q, targets_, mu_, candidate);
+    return candidate;
+}
+
+std::vector<double> ConstraintLoop::allocation_observable(
+    const std::vector<double>& n_alloc,
+    const std::vector<double>& m_alloc) const
+{
+    // Guard: each allocation reading must pair one-to-one with a constraint.
+    if (n_alloc.size() != mu_.size() || m_alloc.size() != mu_.size())
+    {
+        return {};
+    }
+    std::vector<double> q(mu_.size(), 0.0);
+    for (size_t a = 0; a < q.size(); ++a)
+    {
+        // Branch: charge constraints read the allocation charge; spin
+        // constraints read the allocation magnetization.
+        if (kinds_[a] == ConstraintKind::Charge)
+        {
+            q[a] = n_alloc[a];
+        }
+        else if (kinds_[a] == ConstraintKind::Spin)
+        {
+            q[a] = m_alloc[a];
+        }
+        else
+        {
+            return {};
+        }
+    }
+    return q;
+}
+
 void ConstraintLoop::observe_allocation_spin(
     const int iter,
     const std::vector<double>& n_alloc,

@@ -238,6 +238,13 @@ class ConstraintLoop
     bool warm_started_last_init() const { return warm_started_last_init_; }
     // Test-only diagnostic: the solver's retained slope of component i.
     double solver_slope(const int i) const { return mu_solver_.slope(i); }
+    // D2 diagnostic: the outer solver's current Broyden/Jacobian entry,
+    // built only from full-space observations.  Returns 0 outside the trust
+    // path or before the first secant update.
+    double solver_jacobian(const int i, const int j) const
+    {
+        return mu_solver_.jacobian(i, j);
+    }
     // M3 C2 diagnostics: switch, current trust radius [Ry] and cumulative
     // rejected-trial count.  The radius is 0 while the trust path is off.
     bool trust_enabled() const { return cfg_.trust_region; }
@@ -273,6 +280,25 @@ class ConstraintLoop
     // Returns the solver status; targets_ is only valid in CONSTRAINED phase.
     MuStatus subspace_mu_step(const std::vector<double>& n_alloc,
                               const std::vector<double>& m_alloc);
+
+    // Frozen-density predictor for the full-residual acceptance path.  It
+    // maps the subspace observable to a candidate multiplier using the
+    // current full-space Jacobian, but commits nothing: Q_, mu_, status_ and
+    // the MuSolver history are all left untouched.  D2 (2026-10-28) shows
+    // that the frozen-density Jacobian is not a usable substitute for the
+    // full-space one, so the candidate is diagnostic only.
+    std::vector<double> preview_allocation_mu(
+        const std::vector<double>& n_alloc,
+        const std::vector<double>& m_alloc) const;
+
+    // Map per-constraint allocation readings to the observable that actually
+    // enters the outer equation: charge constraints use n_alloc, spin
+    // constraints use m_alloc.  Returns an empty vector on a size/kind
+    // mismatch; callers that need a hard failure use the observe path.
+    std::vector<double> allocation_observable(
+        const std::vector<double>& n_alloc,
+        const std::vector<double>& m_alloc) const;
+
     // M3 E1 diagnostics: number of steps rejected because the total
     // magnetization jumped away from the reference branch.
     int mag_rejections() const { return mag_rejections_; }

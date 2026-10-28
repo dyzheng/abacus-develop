@@ -6784,3 +6784,196 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
      使固定密度 \(A_i\) 子空间只承担初值或预条件器角色。
   3. 清理实验开关的长期维护成本：若后续两轮仍无外层收益，删除精确路径，
      只保留 \(A_i\) 的单元测试/诊断接口。
+
+## 2026-10-28 (S5.12 math): allocation 约束的不动点数学分析
+
+- **完成内容**：
+  1. 新建数学分析文档，把约束问题写成
+     \(F(\rho,\mu)=(\rho-T(\rho,\mu),q(\rho)-t)=0\)，给出约束方向
+     Jacobian 的 Schur 补
+     \(J=Q_\rho(I-T_\rho)^{-1}T_\mu\)，并证明固定密度/冻结 Hamiltonian
+     模型只保留 \(J_0=Q_\rho T_\mu\)，缺少密度响应项。
+  2. 证明占据子空间内、占据数相同条件下的酉旋转不改变占据投影和
+     \(q_i=\operatorname{Tr}(\rho A_i)\)；要改变约束必须混合占据态与空态
+     或改变占据数，因此“固定输出密度只调系数”没有可用控制方向。DeltaSpin
+     的固定内循环实际固定的是输入 Hamiltonian，输出密度仍会变化。
+  3. 将 DeltaSpin 内循环定位为冻结 H 的约束根求解 + stage-2 全空间校正，
+     即块 Gauss-Seidel/多保真预测器；固定密度读数只能作为 trial/预条件器，
+     外层验收必须使用全空间 \(q\)。
+  4. 整理相邻优化问题：约束 KKT/SQP/ALM、PDE 约束优化/最优控制、
+     bilevel/平衡约束优化、Broyden/Newton-Krylov/JFNK、Anderson/DIIS/Pulay、
+     NEPv/约束 DFT、Stiefel/Grassmann 流形、continuation/伪弧长、
+     multi-fidelity/space mapping 与块区域分解。
+  5. 补充结构性问题：\(\sum_iA_i=I\) 导致公共乘子规范零方向；目标集合
+     可能冗余/秩亏；\(q(\mu)\) 可非单调并出现磁支折叠；\(I-T_\rho\) 的
+     条件数决定外层精度和稳定性。
+- **验证**：本轮为纯文档轮，无源码和数值行为变更；已检查公式符号、
+  Markdown 结构和 `git diff --check`。未运行新的物理测试，避免把文档讨论
+  误报为新的数值证据。
+- **文件**：`docs/superpowers/specs/2026-10-28-allocation-fixed-point-mathematics.md`、
+  本日志。
+- **结论**：\(A_i\) 子空间是有效的低层代数模型和预条件器，但不是完整的
+  约束不动点方程；当前 exact subspace 的负结果可由缺失密度响应项解释。
+  若继续实现，应采用“冻结 H 预测 + 全空间 stage-2 + 全空间残差验收”，
+  并显式处理规范零空间、分支跟踪和 Schur/拟 Newton 更新；若仅需 Fe 的
+  局域磁矩约束，native DeltaSpin 仍是当前首选。
+- **下一步**：
+  1. 实现并验证真正的 DeltaSpin 式 trial→stage-2→全空间 \(q\)→外层更新
+     循环，禁止固定密度 \(q\) 直接更新外层 trust/Jacobian。
+  2. 在 Fe2 上用全空间 \(q\) 的有限差分或 Broyden 更新构造
+     \(J_0\) 与 \(J\) 的对比诊断，确认密度响应项的实际量级。
+  3. 对 \(\sum_iA_i=I\) 的约束集合检查 Jacobian 零空间并加入规范投影；
+     对 Fe2 目标扫描用 continuation 记录磁支连续性。
+
+## 2026-10-28 (S5.13 survey review): 优化算法调研的再评估
+
+- **完成内容**：
+  1. 核对 `docs/superpowers/specs/Allocation约束优化算法调研.md`，确认其
+     主体方向正确：平衡约束/缩减空间 Newton、全空间残差验收、规范投影、
+     LM/continuation、多保真预测—校正。
+  2. 在数学分析文档新增“再评估”一节，修正/限定了调研中的若干强断言：
+     - 联合 Anderson 的正确固定点映射是
+       \((\rho,\mu)\mapsto(T(\rho,\mu),\mu-\eta(q(\rho)-t))\)，不是
+       \((T,q)\)；后者不动点是 \(\mu=q\)，不是约束 \(q=t\)。
+     - Neumann 级数只在局部、\(T_\rho\) 谱半径小于 1 时成立；非线性
+       SCF 的 Anderson/Broyden 历史不能直接充作线性响应 Krylov 子空间。
+     - 统一响应成本口径为 \(C_{\rm SCF}\approx N_{\rm scf}C_H\)、
+       \(C_{\rm resp}\approx\kappa C_H\)、
+       \(C_J\approx n_c\kappa C_H\)，调研中两处 \(C_{\rm SCF}\) 口径不一致。
+     - 固定 H 子问题只有在分支内良定义、连续且有明确预条件残差时，才可
+       作为 ASPIN/非线性消除候选；不能自动继承其收敛保证。
+     - 调研的 SQP 展示式漏掉了线性化状态方程；块三角预条件中
+       \(\widehat S\) 应近似 \(J\) 而非 \(-J\)。
+     - output space mapping 只校正零阶偏置，不能自动校正 Jacobian；
+       规范投影只适用于完整的单位分解约束集。
+  3. 明确性能目标（3–10 倍迭代下降、≤2× DeltaSpin）是待验证 benchmark，
+     不是现有 Fe2 数据推出的结论。
+- **验证**：纯文档轮，无源码/数值行为变更；公式环境 50/50 配对，
+  `git diff --check` 通过。未运行新物理测试。
+- **文件**：`docs/superpowers/specs/2026-10-28-allocation-fixed-point-mathematics.md`、
+  `docs/superpowers/specs/Allocation约束优化算法调研.md`（只读核对）、本日志。
+- **结论**：接受调研的“响应层 + 缩减外层 + 多保真 + 分支层”总体框架，
+  但要把“固定 H 子问题”限定为候选生成器/预条件器；下一步应先做全空间
+  残差验收与规范投影，再用 D2/D6 决定是否值得支付响应求解成本。
+
+## 2026-10-28 (S6.2 full-residual acceptance): 固定密度预测与全空间验收解耦
+
+- **完成内容**：
+  1. 新增默认关闭的 `constraint_alloc_full_residual_accept`。开启后，
+     exact 子空间的冻结密度 `Q_sub` 只作为诊断预测器：不写入 `Q_`，不推进
+     `MuSolver` 的 trust/Broyden 历史，也不替换 Hamiltonian 中的已提交
+     `mu`；stage-2 仍在全空间求解，`iter_finish()` 的全空间 `Q_full` 是
+     唯一的外层接受依据。
+  2. 新增 `MuSolver::preview_step()`：无状态地给出候选 `mu`，受当前 trust
+     半径、`step_max` 和分量硬上限约束；不改变 `nsteps`、trust 计数、
+     trust 半径或输入 `mu`。新增 gtest 固定该契约。
+  3. exact 路径记录 `q_sub / mu_committed / mu_preview`，便于后续比较冻结
+     密度预测与全空间响应；默认关闭时旧诊断路径逐位保留。
+  4. 负对照验证了“把预测候选直接安装为 trial”不可行：虽然只让
+     `Q_full` 评分，Fe2 外层步数仍从 6 增至 13，电子迭代从 82 增至 129。
+- **验证/结果**（Fe2-bcc，4 MPI，单线程 OpenMP/BLAS/MKL）：
+  - `exact=0` 基线：82 次电子迭代、6 个外层步、1984 次 hPsi、hPsi
+    9.38 s、墙钟 14 s，`q=-3.800014066/+3.799903209 mu_B`，
+    ETOT `-6370.610151200 eV`，最大残差 `9.68e-5 mu_B`。
+  - `exact=1 + full_residual_accept=1`：85 次迭代、6 个外层步、3063 次
+    hPsi、hPsi 12.01 s、墙钟 21 s，`q=-3.799949497/+3.799961372 mu_B`，
+    ETOT `-6370.610151207 eV`，最大残差 `5.05e-5 mu_B`；
+    `dsum_n=8.71e-11`、`dsum_m=-3.46e-15`。
+  - 负对照（预测候选直接作为 trial）：129 次迭代、13 个外层步、3125 次
+    hPsi、墙钟 27 s、3 次 trust 拒绝，ETOT 仍正确
+    `-6370.610150858 eV`，但效率明显恶化。
+  - 回归：`ctest --test-dir build -R MODULE_ESTATE_constraint` 23/23 PASS；
+    `MODULE_ESTATE_constraint_mu_solver` 新增 `PreviewDoesNotCommitState`。
+- **Bug/fix list**：
+  1. 首版把 `mu_preview` 安装为 stage-2 trial，并声称 trust 已按全空间
+     `Q` 评分；结果数学上未污染历史，但候选质量差，外层步数翻倍。改为仅
+     诊断、不提交。
+  2. 输入说明最初写成“trial 会被安装”，与安全实现不一致；已同步为
+     “预测器只做诊断，stage-2 保持已提交 `mu`”。
+- **文件**：`source/source_estate/module_constraint/mu_solver.{h,cpp}`、
+  `source/source_estate/module_constraint/constraint_loop.{h,cpp}`、
+  `source/source_estate/module_constraint/test/mu_solver_test.cpp`、
+  `source/source_esolver/esolver_ks_pw.cpp`、
+  `source/source_io/module_parameter/{input_parameter.h,read_input_item_other.cpp}`、
+  `docs/superpowers/specs/2026-10-28-allocation-full-residual-accept.md`、本日志。
+- **结论**：全空间残差验收基线成立，固定密度 `Q_sub` 不能直接充当外层
+  proposal。exact 子空间当前仍是诊断/正确性路径，成本约为基线的 1.5 倍，
+  没有加速收益；若继续优化，必须先做 `Q_sub` 的零阶偏置校正（output-space
+  mapping）或直接估计完整 `J`，并在 Fe2/LiCl 上同时记录 predicted/actual
+  reduction。
+- **下一步**：
+  1. 记录同一 `mu` 下 `Q_sub` 与 `Q_full`，估计 `b=Q_full-Q_sub`，测试
+     偏置校正后的预测器能否减少外层步数。
+  2. 用有限差分或 Broyden 全空间历史对比 `J0=Q_rho T_mu` 与完整 Schur 补
+     `J`，量化密度响应项。
+  3. 若 exact 子空间仅作 warm start，改用 DeltaSpin 式 `becp + 局域积分`
+     构造 `A_i` 子空间，避免每轮重建全部矩阵。
+
+## 2026-10-28 (S5.13): predictor 旋转修正、output-space mapping 与 D2
+
+- **完成内容**：
+  1. 修正 predictor-commit 的关键缺陷：`set_allocation_trial_mu()` 之后
+     没有把 psi 旋转到 trial，stage-2 初值仍属于 `mu_start`。现在提交
+     trial 后执行 `rotate_at_mu(trial)`、刷新占据数并记录
+     `q_sub(trial)`，再做全空间求解。
+  2. 在修正后的代码上重跑 Fe2 的 `alpha=1.0/0.5/0.25` 阻尼实验，并与
+     同二进制、同输入的生产基线 `exact=0` 和安全版
+     `exact=1 + full_residual_accept=1` 对照。
+  3. 修正 `Q_sub/Q_full` 的配对：审计行的 `q` 属于**上一次** `mu`，不能与
+     同一行打印的新 `mu` 直接配对；改为 `Q_sub(mu_k)` 对下一次外层步的
+     `Q_full`。
+  4. 测试零阶 output-space mapping：`Q_sub_corr = Q_sub + b_prev`，
+     `b_prev = Q_full(mu_{k-1}) - Q_sub(mu_{k-1})`。
+  5. 新增默认关闭的 `constraint_alloc_jacobian_probe`：在固定密度下对每个
+     `mu` 分量做 `+/-1e-3 Ry` 中心差分，打印 `J0=dQ_sub/dmu`、外层
+     Broyden `JB` 及 `||JB-J0||/||JB||`；探针结束后恢复 psi、占据数、
+     `mu` 和 `n_alloc/m_alloc`，不改变 SCF。
+  6. 删除无收益的 `constraint_alloc_predictor_commit` 与
+     `constraint_alloc_predictor_damping` 输入项及求解分支；保留
+     `preview_allocation_mu()` 的无状态诊断和安全版全空间验收。
+- **验证/结果**（Fe2-bcc，4 MPI，单线程 OpenMP/BLAS/MKL）：
+  - 生产基线 `exact=0`：82 次迭代、1984 次 hPsi、墙钟 16 s，
+    ETOT `-6370.610151200478 eV`，最大残差 `1.41e-5 mu_B`。
+  - 安全版 `exact=1 + full_residual_accept=1`：85 次迭代、5 次 exact
+    子空间调用、3063 次 hPsi、墙钟 19 s，
+    ETOT `-6370.610151207196 eV`，最大残差 `5.05e-5 mu_B`。
+  - 修正后 `alpha=1.0`：129 次迭代、12 次 exact 调用、3125 次 hPsi、
+    25 s，ETOT `-6370.610150858 eV`，残差 `5.52e-5`；仍明显慢于安全版。
+  - `alpha=0.5`：84 次迭代、8 次 exact 调用、2178 次 hPsi、19 s，
+    ETOT `-6370.610430847 eV`；比基线低 0.28 meV，落在另一状态。
+  - `alpha=0.25`：186 次迭代、6 次 exact 调用、6100 次 hPsi、37 s，
+    `BUDGET_FREEZE`，残差 `8.80e-4`，未通过验收。
+  - output-space mapping：`b_prev` 校正只在末段略有改善，在 `mu_3`、
+    `mu_4` 明显变差；`b` 在不同外层步之间变号且量级变化大。
+  - D2：第一次有效 Broyden 更新后
+    `||JB-J0||/||JB|| = 0.45–3.18`（第 2–5 步），远高于调研文档的
+    0.1 门槛；`J0` 从约 `-20` 变到约 `-0.3`，且缺少 `JB` 的大离对角
+    耦合。
+  - 回归：`ctest --test-dir build -R MODULE_ESTATE_constraint` 23/23 PASS。
+- **Bug/fix list**：
+  1. predictor-commit 安装 trial 后未旋转 psi，导致旧 alpha 实验测的是
+     “只改 Hamiltonian、不改初值”，`alpha=1.0` 的 180 次迭代/预算冻结
+     是伪结果；修正后为 129 次迭代并收敛。
+  2. `Q_sub/Q_full` 早期按同一审计行配对，错位了一个 `mu`；本轮的
+     `b` 表已按“`Q_sub(mu_k)` 对下一次 `Q_full`”重算。
+  3. 零阶 output-space mapping 不是稳定校正；没有实现为代码路径。
+  4. `J0` 探针必须刷新占据数后再读取子空间可观测量，否则中心差分只含
+     波函数旋转、不含 Fermi 填充变化；实现中已对 `+h`、`-h` 和恢复点
+     都调用 `calculate_weights()`。
+- **文件**：`source/source_esolver/esolver_ks_pw.cpp`、
+  `source/source_estate/module_constraint/constraint_loop.h`、
+  `source/source_io/module_parameter/{input_parameter.h,read_input_item_other.cpp}`、
+  `docs/superpowers/specs/2026-10-28-allocation-full-residual-accept.md`、
+  本日志。
+- **结论**：修正 psi 旋转后 predictor-commit 仍无可复现收益；D2 明确显示
+  冻结密度 `J0` 缺失的密度响应在量级上与全空间 Jacobian 相当，不能用
+  零阶偏置或阻尼补上。该实验路径已删除，生产推荐仍是
+  `exact=0 + subspace_rotation=1`。Fe2 上 allocation 约 82 次迭代/16 s，
+  纯 DeltaSpin 约 13 次/4 s，效率差距没有缩小。
+- **下一步**：
+  1. 停止在冻结密度预测器上调参；若继续追求外层加速，进入显式响应层
+     （D6/D7：`(I-T_rho)^(-1)` 的 Krylov 成本与 `J` 条件数）。
+  2. 任何后续性能比较必须同时记录最终 `q`、ETOT 和磁支，避免把“换到
+     另一个解”误判为加速。
+  3. exact 子空间仅保留为正确性基线；若还要降低其成本，改用 DeltaSpin
+     式 `becp + 局域积分` 构造 `A_i`，而不是每轮重建全部矩阵。

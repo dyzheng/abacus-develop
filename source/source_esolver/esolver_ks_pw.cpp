@@ -1,5 +1,7 @@
 #include "esolver_ks_pw.h"
 
+#include <cmath>
+
 #include "source_estate/cal_ux.h"
 #include "source_estate/elecstate_pw.h"
 #include "source_estate/elecstate_tools.h"
@@ -599,72 +601,237 @@ void ESolver_KS_PW<T, Device>::hamilt2rho_single(UnitCell& ucell, const int iste
                     this->pelec->eferm, this->pelec->f_en,
                     this->pelec->nelec_spin, this->pelec->skip_weights);
                 evaluate_subspace_observable(rotations, n_alloc, m_alloc);
+                // D2 diagnostic: at fixed density, perturb each multiplier
+                // component by +/-h and measure the frozen-density observable.
+                // The resulting J0 = dQ_sub/dmu is compared with the outer
+                // Broyden Jacobian, which is built only from full-space Q.
+                // psi, occupations, mu and n_alloc/m_alloc are restored
+                // below, so the probe cannot change the SCF trajectory.
+                if (PARAM.inp.constraint_alloc_jacobian_probe
+                    && nconstraint > 0)
+                {
+                    const double probe_h = 1.0e-3;
+                    std::vector<std::vector<double>> j0(
+                        nconstraint, std::vector<double>(nconstraint, 0.0));
+                    for (int col = 0; col < nconstraint; ++col)
+                    {
+                        std::vector<double> mu_plus = mu_start;
+                        std::vector<double> mu_minus = mu_start;
+                        mu_plus[col] += probe_h;
+                        mu_minus[col] -= probe_h;
+                        std::vector<double> n_plus;
+                        std::vector<double> m_plus;
+                        std::vector<double> n_minus;
+                        std::vector<double> m_minus;
+                        rotate_at_mu(mu_plus);
+                        elecstate::calculate_weights(
+                            this->pelec->ekb, this->pelec->wg,
+                            this->pelec->klist, this->pelec->eferm,
+                            this->pelec->f_en, this->pelec->nelec_spin,
+                            this->pelec->skip_weights);
+                        evaluate_subspace_observable(rotations, n_plus, m_plus);
+                        rotate_at_mu(mu_minus);
+                        elecstate::calculate_weights(
+                            this->pelec->ekb, this->pelec->wg,
+                            this->pelec->klist, this->pelec->eferm,
+                            this->pelec->f_en, this->pelec->nelec_spin,
+                            this->pelec->skip_weights);
+                        evaluate_subspace_observable(rotations, n_minus,
+                                                     m_minus);
+                        const std::vector<double> q_plus
+                            = cloop.allocation_observable(n_plus, m_plus);
+                        const std::vector<double> q_minus
+                            = cloop.allocation_observable(n_minus, m_minus);
+                        // Branch: a size mismatch means the observable could
+                        // not be mapped to the constraint list; leave this
+                        // column zero instead of indexing an empty vector.
+                        if (static_cast<int>(q_plus.size()) == nconstraint
+                            && static_cast<int>(q_minus.size())
+                                   == nconstraint)
+                        {
+                            for (int row = 0; row < nconstraint; ++row)
+                            {
+                                j0[row][col]
+                                    = (q_plus[row] - q_minus[row])
+                                      / (2.0 * probe_h);
+                            }
+                        }
+                    }
+                    // Branch: restore the committed multiplier so the
+                    // predictor and the downstream solve see mu_start.
+                    rotate_at_mu(mu_start);
+                    elecstate::calculate_weights(
+                        this->pelec->ekb, this->pelec->wg, this->pelec->klist,
+                        this->pelec->eferm, this->pelec->f_en,
+                        this->pelec->nelec_spin, this->pelec->skip_weights);
+                    evaluate_subspace_observable(rotations, n_alloc, m_alloc);
+                    // Relative Frobenius difference between the frozen-density
+                    // model and the outer full-space Jacobian.  A zero outer
+                    // Jacobian means the secant history is still empty.
+                    double num = 0.0;
+                    double den = 0.0;
+                    for (int row = 0; row < nconstraint; ++row)
+                    {
+                        for (int col = 0; col < nconstraint; ++col)
+                        {
+                            const double jb = cloop.solver_jacobian(row, col);
+                            num += (jb - j0[row][col]) * (jb - j0[row][col]);
+                            den += jb * jb;
+                        }
+                    }
+                    const double rel
+                        = (den > 0.0) ? std::sqrt(num / den) : -1.0;
+                    GlobalV::ofs_running << "[constraint] ALLOC-PW J0=(";
+                    for (int row = 0; row < nconstraint; ++row)
+                    {
+                        for (int col = 0; col < nconstraint; ++col)
+                        {
+                            GlobalV::ofs_running
+                                << ((row == 0 && col == 0) ? "" : ",")
+                                << j0[row][col];
+                        }
+                    }
+                    GlobalV::ofs_running << ") JB=(";
+                    for (int row = 0; row < nconstraint; ++row)
+                    {
+                        for (int col = 0; col < nconstraint; ++col)
+                        {
+                            GlobalV::ofs_running
+                                << ((row == 0 && col == 0) ? "" : ",")
+                                << cloop.solver_jacobian(row, col);
+                        }
+                    }
+                    GlobalV::ofs_running
+                        << ") rel_diff=" << rel
+                        << " (J0=dQ_sub/dmu, JB=full-space Broyden)\n";
+                }
                 constraint::MuStatus exact_status
                     = constraint::MuStatus::RUNNING;
-                for (int inner = 0; inner < max_inner; ++inner)
+                const bool full_residual_accept
+                    = PARAM.inp.constraint_alloc_full_residual_accept;
+                // Branch A: full-residual acceptance.  The frozen-density
+                // subspace is evaluated for diagnostics only: the outer
+                // multiplier (mu_start, already installed in the Hamiltonian)
+                // is kept for stage-2, and only the subsequent full-space Q
+                // may update trust/Broyden/convergence.  The previous
+                // experiment that installed the predictor itself as the trial
+                // doubled the outer-step count on Fe2, so the predictor is not
+                // allowed to replace the full-space proposal.
+                if (full_residual_accept)
                 {
-                    exact_status
-                        = cloop.subspace_mu_step(n_alloc, m_alloc);
+                    const std::vector<double> candidate
+                        = cloop.preview_allocation_mu(n_alloc, m_alloc);
+                    const std::vector<double> q_sub
+                        = cloop.allocation_observable(n_alloc, m_alloc);
                     GlobalV::ofs_running
-                        << "[constraint] ALLOC-PW exact inner " << inner
-                        << " status=" << static_cast<int>(exact_status)
-                        << " q=(";
+                        << "[constraint] ALLOC-PW predictor q_sub=(";
+                    for (int alpha = 0; alpha < nconstraint; ++alpha)
+                    {
+                        // Branch: an unavailable observable is logged as nan
+                        // rather than indexing an empty diagnostic vector.
+                        if (static_cast<int>(q_sub.size()) == nconstraint)
+                        {
+                            GlobalV::ofs_running << (alpha == 0 ? "" : ",")
+                                                 << q_sub[alpha];
+                        }
+                        else
+                        {
+                            GlobalV::ofs_running << (alpha == 0 ? "" : ",")
+                                                 << "nan";
+                        }
+                    }
+                    GlobalV::ofs_running << ") mu_committed=(";
                     for (int alpha = 0; alpha < nconstraint; ++alpha)
                     {
                         GlobalV::ofs_running << (alpha == 0 ? "" : ",")
-                                             << n_alloc[alpha];
+                                             << mu_start[alpha];
                     }
-                    GlobalV::ofs_running << ") m=(";
+                    GlobalV::ofs_running << ") mu_preview=(";
                     for (int alpha = 0; alpha < nconstraint; ++alpha)
                     {
                         GlobalV::ofs_running << (alpha == 0 ? "" : ",")
-                                             << m_alloc[alpha];
+                                             << candidate[alpha];
                     }
-                    GlobalV::ofs_running << ") mu=(";
-                    for (int alpha = 0; alpha < nconstraint; ++alpha)
-                    {
-                        GlobalV::ofs_running << (alpha == 0 ? "" : ",")
-                                             << cloop.mu_eff()[alpha];
-                    }
-                    GlobalV::ofs_running << ")\n";
-                    // Branch: a converged or unreachable multiplier needs no
-                    // further trial; the current psi already belongs to the
-                    // last observed mu only if it was rotated there.
-                    if (exact_status != constraint::MuStatus::RUNNING)
-                    {
-                        break;
-                    }
-                    const std::vector<double> mu_trial = cloop.mu_eff();
-                    rotate_at_mu(mu_trial);
-                    rotated_mu = mu_trial;
-                    // Branch: subspace diagonalization changes the band
-                    // energies, so occupations must follow the new spectrum
-                    // before the constraint observable is measured.  This is
-                    // the same weight update DeltaSpin performs after each
-                    // fixed-density rotation.
-                    elecstate::calculate_weights(
-                        this->pelec->ekb, this->pelec->wg,
-                        this->pelec->klist, this->pelec->eferm,
-                        this->pelec->f_en, this->pelec->nelec_spin,
-                        this->pelec->skip_weights);
-                    evaluate_subspace_observable(rotations, n_alloc, m_alloc);
-                    ++inner_done;
+                    GlobalV::ofs_running
+                        << "): diagnostic only; stage-2 keeps mu_committed "
+                           "and acceptance uses full-space Q\n";
+                    // The psi rotation at mu_start above is the only stage-1
+                    // work used by the solve; no frozen-density Q is committed.
+                    inner_done = 1;
                 }
-                // Branch: the last permitted mu update was not followed by a
-                // rotation inside the loop.  Rotate once so the density and
-                // eigenvalues correspond to the multiplier that will be
-                // audited.
-                if (cloop.mu_eff() != rotated_mu)
+                else
                 {
-                    rotate_at_mu(cloop.mu_eff());
-                    // Branch: the trailing rotation also changes the
-                    // spectrum; refresh occupations before density rebuild.
-                    elecstate::calculate_weights(
-                        this->pelec->ekb, this->pelec->wg,
-                        this->pelec->klist, this->pelec->eferm,
-                        this->pelec->f_en, this->pelec->nelec_spin,
-                        this->pelec->skip_weights);
-                    ++inner_done;
+                    // Branch B: legacy diagnostic path.  The frozen-density
+                    // Q is committed directly to the outer MuSolver; this is
+                    // kept only for reproducing the 2026-10-28 experiment.
+                    for (int inner = 0; inner < max_inner; ++inner)
+                    {
+                        exact_status
+                            = cloop.subspace_mu_step(n_alloc, m_alloc);
+                        GlobalV::ofs_running
+                            << "[constraint] ALLOC-PW exact inner " << inner
+                            << " status=" << static_cast<int>(exact_status)
+                            << " q=(";
+                        for (int alpha = 0; alpha < nconstraint; ++alpha)
+                        {
+                            GlobalV::ofs_running << (alpha == 0 ? "" : ",")
+                                                 << n_alloc[alpha];
+                        }
+                        GlobalV::ofs_running << ") m=(";
+                        for (int alpha = 0; alpha < nconstraint; ++alpha)
+                        {
+                            GlobalV::ofs_running << (alpha == 0 ? "" : ",")
+                                                 << m_alloc[alpha];
+                        }
+                        GlobalV::ofs_running << ") mu=(";
+                        for (int alpha = 0; alpha < nconstraint; ++alpha)
+                        {
+                            GlobalV::ofs_running << (alpha == 0 ? "" : ",")
+                                                 << cloop.mu_eff()[alpha];
+                        }
+                        GlobalV::ofs_running << ")\n";
+                        // Branch: a converged or unreachable multiplier needs
+                        // no further trial; the current psi already belongs
+                        // to the last observed mu only if it was rotated
+                        // there.
+                        if (exact_status != constraint::MuStatus::RUNNING)
+                        {
+                            break;
+                        }
+                        const std::vector<double> mu_trial = cloop.mu_eff();
+                        rotate_at_mu(mu_trial);
+                        rotated_mu = mu_trial;
+                        // Branch: subspace diagonalization changes the band
+                        // energies, so occupations must follow the new
+                        // spectrum before the constraint observable is
+                        // measured.  This is the same weight update DeltaSpin
+                        // performs after each fixed-density rotation.
+                        elecstate::calculate_weights(
+                            this->pelec->ekb, this->pelec->wg,
+                            this->pelec->klist, this->pelec->eferm,
+                            this->pelec->f_en, this->pelec->nelec_spin,
+                            this->pelec->skip_weights);
+                        evaluate_subspace_observable(rotations, n_alloc,
+                                                     m_alloc);
+                        ++inner_done;
+                    }
+                    // Branch: the last permitted mu update was not followed
+                    // by a rotation inside the loop.  Rotate once so the
+                    // density and eigenvalues correspond to the multiplier
+                    // that will be audited.
+                    if (cloop.mu_eff() != rotated_mu)
+                    {
+                        rotate_at_mu(cloop.mu_eff());
+                        // Branch: the trailing rotation also changes the
+                        // spectrum; refresh occupations before density
+                        // rebuild.
+                        elecstate::calculate_weights(
+                            this->pelec->ekb, this->pelec->wg,
+                            this->pelec->klist, this->pelec->eferm,
+                            this->pelec->f_en, this->pelec->nelec_spin,
+                            this->pelec->skip_weights);
+                        ++inner_done;
+                    }
                 }
                 GlobalV::ofs_running
                     << "[constraint] ALLOC-PW exact subspace at SCF iteration "

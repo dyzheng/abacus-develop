@@ -1889,6 +1889,30 @@ Manual override is allowed: if sc_acceleration_mode is explicitly set, it takes 
         this->add_item(item);
     }
     {
+        Input_Item item("constraint_alloc_full_residual_accept");
+        item.annotation = "PW allocation: fixed-density predictor, full-space acceptance";
+        item.category = "Constraint";
+        item.type = "Boolean";
+        item.description = "Experimental PW allocation safeguard. When true, the exact-subspace fast path evaluates the frozen-density observable only as a diagnostic predictor and never commits it to the outer MuSolver or to the Hamiltonian trial. The committed outer multiplier is kept for the stage-2 full-space solve, and only the full-space Q from iter_finish updates trust/Broyden history and convergence. This prevents the fixed-density Q from polluting the outer model; it is a correctness baseline, not a speedup. Requires constraint_alloc_subspace_rotation and is most useful with constraint_alloc_exact_subspace; default false keeps the previous diagnostic path.";
+        item.default_value = "False";
+        item.unit = "";
+        item.availability = "constraint is true, basis_type = pw, and constraint_alloc_switch is true";
+        read_sync_bool(input.constraint_alloc_full_residual_accept);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("constraint_alloc_jacobian_probe");
+        item.annotation = "PW allocation: finite-difference J0 vs outer Jacobian diagnostic";
+        item.category = "Constraint";
+        item.type = "Boolean";
+        item.description = "Diagnostic only. When true (with constraint_alloc_exact_subspace), the exact-subspace path perturbs each multiplier by +/-h at the current density, measures the frozen-density observable, and prints J0 = dQ_sub/dmu next to the outer Broyden Jacobian built from full-space Q. The relative Frobenius difference is written to the running log. It does not change the multiplier, the trial, or the observable used by the outer solver. Default false.";
+        item.default_value = "False";
+        item.unit = "";
+        item.availability = "constraint is true, basis_type = pw, and constraint_alloc_exact_subspace is true";
+        read_sync_bool(input.constraint_alloc_jacobian_probe);
+        this->add_item(item);
+    }
+    {
         Input_Item item("deltap_branch_write");
         item.annotation = "persist deltap_branch.dat: true or false";
         item.category = "DeltaP";

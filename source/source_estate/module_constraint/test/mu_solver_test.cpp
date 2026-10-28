@@ -545,3 +545,66 @@ TEST(MuSolverTest, BadRhoUpdatesModelInsteadOfRepeatingTheStep)
     EXPECT_NEAR(mu[0], -0.001 / chi, 1e-6);
     EXPECT_NEAR(mu[1], 0.001 / chi, 1e-6);
 }
+
+TEST(MuSolverTest, PreviewDoesNotCommitState)
+{
+    // A frozen-density predictor may inspect the current full-space model,
+    // but it must not advance nsteps, trust counters or mu itself.
+    constraint::MuSolverParams params;
+    params.trust_region = true;
+    params.step_max = 0.05;
+    params.trust_radius_max = 1.0;
+    params.kappa_min = 0.3;
+    params.conv_tol = 1e-4;
+    constraint::MuSolver solver(params);
+    MockResponse mock{2.0, 0.5};
+    std::vector<double> mu = {0.0};
+    const std::vector<double> target = {0.5};
+
+    EXPECT_EQ(solver.step({mock(0.0)}, target, mu),
+              constraint::MuStatus::RUNNING);
+    const double committed_mu = mu[0];
+    const int steps_before = solver.nsteps();
+    const int accepts_before = solver.trust_accept_count();
+    const int rejects_before = solver.trust_reject_count();
+    const double radius_before = solver.trust_radius();
+
+    std::vector<double> candidate;
+    EXPECT_EQ(solver.preview_step({mock(committed_mu)}, target, mu, candidate),
+              constraint::MuStatus::RUNNING);
+    EXPECT_EQ(solver.nsteps(), steps_before);
+    EXPECT_EQ(solver.trust_accept_count(), accepts_before);
+    EXPECT_EQ(solver.trust_reject_count(), rejects_before);
+    EXPECT_DOUBLE_EQ(solver.trust_radius(), radius_before);
+    EXPECT_DOUBLE_EQ(mu[0], committed_mu);
+    // The predicted move is real and bounded by the active trust radius.
+    EXPECT_GT(candidate[0], committed_mu);
+    EXPECT_LE(std::abs(candidate[0] - committed_mu),
+              radius_before + 1e-12);
+}
+
+TEST(MuSolverTest, OverridePendingTrialScoresActualCandidate)
+{
+    // A committed frozen-density candidate must be scored against the anchor
+    // that produced it, not against the solver's discarded proposal.
+    constraint::MuSolverParams params;
+    params.trust_region = true;
+    params.step_max = 0.05;
+    params.trust_radius_max = 1.0;
+    params.kappa_min = 0.3;
+    params.conv_tol = 1e-4;
+    constraint::MuSolver solver(params);
+    MockResponse mock{2.0, 0.5};
+    std::vector<double> mu = {0.0};
+    const std::vector<double> target = {0.5}; // root mu = 3.0
+
+    EXPECT_EQ(solver.step({mock(0.0)}, target, mu),
+              constraint::MuStatus::RUNNING);
+    const std::vector<double> candidate = {0.02};
+    solver.override_pending_trial(mu, candidate);
+    EXPECT_DOUBLE_EQ(mu[0], candidate[0]);
+    EXPECT_EQ(solver.step({mock(candidate[0])}, target, mu),
+              constraint::MuStatus::RUNNING);
+    EXPECT_EQ(solver.trust_accept_count(), 1);
+    EXPECT_EQ(solver.trust_reject_count(), 0);
+}

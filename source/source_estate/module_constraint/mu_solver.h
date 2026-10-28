@@ -104,6 +104,25 @@ class MuSolver
                   const std::vector<double>& target,
                   std::vector<double>& mu);
 
+    // Predict one trial multiplier from the current (full-space) model
+    // without changing any solver state.  The caller may use this candidate
+    // as a frozen-density warm start, but must not treat the frozen-density
+    // observable as an outer observation: only a full-space Q may later be
+    // fed to step()/override_pending_trial().  The prediction is capped by
+    // the current trust radius (and step_max) and by the per-component cap.
+    MuStatus preview_step(const std::vector<double>& Q,
+                          const std::vector<double>& target,
+                          const std::vector<double>& mu,
+                          std::vector<double>& mu_preview) const;
+
+    // Replace the pending trial multiplier with an externally generated
+    // candidate.  The trust anchor (mu_before_step_, Q_before_step_) is kept
+    // and the predicted residual is recomputed at the replacement, so the
+    // next full-space observation scores the trial actually used.  No history
+    // or radius changes here.
+    void override_pending_trial(std::vector<double>& mu,
+                                const std::vector<double>& mu_trial);
+
     // Forget all history (fresh outer run with a new target).
     void reset();
 

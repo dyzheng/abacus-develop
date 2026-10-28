@@ -81,6 +81,136 @@ MuStatus MuSolver::step(const std::vector<double>& Q,
     return step_trust(Q, target, mu);
 }
 
+MuStatus MuSolver::preview_step(const std::vector<double>& Q,
+                                const std::vector<double>& target,
+                                const std::vector<double>& mu,
+                                std::vector<double>& mu_preview) const
+{
+    const int n = static_cast<int>(Q.size());
+    // Guard: all inputs describe the same component list.  A mismatch would
+    // pair a residual with a different fragment's multiplier.
+    if (static_cast<int>(target.size()) != n
+        || static_cast<int>(mu.size()) != n)
+    {
+        ModuleBase::WARNING_QUIT(
+            "MuSolver::preview_step",
+            "Q, target and mu sizes differ while previewing a trial");
+    }
+    mu_preview = mu;
+    std::vector<double> res(n, 0.0);
+    std::vector<bool> active(n, false);
+    bool all_converged = true;
+    for (int i = 0; i < n; ++i)
+    {
+        res[i] = Q[i] - target[i];
+        active[i] = std::abs(res[i]) >= params_.conv_tol;
+        all_converged = all_converged && !active[i];
+    }
+    // Branch: the frozen-density observable already meets the target.  Keep
+    // the current multiplier; this is only a warm-start prediction and never
+    // an outer convergence declaration.
+    if (all_converged)
+    {
+        return MuStatus::CONVERGED;
+    }
+
+    std::vector<double> dmu(n, 0.0);
+    bool solved = false;
+    // Branch: a trust/Broyden Jacobian exists -> use the coupled model.
+    if (static_cast<int>(jacobian_.size()) == n)
+    {
+        solved = solve_active(res, active, dmu);
+    }
+    // Branch: no usable Jacobian (first call or singular reduced system) ->
+    // fall back to the diagonal secant model.
+    if (!solved)
+    {
+        dmu.assign(n, 0.0);
+        for (int i = 0; i < n; ++i)
+        {
+            // Branch: an inactive component needs no predicted move.
+            if (!active[i])
+            {
+                continue;
+            }
+            const double jii = (static_cast<int>(jacobian_.size()) == n)
+                                   ? jacobian_[i][i]
+                                   : slope(i);
+            const double denom = (std::abs(jii) > 1e-12) ? jii : slope(i);
+            dmu[i] = -res[i] / denom;
+        }
+    }
+
+    // Bound the candidate by both the trust radius and the ordinary step cap.
+    // The preview must never jump outside the region the outer solver can
+    // actually evaluate.
+    double radius = params_.step_max;
+    // Branch: trust mode owns a radius; an uninitialized radius falls back to
+    // the constructor's initial value.
+    if (params_.trust_region)
+    {
+        const double trust = (trust_radius_ > 0.0)
+                                 ? trust_radius_
+                                 : std::max(params_.trust_radius_min,
+                                            std::min(params_.step_max,
+                                                     params_.trust_radius_max));
+        radius = std::min(radius, trust);
+    }
+    const double len = norm2(dmu);
+    // Branch: an over-long candidate is radially scaled, preserving direction.
+    if (len > radius && len > 0.0)
+    {
+        const double scale = radius / len;
+        for (double& value : dmu)
+        {
+            value *= scale;
+        }
+    }
+    for (int i = 0; i < n; ++i)
+    {
+        mu_preview[i] += dmu[i];
+        const double cap_i = cap_for(i, n);
+        mu_preview[i] = clamp_value(mu_preview[i], -cap_i, cap_i);
+    }
+    return MuStatus::RUNNING;
+}
+
+void MuSolver::override_pending_trial(std::vector<double>& mu,
+                                      const std::vector<double>& mu_trial)
+{
+    const int n = static_cast<int>(mu.size());
+    // Guard: the replacement must stay parallel to the current state.
+    if (static_cast<int>(mu_trial.size()) != n)
+    {
+        ModuleBase::WARNING_QUIT(
+            "MuSolver::override_pending_trial",
+            "mu and replacement-trial sizes differ");
+    }
+    mu = mu_trial;
+    // Branch: no pending trust trial or no populated model -> the next step()
+    // consumes only the full-space observation at this multiplier.
+    if (!params_.trust_region || !trust_pending_
+        || static_cast<int>(jacobian_.size()) != n
+        || static_cast<int>(mu_before_step_.size()) != n
+        || static_cast<int>(res_before_step_.size()) != n)
+    {
+        return;
+    }
+    // Recompute the predicted residual at the replacement candidate.  The
+    // stored pred_res_step_ belongs to the discarded proposal; reusing it
+    // would score a different trial than the one actually solved.
+    pred_res_step_.assign(n, 0.0);
+    for (int i = 0; i < n; ++i)
+    {
+        const double dmu_i = mu[i] - mu_before_step_[i];
+        pred_res_step_[i] = res_before_step_[i];
+        for (int j = 0; j < n; ++j)
+        {
+            pred_res_step_[i] += jacobian_[i][j] * dmu_i;
+        }
+    }
+}
+
 MuStatus MuSolver::step_secant(const std::vector<double>& Q,
                                const std::vector<double>& target,
                                std::vector<double>& mu)
