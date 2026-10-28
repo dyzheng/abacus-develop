@@ -6977,3 +6977,22 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
      另一个解”误判为加速。
   3. exact 子空间仅保留为正确性基线；若还要降低其成本，改用 DeltaSpin
      式 `becp + 局域积分` 构造 `A_i`，而不是每轮重建全部矩阵。
+
+## 2026-10-28 (S5.14): 观测量快路径 A/B（回退）+ 子空间内层迭代扫描（证否）
+
+- **目的**：验证批判性评估的两个效率假设：观测量门控、内层子空间迭代数。
+- **观测量快路径**：把 `compute_pw_alloc_observables` 限制在"会被消费"的迭代
+  （收敛 / armed ALM / inner）。Fe2 A/B：87 vs 87 迭代、ETOT 差 4e-10 eV、
+  墙钟同为 27 s；计时分解 hPsi 21.4 s/3126 calls（75.8%）占主导。
+  **无收益，已回退**，不进入代码。
+- **内层迭代扫描**（rotation=1）：iterations=1 → 82 步 CONVERGED（复现基线）；
+  iterations=4 → 180 步未收敛；iterations=8 → 200 步 RUNNING 且落到低 0.23 meV
+  的另一状态；exact_subspace=1 单独 → 116 步未收敛。
+- **分析**：观测量不是瓶颈；λ=0 算符快路径已存在；增加冻结密度内层更新等价于
+  μ 过冲，与 D2（||JB-J0||/||JB||=0.45-3.18，缺密度响应）互相印证。
+  语义问题（q=Tr[ρA_i] vs orbital-sum：同靶 ±3.8 时后者仅 ±2.93 μB）
+  未解决，必须先做第 4 条闭环。
+- **文件**：`docs/superpowers/specs/2026-10-28-allocation-subspace-iteration-sweep.md` 与
+  本日志。代码改动（观测量门控）已回退，工作树无源码变更。
+- **下一轮**：暂停性能调参；优先语义闭环（Fe2/LiCl 并列 q、onsite、Becke、
+  target_l 敏感性）；若通过再时间盒评估 D6/D7 显式响应层。
