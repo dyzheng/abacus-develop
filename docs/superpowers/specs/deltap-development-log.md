@@ -6696,3 +6696,34 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   1. 预存 `W_i phi` 与 `Phi^dagger W_i phi`，减少 lambda 变化时 R 次 target FFT。
   2. 构造 `<\psi_m|A_i|\psi_n>`，实现真正的固定密度受约束子空间最小化。
   3. 在 force/stress、非零电荷目标与 `nbands=100+` 上验证折叠路径。
+
+## 2026-10-28 (S5.10 cache): allocation 目标与乘积按 k 缓存
+
+- **完成内容**：
+  1. 将 `AllocPwCache` 的单个 target/product 槽改为 per-k target 向量，避免
+     Davidson 在 k 点间切换时反复执行 onsite tabulation 与目标空间构造。
+  2. product 改为最多 8 槽的 per-k 有界缓存；键仍包含 spin、target
+     generation 与 lambda，保证目标重建或乘子变化时不会复用陈旧乘积。
+  3. 为 `target_context` 与 `target_products` 增加 timer，便于后续确认缓存
+     命中是否改变。
+- **验证**（4 MPI、单线程 OpenMP/BLAS/FFT）：
+  - Fe2 folded 路径：82 次迭代、1985 次 hPsi；两组 hPsi 总时间
+    `15.34/16.12 s`、墙钟 `24.22/25.56 s`，对比 S5.9 的 `18.36–18.70 s`
+    与 `28.84–29.73 s`。
+  - `recip2real` 与 `real2recip` 均从 `46730/32464` 降到 `44210/29944`，
+    相当于消除约 252 次 target-product 重建。
+  - 最终 `q=-3.800014112/+3.799903104 μB`、残差 `9.689644075e-5 μB`、
+    ETOT `-6370.6101511999 eV`，与 S5.9 逐位一致。
+  - `ctest -R MODULE_ESTATE_constraint`：23/23 PASS。
+- **Bug/fix list**：本轮无新增数值 bug；首轮编译发现一处旧
+  `cache->product.vphi` 引用未替换，构建即报错，已改为局部 `product` 引用。
+- **文件**：`source/source_pw/module_pwdft/op_pw_alloc.cpp`、
+  `docs/superpowers/specs/2026-10-28-allocation-per-k-cache.md`、本日志。
+- **结论**：per-k 缓存消除了 k 切换导致的重复乘积重建，Fe2 墙钟比 S5.9
+  再降约 14% 至 18%，且结果逐位一致。剩余 82 次电子迭代说明外层固定点仍是
+  主瓶颈，继续削减单次 hPsi 常数已接近边际收益。
+- **下一步**：
+  1. 构造 `<\psi_m|A_i|\psi_n>`，缓存 `H_sub/S_sub/A_i,sub`，在固定密度内
+     多步更新 lambda。
+  2. 由子空间矩阵直接更新约束读数，去掉 inner 循环的逐 band FFT。
+  3. 对比新子空间步与当前 82 次外层迭代，验证能否接近 DeltaSpin 的 13 次。

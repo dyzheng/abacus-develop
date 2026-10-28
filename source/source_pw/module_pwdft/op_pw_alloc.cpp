@@ -4,6 +4,7 @@
 #include "source_base/parallel_comm.h"
 #include "source_base/tool_quit.h"
 #include "source_base/global_variable.h"
+#include "source_base/timer.h"
 #include "source_cell/klist.h"
 #include "source_cell/unitcell.h"
 #include "source_estate/module_constraint/alloc_pw.h"
@@ -1460,8 +1461,15 @@ class AllocPwCache
         std::vector<double> values;
     };
 
-    Target target;
-    Product product;
+    // Targets are indexed by k-point.  Keeping one context per k-point avoids
+    // rebuilding the onsite tabulation whenever the Hamiltonian switches k.
+    std::vector<Target> targets;
+    // Products are much larger than targets, so retain only a bounded window.
+    // The window is keyed by ik; for small k sets every k keeps its product.
+    std::vector<Product> products;
+    // Monotonic generation for target rebuilds.  A product is valid only when
+    // its generation matches the target context from the same k slot.
+    long next_target_generation = 0;
     // nspin is at most 2 on the supported collinear path.  Separate caches
     // avoid rebuilding the O(nrxx) potential when k-points alternate spin.
     LocalPotential local_potential[2];
@@ -1701,30 +1709,36 @@ void AllocConstraintPW<OperatorPW<T, Device>>::act(
     auto* onsite_p
         = projectors::OnsiteProjector<double,
                                       base_device::DEVICE_CPU>::get_instance();
+    const int nks = std::max(1, this->wfcpw->nks);
+    // Branch: the cache is first used after the wavefunction basis is known,
+    // so allocate its per-k target slots lazily from the actual k count.
+    if (static_cast<int>(cache->targets.size()) < nks)
+    {
+        cache->targets.resize(nks);
+    }
+    AllocPwCache::Target& target = cache->targets[this->ik];
     // The target space is geometry/ik keyed and independent of lambda.  Reuse
     // it across every band, CG/Davidson application and unchanged SCF frame.
-    if (!cache->target.valid || cache->target.ik != this->ik
-        || cache->target.weight_grid != &wg
-        || cache->target.target_l != PARAM.inp.constraint_alloc_target_l)
+    if (!target.valid || target.weight_grid != &wg
+        || target.target_l != PARAM.inp.constraint_alloc_target_l)
     {
-        if (!alloc::build_target_context(
-                onsite_p, wg, this->ik,
-                PARAM.inp.constraint_alloc_target_l,
-                reinterpret_cast<const std::complex<double>*>(tmpsi_in),
-                nbands, nbasis,
-                cache->target.context, error))
+        ModuleBase::timer::start("AllocConstraintPW", "target_context");
+        const bool built = alloc::build_target_context(
+            onsite_p, wg, this->ik, PARAM.inp.constraint_alloc_target_l,
+            reinterpret_cast<const std::complex<double>*>(tmpsi_in), nbands,
+            nbasis, target.context, error);
+        ModuleBase::timer::end("AllocConstraintPW", "target_context");
+        if (!built)
         {
             ModuleBase::WARNING_QUIT("AllocConstraintPW::act", error);
         }
-        cache->target.valid = true;
-        cache->target.ik = this->ik;
-        cache->target.weight_grid = &wg;
-        cache->target.target_l = PARAM.inp.constraint_alloc_target_l;
-        ++cache->target.generation;
-        // A new target space invalidates every multiplier-dependent product.
-        cache->product.valid = false;
+        target.valid = true;
+        target.ik = this->ik;
+        target.weight_grid = &wg;
+        target.target_l = PARAM.inp.constraint_alloc_target_l;
+        target.generation = ++cache->next_target_generation;
     }
-    const alloc::PwTargetContext& context = cache->target.context;
+    const alloc::PwTargetContext& context = target.context;
     const int npw = ngk_ik > 0 ? ngk_ik : context.npw;
     // Guard: the operator chain and onsite tabulation must describe one
     // plane-wave partition.
@@ -1733,29 +1747,46 @@ void AllocConstraintPW<OperatorPW<T, Device>>::act(
         ModuleBase::WARNING_QUIT("AllocConstraintPW::act",
             "PW allocation plane-wave partition mismatch");
     }
+    // Products are bounded in memory but keep one slot per k when nks is
+    // small.  This is enough to survive the k alternation inside a Davidson
+    // sweep while avoiding O(nks) copies of vphi on large calculations.
+    constexpr int product_cache_limit = 8;
+    const int product_slots
+        = std::max(1, std::min(nks, product_cache_limit));
+    // Branch: a change in the k count (or the first call) rebuilds the slot
+    // table; existing products are invalidated naturally by their ik keys.
+    if (static_cast<int>(cache->products.size()) != product_slots)
+    {
+        cache->products.resize(product_slots);
+    }
+    const int product_slot = this->ik % product_slots;
+    AllocPwCache::Product& product = cache->products[product_slot];
     // V|alpha>, <alpha|V|beta> and the orthonormal products depend only on the
     // local potential.  In a fixed-mu frame lambda is bitwise constant, so the
     // expensive FFTs and R x R algebra run once instead of once per band.
-    if (!cache->product.valid || cache->product.ik != this->ik
-        || cache->product.spin != spin
-        || cache->product.target_generation != cache->target.generation
-        || cache->product.lambda != lambda)
+    if (!product.valid || product.ik != this->ik
+        || product.spin != spin
+        || product.target_generation != target.generation
+        || product.lambda != lambda)
     {
         std::vector<std::complex<double>> m_raw;
-        if (!alloc::build_target_products(*this->wfcpw, this->ik, potential,
-                                          context, cache->product.vphi, m_raw,
-                                          error))
+        ModuleBase::timer::start("AllocConstraintPW", "target_products");
+        const bool built = alloc::build_target_products(
+            *this->wfcpw, this->ik, potential, context, product.vphi, m_raw,
+            error);
+        ModuleBase::timer::end("AllocConstraintPW", "target_products");
+        if (!built)
         {
             ModuleBase::WARNING_QUIT("AllocConstraintPW::act", error);
         }
         alloc::build_pw_alloc_orthogonal_context(
-            context.space, context.phi, cache->product.vphi, m_raw,
-            cache->product.orthogonal);
-        cache->product.valid = true;
-        cache->product.ik = this->ik;
-        cache->product.spin = spin;
-        cache->product.target_generation = cache->target.generation;
-        cache->product.lambda = lambda;
+            context.space, context.phi, product.vphi, m_raw,
+            product.orthogonal);
+        product.valid = true;
+        product.ik = this->ik;
+        product.spin = spin;
+        product.target_generation = target.generation;
+        product.lambda = lambda;
     }
 
     const int ntarget = context.space.ntarget;
@@ -1798,7 +1829,7 @@ void AllocConstraintPW<OperatorPW<T, Device>>::act(
                     *this->wfcpw, this->ik, potential, psi_band, npw,
                     fft_porter, vpsi_chunk[local_band].data());
             }
-            alloc::build_vphi_overlap_local(cache->product.vphi, psi_band, npw,
+            alloc::build_vphi_overlap_local(product.vphi, psi_band, npw,
                                             braw_chunk[local_band]);
         }
         // Pack the chunk's <phi|psi> and <Vphi|psi> into one collective.  The
@@ -1853,7 +1884,7 @@ void AllocConstraintPW<OperatorPW<T, Device>>::act(
             const std::vector<std::complex<double>>& vpsi_band
                 = folded_potential ? empty_vpsi : vpsi_chunk[local_band];
             alloc::apply_pw_alloc_delta_h_orthogonal_reduced(
-                context.space, cache->product.orthogonal, cache->product.vphi,
+                context.space, product.orthogonal, product.vphi,
                 npw, raw_chunk[local_band], braw_chunk[local_band],
                 vpsi_band, lambda, delta, !folded_potential);
             for (int ig = 0; ig < npw; ++ig)
