@@ -1865,6 +1865,18 @@ Manual override is allowed: if sc_acceleration_mode is explicitly set, it takes 
         this->add_item(item);
     }
     {
+        Input_Item item("constraint_alloc_fold_potential");
+        item.annotation = "PW allocation: fuse the local constraint potential into Veff";
+        item.category = "Constraint";
+        item.type = "Boolean";
+        item.description = "When true, the PW allocation local potential sum_i mu_i w_i is added to the effective potential inside the existing Veff plane-wave transform. The allocation operator then adds only the target-projector correction terms, eliminating one reciprocal-to-real-to-reciprocal transform per band. The A/B switch is off by default; it has no effect when the allocation operator is inactive or the weight and Veff grids differ.";
+        item.default_value = "False";
+        item.unit = "";
+        item.availability = "constraint is true and basis_type = pw";
+        read_sync_bool(input.constraint_alloc_fold_potential);
+        this->add_item(item);
+    }
+    {
         Input_Item item("deltap_branch_write");
         item.annotation = "persist deltap_branch.dat: true or false";
         item.category = "DeltaP";

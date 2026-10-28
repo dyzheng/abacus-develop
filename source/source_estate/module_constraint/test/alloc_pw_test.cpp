@@ -411,8 +411,28 @@ TEST(AllocPwTest, ApplyDeltaHMatchesLcaoKernel)
     alloc::apply_pw_alloc_delta_h_orthogonal(
         pw_space, orthogonal, vphi, psi_c, raw_overlap, vpsi_c, lambda,
         delta_orthogonal);
+
+    std::vector<std::complex<double>> braw(ntarget, 0.0);
+    for (int a = 0; a < ntarget; ++a)
+    {
+        for (int i = 0; i < norb; ++i)
+        {
+            braw[a] += std::conj(vphi[a][i]) * psi_c[i];
+        }
+    }
+    std::vector<std::complex<double>> delta_reduced;
+    alloc::apply_pw_alloc_delta_h_orthogonal_reduced(
+        pw_space, orthogonal, vphi, norb, raw_overlap, braw, vpsi_c, lambda,
+        delta_reduced, true);
+    const std::vector<std::complex<double>> empty_vpsi;
+    std::vector<std::complex<double>> delta_folded;
+    alloc::apply_pw_alloc_delta_h_orthogonal_reduced(
+        pw_space, orthogonal, vphi, norb, raw_overlap, braw, empty_vpsi,
+        lambda, delta_folded, false);
+
     double max_diff = 0.0;
     double max_prepared_diff = 0.0;
+    double max_folded_diff = 0.0;
     for (int i = 0; i < norb; ++i)
     {
         max_diff = std::max(max_diff,
@@ -420,11 +440,18 @@ TEST(AllocPwTest, ApplyDeltaHMatchesLcaoKernel)
         max_prepared_diff = std::max(
             max_prepared_diff,
             std::abs(delta_orthogonal[i] - delta[i]));
+        // Folded Veff supplies vpsi separately, so adding it back must recover
+        // the standalone reduced correction exactly.
+        max_folded_diff = std::max(
+            max_folded_diff,
+            std::abs(delta_reduced[i] - delta_folded[i] - vpsi_c[i]));
     }
     printf("alloc_pw apply: max_diff=%.3e\n", max_diff);
     printf("alloc_pw prepared apply: max_diff=%.3e\n", max_prepared_diff);
+    printf("alloc_pw folded apply: max_diff=%.3e\n", max_folded_diff);
     EXPECT_LT(max_diff, 1e-10);
     EXPECT_LT(max_prepared_diff, 1e-13);
+    EXPECT_LT(max_folded_diff, 1e-13);
 }
 
 TEST(AllocPwTest, ProjectorTabulationBuildsOverlapAndBecp)

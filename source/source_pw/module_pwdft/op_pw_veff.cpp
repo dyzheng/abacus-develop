@@ -1,5 +1,6 @@
 #include "op_pw_veff.h"
 
+#include "source_pw/module_pwdft/op_pw_alloc.h"
 #include "source_base/timer.h"
 #include "source_base/tool_quit.h"
 
@@ -10,7 +11,8 @@ Veff<OperatorPW<T, Device>>::Veff(const int* isk_in,
                                        const Real* veff_in,
                                        const int veff_row,
                                        const int veff_col,
-                                       const ModulePW::PW_Basis_K* wfcpw_in)
+                                       const ModulePW::PW_Basis_K* wfcpw_in,
+                                       AllocConstraintPW<OperatorPW<T, Device>>* alloc_constraint_in)
 {
     if (isk_in == nullptr || wfcpw_in == nullptr) 
     {
@@ -25,9 +27,23 @@ Veff<OperatorPW<T, Device>>::Veff(const int* isk_in,
     this->veff_row = veff_row;
     this->veff_col = veff_col;
     this->wfcpw = wfcpw_in;
+    this->set_alloc_constraint(alloc_constraint_in);
     resmem_complex_op()(this->porter, this->wfcpw->nmaxgr, "Veff<PW>::porter");
     resmem_complex_op()(this->porter1, this->wfcpw->nmaxgr, "Veff<PW>::porter1");
 
+}
+
+template<typename T, typename Device>
+void Veff<OperatorPW<T, Device>>::set_alloc_constraint(
+    AllocConstraintPW<OperatorPW<T, Device>>* alloc_constraint_in)
+{
+    this->alloc_constraint = alloc_constraint_in;
+    // Branch: a copy or ordinary Hamiltonian has no allocation node, so Veff
+    // keeps its historical one-potential transform.
+    if (this->alloc_constraint != nullptr)
+    {
+        this->alloc_constraint->enable_fold_potential(this->veff_col);
+    }
 }
 
 template<typename T, typename Device>
@@ -94,13 +110,38 @@ void Veff<OperatorPW<T, Device>>::act(
 #else
     if (npol == 1)
     {
+        const Real* current_veff
+            = this->veff + current_spin * this->veff_col;
+        // Branch: the allocation fast path is active only after the operator
+        // explicitly enabled it for this exact Veff grid.  When active, build
+        // Veff+V_alloc once per Hamiltonian application and reuse it for every
+        // band, so the allocation potential costs no second FFT.
+        if (this->alloc_constraint != nullptr)
+        {
+            bool can_fold = false;
+            const std::vector<double>* alloc_potential
+                = this->alloc_constraint->get_fold_potential(current_spin,
+                                                             can_fold);
+            if (can_fold && alloc_potential != nullptr
+                && static_cast<int>(alloc_potential->size()) == this->veff_col)
+            {
+                this->veff_with_alloc.resize(this->veff_col);
+                for (int ir = 0; ir < this->veff_col; ++ir)
+                {
+                    this->veff_with_alloc[ir]
+                        = current_veff[ir]
+                          + static_cast<Real>((*alloc_potential)[ir]);
+                }
+                current_veff = this->veff_with_alloc.data();
+            }
+        }
         for (int ib = 0; ib < nbands; ib += npol)
         {
             wfcpw->recip_to_real<T, Device>(tmpsi_in, this->porter, this->ik);
             // NOTICE: when MPI threads are larger than the number of Z grids
             // veff would contain nothing, and nothing should be done in real space
             // but the 3DFFT can not be skipped, it will cause hanging
-            veff_op()(this->ctx, this->veff_col, this->porter, this->veff + current_spin * this->veff_col);
+            veff_op()(this->ctx, this->veff_col, this->porter, current_veff);
             wfcpw->real_to_recip<T, Device>(this->porter, tmhpsi, this->ik, true);
             tmhpsi   += psi_offset;
             tmpsi_in += psi_offset;

@@ -8,7 +8,12 @@
 
 #include <source_base/macros.h>
 
+#include <vector>
+
 namespace hamilt {
+
+template<typename T>
+class AllocConstraintPW;
 
 #ifndef __VEFFTEMPLATE
 #define __VEFFTEMPLATE
@@ -29,7 +34,8 @@ class Veff<OperatorPW<T, Device>> : public OperatorPW<T, Device>
          const Real* veff_in,
          const int veff_row,
          const int veff_col,
-         const ModulePW::PW_Basis_K* wfcpw_in);
+         const ModulePW::PW_Basis_K* wfcpw_in,
+         AllocConstraintPW<OperatorPW<T, Device>>* alloc_constraint_in = nullptr);
 
     template<typename T_in, typename Device_in = Device>
     explicit Veff(const Veff<OperatorPW<T_in, Device_in>>* veff);
@@ -54,6 +60,11 @@ class Veff<OperatorPW<T, Device>> : public OperatorPW<T, Device>
         return this->wfcpw;
     }
 
+    // Connect the allocation operator after a Hamiltonian copy has rebuilt
+    // both nodes.  The connection is a no-op for non-allocation runs.
+    void set_alloc_constraint(
+        AllocConstraintPW<OperatorPW<T, Device>>* alloc_constraint_in);
+
   private:
 
     const int* isk = nullptr;
@@ -68,6 +79,12 @@ class Veff<OperatorPW<T, Device>> : public OperatorPW<T, Device>
     const Real *veff = nullptr, *h_veff = nullptr, *d_veff = nullptr;
     T *porter = nullptr;
     T *porter1 = nullptr;
+    // Optional PW allocation source.  When connected, its real-space potential
+    // is added to Veff before the single transform per band.
+    AllocConstraintPW<OperatorPW<T, Device>>* alloc_constraint = nullptr;
+    // Spin-resolved copy of Veff + V_alloc.  It is rebuilt once per act()
+    // call, not once per band, and never mutates the shared Potential array.
+    mutable std::vector<Real> veff_with_alloc;
     base_device::AbacusDevice_t device = {};
     using veff_op = veff_pw_op<Real, Device>;
 

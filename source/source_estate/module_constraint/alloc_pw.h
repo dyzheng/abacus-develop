@@ -267,7 +267,8 @@ void apply_pw_alloc_delta_h_orthogonal_reduced(
     const std::vector<std::complex<double>>& braw_overlap,
     const std::vector<std::complex<double>>& vpsi,
     const std::vector<double>& lambda,
-    std::vector<std::complex<double>>& delta);
+    std::vector<std::complex<double>>& delta,
+    const bool include_vpsi = true);
 
 } // namespace alloc
 

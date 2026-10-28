@@ -1462,7 +1462,9 @@ class AllocPwCache
 
     Target target;
     Product product;
-    LocalPotential local_potential;
+    // nspin is at most 2 on the supported collinear path.  Separate caches
+    // avoid rebuilding the O(nrxx) potential when k-points alternate spin.
+    LocalPotential local_potential[2];
 };
 
 template <typename T, typename Device>
@@ -1492,6 +1494,108 @@ AllocConstraintPW<OperatorPW<T, Device>>::AllocConstraintPW(
 
 template <typename T, typename Device>
 AllocConstraintPW<OperatorPW<T, Device>>::~AllocConstraintPW() = default;
+
+template <typename T, typename Device>
+void AllocConstraintPW<OperatorPW<T, Device>>::enable_fold_potential(
+    const int grid_size)
+{
+    // Branch: only the double-precision CPU allocation algebra can share the
+    // host Veff real-space workspace.  Other instantiations keep the standalone
+    // transform path.
+    if (!std::is_same<T, std::complex<double>>::value
+        || !std::is_same<Device, base_device::DEVICE_CPU>::value
+        || grid_size <= 0)
+    {
+        return;
+    }
+#ifdef __DSP
+    // The DSP Veff path uses a bundled convolution API and cannot accept an
+    // extra real-space potential without falling back to a second transform.
+    return;
+#else
+    this->fold_potential_grid = grid_size;
+#endif
+}
+
+template <typename T, typename Device>
+const std::vector<double>*
+AllocConstraintPW<OperatorPW<T, Device>>::get_fold_potential(
+    const int spin, bool& can_fold) const
+{
+    can_fold = false;
+    // Branch: the operator is inactive before the constraint loop is armed or
+    // when the user selected the legacy grid backend.
+    if (!PARAM.inp.constraint || !PARAM.inp.constraint_alloc_switch)
+    {
+        return nullptr;
+    }
+    // Branch: only the host double-precision path can feed Veff's CPU FFT
+    // workspace.  Returning early also avoids building the potential cache
+    // when a device build queries this interface.
+    if (!std::is_same<T, std::complex<double>>::value
+        || !std::is_same<Device, base_device::DEVICE_CPU>::value)
+    {
+        return nullptr;
+    }
+    constraint::ConstraintLoop& loop
+        = constraint::ConstraintLoop::instance();
+    // Branch: an unarmed loop leaves the ordinary Hamiltonian untouched.
+    if (!loop.enabled() || !loop.allocation_mode())
+    {
+        return nullptr;
+    }
+    // Guard: this cache is indexed by the two collinear spin channels.
+    if (spin != 0 && spin != 1)
+    {
+        return nullptr;
+    }
+    const constraint::WeightGrid& wg = loop.weight_grid();
+    // Branch: a Veff on a different real-space partition cannot consume the
+    // allocation potential.  act() keeps the standalone path (and reports the
+    // grid mismatch there).
+    if (wg.nrxx() != this->wfcpw->nrxx)
+    {
+        return nullptr;
+    }
+    const std::vector<double>& mu = loop.mu_eff();
+    // Branch: an identically zero multiplier makes every allocation term
+    // vanish, so neither Veff nor act() should touch the potential cache.
+    if (static_cast<int>(mu.size()) == wg.nconstraint() && !mu.empty()
+        && std::all_of(mu.begin(), mu.end(),
+                       [](const double value) { return value == 0.0; }))
+    {
+        return nullptr;
+    }
+    std::string error;
+    std::vector<double> lambda;
+    if (!alloc::build_mu_coefficients(wg, loop, spin, lambda, error))
+    {
+        ModuleBase::WARNING_QUIT("AllocConstraintPW::get_fold_potential", error);
+    }
+    // Branch: channel signs can cancel every effective multiplier even when
+    // the stored ALM multipliers are nonzero.
+    if (std::all_of(lambda.begin(), lambda.end(),
+                    [](const double value) { return value == 0.0; }))
+    {
+        return nullptr;
+    }
+    AllocPwCache::LocalPotential& cached = cache->local_potential[spin];
+    // The potential depends only on the weight grid and effective lambda.  A
+    // fixed-mu frame reuses this array across every band and every Hamiltonian
+    // application instead of rebuilding it in each call.
+    if (!cached.valid || cached.weight_grid != &wg
+        || cached.lambda != lambda)
+    {
+        alloc::build_mu_potential(wg, lambda, cached.values);
+        cached.valid = true;
+        cached.weight_grid = &wg;
+        cached.lambda = lambda;
+    }
+    // can_fold and act() use the same grid key, so Veff never adds V|psi> and
+    // then leaves the allocation operator to add it a second time.
+    can_fold = this->fold_potential_grid == wg.nrxx();
+    return &cached.values;
+}
 
 template <typename T, typename Device>
 void AllocConstraintPW<OperatorPW<T, Device>>::init(const int ik_in)
@@ -1577,43 +1681,23 @@ void AllocConstraintPW<OperatorPW<T, Device>>::act(
             "PW allocation weight and wavefunction grids differ");
     }
 
-    // Branch: an identically zero multiplier vector makes every A_i term
-    // vanish.  Test mu before building the full real-space potential, which is
-    // the dominant no-op cost on large FFT grids such as LiCl.
-    const std::vector<double>& mu = loop.mu_eff();
-    if (static_cast<int>(mu.size()) == wg.nconstraint() && !mu.empty()
-        && std::all_of(mu.begin(), mu.end(),
-                       [](const double value) { return value == 0.0; }))
+    std::string error;
+    bool folded_potential = false;
+    const std::vector<double>* potential_ptr
+        = get_fold_potential(spin, folded_potential);
+    // Branch: zero multipliers or an unarmed loop leave the allocation
+    // operator inert.  The potential cache is shared with Veff so this is the
+    // same decision that controlled whether V|psi> was already added.
+    if (potential_ptr == nullptr)
     {
         return;
     }
-    std::string error;
+    const std::vector<double>& potential = *potential_ptr;
     std::vector<double> lambda;
     if (!alloc::build_mu_coefficients(wg, loop, spin, lambda, error))
     {
         ModuleBase::WARNING_QUIT("AllocConstraintPW::act", error);
     }
-    // Branch: channel signs can also make every effective multiplier zero.
-    // Return before allocating the potential or entering the target algebra.
-    if (std::all_of(lambda.begin(), lambda.end(),
-                    [](const double value) { return value == 0.0; }))
-    {
-        return;
-    }
-    // The potential depends only on the weight grid and effective lambda.  A
-    // fixed-mu frame reuses the same FFT-grid array across every band and every
-    // Hamiltonian application instead of rebuilding it in each call.
-    if (!cache->local_potential.valid
-        || cache->local_potential.weight_grid != &wg
-        || cache->local_potential.lambda != lambda)
-    {
-        alloc::build_mu_potential(wg, lambda,
-                                  cache->local_potential.values);
-        cache->local_potential.valid = true;
-        cache->local_potential.weight_grid = &wg;
-        cache->local_potential.lambda = lambda;
-    }
-    const std::vector<double>& potential = cache->local_potential.values;
     auto* onsite_p
         = projectors::OnsiteProjector<double,
                                       base_device::DEVICE_CPU>::get_instance();
@@ -1675,14 +1759,22 @@ void AllocConstraintPW<OperatorPW<T, Device>>::act(
     }
 
     const int ntarget = context.space.ntarget;
-    // Keep the batched V|psi> storage bounded for large band counts.  Eight
-    // bands still cut two reductions per band down to one reduction per chunk.
+    // Keep the batched target-overlap storage bounded for large band counts.
+    // Eight bands still cut two reductions per band down to one per chunk.
     const int band_chunk = std::min(nbands, 8);
     std::vector<std::vector<std::complex<double>>> raw_chunk(band_chunk);
     std::vector<std::vector<std::complex<double>>> braw_chunk(band_chunk);
     std::vector<std::vector<std::complex<double>>> vpsi_chunk(band_chunk);
-    std::vector<std::complex<double>> fft_porter(this->wfcpw->nmaxgr,
-                                                 std::complex<double>(0.0, 0.0));
+    // Branch A (folded): Veff already supplied V|psi> in tmhpsi, so neither
+    // the band FFT workspace nor a local V|psi> array is needed.  Branch B
+    // (standalone): retain the original per-band transform.
+    std::vector<std::complex<double>> fft_porter;
+    if (!folded_potential)
+    {
+        fft_porter.assign(this->wfcpw->nmaxgr,
+                          std::complex<double>(0.0, 0.0));
+    }
+    const std::vector<std::complex<double>> empty_vpsi;
     std::vector<std::complex<double>> delta;
     for (int band_start = 0; band_start < nbands; band_start += band_chunk)
     {
@@ -1696,11 +1788,16 @@ void AllocConstraintPW<OperatorPW<T, Device>>::act(
                   + static_cast<size_t>(ib) * nbasis;
             alloc::build_raw_overlap_local(context, psi_band,
                                            raw_chunk[local_band]);
-            vpsi_chunk[local_band].assign(npw,
-                                          std::complex<double>(0.0, 0.0));
-            alloc::apply_local_potential_reuse(
-                *this->wfcpw, this->ik, potential, psi_band, npw, fft_porter,
-                vpsi_chunk[local_band].data());
+            // Branch: the standalone path must form V|psi> here; the folded
+            // path receives it from Veff and only forms the projector terms.
+            if (!folded_potential)
+            {
+                vpsi_chunk[local_band].assign(
+                    npw, std::complex<double>(0.0, 0.0));
+                alloc::apply_local_potential_reuse(
+                    *this->wfcpw, this->ik, potential, psi_band, npw,
+                    fft_porter, vpsi_chunk[local_band].data());
+            }
             alloc::build_vphi_overlap_local(cache->product.vphi, psi_band, npw,
                                             braw_chunk[local_band]);
         }
@@ -1753,10 +1850,12 @@ void AllocConstraintPW<OperatorPW<T, Device>>::act(
             std::complex<double>* hpsi_band
                 = reinterpret_cast<std::complex<double>*>(tmhpsi)
                   + static_cast<size_t>(ib) * nbasis;
+            const std::vector<std::complex<double>>& vpsi_band
+                = folded_potential ? empty_vpsi : vpsi_chunk[local_band];
             alloc::apply_pw_alloc_delta_h_orthogonal_reduced(
                 context.space, cache->product.orthogonal, cache->product.vphi,
                 npw, raw_chunk[local_band], braw_chunk[local_band],
-                vpsi_chunk[local_band], lambda, delta);
+                vpsi_band, lambda, delta, !folded_potential);
             for (int ig = 0; ig < npw; ++ig)
             {
                 hpsi_band[ig] += delta[ig];

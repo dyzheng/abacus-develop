@@ -554,13 +554,17 @@ void apply_pw_alloc_delta_h_orthogonal_reduced(
     const std::vector<std::complex<double>>& braw_overlap,
     const std::vector<std::complex<double>>& vpsi,
     const std::vector<double>& lambda,
-    std::vector<std::complex<double>>& delta)
+    std::vector<std::complex<double>>& delta,
+    const bool include_vpsi)
 {
     check_space(space);
     const int r = space.ntarget;
     // Branch: every per-band vector and prepared target product must share the
-    // current plane-wave basis and constraint count.
-    if (static_cast<int>(vpsi.size()) != nbasis
+    // current plane-wave basis and constraint count.  In folded-potential mode
+    // V|psi> is already in the Hamiltonian, so vpsi must be omitted rather than
+    // silently passed as a stale or partially initialized array.
+    if ((include_vpsi && static_cast<int>(vpsi.size()) != nbasis)
+        || (!include_vpsi && !vpsi.empty())
         || static_cast<int>(raw_overlap.size()) != r
         || static_cast<int>(braw_overlap.size()) != r
         || static_cast<int>(vphi.size()) != r
@@ -586,7 +590,17 @@ void apply_pw_alloc_delta_h_orthogonal_reduced(
     orthogonalize_pw_overlaps(space, raw_overlap, o);
     orthogonalize_pw_overlaps(space, braw_overlap, borth);
 
-    delta = vpsi;
+    // Branch A: the standalone operator supplies the full local-potential
+    // action V|psi>.  Branch B: Veff already added V|psi>, so start from zero
+    // and emit only the projector-complement correction.
+    if (include_vpsi)
+    {
+        delta = vpsi;
+    }
+    else
+    {
+        delta.assign(nbasis, std::complex<double>(0.0, 0.0));
+    }
     for (int a = 0; a < r; ++a)
     {
         for (int i = 0; i < nbasis; ++i)

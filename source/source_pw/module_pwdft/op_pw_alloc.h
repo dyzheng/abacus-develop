@@ -169,6 +169,26 @@ class AllocConstraintPW<OperatorPW<T, Device>> : public OperatorPW<T, Device>
     const UnitCell* get_ucell() const { return ucell; }
     const ModulePW::PW_Basis_K* get_wfcpw() const { return wfcpw; }
 
+    /**
+     * @brief Enable fusion of the allocation local potential into Veff.
+     *
+     * grid_size is the real-space length of the Veff potential array.  The
+     * fast path is accepted only for the double-precision CPU build; the
+     * allocation operator then omits its own V|psi> transform and Veff adds
+     * V|psi> while it already has the wavefunction in real space.
+     */
+    void enable_fold_potential(const int grid_size);
+
+    /**
+     * @brief Return the active allocation potential for one spin channel.
+     *
+     * can_fold is true only when Veff can safely consume this array in its
+     * existing real-space multiply.  The pointer is owned by the operator
+     * cache and remains valid until the next multiplier or geometry change.
+     */
+    const std::vector<double>* get_fold_potential(const int spin,
+                                                  bool& can_fold) const;
+
   private:
     const int* isk = nullptr;
     const UnitCell* ucell = nullptr;
@@ -176,6 +196,10 @@ class AllocConstraintPW<OperatorPW<T, Device>> : public OperatorPW<T, Device>
     // The cache is mutable because OperatorPW::act is const but must retain
     // geometry- and multiplier-keyed target products across band applications.
     mutable std::unique_ptr<AllocPwCache> cache;
+    // Set by Veff during Hamiltonian construction.  A zero grid means no
+    // compatible Veff consumer was registered, so act() keeps the standalone
+    // local-potential transform.
+    int fold_potential_grid = 0;
 };
 
 } // namespace hamilt

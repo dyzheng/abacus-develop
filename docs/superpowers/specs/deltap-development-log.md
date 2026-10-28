@@ -6655,3 +6655,44 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
      一个可信步。
   3. 在 force/stress 与 `nbands=100+` 体系上验证 warm start 的密度和内存
      一致性。
+
+## 2026-10-28 (S5.9 fold): 局域势并入 Veff
+
+- **完成内容**：
+  1. 新增默认关闭的 `constraint_alloc_fold_potential`。开启后，`Veff` 在已有
+     的 band 实空间乘法中叠加 `V_alloc = sum_i lambda_i w_i`，不再单独做
+     allocation 的局域势 FFT。
+  2. allocation 的 reduced kernel 新增 `include_vpsi=false` 分支：折叠时只补
+     `-P V|psi> - V P|psi> + P V P|psi> + sum_i lambda_i Q_i|psi>`，因为
+     `V|psi>` 已由 Veff 计入。
+  3. `AllocConstraintPW` 的势缓存改为按 spin 分开，并向 Veff 暴露同一份
+     `get_fold_potential()`。Veff 不修改共享 `Potential::veff_smooth`，只在
+     每次 `act()` 重建本地 `veff_with_alloc`。
+  4. 仅 double/CPU、`npol=1`、allocation 激活且权重/Veff 网格一致时折叠；
+     GPU、`__DSP` 和普通 Hamiltonian 自动保留原路径。
+- **验证**（4 MPI、单线程 OpenMP/BLAS/FFT）：
+  - Fe2 A/B，仅切开关：关闭组 82 次迭代、1983 次 hPsi、hPsi 28.83 s、墙钟
+    38.61 s；开启组 82 次、1985 次、hPsi 18.36–18.70 s、墙钟
+    28.84–29.73 s。单次 hPsi 14.54 -> 9.25–9.42 ms（约 -35%），墙钟约
+    -23% 至 -25%。
+  - Fe2 关闭组 ETOT 与 S5.8 逐位一致；开启组 `q=-3.800014112/+3.799903104
+    μB`、最大残差 `9.69e-5 μB`、ETOT 差 `2.7e-9 eV`。
+  - LiCl `mu=0`：19 次迭代、809 次 hPsi、hPsi 98.24 s、墙钟 163.01 s，
+    `q=2.947887372 e`、ETOT `-643.97565238003517 eV`，与 S5.8 一致。
+  - `alloc_pw` 折叠/完整 reduced 等价性测试 `<1e-13`；
+    `ctest -R MODULE_ESTATE_constraint` 23/23 PASS。
+- **Bug/fix list**：首版共享势查询把“是否折叠”误写成“是否启用”，导致关闭
+  折叠时 allocation 算符整体失效、Fe2 落到错误分支；已把势计算与折叠开关
+  解耦，关闭组随后与 S5.8 逐位一致。
+- **文件**：`source/source_pw/module_pwdft/{hamilt_pw.cpp,op_pw_alloc.h,op_pw_alloc.cpp,op_pw_veff.h,op_pw_veff.cpp}`、
+  `source/source_estate/module_constraint/{alloc_pw.h,alloc_pw.cpp}`、
+  `source/source_estate/module_constraint/test/alloc_pw_test.cpp`、
+  `source/source_io/module_parameter/{input_parameter.h,read_input_item_other.cpp}`、
+  `docs/superpowers/specs/2026-10-28-allocation-veff-potential-fold.md`、本日志。
+- **结论**：局域势折叠是低风险、可直接测量收益的常数优化；Fe2 单次 hPsi 已从
+  上一轮约 14.5 ms 降到 9.4 ms。它不改变外层迭代数，因此下一阶段若要接近
+  DeltaSpin 的 13 次电子迭代，必须转向占据子空间内的约束矩阵求解。
+- **下一步**：
+  1. 预存 `W_i phi` 与 `Phi^dagger W_i phi`，减少 lambda 变化时 R 次 target FFT。
+  2. 构造 `<\psi_m|A_i|\psi_n>`，实现真正的固定密度受约束子空间最小化。
+  3. 在 force/stress、非零电荷目标与 `nbands=100+` 上验证折叠路径。

@@ -35,6 +35,17 @@ HamiltPW<T, Device>::HamiltPW(elecstate::Potential* pot_in,
     const int* isk = pkv->isk.data();
     const Real* gk2 = wfc_basis->get_gk2_data<Real>();
 
+    // Construct the allocation node before Veff so Veff can optionally fuse
+    // its real-space potential into the existing transform.  The node is still
+    // appended to the operator chain in its original, numerically tested
+    // position below.
+    AllocConstraintPW<OperatorPW<T, Device>>* alloc_constraint = nullptr;
+    if (PARAM.inp.constraint && PARAM.inp.constraint_alloc_switch)
+    {
+        alloc_constraint = new AllocConstraintPW<OperatorPW<T, Device>>(
+            isk, ucell, wfc_basis);
+    }
+
     if (PARAM.inp.t_in_h)
     {
         // Operator<double>* ekinetic = new Ekinetic<OperatorLCAO<double>>
@@ -91,7 +102,8 @@ HamiltPW<T, Device>::HamiltPW(elecstate::Potential* pot_in,
                                                                         pot_in->get_veff_smooth_data<Real>(),
                                                                         pot_in->get_veff_smooth().nr,
                                                                         pot_in->get_veff_smooth().nc,
-                                                                        wfc_basis);
+                                                                        wfc_basis,
+                                                                        PARAM.inp.constraint_alloc_fold_potential ? alloc_constraint : nullptr);
             if(this->ops == nullptr)
             {
                 this->ops = veff;
@@ -133,11 +145,8 @@ HamiltPW<T, Device>::HamiltPW(elecstate::Potential* pot_in,
     // Unified local-moment allocation enters through a PW-native low-rank
     // operator.  It is registered even before the target space is built; the
     // first band application activates it once ConstraintLoop is armed.
-    if (PARAM.inp.constraint && PARAM.inp.constraint_alloc_switch)
+    if (alloc_constraint != nullptr)
     {
-        Operator<T, Device>* alloc_constraint
-            = new AllocConstraintPW<OperatorPW<T, Device>>(isk, ucell,
-                                                            wfc_basis);
         if (this->ops == nullptr)
         {
             this->ops = alloc_constraint;
@@ -191,6 +200,8 @@ HamiltPW<T, Device>::HamiltPW(const HamiltPW<T_in, Device_in> *hamilt)
     this->vkb = hamilt->vkb;
     OperatorPW<std::complex<T_in>, Device_in> * node =
             reinterpret_cast<OperatorPW<std::complex<T_in>, Device_in> *>(hamilt->ops);
+    Veff<OperatorPW<T, Device>>* veff_node = nullptr;
+    AllocConstraintPW<OperatorPW<T, Device>>* alloc_node = nullptr;
 
     while(node != nullptr) {
         if (node->classname == "Ekinetic") {
@@ -217,9 +228,10 @@ HamiltPW<T, Device>::HamiltPW(const HamiltPW<T_in, Device_in> *hamilt)
             }
         }
         else if (node->classname == "Veff") {
-            Operator<T, Device>* veff =
+            Veff<OperatorPW<T, Device>>* veff =
                     new Veff<OperatorPW<T, Device>>(
                             reinterpret_cast<const Veff<OperatorPW<T_in, Device_in>>*>(node));
+            veff_node = veff;
             if(this->ops == nullptr) {
                 this->ops = veff;
             }
@@ -250,9 +262,10 @@ HamiltPW<T, Device>::HamiltPW(const HamiltPW<T_in, Device_in> *hamilt)
             }
         }
         else if (node->classname == "AllocConstraintPW") {
-            Operator<T, Device>* alloc_constraint =
+            AllocConstraintPW<OperatorPW<T, Device>>* alloc_constraint =
                     new AllocConstraintPW<OperatorPW<T, Device>>(
                             reinterpret_cast<const AllocConstraintPW<OperatorPW<T_in, Device_in>>*>(node));
+            alloc_node = alloc_constraint;
             if(this->ops == nullptr) {
                 this->ops = alloc_constraint;
             }
@@ -264,6 +277,13 @@ HamiltPW<T, Device>::HamiltPW(const HamiltPW<T_in, Device_in> *hamilt)
             ModuleBase::WARNING_QUIT("HamiltPW", "Unrecognized Operator type!");
         }
         node = reinterpret_cast<OperatorPW<std::complex<T_in>, Device_in> *>(node->next_op);
+    }
+    // Branch: the copied chain contains both nodes and the user opted into the
+    // fused transform, so reconnect the new Veff to the new allocation cache.
+    if (PARAM.inp.constraint_alloc_fold_potential && veff_node != nullptr
+        && alloc_node != nullptr)
+    {
+        veff_node->set_alloc_constraint(alloc_node);
     }
 }
 
