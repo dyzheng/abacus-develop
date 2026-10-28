@@ -944,6 +944,23 @@ TEST(AllocObserveTest, EmptyTargetSetEqualsBecke)
 本任务，必须让 stage-2 全空间求解后的 \(Q\) 驱动 lambda 更新，固定密度
 子空间仅作为 warm start/预条件器。
 
+2026-10-28 全空间验收基线：新增默认关闭的
+`constraint_alloc_full_residual_accept`，冻结密度预测只做诊断、不进入
+`MuSolver`/Hamiltonian trial；Fe2 与基线同为 6 个外层步，ETOT 差 `7e-9 eV`，
+但 85 vs 82 次电子迭代、21 vs 14 s 墙钟，尚无加速。把预测候选直接当 trial
+的负对照为 129 次迭代、13 个外层步。详见
+`docs/superpowers/specs/2026-10-28-allocation-full-residual-accept.md`。
+因此本任务的“子空间加速”仍未完成，下一步需先做 `Q_sub` 偏置校正或完整
+`J` 估计，再决定是否投入生产路径。
+
+2026-10-28 探索结论（predictor / D2）：修正 predictor-commit 的 psi 旋转
+后，`alpha=1.0` 为 129 次迭代/12 个外层调用（安全版 85/5），`alpha=0.5`
+落到偏低 0.28 meV 的另一状态，`alpha=0.25` 预算冻结；该实验路径已从输入
+和求解分支删除。固定密度 `J0` 与全空间 Broyden `JB` 的相对差在第一次
+有效更新后为 0.45–3.18，且 `J0` 在外层步间可从约 `-20` 变到约 `-0.3`，
+说明零阶偏置与冻结密度 Jacobian 都不足以替代密度响应。后续若继续，只能
+进入显式响应层（D6/D7），不再在预测器上调参。
+
 ### Task S6.3 回归与效率
 
 - [ ] 既有 13 个 `ctest -R constraint` 全绿；默认路径逐字节不变。
