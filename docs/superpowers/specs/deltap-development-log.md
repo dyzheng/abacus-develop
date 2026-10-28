@@ -6727,3 +6727,60 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
      多步更新 lambda。
   2. 由子空间矩阵直接更新约束读数，去掉 inner 循环的逐 band FFT。
   3. 对比新子空间步与当前 82 次外层迭代，验证能否接近 DeltaSpin 的 13 次。
+
+## 2026-10-28 (S5.11 exact subspace): \(A_i\) 固定密度子空间与负结果
+
+- **完成内容**：
+  1. 新增默认关闭的实验开关 `constraint_alloc_exact_subspace`。开启后每个
+     k 点构造并缓存 `H_sub/S_sub`、目标正交基 `phi_orth` 和
+     \(A_i=Q_i+Q_c w_i Q_c\) 的带空间矩阵；mu trial 只需
+     \(n_{\rm bands}\times n_{\rm bands}\) 广义本征分解，不再重建
+     Hamiltonian 或逐 band 做 allocation FFT。
+  2. `DiagoIterAssist::diag_subspace_psi()` 增加可选 `rotation_out`，用于
+     把旋转矩阵直接收缩到 \(A_i\) 得到固定密度 \(Q(\mu)\)。确认返回矩阵为
+     列主序，并按 `u[band*nbands + m]` 读取。
+  3. 参考态不变量：\(\langle\psi_m|A_i|\psi_n\rangle\) 与全空间观测量的
+     最大差为 `1.20e-14`（`kpar=2` 使用 all-pool 归约）；旋转后子空间与
+     全空间读数差 `1.51e-14`。
+  4. 精确子空间结束后按 DeltaSpin stage-2 语义，把旋转后的 psi 交给全空间
+     HSolver 做初值，而不是恢复参考 psi。该修正没有改变 Fe2 的失败模式。
+- **验证/结果**（4 MPI、单线程 OpenMP/BLAS/FFT）：
+  - Fe2 生产基线（`exact=0`）：82 次电子迭代、1984 次 hPsi、hPsi 9.64 s、
+    墙钟 15 s，`q=-3.800014066/+3.799903209 μB`、
+    ETOT `-6370.610151200 eV`、残差 `9.68e-5 μB`。
+  - `exact=1, inner=1`：116 次迭代后一个 MPI rank 以非零码退出；停止点
+    `q=-3.798530/+3.793894 μB`，trust 半径 `1.53e-7`、20 次拒绝，无正常
+    FINAL_ETOT。
+  - `exact=1, inner=8, trust on`：200 次迭代、9381 次 hPsi、hPsi 49.31 s、
+    墙钟 75 s，落到错误分支，ETOT `-6383.165871 eV`。
+  - `exact=1, inner=8, trust off`：200 次迭代、9145 次 hPsi、hPsi 41.05 s、
+    墙钟 63 s，ETOT `-6370.977116 eV`，仍错误。
+  - 回归：`ctest --test-dir build -R MODULE_ESTATE_constraint` 23/23 PASS；
+    LiCl `mu=0` 19 次迭代，`q=2.947887372 e`、
+    ETOT `-643.97565238003517 eV`、`dsum_n=-2.18847163e-12`，逐位不变。
+- **Bug/fix list**：
+  1. 首版子空间读数只归约当前 pool，`kpar=2` 时与全空间观测不一致
+     （偏差 `8.28`）；改用 `reduce_double_allpool()` 后降到 `1e-14`。
+  2. 旋转矩阵首次按行主序读取，预测 psi 残差约 `1`；确认列主序后正确
+     方向残差约 `2e-16`。
+  3. 精确路径结束后恢复 `psi_ref` 会丢弃 stage-1 响应；已改为保留旋转态，
+     但它不是本轮失败的根因。
+  4. 临时四方向旋转诊断和逐次全空间交叉检查已删除；保留参考态
+     \(A_i\) 不变量检查。
+- **文件**：`source/source_esolver/esolver_ks_pw.cpp`、
+  `source/source_hsolver/diago_iter_assist.{h,cpp}`、
+  `source/source_io/module_parameter/{input_parameter.h,read_input_item_other.cpp}`、
+  `source/source_pw/module_pwdft/op_pw_alloc.{h,cpp}`、
+  `docs/superpowers/specs/2026-10-28-allocation-exact-subspace.md`、本日志。
+- **结论**：S6.2 的代数子问题实现正确，但**固定密度 \(Q(\mu)\) 不能替代
+  自洽密度响应**。Fe2 上固定密度预测已接近目标时，stage-2 更新密度后偏磁
+  通道仍可移动约 `0.145 μB`；内层固定密度 trial 与外层全空间评分混合，
+  会持续污染 trust 模型并导致收缩。该路径默认关闭、不推荐生产使用；
+  单次 stage-1 warm start 仍是生产最优路径。
+- **下一步**：
+  1. 若继续做 DeltaSpin 式内层，每个 lambda trial 后必须执行 stage-2 全空间
+     求解，并用全空间 \(Q\) 更新 mu；不能用固定密度 \(Q\) 提前判收敛。
+  2. 研究 \(\partial Q/\partial\mu\) 的密度响应预条件（线性响应/Broyden），
+     使固定密度 \(A_i\) 子空间只承担初值或预条件器角色。
+  3. 清理实验开关的长期维护成本：若后续两轮仍无外层收益，删除精确路径，
+     只保留 \(A_i\) 的单元测试/诊断接口。

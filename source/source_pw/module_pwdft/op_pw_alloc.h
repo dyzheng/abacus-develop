@@ -47,6 +47,26 @@ bool compute_pw_alloc_observables(
     std::string& error);
 
 /**
+ * @brief Build the constraint operators in the current band subspace.
+ *
+ * For every k-point this forms A_i = Q_i + Q_c w_i Q_c in the basis of the
+ * supplied bands, i.e. the nband x nband matrix needed for a fixed-density
+ * constrained subspace diagonalization.  a_sub[ik] is row-major with layout
+ * (alpha * nband + m) * nband + n.  The matrix is pooled over the PW pool.
+ */
+bool build_pw_alloc_subspace_matrices(
+    const UnitCell& ucell,
+    const psi::Psi<std::complex<double>>* psi,
+    const K_Vectors& kv,
+    const ModulePW::PW_Basis_K& wfcpw,
+    const int nspin,
+    const constraint::WeightGrid& weight_grid,
+    const int target_l,
+    std::vector<std::vector<std::complex<double>>>& a_sub,
+    std::vector<int>& spin_labels,
+    std::string& error);
+
+/**
  * @brief Form the frozen-target complement density Q_c D Q_c on the PW grid.
  *
  * The returned rho_c[spin][ir] uses the same electron-density normalization as

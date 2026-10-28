@@ -118,7 +118,8 @@ class DiagoIterAssist
                               T* scc,
                               const int dim_subspace,
                               psi::Psi<T, Device>& evc,
-                              Real* en);
+                              Real* en,
+                              T* rotation_out = nullptr);
 
     static bool test_exit_cond(const int& ntry, const int& notconv);
 

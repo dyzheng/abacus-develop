@@ -936,6 +936,14 @@ TEST(AllocObserveTest, EmptyTargetSetEqualsBecke)
 - [ ] 复用 DeltaSpin `SubspaceDiagonalizer`：`P_i^sub = ⟨ψ|Ŵ_i|ψ⟩ + ⟨Q̂_cψ|Ŵ_i|Q̂_cψ⟩`（只需局域积分 + becp）。
 - [ ] 测试：λ trial 数 × 小对角化成本；与全对角化结果 `<1e-8`；近简并时回退。
 
+2026-10-28 实验记录：已构造
+\(A_i=Q_i+Q_c w_i Q_c\) 的带空间矩阵，子空间读数与全空间读数一致到
+`1.5e-14`；但固定密度 \(Q(\mu)\) 不含密度响应，Fe2 上把其送入外层 mu
+求解会污染 trust 模型，无法压缩外层 SCF。详见
+`docs/superpowers/specs/2026-10-28-allocation-exact-subspace.md`。后续若继续
+本任务，必须让 stage-2 全空间求解后的 \(Q\) 驱动 lambda 更新，固定密度
+子空间仅作为 warm start/预条件器。
+
 ### Task S6.3 回归与效率
 
 - [ ] 既有 13 个 `ctest -R constraint` 全绿；默认路径逐字节不变。

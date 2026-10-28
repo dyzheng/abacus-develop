@@ -802,6 +802,7 @@ struct Input_para
     bool constraint_alloc_switch = false;    ///< enable the LCAO unified-allocation constraint
     bool constraint_alloc_subspace_rotation = false; ///< PW: rotate psi in the occupied subspace after a mu move
     int constraint_alloc_subspace_iterations = 1; ///< PW: fixed-density mu updates per rotation fast path
+    bool constraint_alloc_exact_subspace = false; ///< PW: solve mu in the exact A_i band subspace
     bool constraint_alloc_fold_potential = false; ///< PW: fuse the allocation local potential into Veff
 
     // ==============   #Parameters (25.uncommon hardware) ==================

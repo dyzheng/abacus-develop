@@ -35,6 +35,7 @@
 #include "source_pw/module_pwdft/deltaspin_pw.h" // mohan add 20250309
 #include "source_pw/module_pwdft/deltap_pw.h"
 #include "source_base/constants.h"
+#include "source_base/parallel_reduce.h"
 #include "source_base/tool_quit.h"
 #include "source_estate/module_constraint/constraint_loop.h"
 #include "source_pw/module_pwdft/alloc_pw_report.h"
@@ -345,7 +346,8 @@ void ESolver_KS_PW<T, Device>::hamilt2rho_single(UnitCell& ucell, const int iste
             // responds and the run lands on the wrong magnetic branch.  Warn
             // once so a production input cannot enable it silently.
             static bool inner_budget_warned = false;
-            if (max_inner > 1 && !inner_budget_warned)
+            if (max_inner > 1 && !PARAM.inp.constraint_alloc_exact_subspace
+                && !inner_budget_warned)
             {
                 inner_budget_warned = true;
                 GlobalV::ofs_running
@@ -353,34 +355,189 @@ void ESolver_KS_PW<T, Device>::hamilt2rho_single(UnitCell& ucell, const int iste
                        "iterations > 1 is experimental; Fe2 may over-correct "
                        "and flip magnetic branches\n";
             }
-            int inner_done = 0;
-            for (int inner = 0; inner < max_inner; ++inner)
+            static bool exact_inner_budget_warned = false;
+            // Branch: the exact path can evaluate many fixed-density mu trials
+            // cheaply, but those trials do not include the density response.
+            // More than one trial is diagnostic only: Fe2 shows that the
+            // outer trust model is polluted and the run can stall or abort.
+            if (max_inner > 1 && PARAM.inp.constraint_alloc_exact_subspace
+                && !exact_inner_budget_warned)
             {
-                for (int ik = 0; ik < psi_cpu->get_nk(); ++ik)
+                exact_inner_budget_warned = true;
+                GlobalV::ofs_running
+                    << "[constraint] WARNING: exact-subspace inner iterations "
+                       "> 1 are diagnostic only; fixed-density Q(mu) omits the "
+                       "density response and Fe2 can stall or abort\n";
+            }
+            int inner_done = 0;
+            bool exact_full_solve = false;
+            // Branch A: exact fixed-density subspace (experimental).  H_sub,
+            // S_sub and every A_i matrix are built once at the current
+            // density; later mu trials are diagonalized without another
+            // Hamiltonian rebuild.  The resulting Q(mu) omits the density
+            // response, so this is a diagnostic/preconditioner path rather
+            // than a production replacement for the outer fixed point.
+            if (PARAM.inp.constraint_alloc_exact_subspace)
+            {
+                const int nks = psi_cpu->get_nk();
+                const int ld_psi = psi_cpu->get_nbasis();
+                const int nconstraint = cloop.weight_grid().nconstraint();
+                std::vector<std::vector<std::complex<double>>> a_sub;
+                std::vector<int> spin_labels;
+                std::string exact_error;
+                if (!alloc::build_pw_alloc_subspace_matrices(
+                        ucell, psi_cpu, this->kv, *this->pw_wfc,
+                        PARAM.inp.nspin, cloop.weight_grid(),
+                        PARAM.inp.constraint_alloc_target_l, a_sub,
+                        spin_labels, exact_error))
+                {
+                    ModuleBase::WARNING_QUIT(
+                        "ESolver_KS_PW::hamilt2rho_single", exact_error);
+                }
+                std::vector<std::vector<std::complex<double>>> h_ref(nks);
+                std::vector<std::vector<std::complex<double>>> s_ref(nks);
+                std::vector<std::vector<std::complex<double>>> psi_ref(nks);
+                std::vector<std::vector<std::complex<double>>> rotations(nks);
+                std::vector<std::vector<double>> lambda_ref(
+                    nks, std::vector<double>(nconstraint, 0.0));
+                const std::vector<double> mu_start = cloop.mu_eff();
+                const auto channel_sign
+                    = [&cloop](const int spin, const int alpha) {
+                          // Branch: the two collinear channels use the
+                          // corresponding injection sign; nspin=1 reads the
+                          // up channel.
+                          return (spin == 0)
+                                     ? cloop.channels()[alpha].inj_up
+                                     : cloop.channels()[alpha].inj_dn;
+                      };
+                for (int ik = 0; ik < nks; ++ik)
                 {
                     psi_cpu->fix_k(ik);
                     hamilt_cpu->updateHk(ik);
+                    h_ref[ik].assign(
+                        static_cast<size_t>(nbands) * nbands, 0.0);
+                    s_ref[ik].assign(
+                        static_cast<size_t>(nbands) * nbands, 0.0);
                     hsolver::DiagoIterAssist<std::complex<double>,
                                              base_device::DEVICE_CPU>::
-                        cal_hs_subspace(hamilt_cpu, *psi_cpu, hcc.data(),
-                                        scc.data());
-                    hsolver::DiagoIterAssist<std::complex<double>,
-                                             base_device::DEVICE_CPU>::
-                        diag_subspace_psi(hcc.data(), scc.data(), nbands,
-                                          *psi_cpu,
-                                          &this->pelec->ekb(ik, 0));
+                        cal_hs_subspace(hamilt_cpu, *psi_cpu,
+                                        h_ref[ik].data(), s_ref[ik].data());
+                    psi_ref[ik].assign(
+                        psi_cpu->get_pointer(),
+                        psi_cpu->get_pointer()
+                            + static_cast<size_t>(nbands) * ld_psi);
+                    for (int alpha = 0; alpha < nconstraint; ++alpha)
+                    {
+                        lambda_ref[ik][alpha]
+                            = mu_start[alpha]
+                              * channel_sign(spin_labels[ik], alpha);
+                    }
                 }
-                elecstate::calculate_weights(
-                    this->pelec->ekb, this->pelec->wg, this->pelec->klist,
-                    this->pelec->eferm, this->pelec->f_en,
-                    this->pelec->nelec_spin, this->pelec->skip_weights);
-                ++inner_done;
-                // Branch: the last allowed rotation has no following mu
-                // update; the density is rebuilt below from this state.
-                if (inner + 1 >= max_inner)
-                {
-                    break;
-                }
+                const auto rotate_at_mu
+                    = [&](const std::vector<double>& mu) {
+                          for (int ik = 0; ik < nks; ++ik)
+                          {
+                              psi_cpu->fix_k(ik);
+                              std::copy(psi_ref[ik].begin(), psi_ref[ik].end(),
+                                        psi_cpu->get_pointer());
+                              std::vector<std::complex<double>> h_trial
+                                  = h_ref[ik];
+                              std::vector<std::complex<double>> s_trial
+                                  = s_ref[ik];
+                              for (int alpha = 0; alpha < nconstraint;
+                                   ++alpha)
+                              {
+                                  const double dlambda
+                                      = mu[alpha]
+                                            * channel_sign(spin_labels[ik],
+                                                           alpha)
+                                        - lambda_ref[ik][alpha];
+                                  // Branch: an unchanged component needs no
+                                  // matrix update.
+                                  if (dlambda == 0.0)
+                                  {
+                                      continue;
+                                  }
+                                  const std::complex<double>* a_alpha
+                                      = a_sub[ik].data()
+                                        + static_cast<size_t>(alpha) * nbands
+                                              * nbands;
+                                  for (int i = 0; i < nbands * nbands; ++i)
+                                  {
+                                      h_trial[i] += dlambda * a_alpha[i];
+                                  }
+                              }
+                              rotations[ik].assign(
+                                  static_cast<size_t>(nbands) * nbands, 0.0);
+                              hsolver::DiagoIterAssist<
+                                  std::complex<double>,
+                                  base_device::DEVICE_CPU>::
+                                  diag_subspace_psi(
+                                      h_trial.data(), s_trial.data(), nbands,
+                                      *psi_cpu, &this->pelec->ekb(ik, 0),
+                                      rotations[ik].data());
+                          }
+                      };
+                const auto evaluate_subspace_observable
+                    = [&](const std::vector<std::vector<std::complex<double>>>&
+                              rotation,
+                          std::vector<double>& n_alloc,
+                          std::vector<double>& m_alloc) {
+                          n_alloc.assign(nconstraint, 0.0);
+                          m_alloc.assign(nconstraint, 0.0);
+                          for (int ik = 0; ik < nks; ++ik)
+                          {
+                              const double spin_sign
+                                  = (spin_labels[ik] == 1) ? -1.0 : 1.0;
+                              const auto& u = rotation[ik];
+                              for (int alpha = 0; alpha < nconstraint;
+                                   ++alpha)
+                              {
+                                  const std::complex<double>* a_alpha
+                                      = a_sub[ik].data()
+                                        + static_cast<size_t>(alpha) * nbands
+                                              * nbands;
+                                  double value = 0.0;
+                                  for (int band = 0; band < nbands; ++band)
+                                  {
+                                      std::complex<double> element(0.0, 0.0);
+                                      for (int m = 0; m < nbands; ++m)
+                                      {
+                                          for (int n = 0; n < nbands; ++n)
+                                          {
+                                              element
+                                                  += std::conj(
+                                                         u[static_cast<size_t>(band)
+                                                               * nbands
+                                                           + m])
+                                                     * a_alpha[static_cast<size_t>(m)
+                                                                   * nbands
+                                                               + n]
+                                                     * u[static_cast<size_t>(band)
+                                                             * nbands
+                                                         + n];
+                                          }
+                                      }
+                                      value += this->pelec->wg(ik, band)
+                                               * element.real();
+                                  }
+                                  n_alloc[alpha] += value;
+                                  m_alloc[alpha] += spin_sign * value;
+                              }
+                          }
+                          // Branch: with k-point pools each rank owns only a
+                          // subset of k-points.  Mirror the observable path's
+                          // all-pool reduction so the subspace and reference
+                          // readings describe the same global state.
+                          const int npool = GlobalV::KPAR * PARAM.inp.bndpar;
+                          Parallel_Reduce::reduce_double_allpool(
+                              npool, GlobalV::NPROC_IN_POOL, n_alloc.data(),
+                              nconstraint);
+                          Parallel_Reduce::reduce_double_allpool(
+                              npool, GlobalV::NPROC_IN_POOL, m_alloc.data(),
+                              nconstraint);
+                      };
+
                 std::vector<double> n_alloc;
                 std::vector<double> m_alloc;
                 std::string alloc_error;
@@ -393,21 +550,202 @@ void ESolver_KS_PW<T, Device>::hamilt2rho_single(UnitCell& ucell, const int iste
                     ModuleBase::WARNING_QUIT(
                         "ESolver_KS_PW::hamilt2rho_single", alloc_error);
                 }
-                const constraint::MuStatus inner_status
-                    = cloop.subspace_mu_step(n_alloc, m_alloc);
-                // Branch: CONVERGED/UNREACHABLE freezes mu for this density;
-                // another rotation would only repeat the same subspace.
-                if (inner_status != constraint::MuStatus::RUNNING)
+                std::vector<std::vector<std::complex<double>>> identity(
+                    nks, std::vector<std::complex<double>>(
+                             static_cast<size_t>(nbands) * nbands, 0.0));
+                for (int ik = 0; ik < nks; ++ik)
                 {
-                    break;
+                    for (int band = 0; band < nbands; ++band)
+                    {
+                        identity[ik][static_cast<size_t>(band) * nbands
+                                     + band]
+                            = 1.0;
+                    }
+                }
+                std::vector<double> n_check;
+                std::vector<double> m_check;
+                evaluate_subspace_observable(identity, n_check, m_check);
+                double observable_diff = 0.0;
+                for (int alpha = 0; alpha < nconstraint; ++alpha)
+                {
+                    observable_diff = std::max(
+                        observable_diff, std::abs(n_alloc[alpha]
+                                                  - n_check[alpha]));
+                    observable_diff = std::max(
+                        observable_diff, std::abs(m_alloc[alpha]
+                                                  - m_check[alpha]));
+                }
+                // Guard: the subspace matrices must reproduce the operator
+                // observable at the reference wavefunction.  A mismatch means
+                // the A_i construction is inconsistent, so refuse to advance
+                // mu on a wrong model.
+                if (observable_diff > 1.0e-6)
+                {
+                    ModuleBase::WARNING_QUIT(
+                        "ESolver_KS_PW::hamilt2rho_single",
+                        "allocation exact subspace observable mismatch: "
+                            + std::to_string(observable_diff));
+                }
+                // The incoming psi belongs to the previous density/potential,
+                // while h_ref already contains the outer step's new mu.  Put
+                // psi on the new fixed-density eigenbasis before observing Q;
+                // otherwise the first secant update compares Q at the old
+                // potential with a new Hamiltonian and drives the SCF into a
+                // moving-target limit cycle.
+                rotate_at_mu(mu_start);
+                std::vector<double> rotated_mu = mu_start;
+                elecstate::calculate_weights(
+                    this->pelec->ekb, this->pelec->wg, this->pelec->klist,
+                    this->pelec->eferm, this->pelec->f_en,
+                    this->pelec->nelec_spin, this->pelec->skip_weights);
+                evaluate_subspace_observable(rotations, n_alloc, m_alloc);
+                constraint::MuStatus exact_status
+                    = constraint::MuStatus::RUNNING;
+                for (int inner = 0; inner < max_inner; ++inner)
+                {
+                    exact_status
+                        = cloop.subspace_mu_step(n_alloc, m_alloc);
+                    GlobalV::ofs_running
+                        << "[constraint] ALLOC-PW exact inner " << inner
+                        << " status=" << static_cast<int>(exact_status)
+                        << " q=(";
+                    for (int alpha = 0; alpha < nconstraint; ++alpha)
+                    {
+                        GlobalV::ofs_running << (alpha == 0 ? "" : ",")
+                                             << n_alloc[alpha];
+                    }
+                    GlobalV::ofs_running << ") m=(";
+                    for (int alpha = 0; alpha < nconstraint; ++alpha)
+                    {
+                        GlobalV::ofs_running << (alpha == 0 ? "" : ",")
+                                             << m_alloc[alpha];
+                    }
+                    GlobalV::ofs_running << ") mu=(";
+                    for (int alpha = 0; alpha < nconstraint; ++alpha)
+                    {
+                        GlobalV::ofs_running << (alpha == 0 ? "" : ",")
+                                             << cloop.mu_eff()[alpha];
+                    }
+                    GlobalV::ofs_running << ")\n";
+                    // Branch: a converged or unreachable multiplier needs no
+                    // further trial; the current psi already belongs to the
+                    // last observed mu only if it was rotated there.
+                    if (exact_status != constraint::MuStatus::RUNNING)
+                    {
+                        break;
+                    }
+                    const std::vector<double> mu_trial = cloop.mu_eff();
+                    rotate_at_mu(mu_trial);
+                    rotated_mu = mu_trial;
+                    // Branch: subspace diagonalization changes the band
+                    // energies, so occupations must follow the new spectrum
+                    // before the constraint observable is measured.  This is
+                    // the same weight update DeltaSpin performs after each
+                    // fixed-density rotation.
+                    elecstate::calculate_weights(
+                        this->pelec->ekb, this->pelec->wg,
+                        this->pelec->klist, this->pelec->eferm,
+                        this->pelec->f_en, this->pelec->nelec_spin,
+                        this->pelec->skip_weights);
+                    evaluate_subspace_observable(rotations, n_alloc, m_alloc);
+                    ++inner_done;
+                }
+                // Branch: the last permitted mu update was not followed by a
+                // rotation inside the loop.  Rotate once so the density and
+                // eigenvalues correspond to the multiplier that will be
+                // audited.
+                if (cloop.mu_eff() != rotated_mu)
+                {
+                    rotate_at_mu(cloop.mu_eff());
+                    // Branch: the trailing rotation also changes the
+                    // spectrum; refresh occupations before density rebuild.
+                    elecstate::calculate_weights(
+                        this->pelec->ekb, this->pelec->wg,
+                        this->pelec->klist, this->pelec->eferm,
+                        this->pelec->f_en, this->pelec->nelec_spin,
+                        this->pelec->skip_weights);
+                    ++inner_done;
+                }
+                GlobalV::ofs_running
+                    << "[constraint] ALLOC-PW exact subspace at SCF iteration "
+                    << iter << " (nbands=" << nbands
+                    << ", inner rotations=" << inner_done
+                    << ", q_check=" << observable_diff << ")\n";
+                // Branch: DeltaSpin stage 2.  The subspace diagonalization
+                // above rotated psi onto the fixed-density eigenbasis for the
+                // final mu.  Keep that rotated state as the full-space HSolver
+                // initial guess, exactly as update_psi_charge_pw_cpu does;
+                // restoring psi_ref would discard the constraint response and
+                // make the outer multiplier lag the density by one iteration.
+                exact_full_solve = true;
+            }
+            else
+            {
+                // Branch B: legacy one-shot fixed-density rotation.  Rebuild
+                // H/S for each allowed inner step and update mu from the
+                // observed band projection.
+                for (int inner = 0; inner < max_inner; ++inner)
+                {
+                    for (int ik = 0; ik < psi_cpu->get_nk(); ++ik)
+                    {
+                        psi_cpu->fix_k(ik);
+                        hamilt_cpu->updateHk(ik);
+                        hsolver::DiagoIterAssist<std::complex<double>,
+                                                 base_device::DEVICE_CPU>::
+                            cal_hs_subspace(hamilt_cpu, *psi_cpu, hcc.data(),
+                                            scc.data());
+                        hsolver::DiagoIterAssist<std::complex<double>,
+                                                 base_device::DEVICE_CPU>::
+                            diag_subspace_psi(hcc.data(), scc.data(), nbands,
+                                              *psi_cpu,
+                                              &this->pelec->ekb(ik, 0));
+                    }
+                    elecstate::calculate_weights(
+                        this->pelec->ekb, this->pelec->wg, this->pelec->klist,
+                        this->pelec->eferm, this->pelec->f_en,
+                        this->pelec->nelec_spin, this->pelec->skip_weights);
+                    ++inner_done;
+                    // Branch: the last allowed rotation has no following mu
+                    // update; the density is rebuilt below from this state.
+                    if (inner + 1 >= max_inner)
+                    {
+                        break;
+                    }
+                    std::vector<double> n_alloc;
+                    std::vector<double> m_alloc;
+                    std::string alloc_error;
+                    if (!alloc::compute_pw_alloc_observables(
+                            ucell, psi_cpu, this->pelec->wg, this->kv,
+                            *this->pw_wfc, PARAM.inp.nspin,
+                            cloop.weight_grid(),
+                            PARAM.inp.constraint_alloc_target_l, n_alloc,
+                            m_alloc, alloc_error))
+                    {
+                        ModuleBase::WARNING_QUIT(
+                            "ESolver_KS_PW::hamilt2rho_single", alloc_error);
+                    }
+                    const constraint::MuStatus inner_status
+                        = cloop.subspace_mu_step(n_alloc, m_alloc);
+                    // Branch: CONVERGED/UNREACHABLE freezes mu for this
+                    // density; another rotation would repeat the same
+                    // subspace.
+                    if (inner_status != constraint::MuStatus::RUNNING)
+                    {
+                        break;
+                    }
                 }
             }
-            // The final rotated bands must update the energy and density
-            // before the next iteration observes the constrained moment.
-            elecstate::calEBand(this->pelec->ekb, this->pelec->wg,
-                                this->pelec->f_en);
-            pelec_pw->psiToRho(*psi_cpu);
-            skip_solve = true;
+            // Branch A: the legacy fast path ends with the rotated bands and
+            // rebuilds the density directly.
+            // Branch B: the exact-subspace path only predicts mu; the normal
+            // full-space HSolver below supplies the density response.
+            if (!exact_full_solve)
+            {
+                elecstate::calEBand(this->pelec->ekb, this->pelec->wg,
+                                    this->pelec->f_en);
+                pelec_pw->psiToRho(*psi_cpu);
+                skip_solve = true;
+            }
             GlobalV::ofs_running
                 << "[constraint] ALLOC-PW subspace rotation at SCF iteration "
                 << iter << " (nbands=" << nbands

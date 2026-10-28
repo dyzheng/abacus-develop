@@ -588,7 +588,8 @@ void DiagoIterAssist<T, Device>::diag_subspace_psi(const T* hcc,
                               T* scc,
                               const int dim_subspace,
                               psi::Psi<T, Device>& evc,
-                              Real* en
+                              Real* en,
+                              T* rotation_out
 )
 {
     ModuleBase::TITLE("DiagoIterAssist", "diag_subspace_psi");
@@ -603,6 +604,17 @@ void DiagoIterAssist<T, Device>::diag_subspace_psi(const T* hcc,
 
     // after generation of H and S matrix, diag them
     DiagoIterAssist::diag_hegvd(nstart, nstart, hcc, scc, nstart, en, vcc);
+
+    // Branch: the caller needs the subspace rotation for matrix contractions
+    // (for example the allocation constraint matrices).  Copy it before the
+    // local eigenvector workspace is released.
+    if (rotation_out != nullptr)
+    {
+        for (int i = 0; i < nstart * nstart; ++i)
+        {
+            rotation_out[i] = vcc[i];
+        }
+    }
 
     { // code block to calculate tar_mat
         const int dmin = evc.get_current_ngk();

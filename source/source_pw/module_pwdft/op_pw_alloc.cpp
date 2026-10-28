@@ -359,6 +359,211 @@ void build_raw_overlap(const PwTargetContext& context,
     }
 }
 
+bool build_pw_alloc_subspace_matrices_impl(
+    const UnitCell& ucell,
+    const psi::Psi<std::complex<double>>* psi,
+    const K_Vectors& kv,
+    const ModulePW::PW_Basis_K& wfcpw,
+    const int nspin,
+    const constraint::WeightGrid& weight_grid,
+    const int target_l,
+    std::vector<std::vector<std::complex<double>>>& a_sub,
+    std::vector<int>& spin_labels,
+    std::string& error)
+{
+    (void)ucell;
+    // Branch: the scalar PW allocation observable and operator are defined
+    // only for collinear bands.
+    if (nspin != 1 && nspin != 2)
+    {
+        error = "PW allocation subspace supports only nspin 1/2";
+        return false;
+    }
+    // Branch: spinor bands have two components per band and need a Pauli
+    // contraction, which this closure does not form.
+    if (psi == nullptr || psi->get_npol() != 1)
+    {
+        error = "PW allocation subspace requires scalar CPU wavefunctions";
+        return false;
+    }
+    const int nks = psi->get_nk();
+    const int nband = psi->get_nbands();
+    const int ld_psi = psi->get_nbasis();
+    // Branch: an empty band or k-point set has no subspace to constrain.
+    if (nks <= 0 || nband <= 0)
+    {
+        error = "PW allocation subspace has no k-points or bands";
+        return false;
+    }
+    // Guard: the target weights and wavefunction transforms must live on the
+    // same real-space partition.
+    if (weight_grid.nrxx() != wfcpw.nrxx)
+    {
+        error = "PW allocation subspace weight/wavefunction grid mismatch";
+        return false;
+    }
+    const int nconstraint = weight_grid.nconstraint();
+    // Branch: a run without constraints has no A_i matrices to build.
+    if (nconstraint <= 0)
+    {
+        a_sub.clear();
+        spin_labels.assign(nks, 0);
+        return true;
+    }
+
+    a_sub.assign(nks, {});
+    spin_labels.assign(nks, 0);
+    auto* onsite_p
+        = projectors::OnsiteProjector<double,
+                                      base_device::DEVICE_CPU>::get_instance();
+    const double inverse_grid_size = 1.0 / static_cast<double>(wfcpw.nxyz);
+    for (int ik = 0; ik < nks; ++ik)
+    {
+        // Guard: every k-point needs the spin label selecting its channel.
+        if (static_cast<int>(kv.isk.size()) <= ik)
+        {
+            error = "PW allocation subspace has no k-point spin label";
+            return false;
+        }
+        const int spin = (nspin == 2) ? kv.isk[ik] : 0;
+        // Guard: an unexpected spin label would select the wrong channel.
+        if (spin < 0 || spin >= nspin)
+        {
+            error = "PW allocation subspace has an invalid spin label";
+            return false;
+        }
+        spin_labels[ik] = spin;
+        psi->fix_k(ik);
+        PwTargetContext context;
+        if (!build_target_context(onsite_p, weight_grid, ik, target_l,
+                                  psi->get_pointer(), nband, ld_psi, context,
+                                  error))
+        {
+            return false;
+        }
+        std::vector<std::vector<std::complex<double>>> phi_orth;
+        try
+        {
+            build_pw_alloc_orthogonal_phi(context.space, context.phi,
+                                          phi_orth);
+        }
+        catch (const std::invalid_argument& exc)
+        {
+            error = std::string("PW allocation subspace: ") + exc.what();
+            return false;
+        }
+        const int r = context.space.ntarget;
+        // Orthonormal target overlaps and complement vectors are band
+        // independent inputs to all constraint matrices.  Keep them for the
+        // current k-point only, so memory stays bounded by one k-block.
+        std::vector<std::vector<std::complex<double>>> orth(
+            nband, std::vector<std::complex<double>>(
+                       r, std::complex<double>(0.0, 0.0)));
+        std::vector<std::vector<std::complex<double>>> complement_real(
+            nband, std::vector<std::complex<double>>(
+                       wfcpw.nmaxgr, std::complex<double>(0.0, 0.0)));
+        std::vector<std::complex<double>> complement(
+            context.npw, std::complex<double>(0.0, 0.0));
+        const std::complex<double>* psi_k = psi->get_pointer();
+        for (int band = 0; band < nband; ++band)
+        {
+            const std::complex<double>* band_ptr
+                = psi_k + static_cast<size_t>(band) * ld_psi;
+            std::vector<std::complex<double>> raw;
+            build_raw_overlap(context, band_ptr, raw);
+            orthogonalize_pw_overlaps(context.space, raw, orth[band]);
+            // Q_c|psi_n> = |psi_n> - sum_a |phi_a><phi_a|psi_n>.
+            std::copy(band_ptr, band_ptr + context.npw, complement.begin());
+            for (int a = 0; a < r; ++a)
+            {
+                for (int ig = 0; ig < context.npw; ++ig)
+                {
+                    complement[ig] -= phi_orth[a][ig] * orth[band][a];
+                }
+            }
+            wfcpw.template recip_to_real<std::complex<double>,
+                                         base_device::DEVICE_CPU>(
+                complement.data(), complement_real[band].data(), ik);
+        }
+
+        std::vector<std::complex<double>>& matrices = a_sub[ik];
+        matrices.assign(static_cast<size_t>(nconstraint) * nband * nband,
+                        std::complex<double>(0.0, 0.0));
+        // The Q_c w_i Q_c block is diagonal in real space but not in the band
+        // basis.  Accumulate the local-grid contribution first, then reduce
+        // it before adding the already-global target-projector term.
+        for (int alpha = 0; alpha < nconstraint; ++alpha)
+        {
+            std::complex<double>* block
+                = matrices.data()
+                  + static_cast<size_t>(alpha) * nband * nband;
+            const std::vector<double>& weights
+                = weight_grid.constraint_weight(alpha);
+            for (int ir = 0; ir < weight_grid.nrxx(); ++ir)
+            {
+                const double weight = weights[ir] * inverse_grid_size;
+                // Branch: a zero weight contributes nothing to this grid row.
+                if (weight == 0.0)
+                {
+                    continue;
+                }
+                for (int m = 0; m < nband; ++m)
+                {
+                    const std::complex<double> left
+                        = std::conj(complement_real[m][ir]) * weight;
+                    for (int n = 0; n < nband; ++n)
+                    {
+                        block[static_cast<size_t>(m) * nband + n]
+                            += left * complement_real[n][ir];
+                    }
+                }
+            }
+        }
+        reduce_pool(matrices);
+        for (int alpha = 0; alpha < nconstraint; ++alpha)
+        {
+            std::complex<double>* block
+                = matrices.data()
+                  + static_cast<size_t>(alpha) * nband * nband;
+            for (int a = 0; a < r; ++a)
+            {
+                // Branch: only target projectors owned by this constraint
+                // enter Q_i; unowned rows belong to P only.
+                if (context.space.constraint[a] != alpha)
+                {
+                    continue;
+                }
+                for (int m = 0; m < nband; ++m)
+                {
+                    const std::complex<double> left
+                        = std::conj(orth[m][a]);
+                    for (int n = 0; n < nband; ++n)
+                    {
+                        block[static_cast<size_t>(m) * nband + n]
+                            += left * orth[n][a];
+                    }
+                }
+            }
+            // The analytic operator is Hermitian.  Remove roundoff asymmetry
+            // before it enters the generalized eigensolver.
+            for (int m = 0; m < nband; ++m)
+            {
+                for (int n = m + 1; n < nband; ++n)
+                {
+                    const std::complex<double> value
+                        = 0.5
+                          * (block[static_cast<size_t>(m) * nband + n]
+                             + std::conj(block[static_cast<size_t>(n) * nband + m]));
+                    block[static_cast<size_t>(m) * nband + n] = value;
+                    block[static_cast<size_t>(n) * nband + m]
+                        = std::conj(value);
+                }
+            }
+        }
+    }
+    return true;
+}
+
 void build_vphi_overlap_local(
     const std::vector<std::vector<std::complex<double>>>& vphi,
     const std::complex<double>* psi,
@@ -791,6 +996,25 @@ void accumulate_target_stress_component(
 }
 
 } // namespace
+
+bool build_pw_alloc_subspace_matrices(
+    const UnitCell& ucell,
+    const psi::Psi<std::complex<double>>* psi,
+    const K_Vectors& kv,
+    const ModulePW::PW_Basis_K& wfcpw,
+    const int nspin,
+    const constraint::WeightGrid& weight_grid,
+    const int target_l,
+    std::vector<std::vector<std::complex<double>>>& a_sub,
+    std::vector<int>& spin_labels,
+    std::string& error)
+{
+    // The implementation shares the target-context and overlap helpers with
+    // the operator/observable paths; expose it through the public alloc API.
+    return build_pw_alloc_subspace_matrices_impl(
+        ucell, psi, kv, wfcpw, nspin, weight_grid, target_l, a_sub,
+        spin_labels, error);
+}
 
 bool compute_pw_alloc_observables(
     const UnitCell& ucell,

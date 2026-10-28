@@ -1877,6 +1877,18 @@ Manual override is allowed: if sc_acceleration_mode is explicitly set, it takes 
         this->add_item(item);
     }
     {
+        Input_Item item("constraint_alloc_exact_subspace");
+        item.annotation = "PW allocation: solve mu in the exact A_i band subspace";
+        item.category = "Constraint";
+        item.type = "Boolean";
+        item.description = "Experimental PW diagnostic. When true, the allocation warm start builds H_sub, S_sub, and <psi_m|A_i|psi_n> once for the current density, then updates mu by subspace diagonalization without rebuilding the Hamiltonian. The fixed-density observable omits the density response, so on Fe2 this path does not reproduce DeltaSpin-like outer convergence and can stall or abort with more than one inner trial. Requires constraint_alloc_subspace_rotation; default False keeps the production one-step rotation path.";
+        item.default_value = "False";
+        item.unit = "";
+        item.availability = "constraint is true, basis_type = pw, and constraint_alloc_switch is true";
+        read_sync_bool(input.constraint_alloc_exact_subspace);
+        this->add_item(item);
+    }
+    {
         Input_Item item("deltap_branch_write");
         item.annotation = "persist deltap_branch.dat: true or false";
         item.category = "DeltaP";
