@@ -550,11 +550,11 @@ void HSolverPW<T, Device>::hamiltSolvePsiK(hamilt::Hamilt<T, Device>* hm,
             if (initial_hpsi)
             {
                 initial_action = [&](T* output, int leading) {
-                    initial_hpsi(ik, output, leading);
                     if (basis_observer)
                     {
                         basis_observer->capture(ik, 0, psi.get_nbands(), true);
                     }
+                    initial_hpsi(ik, output, leading);
                 };
             }
             typename Diago_DavSubspace<T, Device>::BasisRotationFunc rotate_basis;
