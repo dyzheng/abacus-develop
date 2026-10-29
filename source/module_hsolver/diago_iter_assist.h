@@ -43,7 +43,8 @@ class DiagoIterAssist
                                                 T *hcc, 
                                                 T *scc,
                                                 T *hpsi_host = nullptr,
-                                                bool identity_overlap = false);
+                                                bool identity_overlap = false,
+                                                const typename hamilt::Operator<T, Device>::Action& action = {});
 
     static void diag_responce(const T* hcc,
                               const T* scc,

@@ -724,6 +724,10 @@ void ESolver_KS_PW<T, Device>::hamilt2density(const int istep,
         }
         if(!skip_solve)
         {
+            if (PARAM.inp.sc_mag_switch)
+            {
+                SpinConstrain<std::complex<double>>::getScInstance().invalidate_nonlocal_projections();
+            }
             this->phsol->solve(this->p_hamilt,      // hamilt::Hamilt<T, Device>* pHamilt,
                 this->kspw_psi[0],   // psi::Psi<T, Device>& psi,
                 this->pelec,         // elecstate::ElecState<T, Device>* pelec,

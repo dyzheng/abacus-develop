@@ -23,6 +23,19 @@ class HSolverPW : public HSolver<T, Device>
   public:
     using InitialHPsiFunc = std::function<void(int, T*, int)>;
 
+    /// A complete observer follows Davidson basis changes for each k point.
+    /// capture receives the first band, count and whether the action was
+    /// supplied from a cache; otherwise projector products are freshly
+    /// available. rotate receives the old basis size, Ritz coefficients,
+    /// leading dimension and final/restart flag. invalidate precedes a
+    /// fallback that changes wavefunctions without Davidson rotations.
+    struct BasisObserver
+    {
+        std::function<void(int, int, int, bool)> capture;
+        std::function<void(int, int, const T*, int, bool)> rotate;
+        std::function<void(int)> invalidate;
+    };
+
     /**
      * @brief diago_full_acc
      * If .TRUE. all the empty states are diagonalized at the same level of
@@ -60,7 +73,8 @@ class HSolverPW : public HSolver<T, Device>
                const bool skip_charge,
                const T* initial_h,
                const T* initial_s,
-               const InitialHPsiFunc& initial_hpsi = {});
+               const InitialHPsiFunc& initial_hpsi = {},
+               const BasisObserver* basis_observer = nullptr);
 
     virtual Real cal_hsolerror() override;
 
@@ -76,7 +90,8 @@ class HSolverPW : public HSolver<T, Device>
                          Real* eigenvalue,
                          const T* initial_h,
                          const T* initial_s,
-                         const InitialHPsiFunc& initial_hpsi);
+                         const InitialHPsiFunc& initial_hpsi,
+                         const BasisObserver* basis_observer);
 
     // psi initializer && change k point in psi
     void updatePsiK(hamilt::Hamilt<T, Device>* pHamilt, psi::Psi<T, Device>& psi, const int ik);

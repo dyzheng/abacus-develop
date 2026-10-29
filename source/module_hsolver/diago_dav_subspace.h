@@ -33,6 +33,10 @@ class Diago_DavSubspace : public DiagH<T, Device>
 
     using HPsiFunc = std::function<void(T*, T*, const int, const int, const int, const int)>;
     using InitialHPsiFunc = std::function<void(T*, int)>;
+    /// Receives the old basis size, Ritz coefficients and their leading
+    /// dimension after rotation. The final flag distinguishes returns from
+    /// restarts. The coefficient buffer remains owned by the solver.
+    using BasisRotationFunc = std::function<void(int, const T*, int, bool)>;
 
     /// Initial projected matrices are optional, contiguous column-major arrays
     /// of size n_band squared on Device: psi_in^H H psi_in and psi_in^H psi_in,
@@ -47,7 +51,8 @@ class Diago_DavSubspace : public DiagH<T, Device>
              const bool& scf_type,
              const T* initial_h = nullptr,
              const T* initial_s = nullptr,
-             const InitialHPsiFunc& initial_hpsi = {});
+             const InitialHPsiFunc& initial_hpsi = {},
+             const BasisRotationFunc& rotate_basis = {});
 
   private:
     /// for MPI communication
@@ -147,7 +152,8 @@ class Diago_DavSubspace : public DiagH<T, Device>
                   const double* ethr_band,
                   const T* initial_h,
                   const T* initial_s,
-                  const InitialHPsiFunc& initial_hpsi);
+                  const InitialHPsiFunc& initial_hpsi,
+                  const BasisRotationFunc& rotate_basis);
 
     bool test_exit_cond(const int& ntry, const int& notconv, const bool& scf);
 

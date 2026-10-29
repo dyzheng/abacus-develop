@@ -46,7 +46,7 @@ void HSolverPW_SDFT::solve(hamilt::Hamilt<std::complex<double>>* pHamilt,
             update_precondition(precondition, ik, this->wfc_basis->npwk[ik]);
             /// solve eigenvector and eigenvalue for H(k)
             double* p_eigenvalues = &(pes->ekb(ik, 0));
-            this->hamiltSolvePsiK(pHamilt, psi, precondition, p_eigenvalues, nullptr, nullptr, {});
+            this->hamiltSolvePsiK(pHamilt, psi, precondition, p_eigenvalues, nullptr, nullptr, {}, nullptr);
         }
 
         stoiter.stohchi.current_ik = ik;
