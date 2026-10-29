@@ -492,7 +492,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik,
                   this->nkb);
     }
 
-    if (this->device == base_device::GpuDevice)
+    if (GlobalV::NPROC_IN_POOL > 1 && this->device == base_device::GpuDevice)
     {
         std::complex<FPTYPE>* h_becp = nullptr;
         resmem_complex_h_op()(this->cpu_ctx, h_becp, size_becp_act);
@@ -501,7 +501,7 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik,
         syncmem_complex_h2d_op()(this->ctx, this->cpu_ctx, becp_tmp, h_becp, size_becp_act);
         delmem_complex_h_op()(this->cpu_ctx, h_becp);
     }
-    else
+    else if (GlobalV::NPROC_IN_POOL > 1)
     {
         Parallel_Reduce::reduce_pool(becp_tmp, size_becp_act);
     }
