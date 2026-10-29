@@ -53,7 +53,17 @@ bool compute_pw_alloc_observables(
     std::vector<double>* n_T_out = nullptr,
     std::vector<double>* n_c_out = nullptr,
     std::vector<double>* m_T_out = nullptr,
-    std::vector<double>* m_c_out = nullptr);
+    std::vector<double>* m_c_out = nullptr,
+    // Optional totals over EVERY target row (owned or not): the partition
+    // audit needs them to separate "unowned target" from "complement
+    // normalization" when sum_a q_a != N.
+    double* n_T_all_out = nullptr,
+    double* m_T_all_out = nullptr,
+    // Optional partition-audit scalars: occupation-weighted band norm
+    // sum wg |psi_G|^2 (must equal nelec for normalized bands) and the
+    // rank-local real-space transform norm (the code's 1/nxyz convention).
+    double* n_band_norm_out = nullptr,
+    double* n_real_norm_out = nullptr);
 
 /**
  * @brief Build the constraint operators in the current band subspace.

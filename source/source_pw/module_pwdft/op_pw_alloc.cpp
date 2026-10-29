@@ -1031,7 +1031,11 @@ bool compute_pw_alloc_observables(
     std::vector<double>* n_T_out,
     std::vector<double>* n_c_out,
     std::vector<double>* m_T_out,
-    std::vector<double>* m_c_out)
+    std::vector<double>* m_c_out,
+    double* n_T_all_out,
+    double* m_T_all_out,
+    double* n_band_norm_out,
+    double* n_real_norm_out)
 {
     const int nconstraint = weight_grid.nconstraint();
     n_alloc.assign(nconstraint, 0.0);
@@ -1042,6 +1046,11 @@ bool compute_pw_alloc_observables(
     if (n_c_out != nullptr) { n_c_out->assign(nconstraint, 0.0); }
     if (m_T_out != nullptr) { m_T_out->assign(nconstraint, 0.0); }
     if (m_c_out != nullptr) { m_c_out->assign(nconstraint, 0.0); }
+    // Partition-audit totals over every target row (owned or not).
+    double n_T_all = 0.0;
+    double m_T_all = 0.0;
+    double n_band_norm = 0.0;
+    double n_real_norm = 0.0;
     // Branch: the observable is defined for the collinear scalar-band path.
     if (nspin != 1 && nspin != 2)
     {
@@ -1167,9 +1176,64 @@ bool compute_pw_alloc_observables(
                 }
                 qc_alpha[alpha] += qc * inverse_grid_size;
             }
+            {
+                // Parseval guard: the manual 1/nxyz real-space norm differs
+                // from the unambiguous G-space norm by the transform's grid
+                // factor (Fe2: 1.85%).  The G-space norm sum_G |Q_c psi|^2 is
+                // the exact orthogonal-complement norm, so fix the TOTAL with
+                // it and keep the FFT only for the per-constraint spatial
+                // shape.  Without this, sum_a q_a exceeded N by 0.376 e.
+                double comp_g = 0.0;
+                for (int ig = 0; ig < npw; ++ig)
+                {
+                    comp_g += std::norm(complement[ig]);
+                }
+                Parallel_Reduce::reduce_pool(comp_g);
+                double real_norm = 0.0;
+                for (int ir = 0; ir < wfcpw.nrxx; ++ir)
+                {
+                    real_norm += std::norm(complement_real[ir]);
+                }
+                Parallel_Reduce::reduce_pool(real_norm);
+                const double real_norm_scaled = real_norm * inverse_grid_size;
+                // Branch: a nonzero complement shape -> rescale the weighted
+                // integrals so their total is the G-space norm.
+                if (real_norm_scaled > 0.0 && comp_g > 0.0)
+                {
+                    const double scale = comp_g / real_norm_scaled;
+                    for (int alpha = 0; alpha < nconstraint; ++alpha)
+                    {
+                        qc_alpha[alpha] *= scale;
+                    }
+                }
+                n_real_norm += occupation * comp_g;
+            }
             // The Q_c contribution is rank-local, so reduce it separately
             // from the already global Q_i contribution.  This keeps the
             // collective count at one per band without double counting Q_i.
+            // Total target weight over ALL rows, before the ownership mask,
+            // so the audit can distinguish an unowned target row from a
+            // complement normalization error.
+            double all_target = 0.0;
+            for (int a = 0; a < context.space.ntarget; ++a)
+            {
+                all_target += std::norm(overlap[a]);
+            }
+            n_T_all += occupation * all_target;
+            if (nspin == 2)
+            {
+                m_T_all += spin_sign * occupation * all_target;
+            }
+            // Audit: band G-norm and the real-space complement norm on the
+            // same grid.  These separate a projection-identity failure from a
+            // wavefunction/occupation normalization failure.
+            double band_norm = 0.0;
+            for (int ig = 0; ig < npw; ++ig)
+            {
+                band_norm += std::norm(band_ptr[ig]);
+            }
+            Parallel_Reduce::reduce_pool(band_norm);
+            n_band_norm += occupation * band_norm;
             reduce_pool(qc_alpha);
             for (int alpha = 0; alpha < nconstraint; ++alpha)
             {
@@ -1239,6 +1303,28 @@ bool compute_pw_alloc_observables(
         Parallel_Reduce::reduce_double_allpool(
             npool, GlobalV::NPROC_IN_POOL, m_c_out->data(), nconstraint);
     }
+    // Same averaging/summing convention as n_alloc/m_alloc.
+    if (n_T_all_out != nullptr || m_T_all_out != nullptr)
+    {
+        Parallel_Reduce::reduce_double_allpool(
+            npool, GlobalV::NPROC_IN_POOL, &n_T_all, 1);
+        if (nspin == 2)
+        {
+            Parallel_Reduce::reduce_double_allpool(
+                npool, GlobalV::NPROC_IN_POOL, &m_T_all, 1);
+        }
+    }
+    if (n_T_all_out != nullptr) { *n_T_all_out = n_T_all; }
+    if (m_T_all_out != nullptr) { *m_T_all_out = m_T_all; }
+    if (n_band_norm_out != nullptr || n_real_norm_out != nullptr)
+    {
+        Parallel_Reduce::reduce_double_allpool(
+            npool, GlobalV::NPROC_IN_POOL, &n_band_norm, 1);
+        Parallel_Reduce::reduce_double_allpool(
+            npool, GlobalV::NPROC_IN_POOL, &n_real_norm, 1);
+    }
+    if (n_band_norm_out != nullptr) { *n_band_norm_out = n_band_norm; }
+    if (n_real_norm_out != nullptr) { *n_real_norm_out = n_real_norm; }
     (void)ucell;
     return true;
 }

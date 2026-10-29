@@ -1039,6 +1039,10 @@ void ESolver_KS_PW<T, Device>::iter_finish(UnitCell& ucell, const int istep, int
             std::vector<double> n_c;
             std::vector<double> m_T;
             std::vector<double> m_c;
+            double n_T_all = 0.0;
+            double m_T_all = 0.0;
+            double n_band_norm = 0.0;
+            double n_real_norm = 0.0;
             if (!alloc::compute_pw_alloc_observables(
                     ucell, this->stp.psi_cpu, this->pelec->wg, this->kv,
                     *this->pw_wfc, PARAM.inp.nspin, cloop.weight_grid(),
@@ -1047,7 +1051,11 @@ void ESolver_KS_PW<T, Device>::iter_finish(UnitCell& ucell, const int istep, int
                     want_split ? &n_T : nullptr,
                     want_split ? &n_c : nullptr,
                     want_split ? &m_T : nullptr,
-                    want_split ? &m_c : nullptr))
+                    want_split ? &m_c : nullptr,
+                    want_split ? &n_T_all : nullptr,
+                    want_split ? &m_T_all : nullptr,
+                    want_split ? &n_band_norm : nullptr,
+                    want_split ? &n_real_norm : nullptr))
             {
                 ModuleBase::WARNING_QUIT("ESolver_KS_PW::iter_finish",
                                          alloc_error);
@@ -1062,10 +1070,12 @@ void ESolver_KS_PW<T, Device>::iter_finish(UnitCell& ucell, const int istep, int
                                      << iter << "\n";
                 double nsum = 0.0;
                 double msum = 0.0;
+                double ncs = 0.0;
                 for (size_t a = 0; a < n_alloc.size(); ++a)
                 {
                     nsum += n_alloc[a];
                     msum += m_alloc[a];
+                    ncs += n_c[a];
                     GlobalV::ofs_running
                         << "ALLOC-SPLIT c[" << a << "] n_T=" << n_T[a]
                         << " n_c=" << n_c[a] << " n=" << n_alloc[a]
@@ -1080,7 +1090,13 @@ void ESolver_KS_PW<T, Device>::iter_finish(UnitCell& ucell, const int istep, int
                     << "ALLOC-SPLIT audit sum_n=" << nsum
                     << " nelec=" << PARAM.inp.nelec
                     << " dsum_n=" << nsum - PARAM.inp.nelec
-                    << " sum_m=" << msum << "\n";
+                    << " sum_n_T_all=" << n_T_all
+                    << " sum_n_c=" << ncs
+                    << " all_target_plus_c=" << n_T_all + ncs
+                    << " sum_m=" << msum
+                    << " sum_m_T_all=" << m_T_all
+                    << " sum_band_norm=" << n_band_norm
+                    << " sum_real_norm=" << n_real_norm << "\n";
             }
         }
         // Branch B: the legacy grid mode keeps the real-space Becke reading.

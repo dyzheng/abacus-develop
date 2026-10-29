@@ -7067,3 +7067,25 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   `docs/superpowers/specs/2026-10-29-allocation-outer-efficiency-fold-and-trial-abort.md`、本日志。
 - **下一轮**：① 电荷互补归一化（dsum_n=0.376，优先）；② 响应层按 D6/D7 时间盒
   只针对"已接受步数/尾巴"，分支跳变靠 continuation/更小 trust。
+
+## 2026-10-29 (S6.4): 电荷互补归一化根因 = 复 k 正交化共轭约定不一致
+
+- **诊断**：Fe2 两片段划分 `dsum_n=+0.376`。新增 `sum_n_T_all / sum_band_norm /
+  sum_real_norm` 三项审计：目标行全部归属（11.8625）、band norm 精确=32、
+  G/实空间互补范数一致（20.5139）⇒ **投影恒等式被破坏**，不是归一化常数。
+- **数值实验**（随机复 Hermitian，2×2）：约定 C（`phi_orth=conj(G)φ`，
+  `overlap=G raw`）给出精确投影与分区恒等式（1e-15）；现行约定 A（`Gφ` 配
+  `conj(G)raw`）是**共轭投影**，Γ 点（实 G）不可见 → Fe2 广义 k 暴露。
+  新增单测 `HermitianInvSqrtIdentity` 确认 `herm_inv_sqrt` 本身正确。
+- **尝试与回退**：把两个 helper+导数切到约定 C 后分区立刻正确
+  （`dsum_n=-3.6e-11`），但 Fe2 首次 μ 注入后 drho 爆到 2.6e49、exit 1 ⇒
+  operator/force 路径仍有不一致配对（已确认 `build_band_force_data` 用
+  `conj(G)raw` 配 raw φ）。为避免分支发散，已回退 helper 约定切换；
+  **保留诊断输出与单测**；Fe2 恢复 55 步收敛、`dsum_n=0.376`。
+- **回归**：23/23 PASS。
+- **文件**：`module_pwdft/op_pw_alloc.{h,cpp}`（诊断+Parseval 守卫）、
+  `esolver_ks_pw.cpp`（审计行）、`test/alloc_linalg_test.cpp`、
+  `docs/superpowers/specs/2026-10-29-allocation-charge-normalization-root-cause.md`、本日志。
+- **下一轮**：盘点全部 ST_inv_root/phi_orth/raw 配对；统一到约定 C（value/
+  operator/subspace/force/stress）；加复 k 投影/单位分解矩阵级回归；
+  重跑 Fe2（|dsum_n|<1e-8）、LiCl、力/应力 FD。修复前 charge allocation 不生产。

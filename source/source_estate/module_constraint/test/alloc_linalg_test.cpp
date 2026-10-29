@@ -232,6 +232,40 @@ TEST(AllocLinalgTest, HermitianEigReconstruction)
     }
 }
 
+TEST(AllocLinalgTest, HermitianInvSqrtIdentity)
+{
+    // S^{-1/2} S S^{-1/2} = I for a complex Hermitian positive-definite S.
+    // This is the invariant the allocation target orthogonalization relies
+    // on; without it |P psi|^2 exceeds sum_a |<phi_a|psi>|^2 and the
+    // partition sum drifts above N.
+    std::mt19937 gen(17);
+    const int n = 6;
+    const std::vector<std::complex<double>> S = random_hpd(n, gen);
+    std::vector<std::complex<double>> Si;
+    alloc::herm_inv_sqrt(S, n, Si, 1e-10);
+    for (int i = 0; i < n; ++i)
+    {
+        for (int j = 0; j < n; ++j)
+        {
+            std::complex<double> value(0.0, 0.0);
+            for (int a = 0; a < n; ++a)
+            {
+                for (int b = 0; b < n; ++b)
+                {
+                    value += Si[i * n + a] * S[a * n + b] * Si[b * n + j];
+                }
+            }
+            const std::complex<double> expected((i == j) ? 1.0 : 0.0, 0.0);
+            EXPECT_NEAR(std::abs(value - expected), 0.0, 1e-9);
+            // The inverse square root of a Hermitian matrix is Hermitian; a
+            // non-Hermitian result silently breaks the projector identity.
+            EXPECT_NEAR(std::abs(Si[i * n + j]
+                                 - std::conj(Si[j * n + i])),
+                        0.0, 1e-12);
+        }
+    }
+}
+
 TEST(AllocLinalgTest, HermitianInvSqrtDerivativeMatchesFiniteDifference)
 {
     std::mt19937 gen(31);
