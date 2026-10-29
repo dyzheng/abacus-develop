@@ -98,13 +98,6 @@ void FFT::initfft(int nx_in, int ny_in, int nz_in, int lixy_in, int rixy_in, int
         d_rspace = (double*)z_auxg;
         // auxr_3d = static_cast<std::complex<double> *>(
         //     fftw_malloc(sizeof(fftw_complex) * (this->nx * this->ny * this->nz)));
-#if defined(__CUDA) || defined(__ROCM)
-        if (this->device == "gpu")
-        {
-            resmem_cd_op()(gpu_ctx, this->c_auxr_3d, this->nx * this->ny * this->nz);
-            resmem_zd_op()(gpu_ctx, this->z_auxr_3d, this->nx * this->ny * this->nz);
-        }
-#endif // defined(__CUDA) || defined(__ROCM)
 #if defined(__ENABLE_FLOAT_FFTW)
         if (this->precision == "single")
         {
@@ -258,18 +251,6 @@ void FFT ::initplan(const unsigned int& flag)
     //    reinterpret_cast<fftw_complex *>(auxr_3d),
     //    FFTW_BACKWARD, flag);
 
-#if defined(__CUDA) || defined(__ROCM)
-    if (this->device == "gpu")
-    {
-#if defined(__CUDA)
-        cufftPlan3d(&c_handle, this->nx, this->ny, this->nz, CUFFT_C2C);
-        cufftPlan3d(&z_handle, this->nx, this->ny, this->nz, CUFFT_Z2Z);
-#elif defined(__ROCM)
-        hipfftPlan3d(&c_handle, this->nx, this->ny, this->nz, HIPFFT_C2C);
-        hipfftPlan3d(&z_handle, this->nx, this->ny, this->nz, HIPFFT_Z2Z);
-#endif
-    }
-#endif
 }
 
 #if defined(__ENABLE_FLOAT_FFTW)
@@ -773,8 +754,35 @@ void FFT::fftxyc2r(std::complex<double>* in, double* out) const
 
 #if defined(__CUDA) || defined(__ROCM)
 template <>
+void FFT::init_gpu_plan<float>() const
+{
+    if (!c_handle)
+    {
+#if defined(__CUDA)
+        CHECK_CUFFT(cufftPlan3d(&c_handle, this->nx, this->ny, this->nz, CUFFT_C2C));
+#elif defined(__ROCM)
+        CHECK_CUFFT(hipfftPlan3d(&c_handle, this->nx, this->ny, this->nz, HIPFFT_C2C));
+#endif
+    }
+}
+
+template <>
+void FFT::init_gpu_plan<double>() const
+{
+    if (!z_handle)
+    {
+#if defined(__CUDA)
+        CHECK_CUFFT(cufftPlan3d(&z_handle, this->nx, this->ny, this->nz, CUFFT_Z2Z));
+#elif defined(__ROCM)
+        CHECK_CUFFT(hipfftPlan3d(&z_handle, this->nx, this->ny, this->nz, HIPFFT_Z2Z));
+#endif
+    }
+}
+
+template <>
 void FFT::fft3D_forward(const base_device::DEVICE_GPU* /*ctx*/, std::complex<float>* in, std::complex<float>* out) const
 {
+    this->init_gpu_plan<float>();
 #if defined(__CUDA)
     CHECK_CUFFT(cufftExecC2C(this->c_handle, reinterpret_cast<cufftComplex*>(in), reinterpret_cast<cufftComplex*>(out),
                              CUFFT_FORWARD));
@@ -787,6 +795,7 @@ template <>
 void FFT::fft3D_forward(const base_device::DEVICE_GPU* /*ctx*/, std::complex<double>* in,
                         std::complex<double>* out) const
 {
+    this->init_gpu_plan<double>();
 #if defined(__CUDA)
     CHECK_CUFFT(cufftExecZ2Z(this->z_handle, reinterpret_cast<cufftDoubleComplex*>(in),
                              reinterpret_cast<cufftDoubleComplex*>(out), CUFFT_FORWARD));
@@ -800,6 +809,7 @@ template <>
 void FFT::fft3D_backward(const base_device::DEVICE_GPU* /*ctx*/, std::complex<float>* in,
                          std::complex<float>* out) const
 {
+    this->init_gpu_plan<float>();
 #if defined(__CUDA)
     CHECK_CUFFT(cufftExecC2C(this->c_handle, reinterpret_cast<cufftComplex*>(in), reinterpret_cast<cufftComplex*>(out),
                              CUFFT_INVERSE));
@@ -812,6 +822,7 @@ template <>
 void FFT::fft3D_backward(const base_device::DEVICE_GPU* /*ctx*/, std::complex<double>* in,
                          std::complex<double>* out) const
 {
+    this->init_gpu_plan<double>();
 #if defined(__CUDA)
     CHECK_CUFFT(cufftExecZ2Z(this->z_handle, reinterpret_cast<cufftDoubleComplex*>(in),
                              reinterpret_cast<cufftDoubleComplex*>(out), CUFFT_INVERSE));
@@ -859,11 +870,19 @@ std::complex<double>* FFT::get_auxg_data() const
 template <>
 std::complex<float>* FFT::get_auxr_3d_data() const
 {
+    if (this->c_auxr_3d == nullptr)
+    {
+        resmem_cd_op()(gpu_ctx, this->c_auxr_3d, this->nx * this->ny * this->nz);
+    }
     return this->c_auxr_3d;
 }
 template <>
 std::complex<double>* FFT::get_auxr_3d_data() const
 {
+    if (this->z_auxr_3d == nullptr)
+    {
+        resmem_zd_op()(gpu_ctx, this->z_auxr_3d, this->nx * this->ny * this->nz);
+    }
     return this->z_auxr_3d;
 }
 #endif

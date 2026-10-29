@@ -130,11 +130,16 @@ public :
 //	fftw_plan plan3dbackward;
 
 #if defined(__CUDA)
-    cufftHandle c_handle = {};
-    cufftHandle z_handle = {};
+    mutable cufftHandle c_handle = {};
+    mutable cufftHandle z_handle = {};
 #elif defined(__ROCM)
-    hipfftHandle c_handle = {};
-    hipfftHandle z_handle = {};
+    mutable hipfftHandle c_handle = {};
+    mutable hipfftHandle z_handle = {};
+#endif
+
+#if defined(__CUDA) || defined(__ROCM)
+    template <typename FPTYPE>
+    void init_gpu_plan() const;
 #endif
 
 #if defined(__ENABLE_FLOAT_FFTW)
