@@ -986,34 +986,38 @@ int FFT::fused_veff_stick_size() const
                ? this->ns * this->nz : 0;
 }
 
+void FFT::transform_spinor_sticks(std::complex<double>* up, std::complex<double>* down,
+                                  const int* reverse, bool inverse) const
+{
+    const int stick_size = this->fused_veff_stick_size();
+    assert(stick_size > 0 && reverse != nullptr);
+    if (!this->z_stick_handle)
+    {
+        int length = this->nz;
+        CHECK_CUFFT(cufftPlanMany(&this->z_stick_handle, 1, &length, &length, 1, length,
+                                 &length, 1, length, CUFFT_Z2Z, this->ns));
+    }
+    std::complex<double>* slabs[2] = {up, down};
+    auto* workspace = this->get_auxr_3d_data<double>();
+    for (int spin = 0; spin < 2; ++spin)
+    {
+        auto* sticks = workspace + spin * stick_size;
+        auto* data = reinterpret_cast<cufftDoubleComplex*>(sticks);
+        if (inverse) { CHECK_CUFFT(cufftExecZ2Z(this->z_stick_handle, data, data, CUFFT_INVERSE)); }
+        transform_stick_slabs(sticks, slabs[spin], reverse, this->nz, this->lixy + 1, this->rixy, inverse);
+        if (!inverse) { CHECK_CUFFT(cufftExecZ2Z(this->z_stick_handle, data, data, CUFFT_FORWARD)); }
+    }
+}
+
 void FFT::apply_spinor_potential(const double* potential, std::complex<double>* up,
                                 std::complex<double>* down, const int* reverse) const
 {
     assert(this->fused_veff_grid_size() > 0);
     if (reverse != nullptr)
     {
-        const int stick_size = this->fused_veff_stick_size();
-        assert(stick_size > 0);
-        if (!this->z_stick_handle)
-        {
-            int length = this->nz;
-            CHECK_CUFFT(cufftPlanMany(&this->z_stick_handle, 1, &length, &length, 1, length,
-                                     &length, 1, length, CUFFT_Z2Z, this->ns));
-        }
-        auto* stick_up = this->get_auxr_3d_data<double>();
-        auto* stick_down = stick_up + stick_size;
-        auto transform = [&](std::complex<double>* sticks, std::complex<double>* slabs, bool inverse)
-        {
-            auto* data = reinterpret_cast<cufftDoubleComplex*>(sticks);
-            if (inverse) { CHECK_CUFFT(cufftExecZ2Z(this->z_stick_handle, data, data, CUFFT_INVERSE)); }
-            transform_stick_slabs(sticks, slabs, reverse, this->nz, this->lixy + 1, this->rixy, inverse);
-            if (!inverse) { CHECK_CUFFT(cufftExecZ2Z(this->z_stick_handle, data, data, CUFFT_FORWARD)); }
-        };
-        transform(stick_up, up, true);
-        transform(stick_down, down, true);
+        this->transform_spinor_sticks(up, down, reverse, true);
         fused_veff_x(this->ny * this->nz, this->lixy + 1, this->rixy, potential, up, down);
-        transform(stick_up, up, false);
-        transform(stick_down, down, false);
+        this->transform_spinor_sticks(up, down, reverse, false);
         return;
     }
     this->init_gpu_pruned_plan();

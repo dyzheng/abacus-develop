@@ -86,6 +86,10 @@ public:
     int fused_veff_grid_size() const;
     // Two stick fields fit in the existing full-grid transform workspace.
     int fused_veff_stick_size() const;
+    // Transforms both spin components between the internal stick workspace
+    // and caller-owned compact x slabs. The inverse direction expands sticks.
+    void transform_spinor_sticks(std::complex<double>* up, std::complex<double>* down,
+                                 const int* reverse, bool inverse) const;
     void apply_spinor_potential(const double* potential, std::complex<double>* up,
                                std::complex<double>* down, const int* reverse = nullptr) const;
 #endif
