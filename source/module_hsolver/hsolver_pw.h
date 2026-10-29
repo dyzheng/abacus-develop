@@ -43,6 +43,18 @@ class HSolverPW : public HSolver<T, Device>
                const std::string method_in,
                const bool skip_charge) override;
 
+    /// Solve with projected matrices for the unchanged initial wavefunctions.
+    /// Both arrays contain nk consecutive column-major nbands-by-nbands
+    /// matrices on Device, including pool reduction. Their Hamiltonian must
+    /// equal pHamilt throughout this solve; the caller retains ownership.
+    void solve(hamilt::Hamilt<T, Device>* pHamilt,
+               psi::Psi<T, Device>& psi,
+               elecstate::ElecState* pes,
+               const std::string method_in,
+               const bool skip_charge,
+               const T* initial_h,
+               const T* initial_s);
+
     virtual Real cal_hsolerror() override;
 
     virtual Real set_diagethr(const int istep, const int iter, const Real drho) override;
@@ -54,7 +66,9 @@ class HSolverPW : public HSolver<T, Device>
     void hamiltSolvePsiK(hamilt::Hamilt<T, Device>* hm,
                          psi::Psi<T, Device>& psi,
                          std::vector<Real>& pre_condition,
-                         Real* eigenvalue);
+                         Real* eigenvalue,
+                         const T* initial_h,
+                         const T* initial_s);
 
     // psi initializer && change k point in psi
     void updatePsiK(hamilt::Hamilt<T, Device>* pHamilt, psi::Psi<T, Device>& psi, const int ik);
