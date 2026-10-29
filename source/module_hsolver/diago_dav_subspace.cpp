@@ -62,6 +62,12 @@ Diago_DavSubspace<T, Device>::Diago_DavSubspace(const std::vector<Real>& precond
         resmem_real_op()(this->ctx, this->d_precondition, nbasis_in);
         base_device::memory::resize_memory_op<T, Device>()(this->ctx, this->d_scc, this->nbase_x * this->nbase_x);
         resmem_real_op()(this->ctx, this->d_eigenvalue, this->nbase_x);
+#if defined(__CUDA)
+        if (std::is_same<T, std::complex<double>>::value)
+        {
+            base_device::memory::resize_memory_op<int, Device>()(this->ctx, this->d_unconv, this->n_band);
+        }
+#endif
     }
 #endif
 }
@@ -82,6 +88,12 @@ Diago_DavSubspace<T, Device>::~Diago_DavSubspace()
         delmem_real_op()(this->ctx, this->d_precondition);
         delmem_complex_op()(this->ctx, this->d_scc);
         delmem_real_op()(this->ctx, this->d_eigenvalue);
+#if defined(__CUDA)
+        if (std::is_same<T, std::complex<double>>::value)
+        {
+            base_device::memory::delete_memory_op<int, Device>()(this->ctx, this->d_unconv);
+        }
+#endif
     }
 #endif
 }
@@ -137,6 +149,7 @@ int Diago_DavSubspace<T, Device>::diag_once(const HPsiFunc& hpsi_func,
     ModuleBase::timer::tick("Diago_DavSubspace", "first");
 
     int dav_iter = 0;
+    bool basis_is_rotated = false;
 
     do
     {
@@ -150,7 +163,9 @@ int Diago_DavSubspace<T, Device>::diag_once(const HPsiFunc& hpsi_func,
                        this->hphi,
                        this->vcc,
                        unconv.data(),
-                       &eigenvalue_iter);
+                       &eigenvalue_iter,
+                       basis_is_rotated);
+        basis_is_rotated = false;
         if(!grad_ok)
         {
             ModuleBase::timer::tick("Diago_DavSubspace", "diag_once");
@@ -232,6 +247,7 @@ int Diago_DavSubspace<T, Device>::diag_once(const HPsiFunc& hpsi_func,
                               this->hcc,
                               this->scc,
                               this->vcc);
+                basis_is_rotated = true;
 
                 ModuleBase::timer::tick("Diago_DavSubspace", "last");
             }
@@ -253,57 +269,89 @@ bool Diago_DavSubspace<T, Device>::cal_grad(const HPsiFunc& hpsi_func,
                                             T* hphi,
                                             T* vcc,
                                             const int* unconv,
-                                            std::vector<Real>* eigenvalue_iter)
+                                            std::vector<Real>* eigenvalue_iter,
+                                            bool basis_is_rotated)
 {
     ModuleBase::timer::tick("Diago_DavSubspace", "cal_grad");
+
+    bool use_selected_basis = false;
+#if defined(__CUDA)
+    use_selected_basis = basis_is_rotated && this->device == base_device::GpuDevice
+                         && std::is_same<T, std::complex<double>>::value;
+#endif
 
     for (size_t i = 0; i < notconv; i++)
     {
         if (unconv[i] != i)
         {
-            syncmem_complex_op()(this->ctx, this->ctx, vcc + i * this->nbase_x, vcc + unconv[i] * this->nbase_x, nbase);
+            if (!use_selected_basis)
+            {
+                syncmem_complex_op()(this->ctx, this->ctx, vcc + i * this->nbase_x, vcc + unconv[i] * this->nbase_x, nbase);
+            }
             (*eigenvalue_iter)[i] = (*eigenvalue_iter)[unconv[i]];
         }
     }
 
-    gemm_op<T, Device>()(this->ctx,
-                         'N',
-                         'N',
-                         this->dim,
-                         notconv,
-                         nbase,
-                         this->one,
-                         hphi,
-                         this->dim,
-                         vcc,
-                         this->nbase_x,
-                         this->zero,
-                         psi_iter + (nbase) * this->dim,
-                         this->dim);
-
-    if (this->device == base_device::GpuDevice){
 #if defined(__CUDA) || defined(__ROCM)
+    if (this->device == base_device::GpuDevice)
+    {
         syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, this->d_eigenvalue, eigenvalue_iter->data(), this->nbase_x);
-        hsolver::matrixMutiplyVector<T, Device>()(this->ctx, nbase, notconv, vcc, this->nbase_x, this->d_eigenvalue, -1.0, vcc, this->nbase_x);
-#endif
-    }else{
-        hsolver::matrixMutiplyVector<T, Device>()(this->ctx, nbase, notconv, vcc, this->nbase_x, eigenvalue_iter->data(), -1.0, vcc, this->nbase_x);
     }
+#endif
+    if (use_selected_basis)
+    {
+#if defined(__CUDA)
+        // refresh rotates both basis arrays and explicitly sets vcc to I.
+        // The selected-basis predicate restricts this path to complex double.
+        base_device::memory::synchronize_memory_op<int, Device, base_device::DEVICE_CPU>()(
+            this->ctx, this->cpu_ctx, this->d_unconv, unconv, notconv);
+        selected_basis_residual_gpu(this->dim, notconv, this->dim,
+            reinterpret_cast<const std::complex<double>*>(psi_iter),
+            reinterpret_cast<const std::complex<double>*>(hphi), this->d_unconv,
+            reinterpret_cast<const double*>(this->d_eigenvalue),
+            reinterpret_cast<std::complex<double>*>(psi_iter + nbase * this->dim));
+#endif
+    }
+    else
+    {
+        gemm_op<T, Device>()(this->ctx,
+                             'N',
+                             'N',
+                             this->dim,
+                             notconv,
+                             nbase,
+                             this->one,
+                             hphi,
+                             this->dim,
+                             vcc,
+                             this->nbase_x,
+                             this->zero,
+                             psi_iter + (nbase) * this->dim,
+                             this->dim);
 
-    gemm_op<T, Device>()(this->ctx,
-                         'N',
-                         'N',
-                         this->dim,
-                         notconv,
-                         nbase,
-                         this->one,
-                         psi_iter,
-                         this->dim,
-                         vcc,
-                         this->nbase_x,
-                         this->one,
-                         psi_iter + nbase * this->dim,
-                         this->dim);
+        if (this->device == base_device::GpuDevice){
+#if defined(__CUDA) || defined(__ROCM)
+            hsolver::matrixMutiplyVector<T, Device>()(this->ctx, nbase, notconv, vcc, this->nbase_x, this->d_eigenvalue, -1.0, vcc, this->nbase_x);
+#endif
+        }else{
+            hsolver::matrixMutiplyVector<T, Device>()(this->ctx, nbase, notconv, vcc, this->nbase_x, eigenvalue_iter->data(), -1.0, vcc, this->nbase_x);
+        }
+
+        gemm_op<T, Device>()(this->ctx,
+                             'N',
+                             'N',
+                             this->dim,
+                             notconv,
+                             nbase,
+                             this->one,
+                             psi_iter,
+                             this->dim,
+                             vcc,
+                             this->nbase_x,
+                             this->one,
+                             psi_iter + nbase * this->dim,
+                             this->dim);
+    }
 
     if (this->device == base_device::GpuDevice){
 #if defined(__CUDA) || defined(__ROCM)

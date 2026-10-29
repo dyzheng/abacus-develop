@@ -85,6 +85,7 @@ class Diago_DavSubspace : public DiagH<T, Device>
 
     T* d_scc = nullptr;
     Real* d_eigenvalue = nullptr;
+    int* d_unconv = nullptr;
 
     /// device type of psi
     Device* ctx = {};
@@ -99,7 +100,8 @@ class Diago_DavSubspace : public DiagH<T, Device>
                   T* hphi,
                   T* vcc,
                   const int* unconv,
-                  std::vector<Real>* eigenvalue_iter);
+                  std::vector<Real>* eigenvalue_iter,
+                  bool basis_is_rotated);
 
     void cal_elem(const int& dim, int& nbase, const int& notconv, const T* psi_iter, const T* hphi, T* hcc, T* scc);
 
