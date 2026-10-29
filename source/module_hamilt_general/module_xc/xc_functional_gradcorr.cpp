@@ -10,6 +10,7 @@
 
 #include "module_base/timer.h"
 #include "module_basis/module_pw/pw_basis_k.h"
+#include "module_basis/module_pw/kernels/pw_op.h"
 #include "xc_functional.h"
 
 #include <ATen/core/tensor.h>
@@ -19,6 +20,88 @@
 #include "module_parameter/parameter.h"
 
 int XC_Functional::gga_grad = 1;
+
+#if defined(__CUDA)
+namespace {
+
+template <typename T>
+ct::Tensor copy_to_gpu(const T* source, int size)
+{
+    ct::Tensor result(ct::DataTypeToEnum<T>::value, ct::DeviceType::GpuDevice, {size});
+    base_device::memory::synchronize_memory_op<T, base_device::DEVICE_GPU, base_device::DEVICE_CPU>()(
+        nullptr, nullptr, result.data<T>(), source, size);
+    return result;
+}
+
+ct::Tensor density_grid_indices(const ModulePW::PW_Basis& basis)
+{
+    ct::Tensor indices(ct::DataType::DT_INT, ct::DeviceType::CpuDevice, {basis.npw});
+    auto* index = indices.data<int>();
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024)
+#endif
+    for (int ig = 0; ig < basis.npw; ++ig)
+    {
+        const int iz = basis.ig2isz[ig] % basis.nz;
+        const int is = basis.ig2isz[ig] / basis.nz;
+        index[ig] = basis.is2fftixy[is] * basis.nz + iz;
+    }
+    return indices.to_device<ct::DEVICE_GPU>();
+}
+
+void density_gradient_gpu(const std::complex<double>* rhog, ModuleBase::Vector3<double>* gradient,
+                          const ModulePW::PW_Basis& basis, double scale)
+{
+    static_assert(sizeof(ModuleBase::Vector3<double>) == 3 * sizeof(double), "Vector3 must have contiguous components");
+    const base_device::DEVICE_GPU* gpu = nullptr;
+    const base_device::DEVICE_CPU* cpu = nullptr;
+    auto indices = density_grid_indices(basis);
+    auto reciprocal = copy_to_gpu(rhog, basis.npw);
+    auto gcar = copy_to_gpu(reinterpret_cast<const double*>(basis.gcar), 3 * basis.npw);
+    ct::Tensor result(ct::DataType::DT_DOUBLE, ct::DeviceType::GpuDevice, {basis.nrxx, 3});
+    auto* grid = basis.ft.get_auxr_3d_data<double>();
+    for (int component = 0; component < 3; ++component)
+    {
+        base_device::memory::set_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(gpu, grid, 0, basis.nxyz);
+        hamilt::xc_gradient_coefficients_gpu(basis.npw, component, indices.data<int>(), gcar.data<double>(),
+                                             reciprocal.data<std::complex<double>>(), grid);
+        basis.ft.fft3D_backward(gpu, grid, grid);
+        hamilt::xc_extract_real_gpu(basis.nrxx, 3, component, scale, grid, result.data<double>());
+    }
+    base_device::memory::synchronize_memory_op<double, base_device::DEVICE_CPU, base_device::DEVICE_GPU>()(
+        cpu, gpu, reinterpret_cast<double*>(gradient), result.data<double>(), 3 * basis.nrxx);
+}
+
+void density_divergence_gpu(const ModuleBase::Vector3<double>* vectors, double* divergence,
+                            const ModulePW::PW_Basis& basis, double scale)
+{
+    static_assert(sizeof(ModuleBase::Vector3<double>) == 3 * sizeof(double), "Vector3 must have contiguous components");
+    const base_device::DEVICE_GPU* gpu = nullptr;
+    const base_device::DEVICE_CPU* cpu = nullptr;
+    auto indices = density_grid_indices(basis);
+    auto input = copy_to_gpu(reinterpret_cast<const double*>(vectors), 3 * basis.nrxx);
+    auto gcar = copy_to_gpu(reinterpret_cast<const double*>(basis.gcar), 3 * basis.npw);
+    ct::Tensor reciprocal(ct::DataType::DT_COMPLEX_DOUBLE, ct::DeviceType::GpuDevice, {basis.npw});
+    ct::Tensor result(ct::DataType::DT_DOUBLE, ct::DeviceType::GpuDevice, {basis.nrxx});
+    auto* grid = basis.ft.get_auxr_3d_data<double>();
+    for (int component = 0; component < 3; ++component)
+    {
+        hamilt::xc_pack_component_gpu(basis.nrxx, component, input.data<double>(), grid);
+        basis.ft.fft3D_forward(gpu, grid, grid);
+        hamilt::xc_accumulate_divergence_gpu(basis.npw, basis.nxyz, component, indices.data<int>(),
+                                            gcar.data<double>(), grid, reciprocal.data<std::complex<double>>());
+    }
+    base_device::memory::set_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(gpu, grid, 0, basis.nxyz);
+    ModulePW::set_3d_fft_box_op<double, base_device::DEVICE_GPU>()(
+        gpu, basis.npw, indices.data<int>(), reciprocal.data<std::complex<double>>(), grid);
+    basis.ft.fft3D_backward(gpu, grid, grid);
+    hamilt::xc_extract_real_gpu(basis.nrxx, 1, 0, scale, grid, result.data<double>());
+    base_device::memory::synchronize_memory_op<double, base_device::DEVICE_CPU, base_device::DEVICE_GPU>()(
+        cpu, gpu, divergence, result.data<double>(), basis.nrxx);
+}
+
+} // namespace
+#endif
 
 // from gradcorr.f90
 void XC_Functional::gradcorr(double& etxc,
@@ -887,6 +970,14 @@ void XC_Functional::grad_rho(const std::complex<double>* rhog,
                              const ModulePW::PW_Basis* rho_basis,
                              const double tpiba)
 {
+#if defined(__CUDA)
+    // The device stick map identifies a GPU basis; distributed and Gamma-only grids retain their native transforms.
+    if (rho_basis->d_is2fftixy != nullptr && rho_basis->poolnproc == 1 && !rho_basis->gamma_only)
+    {
+        density_gradient_gpu(rhog, gdr, *rho_basis, tpiba);
+        return;
+    }
+#endif
     std::complex<double>* gdrtmp = new std::complex<double>[rho_basis->nmaxgr];
 
     // the formula is : rho(r)^prime = \int iG * rho(G)e^{iGr} dG
@@ -923,6 +1014,13 @@ void XC_Functional::grad_dot(const ModuleBase::Vector3<double>* h,
                              const ModulePW::PW_Basis* rho_basis,
                              const double tpiba)
 {
+#if defined(__CUDA)
+    if (rho_basis->d_is2fftixy != nullptr && rho_basis->poolnproc == 1 && !rho_basis->gamma_only)
+    {
+        density_divergence_gpu(h, dh, *rho_basis, tpiba);
+        return;
+    }
+#endif
     std::complex<double>* aux = new std::complex<double>[rho_basis->nmaxgr];
     std::complex<double>* gaux = new std::complex<double>[rho_basis->npw];
 
