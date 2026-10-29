@@ -292,10 +292,12 @@ void orthogonalize_pw_overlaps(const PwTargetSpace& space,
     {
         for (int b = 0; b < space.ntarget; ++b)
         {
-            // orth = G^H raw because raw stores <alpha_b|psi>.  The
-            // Hermitian G is not real at a general k-point.
-            orth[a] += std::conj(space.ST_inv_root[static_cast<size_t>(a)
-                                                      * space.ntarget + b])
+            // Convention C (see build_pw_alloc_orthogonal_phi): target
+            // vectors rotate with conj(G), overlaps with G.  This pairing is
+            // exact at general k; the conjugate pairing is Gamma-invisible but
+            // broke sum_a q_a = N by 0.376 e on Fe2.
+            orth[a] += space.ST_inv_root[static_cast<size_t>(a)
+                                             * space.ntarget + b]
                        * raw[b];
         }
     }
@@ -365,10 +367,10 @@ void orthogonalize_pw_overlaps_derivative(
                 = space.ST_inv_root[static_cast<size_t>(a) * r + b];
             const std::complex<double> dg
                 = dST_inv_root[static_cast<size_t>(a) * r + b];
-            // Overlap values rotate with G^H, while target vectors rotate
-            // with G itself.
-            orth[a] += std::conj(g) * raw[b];
-            d_orth[a] += std::conj(g) * d_raw[b] + std::conj(dg) * raw[b];
+            // Convention C derivative: overlaps rotate with G, targets with
+            // conj(G); d(overlap) = dG raw + G d_raw.
+            orth[a] += g * raw[b];
+            d_orth[a] += g * d_raw[b] + dg * raw[b];
         }
     }
 }
@@ -467,7 +469,9 @@ void build_pw_alloc_orthogonal_phi(
                 = space.ST_inv_root[static_cast<size_t>(a) * r + b];
             for (int i = 0; i < nbasis; ++i)
             {
-                phi_orth[a][i] += g * phi[b][i];
+                // Convention C: target vectors rotate with conj(G); the
+                // matching overlap (G raw) keeps the rotated Gram the identity.
+                phi_orth[a][i] += std::conj(g) * phi[b][i];
             }
         }
     }
@@ -517,7 +521,8 @@ void build_pw_alloc_orthogonal_context(
                 = space.ST_inv_root[static_cast<size_t>(a) * r + b];
             for (int i = 0; i < nbasis; ++i)
             {
-                context.vphi_orth[a][i] += g * vphi[b][i];
+                // Same rotation as phi_orth (V commutes with it).
+                context.vphi_orth[a][i] += std::conj(g) * vphi[b][i];
             }
         }
     }

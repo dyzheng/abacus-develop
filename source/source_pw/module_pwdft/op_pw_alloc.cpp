@@ -652,6 +652,9 @@ bool build_band_force_data(
         return false;
     }
 
+    // Convention C target vectors (conj(G) phi); the overlap rotates with G.
+    std::vector<std::vector<std::complex<double>>> phi_orth;
+    build_pw_alloc_orthogonal_phi(context.space, context.phi, phi_orth);
     for (int s = 0; s < data.nocc; ++s)
     {
         const std::complex<double>* band_ptr
@@ -662,14 +665,13 @@ bool build_band_force_data(
             for (int b = 0; b < r; ++b)
             {
                 data.orth_overlap[s][a]
-                    += std::conj(
-                           context.space.ST_inv_root[static_cast<size_t>(a) * r
-                                                     + b])
+                    += context.space.ST_inv_root[static_cast<size_t>(a) * r
+                                                 + b]
                        * data.raw_overlap[s][b];
             }
         }
 
-        // Q_c|psi> = |psi> - sum_a |phi_a> <phi_a|psi>.
+        // Q_c|psi> = |psi> - sum_a |phi_orth_a> <phi_orth_a|psi>.
         std::vector<std::complex<double>> complement(
             context.npw, std::complex<double>(0.0, 0.0));
         for (int ig = 0; ig < context.npw; ++ig)
@@ -680,7 +682,7 @@ bool build_band_force_data(
         {
             for (int ig = 0; ig < context.npw; ++ig)
             {
-                complement[ig] -= context.phi[a][ig]
+                complement[ig] -= phi_orth[a][ig]
                                   * data.orth_overlap[s][a];
             }
         }

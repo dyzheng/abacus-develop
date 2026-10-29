@@ -1,5 +1,8 @@
 # 2026-10-29 Allocation 电荷归一化：根因定位与分阶段修复计划
 
+> **状态：已修复**（约定 C 全路径统一），验证见
+> `2026-10-29-allocation-complex-k-conjugation-fix.md`。
+
 ## 1. 测试计划
 
 定位 `ALLOC-SPLIT audit` 的 `sum_n - nelec = +0.376 e`（Fe2 两片段完整划分）。

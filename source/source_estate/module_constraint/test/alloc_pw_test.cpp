@@ -736,9 +736,10 @@ TEST(AllocPwTest, AllocationOperatorDerivativeDecomposition)
             q[i] -= phi[a][i] * orth[a];
         }
     }
-    // dP psi = sum_a (o_a dphi_a + d_o_a phi_a); build dphi from
-    // dphi = f G, so dphi = df G + f dG.  The rotation G changes every
-    // orthonormal target, including those centred on the other atom.
+    // dP psi = sum_a (o_a dphi_a + d_o_a phi_a).  The production target
+    // rotation is phi_orth = conj(G) f (convention C), so
+    // dphi = conj(G) df + conj(dG) f.  The rotation changes every orthonormal
+    // target, including those centred on the other atom.
     std::vector<std::complex<double>> dPpsi(nbasis,
                                             std::complex<double>(0.0, 0.0));
     for (int a = 0; a < ntarget; ++a)
@@ -749,8 +750,9 @@ TEST(AllocPwTest, AllocationOperatorDerivativeDecomposition)
         {
             for (int i = 0; i < nbasis; ++i)
             {
-                dphi[i] += space.ST_inv_root[a * ntarget + b] * df[b][i];
-                dphi[i] += dG[a * ntarget + b] * f[b][i];
+                dphi[i] += std::conj(space.ST_inv_root[a * ntarget + b])
+                           * df[b][i];
+                dphi[i] += std::conj(dG[a * ntarget + b]) * f[b][i];
             }
         }
         for (int i = 0; i < nbasis; ++i)

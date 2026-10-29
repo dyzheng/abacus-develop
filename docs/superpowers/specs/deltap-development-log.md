@@ -7089,3 +7089,27 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - **下一轮**：盘点全部 ST_inv_root/phi_orth/raw 配对；统一到约定 C（value/
   operator/subspace/force/stress）；加复 k 投影/单位分解矩阵级回归；
   重跑 Fe2（|dsum_n|<1e-8）、LiCl、力/应力 FD。修复前 charge allocation 不生产。
+
+## 2026-10-29 (S6.5): 复 k 共轭约定修复（约定 C）——电荷分区精确
+
+- **修复**：按根因报告把正交化统一到约定 C：`phi_orth=conj(G)φ`、
+  `overlap=G raw`、导数 `d(phi_orth)=conj(G)dφ+conj(dG)φ`、`d(overlap)=dG raw+G d_raw`。
+  覆盖 value（`orthogonalize_pw_overlaps`）、phi/vphi（`build_pw_alloc_orthogonal_phi`、
+  `vphi_orth`）、force（`build_band_force_data` 改用 phi_orth+G raw）、以及单测解析导数。
+- **验证**：
+  - Fe2：**CONVERGED 63 步**，`dsum_n=+0.376 → 8.57e-11`；目标+互补=32；
+    `sum_band_norm=32`；末态 ETOT -6370.603964（坐标修正后的不同约束态）。
+  - LiCl（Γ）：`q=2.947887372`、ETOT -643.9756523800 **逐位不变**。
+  - H2O allocation 力 FD：F_FD(z)=-5.668 vs 解析 -5.669 eV/Å，差 0.001
+    （判据 0.0129，13×）；力路径自洽。
+  - `ctest -R MODULE_ESTATE_constraint` **23/23 PASS**（含更新约定的
+    `AllocationOperatorDerivativeDecomposition`）。
+- **分析**：charge allocation 的分区正确性障碍解除；观测量改变导致 Fe2 末态
+  移动 6.2 meV、m_T 由 ±3.60 变 ±3.70，语义闭环表需以修复后数值更新；
+  性能 63 步（同量级，外层步数仍由缺响应层主导）。
+- **文件**：`module_constraint/alloc_pw.cpp`、`module_pwdft/op_pw_alloc.cpp`、
+  `test/alloc_pw_test.cpp`、`docs/superpowers/specs/2026-10-29-allocation-complex-k-conjugation-fix.md`、
+  `2026-10-29-allocation-charge-normalization-root-cause.md`（状态标注）、
+  `2026-10-28-allocation-semantic-closure.md`（数值更新提示）、本日志。
+- **下一轮**：更新语义闭环数值/target_l 扫描；补多片段/非共线/kpar>1 的
+  Σq=N 集成回归；性能转响应层/continuation。
