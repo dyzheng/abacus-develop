@@ -120,6 +120,8 @@ public :
 	fftw_plan planxbac2 = NULL;
 	fftw_plan planyfor  = NULL;
 	fftw_plan planybac  = NULL;
+    fftw_plan planyfor2 = NULL;
+    fftw_plan planybac2 = NULL;
 	fftw_plan planxr2c  = NULL;
 	fftw_plan planxc2r  = NULL;
 	fftw_plan planyr2c  = NULL;
