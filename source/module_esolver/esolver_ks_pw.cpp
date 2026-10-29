@@ -916,7 +916,15 @@ void ESolver_KS_PW<T, Device>::after_scf(const int istep) {
         this->pelec->print_eigenvalue(GlobalV::ofs_running);
     }
 
-    if (this->device == base_device::GpuDevice) {
+    bool host_wavefunctions_required = true;
+#if defined(__CUDA)
+    // CUDA stress and forces consume device wavefunctions. Host copies serve post-processing and other workflows.
+    host_wavefunctions_required = GlobalV::CALCULATION != "scf" || GlobalV::BASIS_TYPE != "pw"
+                                  || this->wf.out_wfc_pw != 0 || this->wf.out_wfc_r != 0
+                                  || !PARAM.inp.bands_to_print.empty() || winput::out_spillage != 0
+                                  || PARAM.inp.cal_cond || PARAM.inp.towannier90 || berryphase::berry_phase_flag;
+#endif
+    if (this->device == base_device::GpuDevice && host_wavefunctions_required) {
         castmem_2d_d2h_op()(
             this->psi[0].get_device(),
             this->kspw_psi[0].get_device(),
