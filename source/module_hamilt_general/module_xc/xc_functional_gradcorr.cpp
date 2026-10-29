@@ -36,6 +36,8 @@ void XC_Functional::gradcorr(double& etxc,
     {
         return; // none or LDA functional
     }
+    ModuleBase::timer::tick("XC_Functional", "gradcorr");
+    ModuleBase::timer::tick("XC_Functional", "gradient_setup");
 
     bool igcc_is_lyp = false;
     if (func_id[1] == XC_GGA_C_LYP)
@@ -231,6 +233,9 @@ void XC_Functional::gradcorr(double& etxc,
         // in gdr1
         tmp_recip = new std::complex<double>[rhopw->npw];
         gdr_mag = new ModuleBase::Vector3<double>[rhopw->nrxx];
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024)
+#endif
         for (int ir = 0; ir < rhopw->nrxx; ir++)
         {
             gdr_mag[ir] = gdr1[ir];
@@ -242,6 +247,9 @@ void XC_Functional::gradcorr(double& etxc,
             rhopw->real2recip(chr->rho[is], tmp_recip);
             XC_Functional::grad_rho(tmp_recip, gdr_mag, rhopw, ucell->tpiba);
             const double* mag_part_is = mag_part.data() + (is-1) * rhopw->nrxx;
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024)
+#endif
             for (int ir = 0; ir < rhopw->nrxx; ir++)
             {
                 const ModuleBase::Vector3<double> grad_is = 0.5 * gdr_mag[ir] * mag_part_is[ir];
@@ -259,6 +267,8 @@ void XC_Functional::gradcorr(double& etxc,
         }
     }
 
+    ModuleBase::timer::tick("XC_Functional", "gradient_setup");
+    ModuleBase::timer::tick("XC_Functional", "functional_eval");
     const double epsr = 1.0e-6;
     const double epsg = 1.0e-10;
 
@@ -570,6 +580,8 @@ void XC_Functional::gradcorr(double& etxc,
     }
 #endif
 
+    ModuleBase::timer::tick("XC_Functional", "functional_eval");
+    ModuleBase::timer::tick("XC_Functional", "potential_assembly");
     // std::cout << "\n vtxcgc=" << vtxcgc;
     // std::cout << "\n etxcgc=" << etxcgc << std::endl;
 
@@ -599,6 +611,9 @@ void XC_Functional::gradcorr(double& etxc,
         double* dh = new double[rhopw->nrxx];
         double* dh1 = new double[rhopw->nrxx];
         ModuleBase::Vector3<double>* tmp_h = new ModuleBase::Vector3<double>[rhopw->nrxx];
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024)
+#endif
         for (int ir = 0; ir < rhopw->nrxx; ir++)
         {
             tmp_h[ir] = 0.5 * (h1[ir] + h2[ir]);
@@ -625,11 +640,17 @@ void XC_Functional::gradcorr(double& etxc,
         for(int is=1;is<4;is++)
         {
             const double* mag_part_is = &mag_part[(is - 1) * rhopw->nrxx];
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024)
+#endif
             for (int ir = 0; ir < rhopw->nrxx; ir++)
             {
                 tmp_h[ir] = 0.5 * (h1[ir] - h2[ir]) * mag_part_is[ir];
             }
             XC_Functional::grad_dot(tmp_h, dh, rhopw, ucell->tpiba);
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024)
+#endif
             for(int ir=0;ir<rhopw->nrxx;ir++)
             {
                 dh1[ir] += dh[ir] * mag_part_is[ir];
@@ -638,6 +659,9 @@ void XC_Functional::gradcorr(double& etxc,
         for(int is=1;is<4;is++)
         {
             const double* mag_part_is = &mag_part[(is - 1) * rhopw->nrxx];
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024)
+#endif
             for(int ir=0;ir<rhopw->nrxx;ir++)
             {
                 v(is,ir) -= dh1[ir] * mag_part_is[ir];
@@ -765,6 +789,7 @@ void XC_Functional::gradcorr(double& etxc,
         }
     }
 
+    ModuleBase::timer::tick("XC_Functional", "potential_assembly");
     // deacllocate
     delete[] rhotmp1;
     delete[] rhogsum1;
@@ -805,6 +830,7 @@ void XC_Functional::gradcorr(double& etxc,
         delete[] gdr2;
     }
 
+    ModuleBase::timer::tick("XC_Functional", "gradcorr");
     return;
 }
 
