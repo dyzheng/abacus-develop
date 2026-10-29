@@ -805,7 +805,7 @@ struct Input_para
     bool constraint_alloc_exact_subspace = false; ///< PW: solve mu in the exact A_i band subspace
     bool constraint_alloc_full_residual_accept = false; ///< PW: fixed-density predictor, full-space trust acceptance
     bool constraint_alloc_jacobian_probe = false; ///< PW: finite-difference J0 diagnostic against the outer Jacobian
-    bool constraint_alloc_fold_potential = false; ///< PW: fuse the allocation local potential into Veff
+    bool constraint_alloc_fold_potential = true;  ///< PW: fuse the allocation local potential into Veff (1.78x per-hPsi on Fe2)
 
     // ==============   #Parameters (25.uncommon hardware) ==================
     int dsp_count = 4;           ///< count of DSP hardwares in one node

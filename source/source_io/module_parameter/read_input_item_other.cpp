@@ -1869,8 +1869,8 @@ Manual override is allowed: if sc_acceleration_mode is explicitly set, it takes 
         item.annotation = "PW allocation: fuse the local constraint potential into Veff";
         item.category = "Constraint";
         item.type = "Boolean";
-        item.description = "When true, the PW allocation local potential sum_i mu_i w_i is added to the effective potential inside the existing Veff plane-wave transform. The allocation operator then adds only the target-projector correction terms, eliminating one reciprocal-to-real-to-reciprocal transform per band. The A/B switch is off by default; it has no effect when the allocation operator is inactive or the weight and Veff grids differ.";
-        item.default_value = "False";
+        item.description = "When true (default), the PW allocation local potential sum_i mu_i w_i is added to the effective potential inside the existing Veff plane-wave transform. The allocation operator then adds only the target-projector correction terms, eliminating one reciprocal-to-real-to-reciprocal transform per band. Fe2 A/B: identical iterations/ETOT, per-hPsi 7.00 -> 3.93 ms (1.78x), wall 16 -> 13 s; LiCl charge A/B identical q/ETOT. It has no effect when the allocation operator is inactive or the weight and Veff grids differ; set false to keep the pre-2026-10-29 split-transform path.";
+        item.default_value = "True";
         item.unit = "";
         item.availability = "constraint is true and basis_type = pw";
         read_sync_bool(input.constraint_alloc_fold_potential);

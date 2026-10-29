@@ -7049,3 +7049,21 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - **文件**：`module_constraint/constraint_loop.{h,cpp}`、
   `test/constraint_loop_test.cpp`、`docs/superpowers/specs/2026-10-29-allocation-mixing-reset-diagnosis.md`、本日志。
 - **下一轮**：① 响应层时间盒；② 电荷互补归一化（dsum_n=0.376）；③ hPsi 单步成本。
+
+## 2026-10-29 (S6.3): trial 早停（负结果，已回退）+ fold_potential（正结果，默认开启）
+
+- **R-A trial 早停**：逐迭代监测 allocation 自旋矩相对 trial 锚点的塌缩
+  （|q|<0.7|q_anchor| 且锚点已入约束区），触发 `MuSolver::reject` 回退并缩
+  trust；单测通过。Fe2 上 guard 在 outer_step=2 正确触发（2.66 vs 3.83），
+  但结果 **200 步 RUNNING**（比 55 步更差）。原因：中止 SCF 只恢复 μ、不恢复
+  密度，坏支密度使重试更慢；**收敛后 trust 拒绝**才是正确机制。已回退。
+- **fold_potential 正结果**：同二进制 55 步、ETOT 逐位一致；
+  hPsi 10.80 s/1543（7.00 ms）→ 6.06 s/1543（3.93 ms，**1.78×**），
+  墙钟 16→13 s；相对 DeltaSpin 单次 hPsi 仅 1.17×（门槛 <1.5×）。
+  LiCl charge 前后 q/ETOT 完全相同。默认值改为 **true**（INPUT 说明同步）。
+- **剩余差距**：迭代 55 vs 13（4.2×）几乎全部是外层步数；单步成本已达标。
+- **回归**：23/23 PASS（构建中的 elecstate/charge 链接错误为既有无关问题）。
+- **文件**：`source_io/module_parameter/{input_parameter.h,read_input_item_other.cpp}`、
+  `docs/superpowers/specs/2026-10-29-allocation-outer-efficiency-fold-and-trial-abort.md`、本日志。
+- **下一轮**：① 电荷互补归一化（dsum_n=0.376，优先）；② 响应层按 D6/D7 时间盒
+  只针对"已接受步数/尾巴"，分支跳变靠 continuation/更小 trust。
