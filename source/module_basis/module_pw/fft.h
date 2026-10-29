@@ -86,7 +86,9 @@ public:
     int fused_veff_grid_size() const;
     // Two stick fields fit in the existing full-grid transform workspace.
     int fused_veff_stick_size() const;
-    // Returns workspace for 1, 2, or 4 spinor bands. Contents are scratch data.
+    // Limits the batch by the compact-grid and stick workspace footprint.
+    int spinor_batch_size() const;
+    // Returns workspace for a batch of spinor bands. Contents are scratch data.
     std::complex<double>* get_spinor_stick_data(int bands) const;
     // Transforms both spin components between the internal stick workspace
     // and caller-owned compact x slabs. The inverse direction expands sticks.
@@ -158,7 +160,7 @@ public :
     mutable cufftHandle z_x_handle = {};
     mutable cufftHandle z_yz_left_handle = {};
     mutable cufftHandle z_yz_right_handle = {};
-    mutable cufftHandle z_stick_handle[3] = {};
+    mutable cufftHandle z_stick_handle[17] = {};
     bool use_pruned_gpu_fft() const;
     void init_gpu_pruned_plan() const;
 #elif defined(__ROCM)
