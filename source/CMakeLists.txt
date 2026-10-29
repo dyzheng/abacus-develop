@@ -53,6 +53,7 @@ list(APPEND device_srcs
 if(USE_CUDA)
   list(APPEND device_srcs
     module_hamilt_pw/hamilt_pwdft/kernels/cuda/nonlocal_op.cu
+    module_hamilt_pw/hamilt_pwdft/kernels/cuda/projector_fold.cu
     module_hamilt_pw/hamilt_pwdft/kernels/cuda/onsite_op.cu
     module_hamilt_pw/hamilt_pwdft/kernels/cuda/veff_op.cu
     module_hamilt_pw/hamilt_pwdft/kernels/cuda/ekinetic_op.cu
