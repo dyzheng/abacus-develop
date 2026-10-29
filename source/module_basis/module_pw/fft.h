@@ -81,6 +81,13 @@ public:
     void fft3D_backward_pw(std::complex<double>* in, std::complex<double>* out) const;
 #endif
 
+#if defined(__CUFFTDX)
+    // Returns the compact grid length, or zero for unsupported grid layouts.
+    int fused_veff_grid_size() const;
+    void apply_spinor_potential(const double* potential, std::complex<double>* up,
+                               std::complex<double>* down) const;
+#endif
+
   public:
 	//init fftw_plans
 	void initplan(const unsigned int& flag = 0);

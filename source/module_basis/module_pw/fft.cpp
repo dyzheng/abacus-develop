@@ -1,4 +1,7 @@
 #include "fft.h"
+#if defined(__CUFFTDX)
+#include "kernels/fused_veff.h"
+#endif
 
 #include "module_base/memory.h"
 #include "module_base/tool_quit.h"
@@ -909,6 +912,38 @@ void FFT::fft3D_backward_pw(std::complex<double>* in, std::complex<double>* out)
         CHECK_CUFFT(cufftExecZ2Z(this->z_yz_right_handle, right, right, CUFFT_INVERSE));
     }
     CHECK_CUFFT(cufftExecZ2Z(this->z_x_handle, input, output, CUFFT_INVERSE));
+}
+#endif
+
+#if defined(__CUFFTDX)
+int FFT::fused_veff_grid_size() const
+{
+    return this->nx == 200 && this->use_pruned_gpu_fft()
+               ? (this->lixy + 1 + this->nx - this->rixy) * this->ny * this->nz : 0;
+}
+
+void FFT::apply_spinor_potential(const double* potential, std::complex<double>* up,
+                                std::complex<double>* down) const
+{
+    assert(this->fused_veff_grid_size() > 0);
+    this->init_gpu_pruned_plan();
+    const int plane = this->ny * this->nz;
+    const int left = this->lixy + 1;
+    auto transform_yz = [&](std::complex<double>* grid, int direction)
+    {
+        auto* data = reinterpret_cast<cufftDoubleComplex*>(grid);
+        CHECK_CUFFT(cufftExecZ2Z(this->z_yz_left_handle, data, data, direction));
+        if (this->z_yz_right_handle)
+        {
+            data += left * plane;
+            CHECK_CUFFT(cufftExecZ2Z(this->z_yz_right_handle, data, data, direction));
+        }
+    };
+    transform_yz(up, CUFFT_INVERSE);
+    transform_yz(down, CUFFT_INVERSE);
+    fused_veff_x(plane, left, this->rixy, potential, up, down);
+    transform_yz(up, CUFFT_FORWARD);
+    transform_yz(down, CUFFT_FORWARD);
 }
 #endif
 
