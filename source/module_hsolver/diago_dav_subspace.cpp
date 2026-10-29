@@ -59,7 +59,6 @@ Diago_DavSubspace<T, Device>::Diago_DavSubspace(const std::vector<Real>& precond
     if (this->device == base_device::GpuDevice)
     {
         resmem_real_op()(this->ctx, this->d_precondition, nbasis_in);
-        // syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, this->d_precondition, this->precondition.data(), nbasis_in);
         base_device::memory::resize_memory_op<T, Device>()(this->ctx, this->d_scc, this->nbase_x * this->nbase_x);
         resmem_real_op()(this->ctx, this->d_eigenvalue, this->nbase_x);
     }
@@ -307,7 +306,6 @@ bool Diago_DavSubspace<T, Device>::cal_grad(const HPsiFunc& hpsi_func,
 
     if (this->device == base_device::GpuDevice){
 #if defined(__CUDA) || defined(__ROCM)
-        syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, this->d_precondition,this->precondition.data(), this->dim);
         hsolver::updatePsiByPrecondition<T, Device>()(this->ctx, this->dim, notconv, psi_iter + nbase * this->dim,
             this->dim, this->d_precondition, this->d_eigenvalue);
 #endif
@@ -596,6 +594,14 @@ int Diago_DavSubspace<T, Device>::diag(const HPsiFunc& hpsi_func,
                                        const double* ethr_band,
                                        const bool& scf_type)
 {
+#if defined(__CUDA) || defined(__ROCM)
+    if (this->device == base_device::GpuDevice)
+    {
+        // The preconditioner is fixed during diagonalization but may change
+        // between calls when the same solver instance is reused.
+        syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, this->d_precondition, this->precondition.data(), this->dim);
+    }
+#endif
     /// record the times of trying iterative diagonalization
     this->notconv = 0;
 
