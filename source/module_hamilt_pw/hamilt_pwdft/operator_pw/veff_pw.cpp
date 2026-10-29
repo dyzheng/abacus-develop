@@ -6,6 +6,7 @@
 #include "module_basis/module_pw/kernels/fused_veff.h"
 #endif
 
+#include <algorithm>
 #include <type_traits>
 
 namespace hamilt {
@@ -63,8 +64,15 @@ void Veff<OperatorPW<T, Device>>::act(
         fused_size = this->wfcpw->ft.fused_veff_grid_size();
     }
 #endif
-    const int size = fused_size > 0 ? fused_size : this->wfcpw->nmaxgr;
-    if (this->porter_size != size)
+    int batch_size = 1;
+#if defined(__CUFFTDX)
+    if (fused_size > 0 && this->wfcpw->ft.fused_veff_stick_size() > 0)
+    {
+        batch_size = nbands / npol >= 4 ? 4 : (nbands / npol >= 2 ? 2 : 1);
+    }
+#endif
+    const int size = fused_size > 0 ? batch_size * fused_size : this->wfcpw->nmaxgr;
+    if (this->porter_size < size)
     {
         resmem_complex_op()(this->ctx, this->porter, size, "Veff<PW>::porter");
         resmem_complex_op()(this->ctx, this->porter1, size, "Veff<PW>::porter1");
@@ -72,8 +80,10 @@ void Veff<OperatorPW<T, Device>>::act(
     }
     
     // T *porter = new T[wfcpw->nmaxgr];
-    for (int ib = 0; ib < nbands; ib += npol)
+    for (int ib = 0; ib < nbands;)
     {
+        const int remaining = (nbands - ib) / npol;
+        const int bands = std::min(batch_size, remaining >= 4 ? 4 : (remaining >= 2 ? 2 : 1));
 #if defined(__CUFFTDX)
         if (fused_size > 0)
         {
@@ -82,7 +92,7 @@ void Veff<OperatorPW<T, Device>>::act(
                                              reinterpret_cast<std::complex<double>*>(tmhpsi),
                                              this->ik, max_npw,
                                              reinterpret_cast<std::complex<double>*>(this->porter),
-                                             reinterpret_cast<std::complex<double>*>(this->porter1));
+                                             reinterpret_cast<std::complex<double>*>(this->porter1), bands);
         }
         else
 #endif
@@ -137,8 +147,9 @@ void Veff<OperatorPW<T, Device>>::act(
             wfcpw->real_to_recip(this->ctx, this->porter, tmhpsi, this->ik, true);
             wfcpw->real_to_recip(this->ctx, this->porter1, tmhpsi + max_npw, this->ik, true);
         }
-        tmhpsi += max_npw * npol;
-        tmpsi_in += max_npw * npol;
+        tmhpsi += bands * max_npw * npol;
+        tmpsi_in += bands * max_npw * npol;
+        ib += bands * npol;
     }
     ModuleBase::timer::tick("Operator", "VeffPW");
 }

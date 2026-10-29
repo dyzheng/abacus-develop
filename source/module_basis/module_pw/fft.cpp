@@ -44,6 +44,7 @@ void FFT::clear()
         {
             delmem_zd_op()(gpu_ctx, z_auxr_3d);
             z_auxr_3d = nullptr;
+            z_auxr_3d_capacity = 0;
         }
     }
 #endif // defined(__CUDA) || defined(__ROCM)
@@ -430,7 +431,8 @@ void FFT::cleanFFT()
             cufftDestroy(z_handle);
             z_handle = {};
         }
-        for (auto* handle : {&z_x_handle, &z_yz_left_handle, &z_yz_right_handle, &z_stick_handle})
+        for (auto* handle : {&z_x_handle, &z_yz_left_handle, &z_yz_right_handle,
+                             &z_stick_handle[0], &z_stick_handle[1], &z_stick_handle[2]})
         {
             if (*handle)
             {
@@ -964,7 +966,8 @@ std::complex<double>* FFT::get_auxr_3d_data() const
 {
     if (this->z_auxr_3d == nullptr)
     {
-        resmem_zd_op()(gpu_ctx, this->z_auxr_3d, this->nx * this->ny * this->nz);
+        this->z_auxr_3d_capacity = this->nx * this->ny * this->nz;
+        resmem_zd_op()(gpu_ctx, this->z_auxr_3d, this->z_auxr_3d_capacity);
     }
     return this->z_auxr_3d;
 }
@@ -986,40 +989,56 @@ int FFT::fused_veff_stick_size() const
                ? this->ns * this->nz : 0;
 }
 
+std::complex<double>* FFT::get_spinor_stick_data(int bands) const
+{
+    assert(bands == 1 || bands == 2 || bands == 4);
+    const int size = std::max(this->nx * this->ny * this->nz, 2 * bands * this->fused_veff_stick_size());
+    if (this->z_auxr_3d_capacity < size)
+    {
+        resmem_zd_op()(gpu_ctx, this->z_auxr_3d, size);
+        this->z_auxr_3d_capacity = size;
+    }
+    return this->z_auxr_3d;
+}
+
 void FFT::transform_spinor_sticks(std::complex<double>* up, std::complex<double>* down,
-                                  const int* reverse, bool inverse) const
+                                  const int* reverse, bool inverse, int bands) const
 {
     const int stick_size = this->fused_veff_stick_size();
     assert(stick_size > 0 && reverse != nullptr);
-    if (!this->z_stick_handle)
+    assert(bands == 1 || bands == 2 || bands == 4);
+    auto& plan = this->z_stick_handle[bands / 2];
+    if (!plan)
     {
         int length = this->nz;
-        CHECK_CUFFT(cufftPlanMany(&this->z_stick_handle, 1, &length, &length, 1, length,
-                                 &length, 1, length, CUFFT_Z2Z, this->ns));
+        CHECK_CUFFT(cufftPlanMany(&plan, 1, &length, &length, 1, length,
+                                 &length, 1, length, CUFFT_Z2Z, 2 * bands * this->ns));
     }
     std::complex<double>* slabs[2] = {up, down};
-    auto* workspace = this->get_auxr_3d_data<double>();
+    auto* workspace = this->get_spinor_stick_data(bands);
+    auto* data = reinterpret_cast<cufftDoubleComplex*>(workspace);
+    if (inverse) { CHECK_CUFFT(cufftExecZ2Z(plan, data, data, CUFFT_INVERSE)); }
     for (int spin = 0; spin < 2; ++spin)
     {
-        auto* sticks = workspace + spin * stick_size;
-        auto* data = reinterpret_cast<cufftDoubleComplex*>(sticks);
-        if (inverse) { CHECK_CUFFT(cufftExecZ2Z(this->z_stick_handle, data, data, CUFFT_INVERSE)); }
-        transform_stick_slabs(sticks, slabs[spin], reverse, this->nz, this->lixy + 1, this->rixy, inverse);
-        if (!inverse) { CHECK_CUFFT(cufftExecZ2Z(this->z_stick_handle, data, data, CUFFT_FORWARD)); }
+        auto* sticks = workspace + spin * bands * stick_size;
+        transform_stick_slabs(sticks, slabs[spin], reverse, this->nz, this->lixy + 1, this->rixy,
+                             inverse, bands, stick_size);
     }
+    if (!inverse) { CHECK_CUFFT(cufftExecZ2Z(plan, data, data, CUFFT_FORWARD)); }
 }
 
 void FFT::apply_spinor_potential(const double* potential, std::complex<double>* up,
-                                std::complex<double>* down, const int* reverse) const
+                                std::complex<double>* down, const int* reverse, int bands) const
 {
     assert(this->fused_veff_grid_size() > 0);
     if (reverse != nullptr)
     {
-        this->transform_spinor_sticks(up, down, reverse, true);
-        fused_veff_x(this->ny * this->nz, this->lixy + 1, this->rixy, potential, up, down);
-        this->transform_spinor_sticks(up, down, reverse, false);
+        this->transform_spinor_sticks(up, down, reverse, true, bands);
+        fused_veff_x(this->ny * this->nz, this->lixy + 1, this->rixy, potential, up, down, bands);
+        this->transform_spinor_sticks(up, down, reverse, false, bands);
         return;
     }
+    assert(bands == 1);
     this->init_gpu_pruned_plan();
     const int plane = this->ny * this->nz;
     const int left = this->lixy + 1;

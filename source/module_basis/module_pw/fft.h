@@ -86,12 +86,14 @@ public:
     int fused_veff_grid_size() const;
     // Two stick fields fit in the existing full-grid transform workspace.
     int fused_veff_stick_size() const;
+    // Returns workspace for 1, 2, or 4 spinor bands. Contents are scratch data.
+    std::complex<double>* get_spinor_stick_data(int bands) const;
     // Transforms both spin components between the internal stick workspace
     // and caller-owned compact x slabs. The inverse direction expands sticks.
     void transform_spinor_sticks(std::complex<double>* up, std::complex<double>* down,
-                                 const int* reverse, bool inverse) const;
+                                 const int* reverse, bool inverse, int bands = 1) const;
     void apply_spinor_potential(const double* potential, std::complex<double>* up,
-                               std::complex<double>* down, const int* reverse = nullptr) const;
+                               std::complex<double>* down, const int* reverse = nullptr, int bands = 1) const;
 #endif
 
   public:
@@ -156,7 +158,7 @@ public :
     mutable cufftHandle z_x_handle = {};
     mutable cufftHandle z_yz_left_handle = {};
     mutable cufftHandle z_yz_right_handle = {};
-    mutable cufftHandle z_stick_handle = {};
+    mutable cufftHandle z_stick_handle[3] = {};
     bool use_pruned_gpu_fft() const;
     void init_gpu_pruned_plan() const;
 #elif defined(__ROCM)
@@ -186,6 +188,7 @@ public :
 
     mutable std::complex<float>* c_auxr_3d = nullptr;  // fft space
     mutable std::complex<double>* z_auxr_3d = nullptr; // fft space
+    mutable int z_auxr_3d_capacity = 0;
 
     mutable std::complex<float>*c_auxg = nullptr, *c_auxr = nullptr;  // fft space,
     mutable std::complex<double>*z_auxg = nullptr, *z_auxr = nullptr; // fft space
