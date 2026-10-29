@@ -9,6 +9,10 @@
 #include "nonlocal_maths.hpp"
 
 #include <numeric>
+#include <type_traits>
+#if defined(__CUDA)
+#include "module_hamilt_pw/hamilt_pwdft/kernels/projector_fold.h"
+#endif
 
 namespace hamilt
 {
@@ -156,6 +160,17 @@ FS_Nonlocal_tools<FPTYPE, Device>::FS_Nonlocal_tools(
     this->allocate_memory(wg, ekb, nproj, this->h_atom_nh);
     // what is this??? seems it is not on gpu
     this->ppcell_vkb = vkb_buf;
+#if defined(__CUDA)
+    if (std::is_same<FPTYPE, double>::value && std::is_same<Device, base_device::DEVICE_GPU>::value
+        && GlobalV::NPROC_IN_POOL == 1 && this->ntype == 1 && this->nkb >= 256)
+    {
+        const auto& atoms = this->ucell_->atoms[0];
+        // Narrow projector matrices do not amortize the grouped packing cost.
+        // The owner recreates these tools when geometry or reciprocal basis changes.
+        this->projector_fold = ProjectorFold::create(atoms.na, this->h_atom_nh[0],
+                                                     atoms.taud, atoms.tau, *this->wfc_basis_);
+    }
+#endif
 }
 
 template <typename FPTYPE, typename Device>
@@ -381,8 +396,32 @@ void FS_Nonlocal_tools<FPTYPE, Device>::prepare_projectors(int ik)
             // vkb_size += nh * npw;
         }
     }
+#if defined(__CUDA)
+    if (this->projector_fold)
+    {
+        this->projector_fold->prepare(ik, reinterpret_cast<const std::complex<double>*>(this->ppcell_vkb), npw);
+    }
+#endif
     this->current_ik = ik;
 
+}
+
+template <typename FPTYPE, typename Device>
+void FS_Nonlocal_tools<FPTYPE, Device>::add_projectors(int ik, int columns, int leading,
+    const std::complex<FPTYPE>* coefficients, std::complex<FPTYPE>* output)
+{
+    this->prepare_projectors(ik);
+#if defined(__CUDA)
+    if (this->projector_fold && this->projector_fold->add(columns, leading,
+        reinterpret_cast<const std::complex<double>*>(coefficients), reinterpret_cast<std::complex<double>*>(output)))
+    {
+        return;
+    }
+#endif
+    const int npw = this->wfc_basis_->npwk[ik];
+    const std::complex<FPTYPE> one(1, 0);
+    gemm_op()(this->ctx, 'N', 'T', npw, columns, this->nkb, &one, this->ppcell_vkb,
+              npw, coefficients, columns, &one, output, leading);
 }
 
 // cal_becp
@@ -430,20 +469,28 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik,
     const char transa = 'C';
     const char transb = 'N';
     int npm_npol = npm * npol;
-    gemm_op()(this->ctx,
-              transa,
-              transb,
-              this->nkb,
-              npm_npol, // nbands(occ)*npol
-              npw,
-              &ModuleBase::ONE,
-              this->ppcell_vkb,
-              npw,
-              ppsi,
-              npwx,
-              &ModuleBase::ZERO,
-              becp_tmp,
-              this->nkb);
+    bool folded = false;
+#if defined(__CUDA)
+    folded = this->projector_fold && this->projector_fold->project(npm_npol, npwx,
+        reinterpret_cast<const std::complex<double>*>(ppsi), reinterpret_cast<std::complex<double>*>(becp_tmp));
+#endif
+    if (!folded)
+    {
+        gemm_op()(this->ctx,
+                  transa,
+                  transb,
+                  this->nkb,
+                  npm_npol, // nbands(occ)*npol
+                  npw,
+                  &ModuleBase::ONE,
+                  this->ppcell_vkb,
+                  npw,
+                  ppsi,
+                  npwx,
+                  &ModuleBase::ZERO,
+                  becp_tmp,
+                  this->nkb);
+    }
 
     if (this->device == base_device::GpuDevice)
     {
