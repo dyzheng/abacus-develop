@@ -9,6 +9,8 @@
 #include "module_base/timer.h"
 #include "module_hamilt_pw/hamilt_pwdft/global.h"
 
+#include <memory>
+
 Charge_Mixing::Charge_Mixing()
 {
 }
@@ -1126,12 +1128,12 @@ void Charge_Mixing::mix_rho(Charge* chr)
 
     // the charge before mixing.
     const int nrxx = chr->rhopw->nrxx;
-    std::vector<double> rho123(GlobalV::NSPIN * nrxx);
+    std::unique_ptr<double[]> rho123(new double[GlobalV::NSPIN * nrxx]);
     for (int is = 0; is < GlobalV::NSPIN; ++is)
     {
         if (is == 0 || is == 3 || !GlobalV::DOMAG_Z)
         {
-            double* rho123_is = rho123.data() + is * nrxx;
+            double* rho123_is = rho123.get() + is * nrxx;
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static, 512)
 #endif
@@ -1141,13 +1143,13 @@ void Charge_Mixing::mix_rho(Charge* chr)
             }
         }
     }
-    std::vector<double> kin_r123;
+    std::unique_ptr<double[]> kin_r123;
     if ((XC_Functional::get_func_type() == 3 || XC_Functional::get_func_type() == 5) && mixing_tau)
     {
-        kin_r123.resize(GlobalV::NSPIN * nrxx);
+        kin_r123.reset(new double[GlobalV::NSPIN * nrxx]);
         for (int is = 0; is < GlobalV::NSPIN; ++is)
         {
-            double* kin_r123_is = kin_r123.data() + is * nrxx;
+            double* kin_r123_is = kin_r123.get() + is * nrxx;
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static, 512)
 #endif
@@ -1158,10 +1160,10 @@ void Charge_Mixing::mix_rho(Charge* chr)
         }
     }
 #ifdef USE_PAW
-    std::vector<double> nhat_r123;
+    std::unique_ptr<double[]> nhat_r123;
     if(GlobalV::use_paw)
     {
-        nhat_r123.resize(GlobalV::NSPIN * nrxx);
+        nhat_r123.reset(new double[GlobalV::NSPIN * nrxx]);
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static, 512)
 #endif
@@ -1191,7 +1193,7 @@ void Charge_Mixing::mix_rho(Charge* chr)
     {
         if (is == 0 || is == 3 || !GlobalV::DOMAG_Z)
         {
-            double* rho123_is = rho123.data() + is * nrxx;
+            double* rho123_is = rho123.get() + is * nrxx;
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static, 512)
 #endif
@@ -1206,7 +1208,7 @@ void Charge_Mixing::mix_rho(Charge* chr)
     {
         for (int is = 0; is < GlobalV::NSPIN; ++is)
         {
-            double* kin_r123_is = kin_r123.data() + is * nrxx;
+            double* kin_r123_is = kin_r123.get() + is * nrxx;
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static, 512)
 #endif
