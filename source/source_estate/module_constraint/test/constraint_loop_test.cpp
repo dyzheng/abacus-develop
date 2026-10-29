@@ -945,6 +945,32 @@ TEST_F(ConstraintLoopTest, AllocationOutputCorrectionSubtractsTargetTermOnly)
     EXPECT_NE(loop.output_energy_correction(), loop.last_audit().e_con);
 }
 
+TEST_F(ConstraintLoopTest, AllocationMuMoveRequestsMixingReset)
+{
+    // An allocation mu move replaces the nonlocal constraint operator, so the
+    // Broyden/DIIS history is stale.  The loop must request exactly one
+    // mixing reset per move (the esolver consumes the flag once).
+    constraint::ConstraintLoop& loop = constraint::ConstraintLoop::instance();
+    constraint::ConstraintConfig cfg = make_cfg(0.1);
+    cfg.allocation_mode = true;
+    loop.init(*ucell, rhopw, cfg, radii, 10.0);
+
+    const std::vector<double> q_ref = {Q_of(rho_ref)};
+    const std::vector<double> m_ref = {0.0};
+    loop.observe_allocation(1, q_ref, m_ref);
+    bool conv = true;
+    loop.on_scf_converged(1, conv); // reference close -> first mu step
+    ASSERT_EQ(loop.phase(), constraint::LoopPhase::CONSTRAINED);
+    EXPECT_TRUE(loop.consume_trust_rollback());
+    EXPECT_FALSE(loop.consume_trust_rollback()); // one-shot
+
+    // A second constrained convergence moves mu again -> reset again.
+    loop.observe_allocation(2, q_ref, m_ref);
+    bool conv2 = true;
+    loop.on_scf_converged(2, conv2);
+    EXPECT_TRUE(loop.consume_trust_rollback());
+}
+
 // Synthetic energy feed: place the guard's E_tot exactly de_target above the
 // reference by subtracting the constraint term the loop will add back.
 static void feed_guard_energy(constraint::ConstraintLoop& loop,

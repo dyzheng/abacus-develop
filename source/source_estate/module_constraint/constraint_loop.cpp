@@ -1471,6 +1471,17 @@ void ConstraintLoop::outer_step(const int iter, bool& conv_esolver)
         const std::vector<double> mu_before = mu_;
         const int rejects_before = mu_solver_.trust_reject_count();
         status_ = mu_solver_.step(Q_, targets_, mu_);
+        // Branch: an allocation multiplier move replaces the nonlocal
+        // constraint operator, so the Broyden/DIIS history now describes a
+        // fixed-point map that no longer exists.  Request one mixing reset
+        // through the same one-shot consumer as a trust rollback.  Without it
+        // the stale inverse Jacobian extrapolates until its window rolls over,
+        // which showed up as a ~9-iteration drho plateau after every mu move
+        // (Fe2: 82 -> 55 electronic iterations with this reset).
+        if (allocation_mode_ && mu_ != mu_before)
+        {
+            trust_rollback_pending_ = true;
+        }
         // Branch: the solver rejected this trial and re-walked it with a
         // smaller radius -> request one mixing reset from the esolver.
         if (mu_solver_.trust_reject_count() > rejects_before)
@@ -1514,10 +1525,13 @@ void ConstraintLoop::outer_step(const int iter, bool& conv_esolver)
     {
         tighten_pending_ = false;
         // Branch: an allocation multiplier move arms the subspace rotation
-        // consumed by ESolver_KS_PW at the next hamilt2rho_single().
+        // consumed by ESolver_KS_PW at the next hamilt2rho_single().  It also
+        // invalidates the mixing history (the nonlocal operator changed), so
+        // request the same one-shot reset the trust path uses.
         if (allocation_mode_)
         {
             alloc_subspace_rotation_pending_ = true;
+            trust_rollback_pending_ = true;
         }
     }
     print_audit(iter);

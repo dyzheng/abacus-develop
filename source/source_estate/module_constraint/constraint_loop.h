@@ -252,10 +252,13 @@ class ConstraintLoop
     int trust_rejections() const { return mu_solver_.trust_reject_count(); }
     // Consume the one-shot "the fixed-point map changed" request.  The
     // esolver calls this right after on_scf_converged() and resets the
-    // charge-mixing history when true.  Set on a rejected trust trial and on
-    // every ALM multiplier move (probe seed / Newton re-seed / outer update):
-    // the Broyden/DIIS cache extrapolates across the old potential, and R2
-    // showed a 0.25 drho transient without the reset.
+    // charge-mixing history when true.  Set on a rejected trust trial, on
+    // every ALM multiplier move (probe seed / Newton re-seed / outer update),
+    // and on every allocation multiplier move: in all three cases the
+    // Broyden/DIIS cache extrapolates across a potential that no longer
+    // exists.  R2 showed a 0.25 drho transient without the ALM reset; Fe2
+    // showed a ~9-iteration drho plateau per allocation mu move (82 -> 55
+    // electronic iterations with the reset).
     bool consume_trust_rollback()
     {
         const bool pending = trust_rollback_pending_;
@@ -496,7 +499,8 @@ class ConstraintLoop
     bool inner_step_this_iter_ = false;
     int last_reset_iter_ = 0;
     // Set by outer_step()/take_inner_step() when the trust solver rejected a
-    // trial; consumed once by the esolver to reset the mixing history.
+    // trial or when an allocation multiplier moved; consumed once by the
+    // esolver to reset the mixing history.
     bool trust_rollback_pending_ = false;
     // Set by outer_step()/take_inner_step() when an allocation multiplier
     // changed; the esolver may consume it for one subspace rotation.

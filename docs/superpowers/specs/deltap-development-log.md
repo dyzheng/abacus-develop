@@ -7027,3 +7027,25 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - **文件**：`module_pwdft/op_pw_alloc.{h,cpp}`、`module_pwdft/alloc_pw_report.cpp`、
   `esolver_ks_pw.cpp`、`docs/superpowers/specs/2026-10-28-allocation-semantic-closure.md`、本日志。
 - **下一轮**：修互补归一化（目标 `|dsum_n|<1e-8`）；之后才评估 charge allocation 与性能。
+
+## 2026-10-29 (S6.2): Allocation drho 平台期根因（mixing 历史陈旧）+ 修复
+
+- **诊断**：Fe2 allocation 82 步 vs DeltaSpin 13 步。逐迭代 drho 显示：
+  μ=0 参考相 14 步干净收敛；每次外层 μ 移动后 drho 出现 7–9 步**恒定平台**
+  （6.6e-4 / 2.2e-2 / ~3e-6），随后突然坍缩。
+  根因：allocation 外层路径 μ 移动后未重置 Broyden/DIIS 历史（只有 INNER/
+  trust 回退会重置）；μ 改变的是非局域算符，旧逆 Jacobian 外推成极限环，
+  直到窗口滚出。
+- **修复**：`outer_step` 的两个 μ 步分支在 `allocation_mode_ && mu_!=mu_before`
+  时置 `trust_rollback_pending_`（复用 esolver 一次性 mixing-reset 通道）；
+  新增单测 `AllocationMuMoveRequestsMixingReset`。
+- **A/B**（Fe2，4 MPI，同机同构建）：
+  - 修复前：82 迭代 / 19 s / ETOT -6370.6101511942 / 平台 7–9 步；
+  - 修复后：**55 迭代 / 15 s** / ETOT -6370.6101512101（同态，差 1.6e-8 eV）/ 平台消失；
+  - DeltaSpin：13 迭代 / 2 s / -6369.985258（不同约束态，0.625 eV）。
+- **回归**：23/23 PASS。
+- **分析**：修复后 55 ≈ 6 次外层 × ~9 次 SCF；剩余差距需显式响应层
+  （D6/D7）或密度感知的内层 μ 更新；单次 hPsi 仍为 DeltaSpin 的 2.2×。
+- **文件**：`module_constraint/constraint_loop.{h,cpp}`、
+  `test/constraint_loop_test.cpp`、`docs/superpowers/specs/2026-10-29-allocation-mixing-reset-diagnosis.md`、本日志。
+- **下一轮**：① 响应层时间盒；② 电荷互补归一化（dsum_n=0.376）；③ hPsi 单步成本。
