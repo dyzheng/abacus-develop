@@ -36,12 +36,14 @@ class DiagoIterAssist
                                int n_band = 0);
     
     /// Optional hpsi_host receives nbands-by-nbasis Hamiltonian-action values
-    /// in host memory before the temporary storage is reused for the overlap.
+    /// in host memory. Pinned host storage permits transfer/projection overlap.
+    /// identity_overlap requires an exactly Euclidean overlap operator.
     static void cal_hs_subspace(const hamilt::Hamilt<T, Device>* pHamilt, // hamiltonian operator carrier
                                                 const psi::Psi<T, Device>& psi,     // [in] wavefunction
                                                 T *hcc, 
                                                 T *scc,
-                                                T *hpsi_host = nullptr);
+                                                T *hpsi_host = nullptr,
+                                                bool identity_overlap = false);
 
     static void diag_responce(const T* hcc,
                               const T* scc,
