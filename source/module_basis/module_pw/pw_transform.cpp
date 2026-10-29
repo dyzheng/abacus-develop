@@ -7,6 +7,81 @@
 #include "pw_gatherscatter.h"
 
 namespace ModulePW {
+
+#if defined(__CUDA) || defined(__ROCM)
+template <typename FPTYPE>
+void PW_Basis::fft3d_gpu(bool inverse) const
+{
+    using Complex = std::complex<FPTYPE>;
+    auto* host_grid = this->ft.get_auxr_data<FPTYPE>();
+    auto* device_grid = this->ft.get_auxr_3d_data<FPTYPE>();
+    base_device::memory::synchronize_memory_op<Complex, base_device::DEVICE_GPU, base_device::DEVICE_CPU>()(
+        gpu_ctx, cpu_ctx, device_grid, host_grid, this->nxyz);
+    if (inverse)
+    {
+        this->ft.fft3D_backward(gpu_ctx, device_grid, device_grid);
+    }
+    else
+    {
+        this->ft.fft3D_forward(gpu_ctx, device_grid, device_grid);
+    }
+    base_device::memory::synchronize_memory_op<Complex, base_device::DEVICE_CPU, base_device::DEVICE_GPU>()(
+        cpu_ctx, gpu_ctx, host_grid, device_grid, this->nxyz);
+}
+#endif
+
+template <typename FPTYPE>
+void PW_Basis::fft_forward() const
+{
+    auto* auxr = this->ft.get_auxr_data<FPTYPE>();
+    auto* auxg = this->ft.get_auxg_data<FPTYPE>();
+#if defined(__CUDA) || defined(__ROCM)
+    if (this->device == "gpu" && this->poolnproc == 1 && !this->gamma_only)
+    {
+        // A complete complex grid can be transformed before gathering its sticks.
+        this->fft3d_gpu<FPTYPE>(false);
+        this->gatherp_scatters(auxr, auxg);
+        return;
+    }
+#endif
+    if (this->gamma_only)
+    {
+        this->ft.fftxyr2c(this->ft.get_rspace_data<FPTYPE>(), auxr);
+    }
+    else
+    {
+        this->ft.fftxyfor(auxr, auxr);
+    }
+    this->gatherp_scatters(auxr, auxg);
+    this->ft.fftzfor(auxg, auxg);
+}
+
+template <typename FPTYPE>
+void PW_Basis::fft_backward() const
+{
+    auto* auxr = this->ft.get_auxr_data<FPTYPE>();
+    auto* auxg = this->ft.get_auxg_data<FPTYPE>();
+#if defined(__CUDA) || defined(__ROCM)
+    if (this->device == "gpu" && this->poolnproc == 1 && !this->gamma_only)
+    {
+        // Assemble the reciprocal grid before the full inverse transform.
+        this->gathers_scatterp(auxg, auxr);
+        this->fft3d_gpu<FPTYPE>(true);
+        return;
+    }
+#endif
+    this->ft.fftzbac(auxg, auxg);
+    this->gathers_scatterp(auxg, auxr);
+    if (this->gamma_only)
+    {
+        this->ft.fftxyc2r(auxr, this->ft.get_rspace_data<FPTYPE>());
+    }
+    else
+    {
+        this->ft.fftxybac(auxr, auxr);
+    }
+}
+
 /**
  * @brief transform real space to reciprocal space
  * @details c(g)=\int dr*f(r)*exp(-ig*r)
@@ -30,11 +105,7 @@ void PW_Basis::real2recip(const std::complex<FPTYPE>* in,
     {
         this->ft.get_auxr_data<FPTYPE>()[ir] = in[ir];
     }
-    this->ft.fftxyfor(ft.get_auxr_data<FPTYPE>(),ft.get_auxr_data<FPTYPE>());
-
-    this->gatherp_scatters(this->ft.get_auxr_data<FPTYPE>(), this->ft.get_auxg_data<FPTYPE>());
-    
-    this->ft.fftzfor(ft.get_auxg_data<FPTYPE>(),ft.get_auxg_data<FPTYPE>());
+    this->fft_forward<FPTYPE>();
 
     if(add)
     {
@@ -86,7 +157,6 @@ void PW_Basis::real2recip(const FPTYPE* in, std::complex<FPTYPE>* out, const boo
             }
         }
 
-        this->ft.fftxyr2c(ft.get_rspace_data<FPTYPE>(),ft.get_auxr_data<FPTYPE>());
     }
     else
     {
@@ -97,11 +167,8 @@ void PW_Basis::real2recip(const FPTYPE* in, std::complex<FPTYPE>* out, const boo
         {
             this->ft.get_auxr_data<FPTYPE>()[ir] = std::complex<FPTYPE>(in[ir],0);
         }
-        this->ft.fftxyfor(ft.get_auxr_data<FPTYPE>(),ft.get_auxr_data<FPTYPE>());
     }
-    this->gatherp_scatters(this->ft.get_auxr_data<FPTYPE>(), this->ft.get_auxg_data<FPTYPE>());
-    
-    this->ft.fftzfor(ft.get_auxg_data<FPTYPE>(),ft.get_auxg_data<FPTYPE>());
+    this->fft_forward<FPTYPE>();
 
     if(add)
     {
@@ -158,11 +225,7 @@ void PW_Basis::recip2real(const std::complex<FPTYPE>* in,
     {
         this->ft.get_auxg_data<FPTYPE>()[this->ig2isz[ig]] = in[ig];
     }
-    this->ft.fftzbac(ft.get_auxg_data<FPTYPE>(), ft.get_auxg_data<FPTYPE>());
-
-    this->gathers_scatterp(this->ft.get_auxg_data<FPTYPE>(),this->ft.get_auxr_data<FPTYPE>());
-
-    this->ft.fftxybac(ft.get_auxr_data<FPTYPE>(),ft.get_auxr_data<FPTYPE>());
+    this->fft_backward<FPTYPE>();
     
     if(add)
     {
@@ -213,14 +276,10 @@ void PW_Basis::recip2real(const std::complex<FPTYPE>* in, FPTYPE* out, const boo
     {
         this->ft.get_auxg_data<FPTYPE>()[this->ig2isz[ig]] = in[ig];
     }
-    this->ft.fftzbac(ft.get_auxg_data<FPTYPE>(), ft.get_auxg_data<FPTYPE>());
-
-    this->gathers_scatterp(this->ft.get_auxg_data<FPTYPE>(), this->ft.get_auxr_data<FPTYPE>());
+    this->fft_backward<FPTYPE>();
 
     if(this->gamma_only)
     {
-        this->ft.fftxyc2r(ft.get_auxr_data<FPTYPE>(),ft.get_rspace_data<FPTYPE>());
-
         // r2c in place
         const int npy = this->ny * this->nplane;
 
@@ -253,7 +312,6 @@ void PW_Basis::recip2real(const std::complex<FPTYPE>* in, FPTYPE* out, const boo
     }
     else
     {
-        this->ft.fftxybac(ft.get_auxr_data<FPTYPE>(),ft.get_auxr_data<FPTYPE>());
         if(add)
         {
 #ifdef _OPENMP
