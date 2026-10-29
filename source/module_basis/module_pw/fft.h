@@ -73,6 +73,14 @@ public:
     template <typename FPTYPE, typename Device>
     void fft3D_backward(const Device* ctx, std::complex<FPTYPE>* in, std::complex<FPTYPE>* out) const;
 
+#if defined(__CUDA)
+    // Only the retained x slabs have defined Fourier coefficients. The forward
+    // transform preserves its input unless the input and output pointers alias.
+    void fft3D_forward_pw(std::complex<double>* in, std::complex<double>* out) const;
+    // The input is zero outside the retained x slabs and may be overwritten.
+    void fft3D_backward_pw(std::complex<double>* in, std::complex<double>* out) const;
+#endif
+
   public:
 	//init fftw_plans
 	void initplan(const unsigned int& flag = 0);
@@ -132,6 +140,11 @@ public :
 #if defined(__CUDA)
     mutable cufftHandle c_handle = {};
     mutable cufftHandle z_handle = {};
+    mutable cufftHandle z_x_handle = {};
+    mutable cufftHandle z_yz_left_handle = {};
+    mutable cufftHandle z_yz_right_handle = {};
+    bool use_pruned_gpu_fft() const;
+    void init_gpu_pruned_plan() const;
 #elif defined(__ROCM)
     mutable hipfftHandle c_handle = {};
     mutable hipfftHandle z_handle = {};

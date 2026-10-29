@@ -427,6 +427,14 @@ void FFT::cleanFFT()
             cufftDestroy(z_handle);
             z_handle = {};
         }
+        for (auto* handle : {&z_x_handle, &z_yz_left_handle, &z_yz_right_handle})
+        {
+            if (*handle)
+            {
+                cufftDestroy(*handle);
+                *handle = {};
+            }
+        }
 #elif defined(__ROCM)
         if (c_handle)
         {
@@ -752,6 +760,37 @@ void FFT::fftxyc2r(std::complex<double>* in, double* out) const
     }
 }
 
+#if defined(__CUDA)
+bool FFT::use_pruned_gpu_fft() const
+{
+    // Small grids are dominated by the extra kernel launches. Sparse large
+    // grids avoid the y-z transforms in the unoccupied middle x slabs.
+    return this->xprime && !this->gamma_only && this->nproc == 1
+           && this->nx * this->ny * this->nz >= 1048576
+           && 4 * (this->lixy + 1 + this->nx - this->rixy) <= 3 * this->nx;
+}
+
+void FFT::init_gpu_pruned_plan() const
+{
+    if (this->z_x_handle)
+    {
+        return;
+    }
+    int x_size = this->nx;
+    int yz_size[2] = {this->ny, this->nz};
+    const int plane = this->ny * this->nz;
+    CHECK_CUFFT(cufftPlanMany(&this->z_x_handle, 1, &x_size, &x_size, plane, 1,
+                             &x_size, plane, 1, CUFFT_Z2Z, plane));
+    CHECK_CUFFT(cufftPlanMany(&this->z_yz_left_handle, 2, yz_size, yz_size, 1, plane,
+                             yz_size, 1, plane, CUFFT_Z2Z, this->lixy + 1));
+    if (this->rixy < this->nx)
+    {
+        CHECK_CUFFT(cufftPlanMany(&this->z_yz_right_handle, 2, yz_size, yz_size, 1, plane,
+                                 yz_size, 1, plane, CUFFT_Z2Z, this->nx - this->rixy));
+    }
+}
+#endif
+
 #if defined(__CUDA) || defined(__ROCM)
 template <>
 void FFT::init_gpu_plan<float>() const
@@ -830,6 +869,46 @@ void FFT::fft3D_backward(const base_device::DEVICE_GPU* /*ctx*/, std::complex<do
     CHECK_CUFFT(hipfftExecZ2Z(this->z_handle, reinterpret_cast<hipfftDoubleComplex*>(in),
                               reinterpret_cast<hipfftDoubleComplex*>(out), HIPFFT_BACKWARD));
 #endif
+}
+#endif
+
+#if defined(__CUDA)
+void FFT::fft3D_forward_pw(std::complex<double>* in, std::complex<double>* out) const
+{
+    if (!this->use_pruned_gpu_fft())
+    {
+        this->fft3D_forward(gpu_ctx, in, out);
+        return;
+    }
+    this->init_gpu_pruned_plan();
+    auto* input = reinterpret_cast<cufftDoubleComplex*>(in);
+    auto* output = reinterpret_cast<cufftDoubleComplex*>(out);
+    CHECK_CUFFT(cufftExecZ2Z(this->z_x_handle, input, output, CUFFT_FORWARD));
+    CHECK_CUFFT(cufftExecZ2Z(this->z_yz_left_handle, output, output, CUFFT_FORWARD));
+    if (this->z_yz_right_handle)
+    {
+        auto* right = output + this->rixy * this->ny * this->nz;
+        CHECK_CUFFT(cufftExecZ2Z(this->z_yz_right_handle, right, right, CUFFT_FORWARD));
+    }
+}
+
+void FFT::fft3D_backward_pw(std::complex<double>* in, std::complex<double>* out) const
+{
+    if (!this->use_pruned_gpu_fft())
+    {
+        this->fft3D_backward(gpu_ctx, in, out);
+        return;
+    }
+    this->init_gpu_pruned_plan();
+    auto* input = reinterpret_cast<cufftDoubleComplex*>(in);
+    auto* output = reinterpret_cast<cufftDoubleComplex*>(out);
+    CHECK_CUFFT(cufftExecZ2Z(this->z_yz_left_handle, input, input, CUFFT_INVERSE));
+    if (this->z_yz_right_handle)
+    {
+        auto* right = input + this->rixy * this->ny * this->nz;
+        CHECK_CUFFT(cufftExecZ2Z(this->z_yz_right_handle, right, right, CUFFT_INVERSE));
+    }
+    CHECK_CUFFT(cufftExecZ2Z(this->z_x_handle, input, output, CUFFT_INVERSE));
 }
 #endif
 
