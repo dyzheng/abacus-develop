@@ -84,8 +84,10 @@ public:
 #if defined(__CUFFTDX)
     // Returns the compact grid length, or zero for unsupported grid layouts.
     int fused_veff_grid_size() const;
+    // Two stick fields fit in the existing full-grid transform workspace.
+    int fused_veff_stick_size() const;
     void apply_spinor_potential(const double* potential, std::complex<double>* up,
-                               std::complex<double>* down) const;
+                               std::complex<double>* down, const int* reverse = nullptr) const;
 #endif
 
   public:
@@ -150,6 +152,7 @@ public :
     mutable cufftHandle z_x_handle = {};
     mutable cufftHandle z_yz_left_handle = {};
     mutable cufftHandle z_yz_right_handle = {};
+    mutable cufftHandle z_stick_handle = {};
     bool use_pruned_gpu_fft() const;
     void init_gpu_pruned_plan() const;
 #elif defined(__ROCM)
