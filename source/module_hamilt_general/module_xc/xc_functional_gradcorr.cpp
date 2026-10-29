@@ -52,6 +52,7 @@ ct::Tensor density_grid_indices(const ModulePW::PW_Basis& basis)
 void density_gradient_gpu(const std::complex<double>* rhog, ModuleBase::Vector3<double>* gradient,
                           const ModulePW::PW_Basis& basis, double scale)
 {
+    ModuleBase::timer::tick("XC_Functional", "grad_rho_gpu");
     static_assert(sizeof(ModuleBase::Vector3<double>) == 3 * sizeof(double), "Vector3 must have contiguous components");
     const base_device::DEVICE_GPU* gpu = nullptr;
     const base_device::DEVICE_CPU* cpu = nullptr;
@@ -70,11 +71,13 @@ void density_gradient_gpu(const std::complex<double>* rhog, ModuleBase::Vector3<
     }
     base_device::memory::synchronize_memory_op<double, base_device::DEVICE_CPU, base_device::DEVICE_GPU>()(
         cpu, gpu, reinterpret_cast<double*>(gradient), result.data<double>(), 3 * basis.nrxx);
+    ModuleBase::timer::tick("XC_Functional", "grad_rho_gpu");
 }
 
 void density_divergence_gpu(const ModuleBase::Vector3<double>* vectors, double* divergence,
                             const ModulePW::PW_Basis& basis, double scale)
 {
+    ModuleBase::timer::tick("XC_Functional", "grad_dot_gpu");
     static_assert(sizeof(ModuleBase::Vector3<double>) == 3 * sizeof(double), "Vector3 must have contiguous components");
     const base_device::DEVICE_GPU* gpu = nullptr;
     const base_device::DEVICE_CPU* cpu = nullptr;
@@ -98,6 +101,7 @@ void density_divergence_gpu(const ModuleBase::Vector3<double>* vectors, double* 
     hamilt::xc_extract_real_gpu(basis.nrxx, 1, 0, scale, grid, result.data<double>());
     base_device::memory::synchronize_memory_op<double, base_device::DEVICE_CPU, base_device::DEVICE_GPU>()(
         cpu, gpu, divergence, result.data<double>(), basis.nrxx);
+    ModuleBase::timer::tick("XC_Functional", "grad_dot_gpu");
 }
 
 } // namespace
@@ -237,23 +241,6 @@ void XC_Functional::gradcorr(double& etxc,
     {
         mag_part.resize(rhopw->nrxx * 3, 0.0);
         rhotmp2 = new double[rhopw->nrxx];
-        rhogsum2 = new std::complex<double>[rhopw->npw];
-#ifdef _OPENMP
-#pragma omp parallel for schedule(static, 1024)
-#endif
-        for (int ir = 0; ir < rhopw->nrxx; ir++)
-        {
-            rhotmp1[ir] = 0.0;
-            rhotmp2[ir] = 0.0;
-        }
-#ifdef _OPENMP
-#pragma omp parallel for schedule(static, 1024)
-#endif
-        for (int ig = 0; ig < rhopw->npw; ig++)
-        {
-            rhogsum1[ig] = 0.0;
-            rhogsum2[ig] = 0.0;
-        }
         if (!is_stress)
         {
             vsave = new double*[GlobalV::NSPIN];
@@ -279,8 +266,22 @@ void XC_Functional::gradcorr(double& etxc,
             }
         }
         noncolin_rho(rhotmp1, rhotmp2, chr->rho, rhopw->nrxx, mag_part.data());
-        rhopw->real2recip(rhotmp1, rhogsum1);
-        rhopw->real2recip(rhotmp2, rhogsum2);
+        if (XC_Functional::gga_grad != 2)
+        {
+            // Eigenchannel gradients require their Fourier coefficients. The
+            // chain-rule formulation uses the charge and Cartesian spin fields.
+            rhogsum2 = new std::complex<double>[rhopw->npw];
+            rhopw->real2recip(rhotmp1, rhogsum1);
+            rhopw->real2recip(rhotmp2, rhogsum2);
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024)
+#endif
+            for (int ig = 0; ig < rhopw->npw; ig++)
+            {
+                rhogsum2[ig] += fac * chr->rhog_core[ig];
+                rhogsum1[ig] += fac * chr->rhog_core[ig];
+            }
+        }
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static, 1024)
 #endif
@@ -289,15 +290,6 @@ void XC_Functional::gradcorr(double& etxc,
             rhotmp2[ir] += fac * chr->rho_core[ir];
             rhotmp1[ir] += fac * chr->rho_core[ir];
         }
-#ifdef _OPENMP
-#pragma omp parallel for schedule(static, 1024)
-#endif
-        for (int ig = 0; ig < rhopw->npw; ig++)
-        {
-            rhogsum2[ig] += fac * chr->rhog_core[ig];
-            rhogsum1[ig] += fac * chr->rhog_core[ig];
-        }
-
         gdr2 = new ModuleBase::Vector3<double>[rhopw->nrxx];
         if (!is_stress)
             h2 = new ModuleBase::Vector3<double>[rhopw->nrxx];
