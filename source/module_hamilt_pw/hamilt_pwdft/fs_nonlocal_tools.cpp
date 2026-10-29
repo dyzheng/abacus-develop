@@ -266,6 +266,125 @@ void FS_Nonlocal_tools<FPTYPE, Device>::delete_memory()
     }
 }
 
+template <typename FPTYPE, typename Device>
+void FS_Nonlocal_tools<FPTYPE, Device>::prepare_projectors(int ik)
+{
+    if (ik == this->current_ik)
+    {
+        return;
+    }
+    const int npw = this->wfc_basis_->npwk[ik];
+    // prepare math tools
+    Nonlocal_maths<FPTYPE, Device> maths(*(this->nhtol), this->lprojmax, this->ucell_);
+
+    std::complex<FPTYPE>* vkb_ptr = this->ppcell_vkb;
+
+    // calculate G+K
+    this->g_plus_k = maths.cal_gk(ik, this->wfc_basis_);
+    FPTYPE *gk = g_plus_k.data(), *vq_tb = this->tabtpr->ptr;
+    // vq_tb has dimension (ntype, nproj, GlobalV::NQX)
+
+    // calculate sk
+    resmem_complex_op()(ctx, hd_sk, this->ucell_->nat * npw);
+    this->sf_->get_sk(ctx, ik, this->wfc_basis_, hd_sk);
+    std::complex<FPTYPE>* d_sk = this->hd_sk;
+    // prepare ylm，size: (lmax+1)^2 * this->max_npw
+    const int lmax_ = this->lprojmax;
+
+    // DEBUG: ONCE YOU CHECK ylm VALUES, YOU UNCOMMENT THE FOLLOW
+    // std::vector<ModuleBase::Vector3<double>> qs(npw);
+    // for (int ig = 0; ig < npw; ig++)
+    // {
+    //     qs[ig] = this->wfc_basis_->getgpluskcar(ik, ig);
+    // }
+    // const int total_lm = (lmax_ + 1) * (lmax_ + 1);
+    // ModuleBase::matrix ylmref(total_lm, npw);
+    // ModuleBase::YlmReal::Ylm_Real(total_lm, npw, qs.data(), ylmref);
+    // std::cout << "Compare the Ylm values of two methods:" << std::endl;
+    // int lm = 0;
+    // for(int l_ = 0; l_ < lmax_ + 1; l_++)
+    // {
+    //     for(int m_ = -l_; m_ <= l_; m_++)
+    //     {
+    //         std::cout << "l = " << l_ << " m = " << m_ << std::endl;
+    //         lm = l_ * l_ + l_ + m_;
+    //         for(int ig = 0; ig < npw; ig++)
+    //         {
+    //             std::cout << "[" << ylmref(lm, ig) << " " << hd_ylm[lm * npw + ig] << "]" << " ";
+    //         }
+    //         std::cout << std::endl;
+    //     }
+    //     std::cout << std::endl;
+    // }
+    // ModuleBase::WARNING_QUIT("FS_Nonlocal_tools", "cal_becp");
+
+    if (this->device == base_device::GpuDevice)
+    {
+        syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, d_g_plus_k, g_plus_k.data(), g_plus_k.size());
+        syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, d_vq_tab, this->tabtpr->ptr, this->tabtpr->getSize());
+        gk = d_g_plus_k;
+        vq_tb = d_vq_tab;
+    }
+    maths.cal_ylm(lmax_, npw, gk, hd_ylm);
+
+    // int vkb_size = 0;
+    for (int it = 0; it < this->ucell_->ntype; it++) // loop all elements
+    {
+        // interpolate (it, 0..nproj[it], 0..npw) to get hd_vq
+        cal_vq_op()(this->ctx,
+                    vq_tb, // its data is correct, dimension (ntype, nprojmax, GlobalV::NQX)
+                    it,    // but maybe it is (ntype, nprojmax*npol, GlobalV::NQX)
+                    gk,
+                    npw,
+                    this->tabtpr->getBound2(),
+                    this->tabtpr->getBound3(),
+                    GlobalV::DQ,
+                    nproj[it],
+                    hd_vq); // hd_vq has dimension (nprojmax, npwx), this size will be the largest needed.
+
+        // DEBUG: ONCE YOU CHECK vq VALUES, YOU UNCOMMENT THE FOLLOWING LINE
+        // for(int ip = 0; ip < nproj[it]; ip++)
+        // {
+        //     std::cout << "projector #" << ip << " of atom type " << it << std::endl;
+        //     for(int iq = 0; iq < npw; iq++)
+        //     {
+        //         std::cout << hd_vq[ip * npw + iq] << " ";
+        //     }
+        //     std::cout << std::endl;
+        // }
+        // std::cout << std::endl;
+
+        // prepare（-i）^l, size: nh
+        std::vector<std::complex<double>> pref = maths.cal_pref(it, h_atom_nh[it]);
+        const int nh = pref.size();
+        this->dvkb_indexes.resize(nh * 4);
+        // print the value of nhtol
+        // nhtol->print(std::cout); // as checked, nhtol works as expected
+        maths.cal_dvkb_index(nproj[it], this->nhtol->c, this->nhtol->nc, npw, it, 0, 0, this->dvkb_indexes.data());
+
+        if (this->device == base_device::GpuDevice)
+        {
+            syncmem_int_h2d_op()(this->ctx, this->cpu_ctx, d_dvkb_indexes, dvkb_indexes.data(), nh * 4);
+            syncmem_complex_h2d_op()(this->ctx, this->cpu_ctx, d_pref_in, pref.data(), nh);
+        }
+
+        for (int ia = 0; ia < h_atom_na[it]; ia++)
+        {
+            if (this->device == base_device::CpuDevice)
+            {
+                d_pref_in = pref.data();
+                d_dvkb_indexes = dvkb_indexes.data();
+            }
+            cal_vkb_op()(this->ctx, nh, npw, d_dvkb_indexes, hd_vq, hd_ylm, d_sk, d_pref_in, vkb_ptr);
+            vkb_ptr += nh * npw; // vkb_ptr has dimension (nhtot, npwx), this size will be the largest needed.
+            d_sk += npw;
+            // vkb_size += nh * npw;
+        }
+    }
+    this->current_ik = ik;
+
+}
+
 // cal_becp
 // starts from vkb (nkb, ng) table
 // it should be merely the multiplication of matrix (vkb, ng) * (ng, nbands) -> (vkb, nbands)
@@ -288,129 +407,13 @@ void FS_Nonlocal_tools<FPTYPE, Device>::cal_becp(int ik,
     const int npol = this->ucell_->get_npol();
     const std::complex<FPTYPE>* ppsi = ppsi_in == nullptr ? &(this->psi_[0](ik, 0, 0)) : ppsi_in;
     const int npw = this->wfc_basis_->npwk[ik];
-    if (becp_in == nullptr && this->becp == nullptr)
+    if (this->becp == nullptr)
     {
         resmem_complex_op()(this->ctx, becp, this->nbands * npol * this->nkb);
     }
     std::complex<FPTYPE>* becp_tmp = becp_in == nullptr ? this->becp : becp_in;
     const int size_becp_act = npm * npol * this->nkb;
-    if (ik != this->current_ik) // different ik, need to recalculate vkb
-    {
-        const int size_becp = this->nbands * npol * this->nkb;
-        if (this->becp == nullptr)
-        {
-            resmem_complex_op()(this->ctx, becp, size_becp);
-        }
-
-        // prepare math tools
-        Nonlocal_maths<FPTYPE, Device> maths(*(this->nhtol), this->lprojmax, this->ucell_);
-
-        std::complex<FPTYPE>* vkb_ptr = this->ppcell_vkb;
-
-        // calculate G+K
-        this->g_plus_k = maths.cal_gk(ik, this->wfc_basis_);
-        FPTYPE *gk = g_plus_k.data(), *vq_tb = this->tabtpr->ptr;
-        // vq_tb has dimension (ntype, nproj, GlobalV::NQX)
-
-        // calculate sk
-        resmem_complex_op()(ctx, hd_sk, this->ucell_->nat * npw);
-        this->sf_->get_sk(ctx, ik, this->wfc_basis_, hd_sk);
-        std::complex<FPTYPE>* d_sk = this->hd_sk;
-        // prepare ylm，size: (lmax+1)^2 * this->max_npw
-        const int lmax_ = this->lprojmax;
-
-        // DEBUG: ONCE YOU CHECK ylm VALUES, YOU UNCOMMENT THE FOLLOW
-        // std::vector<ModuleBase::Vector3<double>> qs(npw);
-        // for (int ig = 0; ig < npw; ig++)
-        // {
-        //     qs[ig] = this->wfc_basis_->getgpluskcar(ik, ig);
-        // }
-        // const int total_lm = (lmax_ + 1) * (lmax_ + 1);
-        // ModuleBase::matrix ylmref(total_lm, npw);
-        // ModuleBase::YlmReal::Ylm_Real(total_lm, npw, qs.data(), ylmref);
-        // std::cout << "Compare the Ylm values of two methods:" << std::endl;
-        // int lm = 0;
-        // for(int l_ = 0; l_ < lmax_ + 1; l_++)
-        // {
-        //     for(int m_ = -l_; m_ <= l_; m_++)
-        //     {
-        //         std::cout << "l = " << l_ << " m = " << m_ << std::endl;
-        //         lm = l_ * l_ + l_ + m_;
-        //         for(int ig = 0; ig < npw; ig++)
-        //         {
-        //             std::cout << "[" << ylmref(lm, ig) << " " << hd_ylm[lm * npw + ig] << "]" << " ";
-        //         }
-        //         std::cout << std::endl;
-        //     }
-        //     std::cout << std::endl;
-        // }
-        // ModuleBase::WARNING_QUIT("FS_Nonlocal_tools", "cal_becp");
-
-        if (this->device == base_device::GpuDevice)
-        {
-            syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, d_g_plus_k, g_plus_k.data(), g_plus_k.size());
-            syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, d_vq_tab, this->tabtpr->ptr, this->tabtpr->getSize());
-            gk = d_g_plus_k;
-            vq_tb = d_vq_tab;
-        }
-        maths.cal_ylm(lmax_, npw, gk, hd_ylm);
-
-        // int vkb_size = 0;
-        for (int it = 0; it < this->ucell_->ntype; it++) // loop all elements
-        {
-            // interpolate (it, 0..nproj[it], 0..npw) to get hd_vq
-            cal_vq_op()(this->ctx,
-                        vq_tb, // its data is correct, dimension (ntype, nprojmax, GlobalV::NQX)
-                        it,    // but maybe it is (ntype, nprojmax*npol, GlobalV::NQX)
-                        gk,
-                        npw,
-                        this->tabtpr->getBound2(),
-                        this->tabtpr->getBound3(),
-                        GlobalV::DQ,
-                        nproj[it],
-                        hd_vq); // hd_vq has dimension (nprojmax, npwx), this size will be the largest needed.
-
-            // DEBUG: ONCE YOU CHECK vq VALUES, YOU UNCOMMENT THE FOLLOWING LINE
-            // for(int ip = 0; ip < nproj[it]; ip++)
-            // {
-            //     std::cout << "projector #" << ip << " of atom type " << it << std::endl;
-            //     for(int iq = 0; iq < npw; iq++)
-            //     {
-            //         std::cout << hd_vq[ip * npw + iq] << " ";
-            //     }
-            //     std::cout << std::endl;
-            // }
-            // std::cout << std::endl;
-
-            // prepare（-i）^l, size: nh
-            std::vector<std::complex<double>> pref = maths.cal_pref(it, h_atom_nh[it]);
-            const int nh = pref.size();
-            this->dvkb_indexes.resize(nh * 4);
-            // print the value of nhtol
-            // nhtol->print(std::cout); // as checked, nhtol works as expected
-            maths.cal_dvkb_index(nproj[it], this->nhtol->c, this->nhtol->nc, npw, it, 0, 0, this->dvkb_indexes.data());
-
-            if (this->device == base_device::GpuDevice)
-            {
-                syncmem_int_h2d_op()(this->ctx, this->cpu_ctx, d_dvkb_indexes, dvkb_indexes.data(), nh * 4);
-                syncmem_complex_h2d_op()(this->ctx, this->cpu_ctx, d_pref_in, pref.data(), nh);
-            }
-
-            for (int ia = 0; ia < h_atom_na[it]; ia++)
-            {
-                if (this->device == base_device::CpuDevice)
-                {
-                    d_pref_in = pref.data();
-                    d_dvkb_indexes = dvkb_indexes.data();
-                }
-                cal_vkb_op()(this->ctx, nh, npw, d_dvkb_indexes, hd_vq, hd_ylm, d_sk, d_pref_in, vkb_ptr);
-                vkb_ptr += nh * npw; // vkb_ptr has dimension (nhtot, npwx), this size will be the largest needed.
-                d_sk += npw;
-                // vkb_size += nh * npw;
-            }
-        }
-        this->current_ik = ik;
-    }
+    this->prepare_projectors(ik);
     // DEBUG: ONCE YOU CHECK vkb VALUES, YOU UNCOMMENT THE FOLLOWING LINE
     // for(int i = 0; i < vkb_size; i++)
     // {

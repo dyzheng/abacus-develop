@@ -6,6 +6,8 @@
 #include "module_basis/module_pw/pw_basis_k.h"
 #include "module_hamilt_pw/hamilt_pwdft/wavefunc.h"
 
+#include <functional>
+
 namespace hsolver
 {
 
@@ -19,6 +21,8 @@ class HSolverPW : public HSolver<T, Device>
     using Real = typename GetTypeReal<T>::type;
 
   public:
+    using InitialHPsiFunc = std::function<void(int, T*, int)>;
+
     /**
      * @brief diago_full_acc
      * If .TRUE. all the empty states are diagonalized at the same level of
@@ -47,13 +51,16 @@ class HSolverPW : public HSolver<T, Device>
     /// Both arrays contain nk consecutive column-major nbands-by-nbands
     /// matrices on Device, including pool reduction. Their Hamiltonian must
     /// equal pHamilt throughout this solve; the caller retains ownership.
+    /// The optional initial_hpsi fills H psi for the given k point, output
+    /// pointer on Device, and leading dimension, using the same entry basis.
     void solve(hamilt::Hamilt<T, Device>* pHamilt,
                psi::Psi<T, Device>& psi,
                elecstate::ElecState* pes,
                const std::string method_in,
                const bool skip_charge,
                const T* initial_h,
-               const T* initial_s);
+               const T* initial_s,
+               const InitialHPsiFunc& initial_hpsi = {});
 
     virtual Real cal_hsolerror() override;
 
@@ -68,7 +75,8 @@ class HSolverPW : public HSolver<T, Device>
                          std::vector<Real>& pre_condition,
                          Real* eigenvalue,
                          const T* initial_h,
-                         const T* initial_s);
+                         const T* initial_s,
+                         const InitialHPsiFunc& initial_hpsi);
 
     // psi initializer && change k point in psi
     void updatePsiK(hamilt::Hamilt<T, Device>* pHamilt, psi::Psi<T, Device>& psi, const int ik);

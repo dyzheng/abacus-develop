@@ -105,7 +105,8 @@ int Diago_DavSubspace<T, Device>::diag_once(const HPsiFunc& hpsi_func,
                                             Real* eigenvalue_in_hsolver,
                                             const double* ethr_band,
                                             const T* initial_h,
-                                            const T* initial_s)
+                                            const T* initial_s,
+                                            const InitialHPsiFunc& initial_hpsi)
 {
     ModuleBase::timer::tick("Diago_DavSubspace", "diag_once");
 
@@ -132,7 +133,14 @@ int Diago_DavSubspace<T, Device>::diag_once(const HPsiFunc& hpsi_func,
         unconv[m] = m;
     }
 
-    hpsi_func(this->hphi, this->psi_in_iter, this->notconv, this->dim, 0, this->notconv - 1);
+    if (initial_hpsi)
+    {
+        initial_hpsi(this->hphi, this->dim);
+    }
+    else
+    {
+        hpsi_func(this->hphi, this->psi_in_iter, this->notconv, this->dim, 0, this->notconv - 1);
+    }
 
     if (initial_h != nullptr)
     {
@@ -652,7 +660,8 @@ int Diago_DavSubspace<T, Device>::diag(const HPsiFunc& hpsi_func,
                                        const double* ethr_band,
                                        const bool& scf_type,
                                        const T* initial_h,
-                                       const T* initial_s)
+                                       const T* initial_s,
+                                       const InitialHPsiFunc& initial_hpsi)
 {
     assert((initial_h == nullptr) == (initial_s == nullptr));
 #if defined(__CUDA) || defined(__ROCM)
@@ -675,7 +684,8 @@ int Diago_DavSubspace<T, Device>::diag(const HPsiFunc& hpsi_func,
         // A retry starts from rotated wavefunctions, so its projections are
         // reconstructed even when the entry basis has supplied matrices.
         int iter_return = this->diag_once(hpsi_func, psi_in, psi_in_dmax, eigenvalue_in_hsolver, ethr_band,
-                                          ntry == 0 ? initial_h : nullptr, ntry == 0 ? initial_s : nullptr);
+                                          ntry == 0 ? initial_h : nullptr, ntry == 0 ? initial_s : nullptr,
+                                          ntry == 0 ? initial_hpsi : InitialHPsiFunc{});
         if(iter_return == -1)
         {
             return -1;

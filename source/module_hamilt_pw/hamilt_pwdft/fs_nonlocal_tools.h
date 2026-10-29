@@ -55,6 +55,10 @@ class FS_Nonlocal_tools
 
     ~FS_Nonlocal_tools();
 
+    /// Construct reciprocal-space projectors for ik without computing overlaps.
+    /// Derivative operations invalidate the cached k point and require preparation again.
+    void prepare_projectors(int ik);
+
     /**
      * @brief calculate the becp = <psi|beta> for all beta functions
      */

@@ -263,10 +263,12 @@ void HSolverPW<T, Device>::solve(hamilt::Hamilt<T, Device>* pHamilt,
                                  const std::string method_in,
                                  const bool skip_charge,
                                  const T* initial_h,
-                                 const T* initial_s)
+                                 const T* initial_s,
+                                 const InitialHPsiFunc& initial_hpsi)
 {
     assert((initial_h == nullptr) == (initial_s == nullptr));
     assert(initial_h == nullptr || (method_in == "dav_subspace" && this->initialed_psi));
+    assert(!initial_hpsi || (method_in == "dav_subspace" && this->initialed_psi));
     ModuleBase::TITLE("HSolverPW", "solve");
     ModuleBase::timer::tick("HSolverPW", "solve");
 
@@ -312,7 +314,8 @@ void HSolverPW<T, Device>::solve(hamilt::Hamilt<T, Device>* pHamilt,
         const size_t subspace_offset = size_t(ik) * psi.get_nbands() * psi.get_nbands();
         this->hamiltSolvePsiK(pHamilt, psi, precondition, eigenvalues.data() + ik * pes->ekb.nc,
                               initial_h == nullptr ? nullptr : initial_h + subspace_offset,
-                              initial_s == nullptr ? nullptr : initial_s + subspace_offset);
+                              initial_s == nullptr ? nullptr : initial_s + subspace_offset,
+                              initial_hpsi);
 
         if (skip_charge)
         {
@@ -375,7 +378,8 @@ void HSolverPW<T, Device>::hamiltSolvePsiK(hamilt::Hamilt<T, Device>* hm,
                                            std::vector<Real>& pre_condition,
                                            Real* eigenvalue,
                                            const T* initial_h,
-                                           const T* initial_s)
+                                           const T* initial_s,
+                                           const InitialHPsiFunc& initial_hpsi)
 {
 #ifdef __MPI
     const diag_comm_info comm_info = {POOL_WORLD, GlobalV::RANK_IN_POOL, GlobalV::NPROC_IN_POOL};
@@ -533,8 +537,15 @@ void HSolverPW<T, Device>::hamiltSolvePsiK(hamilt::Hamilt<T, Device>* hm,
                                                     DiagoIterAssist<T, Device>::need_subspace,
                                                     comm_info);
 
+            typename Diago_DavSubspace<T, Device>::InitialHPsiFunc initial_action;
+            if (initial_hpsi)
+            {
+                initial_action = [&](T* output, int leading) {
+                    initial_hpsi(psi.get_current_k(), output, leading);
+                };
+            }
             int ntry_return = dav_subspace.diag(hpsi_func, psi.get_pointer(), psi.get_nbasis(), eigenvalue,
-                                               this->ethr_band.data(), scf, initial_h, initial_s);
+                                               this->ethr_band.data(), scf, initial_h, initial_s, initial_action);
             if(ntry_return != -1)
             {
                 success = 1;

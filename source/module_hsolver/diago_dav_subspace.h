@@ -32,10 +32,13 @@ class Diago_DavSubspace : public DiagH<T, Device>
     virtual ~Diago_DavSubspace() override;
 
     using HPsiFunc = std::function<void(T*, T*, const int, const int, const int, const int)>;
+    using InitialHPsiFunc = std::function<void(T*, int)>;
 
     /// Initial projected matrices are optional, contiguous column-major arrays
     /// of size n_band squared on Device: psi_in^H H psi_in and psi_in^H psi_in,
     /// including pool reduction. They are consumed only by the first attempt.
+    /// An optional initial_hpsi fills H psi_in on Device with the supplied
+    /// leading dimension and n_band columns, also only on the first attempt.
     int diag(const HPsiFunc& hpsi_func,
              T* psi_in,
              const int psi_in_dmax,
@@ -43,7 +46,8 @@ class Diago_DavSubspace : public DiagH<T, Device>
              const double* ethr_band,
              const bool& scf_type,
              const T* initial_h = nullptr,
-             const T* initial_s = nullptr);
+             const T* initial_s = nullptr,
+             const InitialHPsiFunc& initial_hpsi = {});
 
   private:
     /// for MPI communication
@@ -142,7 +146,8 @@ class Diago_DavSubspace : public DiagH<T, Device>
                   Real* eigenvalue_in,
                   const double* ethr_band,
                   const T* initial_h,
-                  const T* initial_s);
+                  const T* initial_s,
+                  const InitialHPsiFunc& initial_hpsi);
 
     bool test_exit_cond(const int& ntry, const int& notconv, const bool& scf);
 

@@ -11,6 +11,10 @@
 #if defined(__CUDA) || defined(__ROCM)
 #include <ATen/core/tensor.h>
 #endif
+#if defined(__CUDA)
+#include <base/macros/macros.h>
+#include <cuda_runtime_api.h>
+#endif
 
 #ifdef __LCAO
 #include "module_elecstate/elecstate_lcao.h"
@@ -20,6 +24,27 @@
 
 namespace
 {
+
+#if defined(__CUDA)
+std::vector<double> pack_constraint_field(int atoms, int nkb, const int* projectors,
+                                         const ModuleBase::Vector3<double>* field)
+{
+    std::vector<double> coefficients(3 * nkb);
+    int offset = 0;
+    for (int atom = 0; atom < atoms; ++atom)
+    {
+        for (int projector = 0; projector < projectors[atom]; ++projector)
+        {
+            for (int axis = 0; axis < 3; ++axis)
+            {
+                coefficients[3 * (offset + projector) + axis] = field[atom][axis];
+            }
+        }
+        offset += projectors[atom];
+    }
+    return coefficients;
+}
+#endif
 
 void apply_spin_constraint_cpu(int atoms, int bands, int npol, int nkb, int sign,
                                const int* projectors, const ModuleBase::Vector3<double>* lambda,
@@ -69,18 +94,7 @@ void SpinConstrain<std::complex<double>>::calculate_delta_hcc(
 #if defined(__CUDA)
         // Each band shares the same three constraint coefficients per projector.
         // Only these coefficients cross the host/device boundary.
-        std::vector<double> coefficients(3 * nkb);
-        int offset = 0;
-        for (int atom = 0; atom < atoms; ++atom)
-        {
-            for (int ip = 0; ip < nh_iat[atom]; ++ip)
-            {
-                coefficients[3 * (offset + ip)] = delta_lambda[atom].x;
-                coefficients[3 * (offset + ip) + 1] = delta_lambda[atom].y;
-                coefficients[3 * (offset + ip) + 2] = delta_lambda[atom].z;
-            }
-            offset += nh_iat[atom];
-        }
+        const auto coefficients = pack_constraint_field(atoms, nkb, nh_iat, delta_lambda);
         ct::Tensor lambda(ct::DataType::DT_DOUBLE, ct::DeviceType::GpuDevice, {nkb, 3});
         base_device::memory::synchronize_memory_op<double, base_device::DEVICE_GPU, base_device::DEVICE_CPU>()(
             gpu, cpu, lambda.data<double>(), coefficients.data(), coefficients.size());
@@ -258,6 +272,36 @@ void SpinConstrain<std::complex<double>>::cal_mw_from_lambda(int i_step, const M
                     base_device::memory::resize_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(ctx, this->sub_s_save, nbands * nbands * nk);
                     base_device::memory::resize_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(ctx, this->becp_save, size_becp * nk);
                 }
+                std::complex<double>* hpsi_host = nullptr;
+#if defined(__CUDA)
+                if (initial_hs && this->KS_SOLVER == "dav_subspace" && !GlobalV::use_paw && !GlobalV::use_uspp)
+                {
+                    const size_t count = size_t(nbands) * psi_t->get_nbasis() * nk;
+                    if (count > this->hpsi_cache_capacity)
+                    {
+                        this->hpsi_cache.reset();
+                        this->hpsi_cache_capacity = 0;
+                        std::complex<double>* storage = nullptr;
+                        const auto status = cudaHostAlloc(reinterpret_cast<void**>(&storage),
+                                                          count * sizeof(*storage), cudaHostAllocDefault);
+                        if (status == cudaSuccess)
+                        {
+                            this->hpsi_cache = {storage, [](std::complex<double>* pointer) {
+                                cudaErrcheck(cudaFreeHost(pointer));
+                            }};
+                            this->hpsi_cache_capacity = count;
+                        }
+                        else
+                        {
+                            // Host caching is optional when the pinned-memory allocation cannot be satisfied.
+                            GlobalV::ofs_running << "Hamiltonian action cache unavailable: "
+                                                 << cudaGetErrorString(status) << "; recomputing H psi.\n";
+                            cudaGetLastError();
+                        }
+                    }
+                    hpsi_host = this->hpsi_cache.get();
+                }
+#endif
                 std::complex<double>* becp_pointer = nullptr;
                 // allocate memory for becp_pointer in GPU device
                 base_device::memory::resize_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(ctx, becp_pointer, size_becp);
@@ -273,7 +317,9 @@ void SpinConstrain<std::complex<double>>::cal_mw_from_lambda(int i_step, const M
                     {
                         /// update H(k) for each k point
                         hamilt_t->updateHk(ik);
-                        hsolver::DiagoIterAssist<std::complex<double>, base_device::DEVICE_GPU>::cal_hs_subspace(hamilt_t, psi_t[0], h_k, s_k);
+                        const size_t offset = size_t(ik) * nbands * psi_t->get_nbasis();
+                        hsolver::DiagoIterAssist<std::complex<double>, base_device::DEVICE_GPU>::cal_hs_subspace(
+                            hamilt_t, psi_t[0], h_k, s_k, hpsi_host == nullptr ? nullptr : hpsi_host + offset);
                         base_device::memory::synchronize_memory_op<std::complex<double>, base_device::DEVICE_GPU, base_device::DEVICE_GPU>()(ctx, ctx, becp_k, onsite_p->get_becp(), size_becp);
                     }
                     base_device::memory::synchronize_memory_op<std::complex<double>, base_device::DEVICE_GPU, base_device::DEVICE_GPU>()(ctx, ctx, h_tmp, h_k, nbands * nbands);
@@ -467,6 +513,7 @@ void SpinConstrain<std::complex<double>>::update_psi_charge(const ModuleBase::Ve
             // Davidson uses the Euclidean overlap. The saved generalized
             // overlap has the same meaning only for norm-conserving inputs.
             const bool reuse_subspace = davidson_solve && !GlobalV::use_paw && !GlobalV::use_uspp;
+            hsolver::HSolverPW<std::complex<double>, base_device::DEVICE_GPU>::InitialHPsiFunc initial_hpsi;
             if (reuse_subspace)
             {
                 // The local potential and initial wavefunctions stay fixed
@@ -485,6 +532,37 @@ void SpinConstrain<std::complex<double>>::update_psi_charge(const ModuleBase::Ve
                                              this->becp_save + ik * size_becp, difference.data(),
                                              nbands, nkb, nh_iat, sign);
                 }
+#if defined(__CUDA)
+                if (this->hpsi_cache)
+                {
+                    const auto coefficients = pack_constraint_field(difference.size(), nkb, nh_iat, difference.data());
+                    const int source_leading = psi_t->get_nbasis();
+                    // The cached action uses the same entry basis and local potential.
+                    // Only the onsite constraint field needs a low-rank correction.
+                    initial_hpsi = [=](int ik, std::complex<double>* output, int leading) {
+                        using Complex = std::complex<double>;
+                        using GPU = base_device::DEVICE_GPU;
+                        using CPU = base_device::DEVICE_CPU;
+                        const size_t offset = size_t(ik) * nbands * source_leading;
+                        cudaErrcheck(cudaMemcpy2D(output, size_t(leading) * sizeof(Complex),
+                            this->hpsi_cache.get() + offset, size_t(source_leading) * sizeof(Complex),
+                            size_t(leading) * sizeof(Complex), nbands, cudaMemcpyHostToDevice));
+                        ct::Tensor field(ct::DataType::DT_DOUBLE, ct::DeviceType::GpuDevice, {nkb, 3});
+                        ct::Tensor weighted(ct::DataType::DT_COMPLEX_DOUBLE, ct::DeviceType::GpuDevice,
+                                            {nbands * npol, nkb});
+                        base_device::memory::synchronize_memory_op<double, GPU, CPU>()(
+                            ctx, nullptr, field.data<double>(), coefficients.data(), coefficients.size());
+                        const int sign = this->pelec->klist->isk[ik] == 0 ? 1 : -1;
+                        hamilt::spin_constraint_projectors_gpu(nbands, npol, nkb, sign, field.data<double>(),
+                            this->becp_save + size_t(ik) * size_becp, weighted.data<Complex>());
+                        onsite_p->get_fs_tools()->prepare_projectors(ik);
+                        const int npw = onsite_p->get_npw();
+                        hsolver::gemm_op<Complex, GPU>()(ctx, 'N', 'N', npw, nbands * npol, nkb,
+                            &ModuleBase::ONE, onsite_p->get_tab_atomic(), npw, weighted.data<Complex>(), nkb,
+                            &ModuleBase::ONE, output, leading / npol);
+                    };
+                }
+#endif
             }
             else if (!davidson_solve)
             {
@@ -520,14 +598,17 @@ void SpinConstrain<std::complex<double>>::update_psi_charge(const ModuleBase::Ve
                 this->sub_h_save = nullptr;
                 this->sub_s_save = nullptr;
             }
-            base_device::memory::delete_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(ctx, becp_save);
-            this->becp_save = nullptr;
+            if (!initial_hpsi)
+            {
+                base_device::memory::delete_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(ctx, becp_save);
+                this->becp_save = nullptr;
+            }
 
             if(pw_solve)
             {
                 auto* hsolver_t = static_cast<hsolver::HSolverPW<std::complex<double>, base_device::DEVICE_GPU>*>(this->phsol);
                 hsolver_t->solve(hamilt_t, psi_t[0], this->pelec, this->KS_SOLVER, false,
-                                 this->sub_h_save, this->sub_s_save);
+                                 this->sub_h_save, this->sub_s_save, initial_hpsi);
             }
             else
             {// update charge density only
@@ -539,6 +620,11 @@ void SpinConstrain<std::complex<double>>::update_psi_charge(const ModuleBase::Ve
                 base_device::memory::delete_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(ctx, sub_s_save);
                 this->sub_h_save = nullptr;
                 this->sub_s_save = nullptr;
+            }
+            if (initial_hpsi)
+            {
+                base_device::memory::delete_memory_op<std::complex<double>, base_device::DEVICE_GPU>()(ctx, becp_save);
+                this->becp_save = nullptr;
             }
             this->subspace_lambda.clear();
         }
