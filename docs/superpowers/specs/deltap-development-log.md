@@ -7113,3 +7113,11 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   `2026-10-28-allocation-semantic-closure.md`（数值更新提示）、本日志。
 - **下一轮**：更新语义闭环数值/target_l 扫描；补多片段/非共线/kpar>1 的
   Σq=N 集成回归；性能转响应层/continuation。
+
+## 2026-10-29 (总结): 开发进展与各轮分析汇总
+
+- 新增 `docs/superpowers/specs/2026-10-29-allocation-development-summary.md`：
+  从 M1–M4 到统一分配 S0–S6 的时间线、各轮假设/证据/结论（语义闭环、效率、
+  电荷归一化根因与修复）、当前状态（63 步/11 s、4.29 ms/hPsi、dsum 8.6e-11）、
+  方法论总结与下一步（λ 同伦、1e-5 诊断、响应层）。
+- 下一轮：实现 λ 同伦（`A_i(λ)=Q_i+λQ_cW_iQ_c`）并做 Fe2 λ=0/0.5/1 A/B。
