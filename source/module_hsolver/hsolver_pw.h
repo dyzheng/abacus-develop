@@ -7,9 +7,12 @@
 #include "module_hamilt_pw/hamilt_pwdft/wavefunc.h"
 
 #include <functional>
+#include <memory>
 
 namespace hsolver
 {
+template <typename T, typename Device> class Diago_DavSubspace;
+
 
 template <typename T, typename Device = base_device::DEVICE_CPU>
 class HSolverPW : public HSolver<T, Device>
@@ -93,7 +96,8 @@ class HSolverPW : public HSolver<T, Device>
                          const T* initial_h,
                          const T* initial_s,
                          const InitialHPsiFunc& initial_hpsi,
-                         const BasisObserver* basis_observer);
+                         const BasisObserver* basis_observer,
+                         std::unique_ptr<Diago_DavSubspace<T, Device>>* reusable_davidson = nullptr);
 
     // psi initializer && change k point in psi
     void updatePsiK(hamilt::Hamilt<T, Device>* pHamilt, psi::Psi<T, Device>& psi, const int ik);
