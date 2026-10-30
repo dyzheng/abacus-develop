@@ -1783,6 +1783,25 @@ ConfigStatus configure_from_inputs(ConstraintConfig& cfg,
     // straight from INPUT (no interaction with the target list).  The
     // legacy single-type configure entry leaves the defaults (report off),
     // which is exactly its pre-M1 behaviour.
+    // Allocation complement homotopy (default 1 = full allocation).  Kept
+    // out of [0,1] is a user error rather than a silent clamp.
+    if (PARAM.inp.constraint_alloc_complement_ramp < 0.0
+        || PARAM.inp.constraint_alloc_complement_ramp > 1.0)
+    {
+        error = "constraint_alloc_complement_ramp must be in [0, 1]";
+        return ConfigStatus::ERROR;
+    }
+    cfg.alloc_complement_ramp = PARAM.inp.constraint_alloc_complement_ramp;
+    // Guard: the subspace rotation fast path builds the full A_i and does not
+    // carry the ramp, so the pair would inject and score different operators.
+    if (cfg.alloc_complement_ramp != 1.0
+        && PARAM.inp.constraint_alloc_subspace_rotation)
+    {
+        error = "constraint_alloc_complement_ramp != 1 requires "
+                "constraint_alloc_subspace_rotation = 0 (the subspace fast "
+                "path does not carry the ramp)";
+        return ConfigStatus::ERROR;
+    }
     cfg.dipole_report = PARAM.inp.constraint_dipole_report;
     cfg.dipole_frame = PARAM.inp.constraint_dipole_frame;
     cfg.dipole_saw_pos_max = PARAM.inp.constraint_dipole_saw_pos_max;

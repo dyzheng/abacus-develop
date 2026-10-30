@@ -72,6 +72,8 @@ struct ConstraintConfig
     // target-space allocation operator.  Set by the LCAO esolver after its
     // basis-specific guards; the loop still owns the reference/ALM schedule.
     bool allocation_mode = false;
+    // Allocation homotopy: A_i(lambda) = Q_i + lambda Q_c W_i Q_c.
+    double alloc_complement_ramp = 1.0;
 };
 
 enum class ConfigStatus

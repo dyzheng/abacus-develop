@@ -7121,3 +7121,23 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   电荷归一化根因与修复）、当前状态（63 步/11 s、4.29 ms/hPsi、dsum 8.6e-11）、
   方法论总结与下一步（λ 同伦、1e-5 诊断、响应层）。
 - 下一轮：实现 λ 同伦（`A_i(λ)=Q_i+λQ_cW_iQ_c`）并做 Fe2 λ=0/0.5/1 A/B。
+
+## 2026-10-29 (S6.6): λ 同伦（先投影后补偿）实验——负结果
+
+- **假设**：`A_i(λ)=Q_i+λQ_cW_iQ_c`，先 λ=0（仅正交化目标壳层，DeltaSpin 类）
+  再 λ→1；Fe2 的 q_c 仅占 5.6%，预期外层步数 63→25–35。
+- **结果**（Fe2，rotation=0 以隔离算符）：
+  - λ=0：**200 步 RUNNING**，45 次 trust 拒绝、半径→1e-8、末残差 0.10；
+  - λ=0.5：119 步 CONVERGED（11 次拒绝）；
+  - λ=1：63 步 CONVERGED（1 次拒绝，基线）。
+- **分析**：趋势与预期相反——去掉局域互补势后，纯 rank-5 非局域投影对当前
+  outer + 局域密度 mixing 是更难的固定点；DeltaSpin 快是因为它有自己的内层
+  λ 循环+子空间对角化，不是投影算符本身容易。
+- **处置**：保留 `constraint_alloc_complement_ramp`（默认 1.0，行为不变）作为
+  实验开关；加守卫（ramp≠1 时禁止 subspace rotation，该路径不携带 λ）。
+  性能主路线回到响应层/continuation。
+- **回归**：23/23 PASS。
+- **文件**：`input_parameter.h`、`read_input_item_other.cpp`、`constraint_io.{h,cpp}`、
+  `op_pw_alloc.cpp`、`docs/superpowers/specs/2026-10-29-allocation-complement-ramp-experiment.md`、
+  `2026-10-29-allocation-development-summary.md`（更新）、本日志。
+- **下一轮**：响应层时间盒或 continuation；补多片段/非共线/kpar>1 分区审计。

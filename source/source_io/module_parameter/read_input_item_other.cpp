@@ -1877,6 +1877,18 @@ Manual override is allowed: if sc_acceleration_mode is explicitly set, it takes 
         this->add_item(item);
     }
     {
+        Input_Item item("constraint_alloc_complement_ramp");
+        item.annotation = "PW allocation: complement-channel homotopy lambda";
+        item.category = "Constraint";
+        item.type = "Real";
+        item.description = "Homotopy weight of the complement channel: A_i(lambda) = Q_i + lambda * Q_c W_i Q_c, and q = q_T + lambda q_c. 1.0 (default) is the full allocation; 0.0 constrains only the orthogonalized target-shell projector (DeltaSpin-like, small q_c makes the later lambda->1 correction gentle); intermediate values interpolate. The observable and the injected potential use the same lambda.";
+        item.default_value = "1.0";
+        item.unit = "";
+        item.availability = "constraint_alloc_switch is true";
+        read_sync_double(input.constraint_alloc_complement_ramp);
+        this->add_item(item);
+    }
+    {
         Input_Item item("constraint_alloc_exact_subspace");
         item.annotation = "PW allocation: solve mu in the exact A_i band subspace";
         item.category = "Constraint";

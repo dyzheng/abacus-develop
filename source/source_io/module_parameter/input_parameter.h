@@ -806,6 +806,11 @@ struct Input_para
     bool constraint_alloc_full_residual_accept = false; ///< PW: fixed-density predictor, full-space trust acceptance
     bool constraint_alloc_jacobian_probe = false; ///< PW: finite-difference J0 diagnostic against the outer Jacobian
     bool constraint_alloc_fold_potential = true;  ///< PW: fuse the allocation local potential into Veff (1.78x per-hPsi on Fe2)
+    // Homotopy of the complement channel: A_i(lambda) = Q_i + lambda Q_c W_i Q_c.
+    // 1 (default) is the full allocation; 0 constrains only the target-shell
+    // projector (DeltaSpin-like), 0<lambda<1 interpolates.  The observable and
+    // the injected potential use the same lambda.
+    double constraint_alloc_complement_ramp = 1.0;
 
     // ==============   #Parameters (25.uncommon hardware) ==================
     int dsp_count = 4;           ///< count of DSP hardwares in one node

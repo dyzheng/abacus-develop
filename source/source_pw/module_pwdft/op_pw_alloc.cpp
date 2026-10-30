@@ -1208,6 +1208,15 @@ bool compute_pw_alloc_observables(
                         qc_alpha[alpha] *= scale;
                     }
                 }
+                // Homotopy: the constrained coordinate is q = q_T + lambda q_c;
+                // the injected potential uses the same lambda (see
+                // get_fold_potential), so observable and operator stay paired.
+                const double complement_ramp
+                    = PARAM.inp.constraint_alloc_complement_ramp;
+                for (int alpha = 0; alpha < nconstraint; ++alpha)
+                {
+                    qc_alpha[alpha] *= complement_ramp;
+                }
                 n_real_norm += occupation * comp_g;
             }
             // The Q_c contribution is rank-local, so reduce it separately
@@ -1947,6 +1956,17 @@ AllocConstraintPW<OperatorPW<T, Device>>::get_fold_potential(
     if (!alloc::build_mu_coefficients(wg, loop, spin, lambda, error))
     {
         ModuleBase::WARNING_QUIT("AllocConstraintPW::get_fold_potential", error);
+    }
+    // Homotopy: A_i(lambda) = Q_i + lambda Q_c W_i Q_c.  The local potential
+    // and the P V / V P / P V P corrections carry lambda; the owned target
+    // projector term added in act() uses the unscaled build_mu_coefficients.
+    {
+        const double complement_ramp
+            = PARAM.inp.constraint_alloc_complement_ramp;
+        for (double& value : lambda)
+        {
+            value *= complement_ramp;
+        }
     }
     // Branch: channel signs can cancel every effective multiplier even when
     // the stored ALM multipliers are nonzero.
