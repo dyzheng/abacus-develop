@@ -7174,3 +7174,24 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   `2026-10-29-allocation-development-summary.md`（性能收尾）、本日志。
 - **下一轮**：语义/回归已闭环；后续为独立项目（线性化 SCF / continuation）或
   allocation 生产化（多片段集成用例、charge 模式）。
+
+## 2026-10-29 (S6.9): 更正 DeltaSpin/Mulliken 对齐 + 空掩码守卫
+
+- **更正**：此前"DeltaSpin 投影 vs Mulliken 差 1.4 μB"是**错误对比**——我的
+  LCAO DS 输入缺 `sc`，约束掩码全零，DeltaSpin **静默不约束**，Mulliken 停在
+  free 值 ±2.404。单分量 `mag` 经 `read_atoms_helper.cpp:286-305` 已写入
+  `m_loc_.z`，目标值本身正确。
+- **正确输入**：`mag 0 0 3.8 sc 0 0 1`。LCAO DS（含 `sc`）目标 ±3.8 时
+  Mulliken 升到 ±3.63（600 步仍未完全收敛；目标 ±3.8 在 LCAO/NAO 投影下偏难）；
+  PW DS（`fe2_bcc_ds`，`sc 1 1 1`）13 步收敛到末态原子矩 ±3.8001（有效基准）。
+- **判决**：projector/布居家族（DeltaSpin≈Mulliken≈allocation q，3.6–3.9）一致；
+  **Becke 空间矩（2.8–2.9）是离群口径**。此前"allocation q 不是原子矩"作废。
+  效率对比（63 vs 13，4.85×）不受影响（DS 基准有效）。
+- **守卫**：`init_sc` 增加检查——`sc_mag_switch` 开且所有 `constrain_` 为零时
+  输出 WARNING（写入 `warning.log`），提示补 `sc i j k`；非致命（控制输入可
+  合法地"DS 开但无约束"）。
+- **文件**：`source/source_lcao/module_deltaspin/init_sc.cpp`、
+  `docs/superpowers/specs/2026-10-29-allocation-ds-mulliken-alignment.md`、本日志。
+- **下一轮**：用正确的 `sc` 格式把 LCAO DS 跑到收敛（当前 3.63 vs 3.8）；语义表
+  统一为"同态同口径"三列（projector/Mulliken/Becke）。回归：17_DS_DFTU 参考
+  用例无 `sc` 仍只多一条 warning，结果不变。

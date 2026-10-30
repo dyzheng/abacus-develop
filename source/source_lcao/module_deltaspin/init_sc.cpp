@@ -99,6 +99,30 @@ void spinconstrain::SpinConstrain<TK>::init_sc(double sc_thr_in,
         }
     }
 
+    // Guard: sc_mag_switch=1 but every atom's "sc i j k" mask is zero means the
+    // lambda update is fully masked and DeltaSpin silently does nothing, leaving
+    // an unconstrained SCF that is easily mistaken for a converged DS result.
+    // Emit a clear warning (not a hard stop: some control inputs legitimately
+    // run DS-enabled but unconstrained).
+    {
+        bool any_constrained = false;
+        for (const auto& c : this->constrain_)
+        {
+            if (c.x != 0 || c.y != 0 || c.z != 0)
+            {
+                any_constrained = true;
+                break;
+            }
+        }
+        if (!any_constrained)
+        {
+            ModuleBase::WARNING("SpinConstrain::init_sc",
+                                "sc_mag_switch is on but no atom has a non-zero 'sc i j k' "
+                                "mask in STRU; DeltaSpin will NOT constrain any moment. "
+                                "Add e.g. 'sc 0 0 1' to the constrained atom lines.");
+        }
+    }
+
     // Step 6: Set auxiliary parameters
     this->atomLabels_ = ucell.get_atomLabels();      // "Fe_0", "Fe_1", etc.
     this->direction_only_ = direction_only_in;        // Only optimize spin direction
