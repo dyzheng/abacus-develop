@@ -1,5 +1,6 @@
 #include "elecstate_pw.h"
 
+#include <algorithm>
 #include <type_traits>
 
 #include "elecstate_getters.h"
@@ -88,7 +89,8 @@ void ElecStatePW<T, Device>::init_rho_data()
                           && ModulePW::fused_veff_supported();
     if (this->fused_density)
     {
-        grid_size = spin_grid_size = this->basis->ft.fused_veff_grid_size();
+        grid_size = spin_grid_size = std::min(4, this->basis->ft.spinor_batch_size())
+                                     * this->basis->ft.fused_veff_grid_size();
     }
 #endif
     resmem_complex_op()(this->ctx, this->wfcr, grid_size, "ElecSPW::wfcr");
@@ -200,10 +202,20 @@ void ElecStatePW<T, Device>::rhoBandK(const psi::Psi<T, Device>& psi)
 #if defined(__CUFFTDX)
             if (this->fused_density)
             {
+                double weights[4] = {w1};
+                const int capacity = std::min(4, this->basis->ft.spinor_batch_size());
+                int bands = 1;
+                while (bands < capacity && ibnd + bands < nbands)
+                {
+                    const double weight = this->wg(ik, ibnd + bands) / get_ucell_omega();
+                    if (weight == 0.0) { break; }
+                    weights[bands++] = weight;
+                }
                 this->basis->add_spinor_density(reinterpret_cast<const std::complex<double>*>(&psi(ibnd, 0)),
-                                                w1, reinterpret_cast<double*>(this->rho[0]), ik, npwx,
+                                                weights, bands, reinterpret_cast<double*>(this->rho[0]), ik, npwx,
                                                 reinterpret_cast<std::complex<double>*>(this->wfcr),
                                                 reinterpret_cast<std::complex<double>*>(this->wfcr_another_spin));
+                ibnd += bands - 1;
                 continue;
             }
 #endif
