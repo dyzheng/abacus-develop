@@ -1027,17 +1027,27 @@ void FFT::transform_spinor_sticks(std::complex<double>* up, std::complex<double>
         CHECK_CUFFT(cufftPlanMany(&plan, 1, &length, &length, 1, length,
                                  &length, 1, length, CUFFT_Z2Z, 2 * bands * this->ns));
     }
-    std::complex<double>* slabs[2] = {up, down};
     auto* workspace = this->get_spinor_stick_data(bands);
     auto* data = reinterpret_cast<cufftDoubleComplex*>(workspace);
     if (inverse) { CHECK_CUFFT(cufftExecZ2Z(plan, data, data, CUFFT_INVERSE)); }
+    this->transform_spinor_slabs(up, down, reverse, inverse, bands);
+    if (!inverse) { CHECK_CUFFT(cufftExecZ2Z(plan, data, data, CUFFT_FORWARD)); }
+}
+
+void FFT::transform_spinor_slabs(std::complex<double>* up, std::complex<double>* down,
+                                 const int* reverse, bool inverse, int bands) const
+{
+    const int stick_size = this->fused_veff_stick_size();
+    assert(stick_size > 0 && reverse != nullptr);
+    assert(bands >= 1 && bands <= this->spinor_batch_size());
+    auto* workspace = this->get_spinor_stick_data(bands);
+    std::complex<double>* slabs[2] = {up, down};
     for (int spin = 0; spin < 2; ++spin)
     {
         auto* sticks = workspace + spin * bands * stick_size;
         transform_stick_slabs(sticks, slabs[spin], reverse, this->nx, this->ny, this->nz, this->lixy + 1, this->rixy,
                              inverse, bands, stick_size);
     }
-    if (!inverse) { CHECK_CUFFT(cufftExecZ2Z(plan, data, data, CUFFT_FORWARD)); }
 }
 
 void FFT::apply_spinor_potential(const double* potential, std::complex<double>* up,

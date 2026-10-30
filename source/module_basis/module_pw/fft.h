@@ -94,6 +94,9 @@ public:
     // and caller-owned compact x slabs. The inverse direction expands sticks.
     void transform_spinor_sticks(std::complex<double>* up, std::complex<double>* down,
                                  const int* reverse, bool inverse, int bands = 1) const;
+    // Transforms y only; z rows are supplied by the caller's fused boundary.
+    void transform_spinor_slabs(std::complex<double>* up, std::complex<double>* down,
+                                const int* reverse, bool inverse, int bands) const;
     void apply_spinor_potential(const double* potential, std::complex<double>* up,
                                std::complex<double>* down, const int* reverse = nullptr, int bands = 1) const;
 #endif
