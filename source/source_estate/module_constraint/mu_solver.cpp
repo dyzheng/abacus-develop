@@ -858,6 +858,69 @@ std::vector<bool> MuSolver::active_for(const std::vector<double>& res) const
     return active;
 }
 
+void MuSolver::seed_jacobian(const std::vector<std::vector<double>>& J)
+{
+    const int n = static_cast<int>(J.size());
+    // Guard: a non-square Jacobian can not be used for the Newton seed.
+    for (const std::vector<double>& row : J)
+    {
+        if (static_cast<int>(row.size()) != n)
+        {
+            ModuleBase::WARNING_QUIT("MuSolver::seed_jacobian",
+                "Jacobian must be square");
+        }
+    }
+    jacobian_ = J;
+    last_slope_.resize(n, 0.0);
+    for (int i = 0; i < n; ++i)
+    {
+        last_slope_[i] = J[i][i];
+    }
+    trust_pending_ = false;
+}
+
+bool MuSolver::newton_seed(const std::vector<double>& Q,
+                           const std::vector<double>& target,
+                           std::vector<double>& mu)
+{
+    const int n = static_cast<int>(Q.size());
+    // Guard: every input must describe the same component list.
+    if (static_cast<int>(target.size()) != n
+        || static_cast<int>(mu.size()) != n
+        || static_cast<int>(jacobian_.size()) != n)
+    {
+        return false;
+    }
+    std::vector<double> res(n, 0.0);
+    for (int i = 0; i < n; ++i)
+    {
+        res[i] = Q[i] - target[i];
+    }
+    std::vector<bool> active(n, true);
+    std::vector<double> dmu;
+    // Branch: singular reduced system -> keep the current multiplier.
+    if (!solve_active(res, active, dmu))
+    {
+        return false;
+    }
+    // Trust length cap, then the per-component hard caps.
+    const double len = norm2(dmu);
+    if (trust_radius_ > 0.0 && len > trust_radius_ && len > 0.0)
+    {
+        const double scale = trust_radius_ / len;
+        for (double& value : dmu)
+        {
+            value *= scale;
+        }
+    }
+    for (int i = 0; i < n; ++i)
+    {
+        const double cap = cap_for(i, n);
+        mu[i] = clamp_value(mu[i] + dmu[i], -cap, cap);
+    }
+    return true;
+}
+
 MuStatus MuSolver::reject(const std::vector<double>& Q,
                           const std::vector<double>& target,
                           std::vector<double>& mu)

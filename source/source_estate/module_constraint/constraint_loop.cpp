@@ -125,6 +125,9 @@ void ConstraintLoop::reset()
     last_reset_iter_ = 0;
     trust_rollback_pending_ = false;
     alloc_subspace_rotation_pending_ = false;
+    fd_q_ref_.clear();
+    fd_jacobian_.clear();
+    fd_probe_index_ = 0;
     tighten_pending_ = false;
     tighten_notice_done_ = false;
     budget_frozen_ = false;
@@ -1397,6 +1400,70 @@ void ConstraintLoop::print_dipole_report() const
     }
 }
 
+void ConstraintLoop::fd_probe_converged(const int iter, bool& conv_esolver)
+{
+    const int n = static_cast<int>(Q_.size());
+    const double h = cfg_.alloc_fd_step;
+    // Guard: the probe state must match the reference observation.
+    if (n <= 0 || static_cast<int>(fd_q_ref_.size()) != n
+        || static_cast<int>(fd_jacobian_.size()) != n || h <= 0.0)
+    {
+        ModuleBase::WARNING_QUIT("ConstraintLoop::fd_probe_converged",
+            "FD Jacobian probe state is inconsistent");
+    }
+    // Column i of J from the forward difference at mu = h e_i.
+    for (int a = 0; a < n; ++a)
+    {
+        fd_jacobian_[a][fd_probe_index_] = (Q_[a] - fd_q_ref_[a]) / h;
+    }
+    ++fd_probe_index_;
+    // Branch: more probes -> move to the next unit direction.
+    if (fd_probe_index_ < n)
+    {
+        mu_.assign(n, 0.0);
+        mu_[fd_probe_index_] = h;
+        mu_eff_ = mu_;
+        ++outer_steps_;
+        print_audit(iter);
+        conv_esolver = false;
+        return;
+    }
+    // All columns are available: seed the full-space Jacobian and take one
+    // Newton step from the reference.  A singular J falls back to the secant.
+    mu_solver_.seed_jacobian(fd_jacobian_);
+    mu_.assign(n, 0.0);
+    if (!mu_solver_.newton_seed(Q_, targets_, mu_))
+    {
+        GlobalV::ofs_running
+            << "[constraint] FD_JACOBIAN: singular Jacobian, falling back to "
+               "the secant path\n";
+        phase_ = LoopPhase::CONSTRAINED;
+        ++outer_steps_;
+        status_ = mu_solver_.step(Q_, targets_, mu_);
+        print_audit(iter);
+        // Branch: the fallback step itself finished the run.
+        if (status_ == MuStatus::CONVERGED || status_ == MuStatus::UNREACHABLE)
+        {
+            phase_ = LoopPhase::DONE;
+            return;
+        }
+        conv_esolver = false;
+        return;
+    }
+    phase_ = LoopPhase::CONSTRAINED;
+    mu_eff_ = mu_;
+    GlobalV::ofs_running << "[constraint] FD_JACOBIAN: probe columns done, "
+                            "Newton seed mu =";
+    for (const double value : mu_)
+    {
+        GlobalV::ofs_running << " " << value;
+    }
+    GlobalV::ofs_running << " Ry\n";
+    ++outer_steps_;
+    print_audit(iter);
+    conv_esolver = false;
+}
+
 void ConstraintLoop::outer_step(const int iter, bool& conv_esolver)
 {
     // Experiment branch (fixed mu): the multiplier never changes, so the
@@ -1440,6 +1507,25 @@ void ConstraintLoop::outer_step(const int iter, bool& conv_esolver)
                 // the requested shift (calibration scale ~e).
                 targets_[a] = Q_ref_[a] + specs_[a].target;
             }
+        }
+        // FD response layer (allocation, opt-in): one SCF per component at
+        // mu = h e_i builds the full-space Jacobian (density response
+        // included); a Newton step then starts the constrained phase.  This
+        // replaces the normal first secant step.
+        if (cfg_.alloc_fd_jacobian && allocation_mode_ && !Q_.empty())
+        {
+            const int n = static_cast<int>(Q_.size());
+            fd_q_ref_ = Q_;
+            fd_jacobian_.assign(n, std::vector<double>(n, 0.0));
+            fd_probe_index_ = 0;
+            mu_.assign(n, 0.0);
+            mu_[0] = cfg_.alloc_fd_step;
+            mu_eff_ = mu_;
+            phase_ = LoopPhase::FD_PROBE;
+            ++outer_steps_;
+            print_audit(iter);
+            conv_esolver = false;
+            return;
         }
         phase_ = LoopPhase::CONSTRAINED;
         ++outer_steps_;
@@ -1649,6 +1735,19 @@ void ConstraintLoop::on_scf_converged(const int iter, bool& conv_esolver)
     // Branch A: already finished — nothing to do.
     if (phase_ == LoopPhase::DONE)
     {
+        return;
+    }
+    // Branch: FD Jacobian probe.  The column is read only at a genuine SCF
+    // convergence; acting on an intermediate density would build J from
+    // unconverged Q (integration 2026-10-29: 26 outer steps otherwise).
+    if (phase_ == LoopPhase::FD_PROBE)
+    {
+        // Branch: SCF not converged yet -> keep iterating the probe.
+        if (!conv_esolver)
+        {
+            return;
+        }
+        fd_probe_converged(iter, conv_esolver);
         return;
     }
     // Consume the per-iteration marker set by take_inner_step(): an INNER mu

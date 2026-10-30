@@ -155,6 +155,17 @@ class MuSolver
     // clamped by the same rules as an accepted secant observation.
     void seed_slope(const std::vector<double>& chi);
 
+    // FD response layer (allocation): seed the full-space Jacobian from
+    // finite-difference SCF probes, then take one Newton step from the
+    // reference.  J must be square and finite.
+    void seed_jacobian(const std::vector<std::vector<double>>& J);
+    // Solve J dmu = -(Q - target) with the seeded/learned Jacobian and apply
+    // one step under the trust and per-component caps.  Returns false when the
+    // reduced system is singular; the caller then keeps the current mu.
+    bool newton_seed(const std::vector<double>& Q,
+                     const std::vector<double>& target,
+                     std::vector<double>& mu);
+
     // M3 C2/E1: force-reject the pending trial step and re-walk it with a
     // smaller trust radius.  Used by the magnetic branch anchor, which knows
     // the step was physically unacceptable even if its residual improved.

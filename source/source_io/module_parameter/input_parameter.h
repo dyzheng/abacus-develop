@@ -811,6 +811,12 @@ struct Input_para
     // projector (DeltaSpin-like), 0<lambda<1 interpolates.  The observable and
     // the injected potential use the same lambda.
     double constraint_alloc_complement_ramp = 1.0;
+    // FD response layer: before the first constrained step, run one SCF per
+    // constraint component at mu = h e_i, build the full-space Jacobian
+    // (including the density response) and take one Newton step.  Off by
+    // default; h in Ry.
+    bool constraint_alloc_fd_jacobian = false;
+    double constraint_alloc_fd_step = 0.005;
 
     // ==============   #Parameters (25.uncommon hardware) ==================
     int dsp_count = 4;           ///< count of DSP hardwares in one node

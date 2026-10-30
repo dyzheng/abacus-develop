@@ -1889,6 +1889,30 @@ Manual override is allowed: if sc_acceleration_mode is explicitly set, it takes 
         this->add_item(item);
     }
     {
+        Input_Item item("constraint_alloc_fd_jacobian");
+        item.annotation = "PW allocation: finite-difference full-space Jacobian seed";
+        item.category = "Constraint";
+        item.type = "Boolean";
+        item.description = "When true, the first constrained step is replaced by one SCF probe per constraint component at mu = +h e_i (h = constraint_alloc_fd_step, Ry).  The probes build the full-space Jacobian dQ/dmu (which includes the density response, unlike the frozen-density J0), then one Newton step starts the constrained phase.  Costs n_c extra SCF convergences; intended for small n_c. Default false.";
+        item.default_value = "False";
+        item.unit = "";
+        item.availability = "constraint_alloc_switch is true";
+        read_sync_bool(input.constraint_alloc_fd_jacobian);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("constraint_alloc_fd_step");
+        item.annotation = "PW allocation: FD Jacobian probe step in Ry";
+        item.category = "Constraint";
+        item.type = "Real";
+        item.description = "Multiplier perturbation used by constraint_alloc_fd_jacobian probes (mu = +h e_i, Ry). Small enough to stay on the reference branch, large enough to beat the SCF noise.";
+        item.default_value = "0.005";
+        item.unit = "Ry";
+        item.availability = "constraint_alloc_fd_jacobian is true";
+        read_sync_double(input.constraint_alloc_fd_step);
+        this->add_item(item);
+    }
+    {
         Input_Item item("constraint_alloc_exact_subspace");
         item.annotation = "PW allocation: solve mu in the exact A_i band subspace";
         item.category = "Constraint";

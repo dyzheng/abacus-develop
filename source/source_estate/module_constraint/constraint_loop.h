@@ -21,6 +21,7 @@ enum class LoopPhase
 {
     IDLE,        // not initialized or disabled
     REFERENCE,   // first (mu = 0) SCF: recording the reference charges
+    FD_PROBE,    // FD response layer: one SCF per component at mu = h e_i
     CONSTRAINED, // outer secant loop active
     DONE         // CONVERGED / UNREACHABLE / BRANCH_FLIP: no further action
 };
@@ -398,6 +399,8 @@ class ConstraintLoop
     void alm_adjudicate(const int iter, bool& conv_esolver);
     // Run one outer step from the current charges Q_ against targets_.
     void outer_step(const int iter, bool& conv_esolver);
+    // FD response layer: record one Jacobian column per probe, then Newton-seed.
+    void fd_probe_converged(const int iter, bool& conv_esolver);
     // One INNER-schedule mu update from the current observation.  Returns true
     // when mu actually changed (the caller must reset the mixing history).
     bool take_inner_step(const int iter);
@@ -502,6 +505,10 @@ class ConstraintLoop
     // trial or when an allocation multiplier moved; consumed once by the
     // esolver to reset the mixing history.
     bool trust_rollback_pending_ = false;
+    // FD response layer probe state (allocation + constraint_alloc_fd_jacobian).
+    std::vector<double> fd_q_ref_;
+    std::vector<std::vector<double>> fd_jacobian_;
+    int fd_probe_index_ = 0;
     // Set by outer_step()/take_inner_step() when an allocation multiplier
     // changed; the esolver may consume it for one subspace rotation.
     bool alloc_subspace_rotation_pending_ = false;

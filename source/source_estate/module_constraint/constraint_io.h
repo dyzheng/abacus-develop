@@ -74,6 +74,9 @@ struct ConstraintConfig
     bool allocation_mode = false;
     // Allocation homotopy: A_i(lambda) = Q_i + lambda Q_c W_i Q_c.
     double alloc_complement_ramp = 1.0;
+    // FD response layer (allocation): full-space Jacobian seed via SCF probes.
+    bool alloc_fd_jacobian = false;
+    double alloc_fd_step = 0.005; // Ry
 };
 
 enum class ConfigStatus

@@ -7141,3 +7141,21 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   `op_pw_alloc.cpp`、`docs/superpowers/specs/2026-10-29-allocation-complement-ramp-experiment.md`、
   `2026-10-29-allocation-development-summary.md`（更新）、本日志。
 - **下一轮**：响应层时间盒或 continuation；补多片段/非共线/kpar>1 分区审计。
+
+## 2026-10-29 (S6.7): 响应层（全空间 FD Jacobian）时间盒——负结果
+
+- **实现**：`LoopPhase::FD_PROBE` + `MuSolver::{seed_jacobian,newton_seed}`；
+  参考相后对每个约束分量跑 `μ=+h e_i`（h=0.005 Ry）SCF 探针，构造含密度
+  响应的全空间 J，再 Newton 起步。开关 `constraint_alloc_fd_jacobian`（默认 false）。
+- **首版缺陷**：FD_PROBE 分支未检查 `conv_esolver`，每次迭代记录一列 →
+  J 来自未收敛密度，148 步/26 外层步。已加守卫（只在真实收敛时推进）。
+- **结果**（Fe2，rotation=0）：修复后 **116 步 / 24 s**（参考 14 + 探针 15+13 +
+  外层 74）vs 基线 **63 步 / 11 s**。探针各需完整 SCF（J~−22，ΔQ~0.1）；
+  Newton 种子 c1 偏 30%，随后仍需 8 个外层步。
+- **结论**：FD probe 版响应层为负，保留为"精确 J"诊断基准（默认关闭）；
+  真正响应层需线性化 SCF（新能力）；分支偏离另需 continuation。
+- **回归**：默认路径 Fe2 63 步 / `dsum_n=5.1e-11`；23/23 PASS。
+- **文件**：`input_parameter.h`、`read_input_item_other.cpp`、`constraint_io.{h,cpp}`、
+  `constraint_loop.{h,cpp}`、`mu_solver.{h,cpp}`、
+  `docs/superpowers/specs/2026-10-29-allocation-fd-response-layer.md`、summary（更新）、本日志。
+- **下一轮**：性能收尾（接受 63 步基线）或 continuation；补语义表/多片段回归。

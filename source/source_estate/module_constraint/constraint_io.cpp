@@ -1792,6 +1792,15 @@ ConfigStatus configure_from_inputs(ConstraintConfig& cfg,
         return ConfigStatus::ERROR;
     }
     cfg.alloc_complement_ramp = PARAM.inp.constraint_alloc_complement_ramp;
+    cfg.alloc_fd_jacobian = PARAM.inp.constraint_alloc_fd_jacobian;
+    cfg.alloc_fd_step = PARAM.inp.constraint_alloc_fd_step;
+    // Guard: the probe step must be a small positive multiplier perturbation.
+    if (cfg.alloc_fd_jacobian
+        && (cfg.alloc_fd_step <= 0.0 || cfg.alloc_fd_step > 0.1))
+    {
+        error = "constraint_alloc_fd_step must be in (0, 0.1] Ry";
+        return ConfigStatus::ERROR;
+    }
     // Guard: the subspace rotation fast path builds the full A_i and does not
     // carry the ramp, so the pair would inject and score different operators.
     if (cfg.alloc_complement_ramp != 1.0
