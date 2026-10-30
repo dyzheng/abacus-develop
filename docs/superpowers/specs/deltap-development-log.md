@@ -7159,3 +7159,18 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   `constraint_loop.{h,cpp}`、`mu_solver.{h,cpp}`、
   `docs/superpowers/specs/2026-10-29-allocation-fd-response-layer.md`、summary（更新）、本日志。
 - **下一轮**：性能收尾（接受 63 步基线）或 continuation；补语义表/多片段回归。
+
+## 2026-10-29 (S6.8): 性能收尾 + 语义表更新 + 分区回归
+
+- **性能收尾**：接受 63 步 / 11 s 为 allocation 实用基线；可低成本拿到的
+  收益已全部拿到（mixing 82→63、fold 1.78×、只读 1.08×）；预测器/内层/
+  trial 早停/λ 分段/FD 响应层均实测为负并归档；剩余需线性化 SCF（另立项）。
+- **语义表更新**（约定 C 修复后，Fe2 l=2）：
+  `q=-3.80009/+3.79998`、`m_T=-3.58584/+3.58729`、`m_c=-0.21425/+0.21269`、
+  Becke `-2.80822/+2.80811`；`q=m_T+m_c`；ETOT -6370.603964（较修复前移 6.2 meV）。
+- **分区回归**：kpar=2 `dsum_n=5.1e-11`、kpar=1 `2.7e-12`；两者 ETOT 逐位一致；
+  `target_l` 扫描 l=0/1/3 仍 200 步 RUNNING，只有 l=2 可达 ±3.8（结论不变）。
+- **文件**：`docs/superpowers/specs/2026-10-28-allocation-semantic-closure.md`（§3.6）、
+  `2026-10-29-allocation-development-summary.md`（性能收尾）、本日志。
+- **下一轮**：语义/回归已闭环；后续为独立项目（线性化 SCF / continuation）或
+  allocation 生产化（多片段集成用例、charge 模式）。
