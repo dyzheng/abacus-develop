@@ -11,9 +11,12 @@
 #include "module_psi/psi.h"
 
 #include <complex>
+#include <memory>
 
 namespace hamilt
 {
+
+class ProjectorFold;
 
 /**
  * @brief Nonlocal pseudopotential tools in plane wave basis set.
@@ -54,6 +57,16 @@ class FS_Nonlocal_tools
                       const ModuleBase::matrix& ekb);
 
     ~FS_Nonlocal_tools();
+
+    /// Construct reciprocal-space projectors for ik without computing overlaps.
+    /// Derivative operations invalidate the cached k point and require preparation again.
+    void prepare_projectors(int ik);
+
+    /// Add P coefficients^T for the current reciprocal-space projector table.
+    /// Coefficients are column-major (columns, nkb); output is column-major
+    /// (leading, columns). Padding beyond the active plane waves is unchanged.
+    void add_projectors(int ik, int columns, int leading,
+                        const std::complex<FPTYPE>* coefficients, std::complex<FPTYPE>* output);
 
     /**
      * @brief calculate the becp = <psi|beta> for all beta functions
@@ -114,6 +127,9 @@ class FS_Nonlocal_tools
     int deeq_nc_dims[4] = {0, 0, 0, 0};
 
     int current_ik = -1;
+#if defined(__CUDA)
+    std::unique_ptr<ProjectorFold> projector_fold;
+#endif
 
     int max_nh = 0;
     int max_npw = 0;

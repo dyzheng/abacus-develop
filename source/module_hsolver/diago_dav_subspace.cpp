@@ -7,6 +7,7 @@
 #include "module_hsolver/kernels/dngvd_op.h"
 #include "module_hsolver/kernels/math_kernel_op.h"
 
+#include <type_traits>
 #include <vector>
 
 using namespace hsolver;
@@ -59,9 +60,14 @@ Diago_DavSubspace<T, Device>::Diago_DavSubspace(const std::vector<Real>& precond
     if (this->device == base_device::GpuDevice)
     {
         resmem_real_op()(this->ctx, this->d_precondition, nbasis_in);
-        // syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, this->d_precondition, this->precondition.data(), nbasis_in);
         base_device::memory::resize_memory_op<T, Device>()(this->ctx, this->d_scc, this->nbase_x * this->nbase_x);
         resmem_real_op()(this->ctx, this->d_eigenvalue, this->nbase_x);
+#if defined(__CUDA)
+        if (std::is_same<T, std::complex<double>>::value)
+        {
+            base_device::memory::resize_memory_op<int, Device>()(this->ctx, this->d_unconv, this->n_band);
+        }
+#endif
     }
 #endif
 }
@@ -82,6 +88,12 @@ Diago_DavSubspace<T, Device>::~Diago_DavSubspace()
         delmem_real_op()(this->ctx, this->d_precondition);
         delmem_complex_op()(this->ctx, this->d_scc);
         delmem_real_op()(this->ctx, this->d_eigenvalue);
+#if defined(__CUDA)
+        if (std::is_same<T, std::complex<double>>::value)
+        {
+            base_device::memory::delete_memory_op<int, Device>()(this->ctx, this->d_unconv);
+        }
+#endif
     }
 #endif
 }
@@ -91,7 +103,11 @@ int Diago_DavSubspace<T, Device>::diag_once(const HPsiFunc& hpsi_func,
                                             T* psi_in,
                                             const int psi_in_dmax,
                                             Real* eigenvalue_in_hsolver,
-                                            const double* ethr_band)
+                                            const double* ethr_band,
+                                            const T* initial_h,
+                                            const T* initial_s,
+                                            const InitialHPsiFunc& initial_hpsi,
+                                            const BasisRotationFunc& rotate_basis)
 {
     ModuleBase::timer::tick("Diago_DavSubspace", "diag_once");
 
@@ -118,9 +134,27 @@ int Diago_DavSubspace<T, Device>::diag_once(const HPsiFunc& hpsi_func,
         unconv[m] = m;
     }
 
-    hpsi_func(this->hphi, this->psi_in_iter, this->notconv, this->dim, 0, this->notconv - 1);
+    if (initial_hpsi)
+    {
+        initial_hpsi(this->hphi, this->dim);
+    }
+    else
+    {
+        hpsi_func(this->hphi, this->psi_in_iter, this->notconv, this->dim, 0, this->notconv - 1);
+    }
 
-    this->cal_elem(this->dim, nbase, this->notconv, this->psi_in_iter, this->hphi, this->hcc, this->scc);
+    if (initial_h != nullptr)
+    {
+        syncmem_complex_2d_op()(this->ctx, this->ctx, this->hcc, this->nbase_x,
+                               initial_h, this->n_band, this->n_band, this->n_band);
+        syncmem_complex_2d_op()(this->ctx, this->ctx, this->scc, this->nbase_x,
+                               initial_s, this->n_band, this->n_band, this->n_band);
+        nbase = this->n_band;
+    }
+    else
+    {
+        this->cal_elem(this->dim, nbase, this->notconv, this->psi_in_iter, this->hphi, this->hcc, this->scc);
+    }
 
     bool diag_ok = this->diag_zhegvx(nbase, this->notconv, this->hcc, this->scc, this->nbase_x, &eigenvalue_iter, this->vcc);
     if(!diag_ok)
@@ -137,6 +171,7 @@ int Diago_DavSubspace<T, Device>::diag_once(const HPsiFunc& hpsi_func,
     ModuleBase::timer::tick("Diago_DavSubspace", "first");
 
     int dav_iter = 0;
+    bool basis_is_rotated = false;
 
     do
     {
@@ -150,7 +185,9 @@ int Diago_DavSubspace<T, Device>::diag_once(const HPsiFunc& hpsi_func,
                        this->hphi,
                        this->vcc,
                        unconv.data(),
-                       &eigenvalue_iter);
+                       &eigenvalue_iter,
+                       basis_is_rotated);
+        basis_is_rotated = false;
         if(!grad_ok)
         {
             ModuleBase::timer::tick("Diago_DavSubspace", "diag_once");
@@ -207,6 +244,12 @@ int Diago_DavSubspace<T, Device>::diag_once(const HPsiFunc& hpsi_func,
                                  psi_in,
                                  psi_in_dmax);
 
+            if (rotate_basis)
+            {
+                rotate_basis(nbase, this->vcc, this->nbase_x,
+                             this->notconv == 0 || dav_iter == this->iter_nmax);
+            }
+
             if (!this->notconv || (dav_iter == this->iter_nmax))
             {
                 // overall convergence or last iteration: exit the iteration
@@ -232,6 +275,7 @@ int Diago_DavSubspace<T, Device>::diag_once(const HPsiFunc& hpsi_func,
                               this->hcc,
                               this->scc,
                               this->vcc);
+                basis_is_rotated = true;
 
                 ModuleBase::timer::tick("Diago_DavSubspace", "last");
             }
@@ -253,61 +297,92 @@ bool Diago_DavSubspace<T, Device>::cal_grad(const HPsiFunc& hpsi_func,
                                             T* hphi,
                                             T* vcc,
                                             const int* unconv,
-                                            std::vector<Real>* eigenvalue_iter)
+                                            std::vector<Real>* eigenvalue_iter,
+                                            bool basis_is_rotated)
 {
     ModuleBase::timer::tick("Diago_DavSubspace", "cal_grad");
+
+    bool use_selected_basis = false;
+#if defined(__CUDA)
+    use_selected_basis = basis_is_rotated && this->device == base_device::GpuDevice
+                         && std::is_same<T, std::complex<double>>::value;
+#endif
 
     for (size_t i = 0; i < notconv; i++)
     {
         if (unconv[i] != i)
         {
-            syncmem_complex_op()(this->ctx, this->ctx, vcc + i * this->nbase_x, vcc + unconv[i] * this->nbase_x, nbase);
+            if (!use_selected_basis)
+            {
+                syncmem_complex_op()(this->ctx, this->ctx, vcc + i * this->nbase_x, vcc + unconv[i] * this->nbase_x, nbase);
+            }
             (*eigenvalue_iter)[i] = (*eigenvalue_iter)[unconv[i]];
         }
     }
 
-    gemm_op<T, Device>()(this->ctx,
-                         'N',
-                         'N',
-                         this->dim,
-                         notconv,
-                         nbase,
-                         this->one,
-                         hphi,
-                         this->dim,
-                         vcc,
-                         this->nbase_x,
-                         this->zero,
-                         psi_iter + (nbase) * this->dim,
-                         this->dim);
-
-    if (this->device == base_device::GpuDevice){
 #if defined(__CUDA) || defined(__ROCM)
+    if (this->device == base_device::GpuDevice)
+    {
         syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, this->d_eigenvalue, eigenvalue_iter->data(), this->nbase_x);
-        hsolver::matrixMutiplyVector<T, Device>()(this->ctx, nbase, notconv, vcc, this->nbase_x, this->d_eigenvalue, -1.0, vcc, this->nbase_x);
+    }
 #endif
-    }else{
-        hsolver::matrixMutiplyVector<T, Device>()(this->ctx, nbase, notconv, vcc, this->nbase_x, eigenvalue_iter->data(), -1.0, vcc, this->nbase_x);
+    if (use_selected_basis)
+    {
+#if defined(__CUDA)
+        // refresh rotates both basis arrays and explicitly sets vcc to I.
+        // The selected-basis predicate restricts this path to complex double.
+        base_device::memory::synchronize_memory_op<int, Device, base_device::DEVICE_CPU>()(
+            this->ctx, this->cpu_ctx, this->d_unconv, unconv, notconv);
+        selected_basis_residual_gpu(this->dim, notconv, this->dim,
+            reinterpret_cast<const std::complex<double>*>(psi_iter),
+            reinterpret_cast<const std::complex<double>*>(hphi), this->d_unconv,
+            reinterpret_cast<const double*>(this->d_eigenvalue),
+            reinterpret_cast<std::complex<double>*>(psi_iter + nbase * this->dim));
+#endif
+    }
+    else
+    {
+        gemm_op<T, Device>()(this->ctx,
+                             'N',
+                             'N',
+                             this->dim,
+                             notconv,
+                             nbase,
+                             this->one,
+                             hphi,
+                             this->dim,
+                             vcc,
+                             this->nbase_x,
+                             this->zero,
+                             psi_iter + (nbase) * this->dim,
+                             this->dim);
+
+        if (this->device == base_device::GpuDevice){
+#if defined(__CUDA) || defined(__ROCM)
+            hsolver::matrixMutiplyVector<T, Device>()(this->ctx, nbase, notconv, vcc, this->nbase_x, this->d_eigenvalue, -1.0, vcc, this->nbase_x);
+#endif
+        }else{
+            hsolver::matrixMutiplyVector<T, Device>()(this->ctx, nbase, notconv, vcc, this->nbase_x, eigenvalue_iter->data(), -1.0, vcc, this->nbase_x);
+        }
+
+        gemm_op<T, Device>()(this->ctx,
+                             'N',
+                             'N',
+                             this->dim,
+                             notconv,
+                             nbase,
+                             this->one,
+                             psi_iter,
+                             this->dim,
+                             vcc,
+                             this->nbase_x,
+                             this->one,
+                             psi_iter + nbase * this->dim,
+                             this->dim);
     }
 
-    gemm_op<T, Device>()(this->ctx,
-                         'N',
-                         'N',
-                         this->dim,
-                         notconv,
-                         nbase,
-                         this->one,
-                         psi_iter,
-                         this->dim,
-                         vcc,
-                         this->nbase_x,
-                         this->one,
-                         psi_iter + nbase * this->dim,
-                         this->dim);
-
     if (this->device == base_device::GpuDevice){
 #if defined(__CUDA) || defined(__ROCM)
-        syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, this->d_precondition,this->precondition.data(), this->dim);
         hsolver::updatePsiByPrecondition<T, Device>()(this->ctx, this->dim, notconv, psi_iter + nbase * this->dim,
             this->dim, this->d_precondition, this->d_eigenvalue);
 #endif
@@ -337,35 +412,31 @@ void Diago_DavSubspace<T, Device>::cal_elem(const int& dim,
 {
     ModuleBase::timer::tick("Diago_DavSubspace", "cal_elem");
 
-    gemm_op<T, Device>()(this->ctx,
-                         'C',
-                         'N',
-                         nbase + notconv,
-                         notconv,
-                         this->dim,
-                         this->one,
-                         psi_iter,
-                         this->dim,
-                         &hphi[nbase * this->dim],
-                         this->dim,
-                         this->zero,
-                         &hcc[nbase * this->nbase_x],
-                         this->nbase_x);
-
-    gemm_op<T, Device>()(this->ctx,
-                         'C',
-                         'N',
-                         nbase + notconv,
-                         notconv,
-                         this->dim,
-                         this->one,
-                         psi_iter,
-                         this->dim,
-                         psi_iter + nbase * this->dim,
-                         this->dim,
-                         this->zero,
-                         &scc[nbase * this->nbase_x],
-                         this->nbase_x);
+    int columns_per_panel = notconv;
+#if defined(__CUDA)
+    if (this->device == base_device::GpuDevice
+        && std::is_same<T, std::complex<double>>::value && notconv >= 256)
+    {
+        columns_per_panel = 64;
+    }
+#endif
+    // The eigensolver reads the upper triangle. Each column panel includes
+    // every existing basis row and ends at its final diagonal entry, omitting
+    // the lower rows that cannot affect the projected eigenproblem.
+    for (int first = 0; first < notconv; first += columns_per_panel)
+    {
+        const int columns = std::min(columns_per_panel, notconv - first);
+        const int basis_offset = nbase + first;
+        const int rows = basis_offset + columns;
+        gemm_op<T, Device>()(this->ctx, 'C', 'N', rows, columns, this->dim,
+                            this->one, psi_iter, this->dim,
+                            hphi + basis_offset * this->dim, this->dim,
+                            this->zero, hcc + basis_offset * this->nbase_x, this->nbase_x);
+        gemm_op<T, Device>()(this->ctx, 'C', 'N', rows, columns, this->dim,
+                            this->one, psi_iter, this->dim,
+                            psi_iter + basis_offset * this->dim, this->dim,
+                            this->zero, scc + basis_offset * this->nbase_x, this->nbase_x);
+    }
 
 #ifdef __MPI
     if (this->diag_comm.nproc > 1)
@@ -594,8 +665,21 @@ int Diago_DavSubspace<T, Device>::diag(const HPsiFunc& hpsi_func,
                                        const int psi_in_dmax,
                                        Real* eigenvalue_in_hsolver,
                                        const double* ethr_band,
-                                       const bool& scf_type)
+                                       const bool& scf_type,
+                                       const T* initial_h,
+                                       const T* initial_s,
+                                       const InitialHPsiFunc& initial_hpsi,
+                                       const BasisRotationFunc& rotate_basis)
 {
+    assert((initial_h == nullptr) == (initial_s == nullptr));
+#if defined(__CUDA) || defined(__ROCM)
+    if (this->device == base_device::GpuDevice)
+    {
+        // The preconditioner is fixed during diagonalization but may change
+        // between calls when the same solver instance is reused.
+        syncmem_var_h2d_op()(this->ctx, this->cpu_ctx, this->d_precondition, this->precondition.data(), this->dim);
+    }
+#endif
     /// record the times of trying iterative diagonalization
     this->notconv = 0;
 
@@ -605,7 +689,11 @@ int Diago_DavSubspace<T, Device>::diag(const HPsiFunc& hpsi_func,
     do
     {
 
-        int iter_return = this->diag_once(hpsi_func, psi_in, psi_in_dmax, eigenvalue_in_hsolver, ethr_band);
+        // A retry starts from rotated wavefunctions, so its projections are
+        // reconstructed even when the entry basis has supplied matrices.
+        int iter_return = this->diag_once(hpsi_func, psi_in, psi_in_dmax, eigenvalue_in_hsolver, ethr_band,
+                                          ntry == 0 ? initial_h : nullptr, ntry == 0 ? initial_s : nullptr,
+                                          ntry == 0 ? initial_hpsi : InitialHPsiFunc{}, rotate_basis);
         if(iter_return == -1)
         {
             return -1;

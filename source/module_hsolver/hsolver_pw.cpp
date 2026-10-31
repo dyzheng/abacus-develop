@@ -17,6 +17,7 @@
 #include "module_elecstate/potentials/pot_local.h"
 
 #include <algorithm>
+#include <type_traits>
 #include <vector>
 
 #ifdef USE_PAW
@@ -253,6 +254,25 @@ void HSolverPW<T, Device>::solve(hamilt::Hamilt<T, Device>* pHamilt,
                                  const std::string method_in,
                                  const bool skip_charge)
 {
+    this->solve(pHamilt, psi, pes, method_in, skip_charge, nullptr, nullptr);
+}
+
+template <typename T, typename Device>
+void HSolverPW<T, Device>::solve(hamilt::Hamilt<T, Device>* pHamilt,
+                                 psi::Psi<T, Device>& psi,
+                                 elecstate::ElecState* pes,
+                                 const std::string method_in,
+                                 const bool skip_charge,
+                                 const T* initial_h,
+                                 const T* initial_s,
+                                 const InitialHPsiFunc& initial_hpsi,
+                                 const BasisObserver* basis_observer)
+{
+    assert((initial_h == nullptr) == (initial_s == nullptr));
+    assert(initial_h == nullptr || (method_in == "dav_subspace" && this->initialed_psi));
+    assert(!initial_hpsi || (method_in == "dav_subspace" && this->initialed_psi));
+    assert(basis_observer == nullptr || (method_in == "dav_subspace"
+        && basis_observer->capture && basis_observer->rotate && basis_observer->invalidate));
     ModuleBase::TITLE("HSolverPW", "solve");
     ModuleBase::timer::tick("HSolverPW", "solve");
 
@@ -270,6 +290,16 @@ void HSolverPW<T, Device>::solve(hamilt::Hamilt<T, Device>* pHamilt,
     std::vector<Real> precondition(psi.get_nbasis(), 0.0);
     std::vector<Real> eigenvalues(pes->ekb.nr * pes->ekb.nc, 0.0);
     ethr_band.resize(psi.get_nbands(), DiagoIterAssist<T, Device>::PW_DIAG_THR);
+
+    std::unique_ptr<Diago_DavSubspace<T, Device>> davidson;
+    bool reuse_davidson = false;
+#if defined(__CUDA)
+    // Spinor and basis-first storage retain a fixed basis dimension across k
+    // points. The preconditioner is refreshed at every diagonalization entry.
+    reuse_davidson = std::is_same<Device, base_device::DEVICE_GPU>::value
+                     && std::is_same<T, std::complex<double>>::value
+                     && (psi.npol == 2 || !psi.get_k_first());
+#endif
 
     /// Loop over k points for solve Hamiltonian to charge density
     for (int ik = 0; ik < this->wfc_basis->nks; ++ik)
@@ -295,7 +325,11 @@ void HSolverPW<T, Device>::solve(hamilt::Hamilt<T, Device>* pHamilt,
 #endif
 
         /// solve eigenvector and eigenvalue for H(k)
-        this->hamiltSolvePsiK(pHamilt, psi, precondition, eigenvalues.data() + ik * pes->ekb.nc);
+        const size_t subspace_offset = size_t(ik) * psi.get_nbands() * psi.get_nbands();
+        this->hamiltSolvePsiK(pHamilt, psi, precondition, eigenvalues.data() + ik * pes->ekb.nc,
+                              initial_h == nullptr ? nullptr : initial_h + subspace_offset,
+                              initial_s == nullptr ? nullptr : initial_s + subspace_offset,
+                              initial_hpsi, basis_observer, reuse_davidson ? &davidson : nullptr);
 
         if (skip_charge)
         {
@@ -307,6 +341,8 @@ void HSolverPW<T, Device>::solve(hamilt::Hamilt<T, Device>* pHamilt,
         }
         /// calculate the contribution of Psi for charge density rho
     }
+    // Wavefunction density construction does not retain solver storage.
+    davidson.reset();
     // END Loop over k points
 
     // copy eigenvalues to pes->ekb in ElecState
@@ -356,7 +392,12 @@ template <typename T, typename Device>
 void HSolverPW<T, Device>::hamiltSolvePsiK(hamilt::Hamilt<T, Device>* hm,
                                            psi::Psi<T, Device>& psi,
                                            std::vector<Real>& pre_condition,
-                                           Real* eigenvalue)
+                                           Real* eigenvalue,
+                                           const T* initial_h,
+                                           const T* initial_s,
+                                           const InitialHPsiFunc& initial_hpsi,
+                                           const BasisObserver* basis_observer,
+                                           std::unique_ptr<Diago_DavSubspace<T, Device>>* reusable_davidson)
 {
 #ifdef __MPI
     const diag_comm_info comm_info = {POOL_WORLD, GlobalV::RANK_IN_POOL, GlobalV::NPROC_IN_POOL};
@@ -364,6 +405,8 @@ void HSolverPW<T, Device>::hamiltSolvePsiK(hamilt::Hamilt<T, Device>* hm,
     const diag_comm_info comm_info = {GlobalV::RANK_IN_POOL, GlobalV::NPROC_IN_POOL};
 #endif
 
+    std::unique_ptr<Diago_DavSubspace<T, Device>> local_davidson;
+    auto& davidson = reusable_davidson ? *reusable_davidson : local_davidson;
     int success = 0;
     while(!success)
     {
@@ -482,7 +525,8 @@ void HSolverPW<T, Device>::hamiltSolvePsiK(hamilt::Hamilt<T, Device>* hm,
         else if (this->method == "dav_subspace")
         {
             auto ngk_pointer = psi.get_ngk_pointer();
-            auto hpsi_func = [hm, ngk_pointer](T* hpsi_out,
+            const int ik = psi.get_current_k();
+            auto hpsi_func = [hm, ngk_pointer, basis_observer, ik](T* hpsi_out,
                                             T* psi_in,
                                             const int nband_in,
                                             const int nbasis_in,
@@ -498,23 +542,46 @@ void HSolverPW<T, Device>::hamiltSolvePsiK(hamilt::Hamilt<T, Device>* hm,
                 using hpsi_info = typename hamilt::Operator<T, Device>::hpsi_info;
                 hpsi_info info(&psi_iter_wrapper, bands_range, hpsi_out);
                 hm->ops->hPsi(info);
+                if (basis_observer)
+                {
+                    basis_observer->capture(ik, band_index1, band_index2 - band_index1 + 1, false);
+                }
 
                 ModuleBase::timer::tick("DavSubspace", "hpsi_func");
             };
             bool scf = GlobalV::CALCULATION == "nscf" ? false : true;
             const std::vector<bool> is_occupied(psi.get_nbands(), true);
 
-            Diago_DavSubspace<T, Device> dav_subspace(pre_condition,
-                                                    psi.get_nbands(),
-                                                    psi.get_k_first() ? psi.get_current_nbas()
-                                                                        : psi.get_nk() * psi.get_nbasis(),
-                                                    GlobalV::PW_DIAG_NDIM,
-                                                    DiagoIterAssist<T, Device>::PW_DIAG_THR,
-                                                    DiagoIterAssist<T, Device>::PW_DIAG_NMAX,
-                                                    DiagoIterAssist<T, Device>::need_subspace,
-                                                    comm_info);
+            if (!davidson)
+            {
+                davidson.reset(new Diago_DavSubspace<T, Device>(pre_condition,
+                    psi.get_nbands(),
+                    psi.get_k_first() ? psi.get_current_nbas() : psi.get_nk() * psi.get_nbasis(),
+                    GlobalV::PW_DIAG_NDIM, DiagoIterAssist<T, Device>::PW_DIAG_THR,
+                    DiagoIterAssist<T, Device>::PW_DIAG_NMAX,
+                    DiagoIterAssist<T, Device>::need_subspace, comm_info));
+            }
 
-            int ntry_return = dav_subspace.diag(hpsi_func, psi.get_pointer(), psi.get_nbasis(), eigenvalue, this->ethr_band.data(), scf);
+            typename Diago_DavSubspace<T, Device>::InitialHPsiFunc initial_action;
+            if (initial_hpsi)
+            {
+                initial_action = [&](T* output, int leading) {
+                    if (basis_observer)
+                    {
+                        basis_observer->capture(ik, 0, psi.get_nbands(), true);
+                    }
+                    initial_hpsi(ik, output, leading);
+                };
+            }
+            typename Diago_DavSubspace<T, Device>::BasisRotationFunc rotate_basis;
+            if (basis_observer)
+            {
+                rotate_basis = [&](int size, const T* coefficients, int leading, bool final) {
+                    basis_observer->rotate(ik, size, coefficients, leading, final);
+                };
+            }
+            int ntry_return = davidson->diag(hpsi_func, psi.get_pointer(), psi.get_nbasis(), eigenvalue,
+                                               this->ethr_band.data(), scf, initial_h, initial_s, initial_action, rotate_basis);
             if(ntry_return != -1)
             {
                 success = 1;
@@ -522,8 +589,12 @@ void HSolverPW<T, Device>::hamiltSolvePsiK(hamilt::Hamilt<T, Device>* hm,
             }
             else
             {
+                // A CG fallback releases all Davidson work before allocating
+                // its own workspace or changing the wavefunction basis.
+                davidson.reset();
                 std::cout<<"error of Diago_DavSubspace::diag, recalculate by cg method \n";
                 success = -1;
+                if (basis_observer) { basis_observer->invalidate(ik); }
             }
         }
         else if (this->method == "dav")

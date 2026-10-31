@@ -6,8 +6,13 @@
 #include "module_basis/module_pw/pw_basis_k.h"
 #include "module_hamilt_pw/hamilt_pwdft/wavefunc.h"
 
+#include <functional>
+#include <memory>
+
 namespace hsolver
 {
+template <typename T, typename Device> class Diago_DavSubspace;
+
 
 template <typename T, typename Device = base_device::DEVICE_CPU>
 class HSolverPW : public HSolver<T, Device>
@@ -19,6 +24,23 @@ class HSolverPW : public HSolver<T, Device>
     using Real = typename GetTypeReal<T>::type;
 
   public:
+    using InitialHPsiFunc = std::function<void(int, T*, int)>;
+
+    /// A complete observer follows Davidson basis changes for each k point.
+    /// capture receives the first band, count and whether the action comes
+    /// from a cache. Cached products are restored before initial_hpsi, so
+    /// their uploads precede any prefetch it starts. Otherwise capture runs
+    /// after hPsi, when fresh projector products are available.
+    /// rotate receives the old basis size, Ritz coefficients,
+    /// leading dimension and final/restart flag. invalidate precedes a
+    /// fallback that changes wavefunctions without Davidson rotations.
+    struct BasisObserver
+    {
+        std::function<void(int, int, int, bool)> capture;
+        std::function<void(int, int, const T*, int, bool)> rotate;
+        std::function<void(int)> invalidate;
+    };
+
     /**
      * @brief diago_full_acc
      * If .TRUE. all the empty states are diagonalized at the same level of
@@ -43,6 +65,22 @@ class HSolverPW : public HSolver<T, Device>
                const std::string method_in,
                const bool skip_charge) override;
 
+    /// Solve with projected matrices for the unchanged initial wavefunctions.
+    /// Both arrays contain nk consecutive column-major nbands-by-nbands
+    /// matrices on Device, including pool reduction. Their Hamiltonian must
+    /// equal pHamilt throughout this solve; the caller retains ownership.
+    /// The optional initial_hpsi fills H psi for the given k point, output
+    /// pointer on Device, and leading dimension, using the same entry basis.
+    void solve(hamilt::Hamilt<T, Device>* pHamilt,
+               psi::Psi<T, Device>& psi,
+               elecstate::ElecState* pes,
+               const std::string method_in,
+               const bool skip_charge,
+               const T* initial_h,
+               const T* initial_s,
+               const InitialHPsiFunc& initial_hpsi = {},
+               const BasisObserver* basis_observer = nullptr);
+
     virtual Real cal_hsolerror() override;
 
     virtual Real set_diagethr(const int istep, const int iter, const Real drho) override;
@@ -54,7 +92,12 @@ class HSolverPW : public HSolver<T, Device>
     void hamiltSolvePsiK(hamilt::Hamilt<T, Device>* hm,
                          psi::Psi<T, Device>& psi,
                          std::vector<Real>& pre_condition,
-                         Real* eigenvalue);
+                         Real* eigenvalue,
+                         const T* initial_h,
+                         const T* initial_s,
+                         const InitialHPsiFunc& initial_hpsi,
+                         const BasisObserver* basis_observer,
+                         std::unique_ptr<Diago_DavSubspace<T, Device>>* reusable_davidson = nullptr);
 
     // psi initializer && change k point in psi
     void updatePsiK(hamilt::Hamilt<T, Device>* pHamilt, psi::Psi<T, Device>& psi, const int ik);

@@ -100,6 +100,12 @@ class XC_Functional
 	static int func_type; //0:none, 1:lda, 2:gga, 3:mgga, 4:hybrid lda/gga, 5:hybrid mgga
 	static bool use_libxc;
 
+#if defined(__CUDA)
+    static bool use_gpu_pbe(const ModulePW::PW_Basis& basis);
+    static void v_xc_pbe_gpu(double& etxc, double& vtxc, ModuleBase::matrix& potential,
+                             const Charge& charge, const UnitCell& cell);
+#endif
+
 	//exx_hybrid_alpha for mixing exx in hybrid functional:
 	static double hybrid_alpha;
 
