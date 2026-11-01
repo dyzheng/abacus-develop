@@ -63,6 +63,7 @@ class ElecStatePW : public ElecState
 
     Device * ctx = {};
     bool init_rho = false;
+    bool fused_density = false;
     mutable T* vkb = nullptr;
     Real ** rho = nullptr, ** kin_r = nullptr;
     Real * rho_data = nullptr, * kin_r_data = nullptr;

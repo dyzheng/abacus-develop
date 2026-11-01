@@ -73,6 +73,34 @@ public:
     template <typename FPTYPE, typename Device>
     void fft3D_backward(const Device* ctx, std::complex<FPTYPE>* in, std::complex<FPTYPE>* out) const;
 
+#if defined(__CUDA)
+    // Only the retained x slabs have defined Fourier coefficients. The forward
+    // transform preserves its input unless the input and output pointers alias.
+    void fft3D_forward_pw(std::complex<double>* in, std::complex<double>* out) const;
+    // The input is zero outside the retained x slabs and may be overwritten.
+    void fft3D_backward_pw(std::complex<double>* in, std::complex<double>* out) const;
+#endif
+
+#if defined(__CUFFTDX)
+    // Returns the compact grid length, or zero for unsupported grid layouts.
+    int fused_veff_grid_size() const;
+    // Two stick fields fit in the existing full-grid transform workspace.
+    int fused_veff_stick_size() const;
+    // Limits the batch by the compact-grid and stick workspace footprint.
+    int spinor_batch_size() const;
+    // Returns workspace for a batch of spinor bands. Contents are scratch data.
+    std::complex<double>* get_spinor_stick_data(int bands) const;
+    // Transforms both spin components between the internal stick workspace
+    // and caller-owned compact x slabs. The inverse direction expands sticks.
+    void transform_spinor_sticks(std::complex<double>* up, std::complex<double>* down,
+                                 const int* reverse, bool inverse, int bands = 1) const;
+    // Transforms y only; z rows are supplied by the caller's fused boundary.
+    void transform_spinor_slabs(std::complex<double>* up, std::complex<double>* down,
+                                const int* reverse, bool inverse, int bands) const;
+    void apply_spinor_potential(const double* potential, std::complex<double>* up,
+                               std::complex<double>* down, const int* reverse = nullptr, int bands = 1) const;
+#endif
+
   public:
 	//init fftw_plans
 	void initplan(const unsigned int& flag = 0);
@@ -120,6 +148,8 @@ public :
 	fftw_plan planxbac2 = NULL;
 	fftw_plan planyfor  = NULL;
 	fftw_plan planybac  = NULL;
+    fftw_plan planyfor2 = NULL;
+    fftw_plan planybac2 = NULL;
 	fftw_plan planxr2c  = NULL;
 	fftw_plan planxc2r  = NULL;
 	fftw_plan planyr2c  = NULL;
@@ -128,11 +158,22 @@ public :
 //	fftw_plan plan3dbackward;
 
 #if defined(__CUDA)
-    cufftHandle c_handle = {};
-    cufftHandle z_handle = {};
+    mutable cufftHandle c_handle = {};
+    mutable cufftHandle z_handle = {};
+    mutable cufftHandle z_x_handle = {};
+    mutable cufftHandle z_yz_left_handle = {};
+    mutable cufftHandle z_yz_right_handle = {};
+    mutable cufftHandle z_stick_handle[17] = {};
+    bool use_pruned_gpu_fft() const;
+    void init_gpu_pruned_plan() const;
 #elif defined(__ROCM)
-    hipfftHandle c_handle = {};
-    hipfftHandle z_handle = {};
+    mutable hipfftHandle c_handle = {};
+    mutable hipfftHandle z_handle = {};
+#endif
+
+#if defined(__CUDA) || defined(__ROCM)
+    template <typename FPTYPE>
+    void init_gpu_plan() const;
 #endif
 
 #if defined(__ENABLE_FLOAT_FFTW)
@@ -152,6 +193,7 @@ public :
 
     mutable std::complex<float>* c_auxr_3d = nullptr;  // fft space
     mutable std::complex<double>* z_auxr_3d = nullptr; // fft space
+    mutable int z_auxr_3d_capacity = 0;
 
     mutable std::complex<float>*c_auxg = nullptr, *c_auxr = nullptr;  // fft space,
     mutable std::complex<double>*z_auxg = nullptr, *z_auxr = nullptr; // fft space

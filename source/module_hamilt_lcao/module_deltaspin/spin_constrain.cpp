@@ -550,6 +550,7 @@ void SpinConstrain<FPTYPE>::set_solver_parameters(K_Vectors& kv_in,
                                                   elecstate::ElecState* pelec_in,
                                                   std::string KS_SOLVER_in)
 {
+    this->invalidate_nonlocal_projections();
     this->kv_ = kv_in;
     this->phsol = phsol_in;
     this->p_hamilt = p_hamilt_in;

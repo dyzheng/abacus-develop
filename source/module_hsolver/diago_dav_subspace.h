@@ -2,6 +2,7 @@
 #define DIAGO_NEW_DAV_H
 
 #include "diagh.h"
+#include "davidson_action.h"
 #include "module_hsolver/diag_comm_info.h"
 #include "module_hsolver/diag_const_nums.h"
 
@@ -27,18 +28,33 @@ class Diago_DavSubspace : public DiagH<T, Device>
                       const double& diag_thr_in,
                       const int& diag_nmax_in,
                       const bool& need_subspace_in,
-                      const diag_comm_info& diag_comm_in);
+                      const diag_comm_info& diag_comm_in,
+                      bool host_backed_action = false);
 
     virtual ~Diago_DavSubspace() override;
 
     using HPsiFunc = std::function<void(T*, T*, const int, const int, const int, const int)>;
+    using InitialHPsiFunc = std::function<void(T*, int)>;
+    /// Receives the old basis size, Ritz coefficients and their leading
+    /// dimension after rotation. The final flag distinguishes returns from
+    /// restarts. The coefficient buffer remains owned by the solver.
+    using BasisRotationFunc = std::function<void(int, const T*, int, bool)>;
 
+    /// Initial projected matrices are optional, contiguous column-major arrays
+    /// of size n_band squared on Device: psi_in^H H psi_in and psi_in^H psi_in,
+    /// including pool reduction. They are consumed only by the first attempt.
+    /// An optional initial_hpsi fills H psi_in on Device with the supplied
+    /// leading dimension and n_band columns, also only on the first attempt.
     int diag(const HPsiFunc& hpsi_func,
              T* psi_in,
              const int psi_in_dmax,
              Real* eigenvalue_in,
              const double* ethr_band,
-             const bool& scf_type);
+             const bool& scf_type,
+             const T* initial_h = nullptr,
+             const T* initial_s = nullptr,
+             const InitialHPsiFunc& initial_hpsi = {},
+             const BasisRotationFunc& rotate_basis = {});
 
   private:
     /// for MPI communication
@@ -72,7 +88,7 @@ class Diago_DavSubspace : public DiagH<T, Device>
     T* psi_in_iter = nullptr;
 
     /// the product of H and psi in the reduced basis set
-    T* hphi = nullptr;
+    DavidsonAction<T, Device> hphi;
 
     /// Hamiltonian on the reduced basis
     T* hcc = nullptr;
@@ -85,6 +101,7 @@ class Diago_DavSubspace : public DiagH<T, Device>
 
     T* d_scc = nullptr;
     Real* d_eigenvalue = nullptr;
+    int* d_unconv = nullptr;
 
     /// device type of psi
     Device* ctx = {};
@@ -96,19 +113,18 @@ class Diago_DavSubspace : public DiagH<T, Device>
                   const int& nbase,
                   const int& notconv,
                   T* psi_iter,
-                  T* hphi,
                   T* vcc,
                   const int* unconv,
-                  std::vector<Real>* eigenvalue_iter);
+                  std::vector<Real>* eigenvalue_iter,
+                  bool basis_is_rotated);
 
-    void cal_elem(const int& dim, int& nbase, const int& notconv, const T* psi_iter, const T* hphi, T* hcc, T* scc);
+    void cal_elem(const int& dim, int& nbase, const int& notconv, const T* psi_iter, T* hcc, T* scc);
 
     void refresh(const int& dim,
                  const int& nband,
                  int& nbase,
                  const Real* eigenvalue,
                  T* psi_iter,
-                 T* hphi,
                  T* hcc,
                  T* scc,
                  T* vcc);
@@ -133,7 +149,11 @@ class Diago_DavSubspace : public DiagH<T, Device>
                   T* psi_in,
                   const int psi_in_dmax,
                   Real* eigenvalue_in,
-                  const double* ethr_band);
+                  const double* ethr_band,
+                  const T* initial_h,
+                  const T* initial_s,
+                  const InitialHPsiFunc& initial_hpsi,
+                  const BasisRotationFunc& rotate_basis);
 
     bool test_exit_cond(const int& ntry, const int& notconv, const bool& scf);
 

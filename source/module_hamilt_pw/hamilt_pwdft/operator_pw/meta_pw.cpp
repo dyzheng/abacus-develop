@@ -23,7 +23,6 @@ Meta<OperatorPW<T, Device>>::Meta(Real tpiba_in,
     this->vk_row = vk_row;
     this->vk_col = vk_col;
     this->wfcpw = wfcpw_in;
-    resmem_complex_op()(this->ctx, this->porter, this->wfcpw->nmaxgr, "Meta<PW>::porter");
     if(this->isk == nullptr || this->tpiba < 1e-10 || this->wfcpw == nullptr)
     {
         ModuleBase::WARNING_QUIT("MetaPW", "Constuctor of Operator::MetaPW is failed, please check your code!");
@@ -51,6 +50,11 @@ void Meta<OperatorPW<T, Device>>::act(
     }
 
     ModuleBase::timer::tick("Operator", "MetaPW");
+
+    if (this->porter == nullptr)
+    {
+        resmem_complex_op()(this->ctx, this->porter, this->wfcpw->nmaxgr, "Meta<PW>::porter");
+    }
 
     const int current_spin = this->isk[this->ik];
     int max_npw = nbasis / npol;

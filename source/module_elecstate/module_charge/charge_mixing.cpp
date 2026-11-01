@@ -9,6 +9,8 @@
 #include "module_base/timer.h"
 #include "module_hamilt_pw/hamilt_pwdft/global.h"
 
+#include <memory>
+
 Charge_Mixing::Charge_Mixing()
 {
 }
@@ -1126,12 +1128,12 @@ void Charge_Mixing::mix_rho(Charge* chr)
 
     // the charge before mixing.
     const int nrxx = chr->rhopw->nrxx;
-    std::vector<double> rho123(GlobalV::NSPIN * nrxx);
+    std::unique_ptr<double[]> rho123(new double[GlobalV::NSPIN * nrxx]);
     for (int is = 0; is < GlobalV::NSPIN; ++is)
     {
         if (is == 0 || is == 3 || !GlobalV::DOMAG_Z)
         {
-            double* rho123_is = rho123.data() + is * nrxx;
+            double* rho123_is = rho123.get() + is * nrxx;
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static, 512)
 #endif
@@ -1141,13 +1143,13 @@ void Charge_Mixing::mix_rho(Charge* chr)
             }
         }
     }
-    std::vector<double> kin_r123;
+    std::unique_ptr<double[]> kin_r123;
     if ((XC_Functional::get_func_type() == 3 || XC_Functional::get_func_type() == 5) && mixing_tau)
     {
-        kin_r123.resize(GlobalV::NSPIN * nrxx);
+        kin_r123.reset(new double[GlobalV::NSPIN * nrxx]);
         for (int is = 0; is < GlobalV::NSPIN; ++is)
         {
-            double* kin_r123_is = kin_r123.data() + is * nrxx;
+            double* kin_r123_is = kin_r123.get() + is * nrxx;
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static, 512)
 #endif
@@ -1158,10 +1160,10 @@ void Charge_Mixing::mix_rho(Charge* chr)
         }
     }
 #ifdef USE_PAW
-    std::vector<double> nhat_r123;
+    std::unique_ptr<double[]> nhat_r123;
     if(GlobalV::use_paw)
     {
-        nhat_r123.resize(GlobalV::NSPIN * nrxx);
+        nhat_r123.reset(new double[GlobalV::NSPIN * nrxx]);
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static, 512)
 #endif
@@ -1191,7 +1193,7 @@ void Charge_Mixing::mix_rho(Charge* chr)
     {
         if (is == 0 || is == 3 || !GlobalV::DOMAG_Z)
         {
-            double* rho123_is = rho123.data() + is * nrxx;
+            double* rho123_is = rho123.get() + is * nrxx;
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static, 512)
 #endif
@@ -1206,7 +1208,7 @@ void Charge_Mixing::mix_rho(Charge* chr)
     {
         for (int is = 0; is < GlobalV::NSPIN; ++is)
         {
-            double* kin_r123_is = kin_r123.data() + is * nrxx;
+            double* kin_r123_is = kin_r123.get() + is * nrxx;
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static, 512)
 #endif
@@ -1294,76 +1296,38 @@ void Charge_Mixing::Kerker_screen_real(double* drhor)
 {
     if (this->mixing_gg0 <= 0.0001 || this->mixing_beta <= 0.1)
         return;
-    // consider a resize for mixing_angle
-    int resize_tmp = 1;
-    if (GlobalV::NSPIN == 4 && this->mixing_angle > 0) resize_tmp = 2;
-    //
-    std::vector<std::complex<double>> drhog(this->rhopw->npw * GlobalV::NSPIN / resize_tmp);
-    std::vector<double> drhor_filter(this->rhopw->nrxx * GlobalV::NSPIN / resize_tmp);
-    for (int is = 0; is < GlobalV::NSPIN / resize_tmp; ++is)
-    {
-        // Note after this process some G which is higher than Gmax will be filtered.
-        // Thus we cannot use Kerker_screen_recip(drhog.data()) directly after it.
-        this->rhopw->real2recip(drhor + is * this->rhopw->nrxx, drhog.data() + is * this->rhopw->npw);
-    }
-    // implement Kerker for density and magnetization separately
-    double fac, gg0, amin;
-    for (int is = 0; is < GlobalV::NSPIN / resize_tmp; is++)
-    {
 
-        if (is >= 1)
-        {
-            if (this->mixing_gg0_mag <= 0.0001 || this->mixing_beta_mag <= 0.1)
-            {
-#ifdef __DEBUG
-                assert(is == 1); // make sure break works
-#endif
-                double is_mag = GlobalV::NSPIN - 1;
-                if (GlobalV::NSPIN == 4 && this->mixing_angle > 0) is_mag = 1;
-                for (int ig = 0; ig < this->rhopw->npw * is_mag; ig++)
-                {
-                    drhog[is * this->rhopw->npw + ig] = 0;
-                }
-                break;
-            }
-            fac = this->mixing_gg0_mag;
-            amin = this->mixing_beta_mag;
-        }
-        else
-        {
-            fac = this->mixing_gg0;
-            amin = this->mixing_beta;
-        }
-        
-        gg0 = std::pow(fac * 0.529177 / GlobalC::ucell.tpiba, 2);
+    const int spin_channels = GlobalV::NSPIN == 4 && this->mixing_angle > 0 ? 2 : GlobalV::NSPIN;
+    const bool screen_magnetization = this->mixing_gg0_mag > 0.0001 && this->mixing_beta_mag > 0.1;
+    const int screened_channels = screen_magnetization ? spin_channels : 1;
+    std::vector<std::complex<double>> drhog(this->rhopw->npw);
+    std::vector<double> drhor_filter(this->rhopw->nrxx);
+    for (int spin = 0; spin < screened_channels; ++spin)
+    {
+        double* residual = drhor + spin * this->rhopw->nrxx;
+        const double screening = spin == 0 ? this->mixing_gg0 : this->mixing_gg0_mag;
+        const double beta = spin == 0 ? this->mixing_beta : this->mixing_beta_mag;
+        const double gg0 = std::pow(screening * 0.529177 / GlobalC::ucell.tpiba, 2);
+        this->rhopw->real2recip(residual, drhog.data());
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static, 512)
 #endif
-        for (int ig = 0; ig < this->rhopw->npw; ig++)
+        for (int ig = 0; ig < this->rhopw->npw; ++ig)
         {
-            double gg = this->rhopw->gg[ig];
-            // I have not decided how to handle gg=0 part, will be changed in future
-            //if (gg == 0)
-            //{
-            //    drhog[is * this->rhopw->npw + ig] *= 0;
-            //    continue;
-            //}
-            double filter_g = std::max(gg / (gg + gg0), this->mixing_gg0_min / amin);
-            drhog[is * this->rhopw->npw + ig] *= (1 - filter_g);
+            const double gg = this->rhopw->gg[ig];
+            const double filter = std::max(gg / (gg + gg0), this->mixing_gg0_min / beta);
+            drhog[ig] *= 1 - filter;
         }
-    }
-    // inverse FT
-    for (int is = 0; is < GlobalV::NSPIN / resize_tmp; ++is)
-    {
-        this->rhopw->recip2real(drhog.data() + is * this->rhopw->npw, drhor_filter.data() + is * this->rhopw->nrxx);
-    }
-
+        // Subtracting the low-frequency correction preserves residual components above the basis cutoff.
+        // A disabled magnetic filter is the identity and requires no transform.
+        this->rhopw->recip2real(drhog.data(), drhor_filter.data());
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static, 512)
 #endif
-    for (int ir = 0; ir < this->rhopw->nrxx * GlobalV::NSPIN / resize_tmp; ir++)
-    {
-        drhor[ir] -= drhor_filter[ir];
+        for (int ir = 0; ir < this->rhopw->nrxx; ++ir)
+        {
+            residual[ir] -= drhor_filter[ir];
+        }
     }
 }
 
@@ -1806,45 +1770,25 @@ bool Charge_Mixing::if_scf_oscillate(const int iteration, const double drho, con
     // add drho into history
     this->_drho_history[iteration - 1] = drho;
 
-    if(threshold >= 0) // close the function
+    bool oscillating = false;
+    if (threshold < 0 && iteration >= iternum_used + this->mixing_restart_last)
     {
-        return false;
+        // Fit the slope of log10(drho) over the last iternum_used iterations.
+        double sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
+        for (int i = iteration - iternum_used; i < iteration; i++)
+        {
+            sumX += i;
+            sumY += std::log10(this->_drho_history[i]);
+            sumXY += i * std::log10(this->_drho_history[i]);
+            sumXX += i * i;
+        }
+        double numerator = iternum_used * sumXY - sumX * sumY;
+        double denominator = iternum_used * sumXX - sumX * sumX;
+        if (denominator != 0)
+        {
+            oscillating = numerator / denominator > threshold;
+        }
     }
-
-    // check if the history is long enough
-    if(iteration < iternum_used + this->mixing_restart_last)
-    {
-        return false;
-    }
-
-    // calculate the slope of the last iternum_used iterations' drho
-    double slope = 0.0;
-
-    // Least Squares Method
-    // this part is too short, so I do not design it as a free function in principle
-    double sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
-    for (int i = iteration - iternum_used; i < iteration; i++)
-    {
-        sumX += i;
-        sumY += std::log10(this->_drho_history[i]);
-        sumXY += i * std::log10(this->_drho_history[i]);
-        sumXX += i * i;
-    }
-    double numerator = iternum_used * sumXY - sumX * sumY;
-    double denominator = iternum_used * sumXX - sumX * sumX;
-    if (denominator == 0) {
-        return false;
-    }
-    slope =  numerator / denominator;
-
-    // if the slope is less than the threshold, return true
-    if(slope > threshold)
-    {
-        return true;
-    }
-
-    return false;
-
     ModuleBase::timer::tick("Charge_Mixing", "if_scf_oscillate");
-  
+    return oscillating;
 }

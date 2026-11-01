@@ -2,6 +2,7 @@
 #define SPIN_CONSTRAIN_H
 
 #include <map>
+#include <memory>
 #include <vector>
 
 #include "module_base/constants.h"
@@ -12,6 +13,9 @@
 #include "module_cell/klist.h"
 #include "module_cell/unitcell.h"
 #include "module_hsolver/hsolver.h"
+#if defined(__CUDA)
+#include "module_hsolver/kernels/fixed_overlap.h"
+#endif
 #include "module_hamilt_general/operator.h"
 
 struct ScAtomData;
@@ -268,6 +272,8 @@ public:
     void set_read_target_mag(bool _read_target_mag){this->read_target_mag = _read_target_mag;}
     /// @brief get is_Mi_converged
     bool mag_converged() const {return this->is_Mi_converged;}
+    /// Invalidate projections before wavefunctions change outside observed Davidson solves.
+    void invalidate_nonlocal_projections() { this->nonlocal_projections.clear(); }
   private:
     /// operator for spin-constrained DFT, used for calculating current atomic magnetic moment
     hamilt::Operator<FPTYPE>* p_operator = nullptr;
@@ -279,6 +285,18 @@ public:
     FPTYPE* sub_h_save;
     FPTYPE* sub_s_save;
     FPTYPE* becp_save;
+#if defined(__CUDA)
+    /// Orthonormal response matrices for one fixed-wavefunction constraint loop.
+    std::unique_ptr<hsolver::FixedOverlapSubspace> fixed_overlap;
+#endif
+    /// Constraint field used to construct the saved projected Hamiltonian.
+    std::vector<ModuleBase::Vector3<double>> subspace_lambda;
+    /// Pinned host storage reused across constraint loops and released at destruction.
+    std::unique_ptr<FPTYPE, void (*)(FPTYPE*)> hpsi_cache{nullptr, nullptr};
+    size_t hpsi_cache_capacity = 0;
+    /// Per-k nonlocal overlaps for the current wavefunctions, in host memory.
+    /// Empty entries denote invalid projections; ionic/solver setup clears all entries.
+    std::vector<std::vector<FPTYPE>> nonlocal_projections;
 };
 
 

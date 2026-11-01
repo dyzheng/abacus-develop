@@ -8,6 +8,7 @@
 
 namespace psi
 {
+template <typename T, typename Device> class KPointStorage;
 
 // structure for getting range of Psi
 // two display method: k index first or bands index first
@@ -118,6 +119,7 @@ class Psi
     int npol = 1;
 
   private:
+    friend class KPointStorage<T, Device>;
     T* psi = nullptr; // avoid using C++ STL
 
     base_device::AbacusDevice_t device = {}; // track the device type (CPU, GPU and SYCL are supported currented)

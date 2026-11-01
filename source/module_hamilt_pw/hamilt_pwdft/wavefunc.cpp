@@ -541,9 +541,10 @@ void diago_PAO_in_pw_k2(const base_device::DEVICE_GPU* ctx,
     int starting_nw = nbands;
 
     bool result = false;
-    ModuleBase::ComplexMatrix wfcatom(nbands, nbasis);
+    ModuleBase::ComplexMatrix wfcatom;
     if (p_wf->init_wfc == "file")
     {
+        wfcatom.create(nbands, nbasis);
         std::stringstream filename;
         filename << GlobalV::global_readin_dir << "WAVEFUNC" << ik + 1 << ".dat";
         result = ModuleIO::read_wfc_pw(filename.str(), wfc_basis, ik, p_wf->nkstot, wfcatom);
@@ -591,47 +592,25 @@ void diago_PAO_in_pw_k2(const base_device::DEVICE_GPU* ctx,
         }
     }
 
-    std::complex<float> *c_wfcatom = nullptr;
-    if (GlobalV::KS_SOLVER!="bpcg") {
-        // store wfcatom on the GPU
+    if (GlobalV::KS_SOLVER == "cg" && phm_in != nullptr)
+    {
+        std::complex<float>* c_wfcatom = nullptr;
         resmem_cd_op()(gpu_ctx, c_wfcatom, wfcatom.nr * wfcatom.nc);
         castmem_z2c_h2d_op()(gpu_ctx, cpu_ctx, c_wfcatom, wfcatom.c, wfcatom.nr * wfcatom.nc);
-    }
-    if(GlobalV::KS_SOLVER=="cg") //xiaohui add 2013-09-02
-    {
-        // (7) Diago with cg method.
-        if(phm_in!= nullptr)
-        {
-            std::vector<float> etatom(starting_nw, 0.0);
-            hsolver::DiagoIterAssist<std::complex<float>, base_device::DEVICE_GPU>::diagH_subspace_init(phm_in,
-                                                                                                        c_wfcatom,
-                                                                                                        wfcatom.nr,
-                                                                                                        wfcatom.nc,
-                                                                                                        wvf,
-                                                                                                        etatom.data());
-        }
-        else
-        {
-            //this diagonalization method is obsoleted now
-            //GlobalC::hm.diagH_subspace(ik ,starting_nw, nbands, wfcatom, wfcatom, etatom.data());
-        }
+        std::vector<float> etatom(starting_nw, 0.0);
+        hsolver::DiagoIterAssist<std::complex<float>, base_device::DEVICE_GPU>::diagH_subspace_init(
+            phm_in, c_wfcatom, wfcatom.nr, wfcatom.nc, wvf, etatom.data());
+        delmem_cd_op()(gpu_ctx, c_wfcatom);
     }
     else if (GlobalV::KS_SOLVER == "dav" || GlobalV::KS_SOLVER == "dav_subspace")
     {
-        assert(nbands <= wfcatom.nr);
-        // replace by haozhihan 2022-11-23
-        hsolver::matrixSetToAnother<std::complex<float>, base_device::DEVICE_GPU>()(gpu_ctx,
-                                                                                    nbands,
-                                                                                    c_wfcatom,
-                                                                                    wfcatom.nc,
-                                                                                    &wvf(0, 0),
-                                                                                    nbasis);
+        assert(nbands <= wfcatom.nr && wfcatom.nc == nbasis);
+        // Davidson consumes only the requested bands in their existing layout.
+        castmem_z2c_h2d_op()(gpu_ctx, cpu_ctx, &wvf(0, 0), wfcatom.c, nbands * nbasis);
     }
-    else if (GlobalV::KS_SOLVER=="bpcg") {
-        castmem_z2c_h2d_op()(gpu_ctx, cpu_ctx, &wvf(0,0), wfcatom.c, wfcatom.nr * wfcatom.nc);
-    }
-    if (GlobalV::KS_SOLVER!="bpcg") {
-        delmem_cd_op()(gpu_ctx, c_wfcatom);
+    else if (GlobalV::KS_SOLVER == "bpcg")
+    {
+        castmem_z2c_h2d_op()(gpu_ctx, cpu_ctx, &wvf(0, 0), wfcatom.c, wfcatom.nr * wfcatom.nc);
     }
 }
 template <>
@@ -650,9 +629,10 @@ void diago_PAO_in_pw_k2(const base_device::DEVICE_GPU* ctx,
     int starting_nw = nbands;
 
     bool result = false;
-    ModuleBase::ComplexMatrix wfcatom(nbands, nbasis);
+    ModuleBase::ComplexMatrix wfcatom;
     if (p_wf->init_wfc == "file")
     {
+        wfcatom.create(nbands, nbasis);
         std::stringstream filename;
         filename << GlobalV::global_readin_dir << "WAVEFUNC" << ik + 1 << ".dat";
         result = ModuleIO::read_wfc_pw(filename.str(), wfc_basis, ik, p_wf->nkstot, wfcatom);
@@ -699,48 +679,25 @@ void diago_PAO_in_pw_k2(const base_device::DEVICE_GPU* ctx,
         }
     }
 
-    std::complex<double> *z_wfcatom = nullptr;
-    if (GlobalV::KS_SOLVER!="bpcg") {
-        // store wfcatom on the GPU
+    if (GlobalV::KS_SOLVER == "cg" && phm_in != nullptr)
+    {
+        std::complex<double>* z_wfcatom = nullptr;
         resmem_zd_op()(gpu_ctx, z_wfcatom, wfcatom.nr * wfcatom.nc);
         syncmem_z2z_h2d_op()(gpu_ctx, cpu_ctx, z_wfcatom, wfcatom.c, wfcatom.nr * wfcatom.nc);
+        std::vector<double> etatom(starting_nw, 0.0);
+        hsolver::DiagoIterAssist<std::complex<double>, base_device::DEVICE_GPU>::diagH_subspace_init(
+            phm_in, z_wfcatom, wfcatom.nr, wfcatom.nc, wvf, etatom.data());
+        delmem_zd_op()(gpu_ctx, z_wfcatom);
     }
-	if(GlobalV::KS_SOLVER=="cg") //xiaohui add 2013-09-02
-	{
-		// (7) Diago with cg method.
-		if(phm_in!= nullptr)
-		{
-			std::vector<double> etatom(starting_nw, 0.0);
-            hsolver::DiagoIterAssist<std::complex<double>, base_device::DEVICE_GPU>::diagH_subspace_init(phm_in,
-                                                                                                         z_wfcatom,
-                                                                                                         wfcatom.nr,
-                                                                                                         wfcatom.nc,
-                                                                                                         wvf,
-                                                                                                         etatom.data());
-        }
-		else
-		{
-			//this diagonalization method is obsoleted now
-			//GlobalC::hm.diagH_subspace(ik ,starting_nw, nbands, wfcatom, wfcatom, etatom.data());
-		}
-	}
     else if (GlobalV::KS_SOLVER == "dav" || GlobalV::KS_SOLVER == "dav_subspace")
     {
-		assert(nbands <= wfcatom.nr);
-		// replace by haozhihan 2022-11-23
-        hsolver::matrixSetToAnother<std::complex<double>, base_device::DEVICE_GPU>()(gpu_ctx,
-                                                                                     nbands,
-                                                                                     z_wfcatom,
-                                                                                     wfcatom.nc,
-                                                                                     &wvf(0, 0),
-                                                                                     nbasis);
+        assert(nbands <= wfcatom.nr && wfcatom.nc == nbasis);
+        // Davidson consumes only the requested bands in their existing layout.
+        syncmem_z2z_h2d_op()(gpu_ctx, cpu_ctx, &wvf(0, 0), wfcatom.c, nbands * nbasis);
     }
-    else if(GlobalV::KS_SOLVER=="bpcg") {
-        syncmem_z2z_h2d_op()(gpu_ctx, cpu_ctx, &wvf(0,0), wfcatom.c, wfcatom.nr * wfcatom.nc);
-    }
-
-    if (GlobalV::KS_SOLVER!="bpcg") {
-        delmem_zd_op()(gpu_ctx, z_wfcatom);
+    else if (GlobalV::KS_SOLVER == "bpcg")
+    {
+        syncmem_z2z_h2d_op()(gpu_ctx, cpu_ctx, &wvf(0, 0), wfcatom.c, wfcatom.nr * wfcatom.nc);
     }
 }
 #endif
