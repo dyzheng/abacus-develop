@@ -2,6 +2,7 @@
 #define DIAGO_NEW_DAV_H
 
 #include "diagh.h"
+#include "davidson_action.h"
 #include "module_hsolver/diag_comm_info.h"
 #include "module_hsolver/diag_const_nums.h"
 
@@ -27,7 +28,8 @@ class Diago_DavSubspace : public DiagH<T, Device>
                       const double& diag_thr_in,
                       const int& diag_nmax_in,
                       const bool& need_subspace_in,
-                      const diag_comm_info& diag_comm_in);
+                      const diag_comm_info& diag_comm_in,
+                      bool host_backed_action = false);
 
     virtual ~Diago_DavSubspace() override;
 
@@ -86,7 +88,7 @@ class Diago_DavSubspace : public DiagH<T, Device>
     T* psi_in_iter = nullptr;
 
     /// the product of H and psi in the reduced basis set
-    T* hphi = nullptr;
+    DavidsonAction<T, Device> hphi;
 
     /// Hamiltonian on the reduced basis
     T* hcc = nullptr;
@@ -111,20 +113,18 @@ class Diago_DavSubspace : public DiagH<T, Device>
                   const int& nbase,
                   const int& notconv,
                   T* psi_iter,
-                  T* hphi,
                   T* vcc,
                   const int* unconv,
                   std::vector<Real>* eigenvalue_iter,
                   bool basis_is_rotated);
 
-    void cal_elem(const int& dim, int& nbase, const int& notconv, const T* psi_iter, const T* hphi, T* hcc, T* scc);
+    void cal_elem(const int& dim, int& nbase, const int& notconv, const T* psi_iter, T* hcc, T* scc);
 
     void refresh(const int& dim,
                  const int& nband,
                  int& nbase,
                  const Real* eigenvalue,
                  T* psi_iter,
-                 T* hphi,
                  T* hcc,
                  T* scc,
                  T* vcc);

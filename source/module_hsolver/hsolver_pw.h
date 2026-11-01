@@ -97,7 +97,8 @@ class HSolverPW : public HSolver<T, Device>
                          const T* initial_s,
                          const InitialHPsiFunc& initial_hpsi,
                          const BasisObserver* basis_observer,
-                         std::unique_ptr<Diago_DavSubspace<T, Device>>* reusable_davidson = nullptr);
+                         std::unique_ptr<Diago_DavSubspace<T, Device>>* reusable_davidson = nullptr,
+                         bool host_backed_action = false);
 
     // psi initializer && change k point in psi
     void updatePsiK(hamilt::Hamilt<T, Device>* pHamilt, psi::Psi<T, Device>& psi, const int ik);
