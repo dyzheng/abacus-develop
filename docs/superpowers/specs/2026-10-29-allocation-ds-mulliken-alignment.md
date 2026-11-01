@@ -30,7 +30,7 @@ Mulliken"，并据此推断"DeltaSpin 投影与 Mulliken 差 1.4 μB"。**该推
 | 测量（同一体系 Fe2） | Fe1 (μB) | 说明 |
 |---|---:|---|
 | LCAO **free** Mulliken | **2.404** | 无约束态 |
-| LCAO **DeltaSpin 目标 ±3.8（含 `sc`）** 的 Mulliken | **3.63** | λ 约束已收敛（Mi≈3.8，RMS<sc_thr）；600 步是外层电荷 SCF 残差地板，见 `2026-10-30-lcao-ds-3.8-scf-plateau.md` |
+| LCAO **DeltaSpin 目标 ±3.8（含 `sc`, `scf_thr=1e-5`）** 的 Mulliken | **3.6323**（14 步收敛） | λ 约束收敛（Mi≈3.8）；该态有电荷残差地板，1e-8 阈值不可达，见 `2026-10-30-lcao-ds-3.8-scf-plateau.md` |
 | PW DeltaSpin ±3.8（`sc 1 1 1`）的末态原子矩 | **3.8001** | 13 步收敛（`fe2_bcc_ds`，有效基准） |
 | PW free onsite l=2 投影 | 3.697 | 投影口径 |
 | Allocation `q`（约束态） | 3.800 | `q = m_T + m_c` |
