@@ -408,7 +408,7 @@ void HSolverPW<T, Device>::hamiltSolvePsiK(hamilt::Hamilt<T, Device>* hm,
     std::unique_ptr<Diago_DavSubspace<T, Device>> local_davidson;
     auto& davidson = reusable_davidson ? *reusable_davidson : local_davidson;
     int success = 0;
-    while(!success)
+    while (success != 1)
     {
         if (this->method == "cg" || success == -1)
         {
