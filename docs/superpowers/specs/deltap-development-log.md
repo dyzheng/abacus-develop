@@ -7333,3 +7333,21 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
      假带隙分支警告。
   3. 加密 k / 金属初猜 > 物理判据 > 正则化混合（不足）> 展宽/放宽阈值（仅诊断）。
 - **下一轮**：金属分支热启动验证；实现两个守卫；核对该零模是否影响力。
+
+## 2026-10-30 (S6.18): 对齐 ORCA MBIS 的方案
+
+- **代码现状核对**：`WeightType::HirshfeldPeriodic` 已是"每原子 s 型 pro-density
+  + 周期镜像 + C2 窗口 + 导数"的 stockholder 分区，但 pro-density 是**固定
+  Gaussian**（`σ=max(radii,0.25)`、`q=zv`），**不迭代、无 KL、无多极**；
+  `weight_grid.h` 明确"密度不进入权重"。
+- **与 MBIS 差距**：①Slater vs Gaussian；②固定参数 vs KL 迭代的布居+展宽；
+  ③仅单极 vs 单极+偶极+四极；④几何权重 vs 密度依赖（→需外层迭代/力的分区响应）。
+- **方案**（`2026-10-30-mbis-alignment-plan.md`）：
+  - Phase A（建议先做）：只读 MBIS 观察量——Slater s 迭代 + KL + 多极积分，
+    与 ORCA（`MBIS_LARGEPRINT`）在 H2O/LiCl 上对照；不动约束/力。
+  - Phase B（按需）：MBIS 权重作为约束（冻结分区近似 + 外循环），可加
+    电荷/自旋/**原子偶极**约束；力用冻结 HF + 显式 `∂w/∂R` + 响应修正。
+  - Phase C（高风险）：`∂w/∂ρ` 自洽 Jacobian、四极/cMBIS，仅按需。
+- **结论**：值得做、脚手架已 70%，但**不替换**现有 allocation/DeltaSpin；
+  MBIS 是纯空间 AIM（spin-MBIS≈Becke 口径），与投影矩不可混用。
+- **文件**：`2026-10-30-mbis-alignment-plan.md`、本日志。
