@@ -7351,3 +7351,21 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - **结论**：值得做、脚手架已 70%，但**不替换**现有 allocation/DeltaSpin；
   MBIS 是纯空间 AIM（spin-MBIS≈Becke 口径），与投影矩不可混用。
 - **文件**：`2026-10-30-mbis-alignment-plan.md`、本日志。
+
+## 2026-10-30 (S6.19): MBIS 原型实现 + LiCl(LCAO) 三方案对比
+
+- **实现**：`tools/mbis_prototype.py`（Python 只读，读 ABACUS `chg.cube`）：
+  Slater s pro-density，按 MBIS 的布居+均值半径迭代（`N=∫ρ_A`、`ζ=3N/∫rρ_A`），
+  输出电荷/原子偶极/分子偶极。LiCl(LCAO, delta=0) 192³ 网格，~49 步收敛，
+  ΣN=10.00003。
+- **结果（同一自由密度）**：Li 净电荷 MBIS **+0.955**、Mulliken **+0.517**、
+  Allocation(LCAO,l=0/1/2) **−0.083**（`n=3.0833` 与 target_l 无关）。
+  MBIS 原子偶极：Li 0.015 D、Cl 2.807 D；`μ_mol` 重建 **6.48 D**，
+  接近气相实验 ~6.3 D；Mulliken 点电荷仅 ~5.0 D。
+- **分析**：差异主因是 pro-density 宽度（MBIS 把 Li 优化到 ζ=4.6 紧凑、Cl 弥散
+  → Li⁺；Becke/allocation 固定半径 → Li 近中性）。三者语义不同、不可互换；
+  allocation `q`≈Becke 电子数、非净电荷。LCAO allocation `n` 对 target_l 不变，
+  与修复前 PW 的 l 依赖（2.948/3.085/3.028）不一致 → PW 侧需复查旧归一化残留。
+- **文件**：`tools/mbis_prototype.py`、
+  `docs/superpowers/specs/2026-10-30-mbis-prototype-licl-comparison.md`、本日志。
+- **下一轮**：移植为 C++ 只读观察量并与 ORCA 对照；重查 PW target_l 不变性。
