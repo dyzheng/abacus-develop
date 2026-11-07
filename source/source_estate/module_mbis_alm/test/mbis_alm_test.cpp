@@ -195,3 +195,70 @@ TEST(MbisAlmTest, PenaltyOnlyHasBias)
     // the Lagrange/ALM update removes it (tested in AlmConvergesExactlyOneStep).
     EXPECT_GT(std::abs(Q - t), 0.3);
 }
+
+namespace
+{
+// bcc conventional cell (skewed voxels) with two equivalent Fe-like sites:
+// the raw image-sum partition breaks the site equivalence, so --symmetrize
+// must restore equal N and zeta (regression for the in-place-average bug).
+Toy make_bcc()
+{
+    Toy t;
+    t.grid.n = {{30, 30, 30}};
+    t.grid.origin = Vec3{0.0, 0.0, 0.0};
+    t.grid.dv = {{Vec3{0.273, 0.1365, 0.1365}, Vec3{0.1365, 0.273, 0.1365},
+                  Vec3{0.1365, 0.1365, 0.273}}};
+    const Vec3 c0 = 30.0 * t.grid.dv[0];
+    const Vec3 c1 = 30.0 * t.grid.dv[1];
+    const Vec3 c2 = 30.0 * t.grid.dv[2];
+    const Vec3 center = 0.5 * (c0 + c1 + c2);
+    t.atoms = {{Vec3{0.0, 0.0, 0.0}, 16.0}, {center, 16.0}};
+    const std::size_t n = t.grid.size();
+    t.rho.assign(n, 0.0);
+    t.spin.assign(n, 0.0);
+    for (int ix = 0; ix < 30; ++ix)
+        for (int iy = 0; iy < 30; ++iy)
+            for (int iz = 0; iz < 30; ++iz)
+            {
+                const std::size_t ig = (static_cast<std::size_t>(ix) * 30 + iy) * 30 + iz;
+                const Vec3 p = t.grid.point(ix, iy, iz);
+                double rho = 0.0, spin = 0.0;
+                for (int a = 0; a < 2; ++a)
+                {
+                    const Vec3 d = p - t.atoms[a].R;
+                    const double g = std::exp(-dot(d, d) / (2.0 * 1.0 * 1.0));
+                    rho += 16.0 * g;
+                    spin += (a == 0 ? 1.0 : -1.0) * 8.0 * g;
+                }
+                t.rho[ig] = rho;
+                t.spin[ig] = spin;
+            }
+    return t;
+}
+} // namespace
+
+TEST(MbisAlmTest, SymmetrizeRestoresEquivalence)
+{
+    const Toy t = make_bcc();
+    MbisConfig c = cfg();
+    c.images = 1;
+    c.max_iter = 400;
+    c.tol = 1e-9;
+    c.damp = 0.5;
+    c.symmetrize = false;
+    const MbisState raw = compute_mbis(t.rho, t.grid, t.atoms, c);
+    c.symmetrize = true;
+    const MbisState sym = compute_mbis(t.rho, t.grid, t.atoms, c);
+
+    // the raw skewed-cell partition is asymmetric...
+    EXPECT_GT(std::abs(raw.N[0] - raw.N[1]), 1e-3);
+    // ...and the symmetry projection restores equivalent sites.
+    EXPECT_LT(std::abs(sym.N[0] - sym.N[1]), 1e-8);
+    EXPECT_LT(std::abs(sym.zeta[0] - sym.zeta[1]), 1e-8);
+    EXPECT_NEAR(sym.N[0] + sym.N[1], [&] {
+        double ne = 0.0;
+        for (double v : t.rho)
+            ne += v * t.grid.dV();
+        return ne;
+    }(), 1e-8);
+}

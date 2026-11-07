@@ -147,6 +147,30 @@ MbisState compute_mbis(const std::vector<double>& rho, const Grid& grid,
             zn[a] = (na > 1e-12 && mr > 1e-12) ? 3.0 * na / mr : st.zeta[a];
             res = std::max(res, std::abs(na - st.N[a]));
         }
+        if (cfg.symmetrize)
+        {
+            // Symmetry projection for equivalent atoms (same valence charge):
+            // average the population/exponent so a non-primitive cell cannot
+            // break the physically equivalent sites.  Use temporaries so the
+            // sum is not polluted by earlier in-place assignments.
+            std::vector<double> Ns(nat, 0.0), zs(nat, 0.0);
+            for (int a = 0; a < nat; ++a)
+            {
+                int na = 0;
+                double nm = 0.0, zm = 0.0;
+                for (int b = 0; b < nat; ++b)
+                    if (std::abs(atoms[b].Zval - atoms[a].Zval) < 1e-12)
+                    {
+                        nm += Nn[b];
+                        zm += zn[b];
+                        ++na;
+                    }
+                Ns[a] = nm / na;
+                zs[a] = zm / na;
+            }
+            Nn = Ns;
+            zn = zs;
+        }
         for (int a = 0; a < nat; ++a)
         {
             st.N[a] = (1.0 - cfg.damp) * st.N[a] + cfg.damp * Nn[a];

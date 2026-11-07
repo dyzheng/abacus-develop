@@ -7495,3 +7495,19 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   k 取 `κ/χ`（κ≈1–10）+ damping。与近零模分析一致。
 - **文件**：`tools/mbis_alm_compare.cpp`、`2026-10-30-mbis-alm-comparison.md`、本日志。
 - **下一轮**：半真实密度对比 + ESolver 薄接口层。
+
+## 2026-10-30 (S6.28): 独立 MBIS 模块真实 cube 验证（C++ vs Python）+ bug 修复
+
+- **cube 驱动** `tools/mbis_alm_cube.cpp`（独立编译）：读 ABACUS cube（支持非对角
+  体素、单/双自旋），跑 `compute_mbis`/`observe`。
+- **LiCl（真实 cube）**：C++ 与 Python **逐位一致**（Li N=2.044663、ζ=4.59730；
+  Cl N=7.955367、ζ=1.61196；ΣN=10.000030）。
+- **Fe2 Γ（真实自旋 cube, images=2+对称化）**：N=16/16、ζ=1.07789、自旋 ±2.647，
+  与 Python 一致。
+- **修复 bug**：对称化在同一循环内原地覆盖 `Nn/zn` → 平均被二次污染，导致
+  ζ=1.253/1.766 非对称。改为临时数组后整体赋值；新增回归测试
+  `SymmetrizeRestoresEquivalence`（raw 非对称 → sym 对称），gtest **8/8 PASS**（~5 s）。
+- **意义**：交叉验证 C++↔Python 抓到真实 bug；模块在真实密度上正确且解耦。
+- **文件**：`tools/mbis_alm_cube.cpp`、`mbis_alm.cpp`（修复）、`test/mbis_alm_test.cpp`
+  （回归）、`2026-10-30-mbis-alm-real-cube-validation.md`、本日志。
+- **下一轮**：半真实响应上的 ALM 对比；ESolver 薄 adapter（mock 先测）。

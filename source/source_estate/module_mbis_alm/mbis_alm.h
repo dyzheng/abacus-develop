@@ -64,8 +64,9 @@ struct MbisConfig
     int max_iter = 300;
     double tol = 1e-9;
     double damp = 0.5;
-    int images = 0;         ///< 0: direct atoms; 1: +/- one periodic cell
+    int images = 0;         ///< 0: direct atoms; N: +/- N periodic cells
     double init_zeta = 1.5;
+    bool symmetrize = false; ///< average N,zeta over atoms of the same species
 };
 
 /// MBIS state: per-atom weights on the grid, populations and Slater exponents.
