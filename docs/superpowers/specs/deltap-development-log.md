@@ -7591,3 +7591,20 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - **文件**：`weight_grid.{h,cpp}`、`source_estate/CMakeLists.txt`、
   `2026-10-30-mbis-weightgrid-backend.md`、本日志。
 - **下一轮**：`constraint_weight_type mbis` + `constraint_loop` 外层重建 + 自由密度一致性。
+
+## 2026-10-30 (S6.35): 阶段3——MBIS 接入 constraint_loop（运行验证）
+
+- **接通** `constraint_weight_type mbis`：`constraint_loop` 构造时 MBIS→`init_zero()`
+  （首个注入在参考相 mu=0，零权重精确）；`observe()` 用当前密度
+  `build_mbis(Σrho)` 重建。`weight_grid` 加 `MBIS/init_zero/build_mbis` + 温启动；
+  `mbis_alm` 加 `warm_N/warm_zeta`；`mbis_alm.cpp` 入主库。
+- **运行**：LiCl PW serial delta=0 **收敛**（ETOT −643.9756525，与 Becke 一致），
+  `CONSTRAINT_AUDIT q=t=2.0323`（target 来自初始密度；自由密度的 MBIS=2.0447 已由
+  cube 验证，差 0.012 是 delta 语义）。
+- **待办**：绝对值 target=2.0 在 900 s 未收敛（q=2.032, mu=0.05, res=0.032）——
+  ①每次 observe 重建 MBIS 太贵→按外层/K 次节流；②现有 ALM 的 mu 步长未按 MBIS
+  响应 chi 标定→接 `calibrate_alm` 探针；③MPI gather；④力/应力与 bcc symmetrize。
+- **文件**：`constraint_io.cpp`、`constraint_loop.cpp`、`weight_grid.{h,cpp}`、
+  `mbis_alm.{h,cpp}`、`source_estate/CMakeLists.txt`、
+  `2026-10-30-mbis-constraint-loop-integration.md`、本日志。
+- **下一轮**：节流 + ALM 响应标定，使受约束运行收敛。

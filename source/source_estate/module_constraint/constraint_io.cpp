@@ -1240,7 +1240,7 @@ ConfigStatus configure_constraint(ConstraintConfig& cfg,
     // Guard: validated recipes only.  A wrong recipe must abort loudly
     // rather than silently run an unvalidated partition.
     if (weight_type != "becke" && weight_type != "hirshfeld"
-        && weight_type != "hirshfeld_periodic")
+        && weight_type != "hirshfeld_periodic" && weight_type != "mbis")
     {
         error = "constraint_weight_type=\"" + weight_type
                 + "\" is not implemented (use \"becke\" or \"hirshfeld\")";

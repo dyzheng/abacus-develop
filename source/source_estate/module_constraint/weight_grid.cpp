@@ -986,13 +986,17 @@ void WeightGrid::build_mbis(const std::vector<double>& rho_total)
 
     mbis_alm::MbisConfig cfg;
     cfg.cutoff = 1.0e6;
-    cfg.max_iter = 2000;
-    cfg.tol = 1e-11;
-    cfg.damp = 0.3;
+    cfg.max_iter = 200;   // warm-started after the first call
+    cfg.tol = 1e-8;
+    cfg.damp = 0.5;
     cfg.images = 0;
     cfg.init_zeta = 1.0;
     cfg.symmetrize = false;  // bcc conventional cells need this; set by future input
+    cfg.warm_N = mbis_N_;
+    cfg.warm_zeta = mbis_zeta_;
     const mbis_alm::MbisState st = mbis_alm::compute_mbis(rho_total, grid, atoms, cfg);
+    mbis_N_ = st.N;
+    mbis_zeta_ = st.zeta;
 
     w_.assign(nat_, std::vector<double>(nrxx_, 0.0));
     rem_.assign(nrxx_, 0.0);
@@ -1016,6 +1020,15 @@ void WeightGrid::build_mbis(const std::vector<double>& rho_total)
         local_maxdev = std::max(local_maxdev, std::abs(s - 1.0));
     }
     maxdev_ = local_maxdev;
+}
+
+void WeightGrid::init_zero()
+{
+    w_.assign(nat_, std::vector<double>(nrxx_, 0.0));
+    rem_.assign(nrxx_, 0.0);
+    max_rem_ = 0.0;
+    cw_.assign(constraint_atoms_.size(), std::vector<double>(nrxx_, 0.0));
+    maxdev_ = 0.0;
 }
 
 } // namespace constraint

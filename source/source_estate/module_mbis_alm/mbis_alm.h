@@ -67,6 +67,8 @@ struct MbisConfig
     int images = 0;         ///< 0: direct atoms; N: +/- N periodic cells
     double init_zeta = 1.5;
     bool symmetrize = false; ///< average N,zeta over atoms of the same species
+    std::vector<double> warm_N;    ///< optional per-atom warm-start populations
+    std::vector<double> warm_zeta; ///< optional per-atom warm-start exponents
 };
 
 /// MBIS state: per-atom weights on the grid, populations and Slater exponents.

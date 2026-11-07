@@ -491,10 +491,11 @@ void ConstraintLoop::build_geometry(
     // map exactly as before.
     else
     {
-        const WeightType wt = (cfg_.weight_type == "hirshfeld"
-                               || cfg_.weight_type == "hirshfeld_periodic")
-                                  ? WeightType::HirshfeldPeriodic
-                                  : WeightType::Becke;
+        WeightType wt = WeightType::Becke;
+        if (cfg_.weight_type == "hirshfeld" || cfg_.weight_type == "hirshfeld_periodic")
+            wt = WeightType::HirshfeldPeriodic;
+        else if (cfg_.weight_type == "mbis")
+            wt = WeightType::MBIS;  // density-dependent; built in observe()
         wg_.reset(new WeightGrid(ucell, rho_basis, radii, wt));
         std::vector<std::vector<int>> atom_map;
         for (const ConstraintSpec& spec : specs)
@@ -502,7 +503,17 @@ void ConstraintLoop::build_geometry(
             atom_map.push_back(spec.atoms);
         }
         wg_->set_constraint_atoms(atom_map);
-        wg_->build();
+        // Branch: MBIS weights depend on the density, so they are rebuilt in
+        // observe(); before the first density they are zero (the reference
+        // phase injects mu=0, so a zero weight is exact there).
+        if (wt == WeightType::MBIS)
+        {
+            wg_->init_zero();
+        }
+        else
+        {
+            wg_->build();
+        }
     }
 
     // ---- Module A (M1) passive dipole reporter arming --------------------
@@ -1012,6 +1023,17 @@ void ConstraintLoop::observe(const int iter, const double* const* rho,
                 "the auto-placed dipole saw plane is within 1 Bohr of an "
                 "atom; set saw_pos explicitly in the target file");
         }
+    }
+    // Branch: MBIS weights are density-dependent; rebuild them from the
+    // current density so the observed Q is consistent with this density.
+    // (build_mbis is serial-only for now; MPI callers must gather.)
+    if (wg_->is_mbis())
+    {
+        std::vector<double> rho_total(wg_->nrxx(), 0.0);
+        for (int is = 0; is < nspin; ++is)
+            for (int ir = 0; ir < wg_->nrxx(); ++ir)
+                rho_total[ir] += rho[is][ir];
+        wg_->build_mbis(rho_total);
     }
     // Stage-A reading: every alpha reads with its own channel signs, so a
     // mixed charge+spin list is observed in one integral (A2 core).

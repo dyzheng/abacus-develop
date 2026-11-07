@@ -126,8 +126,13 @@ MbisState compute_mbis(const std::vector<double>& rho, const Grid& grid,
     MbisState st;
     st.N.resize(nat);
     st.zeta.assign(nat, cfg.init_zeta);
+    const bool have_warm = (static_cast<int>(cfg.warm_N.size()) == nat
+                            && static_cast<int>(cfg.warm_zeta.size()) == nat);
     for (int a = 0; a < nat; ++a)
-        st.N[a] = atoms[a].Zval;
+    {
+        st.N[a] = have_warm ? cfg.warm_N[a] : atoms[a].Zval;
+        st.zeta[a] = have_warm ? cfg.warm_zeta[a] : cfg.init_zeta;
+    }
 
     for (int it = 0; it < cfg.max_iter; ++it)
     {

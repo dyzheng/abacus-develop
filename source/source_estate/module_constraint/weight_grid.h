@@ -59,6 +59,8 @@ class WeightGrid
     void build();
     /// Density-dependent MBIS weights (serial pool only; MPI caller must gather).
     void build_mbis(const std::vector<double>& rho_total);
+    /// Size the weight fields to zero (used before the first density is available).
+    void init_zero();
 
     // (Re)compute the position-derivative grid d w_alpha / d R_J (M6 force
     // kernel input).  Pure function of the geometry like build(); must be
@@ -220,6 +222,7 @@ class WeightGrid
 
     // Per-atom Gaussian reference-density parameters and the finite image
     // list used by the periodic lattice sum.
+    std::vector<double> mbis_N_, mbis_zeta_;  // warm start across observe() calls
     std::vector<double> hirshfeld_sigma_;
     std::vector<double> hirshfeld_cutoff_;
     std::vector<double> hirshfeld_charge_;
