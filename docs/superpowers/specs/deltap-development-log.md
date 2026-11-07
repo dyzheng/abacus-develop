@@ -7369,3 +7369,19 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - **文件**：`tools/mbis_prototype.py`、
   `docs/superpowers/specs/2026-10-30-mbis-prototype-licl-comparison.md`、本日志。
 - **下一轮**：移植为 C++ 只读观察量并与 ORCA 对照；重查 PW target_l 不变性。
+
+## 2026-10-30 (S6.20): 公式级分析——allocation 偏离 MBIS 的原因与对齐
+
+- **代码确认**：`alloc_lcao_report.cpp:375-404` 的 `n_tot=Tr[ρW_i]`（纯空间权重，
+  与 target_l 无关）、`n_c=n_tot−n_T`（差，非算符互补）；
+  `alloc_constraint_lcao.cpp:178-182` 约束**必须≥1 目标轨道**（纯空间约束不可用）。
+- **差异三源**（按贡献）：(A) pro-density 宽度（主因，~1 e：固定 Gaussian/Becke
+  vs MBIS 迭代 Slater，Li ζ=4.60 紧凑）；(B) 权重是否依赖密度（几何固定 vs
+  随 ρ 自洽）；(C) 轨道投影 `Q_i`（基组依赖、非局域，影响**约束算符**而非报告总量，
+  对电荷多余，适合磁壳层矩）。
+- **对齐步骤**：①去投影（`A_i=W_i`，放开零目标限制）；②`W_i→w^MBIS`（Slater +
+  KL/均值半径迭代），则 `q_i=∫w^MBISρ≡MBIS`；③加外层迭代（密度依赖权重）+
+  冻结分区力；④多极输出。→ 预期 LiCl Li 由 3.0833 变为 2.0447（与原型一致）。
+- **取舍**：按观测量拆分——电荷用纯空间 MBIS；自旋/壳层用投影或 spin-MBIS；
+  混合 allocation 仅用于"壳层+空间互补"建模，不追求与 MBIS 数值一致。
+- **文件**：`2026-10-30-allocation-vs-mbis-formula-analysis.md`、本日志。
