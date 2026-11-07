@@ -7385,3 +7385,19 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - **取舍**：按观测量拆分——电荷用纯空间 MBIS；自旋/壳层用投影或 spin-MBIS；
   混合 allocation 仅用于"壳层+空间互补"建模，不追求与 MBIS 数值一致。
 - **文件**：`2026-10-30-allocation-vs-mbis-formula-analysis.md`、本日志。
+
+## 2026-10-30 (S6.21): MBIS 对 Fe 的有效性 与 轨道分离（概念/公式）
+
+- **结论**：①MBIS 对 Fe 有效（电荷/多极/**空间自旋** `m_A=∫w_A m`），但给的是
+  **空间盆量**，不等于 onsite d 投影（预计 ~2.8–3.2 vs ~3.7–3.8）。②标准 MBIS
+  **不分解 l**（s-only、纯实空间）；要分离轨道贡献需再加"**盆内 l 投影**"：
+  `n_{A,l}=∫w_A ρ_l`、`m_{A,l}=∫w_A m_l`（`ρ_A=w_Aρ` 上的球谐/NAO 投影）。
+- **为什么混合方案 Fe 行、LiCl 不行**：Fe 上 `q` 由 d 投影主导（互补仅 ~5.6%），
+  混合≈投影；LiCl 上主导的是固定 Gaussian/Becke 空间权重（Li 偏宽）→3.08 e，
+  且 Li 4s 弥散投影偏置 → 既非 MBIS 也非 Mulliken。
+- **建议架构（两步）**：MBIS 定原子间空间归属（电荷/偶极/ESP/空间自旋）+
+  盆内 l 投影定壳层贡献；`Q_i` 仅保留给需要 XMCD 口径的场合。盆内 l 投影
+  （作用于 `ρ_A=w_Aρ`）比 `Q_i`（作用于全体系、跨盆、基组依赖）更干净。
+- **验证计划**：Fe2 输出 `chgs1/2.cube` → MBIS 电荷/空间自旋 vs Becke/Mulliken/
+  投影；再加盆内 d 投影 vs 投影；LiCl 做 s/p 投影；与 ORCA 对照。
+- **文件**：`2026-10-30-mbis-feasibility-fe-and-orbital-separation.md`、本日志。
