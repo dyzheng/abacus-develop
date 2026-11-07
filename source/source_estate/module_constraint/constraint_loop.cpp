@@ -1029,18 +1029,32 @@ void ConstraintLoop::observe(const int iter, const double* const* rho,
     // (build_mbis is serial-only for now; MPI callers must gather.)
     if (wg_->is_mbis())
     {
-        // Throttle the MBIS KL rebuild: it is expensive (full-grid iteration)
-        // and would otherwise starve the FD response probe that arms k.  Build
-        // on the first observation and every mbis_rebuild_period_ thereafter;
-        // the warm start makes later rebuilds cheap.
-        if (mbis_obs_count_++ % mbis_rebuild_period_ == 0)
+        // Reference phase: mu = 0, so the constraint potential is exactly zero
+        // and rebuilding the density-dependent weights every observation is
+        // harmless (it only makes the reported Q reference-consistent).
+        // Constrained phase: the weights enter the Hamiltonian, so build once
+        // from the converged reference density and FREEZE (frozen-weight ALM).
+        // This keeps the constrained SCF stationary and lets the FD response
+        // probe arm k.
+        if (phase_ == LoopPhase::REFERENCE)
+        {
+            mbis_constrained_built_ = false;
+        }
+        const bool rebuild = (phase_ == LoopPhase::REFERENCE)
+                             || !mbis_constrained_built_;
+        if (rebuild)
         {
             std::vector<double> rho_total(wg_->nrxx(), 0.0);
             for (int is = 0; is < nspin; ++is)
                 for (int ir = 0; ir < wg_->nrxx(); ++ir)
                     rho_total[ir] += rho[is][ir];
             wg_->build_mbis(rho_total);
+            if (phase_ == LoopPhase::CONSTRAINED)
+            {
+                mbis_constrained_built_ = true;
+            }
         }
+        (void)mbis_obs_count_;
     }
     // Stage-A reading: every alpha reads with its own channel signs, so a
     // mixed charge+spin list is observed in one integral (A2 core).
