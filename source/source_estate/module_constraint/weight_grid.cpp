@@ -8,6 +8,9 @@
 #include "source_base/global_function.h"
 #include "source_base/parallel_reduce.h"
 #include "source_base/module_grid/partition.h"
+#include "source_base/tool_quit.h"
+#include "source_estate/module_mbis_alm/mbis_alm.h"
+#include "source_estate/module_mbis_alm/pw_grid_bridge.h"
 
 namespace constraint
 {
@@ -937,6 +940,82 @@ void WeightGrid::set_constraint_atoms(
             }
         }
     }
+}
+
+void WeightGrid::build_mbis(const std::vector<double>& rho_total)
+{
+    // Serial-only first integration: the MBIS KL iteration uses the full grid.
+    // MPI callers must gather chr.rho to rank 0 (or make compute_mbis
+    // MPI-aware) before running this.
+    if (rho_basis_->poolnproc != 1)
+    {
+        ModuleBase::WARNING_QUIT("WeightGrid::build_mbis",
+            "MBIS weights currently require a serial pool; gather the density.");
+    }
+    if (static_cast<int>(rho_total.size()) != rho_basis_->nxyz)
+    {
+        ModuleBase::WARNING_QUIT("WeightGrid::build_mbis",
+            "rho_total must be the full FFT-grid density (size nxyz).");
+    }
+    int n[3] = {rho_basis_->nx, rho_basis_->ny, rho_basis_->nz};
+    mbis_alm::Vec3 a[3];
+    a[0] = mbis_alm::Vec3{ucell_.latvec.e11 * ucell_.lat0,
+                          ucell_.latvec.e12 * ucell_.lat0,
+                          ucell_.latvec.e13 * ucell_.lat0};
+    a[1] = mbis_alm::Vec3{ucell_.latvec.e21 * ucell_.lat0,
+                          ucell_.latvec.e22 * ucell_.lat0,
+                          ucell_.latvec.e23 * ucell_.lat0};
+    a[2] = mbis_alm::Vec3{ucell_.latvec.e31 * ucell_.lat0,
+                          ucell_.latvec.e32 * ucell_.lat0,
+                          ucell_.latvec.e33 * ucell_.lat0};
+    const mbis_alm::Grid grid = mbis_alm::make_grid(n, a);
+
+    std::vector<mbis_alm::Vec3> R;
+    std::vector<double> Zv;
+    R.reserve(nat_);
+    Zv.reserve(nat_);
+    for (int it = 0; it < ucell_.ntype; ++it)
+        for (int ia = 0; ia < ucell_.atoms[it].na; ++ia)
+        {
+            const ModuleBase::Vector3<double>& t = ucell_.atoms[it].tau[ia];
+            R.push_back(mbis_alm::Vec3{t.x * ucell_.lat0, t.y * ucell_.lat0,
+                                       t.z * ucell_.lat0});
+            Zv.push_back(ucell_.atoms[it].ncpp.zv);
+        }
+    const std::vector<mbis_alm::Atom> atoms = mbis_alm::make_atoms(R, Zv);
+
+    mbis_alm::MbisConfig cfg;
+    cfg.cutoff = 1.0e6;
+    cfg.max_iter = 2000;
+    cfg.tol = 1e-11;
+    cfg.damp = 0.3;
+    cfg.images = 0;
+    cfg.init_zeta = 1.0;
+    cfg.symmetrize = false;  // bcc conventional cells need this; set by future input
+    const mbis_alm::MbisState st = mbis_alm::compute_mbis(rho_total, grid, atoms, cfg);
+
+    w_.assign(nat_, std::vector<double>(nrxx_, 0.0));
+    rem_.assign(nrxx_, 0.0);
+    max_rem_ = 0.0;
+    for (int iat = 0; iat < nat_; ++iat)
+        for (int ir = 0; ir < nrxx_; ++ir)
+            w_[iat][ir] = st.w[iat][ir];
+
+    cw_.assign(constraint_atoms_.size(), std::vector<double>(nrxx_, 0.0));
+    for (std::size_t alpha = 0; alpha < constraint_atoms_.size(); ++alpha)
+        for (const int iat : constraint_atoms_[alpha])
+            for (int ir = 0; ir < nrxx_; ++ir)
+                cw_[alpha][ir] += w_[iat][ir];
+
+    double local_maxdev = 0.0;
+    for (int ir = 0; ir < nrxx_; ++ir)
+    {
+        double s = 0.0;
+        for (int iat = 0; iat < nat_; ++iat)
+            s += w_[iat][ir];
+        local_maxdev = std::max(local_maxdev, std::abs(s - 1.0));
+    }
+    maxdev_ = local_maxdev;
 }
 
 } // namespace constraint

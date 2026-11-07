@@ -14,7 +14,8 @@ enum class WeightType
     Becke,             // Becke partition with heteronuclear size adjustment (M0)
     DipoleSaw,         // M5: dipole weight -Lz*saw(z/Lz), global one-constraint
     DipoleMolecular,   // M5: dipole weight -r_axis, global one-constraint
-    HirshfeldPeriodic  // S5: periodic promolecule density ratio with C2 window
+    HirshfeldPeriodic, // S5: periodic promolecule density ratio with C2 window
+    MBIS               // iterative Slater stockholder (density-dependent)
 };
 
 /**
@@ -56,6 +57,8 @@ class WeightGrid
     // (Re)compute all weights and the partition-of-unity audit.  Calling this
     // twice with the same geometry yields bit-identical results.
     void build();
+    /// Density-dependent MBIS weights (serial pool only; MPI caller must gather).
+    void build_mbis(const std::vector<double>& rho_total);
 
     // (Re)compute the position-derivative grid d w_alpha / d R_J (M6 force
     // kernel input).  Pure function of the geometry like build(); must be
@@ -120,6 +123,7 @@ class WeightGrid
                || type_ == WeightType::DipoleMolecular;
     }
     bool is_hirshfeld() const { return type_ == WeightType::HirshfeldPeriodic; }
+    bool is_mbis() const { return type_ == WeightType::MBIS; }
 
     // S5.2 explicit remainder channel.  Atom weights are q_i/(sum q + q_rem);
     // the remainder weight closes the partition even in vacuum regions where

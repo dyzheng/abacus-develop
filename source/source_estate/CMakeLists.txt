@@ -45,6 +45,7 @@ list(APPEND objects
     setup_estate_pw.cpp
     update_pot.cpp
     module_constraint/weight_grid.cpp
+    module_mbis_alm/mbis_alm.cpp
     module_constraint/constraint_observe.cpp
     module_constraint/mu_solver.cpp
     module_constraint/constraint_io.cpp

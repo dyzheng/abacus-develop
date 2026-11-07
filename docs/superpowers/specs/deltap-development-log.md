@@ -7579,3 +7579,15 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - **文件**：`pw_grid_bridge.h`、`test/mbis_alm_test.cpp`、
   `2026-10-30-mbis-grid-bridge.md`、本日志。
 - **下一轮**：`WeightGrid::build_mbis` + 自由密度一致性（vs cube）。
+
+## 2026-10-30 (S6.34): 阶段2——WeightGrid 新增 MBIS 后端（编译集成）
+
+- **改动**：`weight_grid.h/.cpp` 增 `WeightType::MBIS` + `build_mbis(rho_total)`
+  （复用 `mbis_alm::compute_mbis`，grid/atoms 用 `pw_grid_bridge`，填 `w_/cw_/maxdev_`）；
+  `source_estate/CMakeLists.txt` 把 `module_mbis_alm/mbis_alm.cpp` 加入主库 objects。
+- **验证**：`cmake --build build_rel` 成功、`abacus_basic_para` 链接；现有路径不变。
+  组成件单测已绿（11/11）。运行期一致性待阶段3。
+- **限制**：MPI 需 gather（当前串行守卫）；bcc 需 symmetrize 开关；力/应力未接。
+- **文件**：`weight_grid.{h,cpp}`、`source_estate/CMakeLists.txt`、
+  `2026-10-30-mbis-weightgrid-backend.md`、本日志。
+- **下一轮**：`constraint_weight_type mbis` + `constraint_loop` 外层重建 + 自由密度一致性。
