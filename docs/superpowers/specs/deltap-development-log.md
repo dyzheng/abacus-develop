@@ -7553,3 +7553,17 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - **文件**：`mbis_alm_adapter.{h,cpp}`、`test/mbis_alm_adapter_test.cpp`、
   `tools/mbis_alm_e2e.cpp`、`2026-10-30-mbis-alm-calibration.md`、本日志。
 - **下一轮**：真实 KS 最小 adapter（`solve`=固定乘子 SCF + 返回 N/M）。
+
+## 2026-10-30 (S6.32): 真实集成方案 + 模块就绪检查
+
+- **就绪检查**：`mbis_alm.cpp`+`adapter.cpp` 在 `-Wall -Wextra` 下零告警；
+  修复 `run_alm_mbis` 的 `spin0` 未用告警。
+- **集成方案**（`2026-10-30-mbis-alm-integration-plan.md`，可执行）：
+  复用 `module_constraint` 的注入/观测/ALM，只加 `WeightType::MBIS`；
+  数据转换（`PW_Basis/Charge/UnitCell → Grid/rho/atoms`，`dv_i=a_i/n_i`）；
+  每个外层 μ 步重建权重；MPI 先 gather→rank0→scatter；k 用探针标定、`kmin<1/|χ|`；
+  力/应力用模块核+冻结参数；周期用 images+symmetrize；分 5 阶段任务与测试计划。
+- **待补**：`constraint_stress`、MPI-aware MBIS、`PW_Basis→Grid` bridge+单测。
+- **文件**：`mbis_alm_adapter.cpp`（告警修复）、
+  `2026-10-30-mbis-alm-integration-plan.md`、本日志。
+- **下一轮**：按阶段 1 实现网格 bridge + 单测，再 `WeightGrid::build_mbis`。

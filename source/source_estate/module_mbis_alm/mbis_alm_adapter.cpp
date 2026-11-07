@@ -52,6 +52,7 @@ DriverResult run_alm_mbis(const Grid& grid, const std::vector<Atom>& atoms,
                           const DriverConfig& cfg)
 {
     DriverResult r;
+    (void)spin0;  // the host solver returns the spin observables; kept for API symmetry
     const int nat = static_cast<int>(atoms.size());
     r.state = compute_mbis(rho0, grid, atoms, cfg.mbis);
 
