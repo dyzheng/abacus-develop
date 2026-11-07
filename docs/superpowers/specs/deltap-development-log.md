@@ -7511,3 +7511,18 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - **文件**：`tools/mbis_alm_cube.cpp`、`mbis_alm.cpp`（修复）、`test/mbis_alm_test.cpp`
   （回归）、`2026-10-30-mbis-alm-real-cube-validation.md`、本日志。
 - **下一轮**：半真实响应上的 ALM 对比；ESolver 薄 adapter（mock 先测）。
+
+## 2026-10-30 (S6.29): MBIS+ALM 薄 adapter 与端到端测试
+
+- **新增** `module_mbis_alm/mbis_alm_adapter.{h,cpp}`：`SolverAdapter::solve(st,alm_c,alm_s)`
+  + `run_alm_mbis` 驱动。内层由宿主按 `mu_eff=mu+k(Q−t)` 自洽求解；驱动只做外层
+  `mu+=k(Q−t)`。
+- **mock 求解器**：响应 `Q=Q0+J·coef`，`J` 由真实 MBIS 权重重叠构造；内层精确解
+  `(I−KJ)coef=mu+k(Q0−t)`。端到端测试 2/2 PASS（含非 AFM 自旋目标、电荷仍精确）。
+- **教训**：①只发一次势的旧驱动会发散，必须内层自洽；②`k|J|∈(0,2)`，**默认
+  `kmin=0.1` 对大响应不安全**（本 mock |J|~1e3 → 需 kmin≪1/|J|）；真实体系标定
+  同样注意。
+- **测试**：核心 8 + adapter 2 = **10/10 PASS**（独立编译，无 ABACUS 依赖）。
+- **文件**：`mbis_alm_adapter.{h,cpp}`、`test/mbis_alm_adapter_test.cpp`、
+  `test/CMakeLists.txt`、`2026-10-30-mbis-alm-adapter-e2e.md`、本日志。
+- **下一轮**：真实 KS 最小 adapter（PW/LCAO 包一层，只负责注入/observe）+ Fe2/LiCl 标定。
