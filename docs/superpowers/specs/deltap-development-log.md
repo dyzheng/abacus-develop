@@ -7484,3 +7484,14 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   `source_estate/CMakeLists.txt`、本日志。
 - **下一轮**：在独立模块上跑"ALM on MBIS"的合成/真实密度算法对比（vs 纯 Lagrange/penalty），
   再接 ESolver（另立接口层，保持核心解耦）。
+
+## 2026-10-30 (S6.27): ALM vs Lagrange vs penalty 独立对比
+
+- **驱动** `tools/mbis_alm_compare.cpp`（独立编译，仅依赖 `module_mbis_alm`）。
+- **模型** `Q=Q0−χv`，`χ={10,2,0.5,0.01}`（近零模），target 0，tol 1e-10：
+  - Lagrange（全局 α=0.1）**23016 步**；ALM k=1/χ **34 步**、k=10/χ **10 步**（均精确）；
+  - penalty-only 有偏（k=1/χ：0.50；k=10/χ：0.0909）。
+- **结论**：ALM 用按模态 k 解决近零模导致的慢收敛；纯 penalty 仅可作预条件；
+  k 取 `κ/χ`（κ≈1–10）+ damping。与近零模分析一致。
+- **文件**：`tools/mbis_alm_compare.cpp`、`2026-10-30-mbis-alm-comparison.md`、本日志。
+- **下一轮**：半真实密度对比 + ESolver 薄接口层。
