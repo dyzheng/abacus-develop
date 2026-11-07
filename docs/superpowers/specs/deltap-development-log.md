@@ -7526,3 +7526,17 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - **文件**：`mbis_alm_adapter.{h,cpp}`、`test/mbis_alm_adapter_test.cpp`、
   `test/CMakeLists.txt`、`2026-10-30-mbis-alm-adapter-e2e.md`、本日志。
 - **下一轮**：真实 KS 最小 adapter（PW/LCAO 包一层，只负责注入/observe）+ Fe2/LiCl 标定。
+
+## 2026-10-30 (S6.30): 真实 cube 半真实 e2e（ALM vs Lagrange vs penalty）
+
+- **工具** `tools/mbis_alm_e2e.cpp` + 共享 `tools/mbis_cube_io.h`：
+  真实 cube → MBIS → 权重重叠响应 J=-gO·O → `chi=J_AA` 自动标定 k → ALM/ Lagrange/penalty。
+- **LiCl**（chi: Li −0.389, Cl −6.21，异质）：ALM **25 步** vs Lagrange **295 步**（~12×），
+  penalty 偏差 0.0995。
+- **Fe2**（chi≈−20.5，同质）：Lagrange **12 步** vs ALM 21 步（ALM 反而略慢），
+  penalty 偏差 0.089。
+- **结论修正**："ALM 总是更快"不成立；ALM 收益来自**按模态 k**，只在响应异质
+  （软/硬、近零模）时显著。penalty 永远有偏。k 必须逐体系标定，`kmin` 不可过大。
+- **文件**：`tools/mbis_alm_e2e.cpp`、`tools/mbis_cube_io.h`、
+  `2026-10-30-mbis-alm-e2e-real-cube.md`、本日志。
+- **下一轮**：真实 KS 最小 adapter（PW/LCAO 包一层），验证异质性结论与 k 标定。
