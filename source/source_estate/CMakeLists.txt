@@ -95,6 +95,7 @@ if(BUILD_TESTING)
     add_subdirectory(test_mpi)
   endif()
   add_subdirectory(module_constraint/test)
+  add_subdirectory(module_mbis_alm/test)
 endif()
 
 if(ENABLE_LCAO)

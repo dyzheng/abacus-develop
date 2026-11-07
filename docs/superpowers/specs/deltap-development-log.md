@@ -7465,3 +7465,22 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - **实施**：启用 ALM；k 按响应标定（勿用固定默认，否则重现 200 步负结果）；
   damping；自适应 k（`k|χ|∈[0.5,2]`）；inexact ALM；物理判据诊断。
 - **文件**：`2026-10-30-mbis-alm-penalty-plus-lagrange.md`、本日志。
+
+## 2026-10-30 (S6.26): 独立 MBIS+ALM 模块与单元测试
+
+- **新模块** `source/source_estate/module_mbis_alm/`（仅 STL，不接入主求解器）：
+  `mbis_alm.h/.cpp` —— MBIS 权重（Slater+KL 定点，支持一般体素网格/周期镜像）、
+  电荷/自旋观测量、约束势、**冻结参数力**（解析权重导数）、独立 `Alm` 控制器
+  （`arm(k=kappa/|χ|)`、`mu_eff`、`damping`、`update`、`energy_correction`）。
+- **独立 gtest** `test/mbis_alm_test.cpp`：7 项全部 PASS——
+  单位分解、电荷/自旋求和规则、MBIS 均值半径定点、约束势、**力有限差分**、
+  ALM 一步精确收敛、penalty-only 偏差。
+- **构建接入**：`module_mbis_alm/test/CMakeLists.txt`（`AddTest`），在
+  `source_estate/CMakeLists.txt` 的 `BUILD_TESTING` 分支下 `add_subdirectory`。
+  模块**未**加入主库 objects（保持解耦，仅供独立测试/算法对比）。
+- **验证**：`g++ -std=c++14 ... mbis_alm.cpp test.cpp -lgtest -lgtest_main` →
+  7 tests PASSED。
+- **文件**：`source/source_estate/module_mbis_alm/{mbis_alm.h,mbis_alm.cpp,test/*}`、
+  `source_estate/CMakeLists.txt`、本日志。
+- **下一轮**：在独立模块上跑"ALM on MBIS"的合成/真实密度算法对比（vs 纯 Lagrange/penalty），
+  再接 ESolver（另立接口层，保持核心解耦）。
