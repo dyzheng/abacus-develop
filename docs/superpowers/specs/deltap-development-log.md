@@ -7448,3 +7448,20 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   MBIS 为空间/基组鲁棒的联合约束。
 - **文件**：`2026-10-30-mbis-charge-spin-constraint-algorithm.md`、本日志。
 - **下一轮**：实现 `WeightType::MBIS` + 双通道 > 注入/力核；小体系验证。
+
+## 2026-10-30 (S6.25): penalty + constraint 合并 = 增广拉格朗日（ALM）
+
+- **结论**：不是两套并行方案，而是 **ALM**：`E_ALM=E_KS+Σ[μ(Q−t)+(k/2)(Q−t)²]`，
+  `v=Σ(μ+k(Q−t))w=Σμ_eff w`；penalty 提供曲率/加速、Lagrange 更新消偏置并
+  保证精确。代码 `AlmController` 已实现（`arm(chi): k=kappa/|χ|`、`damping=1/(1+k|χ|)`、
+  `mu_eff/update/energy_correction`）。
+- **为何纯 constraint 慢**：Uzawa 收敛率由 Schur 补 `S` 决定，近零模/软模时慢或
+  2-周期；penalty 把约束方向曲率抬到 `A+k|χ|²`，`S→S/(1+kS)`，外层缩 `|1−kχ|`，
+  `k|χ|≈1` 最快。
+- **纯 penalty 的偏差**：`Q*−t=O(1/k)`，污染 N/M/力/应力；故必须配 Lagrange 更新。
+  **ALM 在收敛点用物理乘子 `μ*=μ_eff` → 力/应力精确**；未收敛用 `μ_eff` 并报残差。
+- **双通道**：`v_con,σ=−Σ[(μ^c+k^c(N−N̄))+σ(μ^s+k^s(M−M̄))]w`；k^c/k^s 各自 arm；
+  R8 冗余用 N−1+全局模式。
+- **实施**：启用 ALM；k 按响应标定（勿用固定默认，否则重现 200 步负结果）；
+  damping；自适应 k（`k|χ|∈[0.5,2]`）；inexact ALM；物理判据诊断。
+- **文件**：`2026-10-30-mbis-alm-penalty-plus-lagrange.md`、本日志。
