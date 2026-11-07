@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "source_estate/module_mbis_alm/mbis_alm.h"
+#include "source_estate/module_mbis_alm/pw_grid_bridge.h"
 
 using namespace mbis_alm;
 
@@ -261,4 +262,36 @@ TEST(MbisAlmTest, SymmetrizeRestoresEquivalence)
             ne += v * t.grid.dV();
         return ne;
     }(), 1e-8);
+}
+
+TEST(MbisAlmTest, GridBridgeMatchesLattice)
+{
+    auto det3 = [](const Vec3 a[3]) {
+        return a[0].x * (a[1].y * a[2].z - a[1].z * a[2].y)
+             - a[0].y * (a[1].x * a[2].z - a[1].z * a[2].x)
+             + a[0].z * (a[1].x * a[2].y - a[1].y * a[2].x);
+    };
+    // Fe2 bcc conventional cell (Bohr): a_i = LATTICE_CONSTANT * vectors.
+    {
+        int n[3] = {30, 30, 30};
+        Vec3 a[3] = {{8.19, 4.095, 4.095}, {4.095, 8.19, 4.095}, {4.095, 4.095, 8.19}};
+        const Grid g = make_grid(n, a);
+        EXPECT_EQ(g.n[0], 30);
+        EXPECT_EQ(g.n[2], 30);
+        EXPECT_NEAR(g.dV() * 30.0 * 30.0 * 30.0, std::abs(det3(a)), 1e-9);
+        const Vec3 p = g.point(29, 0, 0);
+        EXPECT_NEAR(p.x, 29.0 * 8.19 / 30.0, 1e-12);
+        EXPECT_NEAR(p.y, 29.0 * 4.095 / 30.0, 1e-12);
+    }
+    // LiCl cubic box (Bohr): L = 15 * LATTICE_CONSTANT.
+    {
+        int n[3] = {192, 192, 192};
+        const double L = 15.0 * 1.8897261254578284;
+        Vec3 a[3] = {{L, 0.0, 0.0}, {0.0, L, 0.0}, {0.0, 0.0, L}};
+        const Grid g = make_grid(n, a);
+        EXPECT_NEAR(g.dV() * 192.0 * 192.0 * 192.0, L * L * L, 1e-3);
+    }
+    const auto at = make_atoms({{0.0, 0.0, 0.0}, {1.0, 2.0, 3.0}}, {16.0, 7.0});
+    EXPECT_DOUBLE_EQ(at[0].Zval, 16.0);
+    EXPECT_DOUBLE_EQ(at[1].R.z, 3.0);
 }

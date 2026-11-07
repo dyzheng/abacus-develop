@@ -7567,3 +7567,15 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - **文件**：`mbis_alm_adapter.cpp`（告警修复）、
   `2026-10-30-mbis-alm-integration-plan.md`、本日志。
 - **下一轮**：按阶段 1 实现网格 bridge + 单测，再 `WeightGrid::build_mbis`。
+
+## 2026-10-30 (S6.33): 阶段1——网格约定核对 + `pw_grid_bridge.h`
+
+- **网格约定确认**（真实数据）：`a_i=LATTICE_CONSTANT*LATTICE_VECTORS_i`、
+  `dv_i=a_i/n_i`、`ir=(ix*n1+iy)*n2+iz`。LiCl（28.34589 vs 192*0.147635=28.34592）、
+  Fe2（(8.19,4.095,4.095)=30*dv_0）精确吻合。
+- **新增** `module_mbis_alm/pw_grid_bridge.h`：`make_grid(n,a)`、`make_atoms(R,Zval)`。
+- **单测** `GridBridgeMatchesLattice`（体积=det(a)、point 映射、atoms）；核心 9/9、
+  adapter 2/2 = 11/11 PASS。
+- **文件**：`pw_grid_bridge.h`、`test/mbis_alm_test.cpp`、
+  `2026-10-30-mbis-grid-bridge.md`、本日志。
+- **下一轮**：`WeightGrid::build_mbis` + 自由密度一致性（vs cube）。
