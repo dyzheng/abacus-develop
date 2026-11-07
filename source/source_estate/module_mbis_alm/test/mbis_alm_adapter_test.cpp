@@ -238,9 +238,8 @@ TEST(MbisAlmAdapterTest, ChargeAndSpinBothConstrained)
         alm_c.set_target(a, t_c[a]);
         alm_s.set_target(a, t_s[a]);
     }
-    alm_c.arm(chi, 1.0, 1e-10, 1e9);
-    alm_s.arm(chi, 1.0, 1e-10, 1e9);
     MockSolver mock(q0.N, q0.M, J, J);
+    calibrate_alm(mock, st, alm_c, alm_s, q0, 1e-4);
 
     DriverConfig cfg;
     cfg.mbis = mbis_cfg();

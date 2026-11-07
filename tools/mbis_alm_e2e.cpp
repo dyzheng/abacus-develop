@@ -293,10 +293,8 @@ int main(int argc, char** argv)
         alm_c.set_target(a, t_c[a]);
         alm_s.set_target(a, t_s[a]);
     }
-    alm_c.arm(chi, 1.0, 1e-10, 1e9);
-    alm_s.arm(chi, 1.0, 1e-10, 1e9);
-
     LinearSolver solver(q0.N, q0.M, J, J);
+    calibrate_alm(solver, st, alm_c, alm_s, q0, 1e-4, 1.0, 1e-10, 1e9);
     DriverConfig dcfg;
     dcfg.mbis = cfg;
     dcfg.max_outer = 2000;

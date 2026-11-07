@@ -7540,3 +7540,16 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - **文件**：`tools/mbis_alm_e2e.cpp`、`tools/mbis_cube_io.h`、
   `2026-10-30-mbis-alm-e2e-real-cube.md`、本日志。
 - **下一轮**：真实 KS 最小 adapter（PW/LCAO 包一层），验证异质性结论与 k 标定。
+
+## 2026-10-30 (S6.31): 探针式 k 标定 `calibrate_alm`
+
+- **新增** `mbis_alm::calibrate_alm`：有限差分探针测 `chi=dQ/dmu` 并 arm ALM；
+  宿主只需在 k=0（固定乘子）下做一次普通 SCF。
+- **验证**：mock 上 `chi` 恢复解析 `J_aa`（gtest）；真实 cube（LiCl/Fe2）
+  探针 k 与解析一致（LiCl 0.161/2.57；Fe2 0.0487），ALM 仍 25/21 步。
+  核心 8 + adapter 2 = 10/10 PASS。
+- **意义**：真实 adapter 无需解析响应，直接调 `calibrate_alm`；结合响应异质性
+  结论决定 k/kmin。
+- **文件**：`mbis_alm_adapter.{h,cpp}`、`test/mbis_alm_adapter_test.cpp`、
+  `tools/mbis_alm_e2e.cpp`、`2026-10-30-mbis-alm-calibration.md`、本日志。
+- **下一轮**：真实 KS 最小 adapter（`solve`=固定乘子 SCF + 返回 N/M）。

@@ -6,6 +6,45 @@
 namespace mbis_alm
 {
 
+void calibrate_alm(SolverAdapter& solver, const MbisState& st,
+                   Alm& alm_c, Alm& alm_s, const Observables& Q0,
+                   double delta, double kappa, double kmin, double kmax)
+{
+    const int nat = static_cast<int>(st.w.size());
+    std::vector<double> chi_c(nat, 0.0), chi_s(nat, 0.0);
+    for (int a = 0; a < nat; ++a)
+    {
+        {
+            Alm pc, ps;
+            pc.resize(nat);
+            ps.resize(nat);
+            for (int b = 0; b < nat; ++b)
+            {
+                pc.set_target(b, 0.0);
+                ps.set_target(b, 0.0);
+            }
+            pc.set_mu(a, delta);  // k = 0 -> mu_eff = mu
+            const Observables qp = solver.solve(st, pc, ps);
+            chi_c[a] = (qp.N[a] - Q0.N[a]) / delta;
+        }
+        {
+            Alm pc, ps;
+            pc.resize(nat);
+            ps.resize(nat);
+            for (int b = 0; b < nat; ++b)
+            {
+                pc.set_target(b, 0.0);
+                ps.set_target(b, 0.0);
+            }
+            ps.set_mu(a, delta);
+            const Observables qp = solver.solve(st, pc, ps);
+            chi_s[a] = (qp.M[a] - Q0.M[a]) / delta;
+        }
+    }
+    alm_c.arm(chi_c, kappa, kmin, kmax);
+    alm_s.arm(chi_s, kappa, kmin, kmax);
+}
+
 DriverResult run_alm_mbis(const Grid& grid, const std::vector<Atom>& atoms,
                           const std::vector<double>& rho0,
                           const std::vector<double>& spin0,

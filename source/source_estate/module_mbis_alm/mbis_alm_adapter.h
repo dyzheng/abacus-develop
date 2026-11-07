@@ -46,6 +46,16 @@ struct DriverResult
     double residual = 0.0;
 };
 
+/**
+ * @brief Probe-based k calibration: measure chi_a = dQ_a/dmu_a with a
+ * finite-difference solve at k=0, then arm both ALM controllers.
+ * This is what a real host solver calls before the outer ALM loop.
+ */
+void calibrate_alm(SolverAdapter& solver, const MbisState& st,
+                   Alm& alm_c, Alm& alm_s, const Observables& Q0,
+                   double delta = 1e-3, double kappa = 1.0,
+                   double kmin = 1e-8, double kmax = 1e9);
+
 DriverResult run_alm_mbis(const Grid& grid, const std::vector<Atom>& atoms,
                           const std::vector<double>& rho0,
                           const std::vector<double>& spin0,
