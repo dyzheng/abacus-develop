@@ -7416,3 +7416,17 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - **限制**：Fe cube 30³ 较粗；bcc 常规胞需镜像+对称化（否则 17.8/14.2 破缺）；
   周期小胞原子偶极不可用。
 - **文件**：`tools/mbis_prototype.py`、`2026-10-30-mbis-fe2-test.md`、本日志。
+
+## 2026-10-30 (S6.23): 盆内 l 投影实现 + Mulliken/投影 轨道分解对比（Fe2 Γ）
+
+- **实现**：`tools/mbis_l_projection.py`（DMR `out_dmk` + `.orb` 径向 + 球/平均半径，
+  m-不变 trace）；`n_{A,l}=Σ I^R_{nl,n'l} Tr_m[D^{(A,l)}_{n,n'}]`。
+- **结果（Fe1 自旋）**：d 分量 Mulliken **3.034**、投影 **2.985**、
+  **盆内 R=2.78(MBIS 平均半径) 3.069**（s/p/f 近零）；三者一致显示 d-主导。
+  R=6（轨道截断）高估 d=3.241；电荷 s 分量对 R 敏感。
+- **结论**：在 MBIS 平均半径处，盆内 l 分解与 Mulliken/投影一致，
+  支持"MBIS 空间 + 盆内 l 投影"两步架构。
+- **局限**：球（径向平均）近似、同原子 Löwdin 型度量；精确 `w_A(r)` 权重盆
+  需 C++ 加权重叠（`∫w_Aφφ`，复用 allocation 机制）；电荷总量<16 是球外密度。
+- **文件**：`tools/mbis_l_projection.py`、`2026-10-30-mbis-in-basin-l-projection-test.md`、本日志。
+- **下一轮**：C++ 真实权重盆 l 投影；径向平均权重改进；多体系稳健性。
