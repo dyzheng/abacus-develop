@@ -7401,3 +7401,18 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - **验证计划**：Fe2 输出 `chgs1/2.cube` → MBIS 电荷/空间自旋 vs Becke/Mulliken/
   投影；再加盆内 d 投影 vs 投影；LiCl 做 s/p 投影；与 ORCA 对照。
 - **文件**：`2026-10-30-mbis-feasibility-fe-and-orbital-separation.md`、本日志。
+
+## 2026-10-30 (S6.22): Fe2 MBIS 测试（四口径对比）
+
+- **设置**：Γ-only LCAO Fe2 自由态（delta=0 打印 ALLOC、target_l=2、out_chg/out_mul），
+  ETOT=-6787.961875；同一密度下 MBIS/Becke/d投影/Mulliken 对比。
+- **工具修复**：`tools/mbis_prototype.py` 支持**一般体素矩阵坐标**、周期镜像
+  `--images N`、同种原子对称化 `--symmetrize`（bcc 常规胞必需）；LiCl 回归逐位不变。
+- **结果（Fe1 自旋）**：**MBIS 2.647** < d投影 2.985 < Mulliken 3.082；
+  Becke 2.285。MBIS 电荷 16.00/16.00（中性）、ζ=1.08、ΣN=32、Σm≈0。
+- **结论**：MBIS 对 Fe **有效**（电荷/空间自旋良定义）；其自旋是**空间盆量**，
+  位于 Becke 与 d 投影之间、更靠近投影（因 Fe pro-density 被优化得更紧凑）。
+  **不是**纯 d 投影；要分离 d 贡献需 MBIS 盆内 l 投影（未实现，下一步）。
+- **限制**：Fe cube 30³ 较粗；bcc 常规胞需镜像+对称化（否则 17.8/14.2 破缺）；
+  周期小胞原子偶极不可用。
+- **文件**：`tools/mbis_prototype.py`、`2026-10-30-mbis-fe2-test.md`、本日志。
