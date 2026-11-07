@@ -1029,11 +1029,18 @@ void ConstraintLoop::observe(const int iter, const double* const* rho,
     // (build_mbis is serial-only for now; MPI callers must gather.)
     if (wg_->is_mbis())
     {
-        std::vector<double> rho_total(wg_->nrxx(), 0.0);
-        for (int is = 0; is < nspin; ++is)
-            for (int ir = 0; ir < wg_->nrxx(); ++ir)
-                rho_total[ir] += rho[is][ir];
-        wg_->build_mbis(rho_total);
+        // Throttle the MBIS KL rebuild: it is expensive (full-grid iteration)
+        // and would otherwise starve the FD response probe that arms k.  Build
+        // on the first observation and every mbis_rebuild_period_ thereafter;
+        // the warm start makes later rebuilds cheap.
+        if (mbis_obs_count_++ % mbis_rebuild_period_ == 0)
+        {
+            std::vector<double> rho_total(wg_->nrxx(), 0.0);
+            for (int is = 0; is < nspin; ++is)
+                for (int ir = 0; ir < wg_->nrxx(); ++ir)
+                    rho_total[ir] += rho[is][ir];
+            wg_->build_mbis(rho_total);
+        }
     }
     // Stage-A reading: every alpha reads with its own channel signs, so a
     // mixed charge+spin list is observed in one integral (A2 core).

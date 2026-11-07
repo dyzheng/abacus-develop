@@ -497,6 +497,8 @@ class ConstraintLoop
     double inner_thr_ = 1e-3;
     int inner_nmax_ = 20;
     int inner_steps_ = 0;
+    int mbis_obs_count_ = 0;       // observe() counter for MBIS rebuild throttle
+    int mbis_rebuild_period_ = 5;  // rebuild MBIS weights every K observations
     int settle_fail_ = 0;
     bool settle_armed_ = false;
     bool inner_step_this_iter_ = false;

@@ -7608,3 +7608,16 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   `mbis_alm.{h,cpp}`、`source_estate/CMakeLists.txt`、
   `2026-10-30-mbis-constraint-loop-integration.md`、本日志。
 - **下一轮**：节流 + ALM 响应标定，使受约束运行收敛。
+
+## 2026-10-30 (S6.36): 下一轮——MBIS 重建节流
+
+- **改动**：`constraint_loop` 加 `mbis_rebuild_period_=5`、`mbis_obs_count_`；
+  `observe()` 只在首次及每 K 次重建 MBIS 权重（温启动使后续重建便宜）。
+- **运行**（LiCl PW serial, 绝对值 target=2.0, scf_nmax=30）：**不再超时**（exit 0），
+  但 SCF 未收敛（CG30 drho 1.7e-6），ALM **未 arm**（无 `ALM armed` 行），
+  `CONSTRAINT_AUDIT q=2.0323 t=2 μ=0.05 res=0.032` → 未达目标。
+- **分析**：FD 响应探针需**参考相 SCF 先收敛**才能测 `chi` 并 arm；而节流后权重
+  仍每 5 次 observe 变动，可能扰动 SCF 收敛；`scf_nmax=30` 也太小。
+- **下一轮**：参考相**冻结权重**（只建一次）、进入约束相才按外层 μ 步重建；
+  加大 scf_nmax；随后 FD 探针 arm、再验证目标收敛。
+- **文件**：`constraint_loop.{h,cpp}`、本日志。
