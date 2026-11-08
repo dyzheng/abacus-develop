@@ -7660,3 +7660,12 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - **结论**：85 与 13 **不是同类对比**（观测量/目标不同 + bcc 需对称化）。
 - **下一步**：给 `build_mbis` 暴露 images/symmetrize；用 MBIS-native 目标做同口径对比。
 - **文件**：`2026-10-30-mbis-alm-convergence-steps.md`、本日志。
+
+## 2026-10-30 (S6.40): ecutwfc=100 / LCAO 收敛测试补充
+
+- **PW ecutwfc 100**：serial ~39 s/步；2400 s 到 83 步（q=2.0039, res 3.9e-3），未跑完。
+- **LCAO（ecutwfc 100 网格）**：**~5.5 s/步**（比 PW 快 ~7×）；冻结权重下一次 KL，
+  100 步到 q=2.0216（res 2.2e-2），信任半径停在 0.2 未增长，未收敛。
+- **结论**：慢的是 PW 大基组串行 SCF，不是 MBIS；LCAO 每步快，但约束外层需更大
+  初始信任半径/更多步才能收敛。`constraint_step_max 0.5` 复测被中止。
+- **文件**：`2026-10-30-mbis-alm-convergence-steps.md`、本日志。
