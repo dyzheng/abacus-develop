@@ -11,6 +11,7 @@
 #include "source_base/kernels/dsp/dsp_connector.h"
 // #include "source_base/module_container/ATen/kernels/lapack.h"
 
+#include <ATen/kernels/blas.h>
 #include <ATen/kernels/lapack.h>
 
 #include "source_hsolver/kernels/hegvd_op.h"
@@ -18,9 +19,11 @@
 #include "source_hsolver/kernels/bpcg_kernel_op.h" // precondition_op
 
 #include <cmath>
+#include <complex>
 #include <iomanip>
 #include <limits>
 #include <sstream>
+#include <stdexcept>
 #include <vector>
 
 #ifdef __MPI
@@ -30,6 +33,202 @@
 #endif
 
 using namespace hsolver;
+
+namespace
+{
+// The overlap matrix is assembled in the caller's precision. These floors
+// describe the smallest eigenvalue that should be inverted by the fallback:
+// single precision loses about six decimal digits, double precision about
+// twelve, and the absolute floor protects the 1/sqrt(s) transform when the
+// whole reduced basis is nearly rank deficient.
+constexpr double single_precision_overlap_floor = 1.0e-6;
+constexpr double double_precision_overlap_floor = 1.0e-12;
+constexpr double absolute_overlap_floor = 1.0e-14;
+
+// Convert the solver's scalar type to a double-precision complex value and
+// back. The fallback path always diagonalizes in double, even when the
+// Davidson basis is stored in single precision.
+template <typename T>
+struct DavSubspaceFallbackCast;
+
+template <>
+struct DavSubspaceFallbackCast<double>
+{
+    static std::complex<double> to_complex(const double& value)
+    {
+        return std::complex<double>(value, 0.0);
+    }
+
+    static double from_complex(const std::complex<double>& value)
+    {
+        return value.real();
+    }
+};
+
+template <>
+struct DavSubspaceFallbackCast<std::complex<float>>
+{
+    static std::complex<double> to_complex(const std::complex<float>& value)
+    {
+        return std::complex<double>(static_cast<double>(value.real()), static_cast<double>(value.imag()));
+    }
+
+    static std::complex<float> from_complex(const std::complex<double>& value)
+    {
+        return std::complex<float>(static_cast<float>(value.real()), static_cast<float>(value.imag()));
+    }
+};
+
+template <>
+struct DavSubspaceFallbackCast<std::complex<double>>
+{
+    static std::complex<double> to_complex(const std::complex<double>& value)
+    {
+        return value;
+    }
+
+    static std::complex<double> from_complex(const std::complex<double>& value)
+    {
+        return value;
+    }
+};
+
+// Rebuild the projected generalized eigenproblem in double precision and solve
+// it in the span with a well-conditioned overlap matrix. This is only used as
+// a recovery path when the device heuristic diagonalization rejects a
+// single-precision overlap matrix.
+template <typename T>
+bool dav_subspace_double_fallback(const int nbase,
+                                  const int nband,
+                                  const int nbase_x,
+                                  const std::vector<T>& hcc,
+                                  const std::vector<T>& scc,
+                                  std::vector<double>& eigenvalues,
+                                  std::vector<T>& vcc)
+{
+    using Real = typename GetTypeReal<T>::type;
+    using Cast = DavSubspaceFallbackCast<T>;
+
+    if (nbase <= 0 || nband <= 0 || nband > nbase)
+    {
+        return false;
+    }
+
+    const int n = nbase;
+    std::vector<std::complex<double>> h(n * n, std::complex<double>(0.0, 0.0));
+    std::vector<std::complex<double>> s(n * n, std::complex<double>(0.0, 0.0));
+    for (int i = 0; i < n; ++i)
+    {
+        for (int j = 0; j < n; ++j)
+        {
+            h[i + j * n] = Cast::to_complex(hcc[i * nbase_x + j]);
+            s[i + j * n] = Cast::to_complex(scc[i * nbase_x + j]);
+        }
+    }
+
+    std::vector<double> s_eigenvalues(n, 0.0);
+    try
+    {
+        container::kernels::lapack_heevd<std::complex<double>, base_device::DEVICE_CPU>()(
+            n, s.data(), n, s_eigenvalues.data());
+    }
+    catch (const std::runtime_error&)
+    {
+        return false;
+    }
+
+    const double s_max = s_eigenvalues[n - 1];
+    if (!(s_max > 0.0) || !std::isfinite(s_max))
+    {
+        return false;
+    }
+
+    // The overlap matrix was assembled in the caller's precision. Discard
+    // eigenvalues below the corresponding noise floor instead of inverting an
+    // ill-conditioned direction.
+    const double relative_tol
+        = (sizeof(Real) < sizeof(double)) ? single_precision_overlap_floor : double_precision_overlap_floor;
+    const double tol = std::max(relative_tol * s_max, absolute_overlap_floor);
+    int retained = 0;
+    for (int i = n - 1; i >= 0 && s_eigenvalues[i] > tol; --i)
+    {
+        ++retained;
+    }
+    if (retained < nband)
+    {
+        // Keep the requested number of bands even when the tail is close to
+        // the noise floor, but regularize those directions below.
+        retained = nband;
+    }
+    if (retained > n)
+    {
+        return false;
+    }
+
+    const int offset = n - retained;
+    const double floor_value = std::max(tol, absolute_overlap_floor);
+    std::vector<double> inv_sqrt(retained, 0.0);
+    for (int i = 0; i < retained; ++i)
+    {
+        const double value = std::max(s_eigenvalues[offset + i], floor_value);
+        inv_sqrt[i] = 1.0 / std::sqrt(value);
+    }
+
+    // X = U * diag(1/sqrt(s)); solve (X^H H X) y = lambda y in the retained span.
+    const std::complex<double> one(1.0, 0.0);
+    const std::complex<double> zero(0.0, 0.0);
+    const std::complex<double>* u_kept = s.data() + offset * n;
+
+    std::vector<std::complex<double>> hu(n * retained, std::complex<double>(0.0, 0.0));
+    std::vector<std::complex<double>> projected(retained * retained, std::complex<double>(0.0, 0.0));
+    container::kernels::blas_gemm<std::complex<double>, base_device::DEVICE_CPU>()(
+        'N', 'N', n, retained, n, &one, h.data(), n, u_kept, n, &zero, hu.data(), n);
+    container::kernels::blas_gemm<std::complex<double>, base_device::DEVICE_CPU>()(
+        'C', 'N', retained, retained, n, &one, u_kept, n, hu.data(), n, &zero, projected.data(), retained);
+
+    for (int i = 0; i < retained; ++i)
+    {
+        for (int j = 0; j < retained; ++j)
+        {
+            projected[i + j * retained] *= inv_sqrt[i] * inv_sqrt[j];
+        }
+    }
+
+    std::vector<double> projected_eigenvalues(retained, 0.0);
+    try
+    {
+        container::kernels::lapack_heevd<std::complex<double>, base_device::DEVICE_CPU>()(
+            retained, projected.data(), retained, projected_eigenvalues.data());
+    }
+    catch (const std::runtime_error&)
+    {
+        return false;
+    }
+
+    std::vector<std::complex<double>> scaled(retained * retained, std::complex<double>(0.0, 0.0));
+    for (int i = 0; i < retained; ++i)
+    {
+        for (int j = 0; j < retained; ++j)
+        {
+            scaled[i + j * retained] = inv_sqrt[i] * projected[i + j * retained];
+        }
+    }
+
+    std::vector<std::complex<double>> coefficients(n * nband, std::complex<double>(0.0, 0.0));
+    container::kernels::blas_gemm<std::complex<double>, base_device::DEVICE_CPU>()(
+        'N', 'N', n, nband, retained, &one, u_kept, n, scaled.data(), retained, &zero, coefficients.data(), n);
+
+    for (int band = 0; band < nband; ++band)
+    {
+        eigenvalues[band] = projected_eigenvalues[band];
+        for (int row = 0; row < n; ++row)
+        {
+            vcc[band * nbase_x + row] = Cast::from_complex(coefficients[row + band * n]);
+        }
+    }
+    return true;
+}
+} // namespace
 
 template <typename T, typename Device>
 Diago_DavSubspace<T, Device>::Diago_DavSubspace(const std::vector<Real>& precondition_in,
@@ -676,7 +875,36 @@ void Diago_DavSubspace<T, Device>::diag_zhegvx(const int& nbase,
         if (this->diag_comm.rank == 0)
         {
             syncmem_complex_op()(this->d_scc, scc, nbase * this->nbase_x);
-            ct::kernels::lapack_hegvd<T, ct_Device>()(nbase, this->nbase_x, this->hcc, this->d_scc, this->d_eigenvalue, this->vcc);
+            try
+            {
+                ct::kernels::lapack_hegvd<T, ct_Device>()(
+                    nbase, this->nbase_x, this->hcc, this->d_scc, this->d_eigenvalue, this->vcc);
+            }
+            catch (const std::runtime_error&)
+            {
+                // A single-precision overlap matrix can become numerically
+                // indefinite after many subspace expansions. Rebuild the
+                // reduced problem in double and solve only the
+                // well-conditioned part instead of aborting the SCF.
+                std::vector<T> h_host(static_cast<size_t>(nbase) * this->nbase_x, T(0));
+                std::vector<T> s_host(static_cast<size_t>(nbase) * this->nbase_x, T(0));
+                std::vector<T> vcc_host(static_cast<size_t>(this->nbase_x) * nband, T(0));
+                std::vector<double> eigenvalues_host(this->nbase_x, 0.0);
+                syncmem_d2h_op()(h_host.data(), this->hcc, h_host.size());
+                syncmem_d2h_op()(s_host.data(), scc, s_host.size());
+                if (!dav_subspace_double_fallback<T>(
+                        nbase, nband, this->nbase_x, h_host, s_host, eigenvalues_host, vcc_host))
+                {
+                    throw;
+                }
+                std::vector<Real> eigenvalues_real(this->nbase_x, Real(0));
+                for (int i = 0; i < this->nbase_x; ++i)
+                {
+                    eigenvalues_real[i] = static_cast<Real>(eigenvalues_host[i]);
+                }
+                syncmem_var_h2d_op()(this->d_eigenvalue, eigenvalues_real.data(), this->nbase_x);
+                syncmem_h2d_op()(this->vcc, vcc_host.data(), vcc_host.size());
+            }
             syncmem_var_d2h_op()((*eigenvalue_iter).data(), this->d_eigenvalue, this->nbase_x);
         }
 #endif
