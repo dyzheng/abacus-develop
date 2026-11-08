@@ -7648,3 +7648,15 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   差异，非 bug。
 - **下一步**：把 `constraint_trust_region 1` 设为 MBIS 用例默认；补 Fe2 自旋约束
   回归；继续力/应力、MPI。
+
+## 2026-10-30 (S6.39): 收敛步数对比（MBIS+ALM vs DeltaSpin）
+
+- **LiCl 电荷（MBIS）**：**85 SCF 步**全收敛（res=6.5e-6，q=2.0000065，μ=0.826，
+  信任半径 1，零拒绝；ecutwfc 50/dav_subspace）。
+- **BCC-Fe 自旋（MBIS @±3.8）**：**>200 步未收敛**（信任半径塌至 2e-7、20 拒绝；
+  q=0.075 vs 7.92）。根因：①bcc 常规胞 MBIS 分区未对称化（images/symmetrize 未接）；
+  ②MBIS 空间自旋（自然~2.65）≠ DeltaSpin onsite 投影，±3.8 是投影口径目标、可能不可达。
+- **DeltaSpin 投影（Fe2 @±3.8）**：**13 SCF 步**（每原子 3.8001）。
+- **结论**：85 与 13 **不是同类对比**（观测量/目标不同 + bcc 需对称化）。
+- **下一步**：给 `build_mbis` 暴露 images/symmetrize；用 MBIS-native 目标做同口径对比。
+- **文件**：`2026-10-30-mbis-alm-convergence-steps.md`、本日志。
