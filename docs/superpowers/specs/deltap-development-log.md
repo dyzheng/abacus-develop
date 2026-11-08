@@ -7669,3 +7669,11 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - **结论**：慢的是 PW 大基组串行 SCF，不是 MBIS；LCAO 每步快，但约束外层需更大
   初始信任半径/更多步才能收敛。`constraint_step_max 0.5` 复测被中止。
 - **文件**：`2026-10-30-mbis-alm-convergence-steps.md`、本日志。
+
+## 2026-10-30 (S6.41): mixing_beta 对照（LCAO）
+
+- β=0.4：q=2.0216, μ=0.280, 半径 0.2, drho 2.2e-8；β=0.2：q=2.0245, μ=0.291,
+  半径 0.2, drho 2.3e-8。**减小 mixing_beta 无改善（略差）**。
+- 内层 SCF 均已收敛（drho~2e-8），瓶颈是**外层信任半径停在 0.2**；杠杆是
+  `constraint_step_max`/信任域/`calibrate_alm`，非 mixing。
+- **文件**：`2026-10-30-mbis-alm-convergence-steps.md`（§6）、本日志。
