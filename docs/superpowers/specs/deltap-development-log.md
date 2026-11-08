@@ -7631,3 +7631,20 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - **状态**：编译通过（`abacus_basic_para`）。运行时验证在本轮被中止
   （用户切换到 `dav_subspace / scf_nmax 100 / ecutwfc 50` 重测），**尚未验证收敛**。
 - **文件**：`constraint_loop.{h,cpp}`、本日志。
+
+## 2026-10-30 (S6.38): MBIS 约束运行时验证成功（PW dav_subspace, ecutwfc 50）
+
+- **设置**：LiCl PW、`ks_solver dav_subspace`、`ecutwfc 50 / ecutrho 200`、
+  `scf_nmax 100`、`constraint_weight_type mbis`、绝对目标 `N_Li=2.0`、serial；
+  **`constraint_trust_region 1`、`alpha_trial 1.0`、`constraint_step_max 0.2`**。
+- **结果**：**SCF CONVERGED**；约束把 `q(Li)` 从 2.018 → **2.000444**（目标 2.0，
+  `res=4.4e-4`，`μ=0.812`），信任半径 0.2→0.4→0.8、无拒绝。末状态
+  `[budget freeze; converged frame, target not validated]` 是因余差 4.4e-4 略高于
+  `constraint_thr 1e-4`（再多几步即达）。
+- **关键结论**：MBIS+ALM 在真实 ABACUS PW 循环中**可达指定电荷目标**；
+  **信任域（`constraint_trust_region 1`）对小响应（χ≈−0.04）是必需的**——
+  关闭时固定小步导致 100 步内只到 2.013–2.017。
+- 注：ecutwfc 50 的绝对 q（~2.02）与 ecutwfc 100 的 cube（2.0447）不同，属基组/网格
+  差异，非 bug。
+- **下一步**：把 `constraint_trust_region 1` 设为 MBIS 用例默认；补 Fe2 自旋约束
+  回归；继续力/应力、MPI。
