@@ -45,3 +45,26 @@ LCAO LiCl: constraint_weight_type mbis, target 2.0, constraint_trust_region 1,
            constraint_step_max {0.2, 0.8}, scf_nmax 100, -np 1
 观察 FD_JACOBIAN 行与 seed 后 audit 的 q。
 ```
+
+## 5. 确认结果（参考相重建版本，LCAO LiCl，目标 2.0）
+
+先前"μ=0.76 时 q 不动"的异常来自**冻结权重取自初始密度**（试验性未提交改动）。
+回退到已提交的**参考相重建**版本后：
+
+| 量 | 值 |
+|---|---|
+| 参考 q（μ≈0） | **2.039**（≈ cube 收敛自由密度 2.0447 ✓） |
+| 响应 χ | ~0.016（μ 0.349→0.749，q 2.0393→2.0328） |
+| 信任半径 | 0.2→0.4（增长、零拒绝） |
+| 100 步末 | q=2.033（目标 2.0，需更大 μ≈2.4） |
+
+**确认**：
+1. 注入链路正确：`inject_potential_lcao` → `ConstraintInjectPW::inject(*wg_, mu_eff_, channels_, v_eff)`
+   （用 MBIS `cw_`）→ `pelec->pot->get_eff_v()` → Hsolver；`V=Σμ cw_` 确实进 LCAO 势。
+2. `cw_` 正确：参考 q=2.039 与 cube 2.0447 一致。
+3. 冻结权重的"零响应"是**初始密度权重不匹配**的假象；参考相重建后响应一致。
+4. **LCAO 的约束响应（χ≈0.016）比 PW 小**，需要很大的 μ（≈2.4）；100 步不够。
+   **不是 bug**，是响应幅度 + 步长/预算问题。
+
+**下一步**：把外层步长（信任域/Newton，或 `constraint_mu_max`/迭代预算）按 χ≈0.016
+放大；或接受 PW（ecutwfc 50，85 步）作为主平台，LCAO 仅作加速探索（每步 5.5 s）。
