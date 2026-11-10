@@ -7744,3 +7744,14 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - 数学：`F(μ)` 凹/饱和、`χ(μ)` 单调降；远目标 `t<F_min` 无解，近饱和时 Newton 失效。
 - **主平台应为 PW**；试验性改动已回退。
 - **文件**：`2026-10-30-lcao-mbis-saturation.md`、本日志。
+
+## 2026-10-30 (S6.48): 纠正"饱和"结论 + 发现 in-SCF ALM 快路径
+
+- **撤回**"LCAO 饱和/2.0 不可达"：基于未收敛 SCF；2.0 是近目标（Δq=0.045）。
+- **外层已 DIIS 式**：PW 残差 0.032→0.0086→0.00054→0.00003（每步降 10–16×）。
+- **84 步来自结构开销**（参考+FD 探针+3–4 次约束 SCF，每次 10–15 步），非外层慢。
+- **关键**：`alm_mode_ = (cfg_.mu_schedule == "alm")`。`constraint_mu_schedule alm`
+  启用 **in-SCF ALM**（probe arm k → 罚项/mu_eff 每 SCF 迭代内更新）→ 约束与密度
+  一次 SCF 收敛（~30–50 步），这才是 DIIS 式。之前默认调度走了旧 secant（84 步）。
+- **下一步**：跑 `constraint_mu_schedule alm` 计数（本轮被中止）。
+- **文件**：`2026-10-30-mbis-solver-correction-and-alm.md`、saturation 文档顶部撤回注、本日志。
