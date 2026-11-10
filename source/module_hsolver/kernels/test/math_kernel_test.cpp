@@ -725,6 +725,77 @@ TEST_F(TestModuleHsolverMathKernel, matrixSetToAnother_op_gpu)
     delete_memory_op()(gpu_ctx, device_B);
 }
 
+TEST_F(TestModuleHsolverMathKernel, gemm_op_host_scalar_alignment_gpu)
+{
+    using T = std::complex<double>;
+    struct alignas(16) HostScalar
+    {
+        double padding;
+        T value;
+    };
+
+    // std::complex<double> is only 8-byte aligned inside this 16-byte struct,
+    // while cuDoubleComplex requires 16-byte alignment. A single-column
+    // product exercises the cuBLAS scalar-read path used by the production
+    // DeltaSpin solver.
+    HostScalar alpha{0.0, T(1.0, 0.0)};
+    HostScalar beta{0.0, T(0.0, 0.0)};
+
+    const int m = 257;
+    const int n = 1;
+    const int k = 64;
+    const int lda = 264;
+    const int ldb = 72;
+    const int ldc = 264;
+
+    std::vector<T> A(static_cast<size_t>(lda) * m, T(0.0, 0.0));
+    std::vector<T> B(static_cast<size_t>(ldb) * n, T(0.0, 0.0));
+    std::vector<T> C0(static_cast<size_t>(ldc) * n, T(0.0, 0.0));
+    std::vector<T> C(static_cast<size_t>(ldc) * n, T(0.0, 0.0));
+    A[0] = T(2.0, 1.0);
+    A[1] = T(-0.5, 0.75);
+    B[0] = T(3.0, -1.0);
+    for (int row = 0; row < m; ++row)
+    {
+        C0[row] = T(0.1 * row - 0.2, 0.05);
+    }
+
+    T* dA = nullptr;
+    T* dB = nullptr;
+    T* dC = nullptr;
+    resize_memory_op()(gpu_ctx, dA, A.size());
+    resize_memory_op()(gpu_ctx, dB, B.size());
+    resize_memory_op()(gpu_ctx, dC, C.size());
+    synchronize_memory_op()(gpu_ctx, cpu_ctx, dA, A.data(), A.size());
+    synchronize_memory_op()(gpu_ctx, cpu_ctx, dB, B.data(), B.size());
+
+    hsolver::createGpuBlasHandle();
+    for (int repetition = 0; repetition < 2; ++repetition)
+    {
+        if (repetition == 1)
+        {
+            alpha.value = T(2.0, -0.5);
+            beta.value = T(0.25, 0.75);
+        }
+        synchronize_memory_op()(gpu_ctx, cpu_ctx, dC, C0.data(), C0.size());
+        hsolver::gemm_op<T, base_device::DEVICE_GPU>()(
+            gpu_ctx, 'N', 'N', m, n, k, &alpha.value, dA, lda, dB, ldb, &beta.value, dC, ldc);
+        synchronize_memory_op_gpu()(cpu_ctx, gpu_ctx, C.data(), dC, C.size());
+        for (int row = 0; row < m; ++row)
+        {
+            const T product = (row == 0 ? A[0] : (row == 1 ? A[1] : T(0.0, 0.0))) * B[0];
+            const T expected = alpha.value * product + beta.value * C0[row];
+            SCOPED_TRACE(::testing::Message() << "repetition=" << repetition << " row=" << row);
+            EXPECT_LT(std::abs(C[row] - expected), 1e-12);
+        }
+    }
+    hsolver::destoryBLAShandle();
+
+    delete_memory_op()(gpu_ctx, dA);
+    delete_memory_op()(gpu_ctx, dB);
+    delete_memory_op()(gpu_ctx, dC);
+}
+
 #endif // __UT_USE_CUDA || __UT_USE_ROCM
 
 /*
