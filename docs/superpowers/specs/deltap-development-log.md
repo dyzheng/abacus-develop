@@ -7755,3 +7755,12 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   一次 SCF 收敛（~30–50 步），这才是 DIIS 式。之前默认调度走了旧 secant（84 步）。
 - **下一步**：跑 `constraint_mu_schedule alm` 计数（本轮被中止）。
 - **文件**：`2026-10-30-mbis-solver-correction-and-alm.md`、saturation 文档顶部撤回注、本日志。
+
+## 2026-10-30 (S6.49): in-SCF ALM（alm 调度）负结果
+
+- `constraint_mu_schedule alm`：`ALM armed k=1.667`，但反复 `ALM dampen: drho growing,
+  k halved` ×7（1.67→~0.013），罚项过刚 → charge sloshing → 100 步未收敛（q≈2.021）。
+- 对比：`outer` 调度 84 步稳定收敛（外层残差每步降一个量级）。
+- **结论**：本 MBIS 电荷约束**不宜用 in-SCF penalty ALM**；用 outer Newton + `scf_thr 1e-6`
+  （非精确内层）+ 大 h 试探，可到 ~2–3 次求解/40–60 步；2 次求解 ~20–30 步是下界。
+- **文件**：`2026-10-30-alm-in-scf-result.md`、本日志。
