@@ -84,6 +84,9 @@ struct MbisState
 MbisState compute_mbis(const std::vector<double>& rho, const Grid& grid,
                        const std::vector<Atom>& atoms, const MbisConfig& cfg);
 
+/// Number of detected translation-group cosets (1 = none beyond identity).
+int mbis_coset_count(const Grid& grid, const std::vector<Atom>& atoms);
+
 /**
  * @brief Multi-start global-min selection: run the MBIS KL fixed point from
  * several initial widths and return the solution with the lowest KL objective

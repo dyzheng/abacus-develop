@@ -134,17 +134,13 @@ std::vector<Vec3> image_translations(const Grid& grid, int images,
     const Vec3 c1 = grid.n[1] * grid.dv[1];
     const Vec3 c2 = grid.n[2] * grid.dv[2];
     const double cell[9] = {c0.x, c0.y, c0.z, c1.x, c1.y, c1.z, c2.x, c2.y, c2.z};
-    const std::vector<Vec3> cosets = detect_cosets(atoms, cell, 1e-6);
-    const int R = std::max(0, images);
-    std::vector<Vec3> T;
-    for (int lx = -R; lx <= R; ++lx)
-        for (int ly = -R; ly <= R; ++ly)
-            for (int lz = -R; lz <= R; ++lz)
-                for (const Vec3& tau : cosets)
-                    T.push_back(lx * c0 + ly * c1 + lz * c2 + tau);
-    if (T.empty())
-        T.push_back(Vec3{0.0, 0.0, 0.0});
-    return T;
+    // Periodic sum over the finite translation-group cosets (e.g. bcc: {0, g}).
+    // Lattice images are redundant for a cell-periodic pro and would
+    // double-count (rescaling D); the cosets alone give the exact group sum.
+    (void)images;
+    std::vector<Vec3> G = detect_cosets(atoms, cell, 1e-6);
+    if (G.empty()) G.push_back(Vec3{0.0, 0.0, 0.0});
+    return G;
 }
 
 // Slater-s pro-density summed over periodic images (cutoff applied per image).
@@ -783,8 +779,13 @@ std::vector<double> newton_fp(std::vector<double> p, int nat,
             rhs[i] = -G[i];
         }
         std::vector<double> dx;
-        if (!solve_lin(A, rhs, dx))
+        // Guard: on a singular/size-mismatched system solve_lin leaves dx empty;
+        // fall back to a (damped) gradient step, never index an empty vector.
+        if (!solve_lin(A, rhs, dx) || static_cast<int>(dx.size()) != n)
+        {
+            dx.assign(n, 0.0);
             for (int i = 0; i < n; ++i) dx[i] = -G[i];
+        }
         double alpha = 1.0;
         bool ok = false;
         for (int ls = 0; ls < 30; ++ls)
@@ -945,5 +946,17 @@ double mbis_fixedpoint_spectral_radius(const std::vector<double>& rho,
     double rho_max = 0.0;
     for (const auto& z : roots) rho_max = std::max(rho_max, std::abs(z));
     return rho_max;
+}
+} // namespace mbis_alm
+
+namespace mbis_alm
+{
+int mbis_coset_count(const Grid& grid, const std::vector<Atom>& atoms)
+{
+    const Vec3 c0 = grid.n[0] * grid.dv[0];
+    const Vec3 c1 = grid.n[1] * grid.dv[1];
+    const Vec3 c2 = grid.n[2] * grid.dv[2];
+    const double cell[9] = {c0.x, c0.y, c0.z, c1.x, c1.y, c1.z, c2.x, c2.y, c2.z};
+    return static_cast<int>(detect_cosets(atoms, cell, 1e-6).size());
 }
 } // namespace mbis_alm

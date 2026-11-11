@@ -7896,3 +7896,14 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - 判稳正确判据 = `ρ(∂F/∂p)<1`（非自由 D Hessian、非谱范数）。
 - 12/12 PASS。**文件**：`mbis_alm.{h,cpp}`、`test/mbis_alm_test.cpp`、
   `2026-10-30-mbis-fixedpoint-spectral-radius.md`、本日志。
+
+## 2026-10-30 (S6.62): 真实 cube 稳定性 + Fe2 0.51 非等价澄清
+
+- LiCl 真实 cube：ρ(∂F/∂p)=0.295<1 **稳定**；N=2.0447/7.9554（与 Python 一致），Picard=Newton。
+- **Fe2 破缺根因**：STRU 用 `0.51 0.51 0.51`（非理想 `0.50`）⇒ 两 Fe 本来不等价，
+  `detect_cosets=1` 正确 ⇒ 不对称是输入使然，非 bug。
+- 修复 `newton_fp` 的 `dx` 越界（solve_lin 失败时未分配）→ 段错误。
+- `image_translations` 简化为周期协集群和（去掉晶格重复计数，修正 D 缩放）。
+- 12/12 PASS。下一步用 0.50 重跑 Fe2 验证 bcc 对称稳定不动点。
+- **文件**：`mbis_alm.cpp`、`mbis_alm.h`、`tools/mbis_alm_stability.cpp`、本日志、
+  `2026-10-30-mbis-real-cube-stability.md`。
