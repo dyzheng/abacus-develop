@@ -7775,3 +7775,10 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - **否决**：大 h 试探（过冲、J 不可靠）、in-SCF 罚项 ALM（k 太硬、dampen 塌缩）。
 - **有效杠杆：`scf_thr 1e-6`（匹配约束目标）**。
 - **文件**：`2026-10-30-mbis-50-steps-inexact-inner.md`、本日志。
+
+## 2026-10-30 (S6.51): 尝试日志 + scf_thr 1e-5 → 40 步
+
+- 汇总尝试日志 `2026-10-30-mbis-convergence-attempts-log.md`（11 次尝试及结论）。
+- **内层容差扫描**：1e-8→84、1e-6→50、**1e-5→40 步收敛**（res 9.9e-5 < 1e-4）。
+- Eisenstat–Walker 最优 `ε≈target/10`；50→40 步；~40–50 为非线性物理下界量级。
+- 下一步：外层 Anderson/DIIS 减修正次数；bcc symmetrize。
