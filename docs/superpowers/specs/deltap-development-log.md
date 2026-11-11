@@ -7794,3 +7794,16 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - 更正旧表述："bcc symmetrize 有助于收敛"→"让 Fe2 MBIS 自旋约束可被正确施加"。
 - 更干净：用**原胞**或把**原胞平移**纳入镜像求和；`symmetrize` 仅限真正等价位点。
 - **文件**：`2026-10-30-mbis-symmetrization-clarification.md`、本日志。
+
+## 2026-10-30 (S6.53): 完成 MBIS 位点等价修复 + 验证
+
+- **公式/设计**：`2026-10-30-mbis-site-equivalence-fix.md`（pro-density、权重、KL、
+  位点等价投影 `N_A←⟨N⟩_G, ζ_A←⟨ζ⟩_G`、与原胞镜像的关系）。
+- **代码**：新增 `constraint_mbis_symmetrize`（bool）、`constraint_mbis_images`（int）输入；
+  `WeightGrid::build_mbis` 用它们设置 `MbisConfig::{symmetrize,images}`；主库编译通过。
+- **验证（Fe2, PW, MBIS 自旋, 目标 ±2.8）**：修复前 q=0.075/7.92（破缺）；修复后
+  **q=−2.79984/+2.80022（对称、近达目标，res~2e-4，87 步 SCF 收敛）**。
+- **结论**：位点等价投影 + 周期镜像修好了 Fe2 MBIS 分区破缺；±3.8 是投影口径（不可达），
+  ±2.8（MBIS-native）良定收敛。该对称化与 SOC/时间反演无关。
+- **文件**：`input_parameter.h`、`read_input_item_other.cpp`、`weight_grid.cpp`、
+  `2026-10-30-mbis-site-equivalence-fix.md`、本日志。

@@ -817,6 +817,8 @@ struct Input_para
     // default; h in Ry.
     bool constraint_alloc_fd_jacobian = false;
     double constraint_alloc_fd_step = 0.005;
+    bool constraint_mbis_symmetrize = false; ///< MBIS: project (N,zeta) onto equivalent same-species sites
+    int constraint_mbis_images = 0;           ///< MBIS: periodic image layers for the pro-density
 
     // ==============   #Parameters (25.uncommon hardware) ==================
     int dsp_count = 4;           ///< count of DSP hardwares in one node

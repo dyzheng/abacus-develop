@@ -11,6 +11,7 @@
 #include "source_base/tool_quit.h"
 #include "source_estate/module_mbis_alm/mbis_alm.h"
 #include "source_estate/module_mbis_alm/pw_grid_bridge.h"
+#include "source_io/module_parameter/parameter.h"
 
 namespace constraint
 {
@@ -989,9 +990,9 @@ void WeightGrid::build_mbis(const std::vector<double>& rho_total)
     cfg.max_iter = 200;   // warm-started after the first call
     cfg.tol = 1e-8;
     cfg.damp = 0.5;
-    cfg.images = 0;
+    cfg.images = PARAM.inp.constraint_mbis_images;
     cfg.init_zeta = 1.0;
-    cfg.symmetrize = false;  // bcc conventional cells need this; set by future input
+    cfg.symmetrize = PARAM.inp.constraint_mbis_symmetrize;
     cfg.warm_N = mbis_N_;
     cfg.warm_zeta = mbis_zeta_;
     const mbis_alm::MbisState st = mbis_alm::compute_mbis(rho_total, grid, atoms, cfg);
