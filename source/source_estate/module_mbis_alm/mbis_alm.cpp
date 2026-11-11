@@ -665,3 +665,195 @@ std::string mbis_hessian_classification(const std::vector<double>& eig, double t
     return "minimum";
 }
 } // namespace mbis_alm
+
+namespace mbis_alm
+{
+namespace
+{
+// One Picard step F(p): N_A = int w_A rho, zeta_A = 3 N_A / int r w_A rho.
+std::vector<double> picard_F(const std::vector<double>& p, int nat,
+                             const std::vector<Vec3>& pts, const Grid& grid,
+                             const std::vector<Atom>& atoms,
+                             const std::vector<Vec3>& imgs, double cutoff,
+                             const std::vector<double>& rho)
+{
+    const std::size_t nxyz = pts.size();
+    const double dV = grid.dV();
+    std::vector<double> pro(nat * nxyz, 0.0), P(nxyz, 0.0);
+    for (int a = 0; a < nat; ++a)
+    {
+        const double N = std::max(p[2 * a], 1e-12);
+        const double z = std::max(p[2 * a + 1], 1e-12);
+        for (std::size_t ig = 0; ig < nxyz; ++ig)
+        {
+            const double v = pro_density_at(pts[ig], atoms[a].R, N, z, imgs, cutoff);
+            pro[a * nxyz + ig] = v;
+            P[ig] += v;
+        }
+    }
+    std::vector<double> F(2 * nat, 0.0);
+    for (int a = 0; a < nat; ++a)
+    {
+        double na = 0.0, mr = 0.0;
+        for (std::size_t ig = 0; ig < nxyz; ++ig)
+        {
+            const double wa = (P[ig] > 1e-300) ? pro[a * nxyz + ig] / P[ig] : 0.0;
+            na += wa * rho[ig] * dV;
+            mr += norm(pts[ig] - atoms[a].R) * wa * rho[ig] * dV;
+        }
+        F[2 * a] = na;
+        F[2 * a + 1] = (na > 1e-12 && mr > 1e-12) ? 3.0 * na / mr : p[2 * a + 1];
+    }
+    return F;
+}
+
+// Solve small dense A x = b (Gaussian elimination, partial pivot).
+bool solve_lin(std::vector<std::vector<double>> A, std::vector<double> b,
+                 std::vector<double>& x)
+{
+    const int n = static_cast<int>(b.size());
+    for (int i = 0; i < n; ++i)
+    {
+        int piv = i;
+        for (int r = i + 1; r < n; ++r)
+            if (std::abs(A[r][i]) > std::abs(A[piv][i])) piv = r;
+        if (std::abs(A[piv][i]) < 1e-14) return false;
+        std::swap(A[i], A[piv]); std::swap(b[i], b[piv]);
+        for (int r = i + 1; r < n; ++r)
+        {
+            const double f = A[r][i] / A[i][i];
+            for (int c = i; c < n; ++c) A[r][c] -= f * A[i][c];
+            b[r] -= f * b[i];
+        }
+    }
+    x.assign(n, 0.0);
+    for (int i = n - 1; i >= 0; --i)
+    {
+        double sm = b[i];
+        for (int c = i + 1; c < n; ++c) sm -= A[i][c] * x[c];
+        x[i] = sm / A[i][i];
+    }
+    return true;
+}
+
+// FD Jacobian J = dF/dp of the Picard map.
+std::vector<std::vector<double>> fp_jac(const std::vector<double>& p, int nat,
+                                        const std::vector<Vec3>& pts, const Grid& grid,
+                                        const std::vector<Atom>& atoms,
+                                        const std::vector<Vec3>& imgs, double cutoff,
+                                        const std::vector<double>& rho)
+{
+    const int n = 2 * nat;
+    std::vector<std::vector<double>> J(n, std::vector<double>(n, 0.0));
+    for (int j = 0; j < n; ++j)
+    {
+        const double hj = 1e-5 * std::max(1.0, std::abs(p[j]));
+        auto p1 = p; p1[j] += hj;
+        auto p2 = p; p2[j] -= hj;
+        const auto F1 = picard_F(p1, nat, pts, grid, atoms, imgs, cutoff, rho);
+        const auto F2 = picard_F(p2, nat, pts, grid, atoms, imgs, cutoff, rho);
+        for (int i = 0; i < n; ++i) J[i][j] = (F1[i] - F2[i]) / (2.0 * hj);
+    }
+    return J;
+}
+
+// Newton on G(p) = F(p) - p = 0 (constrained fixed point; F preserves sum rule).
+std::vector<double> newton_fp(std::vector<double> p, int nat,
+                              const std::vector<Vec3>& pts, const Grid& grid,
+                              const std::vector<Atom>& atoms,
+                              const std::vector<Vec3>& imgs, double cutoff,
+                              const std::vector<double>& rho, int maxit = 50)
+{
+    const int n = 2 * nat;
+    for (int it = 0; it < maxit; ++it)
+    {
+        const auto F = picard_F(p, nat, pts, grid, atoms, imgs, cutoff, rho);
+        std::vector<double> G(n, 0.0);
+        double r = 0.0;
+        for (int i = 0; i < n; ++i) { G[i] = F[i] - p[i]; r += G[i] * G[i]; }
+        r = std::sqrt(r);
+        if (r < 1e-9) break;
+        auto J = fp_jac(p, nat, pts, grid, atoms, imgs, cutoff, rho);
+        std::vector<std::vector<double>> A(n, std::vector<double>(n, 0.0));
+        std::vector<double> rhs(n, 0.0);
+        for (int i = 0; i < n; ++i)
+        {
+            for (int j = 0; j < n; ++j) A[i][j] = J[i][j] - (i == j ? 1.0 : 0.0);
+            rhs[i] = -G[i];
+        }
+        std::vector<double> dx;
+        if (!solve_lin(A, rhs, dx))
+            for (int i = 0; i < n; ++i) dx[i] = -G[i];
+        double alpha = 1.0;
+        bool ok = false;
+        for (int ls = 0; ls < 30; ++ls)
+        {
+            auto trial = p;
+            for (int i = 0; i < n; ++i) trial[i] = std::max(1e-8, p[i] + alpha * dx[i]);
+            const auto Ft = picard_F(trial, nat, pts, grid, atoms, imgs, cutoff, rho);
+            double rt = 0.0;
+            for (int i = 0; i < n; ++i) rt += (Ft[i] - trial[i]) * (Ft[i] - trial[i]);
+            if (std::sqrt(rt) < r) { p = trial; ok = true; break; }
+            alpha *= 0.5;
+        }
+        if (!ok) break;
+    }
+    return p;
+}
+} // namespace
+
+MbisState compute_mbis_newton_fp(const std::vector<double>& rho, const Grid& grid,
+                                 const std::vector<Atom>& atoms, const MbisConfig& cfg,
+                                 int n_starts)
+{
+    const double scales[] = {0.5, 1.0, 2.0, 4.0};
+    const int ns = std::max(1, std::min(n_starts, 4));
+    const int nat = static_cast<int>(atoms.size());
+    const std::vector<Vec3> pts = grid_points(grid);
+    const std::vector<Vec3> imgs = image_translations(grid, cfg.images, atoms);
+    std::vector<double> best_p;
+    double best_D = std::numeric_limits<double>::max();
+    for (int s = 0; s < ns; ++s)
+    {
+        std::vector<double> p(2 * nat, 0.0);
+        for (int a = 0; a < nat; ++a)
+        {
+            p[2 * a] = atoms[a].Zval;
+            p[2 * a + 1] = scales[s];
+        }
+        const auto pn = newton_fp(p, nat, pts, grid, atoms, imgs, cfg.cutoff, rho);
+        const double D = kl_D_from_p(pn, nat, pts, grid, atoms, imgs, cfg.cutoff, rho);
+        if (D < best_D) { best_D = D; best_p = pn; }
+    }
+    std::vector<double> N(nat), z(nat);
+    for (int a = 0; a < nat; ++a) { N[a] = best_p[2 * a]; z[a] = best_p[2 * a + 1]; }
+    MbisState st = weights_from_params(rho, grid, atoms, N, z, cfg.images, cfg.cutoff);
+    st.D = best_D;
+    return st;
+}
+
+double mbis_fixedpoint_spectral_norm(const std::vector<double>& rho, const Grid& grid,
+                                     const std::vector<Atom>& atoms,
+                                     const MbisConfig& cfg, const MbisState& state)
+{
+    const int nat = static_cast<int>(atoms.size());
+    const std::vector<Vec3> pts = grid_points(grid);
+    const std::vector<Vec3> imgs = image_translations(grid, cfg.images, atoms);
+    std::vector<double> p(2 * nat, 0.0);
+    for (int a = 0; a < nat; ++a) { p[2 * a] = state.N[a]; p[2 * a + 1] = state.zeta[a]; }
+    const auto J = fp_jac(p, nat, pts, grid, atoms, imgs, cfg.cutoff, rho);
+    const int n = 2 * nat;
+    std::vector<std::vector<double>> JtJ(n, std::vector<double>(n, 0.0));
+    for (int i = 0; i < n; ++i)
+        for (int j = 0; j < n; ++j)
+        {
+            double v = 0.0;
+            for (int k = 0; k < n; ++k) v += J[k][i] * J[k][j];
+            JtJ[i][j] = v;
+        }
+    const auto eig = jacobi_eig(JtJ);
+    double mx = 0.0;
+    for (double e : eig) mx = std::max(mx, e);
+    return std::sqrt(std::max(0.0, mx));
+}
+} // namespace mbis_alm

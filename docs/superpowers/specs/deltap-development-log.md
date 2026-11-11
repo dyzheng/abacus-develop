@@ -7875,3 +7875,13 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - **文件**：`mbis_alm.{h,cpp}`、`test/mbis_alm_test.cpp`、`weight_grid.cpp`、
   `input_parameter.h`、`read_input_item_other.cpp`、
   `2026-10-30-mbis-constrained-objective-correction.md`、本日志。
+
+## 2026-10-30 (S6.60): 不动点 Jacobian 判稳 + 约束 Newton
+
+- 实现 `compute_mbis_newton_fp`（Newton on `F(p)−p=0`，保 sum rule，多初值最低 D）
+  与 `mbis_fixedpoint_spectral_norm`（FD `∂F/∂p`，`||J||_2` = 谱半径保守上界）。
+- `make_toy`：Newton D = Picard D（同解、sum rule 保持）；`||∂F/∂p||_2=32.7` ⇒ 不可证收缩
+  → Picard 可能病态/不稳定（解释破缺/慢）。
+- 正确稳定性对象是 `∂F/∂p`（非自由 D Hessian）；下一步用小型 QR 求 `ρ(J)` 真实谱半径。
+- 11/11 PASS。**文件**：`mbis_alm.{h,cpp}`、`test/mbis_alm_test.cpp`、
+  `2026-10-30-mbis-fixedpoint-jacobian-newton.md`、本日志。

@@ -336,3 +336,25 @@ TEST(MbisAlmTest, HessianCertifiesMinimum)
     for (double x : e_broken) EXPECT_TRUE(std::isfinite(x));
 }
 
+
+TEST(MbisAlmTest, FixedPointJacobianNewton)
+{
+    const Toy t = make_toy();
+    MbisConfig c = cfg();
+    const MbisState s0 = compute_mbis(t.rho, t.grid, t.atoms, c);
+    const MbisState sn = compute_mbis_newton_fp(t.rho, t.grid, t.atoms, c, 4);
+
+    // Newton fixed point preserves the sum rule (F maps into sum-rule subspace)
+    double ne = 0.0;
+    for (double v : t.rho) ne += v * t.grid.dV();
+    double sN = 0.0;
+    for (double v : sn.N) sN += v;
+    EXPECT_NEAR(sN, ne, 1e-6);
+
+    // Jacobian spectral norm (conservative bound on the Picard spectral radius)
+    const double spec = mbis_fixedpoint_spectral_norm(t.rho, t.grid, t.atoms, c, s0);
+    std::printf("[FP] picard D=%.4e  newton D=%.4e  ||dF/dp||_2=%.4f (contractive if <1)\n",
+                s0.D, sn.D, spec);
+    EXPECT_TRUE(std::isfinite(spec));
+    EXPECT_GT(spec, 0.0);
+}

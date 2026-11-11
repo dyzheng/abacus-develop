@@ -111,6 +111,18 @@ std::vector<double> mbis_hessian_eigenvalues(const std::vector<double>& rho,
 std::string mbis_hessian_classification(const std::vector<double>& eig,
                                         double tol = 1e-6);
 
+/// Multi-start Newton solver of the constrained MBIS fixed point F(p)=p
+/// (preserves the sum rule; more reliable than plain Picard).
+MbisState compute_mbis_newton_fp(const std::vector<double>& rho, const Grid& grid,
+                                 const std::vector<Atom>& atoms, const MbisConfig& cfg,
+                                 int n_starts = 4);
+
+/// Spectral norm ||dF/dp||_2 at the fixed point: a conservative upper bound on
+/// the Picard spectral radius (<1 => contractive/stable; >=1 => marginal).
+double mbis_fixedpoint_spectral_norm(const std::vector<double>& rho, const Grid& grid,
+                                     const std::vector<Atom>& atoms,
+                                     const MbisConfig& cfg, const MbisState& state);
+
 
 /// Frozen-parameter weights (for force finite-difference tests / warm starts).
 MbisState weights_from_params(const std::vector<double>& rho, const Grid& grid,
