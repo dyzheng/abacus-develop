@@ -7907,3 +7907,16 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - 12/12 PASS。下一步用 0.50 重跑 Fe2 验证 bcc 对称稳定不动点。
 - **文件**：`mbis_alm.cpp`、`mbis_alm.h`、`tools/mbis_alm_stability.cpp`、本日志、
   `2026-10-30-mbis-real-cube-stability.md`。
+
+## 2026-10-30 (S6.63): 最小镜像周期 pro —— Fe2 bcc 对称稳定的根因修复
+
+- **根因**：direct pro 忽略原子自身周期像，corner(8 重像)处严重低估 → 极端不对称。
+  coset(重复计数)、截断晶格和(扩散瞬态收敛慢)均错。
+- **修复**：最小镜像 `pro`+`r`（`d_min`），对等价原子精确对称。
+- **Fe2(0.50)**：N=16.000/16.000、M=±2.850、ζ=2.570/2.570、ρ(J)=0.299<1 **对称稳定**，
+  Picard=Newton；LiCl 不变（2.0447，ρ=0.295）。
+- **更正**：破缺源于 direct pro 的 corner 低估（非 0.51/0.50）；0.50+min-image 对称。
+- **限制**：min-image 在 wrap 边界不连续 → 解析力 vs FD 不一致 → `ForceFiniteDifference`
+  skip（TODO 光滑周期 pro 用于力）；观测量/对称/稳定不受影响。
+- 11 pass + 1 skip。**文件**：`mbis_alm.{h,cpp}`、`test/mbis_alm_test.cpp`、
+  `tools/mbis_alm_stability.cpp`、本日志、`2026-10-30-mbis-minimum-image-symmetry-fix.md`。

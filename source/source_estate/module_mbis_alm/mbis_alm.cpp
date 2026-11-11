@@ -130,31 +130,39 @@ std::vector<Vec3> detect_cosets(const std::vector<Atom>& atoms, const double cel
 std::vector<Vec3> image_translations(const Grid& grid, int images,
                                      const std::vector<Atom>& atoms)
 {
+    (void)atoms;
     const Vec3 c0 = grid.n[0] * grid.dv[0];
     const Vec3 c1 = grid.n[1] * grid.dv[1];
     const Vec3 c2 = grid.n[2] * grid.dv[2];
-    const double cell[9] = {c0.x, c0.y, c0.z, c1.x, c1.y, c1.z, c2.x, c2.y, c2.z};
-    // Periodic sum over the finite translation-group cosets (e.g. bcc: {0, g}).
-    // Lattice images are redundant for a cell-periodic pro and would
-    // double-count (rescaling D); the cosets alone give the exact group sum.
-    (void)images;
-    std::vector<Vec3> G = detect_cosets(atoms, cell, 1e-6);
-    if (G.empty()) G.push_back(Vec3{0.0, 0.0, 0.0});
-    return G;
+    // Full LATTICE sum (not cosets): a body-centre atom R1 = R0 + g has its
+    // pro-density equal to R0's translated by g because 2g is a lattice vector
+    // and the periodic pro is invariant, so equivalent atoms are treated
+    // identically.  Summing the lattice (not a coset half-lattice) is what
+    // restores the symmetry.  R >= 1 always includes the home cell.
+    const int R = std::max(1, images);
+    std::vector<Vec3> T;
+    T.reserve((2 * R + 1) * (2 * R + 1) * (2 * R + 1));
+    for (int lx = -R; lx <= R; ++lx)
+        for (int ly = -R; ly <= R; ++ly)
+            for (int lz = -R; lz <= R; ++lz)
+                T.push_back(lx * c0 + ly * c1 + lz * c2);
+    return T;
 }
 
 // Slater-s pro-density summed over periodic images (cutoff applied per image).
 double pro_density_at(const Vec3& p, const Vec3& R, double N, double zeta,
                       const std::vector<Vec3>& images, double cutoff)
 {
-    double acc = 0.0;
+    // Minimum-image distance (nearest periodic image), NOT a truncated lattice
+    // sum: the nearest image is the correct *local* MBIS pro-density and is
+    // exactly symmetric for equivalent atoms (R1 = R0 + g, 2g a lattice vector).
+    // A truncated lattice sum is slowly convergent for a diffuse pro and breaks
+    // the symmetry numerically.
+    double rmin = 1e300;
     for (const Vec3& T : images)
-    {
-        const double r = norm(p - (R + T));
-        if (r <= cutoff)
-            acc += std::exp(-zeta * r);
-    }
-    return N * zeta * zeta * zeta / (8.0 * M_PI) * acc;
+        rmin = std::min(rmin, norm(p - (R + T)));
+    if (rmin > cutoff) return 0.0;
+    return N * zeta * zeta * zeta / (8.0 * M_PI) * std::exp(-zeta * rmin);
 }
 
 void fill_weights(const std::vector<Vec3>& pts, const Grid& grid,
@@ -203,11 +211,17 @@ MbisState compute_mbis(const std::vector<double>& rho, const Grid& grid,
     const int nat = static_cast<int>(atoms.size());
     const double dV = grid.dV();
 
-    // direct distances (used for the mean-radius update)
+    // minimum-image distances (used for the mean-radius update); must wrap by
+    // the lattice so that equivalent atoms get identical mean radii and zeta.
+    const std::vector<Vec3> imgs0 = image_translations(grid, cfg.images, atoms);
     std::vector<std::vector<double>> r(nat, std::vector<double>(nxyz, 0.0));
     for (int a = 0; a < nat; ++a)
         for (std::size_t ig = 0; ig < nxyz; ++ig)
-            r[a][ig] = norm(pts[ig] - atoms[a].R);
+        {
+            double rr = 1e300;
+            for (const Vec3& T : imgs0) rr = std::min(rr, norm(pts[ig] - atoms[a].R - T));
+            r[a][ig] = rr;
+        }
 
     MbisState st;
     st.N.resize(nat);
@@ -331,6 +345,18 @@ std::vector<double> constraint_potential(const MbisState& st,
     return v;
 }
 
+// Minimum-image (periodic) distance between a grid point and an atom centre.
+double mbis_periodic_distance(const Vec3& p, const Vec3& R, const Grid& grid)
+{
+    const Vec3 c0 = grid.n[0] * grid.dv[0];
+    const Vec3 c1 = grid.n[1] * grid.dv[1];
+    const Vec3 c2 = grid.n[2] * grid.dv[2];
+    const double cell[9] = {c0.x, c0.y, c0.z, c1.x, c1.y, c1.z, c2.x, c2.y, c2.z};
+    double inv[9];
+    if (!invert3(cell, inv)) return norm(p - R);
+    return norm(modulo_cell(p - R, inv, cell));
+}
+
 std::vector<Vec3> constraint_force(const MbisState& st, const Grid& grid,
                                    const std::vector<Atom>& atoms,
                                    const std::vector<double>& rho,
@@ -342,6 +368,14 @@ std::vector<Vec3> constraint_force(const MbisState& st, const Grid& grid,
     const std::size_t nxyz = pts.size();
     const int nat = static_cast<int>(atoms.size());
     const double dV = grid.dV();
+    const Vec3 cf0 = grid.n[0] * grid.dv[0];
+    const Vec3 cf1 = grid.n[1] * grid.dv[1];
+    const Vec3 cf2 = grid.n[2] * grid.dv[2];
+    const double fcell[9] = {cf0.x, cf0.y, cf0.z, cf1.x, cf1.y, cf1.z,
+                             cf2.x, cf2.y, cf2.z};
+    double finv[9];
+    if (!invert3(fcell, finv)) { finv[0] = finv[1] = finv[2] = finv[3] = finv[4] =
+        finv[5] = finv[6] = finv[7] = finv[8] = 0.0; }
 
     // frozen-parameter pro-densities and their centre derivatives
     std::vector<double> pro(nat * nxyz, 0.0);
@@ -352,7 +386,11 @@ std::vector<Vec3> constraint_force(const MbisState& st, const Grid& grid,
         const double zeta = st.zeta[a];
         for (std::size_t ig = 0; ig < nxyz; ++ig)
         {
-            const Vec3 d = pts[ig] - atoms[a].R;
+            // centre derivative must use the minimum-image separation so that
+            // the analytic force matches the (min-image) weights used by the FD.
+            const Vec3 d = (finv[0] != 0.0 || finv[4] != 0.0 || finv[8] != 0.0)
+                               ? modulo_cell(pts[ig] - atoms[a].R, finv, fcell)
+                               : (pts[ig] - atoms[a].R);
             const double ra = norm(d);
             const double pa = st.N[a] * zeta * zeta * zeta / (8.0 * M_PI) * std::exp(-zeta * ra);
             pro[a * nxyz + ig] = pa;
@@ -696,7 +734,9 @@ std::vector<double> picard_F(const std::vector<double>& p, int nat,
         {
             const double wa = (P[ig] > 1e-300) ? pro[a * nxyz + ig] / P[ig] : 0.0;
             na += wa * rho[ig] * dV;
-            mr += norm(pts[ig] - atoms[a].R) * wa * rho[ig] * dV;
+            double rr = 1e300;
+            for (const Vec3& T : imgs) rr = std::min(rr, norm(pts[ig] - atoms[a].R - T));
+            mr += rr * wa * rho[ig] * dV;
         }
         F[2 * a] = na;
         F[2 * a + 1] = (na > 1e-12 && mr > 1e-12) ? 3.0 * na / mr : p[2 * a + 1];

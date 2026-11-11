@@ -87,6 +87,9 @@ MbisState compute_mbis(const std::vector<double>& rho, const Grid& grid,
 /// Number of detected translation-group cosets (1 = none beyond identity).
 int mbis_coset_count(const Grid& grid, const std::vector<Atom>& atoms);
 
+/// Minimum-image (periodic) distance between a grid point and an atom centre.
+double mbis_periodic_distance(const Vec3& p, const Vec3& R, const Grid& grid);
+
 /**
  * @brief Multi-start global-min selection: run the MBIS KL fixed point from
  * several initial widths and return the solution with the lowest KL objective
