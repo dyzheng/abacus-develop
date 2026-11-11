@@ -358,3 +358,18 @@ TEST(MbisAlmTest, FixedPointJacobianNewton)
     EXPECT_TRUE(std::isfinite(spec));
     EXPECT_GT(spec, 0.0);
 }
+
+TEST(MbisAlmTest, FixedPointSpectralRadius)
+{
+    const Toy t = make_toy();
+    MbisConfig c = cfg();
+    const MbisState s0 = compute_mbis(t.rho, t.grid, t.atoms, c);
+    bool conv = false;
+    const double rho = mbis_fixedpoint_spectral_radius(t.rho, t.grid, t.atoms, c, s0, &conv);
+    const double norm2 = mbis_fixedpoint_spectral_norm(t.rho, t.grid, t.atoms, c, s0);
+    std::printf("[RHO] rho(J)=%.4f (dk_conv=%d)  ||J||_2=%.4f\n", rho, (int)conv, norm2);
+    EXPECT_TRUE(std::isfinite(rho));
+    EXPECT_GT(rho, 0.0);
+    // spectral radius <= spectral norm (sanity; allow numerical slack)
+    EXPECT_LE(rho, norm2 * 1.05 + 1e-6);
+}

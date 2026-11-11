@@ -7885,3 +7885,14 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - 正确稳定性对象是 `∂F/∂p`（非自由 D Hessian）；下一步用小型 QR 求 `ρ(J)` 真实谱半径。
 - 11/11 PASS。**文件**：`mbis_alm.{h,cpp}`、`test/mbis_alm_test.cpp`、
   `2026-10-30-mbis-fixedpoint-jacobian-newton.md`、本日志。
+
+## 2026-10-30 (S6.61): 真实谱半径 ρ(∂F/∂p)（更正"不稳定"）
+
+- 实现 `mbis_fixedpoint_spectral_radius`（Faddeev-LeVerrier + Durand-Kerner，非对称 J 全部特征值）。
+- **`make_toy`：ρ(J)=0.81 < 1 ⇒ Picard 收缩/稳定**；此前 `||J||_2=32.7` 只是松散的
+  奇异值上界，"可能不稳定"的判断**更正**。
+- 破缺非 Picard 不稳定，而是**多固定点**或修复前的**图像不等价**；平移图像修复后需在
+  真实体系验证对称稳定不动点。
+- 判稳正确判据 = `ρ(∂F/∂p)<1`（非自由 D Hessian、非谱范数）。
+- 12/12 PASS。**文件**：`mbis_alm.{h,cpp}`、`test/mbis_alm_test.cpp`、
+  `2026-10-30-mbis-fixedpoint-spectral-radius.md`、本日志。

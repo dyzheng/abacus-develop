@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <complex>
 
 namespace mbis_alm
 {
@@ -855,5 +856,94 @@ double mbis_fixedpoint_spectral_norm(const std::vector<double>& rho, const Grid&
     double mx = 0.0;
     for (double e : eig) mx = std::max(mx, e);
     return std::sqrt(std::max(0.0, mx));
+}
+} // namespace mbis_alm
+
+namespace mbis_alm
+{
+namespace
+{
+// Faddeev-LeVerrier: coefficients c[0..n] of det(lambda I - A)
+//   = c[0] lambda^n + c[1] lambda^{n-1} + ... + c[n],  c[0]=1.
+std::vector<double> char_poly(const std::vector<std::vector<double>>& A)
+{
+    const int n = static_cast<int>(A.size());
+    std::vector<double> c(n + 1, 0.0);
+    c[0] = 1.0;
+    std::vector<std::vector<double>> M(n, std::vector<double>(n, 0.0));
+    for (int i = 0; i < n; ++i) M[i][i] = 1.0;
+    for (int k = 1; k <= n; ++k)
+    {
+        std::vector<std::vector<double>> AM(n, std::vector<double>(n, 0.0));
+        for (int i = 0; i < n; ++i)
+            for (int j = 0; j < n; ++j)
+            {
+                double v = 0.0;
+                for (int t = 0; t < n; ++t) v += A[i][t] * M[t][j];
+                AM[i][j] = v;
+            }
+        double tr = 0.0;
+        for (int i = 0; i < n; ++i) tr += AM[i][i];
+        const double ck = -tr / k;
+        c[k] = ck;
+        M = AM;
+        for (int i = 0; i < n; ++i) M[i][i] += ck;
+    }
+    return c;
+}
+
+// Durand-Kerner roots of the monic polynomial c (c[0]=1).
+bool durand_kerner(const std::vector<double>& c,
+                   std::vector<std::complex<double>>& roots)
+{
+    const int n = static_cast<int>(c.size()) - 1;
+    auto poly = [&](std::complex<double> z) {
+        std::complex<double> r(c[0], 0.0);
+        for (int k = 1; k <= n; ++k) r = r * z + std::complex<double>(c[k], 0.0);
+        return r;
+    };
+    const std::complex<double> seed(0.4, 0.9);
+    roots.assign(n, std::complex<double>(1.0, 0.0));
+    std::complex<double> acc(1.0, 0.0);
+    for (int i = 0; i < n; ++i) { acc *= seed; roots[i] = acc; }
+    for (int it = 0; it < 500; ++it)
+    {
+        double maxd = 0.0;
+        for (int i = 0; i < n; ++i)
+        {
+            std::complex<double> den(1.0, 0.0);
+            for (int j = 0; j < n; ++j)
+                if (j != i) den *= (roots[i] - roots[j]);
+            if (std::abs(den) < 1e-300) continue;
+            const std::complex<double> dz = poly(roots[i]) / den;
+            roots[i] -= dz;
+            maxd = std::max(maxd, std::abs(dz));
+        }
+        if (maxd < 1e-12) return true;
+    }
+    return false;
+}
+} // namespace
+
+double mbis_fixedpoint_spectral_radius(const std::vector<double>& rho,
+                                       const Grid& grid,
+                                       const std::vector<Atom>& atoms,
+                                       const MbisConfig& cfg,
+                                       const MbisState& state,
+                                       bool* converged)
+{
+    const int nat = static_cast<int>(atoms.size());
+    const std::vector<Vec3> pts = grid_points(grid);
+    const std::vector<Vec3> imgs = image_translations(grid, cfg.images, atoms);
+    std::vector<double> p(2 * nat, 0.0);
+    for (int a = 0; a < nat; ++a) { p[2 * a] = state.N[a]; p[2 * a + 1] = state.zeta[a]; }
+    const auto J = fp_jac(p, nat, pts, grid, atoms, imgs, cfg.cutoff, rho);
+    const auto cp = char_poly(J);
+    std::vector<std::complex<double>> roots;
+    const bool ok = durand_kerner(cp, roots);
+    if (converged) *converged = ok;
+    double rho_max = 0.0;
+    for (const auto& z : roots) rho_max = std::max(rho_max, std::abs(z));
+    return rho_max;
 }
 } // namespace mbis_alm

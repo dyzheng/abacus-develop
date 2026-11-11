@@ -123,6 +123,17 @@ double mbis_fixedpoint_spectral_norm(const std::vector<double>& rho, const Grid&
                                      const std::vector<Atom>& atoms,
                                      const MbisConfig& cfg, const MbisState& state);
 
+/// True spectral radius rho(dF/dp) (general non-symmetric eigensolver:
+/// Faddeev-LeVerrier characteristic polynomial + Durand-Kerner).  Picard is
+/// contractive iff rho < 1 (rho is the exact stability criterion; the spectral
+/// norm above is only a conservative upper bound).
+double mbis_fixedpoint_spectral_radius(const std::vector<double>& rho,
+                                       const Grid& grid,
+                                       const std::vector<Atom>& atoms,
+                                       const MbisConfig& cfg,
+                                       const MbisState& state,
+                                       bool* converged = nullptr);
+
 
 /// Frozen-parameter weights (for force finite-difference tests / warm starts).
 MbisState weights_from_params(const std::vector<double>& rho, const Grid& grid,
