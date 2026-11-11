@@ -1817,23 +1817,11 @@ Manual override is allowed: if sc_acceleration_mode is explicitly set, it takes 
         this->add_item(item);
     }
     {
-        Input_Item item("constraint_mbis_symmetrize");
-        item.annotation = "MBIS: project (N,zeta) onto equivalent same-species sites";
-        item.category = "Constraint";
-        item.type = "Boolean";
-        item.description = "When true, the MBIS pro-density parameters (population and width) are averaged over atoms of the same species after each KL update. Use ONLY when those atoms are genuinely symmetry-equivalent (e.g. the two Fe of a bcc conventional cell related by the body-centre translation); otherwise the projection introduces an error. This prevents the KL iteration from converging to a spurious symmetry-broken partition. Not a time-reversal or SOC symmetry.";
-        item.default_value = "False";
-        item.unit = "";
-        item.availability = "constraint_weight_type = mbis";
-        read_sync_bool(input.constraint_mbis_symmetrize);
-        this->add_item(item);
-    }
-    {
         Input_Item item("constraint_mbis_images");
         item.annotation = "MBIS: periodic image layers for the pro-density sum";
         item.category = "Constraint";
         item.type = "Integer";
-        item.description = "Number of periodic cell image layers summed in the MBIS pro-density (0 = direct atoms only). Needed for small/conventional cells whose atoms sit on the cell boundary (e.g. bcc). Note the image lattice is the input cell lattice; a conventional cell of a smaller primitive lattice may still need constraint_mbis_symmetrize.";
+        item.description = "Number of periodic cell image layers summed in the MBIS pro-density (0 = direct atoms only). Needed for small/conventional cells whose atoms sit on the cell boundary (e.g. bcc). Note the image lattice is the input cell lattice; the module also auto-detects lattice translations (e.g. the bcc body-centre) so equivalent atoms stay equivalent.";
         item.default_value = "0";
         item.unit = "";
         item.availability = "constraint_weight_type = mbis";

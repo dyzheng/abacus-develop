@@ -7861,3 +7861,17 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - 下一步：在**原胞/对称化**的 Fe2/LiCl 上认证为 `minimum`。
 - **文件**：`mbis_alm.{h,cpp}`、`test/mbis_alm_test.cpp`、
   `2026-10-30-mbis-hessian-certification.md`、本日志。
+
+## 2026-10-30 (S6.59): 更正——MBIS 是带约束不动点，非自由最小化 D
+
+- **删除错误**：自由最小化 `D(p)`（`compute_mbis_newton`/`minimise_D`）会把 `N→0`
+  （违反 `ΣN=N`，实验 `N=(0,42.6)`）。MBIS 是**带布居约束** `N_A=∫w_Aρ` 的不动点。
+- **删除 symmetrize**（同种平均，不通用）；改为 `detect_cosets` **自动探测晶体平移群**
+  （含 bcc 体心）做图像和——通用、无物种假设。
+- 现状：不动点求解 + 多初值最低 D 选解 + 自由 D Hessian 诊断（仅启发式；严格稳定性应看
+  不动点 Jacobian）；10/10 测试通过。
+- 合成 bcc toy 病态，应以真实 LiCl/Fe2 验证。
+- **下一步**：不动点 Jacobian 特征值判稳 + 约束 Newton/KKT；真实体系验证。
+- **文件**：`mbis_alm.{h,cpp}`、`test/mbis_alm_test.cpp`、`weight_grid.cpp`、
+  `input_parameter.h`、`read_input_item_other.cpp`、
+  `2026-10-30-mbis-constrained-objective-correction.md`、本日志。

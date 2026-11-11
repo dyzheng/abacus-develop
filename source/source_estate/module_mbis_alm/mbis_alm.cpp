@@ -42,19 +42,107 @@ std::vector<Vec3> grid_points(const Grid& grid)
     return pts;
 }
 
-std::vector<Vec3> image_translations(const Grid& grid, int images)
+bool invert3(const double a[9], double inv[9])
 {
-    std::vector<Vec3> T{Vec3{0.0, 0.0, 0.0}};
-    if (images < 1)
-        return T;
-    T.clear();
+    const double det = a[0] * (a[4] * a[8] - a[5] * a[7])
+                     - a[1] * (a[3] * a[8] - a[5] * a[6])
+                     + a[2] * (a[3] * a[7] - a[4] * a[6]);
+    if (std::abs(det) < 1e-14)
+        return false;
+    const double id = 1.0 / det;
+    inv[0] = (a[4] * a[8] - a[5] * a[7]) * id;
+    inv[1] = (a[2] * a[7] - a[1] * a[8]) * id;
+    inv[2] = (a[1] * a[5] - a[2] * a[4]) * id;
+    inv[3] = (a[5] * a[6] - a[3] * a[8]) * id;
+    inv[4] = (a[0] * a[8] - a[2] * a[6]) * id;
+    inv[5] = (a[2] * a[3] - a[0] * a[5]) * id;
+    inv[6] = (a[3] * a[7] - a[4] * a[6]) * id;
+    inv[7] = (a[1] * a[6] - a[0] * a[7]) * id;
+    inv[8] = (a[0] * a[4] - a[1] * a[3]) * id;
+    return true;
+}
+
+// Bring a Cartesian displacement into the cell [-0.5,0.5) (row-major cell).
+Vec3 modulo_cell(const Vec3& d, const double inv[9], const double cell[9])
+{
+    double f[3];
+    for (int i = 0; i < 3; ++i)
+        f[i] = d.x * inv[i] + d.y * inv[3 + i] + d.z * inv[6 + i];
+    for (int i = 0; i < 3; ++i)
+        f[i] -= std::round(f[i]);
+    return Vec3{f[0] * cell[0] + f[1] * cell[3] + f[2] * cell[6],
+                f[0] * cell[1] + f[1] * cell[4] + f[2] * cell[7],
+                f[0] * cell[2] + f[1] * cell[5] + f[2] * cell[8]};
+}
+
+// Detect the translation-group cosets of the atomic configuration: a Cartesian
+// vector tau is a lattice translation if (R_i + tau) maps every atom onto an
+// atom of the same species (modulo the cell).  This generalises the image sum
+// from the input cell lattice to the full crystal translation lattice (e.g. the
+// bcc body-centre translation), WITHOUT any species-averaging heuristic.
+std::vector<Vec3> detect_cosets(const std::vector<Atom>& atoms, const double cell[9],
+                                double tol)
+{
+    std::vector<Vec3> cosets{Vec3{0.0, 0.0, 0.0}};
+    double inv[9];
+    if (!invert3(cell, inv))
+        return cosets;
+    auto is_translation = [&](const Vec3& tau) {
+        for (std::size_t i = 0; i < atoms.size(); ++i)
+        {
+            const Vec3 p = atoms[i].R + tau;
+            bool found = false;
+            for (std::size_t j = 0; j < atoms.size(); ++j)
+            {
+                if (std::abs(atoms[j].Zval - atoms[i].Zval) > 1e-8)
+                    continue;
+                if (norm(modulo_cell(p - atoms[j].R, inv, cell)) < tol)
+                {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found)
+                return false;
+        }
+        return true;
+    };
+    for (std::size_t i = 0; i < atoms.size(); ++i)
+        for (std::size_t j = 0; j < atoms.size(); ++j)
+        {
+            if (std::abs(atoms[j].Zval - atoms[i].Zval) > 1e-8)
+                continue;
+            const Vec3 tau = modulo_cell(atoms[j].R - atoms[i].R, inv, cell);
+            bool dup = false;
+            for (const Vec3& t : cosets)
+                if (norm(modulo_cell(tau - t, inv, cell)) < tol)
+                {
+                    dup = true;
+                    break;
+                }
+            if (!dup && is_translation(tau))
+                cosets.push_back(tau);
+        }
+    return cosets;
+}
+
+std::vector<Vec3> image_translations(const Grid& grid, int images,
+                                     const std::vector<Atom>& atoms)
+{
     const Vec3 c0 = grid.n[0] * grid.dv[0];
     const Vec3 c1 = grid.n[1] * grid.dv[1];
     const Vec3 c2 = grid.n[2] * grid.dv[2];
-    for (int lx = -images; lx <= images; ++lx)
-        for (int ly = -images; ly <= images; ++ly)
-            for (int lz = -images; lz <= images; ++lz)
-                T.push_back(lx * c0 + ly * c1 + lz * c2);
+    const double cell[9] = {c0.x, c0.y, c0.z, c1.x, c1.y, c1.z, c2.x, c2.y, c2.z};
+    const std::vector<Vec3> cosets = detect_cosets(atoms, cell, 1e-6);
+    const int R = std::max(0, images);
+    std::vector<Vec3> T;
+    for (int lx = -R; lx <= R; ++lx)
+        for (int ly = -R; ly <= R; ++ly)
+            for (int lz = -R; lz <= R; ++lz)
+                for (const Vec3& tau : cosets)
+                    T.push_back(lx * c0 + ly * c1 + lz * c2 + tau);
+    if (T.empty())
+        T.push_back(Vec3{0.0, 0.0, 0.0});
     return T;
 }
 
@@ -79,7 +167,7 @@ void fill_weights(const std::vector<Vec3>& pts, const Grid& grid,
 {
     const std::size_t nxyz = pts.size();
     const int nat = static_cast<int>(atoms.size());
-    const std::vector<Vec3> imgs = image_translations(grid, images);
+    const std::vector<Vec3> imgs = image_translations(grid, images, atoms);
     std::vector<double> pro(nat * nxyz, 0.0);
     std::vector<double> P(nxyz, 0.0);
     for (int a = 0; a < nat; ++a)
@@ -153,30 +241,6 @@ MbisState compute_mbis(const std::vector<double>& rho, const Grid& grid,
             zn[a] = (na > 1e-12 && mr > 1e-12) ? 3.0 * na / mr : st.zeta[a];
             res = std::max(res, std::abs(na - st.N[a]));
         }
-        if (cfg.symmetrize)
-        {
-            // Symmetry projection for equivalent atoms (same valence charge):
-            // average the population/exponent so a non-primitive cell cannot
-            // break the physically equivalent sites.  Use temporaries so the
-            // sum is not polluted by earlier in-place assignments.
-            std::vector<double> Ns(nat, 0.0), zs(nat, 0.0);
-            for (int a = 0; a < nat; ++a)
-            {
-                int na = 0;
-                double nm = 0.0, zm = 0.0;
-                for (int b = 0; b < nat; ++b)
-                    if (std::abs(atoms[b].Zval - atoms[a].Zval) < 1e-12)
-                    {
-                        nm += Nn[b];
-                        zm += zn[b];
-                        ++na;
-                    }
-                Ns[a] = nm / na;
-                zs[a] = zm / na;
-            }
-            Nn = Ns;
-            zn = zs;
-        }
         for (int a = 0; a < nat; ++a)
         {
             st.N[a] = (1.0 - cfg.damp) * st.N[a] + cfg.damp * Nn[a];
@@ -190,7 +254,7 @@ MbisState compute_mbis(const std::vector<double>& rho, const Grid& grid,
     // KL objective D = sum_A int rho_A^pro [ ln rho_A^pro - ln rho_A ] dr,
     // rho_A = w_A rho.  Used to select the lowest-D self-consistent solution.
     {
-        const std::vector<Vec3> imgs = image_translations(grid, cfg.images);
+        const std::vector<Vec3> imgs = image_translations(grid, cfg.images, atoms);
         std::vector<double> pro(nat * nxyz, 0.0);
         std::vector<double> P(nxyz, 0.0);
         for (int a = 0; a < nat; ++a)
@@ -459,6 +523,80 @@ std::vector<double> jacobi_eig(std::vector<std::vector<double>> a)
     for (int i = 0; i < n; ++i) eig[i] = a[i][i];
     return eig;
 }
+
+// Jacobi eigenvalues + eigenvectors (V columns) of a small symmetric matrix.
+void jacobi_eig_vec(std::vector<std::vector<double>> a, std::vector<double>& eig,
+                    std::vector<std::vector<double>>& V)
+{
+    const int n = static_cast<int>(a.size());
+    V.assign(n, std::vector<double>(n, 0.0));
+    for (int i = 0; i < n; ++i) V[i][i] = 1.0;
+    for (int sweep = 0; sweep < 100; ++sweep)
+    {
+        double off = 0.0;
+        for (int i = 0; i < n; ++i)
+            for (int j = i + 1; j < n; ++j) off += a[i][j] * a[i][j];
+        if (off < 1e-26) break;
+        for (int p = 0; p < n; ++p)
+            for (int q = p + 1; q < n; ++q)
+            {
+                if (std::abs(a[p][q]) < 1e-18) continue;
+                const double theta = (a[q][q] - a[p][p]) / (2.0 * a[p][q]);
+                const double t = (theta >= 0 ? 1.0 : -1.0)
+                    / (std::abs(theta) + std::sqrt(theta * theta + 1.0));
+                const double c = 1.0 / std::sqrt(t * t + 1.0), sn = t * c;
+                for (int k = 0; k < n; ++k)
+                {
+                    const double akp = a[k][p], akq = a[k][q];
+                    a[k][p] = c * akp - sn * akq;
+                    a[k][q] = sn * akp + c * akq;
+                }
+                for (int k = 0; k < n; ++k)
+                {
+                    const double apk = a[p][k], aqk = a[q][k];
+                    a[p][k] = c * apk - sn * aqk;
+                    a[q][k] = sn * apk + c * aqk;
+                }
+                for (int k = 0; k < n; ++k)
+                {
+                    const double vkp = V[k][p], vkq = V[k][q];
+                    V[k][p] = c * vkp - sn * vkq;
+                    V[k][q] = sn * vkp + c * vkq;
+                }
+            }
+    }
+    eig.assign(n, 0.0);
+    for (int i = 0; i < n; ++i) eig[i] = a[i][i];
+}
+
+// Solve A x = b for a small dense system (Gaussian elimination, partial pivot).
+bool solve_small(std::vector<std::vector<double>> A, std::vector<double> b,
+                 std::vector<double>& x)
+{
+    const int n = static_cast<int>(b.size());
+    for (int i = 0; i < n; ++i)
+    {
+        int piv = i;
+        for (int r = i + 1; r < n; ++r)
+            if (std::abs(A[r][i]) > std::abs(A[piv][i])) piv = r;
+        if (std::abs(A[piv][i]) < 1e-14) return false;
+        std::swap(A[i], A[piv]); std::swap(b[i], b[piv]);
+        for (int r = i + 1; r < n; ++r)
+        {
+            const double f = A[r][i] / A[i][i];
+            for (int c = i; c < n; ++c) A[r][c] -= f * A[i][c];
+            b[r] -= f * b[i];
+        }
+    }
+    x.assign(n, 0.0);
+    for (int i = n - 1; i >= 0; --i)
+    {
+        double s = b[i];
+        for (int c = i + 1; c < n; ++c) s -= A[i][c] * x[c];
+        x[i] = s / A[i][i];
+    }
+    return true;
+}
 } // namespace
 
 std::vector<double> mbis_hessian_eigenvalues(const std::vector<double>& rho,
@@ -471,7 +609,7 @@ std::vector<double> mbis_hessian_eigenvalues(const std::vector<double>& rho,
     const int nat = static_cast<int>(atoms.size());
     const int n = 2 * nat;
     const std::vector<Vec3> pts = grid_points(grid);
-    const std::vector<Vec3> imgs = image_translations(grid, cfg.images);
+    const std::vector<Vec3> imgs = image_translations(grid, cfg.images, atoms);
     std::vector<double> p(n, 0.0);
     for (int a = 0; a < nat; ++a)
     {

@@ -992,7 +992,6 @@ void WeightGrid::build_mbis(const std::vector<double>& rho_total)
     cfg.damp = 0.5;
     cfg.images = PARAM.inp.constraint_mbis_images;
     cfg.init_zeta = 1.0;
-    cfg.symmetrize = PARAM.inp.constraint_mbis_symmetrize;
     cfg.warm_N = mbis_N_;
     cfg.warm_zeta = mbis_zeta_;
     const mbis_alm::MbisState st = mbis_alm::compute_mbis(rho_total, grid, atoms, cfg);

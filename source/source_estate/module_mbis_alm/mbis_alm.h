@@ -67,7 +67,6 @@ struct MbisConfig
     double damp = 0.5;
     int images = 0;         ///< 0: direct atoms; N: +/- N periodic cells
     double init_zeta = 1.5;
-    bool symmetrize = false; ///< average N,zeta over atoms of the same species
     std::vector<double> warm_N;    ///< optional per-atom warm-start populations
     std::vector<double> warm_zeta; ///< optional per-atom warm-start exponents
 };
@@ -111,6 +110,7 @@ std::vector<double> mbis_hessian_eigenvalues(const std::vector<double>& rho,
 /// "degenerate" (otherwise).  Certifies the MBIS solution kind.
 std::string mbis_hessian_classification(const std::vector<double>& eig,
                                         double tol = 1e-6);
+
 
 /// Frozen-parameter weights (for force finite-difference tests / warm starts).
 MbisState weights_from_params(const std::vector<double>& rho, const Grid& grid,

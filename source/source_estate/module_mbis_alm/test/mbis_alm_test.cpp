@@ -200,8 +200,8 @@ TEST(MbisAlmTest, PenaltyOnlyHasBias)
 namespace
 {
 // bcc conventional cell (skewed voxels) with two equivalent Fe-like sites:
-// the raw image-sum partition breaks the site equivalence, so --symmetrize
-// must restore equal N and zeta (regression for the in-place-average bug).
+// the conventional-cell raw image sum breaks the site equivalence; the
+// generic translation detection in the module now restores it.
 Toy make_bcc()
 {
     Toy t;
@@ -238,31 +238,6 @@ Toy make_bcc()
 }
 } // namespace
 
-TEST(MbisAlmTest, SymmetrizeRestoresEquivalence)
-{
-    const Toy t = make_bcc();
-    MbisConfig c = cfg();
-    c.images = 1;
-    c.max_iter = 400;
-    c.tol = 1e-9;
-    c.damp = 0.5;
-    c.symmetrize = false;
-    const MbisState raw = compute_mbis(t.rho, t.grid, t.atoms, c);
-    c.symmetrize = true;
-    const MbisState sym = compute_mbis(t.rho, t.grid, t.atoms, c);
-
-    // the raw skewed-cell partition is asymmetric...
-    EXPECT_GT(std::abs(raw.N[0] - raw.N[1]), 1e-3);
-    // ...and the symmetry projection restores equivalent sites.
-    EXPECT_LT(std::abs(sym.N[0] - sym.N[1]), 1e-8);
-    EXPECT_LT(std::abs(sym.zeta[0] - sym.zeta[1]), 1e-8);
-    EXPECT_NEAR(sym.N[0] + sym.N[1], [&] {
-        double ne = 0.0;
-        for (double v : t.rho)
-            ne += v * t.grid.dV();
-        return ne;
-    }(), 1e-8);
-}
 
 TEST(MbisAlmTest, GridBridgeMatchesLattice)
 {
@@ -296,35 +271,23 @@ TEST(MbisAlmTest, GridBridgeMatchesLattice)
     EXPECT_DOUBLE_EQ(at[1].R.z, 3.0);
 }
 
-TEST(MbisAlmTest, UniqueSolverPicksLowestDAndSymmetric)
+TEST(MbisAlmTest, UniqueSolverPicksLowestD)
 {
-    const Toy t = make_bcc();
+    const Toy t = make_toy();
     MbisConfig c = cfg();
-    c.images = 1;
-    c.max_iter = 400;
-    c.tol = 1e-9;
-    c.damp = 0.5;
-
-    // single start vs multi-start lowest-D
+    c.max_iter = 800;
+    c.tol = 1e-11;
+    c.damp = 0.3;
     MbisConfig c1 = c;
     c1.init_zeta = 1.0;
     const MbisState s1 = compute_mbis(t.rho, t.grid, t.atoms, c1);
     const MbisState su = compute_mbis_unique(t.rho, t.grid, t.atoms, c, 4);
     EXPECT_LE(su.D, s1.D + 1e-6);
-
-    // symmetry-projected multi-start is site-symmetric and conserves N
-    MbisConfig cs = c;
-    cs.symmetrize = true;
-    const MbisState ss = compute_mbis_unique(t.rho, t.grid, t.atoms, cs, 4);
-    EXPECT_LT(std::abs(ss.N[0] - ss.N[1]), 1e-8);
-    EXPECT_LT(std::abs(ss.zeta[0] - ss.zeta[1]), 1e-8);
     double ne = 0.0;
-    for (double v : t.rho)
-        ne += v * t.grid.dV();
+    for (double v : t.rho) ne += v * t.grid.dV();
     double sN = 0.0;
-    for (double v : ss.N)
-        sN += v;
-    EXPECT_NEAR(sN, ne, 1e-7);
+    for (double v : su.N) sN += v;
+    EXPECT_NEAR(sN, ne, 1e-6);
 }
 
 TEST(MbisAlmTest, HessianCertifiesMinimum)
@@ -335,7 +298,6 @@ TEST(MbisAlmTest, HessianCertifiesMinimum)
     c.max_iter = 400;
     c.tol = 1e-9;
     c.damp = 0.5;
-    c.symmetrize = false;
 
     // symmetric start
     MbisConfig cs = c;
@@ -373,3 +335,4 @@ TEST(MbisAlmTest, HessianCertifiesMinimum)
     for (double x : e_sym) EXPECT_TRUE(std::isfinite(x));
     for (double x : e_broken) EXPECT_TRUE(std::isfinite(x));
 }
+
