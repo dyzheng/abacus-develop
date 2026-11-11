@@ -77,11 +77,22 @@ struct MbisState
     std::vector<std::vector<double>> w;  ///< [nat][grid]
     std::vector<double> N;               ///< electron populations
     std::vector<double> zeta;            ///< Slater exponents (Bohr^-1)
+    double D = 0.0;                      ///< KL objective at the solution (for global-min selection)
 };
 
 /// Run the MBIS KL fixed point (population + mean-radius update).
 MbisState compute_mbis(const std::vector<double>& rho, const Grid& grid,
                        const std::vector<Atom>& atoms, const MbisConfig& cfg);
+
+/**
+ * @brief Multi-start global-min selection: run the MBIS KL fixed point from
+ * several initial widths and return the solution with the lowest KL objective
+ * D.  This addresses the non-convexity / multiple self-consistent solutions
+ * by selecting the lowest-D basin (the MBIS-defined minimum).
+ */
+MbisState compute_mbis_unique(const std::vector<double>& rho, const Grid& grid,
+                              const std::vector<Atom>& atoms, const MbisConfig& cfg,
+                              int n_starts = 4);
 
 /// Frozen-parameter weights (for force finite-difference tests / warm starts).
 MbisState weights_from_params(const std::vector<double>& rho, const Grid& grid,

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace mbis_alm
 {
@@ -185,7 +186,57 @@ MbisState compute_mbis(const std::vector<double>& rho, const Grid& grid,
             break;
     }
     fill_weights(pts, grid, atoms, st.N, st.zeta, cfg.images, cfg.cutoff, st);
+
+    // KL objective D = sum_A int rho_A^pro [ ln rho_A^pro - ln rho_A ] dr,
+    // rho_A = w_A rho.  Used to select the lowest-D self-consistent solution.
+    {
+        const std::vector<Vec3> imgs = image_translations(grid, cfg.images);
+        std::vector<double> pro(nat * nxyz, 0.0);
+        std::vector<double> P(nxyz, 0.0);
+        for (int a = 0; a < nat; ++a)
+            for (std::size_t ig = 0; ig < nxyz; ++ig)
+            {
+                const double v = pro_density_at(pts[ig], atoms[a].R, st.N[a],
+                                                st.zeta[a], imgs, cfg.cutoff);
+                pro[a * nxyz + ig] = v;
+                P[ig] += v;
+            }
+        double D = 0.0;
+        for (int a = 0; a < nat; ++a)
+            for (std::size_t ig = 0; ig < nxyz; ++ig)
+            {
+                const double pa = pro[a * nxyz + ig];
+                if (pa <= 1e-30)
+                    continue;
+                const double wa = (P[ig] > 1e-300) ? pa / P[ig] : 0.0;
+                const double rhoa = wa * rho[ig];
+                if (rhoa > 1e-300)
+                    D += pa * (std::log(pa) - std::log(rhoa)) * dV;
+            }
+        st.D = D;
+    }
     return st;
+}
+
+MbisState compute_mbis_unique(const std::vector<double>& rho, const Grid& grid,
+                              const std::vector<Atom>& atoms, const MbisConfig& cfg,
+                              int n_starts)
+{
+    const double scales[] = {0.5, 1.0, 2.0, 4.0};
+    const int ns = std::max(1, std::min(n_starts, 4));
+    MbisState best;
+    best.D = std::numeric_limits<double>::max();
+    for (int s = 0; s < ns; ++s)
+    {
+        MbisConfig c = cfg;
+        c.init_zeta = scales[s];
+        c.warm_N.clear();
+        c.warm_zeta.clear();
+        MbisState st = compute_mbis(rho, grid, atoms, c);
+        if (st.D < best.D)
+            best = st;
+    }
+    return best;
 }
 
 Observables observe(const MbisState& st, const std::vector<double>& rho,

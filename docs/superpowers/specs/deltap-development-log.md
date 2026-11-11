@@ -7840,3 +7840,13 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - 取正确解：比较 `D` + Hessian 判别 +（仅对称点为极小时）对称约束；Newton 分类/逃鞍点。
 - 对 Fe2 应做：比较 `D(sym)` vs `D(broken)` 及对称点破缺方向曲率，判定伪/真破缺。
 - **文件**：`2026-10-30-mbis-kl-multiplicity-hessian.md`、本日志。
+
+## 2026-10-30 (S6.57): 唯一解算法（多初值 + 最低 KL D）
+
+- 实现：`MbisState::D`（KL 目标）+ `compute_mbis_unique`（init_zeta∈{0.5,1,2,4} 多初值，
+  选最低 D）；可选 `symmetrize`。
+- 逻辑：MBIS 定义下"正确解"= 最低 D 自洽解；多初值探索盆地，最低 D 选全局最小。
+- 测试 `UniqueSolverPicksLowestDAndSymmetric`：D(unique)≤D(single)；symmetrize 后对称
+  （|ΔN|,|Δζ|<1e-8）+ 求和守恒；通过。
+- 局限：有限初值不证明全局；下一步加 Hessian 认证/逃鞍点。
+- **文件**：`mbis_alm.{h,cpp}`、`test/mbis_alm_test.cpp`、`2026-10-30-mbis-unique-solver.md`、本日志。

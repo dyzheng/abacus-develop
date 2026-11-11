@@ -295,3 +295,34 @@ TEST(MbisAlmTest, GridBridgeMatchesLattice)
     EXPECT_DOUBLE_EQ(at[0].Zval, 16.0);
     EXPECT_DOUBLE_EQ(at[1].R.z, 3.0);
 }
+
+TEST(MbisAlmTest, UniqueSolverPicksLowestDAndSymmetric)
+{
+    const Toy t = make_bcc();
+    MbisConfig c = cfg();
+    c.images = 1;
+    c.max_iter = 400;
+    c.tol = 1e-9;
+    c.damp = 0.5;
+
+    // single start vs multi-start lowest-D
+    MbisConfig c1 = c;
+    c1.init_zeta = 1.0;
+    const MbisState s1 = compute_mbis(t.rho, t.grid, t.atoms, c1);
+    const MbisState su = compute_mbis_unique(t.rho, t.grid, t.atoms, c, 4);
+    EXPECT_LE(su.D, s1.D + 1e-6);
+
+    // symmetry-projected multi-start is site-symmetric and conserves N
+    MbisConfig cs = c;
+    cs.symmetrize = true;
+    const MbisState ss = compute_mbis_unique(t.rho, t.grid, t.atoms, cs, 4);
+    EXPECT_LT(std::abs(ss.N[0] - ss.N[1]), 1e-8);
+    EXPECT_LT(std::abs(ss.zeta[0] - ss.zeta[1]), 1e-8);
+    double ne = 0.0;
+    for (double v : t.rho)
+        ne += v * t.grid.dV();
+    double sN = 0.0;
+    for (double v : ss.N)
+        sN += v;
+    EXPECT_NEAR(sN, ne, 1e-7);
+}
