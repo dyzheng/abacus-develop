@@ -22,6 +22,7 @@
 
 #include <array>
 #include <cmath>
+#include <string>
 #include <cstddef>
 #include <vector>
 
@@ -93,6 +94,23 @@ MbisState compute_mbis(const std::vector<double>& rho, const Grid& grid,
 MbisState compute_mbis_unique(const std::vector<double>& rho, const Grid& grid,
                               const std::vector<Atom>& atoms, const MbisConfig& cfg,
                               int n_starts = 4);
+
+/**
+ * @brief Finite-difference Hessian eigenvalues of the MBIS KL objective D(p)
+ * (p = {N_A, zeta_A}) at a given state.  Used to certify a local minimum
+ * (all eigenvalues > 0) versus a saddle (any eigenvalue < 0).  Small systems.
+ */
+std::vector<double> mbis_hessian_eigenvalues(const std::vector<double>& rho,
+                                             const Grid& grid,
+                                             const std::vector<Atom>& atoms,
+                                             const MbisConfig& cfg,
+                                             const MbisState& state,
+                                             double fd_step = 1e-4);
+
+/// Classify Hessian eigenvalues: "minimum" (all > tol), "saddle" (any < -tol),
+/// "degenerate" (otherwise).  Certifies the MBIS solution kind.
+std::string mbis_hessian_classification(const std::vector<double>& eig,
+                                        double tol = 1e-6);
 
 /// Frozen-parameter weights (for force finite-difference tests / warm starts).
 MbisState weights_from_params(const std::vector<double>& rho, const Grid& grid,

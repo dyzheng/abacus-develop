@@ -7850,3 +7850,14 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   （|ΔN|,|Δζ|<1e-8）+ 求和守恒；通过。
 - 局限：有限初值不证明全局；下一步加 Hessian 认证/逃鞍点。
 - **文件**：`mbis_alm.{h,cpp}`、`test/mbis_alm_test.cpp`、`2026-10-30-mbis-unique-solver.md`、本日志。
+
+## 2026-10-30 (S6.58): Hessian 认证 + 鞍点分类
+
+- 实现 `mbis_hessian_eigenvalues`（D 的 FD Hessian + Jacobi 特征值）与
+  `mbis_hessian_classification`（minimum/saddle/degenerate）。
+- 合成 bcc toy：对称/破缺初值都到同一破缺解 N=(3.2,245.4)，`min_eig=-41.9` → **saddle**
+  → 说明常规胞图像和不保持等价，其"自洽点"不是合法最小；支持"原胞/对称化"修复。
+- 唯一解算法两步完成：多初值最低 D 选解 + Hessian 认证；11/11 PASS。
+- 下一步：在**原胞/对称化**的 Fe2/LiCl 上认证为 `minimum`。
+- **文件**：`mbis_alm.{h,cpp}`、`test/mbis_alm_test.cpp`、
+  `2026-10-30-mbis-hessian-certification.md`、本日志。

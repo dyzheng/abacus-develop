@@ -384,3 +384,146 @@ double Alm::energy_correction(const std::vector<double>& Q) const
 }
 
 } // namespace mbis_alm
+
+namespace mbis_alm
+{
+namespace
+{
+double kl_D_from_p(const std::vector<double>& p, int nat,
+                   const std::vector<Vec3>& pts, const Grid& grid,
+                   const std::vector<Atom>& atoms, const std::vector<Vec3>& imgs,
+                   double cutoff, const std::vector<double>& rho)
+{
+    const std::size_t nxyz = pts.size();
+    const double dV = grid.dV();
+    std::vector<double> pro(nat * nxyz, 0.0), P(nxyz, 0.0);
+    for (int a = 0; a < nat; ++a)
+    {
+        const double N = std::max(p[2 * a], 1e-12);
+        const double z = std::max(p[2 * a + 1], 1e-12);
+        for (std::size_t ig = 0; ig < nxyz; ++ig)
+        {
+            const double v = pro_density_at(pts[ig], atoms[a].R, N, z, imgs, cutoff);
+            pro[a * nxyz + ig] = v;
+            P[ig] += v;
+        }
+    }
+    double D = 0.0;
+    for (int a = 0; a < nat; ++a)
+        for (std::size_t ig = 0; ig < nxyz; ++ig)
+        {
+            const double pa = pro[a * nxyz + ig];
+            if (pa <= 1e-30) continue;
+            const double wa = (P[ig] > 1e-300) ? pa / P[ig] : 0.0;
+            const double rhoa = wa * rho[ig];
+            if (rhoa > 1e-300) D += pa * (std::log(pa) - std::log(rhoa)) * dV;
+        }
+    return D;
+}
+
+// Cyclic Jacobi eigenvalues of a small symmetric matrix.
+std::vector<double> jacobi_eig(std::vector<std::vector<double>> a)
+{
+    const int n = static_cast<int>(a.size());
+    for (int sweep = 0; sweep < 100; ++sweep)
+    {
+        double off = 0.0;
+        for (int i = 0; i < n; ++i)
+            for (int j = i + 1; j < n; ++j)
+                off += a[i][j] * a[i][j];
+        if (off < 1e-24) break;
+        for (int p = 0; p < n; ++p)
+            for (int q = p + 1; q < n; ++q)
+            {
+                if (std::abs(a[p][q]) < 1e-18) continue;
+                const double theta = (a[q][q] - a[p][p]) / (2.0 * a[p][q]);
+                const double t = (theta >= 0 ? 1.0 : -1.0)
+                                 / (std::abs(theta) + std::sqrt(theta * theta + 1.0));
+                const double c = 1.0 / std::sqrt(t * t + 1.0);
+                const double s = t * c;
+                for (int k = 0; k < n; ++k)
+                {
+                    const double akp = a[k][p], akq = a[k][q];
+                    a[k][p] = c * akp - s * akq;
+                    a[k][q] = s * akp + c * akq;
+                }
+                for (int k = 0; k < n; ++k)
+                {
+                    const double apk = a[p][k], aqk = a[q][k];
+                    a[p][k] = c * apk - s * aqk;
+                    a[q][k] = s * apk + c * aqk;
+                }
+            }
+    }
+    std::vector<double> eig(n, 0.0);
+    for (int i = 0; i < n; ++i) eig[i] = a[i][i];
+    return eig;
+}
+} // namespace
+
+std::vector<double> mbis_hessian_eigenvalues(const std::vector<double>& rho,
+                                             const Grid& grid,
+                                             const std::vector<Atom>& atoms,
+                                             const MbisConfig& cfg,
+                                             const MbisState& state,
+                                             double fd_step)
+{
+    const int nat = static_cast<int>(atoms.size());
+    const int n = 2 * nat;
+    const std::vector<Vec3> pts = grid_points(grid);
+    const std::vector<Vec3> imgs = image_translations(grid, cfg.images);
+    std::vector<double> p(n, 0.0);
+    for (int a = 0; a < nat; ++a)
+    {
+        p[2 * a] = state.N[a];
+        p[2 * a + 1] = state.zeta[a];
+    }
+    auto eval = [&](const std::vector<double>& pp) {
+        return kl_D_from_p(pp, nat, pts, grid, atoms, imgs, cfg.cutoff, rho);
+    };
+    const double D0 = eval(p);
+    std::vector<std::vector<double>> H(n, std::vector<double>(n, 0.0));
+    for (int i = 0; i < n; ++i)
+    {
+        const double hi = fd_step * std::max(1.0, std::abs(p[i]));
+        for (int j = i; j < n; ++j)
+        {
+            const double hj = fd_step * std::max(1.0, std::abs(p[j]));
+            double v = 0.0;
+            if (i == j)
+            {
+                auto pp1 = p; pp1[i] += hi;
+                auto pp2 = p; pp2[i] -= hi;
+                v = (eval(pp1) - 2.0 * D0 + eval(pp2)) / (hi * hi);
+            }
+            else
+            {
+                auto pp1 = p; pp1[i] += hi; pp1[j] += hj;
+                auto pp2 = p; pp2[i] += hi; pp2[j] -= hj;
+                auto pp3 = p; pp3[i] -= hi; pp3[j] += hj;
+                auto pp4 = p; pp4[i] -= hi; pp4[j] -= hj;
+                v = (eval(pp1) - eval(pp2) - eval(pp3) + eval(pp4)) / (4.0 * hi * hj);
+            }
+            H[i][j] = v;
+            H[j][i] = v;
+        }
+    }
+    return jacobi_eig(H);
+}
+} // namespace mbis_alm
+
+namespace mbis_alm
+{
+std::string mbis_hessian_classification(const std::vector<double>& eig, double tol)
+{
+    bool any_neg = false, any_deg = false;
+    for (double e : eig)
+    {
+        if (e < -tol) any_neg = true;
+        if (std::abs(e) <= tol) any_deg = true;
+    }
+    if (any_neg) return "saddle";
+    if (any_deg) return "degenerate";
+    return "minimum";
+}
+} // namespace mbis_alm
