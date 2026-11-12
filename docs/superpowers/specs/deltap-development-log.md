@@ -7929,3 +7929,13 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   LiCl 不变。
 - TODO：`compute_mbis_newton_fp` 在真实 Fe2 sum 映射上发散（诊断路径，主循环用 Picard）。
 - **文件**：`mbis_alm.{h,cpp}`、`test/mbis_alm_test.cpp`、本日志、`2026-10-30-mbis-smooth-force-pro.md`。
+
+## 2026-10-30 (S6.65): KL 目标退化更正 + Newton 退化回退 Picard
+
+- **更正**：D 在 `ζ→0`（均匀 pro，w=1/nat）时 =0，为**全局最小** ⇒ **"最低 D 选解"退化、撤回**；
+  与"MBIS 是约束不动点非自由最小化"一致。
+- `compute_mbis_newton_fp` 拒绝退化解（ζ<0.05/N≤0/D≤0）并**回退 Picard**（物理起点 ζ~1，稳定对称）。
+- `trial`/`ζ` 加下界排除 `ζ→0` 平凡根。
+- Fe2(0.50)：Newton=Picard，N=16/16、M=±2.849、ρ=0.309<1；LiCl 不变；12/12。
+- **规范语义**：Picard 不动点（稳定）为解；D 仅诊断。
+- **文件**：`mbis_alm.cpp`、本日志、`2026-10-30-mbis-d-degeneracy-fallback.md`。

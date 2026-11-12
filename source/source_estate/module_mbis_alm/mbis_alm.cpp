@@ -256,6 +256,7 @@ MbisState compute_mbis(const std::vector<double>& rho, const Grid& grid,
             }
             Nn[a] = na;
             zn[a] = (na > 1e-12 && mr > 1e-12) ? 3.0 * na / mr : st.zeta[a];
+            zn[a] = std::max(zn[a], 1e-2);  // exclude the degenerate flat-pro (zeta->0) root
             res = std::max(res, std::abs(na - st.N[a]));
         }
         for (int a = 0; a < nat; ++a)
@@ -743,6 +744,7 @@ std::vector<double> picard_F(const std::vector<double>& p, int nat,
         }
         F[2 * a] = na;
         F[2 * a + 1] = (na > 1e-12 && mr > 1e-12) ? 3.0 * na / mr : p[2 * a + 1];
+        F[2 * a + 1] = std::max(F[2 * a + 1], 1e-2);  // exclude zeta->0 degenerate root
     }
     return F;
 }
@@ -834,14 +836,26 @@ std::vector<double> newton_fp(std::vector<double> p, int nat,
         for (int ls = 0; ls < 30; ++ls)
         {
             auto trial = p;
-            for (int i = 0; i < n; ++i) trial[i] = std::max(1e-8, p[i] + alpha * dx[i]);
+            for (int i = 0; i < n; ++i)
+                trial[i] = std::max((i % 2 == 1) ? 5e-2 : 0.0, p[i] + alpha * dx[i]);
             const auto Ft = picard_F(trial, nat, pts, grid, atoms, imgs, cutoff, rho);
             double rt = 0.0;
             for (int i = 0; i < n; ++i) rt += (Ft[i] - trial[i]) * (Ft[i] - trial[i]);
             if (std::sqrt(rt) < r) { p = trial; ok = true; break; }
             alpha *= 0.5;
         }
-        if (!ok) break;
+        if (!ok)
+        {
+            // Newton direction failed (ill-conditioned FD Jacobian near the
+            // fixed point).  Fall back to a Picard step: the Picard map is
+            // contractive here (spectral radius < 1), so it still makes
+            // progress toward the same fixed point.
+            const auto Fp = picard_F(p, nat, pts, grid, atoms, imgs, cutoff, rho);
+            double rp = 0.0;
+            for (int i = 0; i < n; ++i) rp += (Fp[i] - p[i]) * (Fp[i] - p[i]);
+            if (std::sqrt(rp) < r) p = Fp;
+            else break;
+        }
     }
     return p;
 }
@@ -870,6 +884,19 @@ MbisState compute_mbis_newton_fp(const std::vector<double>& rho, const Grid& gri
         const double D = kl_D_from_p(pn, nat, pts, grid, atoms, imgs, cfg.cutoff, rho);
         if (D < best_D) { best_D = D; best_p = pn; }
     }
+    // The KL objective is DEGENERATE: a uniform partition (zeta -> 0) makes the
+    // pro-density position-independent, w_A = 1/nat, and D = 0 exactly, which is
+    // the global minimum.  Hence "lowest D" cannot select a physical solution.
+    // Reject degenerate Newton solutions and fall back to the canonical Picard
+    // fixed point from a physical start (zeta ~ 1), which is stable and symmetric.
+    bool degenerate = (best_D <= 0.0) || (static_cast<int>(best_p.size()) != 2 * nat);
+    for (int a = 0; a < nat && !degenerate; ++a)
+    {
+        // flat-pro root (zeta at/near the clamp) or non-positive population
+        if (best_p[2 * a + 1] < 0.05 || best_p[2 * a] <= 0.0) degenerate = true;
+    }
+    if (degenerate) return compute_mbis(rho, grid, atoms, cfg);
+
     std::vector<double> N(nat), z(nat);
     for (int a = 0; a < nat; ++a) { N[a] = best_p[2 * a]; z[a] = best_p[2 * a + 1]; }
     MbisState st = weights_from_params(rho, grid, atoms, N, z, cfg.images, cfg.cutoff);
