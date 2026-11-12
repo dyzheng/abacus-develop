@@ -7949,3 +7949,11 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - 慢收敛为**外循环 mu 控制器**（dQ/dmu≈−0.036，线性 mu/外步，secant 未触发；~650 SCF），非 MBIS。
 - 12/12 模块测试仍通过。TODO：MPI gather；更快的 secant mu。
 - **文件**：`weight_grid.cpp`、`mbis_alm.cpp`、本日志、`2026-10-30-mbis-abacus-e2e-validation.md`。
+
+## 2026-10-30 (S6.66b): 修正 e2e 提交中失败的单测
+
+- `19521913f` 引入了 `R=max(0,images)`（大盒 `images=0`→direct），但 `MbisMeanRadiusFixedPoint`
+  仍用 `mbis_periodic_distance`(min-image) → 与 `compute_mbis(images=0)` 的 direct `r` 不一致 → 失败。
+- 修正：测试改用 `norm(p−R)`（direct，匹配 `images=0`）；`compute_mbis` 的均径 `r` 用与 `pro`
+  相同的 `image_translations(images)`（Fe2 `images=1`→min-image 对称；LiCl `images=0`→direct）。
+- 12/12 通过；Fe2 对称 15.9998/16.0001、ρ=0.309；LiCl 2.0447、ρ=0.295。

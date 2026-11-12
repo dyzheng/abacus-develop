@@ -107,7 +107,7 @@ TEST(MbisAlmTest, MbisMeanRadiusFixedPoint)
                 {
                     const std::size_t ig = (static_cast<std::size_t>(ix) * 24 + iy) * 24 + iz;
                     const Vec3 p = t.grid.point(ix, iy, iz);
-                    const double r = mbis_periodic_distance(p, t.atoms[a].R, t.grid);
+                    const double r = norm(p - t.atoms[a].R);  // images=0 -> direct
                     na += st.w[a][ig] * t.rho[ig] * t.grid.dV();
                     mr += r * st.w[a][ig] * t.rho[ig] * t.grid.dV();
                 }
