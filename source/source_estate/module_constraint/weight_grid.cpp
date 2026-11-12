@@ -986,7 +986,7 @@ void WeightGrid::build_mbis(const std::vector<double>& rho_total)
     const std::vector<mbis_alm::Atom> atoms = mbis_alm::make_atoms(R, Zv);
 
     mbis_alm::MbisConfig cfg;
-    cfg.cutoff = 1.0e6;
+    cfg.cutoff = 10.0;  // bohr; physical pro decay, keeps MBIS tractable at 1e6 grid points
     cfg.max_iter = 200;   // warm-started after the first call
     cfg.tol = 1e-8;
     cfg.damp = 0.5;

@@ -7939,3 +7939,13 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - Fe2(0.50)：Newton=Picard，N=16/16、M=±2.849、ρ=0.309<1；LiCl 不变；12/12。
 - **规范语义**：Picard 不动点（稳定）为解；D 仅诊断。
 - **文件**：`mbis_alm.cpp`、本日志、`2026-10-30-mbis-d-degeneracy-fallback.md`。
+
+## 2026-10-30 (S6.66): ABACUS 主循环端到端验证（mbis）
+
+- 增量重建 `abacus_basic_para`；LiCl `constraint_weight_type mbis` delta=−0.05，100 步 `-np 1`。
+- **MBIS 约束激活**：q 2.0445→2.0391（随 mu 0.05→0.2 单调下降，方向正确）；未约束 2.0445
+  与独立 MBIS 2.0447 **一致** ⇒ 集成正确。无崩溃。
+- 性能：`cutoff=1e6→10 bohr`、`image_translations R=images`（0→direct，大盒快）修正 1e6 网格超时。
+- 慢收敛为**外循环 mu 控制器**（dQ/dmu≈−0.036，线性 mu/外步，secant 未触发；~650 SCF），非 MBIS。
+- 12/12 模块测试仍通过。TODO：MPI gather；更快的 secant mu。
+- **文件**：`weight_grid.cpp`、`mbis_alm.cpp`、本日志、`2026-10-30-mbis-abacus-e2e-validation.md`。

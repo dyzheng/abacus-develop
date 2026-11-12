@@ -139,7 +139,7 @@ std::vector<Vec3> image_translations(const Grid& grid, int images,
     // and the periodic pro is invariant, so equivalent atoms are treated
     // identically.  Summing the lattice (not a coset half-lattice) is what
     // restores the symmetry.  R >= 1 always includes the home cell.
-    const int R = std::max(1, images);
+    const int R = std::max(0, images);  // images=0 -> no periodic images (large box)
     std::vector<Vec3> T;
     T.reserve((2 * R + 1) * (2 * R + 1) * (2 * R + 1));
     for (int lx = -R; lx <= R; ++lx)
