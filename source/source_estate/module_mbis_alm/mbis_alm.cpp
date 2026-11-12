@@ -158,11 +158,17 @@ double pro_density_at(const Vec3& p, const Vec3& R, double N, double zeta,
     // exactly symmetric for equivalent atoms (R1 = R0 + g, 2g a lattice vector).
     // A truncated lattice sum is slowly convergent for a diffuse pro and breaks
     // the symmetry numerically.
-    double rmin = 1e300;
+    // SMOOTH periodic pro: full lattice sum over images (smooth in R, so its
+    // analytic centre derivative matches the finite-difference of the energy).
+    // The nearest-image form is discontinuous at wrap boundaries; the sum is not.
+    double acc = 0.0;
     for (const Vec3& T : images)
-        rmin = std::min(rmin, norm(p - (R + T)));
-    if (rmin > cutoff) return 0.0;
-    return N * zeta * zeta * zeta / (8.0 * M_PI) * std::exp(-zeta * rmin);
+    {
+        const double r = norm(p - (R + T));
+        if (r <= cutoff) acc += std::exp(-zeta * r);
+    }
+    if (acc <= 0.0) return 0.0;
+    return N * zeta * zeta * zeta / (8.0 * M_PI) * acc;
 }
 
 void fill_weights(const std::vector<Vec3>& pts, const Grid& grid,
@@ -362,51 +368,48 @@ std::vector<Vec3> constraint_force(const MbisState& st, const Grid& grid,
                                    const std::vector<double>& rho,
                                    const std::vector<double>& spin,
                                    const std::vector<double>& mu_c,
-                                   const std::vector<double>& mu_s)
+                                   const std::vector<double>& mu_s,
+                                   int images)
 {
     const std::vector<Vec3> pts = grid_points(grid);
     const std::size_t nxyz = pts.size();
     const int nat = static_cast<int>(atoms.size());
     const double dV = grid.dV();
-    const Vec3 cf0 = grid.n[0] * grid.dv[0];
-    const Vec3 cf1 = grid.n[1] * grid.dv[1];
-    const Vec3 cf2 = grid.n[2] * grid.dv[2];
-    const double fcell[9] = {cf0.x, cf0.y, cf0.z, cf1.x, cf1.y, cf1.z,
-                             cf2.x, cf2.y, cf2.z};
-    double finv[9];
-    if (!invert3(fcell, finv)) { finv[0] = finv[1] = finv[2] = finv[3] = finv[4] =
-        finv[5] = finv[6] = finv[7] = finv[8] = 0.0; }
+    // Use the SAME smooth lattice-sum pro as pro_density_at, so the analytic
+    // centre derivative is the exact gradient of the finite-difference energy
+    // (the nearest-image form is discontinuous at wrap boundaries).
+    const std::vector<Vec3> imgs = image_translations(grid, images, atoms);
 
-    // frozen-parameter pro-densities and their centre derivatives
     std::vector<double> pro(nat * nxyz, 0.0);
     std::vector<double> P(nxyz, 0.0);
     std::vector<std::vector<Vec3>> dpro(nat, std::vector<Vec3>(nxyz, Vec3{}));
     for (int a = 0; a < nat; ++a)
     {
         const double zeta = st.zeta[a];
+        const double pre = st.N[a] * zeta * zeta * zeta / (8.0 * M_PI);
         for (std::size_t ig = 0; ig < nxyz; ++ig)
         {
-            // centre derivative must use the minimum-image separation so that
-            // the analytic force matches the (min-image) weights used by the FD.
-            const Vec3 d = (finv[0] != 0.0 || finv[4] != 0.0 || finv[8] != 0.0)
-                               ? modulo_cell(pts[ig] - atoms[a].R, finv, fcell)
-                               : (pts[ig] - atoms[a].R);
-            const double ra = norm(d);
-            const double pa = st.N[a] * zeta * zeta * zeta / (8.0 * M_PI) * std::exp(-zeta * ra);
+            double pa = 0.0;
+            Vec3 da{};
+            for (const Vec3& T : imgs)
+            {
+                // d = x - R - T ; d/dR exp(-zeta|d|) = (zeta/|d|) exp(-zeta|d|) d
+                const Vec3 d = pts[ig] - atoms[a].R - T;
+                const double ra = norm(d);
+                const double e = std::exp(-zeta * ra);
+                pa += pre * e;
+                if (ra > 1e-12) da = da + (zeta / ra) * pre * e * d;
+            }
             pro[a * nxyz + ig] = pa;
             P[ig] += pa;
-            if (ra > 1e-12)
-                dpro[a][ig] = (zeta / ra) * (1.0 / (8.0 * M_PI)) * st.N[a]
-                              * zeta * zeta * zeta * std::exp(-zeta * ra) * d;
+            dpro[a][ig] = da;
         }
     }
 
     std::vector<Vec3> F(nat, Vec3{});
     for (std::size_t ig = 0; ig < nxyz; ++ig)
     {
-        if (P[ig] <= 1e-300)
-            continue;
-        // drive_a = mu_c[a] rho + mu_s[a] spin ; weighted sum
+        if (P[ig] <= 1e-300) continue;
         std::vector<double> drive(nat, 0.0);
         double wdrive = 0.0;
         for (int a = 0; a < nat; ++a)

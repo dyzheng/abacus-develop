@@ -130,15 +130,12 @@ TEST(MbisAlmTest, ConstraintPotential)
 
 TEST(MbisAlmTest, ForceFiniteDifference)
 {
-    GTEST_SKIP() << "min-image pro is discontinuous at wrap boundaries: the analytic "
-                    "(smooth) force and the finite-difference of the min-image energy "
-                    "differ near the boundary. TODO: smooth periodic pro for the force.";
     const Toy t = make_toy();
     const MbisConfig c = cfg();
     const MbisState st = compute_mbis(t.rho, t.grid, t.atoms, c);
     const std::vector<double> mu_c{0.7, -0.4};
     const std::vector<double> mu_s{0.3, -0.2};
-    const std::vector<Vec3> F = constraint_force(st, t.grid, t.atoms, t.rho, t.spin, mu_c, mu_s);
+    const std::vector<Vec3> F = constraint_force(st, t.grid, t.atoms, t.rho, t.spin, mu_c, mu_s, c.images);
 
     const double h = 1e-4;
     for (int J = 0; J < 2; ++J)

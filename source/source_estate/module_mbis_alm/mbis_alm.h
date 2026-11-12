@@ -174,7 +174,8 @@ std::vector<Vec3> constraint_force(const MbisState& st, const Grid& grid,
                                    const std::vector<double>& rho,
                                    const std::vector<double>& spin,
                                    const std::vector<double>& mu_c,
-                                   const std::vector<double>& mu_s);
+                                   const std::vector<double>& mu_s,
+                                   int images = 0);
 
 /// One augmented-Lagrangian component (a charge or spin constraint).
 struct AlmComponent

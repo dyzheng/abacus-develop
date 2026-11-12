@@ -7920,3 +7920,12 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   skip（TODO 光滑周期 pro 用于力）；观测量/对称/稳定不受影响。
 - 11 pass + 1 skip。**文件**：`mbis_alm.{h,cpp}`、`test/mbis_alm_test.cpp`、
   `tools/mbis_alm_stability.cpp`、本日志、`2026-10-30-mbis-minimum-image-symmetry-fix.md`。
+
+## 2026-10-30 (S6.64): 光滑周期 pro 用于力（force FD 恢复）
+
+- `pro_density_at` 改为**光滑晶格和**（对 R 光滑）；`r` 仍最小镜像（ζ 用，力用冻结 ζ）。
+- `constraint_force` 的 `pro`/`dpro` 用同一晶格和 + 解析导数 ⇒ 与 FD 一致；加 `images` 参数。
+- **12/12 通过**。Fe2(0.50)：Picard N=15.9998/16.0001、M=±2.849、ρ=0.309<1（R=2 精确对称）；
+  LiCl 不变。
+- TODO：`compute_mbis_newton_fp` 在真实 Fe2 sum 映射上发散（诊断路径，主循环用 Picard）。
+- **文件**：`mbis_alm.{h,cpp}`、`test/mbis_alm_test.cpp`、本日志、`2026-10-30-mbis-smooth-force-pro.md`。
