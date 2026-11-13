@@ -7974,3 +7974,13 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   原 ~28 步。默认行为不变（opt-in）。12/12。
 - **文件**：`input_parameter.h`、`read_input_item_other.cpp`、`constraint_io.{h,cpp}`、
   `constraint_loop.cpp`、本日志、`2026-10-30-mbis-faster-mu-controller.md`。
+
+## 2026-10-30 (S6.69): FeO charge+spin 同时约束验证（无 U）
+
+- FeO(2Fe AFM+2O, PBE, 无 U)，MBIS，同一 Fe 上 charge+spin 两条约束。
+- 小胞必须 `constraint_mbis_images 1`（0→corner 低估乱值；1→O≈7.65, Fe≈14.3, M=±2.3–2.8）。
+- **两约束同时生效**；参考 Fe0 charge 14.27、spin 2.85 与独立 MBIS 一致 ⇒ 机制正确。
+- **无 U 的 PBE FeO 亚稳/近简并**：微小约束步(mu≈0.05)即 BRANCH_FLIP（约束能量更低 Δ6.9eV），
+  约束循环正确拒绝验证。受控 charge+spin 需 DFT+U。
+- **结论**：MBIS 支持电荷+自旋同时约束；纯金属约束电荷意义不大（用户判断对），FeO 需 U。
+- 文件：本日志、`2026-10-30-mbis-feo-charge-spin-validation.md`（无代码改动）。
