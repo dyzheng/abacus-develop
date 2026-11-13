@@ -7996,3 +7996,14 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   legacy `E_con=μ(Q−t)` 对大 Q 修正不足 → **假性 BRANCH_FLIP**。
 - 需 DFT+U FeO + 审计 esolver 能量（守卫用 `E_KS[ρ_con]`）才能定量确认/修复。
 - **文件**：本日志、`2026-10-30-mbis-feo-branch-flip-analysis.md`（无代码改动）。
+
+## 2026-10-30 (S6.71): 能量表达式审计（constraint vs DeltaSpin）
+
+- DeltaSpin `escon=−Σλ·M`（计算 M，负）；constraint legacy `cc_escon=Σμ(Q−t)`、allocation `−Σμt`
+  （`fp_energy.h:50`）→ **legacy 与 DeltaSpin 结构不同**，差 `ΣμQ`。
+- **自旋翻转对称性判据**：plain FM(+2.4,−7636.46) vs 约束 FM(−3.6,−7643.93)，同序差 **7.5eV** ⇒
+  `etot` 被污染；**LiCl(nspin1) 正常** ⇒ 标量电荷 OK，**问题在 nspin2 自旋通道**（自旋分裂 V_con
+  未被 deband/cc_escon 扣除）。
+- **结论**：非"参考非全局极小"、非 MBIS 权重 bug；是 **nspin2 自旋通道能量表达式未按 DeltaSpin
+  扣除约束项**。修复方向：spin 修正改 `−μ_s·M`（及 charge `−μ_c·Q`）。
+- **文件**：本日志、`2026-10-30-mbis-energy-audit-deltaspin-comparison.md`（无代码改动）。
