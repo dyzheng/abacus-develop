@@ -6,6 +6,7 @@
 
 #include "constraint_dipole.h"
 #include "source_base/global_function.h"
+#include "source_base/parallel_comm.h"
 #include "source_base/parallel_reduce.h"
 #include "source_base/module_grid/partition.h"
 #include "source_base/tool_quit.h"
@@ -945,18 +946,57 @@ void WeightGrid::set_constraint_atoms(
 
 void WeightGrid::build_mbis(const std::vector<double>& rho_total)
 {
-    // Serial-only first integration: the MBIS KL iteration uses the full grid.
-    // MPI callers must gather chr.rho to rank 0 (or make compute_mbis
-    // MPI-aware) before running this.
-    if (rho_basis_->poolnproc != 1)
+    // Gather the rank-local density slices into the full FFT grid so the
+    // (global) MBIS iteration can run on every pool rank; the weights are
+    // scattered back to the rank-local layout afterwards.  The real-space grid
+    // is distributed as contiguous z-plane blocks: local ir maps to global
+    // nxy*startz_current + ir.
+    if (static_cast<int>(rho_total.size()) != rho_basis_->nrxx)
     {
         ModuleBase::WARNING_QUIT("WeightGrid::build_mbis",
-            "MBIS weights currently require a serial pool; gather the density.");
+            "rho_total must be the rank-local density (size nrxx).");
     }
-    if (static_cast<int>(rho_total.size()) != rho_basis_->nxyz)
+    // Density index is z-fastest: global ig = ixy*nz + iz, local
+    // ir = ixy*nplane + iz_local (see pw_grid_bridge.h / Parallel_Grid::reduce).
+    // So gather the rank-local blocks into a concatenated buffer, then reindex
+    // (a permutation) into the global z-fastest grid.
+    std::vector<double> rho_full(rho_basis_->nxyz, 0.0);
+#ifdef __MPI
+    const int pool_np = rho_basis_->poolnproc;
+    if (pool_np > 1)
     {
-        ModuleBase::WARNING_QUIT("WeightGrid::build_mbis",
-            "rho_total must be the full FFT-grid density (size nxyz).");
+        const int nxy = rho_basis_->nxy;
+        const int nz = rho_basis_->nz;
+        std::vector<int> counts(pool_np), displs(pool_np);
+        int acc = 0;
+        for (int ip = 0; ip < pool_np; ++ip)
+        {
+            const int z0 = rho_basis_->startz[ip];
+            const int z1 = (ip + 1 < pool_np) ? rho_basis_->startz[ip + 1] : nz;
+            counts[ip] = nxy * (z1 - z0);
+            displs[ip] = acc;
+            acc += counts[ip];
+        }
+        std::vector<double> rho_cat(rho_basis_->nxyz, 0.0);
+        MPI_Allgatherv(rho_total.data(), rho_basis_->nrxx, MPI_DOUBLE,
+                       rho_cat.data(), counts.data(), displs.data(), MPI_DOUBLE,
+                       POOL_WORLD);
+        for (int ip = 0; ip < pool_np; ++ip)
+        {
+            const int z0 = rho_basis_->startz[ip];
+            const int z1 = (ip + 1 < pool_np) ? rho_basis_->startz[ip + 1] : nz;
+            const int npl = z1 - z0;
+            const int base = displs[ip];
+            for (int ixy = 0; ixy < nxy; ++ixy)
+                for (int izl = 0; izl < npl; ++izl)
+                    rho_full[ixy * nz + z0 + izl] = rho_cat[base + ixy * npl + izl];
+        }
+    }
+    else
+#endif
+    {
+        // Serial pool: local layout already equals the global z-fastest layout.
+        rho_full = rho_total;
     }
     int n[3] = {rho_basis_->nx, rho_basis_->ny, rho_basis_->nz};
     mbis_alm::Vec3 a[3];
@@ -994,16 +1034,23 @@ void WeightGrid::build_mbis(const std::vector<double>& rho_total)
     cfg.init_zeta = 1.0;
     cfg.warm_N = mbis_N_;
     cfg.warm_zeta = mbis_zeta_;
-    const mbis_alm::MbisState st = mbis_alm::compute_mbis(rho_total, grid, atoms, cfg);
+    const mbis_alm::MbisState st = mbis_alm::compute_mbis(rho_full, grid, atoms, cfg);
     mbis_N_ = st.N;
     mbis_zeta_ = st.zeta;
 
     w_.assign(nat_, std::vector<double>(nrxx_, 0.0));
     rem_.assign(nrxx_, 0.0);
     max_rem_ = 0.0;
+    // Scatter the global (z-fastest) weights back to the rank-local layout
+    // ir = ixy*nplane + iz_local  <->  ig = ixy*nz + (startz_current + iz_local).
+    const int nxy_s = rho_basis_->nxy;
+    const int nz_s = rho_basis_->nz;
+    const int z0_s = rho_basis_->startz_current;
+    const int npl_s = rho_basis_->nplane;
     for (int iat = 0; iat < nat_; ++iat)
-        for (int ir = 0; ir < nrxx_; ++ir)
-            w_[iat][ir] = st.w[iat][ir];
+        for (int ixy = 0; ixy < nxy_s; ++ixy)
+            for (int izl = 0; izl < npl_s; ++izl)
+                w_[iat][ixy * npl_s + izl] = st.w[iat][ixy * nz_s + z0_s + izl];
 
     cw_.assign(constraint_atoms_.size(), std::vector<double>(nrxx_, 0.0));
     for (std::size_t alpha = 0; alpha < constraint_atoms_.size(); ++alpha)

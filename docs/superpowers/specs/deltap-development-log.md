@@ -7957,3 +7957,11 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - 修正：测试改用 `norm(p−R)`（direct，匹配 `images=0`）；`compute_mbis` 的均径 `r` 用与 `pro`
   相同的 `image_translations(images)`（Fe2 `images=1`→min-image 对称；LiCl `images=0`→direct）。
 - 12/12 通过；Fe2 对称 15.9998/16.0001、ρ=0.309；LiCl 2.0447、ρ=0.295。
+
+## 2026-10-30 (S6.67): MBIS 主循环 MPI gather
+
+- 去掉 `build_mbis` 串行守卫；按 **z 最快**布局（`ig=ixy*nz+iz`，`ir=ixy*nplane+iz_local`）
+  `MPI_Allgatherv` + 重排 gather，全局 `compute_mbis`，再 scatter 权重回本地。
+- 验证 `-np 1/2/4` q 完全一致（2.044532…），未约束 2.0445 = 独立 2.0447；12/12。
+- 冗余在所有 rank 运行 compute_mbis（可后续优化为 rank0+bcast）。慢外循环属 mu 控制器（下一步）。
+- **文件**：`weight_grid.cpp`、本日志、`2026-10-30-mbis-mpi-gather.md`。
