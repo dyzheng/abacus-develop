@@ -7984,3 +7984,15 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   约束循环正确拒绝验证。受控 charge+spin 需 DFT+U。
 - **结论**：MBIS 支持电荷+自旋同时约束；纯金属约束电荷意义不大（用户判断对），FeO 需 U。
 - 文件：本日志、`2026-10-30-mbis-feo-charge-spin-validation.md`（无代码改动）。
+
+## 2026-10-30 (S6.70): FeO BRANCH_FLIP 深析（images 语义 / 守卫 / 7eV 异常）
+
+- `images=k` = 晶格平移壳层 R=k（`(2k+1)^3` 个；0=home/direct，1=27 最小镜像）。小胞必须 ≥1。
+- `BRANCH_FLIP`：约束相 `e_guard=scf_energy+E_con` 比 mu=0 参考低 > `constraint_branch_tol`(0.001Ry)
+  → 判为切分支，拒绝验证（`constraint_loop.cpp:1874-1945`）。
+- 实测：纯 AFM −7637.04、纯 FM −7636.46（都收敛，差 0.6eV）；约束 FM −7643.93（低 7.5eV）。
+- **同 FM 序差 7eV 不合理** ⇒ 非"参考非全局极小"；MBIS 参考 Q 与独立一致 ⇒ 非权重 bug。
+  指向**能量记账**：`FINAL_ETOT` 含人为 `∫V_con ρ=μ·Q`（Fe Q~14→~8.7eV，LiCl Q~2 可忽略），
+  legacy `E_con=μ(Q−t)` 对大 Q 修正不足 → **假性 BRANCH_FLIP**。
+- 需 DFT+U FeO + 审计 esolver 能量（守卫用 `E_KS[ρ_con]`）才能定量确认/修复。
+- **文件**：本日志、`2026-10-30-mbis-feo-branch-flip-analysis.md`（无代码改动）。
