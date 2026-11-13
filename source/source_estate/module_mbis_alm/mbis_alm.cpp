@@ -217,15 +217,16 @@ MbisState compute_mbis(const std::vector<double>& rho, const Grid& grid,
     const int nat = static_cast<int>(atoms.size());
     const double dV = grid.dV();
 
-    // minimum-image distances (used for the mean-radius update); must wrap by
-    // the lattice so that equivalent atoms get identical mean radii and zeta.
-    const std::vector<Vec3> imgs0 = image_translations(grid, cfg.images, atoms);
+    // Mean-radius distance uses the SAME image set as the pro-density: direct
+    // for images=0 (large box), min-image for images>=1 (small cell).  Equivalent
+    // atoms then get identical mean radii / zeta when the periodic images are on.
+    const std::vector<Vec3> imgs_r = image_translations(grid, cfg.images, atoms);
     std::vector<std::vector<double>> r(nat, std::vector<double>(nxyz, 0.0));
     for (int a = 0; a < nat; ++a)
         for (std::size_t ig = 0; ig < nxyz; ++ig)
         {
             double rr = 1e300;
-            for (const Vec3& T : imgs0) rr = std::min(rr, norm(pts[ig] - atoms[a].R - T));
+            for (const Vec3& T : imgs_r) rr = std::min(rr, norm(pts[ig] - atoms[a].R - T));
             r[a][ig] = rr;
         }
 
