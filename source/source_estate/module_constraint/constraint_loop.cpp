@@ -2201,10 +2201,33 @@ double ConstraintLoop::output_energy_correction() const
         return correction;
     }
 
-    // Branch: the legacy real-space potential and ALM path add the audited
-    // constraint functional on top of the unconstrained eband.  This is the
-    // historical cc_escon convention and must stay bit-identical.
-    return constraint_energy_functional();
+    // Branch: legacy real-space potential path.  The constraint potential is
+    // injected into v_eff, so the esolver total carries the constraint-field
+    // energy +integral(V_con rho) = sum_alpha mu_alpha Q_alpha on top of the
+    // true KS energy.  Remove it explicitly (DeltaSpin escon = -sum lambda.M
+    // form) so the printed/guarded total is the physical KS energy of the
+    // constrained density.  (The minimised objective E_KS + sum mu(Q-t) is a
+    // property of the SCF, not of the printed total.)
+    // ALM keeps its own quadratic-penalty convention.
+    if (alm_armed_)
+    {
+        return constraint_energy_functional();
+    }
+    double corr = 0.0;
+    const bool vec = spin_vector_mode_ && Q_vec_.size() == mu_.size()
+                     && target_vec_.size() == mu_.size();
+    for (size_t a = 0; a < mu_.size(); ++a)
+    {
+        if (vec && a < kinds_.size() && kinds_[a] == ConstraintKind::Spin)
+        {
+            corr -= mu_vec_[a] * Q_vec_[a];
+        }
+        else
+        {
+            corr -= mu_[a] * Q_[a];
+        }
+    }
+    return corr;
 }
 
 double ConstraintLoop::constraint_energy_functional() const

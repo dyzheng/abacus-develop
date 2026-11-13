@@ -54,3 +54,31 @@ output_energy_correction() = -Σ_alpha mu_alpha * t_alpha
 ## 5. 文件
 本日志；代码定位见 `fp_energy.h:50`、`constraint_loop.cpp:2177 output_energy_correction`、
 `spin_constrain.cpp:38 cal_escon`。无代码改动（纯审计）。
+
+## 6. 修复（已实施并验证）
+
+将 **legacy** 的 `output_energy_correction()` 改为 **DeltaSpin 形式 `−Σ μ·Q`**（电荷用 Q，
+collinear spin 用 M；ALM/allocation 分支不变）：
+```cpp
+// legacy 非-ALM：
+corr -= mu_[a] * Q_[a];            // 电荷
+corr -= mu_vec_[a] * Q_vec_[a];    // nspin4 spin 分量
+// (audit 的 e_con 仍保留 Σμ(Q−t) 物理泛函，二者分离)
+```
+即**显式扣除约束势能量** `∫V_con ρ = ΣμQ`，使 `etot` 为约束密度的**物理 KS 能量**。
+
+### 验证（FeO，charge+spin，−np 2）
+| | 修复前 | 修复后 |
+|---|---|---|
+| `FINAL_ETOT` | **−7643.93 eV**（低 7.5） | **−7636.23 eV**（≈ 纯 FM −7636.46 / 参考） |
+| branch guard `de` | `< −tol`（假 BRANCH_FLIP） | **`+0.0865 Ry > 0`**（约束升能，物理正确） |
+
+- **7.5 eV 异常消失**，自旋翻转对称性恢复 ⇒ **证实原 `Σμ(Q−t)` 错误**（`deband` 未抵消约束势）。
+- **LiCl（charge）** 仍 **3 步 CONVERGED**（q=1.99448，无回归）——小 Q 时 `ΣμQ` 小，新旧都可用，
+  大 Q（Fe）才暴露 bug。
+- **测试**：`AllocationOutputCorrectionSubtractsTargetTermOnly` 是 **allocation 专用**（`−Σμt`，
+  未改）；审计 `e_con` 仍为 `Σμ(Q−t)`；无 legacy 测试断言旧式。
+
+### 残留（非记账问题）
+FeO **无 DFT+U** 时，约束跑中自旋 q 从 +2.85 翻到 −3.39（mu 极小），SCF 换磁态 → 目标 +2.746
+不可达。这是 **PBE-FeO 无 U 的磁性多解/不稳定**，需 **DFT+U** 才能得到稳定 AFM 基态做受控验证。

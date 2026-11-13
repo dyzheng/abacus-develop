@@ -8007,3 +8007,13 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - **结论**：非"参考非全局极小"、非 MBIS 权重 bug；是 **nspin2 自旋通道能量表达式未按 DeltaSpin
   扣除约束项**。修复方向：spin 修正改 `−μ_s·M`（及 charge `−μ_c·Q`）。
 - **文件**：本日志、`2026-10-30-mbis-energy-audit-deltaspin-comparison.md`（无代码改动）。
+
+## 2026-10-30 (S6.72): 修复能量表达式（legacy cc_escon → −ΣμQ，DeltaSpin 形式）
+
+- **修复**：legacy `output_energy_correction` 由 `Σμ(Q−t)` 改为 **`−ΣμQ`**（DeltaSpin `−ΣλM` 形式，
+  显式扣除 `∫V_con ρ`）；allocation/ALM 不变；audit `e_con` 保留 `Σμ(Q−t)`。
+- **FeO 验证**：FINAL_ETOT −7643.93 → **−7636.23 eV**（回到参考/纯 FM），branch guard
+  `de=+0.0865 Ry > 0`（约束升能，物理正确，**无假 BRANCH_FLIP**）⇒ 证实原式错误。
+- **LiCl** 仍 3 步 CONVERGED（无回归）。测试：allocation 专用测试不受影响。
+- **残留**：PBE-FeO 无 U 磁性不稳定（自旋翻态）→ 需 DFT+U 做受控验证。
+- **文件**：`constraint_loop.cpp`、`2026-10-30-mbis-energy-audit-deltaspin-comparison.md`、本日志。
