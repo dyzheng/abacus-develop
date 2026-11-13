@@ -1601,6 +1601,18 @@ Manual override is allowed: if sc_acceleration_mode is explicitly set, it takes 
         this->add_item(item);
     }
     {
+        Input_Item item("constraint_kappa_min");
+        item.annotation = "smallest kept |dQ/dmu| (secant guard)";
+        item.category = "Constraint";
+        item.type = "Real";
+        item.description = "Lower bound on the measured secant response |dQ/dmu| used by the multiplier update (e/Ry). The default 0.3 assumes a soft channel; a stiff channel (|dQ/dmu| < 0.3) is then over-corrected in the conservative direction and the outer loop crawls (one step_max-sized move per SCF). Lower this so the real slope drives the Newton/secant jump (e.g. 0.02 for MBIS LiCl dQ/dmu ~ 0.036).";
+        item.default_value = "0.3";
+        item.unit = "e/Ry";
+        item.availability = "constraint is true";
+        read_sync_double(input.constraint_kappa_min);
+        this->add_item(item);
+    }
+    {
         Input_Item item("constraint_branch_tol");
         item.annotation = "energy branch-guard tolerance (-1 = auto, 0 = off)";
         item.category = "Constraint";

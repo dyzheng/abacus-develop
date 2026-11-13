@@ -435,6 +435,7 @@ void ConstraintLoop::init(const UnitCell& ucell,
     // pre-II-1 behaviour when the INPUT keys are left alone.
     params.step_max = cfg_.step_max;
     params.step_probe = cfg_.step_probe;
+    params.kappa_min = cfg_.kappa_min;
     // Response sign: both channels respond negatively.  For the spin
     // channel the split injection (V_up += mu*w, V_dn -= mu*w) repels
     // spin-up from / attracts spin-down to the fragment for mu > 0, so the

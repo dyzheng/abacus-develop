@@ -7965,3 +7965,12 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - 验证 `-np 1/2/4` q 完全一致（2.044532…），未约束 2.0445 = 独立 2.0447；12/12。
 - 冗余在所有 rank 运行 compute_mbis（可后续优化为 rank0+bcast）。慢外循环属 mu 控制器（下一步）。
 - **文件**：`weight_grid.cpp`、本日志、`2026-10-30-mbis-mpi-gather.md`。
+
+## 2026-10-30 (S6.68): 更快的 mu 控制器（constraint_kappa_min）
+
+- 根因：`kappa_min=0.3` 把 stiff 通道真实 `|dQ/dmu|≈0.036` 抬高，再被 `step_max=0.05` 截断 →
+  ~28 外步。新增输入 `constraint_kappa_min`（默认 0.3 不变），配合 `constraint_step_max` 放大。
+- LiCl delta=−0.05：`kappa_min 0.01` + `step_max 1.5` ⇒ **3 外步 CONVERGED**（q=1.99448，|res|<1e-4），
+  原 ~28 步。默认行为不变（opt-in）。12/12。
+- **文件**：`input_parameter.h`、`read_input_item_other.cpp`、`constraint_io.{h,cpp}`、
+  `constraint_loop.cpp`、本日志、`2026-10-30-mbis-faster-mu-controller.md`。

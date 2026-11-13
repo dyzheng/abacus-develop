@@ -1232,6 +1232,7 @@ ConfigStatus configure_constraint(ConstraintConfig& cfg,
     cfg.thr = thr;
     cfg.step_max = step_max;
     cfg.step_probe = step_probe;
+    cfg.kappa_min = PARAM.inp.constraint_kappa_min;
     cfg.branch_tol = branch_tol;
     cfg.mu_schedule = mu_schedule;
     cfg.inner_thr = inner_thr;

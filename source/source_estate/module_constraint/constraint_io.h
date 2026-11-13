@@ -28,6 +28,7 @@ struct ConstraintConfig
     double thr = 1e-4;                  // e, per-constraint convergence
     double step_max = 0.05;             // Ry, cap on |dmu| per outer step
     double step_probe = 0.0;            // Ry, first-step cap; 0 = use step_max
+    double kappa_min = 0.3;             // smallest kept |dQ/dmu| (secant guard)
     // Ry, online energy branch-guard tolerance.  -1 at configure time means
     // "auto" (spin -> 1e-3 Ry, charge / all-fixed -> 0); the stored value is
     // always resolved to >= 0.  0 disables the guard.  When > 0 the outer
