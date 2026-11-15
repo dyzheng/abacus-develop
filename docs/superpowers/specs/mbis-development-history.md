@@ -5,6 +5,9 @@
 > 指定文档为准。分支 `mbis`（原 `feat/unified-local-moment-allocation`），远程 `zdy`，
 > PR: https://github.com/dyzheng/abacus-develop/pull/new/mbis
 
+> **横向对比综述（公式+机制+实测）**：`local-moment-constraint-algorithms-review.md`。
+
+
 ---
 
 ## 0. 一句话现状

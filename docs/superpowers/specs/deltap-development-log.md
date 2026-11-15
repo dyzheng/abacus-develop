@@ -8030,3 +8030,13 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   symmetrization-clarification、alm-development-summary、lcao-mbis-saturation、
   why-licl-ok-fe2-breaks、fixedpoint-jacobian-newton）。
 - **文件**：`mbis-development-history.md`、上述 10 篇头注、本日志。
+
+## 2026-10-30 (S6.74): 算法整合综述（公式/机制/实测横评）
+
+- 新增 **`local-moment-constraint-algorithms-review.md`**：整合尝试过的全部算法
+  （Becke / Hirshfeld / **MBIS** / Mulliken / d-投影 / Allocation / DeltaSpin + 求解器
+  Lagrange/ALM/penalty），列出**公式**，从**物理机制**（固定形状 vs 密度自适应、空间盆 vs
+  壳层投影、算符一致性、一阶/二阶）与**实际有效性**（成本/周期/稳定性/能量记账/已验证）
+  两维详细对比；含 LiCl（N/偶极）与 Fe2（自旋四口径+盆内 l）实测表与跨口径注意。
+- 索引页 `mbis-development-history.md` 加指向。
+- **文件**：`local-moment-constraint-algorithms-review.md`、`mbis-development-history.md`、本日志。
