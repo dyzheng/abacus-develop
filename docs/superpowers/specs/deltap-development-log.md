@@ -8040,3 +8040,13 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   两维详细对比；含 LiCl（N/偶极）与 Fe2（自旋四口径+盆内 l）实测表与跨口径注意。
 - 索引页 `mbis-development-history.md` 加指向。
 - **文件**：`local-moment-constraint-algorithms-review.md`、`mbis-development-history.md`、本日志。
+
+## 2026-10-30 (S6.75): 完整演进综述（05-17 DeltaSpin→DeltaP→Allocation→MBIS）
+
+- 新增 **`constraint-algorithms-complete-review.md`**：从 2026-05-17（DeltaSpin 参数统一）
+  起，经 DeltaP（Berry/极化，`Γ_I`、`escon=−ΣλΓ`、两阶段/BFGS）、Allocation（`A_i=Q_i+Q_cW_iQ_c`）、
+  到 MBIS（迭代 Slater），给出各代**公式/物理机制/优劣/实测**，共享约束框架
+  （WeightGrid/通道/inject/accounting/ALM/`cc_escon=−ΣμQ`），并做**物理机制 vs 实际有效性**两维对比。
+- 整合了 LiCl/Fe2/DeltaSpin/DeltaP/Allocation/MBIS/Becke/Hirshfeld/Mulliken/投影的数值与求解器对比。
+- 索引页 `mbis-development-history.md` 加指向。
+- **文件**：`constraint-algorithms-complete-review.md`、`mbis-development-history.md`、本日志。

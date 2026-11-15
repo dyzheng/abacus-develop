@@ -6,6 +6,7 @@
 > PR: https://github.com/dyzheng/abacus-develop/pull/new/mbis
 
 > **横向对比综述（公式+机制+实测）**：`local-moment-constraint-algorithms-review.md`。
+> **完整演进综述（2026-05-17→今，DeltaSpin→DeltaP→Allocation→MBIS）**：`constraint-algorithms-complete-review.md`。
 
 
 ---
