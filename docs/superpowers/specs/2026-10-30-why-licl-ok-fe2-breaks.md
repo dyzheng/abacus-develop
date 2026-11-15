@@ -1,5 +1,8 @@
 # 2026-10-30 为什么 LiCl 没有破缺、Fe2 有：回到 MBIS 公式
 
+> ⚠️ 诊断已被**根因修复**取代（direct-pro corner 低估 → min-image）。见 `mbis-minimum-image-symmetry-fix.md`。
+
+
 ## 0. 结论
 
 - **LiCl 不是"没出问题"，而是它不存在"可破缺的对称性"**：两原子是**不同物种**（Li、Cl），

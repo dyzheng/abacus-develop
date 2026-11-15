@@ -1,5 +1,8 @@
 # 2026-10-30 LCAO 下 MBIS 电荷约束的饱和/可达性（100 步问题的真因）
 
+> ⚠️ “饱和”结论已**撤回**；100 步真因与破缺根因见 `mbis-convergence-attempts-log.md`、`mbis-minimum-image-symmetry-fix.md`。
+
+
 > **撤回（2026-10-30 晚）**：本文"饱和 / 目标 2.0 不可达"的结论**不成立**——它基于
 > **未收敛的 SCF 状态**（运行均 `SCF IS NOT CONVERGED`）。2.0 距自然值仅 Δq=0.045，
 > 是**近目标**。正确结论见 `2026-10-30-mbis-solver-correction-and-alm.md`：外层残差

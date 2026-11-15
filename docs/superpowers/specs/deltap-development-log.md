@@ -8017,3 +8017,16 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - **LiCl** 仍 3 步 CONVERGED（无回归）。测试：allocation 专用测试不受影响。
 - **残留**：PBE-FeO 无 U 磁性不稳定（自旋翻态）→ 需 DFT+U 做受控验证。
 - **文件**：`constraint_loop.cpp`、`2026-10-30-mbis-energy-audit-deltaspin-comparison.md`、本日志。
+
+## 2026-10-30 (S6.73): MBIS 文档盘点 + 变迁索引
+
+- 文档审计：~45 篇 MBIS spec + 本 log（S6.34–S6.72）覆盖各阶段（含更正）；但早期 spec 仍以
+  已被推翻结论为主、缺 superseded 标注，且无单一索引。
+- 新增 **`mbis-development-history.md`**：时间线/阶段→文档、**更正撤回台账**、
+  **当前规范算法**（定义/Picard/`ρ(∂F/∂p)<1`/`images` 语义/`cc_escon=−ΣμQ`/mu 控制器/MPI gather）、
+  验证状态表、限制 TODO、阅读指引。
+- 给 10 篇被推翻/过时 spec 加 “⚠️ 已被取代/更正” 头注（unique-solver、hessian-certification、
+  kl-multiplicity-hessian、correctness-and-symmetry、site-equivalence-fix、
+  symmetrization-clarification、alm-development-summary、lcao-mbis-saturation、
+  why-licl-ok-fe2-breaks、fixedpoint-jacobian-newton）。
+- **文件**：`mbis-development-history.md`、上述 10 篇头注、本日志。

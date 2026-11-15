@@ -1,5 +1,8 @@
 # 2026-10-30 不动点 Jacobian 判稳 + 约束 Newton（保 sum rule）
 
+> ⚠️ 其中“`‖J‖₂=32.7` ⇒ Picard 可能不稳”已被**更正**：真实谱半径 0.81<1，Picard **稳定**。见 `mbis-fixedpoint-spectral-radius.md`。
+
+
 ## 0. 实现
 
 - `compute_mbis_newton_fp(rho, grid, atoms, cfg, n_starts)`：

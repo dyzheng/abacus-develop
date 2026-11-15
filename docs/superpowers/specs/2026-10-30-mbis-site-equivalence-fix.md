@@ -1,5 +1,8 @@
 # 2026-10-30 MBIS 位点等价（symmetrize）修复：公式与实现
 
+> ⚠️ **已被取代**：同种原子 `symmetrize` 方案后**移除**；Fe2 破缺真正根因是 **direct-pro corner 低估**，由 **min-image** 修复。见 `mbis-minimum-image-symmetry-fix.md`（S6.63）。
+
+
 ## 1. MBIS 基本公式
 
 原子 A 的 s 型 Slater pro-density（`N_A` 布居，`ζ_A` 展宽）：

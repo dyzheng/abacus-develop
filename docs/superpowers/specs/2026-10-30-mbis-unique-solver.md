@@ -1,5 +1,8 @@
 # 2026-10-30 唯一解算法：多初值 + 最低 KL 目标 D
 
+> ⚠️ **已被 S6.59/S6.65 更正**：按“最低 KL D”选解**无效**（D 在 ζ→0 均匀分割时 =0，是全局最小，属退化）；MBIS 是**带约束不动点**，规范解为物理起点(ζ~1)的 Picard 不动点。见 `mbis-d-degeneracy-fallback.md`、`mbis-constrained-objective-correction.md`。
+
+
 ## 0. 背景
 
 MBIS 的 KL 自洽解**非凸、可能多解**（见 `2026-10-30-mbis-kl-multiplicity-hessian.md`）：

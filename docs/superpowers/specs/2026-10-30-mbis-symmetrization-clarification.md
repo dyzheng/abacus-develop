@@ -1,5 +1,8 @@
 # 2026-10-30 "对称化"澄清：是 MBIS 位点等价，不是时空/时间反演对称
 
+> ⚠️ 澄清本身正确（位点等价、非时间反演），但 `symmetrize` 之后被**移除**，改用 min-image。见 `mbis-minimum-image-symmetry-fix.md`。
+
+
 ## 0. 先澄清两个完全不同的"对称化"
 
 | | (a) 我说的"symmetrize" | (b) 时空对称性（k 点约化/density symmetrize） |

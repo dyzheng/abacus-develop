@@ -1,5 +1,8 @@
 # MBIS + ALM 电荷/自旋约束：开发进展与测试结果总结
 
+> ⚠️ **过时快照**：旧分支名、命令仍含 `--symmetrize`，且未含 min-image 根因、D 退化、能量 `−ΣμQ` 修复。**当前规范见 `mbis-development-history.md`**。
+
+
 **日期**：2026-10-30
 **分支**：`feat/unified-local-moment-allocation`
 **范围**：从"allocation 与 ORCA MBIS 对齐"到"MBIS+ALM 独立模块、真实密度验证、

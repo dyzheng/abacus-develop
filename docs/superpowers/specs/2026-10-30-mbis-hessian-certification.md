@@ -1,5 +1,8 @@
 # 2026-10-30 Hessian 认证与鞍点分类（唯一解算法第二步）
 
+> ⚠️ **对象错**：能量稳定性判据是 **`ρ(∂F/∂p)<1`**（不动点映射），**不是**自由 D 的 Hessian；本页 Hessian 仅作历史诊断。见 `mbis-fixedpoint-spectral-radius.md`。
+
+
 ## 0. 实现
 
 - `mbis_hessian_eigenvalues(rho, grid, atoms, cfg, state, fd_step=1e-4)`：
