@@ -8050,3 +8050,13 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - 整合了 LiCl/Fe2/DeltaSpin/DeltaP/Allocation/MBIS/Becke/Hirshfeld/Mulliken/投影的数值与求解器对比。
 - 索引页 `mbis-development-history.md` 加指向。
 - **文件**：`constraint-algorithms-complete-review.md`、`mbis-development-history.md`、本日志。
+
+## 2026-10-30 (S6.76): 完整综述扩写 + 分节整合
+
+- 将 `constraint-algorithms-complete-review.md` 由 ~270 行扩为 **1243 行 / 17 节**，
+  **分节生成**（§0–§16，各为独立小标题）后**统一拼接整合**、通读校对（代码块 36 对、表 23、
+  关键数字一致）。
+- 覆盖：05-17 DeltaSpin → DeltaP → Allocation → MBIS；公式、物理机制（固定 vs 自适应、
+  空间盆 vs 壳层、能量记账、近零模）、实际有效性（成本/周期/稳定/力/已验证）、数值表、
+  失败模式/更正台账、结论/TODO、文档映射。
+- **文件**：`constraint-algorithms-complete-review.md`、本日志。
