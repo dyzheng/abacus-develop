@@ -8060,3 +8060,15 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   空间盆 vs 壳层、能量记账、近零模）、实际有效性（成本/周期/稳定/力/已验证）、数值表、
   失败模式/更正台账、结论/TODO、文档映射。
 - **文件**：`constraint-algorithms-complete-review.md`、本日志。
+
+## 2026-10-30 (S6.77): MBIS 优势论证 + 开发/测试路线文档
+
+- 新增 `mbis-why-better-and-roadmap.md`：论证 MBIS 相对 Becke/Hirshfeld/Mulliken/Allocation/
+  DeltaSpin/DeltaP 的优势（密度自适应→离子性；同权重双通道；求和精确/不动点稳定；盆内 l；min-image；
+  `−ΣμQ`；MPI/快速 μ），附 LiCl/Fe2 证据；**诚实边界**（不覆盖极化→DeltaP；小胞需 min-image；
+  大 Q 需 −ΣμQ；磁性氧化物需 DFT+U）。
+- 给出后续**开发**（P0：精确盆内 l、自动 images、大 Q 能量；P1：MPI 效率、多约束求解、力/应力；
+  P2：spin-resolved、SOC、多极/ESP）与**测试**（DFT+U FeO、ORCA 基准、多体系、MPI、力/应力、回归）、
+  里程碑/验收、风险。
+- 索引页 `mbis-development-history.md` 加指向。
+- **文件**：`mbis-why-better-and-roadmap.md`、`mbis-development-history.md`、本日志。

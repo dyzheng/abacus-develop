@@ -7,6 +7,7 @@
 
 > **横向对比综述（公式+机制+实测）**：`local-moment-constraint-algorithms-review.md`。
 > **完整演进综述（2026-05-17→今，DeltaSpin→DeltaP→Allocation→MBIS）**：`constraint-algorithms-complete-review.md`。
+> **优势论证 + 开发/测试路线**：`mbis-why-better-and-roadmap.md`。
 
 
 ---
