@@ -1041,8 +1041,12 @@ void ConstraintLoop::observe(const int iter, const double* const* rho,
         {
             mbis_constrained_built_ = false;
         }
+        // Experiment toggle (does not change the default): force a per-observation
+        // rebuild of the density-dependent MBIS weights, to study whether the
+        // moving partition affects SCF convergence / the energy identity.
+        const bool force_rebuild_w = (std::getenv("ABA_MBIS_REBUILD_W") != nullptr);
         const bool rebuild = (phase_ == LoopPhase::REFERENCE)
-                             || !mbis_constrained_built_;
+                             || !mbis_constrained_built_ || force_rebuild_w;
         if (rebuild)
         {
             std::vector<double> rho_total(wg_->nrxx(), 0.0);
@@ -2213,21 +2217,11 @@ double ConstraintLoop::output_energy_correction() const
     {
         return constraint_energy_functional();
     }
-    double corr = 0.0;
-    const bool vec = spin_vector_mode_ && Q_vec_.size() == mu_.size()
-                     && target_vec_.size() == mu_.size();
-    for (size_t a = 0; a < mu_.size(); ++a)
-    {
-        if (vec && a < kinds_.size() && kinds_[a] == ConstraintKind::Spin)
-        {
-            corr -= mu_vec_[a] * Q_vec_[a];
-        }
-        else
-        {
-            corr -= mu_[a] * Q_[a];
-        }
-    }
-    return corr;
+    // Charge channel: deband already cancels the injected scalar V_con, so the
+    // audited functional mu(Q-t) is the correct (objective ~ physical) form.
+    // (The blanket -sum mu Q experiment over-subtracted muQ for charge and was
+    // reverted; the spin channel's energy accounting is tracked separately.)
+    return constraint_energy_functional();
 }
 
 double ConstraintLoop::constraint_energy_functional() const

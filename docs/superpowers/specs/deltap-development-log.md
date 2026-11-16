@@ -8072,3 +8072,15 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   里程碑/验收、风险。
 - 索引页 `mbis-development-history.md` 加指向。
 - **文件**：`mbis-why-better-and-roadmap.md`、`mbis-development-history.md`、本日志。
+
+## 2026-10-30 (S6.78): MBIS CDFT PES 扫描（LiCl）+ 能量记账更正
+
+- 首次沿 δ 的 PES 扫描（LiCl charge，δ=0/±0.05，`scf_thr 1e-5`/`step_max 0.5`/`kappa_min 0.05`）。
+- **抓 bug**：含 `−ΣμQ` 时 E(±0.05) 相差 ~50 eV（=μQ）⇒ **`−ΣμQ` 对电荷错**（`deband` 已抵消
+  电荷 `V_con`）。**回退** `cc_escon=Σμ(Q−t)` 后：E(δ)=−643.28/−642.68/−642.94，**光滑、δ=0 极小**；
+  `−dE/dδ` vs μ ≈ −9.7%/+13.5%（粗扫描、近极小）。
+- **更正 S6.72**："−ΣμQ 修复" 对电荷不成立；spin 通道仍待**通道感知**记账（charge μ(Q−t)、
+  spin −μt/−μM 或修 cal_delta_eband），FeO 待 DFT+U 重审。
+- 新增 `ABA_MBIS_REBUILD_W` 开关（冻结 vs 重建实验）。
+- 文件：`constraint_loop.cpp`、本日志、`2026-10-30-mbis-pes-scan-energy-bug.md`、
+  `mbis-development-history.md`（台账更正）。

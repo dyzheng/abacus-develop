@@ -53,7 +53,7 @@ MBIS（迭代 Slater Stockholder，**带布居约束的不动点**）已作为
 | `‖J‖₂=32.7 ⇒ Picard 可能不稳`（`fixedpoint-jacobian-newton`） | ⚠️ 更正 | 真实谱半径 **0.81<1 稳定**：`fixedpoint-spectral-radius` |
 | **同种原子 `symmetrize`** 修复 Fe2 破缺（`site-equivalence-fix`、`symmetrization-clarification`） | ❌ 移除 | 根因是 **direct-pro corner 低估** → **min-image**：`minimum-image-symmetry-fix`(S6.63) |
 | "Fe2 在任何 `images` 下都 16/16 对称"（早期） | ⚠️ 条件 | `images=0`(direct) 会破缺；0.51 胞两 Fe 本不等价：`real-cube-stability`(S6.62) |
-| legacy `cc_escon = Σμ(Q−t)` 正确 | ❌ 错 | 应 **`−ΣμQ`**（DeltaSpin `−ΣλM`）：`energy-audit-deltaspin-comparison` / S6.72 |
+| legacy `cc_escon = Σμ(Q−t)` 正确 | ✅ **对电荷**（`deband` 已抵消电荷 `V_con`）；`−ΣμQ` 对电荷**错**（多减 μQ） | PES 扫描（S6.78/`2026-10-30-mbis-pes-scan-energy-bug.md`）；spin 通道记账仍待修（通道感知/`cal_delta_eband`） |
 | FeO `BRANCH_FLIP` = 参考非全局极小 / MBIS 权重 bug | ❌ 否 | 是**能量记账（大 Q）致假 flip**；权重/观测正确：`feo-branch-flip-analysis` + `energy-audit` |
 | in-SCF ALM（`alm` 调度）可加速（`solver-correction-and-alm`） | ⚠️ 负结果 | 罚项过刚、dampen 砍 k 过慢：`convergence-attempts-log`、`alm-in-scf-result` |
 
