@@ -8160,3 +8160,11 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - rank0 计算后将各 rank 的本地布局块打包，`MPI_Scatterv` 只发本地片；非 root 不再持 O(nxyz) 权重。
 - 验证：LiCl z00/p05 在 np=4 与 np=1/2 **逐位一致**。
 - 文件：`weight_grid.cpp`、本日志。
+
+## 2026-10-30 (S6.87): MBIS 网格循环 OpenMP
+
+- `fill_weights`（ig 外层，原子内求和，避免 P[ig] 竞争）、`compute_mbis` 的 `r[a][ig]` 与 `N/ζ` 归约
+  加 `#pragma omp parallel for`。
+- 验证：LiCl z00/p05 在 OMP=4,np=4 与串行/纯 MPI 结果一致（E 差 ~1e-9、q ~1e-7，OMP 浮点重排）。
+  模块 gtest 串行 13/13。
+- 文件：`mbis_alm.cpp`、status 文档、本日志。

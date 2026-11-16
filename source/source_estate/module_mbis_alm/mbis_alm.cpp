@@ -181,13 +181,18 @@ void fill_weights(const std::vector<Vec3>& pts, const Grid& grid,
     const std::vector<Vec3> imgs = image_translations(grid, images, atoms);
     std::vector<double> pro(nat * nxyz, 0.0);
     std::vector<double> P(nxyz, 0.0);
-    for (int a = 0; a < nat; ++a)
-        for (std::size_t ig = 0; ig < nxyz; ++ig)
+#pragma omp parallel for schedule(static)
+    for (long ig = 0; ig < static_cast<long>(nxyz); ++ig)
+    {
+        double psum = 0.0;
+        for (int a = 0; a < nat; ++a)
         {
             const double v = pro_density_at(pts[ig], atoms[a].R, N[a], zeta[a], imgs, cutoff);
-            pro[a * nxyz + ig] = v;
-            P[ig] += v;
+            pro[a * nxyz + static_cast<std::size_t>(ig)] = v;
+            psum += v;
         }
+        P[static_cast<std::size_t>(ig)] = psum;
+    }
     st.w.assign(nat, std::vector<double>(nxyz, 0.0));
     for (int a = 0; a < nat; ++a)
         for (std::size_t ig = 0; ig < nxyz; ++ig)
@@ -222,6 +227,7 @@ MbisState compute_mbis(const std::vector<double>& rho, const Grid& grid,
     // atoms then get identical mean radii / zeta when the periodic images are on.
     const std::vector<Vec3> imgs_r = image_translations(grid, cfg.images, atoms);
     std::vector<std::vector<double>> r(nat, std::vector<double>(nxyz, 0.0));
+#pragma omp parallel for schedule(static)
     for (int a = 0; a < nat; ++a)
         for (std::size_t ig = 0; ig < nxyz; ++ig)
         {
@@ -246,6 +252,7 @@ MbisState compute_mbis(const std::vector<double>& rho, const Grid& grid,
         fill_weights(pts, grid, atoms, st.N, st.zeta, cfg.images, cfg.cutoff, st);
         double res = 0.0;
         std::vector<double> Nn(nat, 0.0), zn(nat, 0.0);
+#pragma omp parallel for schedule(static)
         for (int a = 0; a < nat; ++a)
         {
             double na = 0.0, mr = 0.0;

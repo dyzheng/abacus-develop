@@ -4,7 +4,7 @@
 | 维度 | 状态 | 关键证据 / 说明 |
 |---|---|---|
 | **MPI 正确性** | ✅ 完成 | observe `reduce_pool`；`weight_grid` `MPI_Allgatherv` gather；inject 秩本地；alloc `Allreduce/Allgatherv`；**np=1/2/4 的 Q 完全一致** |
-| **MPI 可扩展性** | ⚠️ 未优化 | `compute_mbis` 在**每个 pool rank 冗余**跑全网格（O(nxyz) 内存×np，计算重复）；**无域分解**；**无 OpenMP**（纯串行） |
+| **MPI 可扩展性** | ✅ **已优化** | rank0 计算 + `MPI_Bcast`(N/ζ) + `MPI_Scatterv`(本地权片, 非 root 无 O(nxyz) 副本)；`fill_weights`/`r`/`N,ζ` 网格循环 **OpenMP**；np=4 与 np=1/2 一致 |
 | **GPU 异构** | ❌ **未做** | `module_mbis_alm`/`module_constraint` 纯 CPU（`std::vector`/`std::exp`）；test `remove_definitions(-D__CUDA)`；无 CUDA/HIP/SYCL/offload |
 | **PW（共线 charge/spin）** | ✅ 布线+测试 | `esolver_ks_pw`：init/inject_potential/observe/energy；MBIS 早期 e2e 在 PW（S6.38） |
 | **LCAO（共线 charge/spin）** | ✅ 布线+测试 | `esolver_ks_lcao`：inject_potential_lcao 经 `v_eff`→`cal_gint_vl`→H；LiCl/FeO e2e 在 LCAO |
