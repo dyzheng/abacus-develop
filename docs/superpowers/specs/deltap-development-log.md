@@ -8154,3 +8154,9 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   （p05: E=-642.9351544 eV、q=2.094535、μ=-0.89272；z00: E=-643.2797、q=2.0445）。
 - 串行/单元路径不变（`pool_np==1` 走原 serial 分支；MBIS force/stress 测试仍用串行 PW）。
 - 文件：`weight_grid.cpp`、本日志。
+
+## 2026-10-30 (S6.86): MPI Scatterv（只发本地片，降内存）
+
+- rank0 计算后将各 rank 的本地布局块打包，`MPI_Scatterv` 只发本地片；非 root 不再持 O(nxyz) 权重。
+- 验证：LiCl z00/p05 在 np=4 与 np=1/2 **逐位一致**。
+- 文件：`weight_grid.cpp`、本日志。
