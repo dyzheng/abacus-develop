@@ -55,3 +55,26 @@ z00 −643.3），差值恰为 **±μQ**。原因：
 ## 6. 文件
 `constraint_loop.cpp`（回退 `Σμ(Q−t)`；`ABA_MBIS_REBUILD_W` 开关）、本日志/文档。
 扫描目录 `/tmp/opencode/mbis_licl_scan/`（z00/m05/p05）。
+
+## 7. 自旋通道记账：受控验证（无 bug）
+
+**代码核查**：`ConstraintInjectPW::inject`（nspin2）对 `veff(0),veff(1)` **两通道都写**
+（charge `+1,+1`；spin `+1,-1`，`constraint_inject_pw.cpp:66-85`）；`cal_delta_eband`（nspin2）
+对 `v_eff[0]/v_eff[1]` 与 `ρ[0]/ρ[1]` **两通道都读**（`elecstate_energy.cpp:163-183`）
+⇒ 理论上 `deband` **对电荷与自旋都抵消** `V_con`。
+
+**受控实测（LiCl nspin2，强制 Li 局域矩 M=0.1 μB）**：
+| | M | μ (Ry) | E_tot (eV) |
+|---|---|---|---|
+| plain（无约束） | 0 | 0 | **−643.27975** |
+| spin δ=+0.1 | 0.09996 | −1.060 | **−642.44150** |
+
+- `E_con − E_ref = **+0.838 eV**`（**高于** plain —— 强制闭合壳层原子极化的物理代价）。
+- 若 `deband` 未抵消：应 `E_con = E_phys + μM`，`μM=−1.44 eV` ⇒ 约 **−643.88**（**低于** plain）；
+  **未观察到**。
+- ⇒ **`deband` 对自旋 `V_con` 也抵消**，**`Σμ(Q−t)` 对自旋正确**。
+
+**更正**：
+- **自旋通道记账不是 bug**；S6.72 的 `−ΣμQ` 是**误诊**（对电荷错、对自旋也非必需）。
+- **FeO 的 −7643.9 vs 参考 −7637** 是**约束 SCF 落到另一电子/磁态**（FM vs AFM，PBE 无 U 多解），
+  **不是**能量记账问题。**需 DFT+U** 才有唯一/稳定基态。

@@ -8084,3 +8084,12 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - 新增 `ABA_MBIS_REBUILD_W` 开关（冻结 vs 重建实验）。
 - 文件：`constraint_loop.cpp`、本日志、`2026-10-30-mbis-pes-scan-energy-bug.md`、
   `mbis-development-history.md`（台账更正）。
+
+## 2026-10-30 (S6.79): 自旋记账受控验证——无 bug（`Σμ(Q−t)` 对电荷/自旋都正确）
+
+- 代码：`inject` nspin2 两通道都写、`cal_delta_eband` 两通道都读 ⇒ `deband` 对电荷与自旋都抵消 `V_con`。
+- 受控 LiCl nspin2 强制 Li M=0.1 μB：plain E=−643.27975；spin E_con=−642.44150（**高于** +0.84 eV），
+  M=0.09996、μ=−1.060、res=4.5e-5。若未抵消应低 `μM=−1.44 eV`（约 −643.88，**低于**），**未观察**。
+- **结论**：自旋记账**无 bug**；`cc_escon=Σμ(Q−t)` 对电荷/自旋都正确；S6.72 `−ΣμQ` 为**误诊**（已回退）；
+  FeO −7643.9 是**换态**（PBE 无 U 多解），需 DFT+U。
+- **文件**：`2026-10-30-mbis-pes-scan-energy-bug.md`（§7）、`mbis-development-history.md`（台账更正）、本日志。
