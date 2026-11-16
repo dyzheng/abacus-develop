@@ -1025,9 +1025,13 @@ void WeightGrid::build_mbis(const std::vector<double>& rho_total)
     // ir = ixy*nplane + iz_local (see pw_grid_bridge.h / Parallel_Grid::reduce).
     // So gather the rank-local blocks into a concatenated buffer, then reindex
     // (a permutation) into the global z-fastest grid.
-    std::vector<double> rho_full(rho_basis_->nxyz, 0.0);
+    int pool_np = 1, poolrank = 0;
 #ifdef __MPI
-    const int pool_np = rho_basis_->poolnproc;
+    pool_np = rho_basis_->poolnproc;
+    poolrank = rho_basis_->poolrank;
+#endif
+    std::vector<double> rho_full;
+#ifdef __MPI
     if (pool_np > 1)
     {
         const int nxy = rho_basis_->nxy;
@@ -1042,19 +1046,27 @@ void WeightGrid::build_mbis(const std::vector<double>& rho_total)
             displs[ip] = acc;
             acc += counts[ip];
         }
-        std::vector<double> rho_cat(rho_basis_->nxyz, 0.0);
-        MPI_Allgatherv(rho_total.data(), rho_basis_->nrxx, MPI_DOUBLE,
-                       rho_cat.data(), counts.data(), displs.data(), MPI_DOUBLE,
-                       POOL_WORLD);
-        for (int ip = 0; ip < pool_np; ++ip)
+        // Only the pool root needs the full density (it runs the global MBIS
+        // iteration); other ranks just send their slice (no O(nxyz) buffer).
+        std::vector<double> rho_cat(poolrank == 0 ? rho_basis_->nxyz : 0, 0.0);
+        MPI_Gatherv(rho_total.data(), rho_basis_->nrxx, MPI_DOUBLE,
+                    rho_cat.data(), counts.data(), displs.data(), MPI_DOUBLE,
+                    0, POOL_WORLD);
+        // Branch: the root reindexes the concatenated gather into the global
+        // z-fastest grid consumed by compute_mbis.
+        if (poolrank == 0)
         {
-            const int z0 = rho_basis_->startz[ip];
-            const int z1 = (ip + 1 < pool_np) ? rho_basis_->startz[ip + 1] : nz;
-            const int npl = z1 - z0;
-            const int base = displs[ip];
-            for (int ixy = 0; ixy < nxy; ++ixy)
-                for (int izl = 0; izl < npl; ++izl)
-                    rho_full[ixy * nz + z0 + izl] = rho_cat[base + ixy * npl + izl];
+            rho_full.assign(rho_basis_->nxyz, 0.0);
+            for (int ip = 0; ip < pool_np; ++ip)
+            {
+                const int z0 = rho_basis_->startz[ip];
+                const int z1 = (ip + 1 < pool_np) ? rho_basis_->startz[ip + 1] : nz;
+                const int npl = z1 - z0;
+                const int base = displs[ip];
+                for (int ixy = 0; ixy < nxy; ++ixy)
+                    for (int izl = 0; izl < npl; ++izl)
+                        rho_full[ixy * nz + z0 + izl] = rho_cat[base + ixy * npl + izl];
+            }
         }
     }
     else
@@ -1099,15 +1111,37 @@ void WeightGrid::build_mbis(const std::vector<double>& rho_total)
     cfg.init_zeta = 1.0;
     cfg.warm_N = mbis_N_;
     cfg.warm_zeta = mbis_zeta_;
-    const mbis_alm::MbisState st = mbis_alm::compute_mbis(rho_full, grid, atoms, cfg);
-    mbis_N_ = st.N;
-    mbis_zeta_ = st.zeta;
+    // Only the pool root runs the global (and expensive) MBIS iteration; the
+    // full weights are then broadcast and scattered to every rank. This removes
+    // the per-rank duplicate compute_mbis (was np x redundant).
+    std::vector<double> w_flat(static_cast<std::size_t>(nat_) * rho_basis_->nxyz, 0.0);
+    std::vector<double> Nv(nat_, 0.0), zv(nat_, 0.0);
+    if (pool_np == 1 || poolrank == 0)
+    {
+        const mbis_alm::MbisState st = mbis_alm::compute_mbis(rho_full, grid, atoms, cfg);
+        for (int iat = 0; iat < nat_; ++iat)
+            for (int ig = 0; ig < rho_basis_->nxyz; ++ig)
+                w_flat[static_cast<std::size_t>(iat) * rho_basis_->nxyz + ig]
+                    = st.w[iat][ig];
+        Nv = st.N;
+        zv = st.zeta;
+    }
+#ifdef __MPI
+    if (pool_np > 1)
+    {
+        MPI_Bcast(w_flat.data(),
+                  static_cast<int>(static_cast<std::size_t>(nat_) * rho_basis_->nxyz),
+                  MPI_DOUBLE, 0, POOL_WORLD);
+        MPI_Bcast(Nv.data(), nat_, MPI_DOUBLE, 0, POOL_WORLD);
+        MPI_Bcast(zv.data(), nat_, MPI_DOUBLE, 0, POOL_WORLD);
+    }
+#endif
+    mbis_N_ = Nv;
+    mbis_zeta_ = zv;
 
     w_.assign(nat_, std::vector<double>(nrxx_, 0.0));
     rem_.assign(nrxx_, 0.0);
     max_rem_ = 0.0;
-    // Scatter the global (z-fastest) weights back to the rank-local layout
-    // ir = ixy*nplane + iz_local  <->  ig = ixy*nz + (startz_current + iz_local).
     const int nxy_s = rho_basis_->nxy;
     const int nz_s = rho_basis_->nz;
     const int z0_s = rho_basis_->startz_current;
@@ -1115,7 +1149,9 @@ void WeightGrid::build_mbis(const std::vector<double>& rho_total)
     for (int iat = 0; iat < nat_; ++iat)
         for (int ixy = 0; ixy < nxy_s; ++ixy)
             for (int izl = 0; izl < npl_s; ++izl)
-                w_[iat][ixy * npl_s + izl] = st.w[iat][ixy * nz_s + z0_s + izl];
+                w_[iat][ixy * npl_s + izl]
+                    = w_flat[static_cast<std::size_t>(iat) * rho_basis_->nxyz
+                             + ixy * nz_s + z0_s + izl];
 
     cw_.assign(constraint_atoms_.size(), std::vector<double>(nrxx_, 0.0));
     for (std::size_t alpha = 0; alpha < constraint_atoms_.size(); ++alpha)

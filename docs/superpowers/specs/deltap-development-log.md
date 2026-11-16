@@ -8144,3 +8144,13 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - 结合 force 测试：**MBIS 力与应力均实现并端到端 FD 验证** ⇒ relax/MD/应力可用（冻结分区）。
 - `MODULE_ESTATE_constraint_deriv` 全套通过（含 MBIS force/stress）。
 - 文件：`weight_grid.cpp`、`constraint_deriv.cpp`、`constraint_deriv_test.cpp`、两份 status 文档、本日志。
+
+## 2026-10-30 (S6.85): MPI 去冗余——rank0 计算 + Bcast
+
+- `WeightGrid::build_mbis` MPI 路径改为：`MPI_Gatherv` **到 root**（其他 rank 只发不存全网格）；
+  **仅 rank0** 运行全局 `compute_mbis`；再 `MPI_Bcast` 平坦化权重 + N/ζ 到各 rank，最后 scatter 本地。
+- 去掉了此前的**每 rank 冗余全网格迭代**（`np×` → `1×`），并节省非 root 的 `rho_full` 内存。
+- **一致性验证**：LiCl δ=0/δ=+0.05 在 **np=4** 与 **np=2** 结果**逐位一致**
+  （p05: E=-642.9351544 eV、q=2.094535、μ=-0.89272；z00: E=-643.2797、q=2.0445）。
+- 串行/单元路径不变（`pool_np==1` 走原 serial 分支；MBIS force/stress 测试仍用串行 PW）。
+- 文件：`weight_grid.cpp`、本日志。
