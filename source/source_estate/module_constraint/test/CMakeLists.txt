@@ -101,6 +101,7 @@ AddTest(
     ../constraint_observe.cpp
     ../constraint_dipole.cpp
     ../weight_grid.cpp
+    ../../module_mbis_alm/mbis_alm.cpp
     ../../../source_base/module_grid/radial.cpp
     ../../../source_base/module_grid/delley.cpp
     ../../../source_io/module_output/output.cpp

@@ -9,7 +9,7 @@ SCF-only 路径**不调用** `build_derivatives`（仅力/应力时调用），�
 
 ## 1. 修复（本轮，P0）
 
-**更新（S6.82）**：力**已实现**（`build_mbis_derivatives`，公式经 `MbisWeightDerivativeFD` 通过）；**应力仍 QUIT**。
+**更新（S6.82/83）**：力**已实现并端到端 FD 验证**（`build_mbis_derivatives`；`MbisWeightDerivativeFD` 公式 + `MbisForceEndToEndFD` 的 `∫dw_ρ` vs 扰动分数坐标重建 MBIS 的 `dQ/dτ` 均 PASS）⇒ relax/MD 力可信；**应力仍 QUIT**（应变导数未实现）。
 
 - `weight_grid.cpp::build_derivatives()`：开头加 `if (is_mbis()) WARNING_QUIT(...)`，
   明确说明"生产 WeightGrid 未实现冻结分区 MBIS 的 `d w/dR`；SCF 正常，relax/MD/stress 会中止"。

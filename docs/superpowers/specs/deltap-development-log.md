@@ -8126,3 +8126,12 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - **FD 验证**：新增 `MbisWeightDerivativeFD`（固定 N/ζ，扰动 R，比较 `∂w_A/∂R_J` 解析 vs FD）——**PASS**。
 - 全套模块测试通过（含新测试）。**注**：公式已验证；WeightGrid 端到端力 FD（`∫wρ` vs `dw_`）为后续。
 - 文件：`weight_grid.{h,cpp}`、`test/mbis_alm_test.cpp`、两份 status/guard 文档、本日志。
+
+## 2026-10-30 (S6.83): MBIS 力端到端 FD 验证通过
+
+- 新增测试 `ConstraintDerivTest.MbisForceEndToEndFD`：解析 `dQ_0/dR_J = ∫(∂w_0/∂R_J)ρ`
+  （WeightGrid `dw_`）与**扰动分数坐标 τ 重建 MBIS** 的 `dQ_0/dτ`×晶格 `L=lat0·latvec` 对比 → **PASS**。
+- 测试目标 `MODULE_ESTATE_constraint_deriv` 补链 `module_mbis_alm/mbis_alm.cpp`。
+- 结合 `MbisWeightDerivativeFD`（公式）⇒ **MBIS 力公式+管线端到端 FD 验证**；relax/MD 力可信。
+  **应力仍 QUIT**（应变导数未实现）。
+- 文件：`module_constraint/test/{constraint_deriv_test.cpp,CMakeLists.txt}`、两份 status 文档、本日志。

@@ -1029,3 +1029,73 @@ TEST_F(ConstraintDerivTest, DipoleMolecularForceAxisOnly)
         EXPECT_DOUBLE_EQ(F(J, 2), 0.0);
     }
 }
+
+TEST_F(ConstraintDerivTest, MbisForceEndToEndFD)
+{
+    // Coarse local grid keeps the per-point MBIS rebuild cheap.
+    ModulePW::PW_Basis local_pw;
+    local_pw.initgrids(1.0, ucell->latvec, 48, 48, 48);
+    local_pw.distribute_r();
+    const double sigma = 1.5;
+    std::vector<double> rho;
+    fill_rho_basis(local_pw, sigma, rho);
+    const double dV = ucell->omega / local_pw.nxyz;
+
+    constraint::WeightGrid wg(*ucell, &local_pw, radii, constraint::WeightType::MBIS);
+    wg.build_mbis(rho);
+    wg.build_derivatives();
+
+    std::vector<std::array<int, 2>> flat;
+    for (int it = 0; it < ucell->ntype; ++it)
+        for (int ia = 0; ia < ucell->atoms[it].na; ++ia) flat.push_back({it, ia});
+    const int nat = static_cast<int>(flat.size());
+
+    // analytic g[J][e] = dQ_0/dR_J^e = ∫ (∂w_0/∂R_J^e) rho dV
+    std::vector<std::array<double, 3>> g(nat);
+    for (int J = 0; J < nat; ++J)
+        for (int e = 0; e < 3; ++e)
+        {
+            double s = 0.0;
+            for (int ir = 0; ir < wg.nrxx(); ++ir)
+                s += wg.weight_derivative(0, J, e, ir) * rho[ir];
+            g[J][e] = s * dV;
+        }
+
+    const double L[3][3] = {
+        {ucell->lat0 * ucell->latvec.e11, ucell->lat0 * ucell->latvec.e12, ucell->lat0 * ucell->latvec.e13},
+        {ucell->lat0 * ucell->latvec.e21, ucell->lat0 * ucell->latvec.e22, ucell->lat0 * ucell->latvec.e23},
+        {ucell->lat0 * ucell->latvec.e31, ucell->lat0 * ucell->latvec.e32, ucell->lat0 * ucell->latvec.e33}};
+
+    auto q0_of = [&](const constraint::WeightGrid& w) {
+        double s = 0.0;
+        const auto& c = w.constraint_weights()[0];
+        for (int ir = 0; ir < w.nrxx(); ++ir) s += c[ir] * rho[ir];
+        return s * dV;
+    };
+
+    const double hf = 1e-4; // fractional
+    for (int J = 0; J < nat; ++J)
+        for (int d = 0; d < 3; ++d)
+        {
+            const int it = flat[J][0];
+            const int ia = flat[J][1];
+            double* t = (d == 0) ? &ucell->atoms[it].tau[ia].x
+                       : (d == 1) ? &ucell->atoms[it].tau[ia].y
+                                  : &ucell->atoms[it].tau[ia].z;
+            const double t0 = *t;
+            *t = t0 + hf;
+            constraint::WeightGrid wp(*ucell, &local_pw, radii, constraint::WeightType::MBIS);
+            wp.build_mbis(rho);
+            const double Qp = q0_of(wp);
+            *t = t0 - hf;
+            constraint::WeightGrid wm(*ucell, &local_pw, radii, constraint::WeightType::MBIS);
+            wm.build_mbis(rho);
+            const double Qm = q0_of(wm);
+            *t = t0;
+            const double fd = (Qp - Qm) / (2.0 * hf);
+            double ana = 0.0;
+            for (int e = 0; e < 3; ++e) ana += g[J][e] * L[e][d];
+            EXPECT_NEAR(fd, ana, 1e-4) << "J=" << J << " d=" << d
+                                       << " fd=" << fd << " ana=" << ana;
+        }
+}
