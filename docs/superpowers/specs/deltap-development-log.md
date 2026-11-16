@@ -8093,3 +8093,16 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - **结论**：自旋记账**无 bug**；`cc_escon=Σμ(Q−t)` 对电荷/自旋都正确；S6.72 `−ΣμQ` 为**误诊**（已回退）；
   FeO −7643.9 是**换态**（PBE 无 U 多解），需 DFT+U。
 - **文件**：`2026-10-30-mbis-pes-scan-energy-bug.md`（§7）、`mbis-development-history.md`（台账更正）、本日志。
+
+## 2026-10-30 (S6.80): MPI/GPU/PW/LCAO 覆盖度评估
+
+- **MPI**：正确性✅（reduce_pool/Allgatherv/Allreduce，np=1/2/4 Q 一致）；扩展性⚠️（compute_mbis
+  每 rank 冗余全网格、无域分解、无 OpenMP）。
+- **GPU**：❌未做（纯 CPU，test -D__CUDA 移除）。
+- **PW/LCAO**：共线 charge/spin 两者均接线+测试（PW 早期 e2e，LCAO LiCl/FeO）；**非共线 nspin4 部分**
+  （PW inject 拒绝，LCAO alloc spinor/WeightGrid x/y 受限）。
+- **力/应力（MBIS 生产）**：❌ **静默错**——`build_derivatives` 无 is_mbis→落到 Becke；`constraint_stress`
+  无 MBIS guard→Becke。SCF-only e2e 未暴露；relax/MD/应力会错。模块 force 正确但仅单测。
+- 建议 P0：MBIS 力/应力分支或 QUIT、PW nspin4 支持/QUIT；P1：rank0+Bcast/OpenMP/域分解、力/应力 FD；
+  P2：GPU kernel。
+- **文件**：`2026-10-30-mbis-mpi-gpu-pw-lcao-status.md`、本日志。
