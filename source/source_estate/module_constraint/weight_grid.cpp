@@ -667,6 +667,23 @@ void WeightGrid::build_derivatives()
         dwe_.clear();
         return;
     }
+    // Correctness guard (P0): MBIS weights are density-dependent and, in the
+    // constrained phase, FROZEN from the reference density. The production
+    // force/stress kernel consumes dw_ = d w_alpha / dR_J. For the frozen MBIS
+    // partition the exact derivative (at frozen N,zeta) is
+    //   d w_alpha/dR_J = (1_{J in alpha} - w_alpha) * (-zeta_J) * w_J * u_J ,
+    //   u_J = (R_J - r)/d_J (periodic minimum image),
+    // which is NOT yet wired here. Falling through to the Becke derivative
+    // below would silently produce a WRONG force/stress for MBIS, so refuse
+    // loudly instead. SCF-only runs never call this (no force/stress).
+    if (is_mbis())
+    {
+        ModuleBase::WARNING_QUIT("WeightGrid::build_derivatives",
+            "MBIS force/stress is not wired to the production WeightGrid "
+            "derivative kernel (frozen-partition d w/dR not implemented). "
+            "SCF with constraint_weight_type=mbis is fine; relax/MD/stress "
+            "will abort instead of returning a Becke-derived (wrong) value.");
+    }
     // Branch: the periodic Hirshfeld backend has its own smooth quotient
     // derivative; using the Becke minimum-image kernel here would be wrong.
     if (is_hirshfeld())

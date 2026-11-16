@@ -8106,3 +8106,13 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - 建议 P0：MBIS 力/应力分支或 QUIT、PW nspin4 支持/QUIT；P1：rank0+Bcast/OpenMP/域分解、力/应力 FD；
   P2：GPU kernel。
 - **文件**：`2026-10-30-mbis-mpi-gpu-pw-lcao-status.md`、本日志。
+
+## 2026-10-30 (S6.81): P0 修复——MBIS 力/应力不再静默用 Becke 导数
+
+- 缺陷：`build_derivatives` 无 is_mbis→落 Becke；`constraint_stress` 无 MBIS guard→Becke；
+  SCF 不调用该路径故 e2e 未暴露，relax/MD/应力会静默错。
+- 修复：`build_derivatives`/`constraint_stress` 对 MBIS **显式 WARNING_QUIT**（SCF 不受影响）。
+- 文档给出**冻结分区正确公式** `d w_alpha/dR_J=(1_{J∈α}−w_α)(−ζ_J)w_J u_J`，供下一步实现；
+  应力（应变导数）仍待实现。
+- 编译通过。文件：`weight_grid.cpp`、`constraint_deriv.cpp`、
+  `2026-10-30-mbis-force-stress-guard.md`、本日志。
