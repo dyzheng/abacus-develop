@@ -10,7 +10,7 @@
 | **LCAO（共线 charge/spin）** | ✅ 布线+测试 | `esolver_ks_lcao`：inject_potential_lcao 经 `v_eff`→`cal_gint_vl`→H；LiCl/FeO e2e 在 LCAO |
 | **非共线 nspin4** | ⚠️ 部分 | loop 有 nspin4 分支、LCAO alloc 有 spinor；但 **PW `inject` 直接拒绝**（`constraint_inject_pw.cpp:58`：`nspin!=2 && inj_dn!=inj_up → false`）；WeightGrid LCAO 注入 x/y 受限 |
 | **MBIS 力（生产）** | ✅ **已实现 + 端到端 FD 验证**（S6.82/83）| `constraint_force` 用 `dw_`；`build_derivatives` 无 `is_mbis` 分支 → **落到 Becke 公式**（对 MBIS 错）。模块内 `constraint_force`（dmin 导数）仅用于**单测**；生产路径错 |
-| **MBIS 应力（生产）** | ❌ **未实现/静默错** | `constraint_stress` 只对 dipole/Hirshfeld QUIT；**MBIS 无 guard → 用 Becke `dw_`**（错） |
+| **MBIS 应力（生产）** | ✅ **已实现 + 端到端 FD 验证**（S6.84）| `dwe_` 应变导数；`MbisStressEndToEndFD` PASS |
 
 ## 1. MPI
 - **正确性已达成**：`ConstraintObserver::observe` 做秩本地积分 + `Parallel_Reduce::reduce_pool`；

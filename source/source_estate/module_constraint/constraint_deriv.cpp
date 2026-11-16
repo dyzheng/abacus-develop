@@ -247,12 +247,7 @@ void constraint_stress(const WeightGrid& wg,
     // Defense-in-depth: MBIS stress (frozen-partition strain derivative) is not
     // implemented. build_derivatives already aborts earlier, but guard here too
     // so a bypass cannot silently return a Becke-derived (wrong) stress.
-    if (wg.is_mbis())
-    {
-        ModuleBase::WARNING_QUIT("constraint_stress",
-                                 "MBIS constraint stress is not implemented "
-                                 "(frozen-partition strain derivative)");
-    }
+
     // Guard: one multiplier and one channel profile per constraint.
     if (static_cast<int>(mu.size()) != nalpha
         || static_cast<int>(channels.size()) != nalpha)

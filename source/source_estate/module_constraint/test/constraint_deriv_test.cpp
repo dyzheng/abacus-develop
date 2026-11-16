@@ -1099,3 +1099,64 @@ TEST_F(ConstraintDerivTest, MbisForceEndToEndFD)
                                        << " fd=" << fd << " ana=" << ana;
         }
 }
+
+TEST_F(ConstraintDerivTest, MbisStressEndToEndFD)
+{
+    ModulePW::PW_Basis local_pw;
+    local_pw.initgrids(1.0, ucell->latvec, 48, 48, 48);
+    local_pw.distribute_r();
+    std::vector<double> rho;
+    fill_rho_basis(local_pw, 1.5, rho);
+    const double* rho_ptr = rho.data();
+    const double* rho_arr[2] = {rho_ptr, rho_ptr};
+
+    constraint::WeightGrid wg(*ucell, &local_pw, radii, constraint::WeightType::MBIS);
+    wg.build_mbis(rho);
+    wg.build_derivatives();
+    const std::vector<double> mu = {0.1, 0.0, 0.0};
+    const std::vector<constraint::ChannelProfile> channels
+        = {constraint::build_channel_profile(constraint::ConstraintKind::Charge),
+           constraint::build_channel_profile(constraint::ConstraintKind::Charge),
+           constraint::build_channel_profile(constraint::ConstraintKind::Charge)};
+    ModuleBase::matrix stress(3, 3);
+    constraint::constraint_stress(wg, rho_arr, 1, channels, mu, stress);
+
+    const ModuleBase::Matrix3 base = ucell->latvec;
+    auto base_element = [&base](const int row, const int col) {
+        return (&base.e11)[3 * row + col];
+    };
+    auto cell_element = [this](const int row, const int col) -> double& {
+        return (&ucell->latvec.e11)[3 * row + col];
+    };
+    const double eps = 1e-5;
+    const double nxyz = static_cast<double>(local_pw.nxyz);
+    auto strained_observable = [&](const int a, const int b, const double step) {
+        ucell->latvec = base;
+        for (int row = 0; row < 3; ++row)
+            for (int col = 0; col < 3; ++col)
+            {
+                if (col == a) cell_element(row, col) += base_element(row, b) * step;
+                if (a != b && col == b) cell_element(row, col) += base_element(row, a) * step;
+            }
+        const double omega = std::abs(ucell->latvec.Det()) * ucell->lat0 * ucell->lat0 * ucell->lat0;
+        constraint::WeightGrid strained(*ucell, &local_pw, radii, constraint::WeightType::MBIS);
+        strained.build_mbis(rho);
+        double q = 0.0;
+        const std::vector<double>& w = strained.constraint_weight(0);
+        for (int ir = 0; ir < local_pw.nrxx; ++ir) q += rho[ir] * w[ir];
+        q *= omega / nxyz;
+        ucell->latvec = base;
+        return q;
+    };
+    const std::array<std::array<int, 2>, 3> components = {{{0, 0}, {0, 1}, {2, 2}}};
+    const double omega0 = std::abs(base.Det()) * ucell->lat0 * ucell->lat0 * ucell->lat0;
+    for (const auto& comp : components)
+    {
+        const int a = comp[0], b = comp[1];
+        const double q_plus = strained_observable(a, b, eps);
+        const double q_minus = strained_observable(a, b, -eps);
+        const double strain_factor = (a == b) ? 1.0 : 2.0;
+        const double fd = -mu[0] * (q_plus - q_minus) / (2.0 * eps * strain_factor * omega0);
+        EXPECT_NEAR(stress(a, b), fd, 2e-6) << "MBIS stress component " << a << b;
+    }
+}
