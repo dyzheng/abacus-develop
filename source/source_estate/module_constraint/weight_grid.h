@@ -216,6 +216,8 @@ class WeightGrid
     void prepare_hirshfeld_geometry();
     void build_hirshfeld();
     void build_hirshfeld_derivatives();
+    // MBIS frozen-partition position derivative (Slater pro center derivative).
+    void build_mbis_derivatives();
     double hirshfeld_atom_density(const int iat,
                                   const ModuleBase::Vector3<double>& rfrac,
                                   ModuleBase::Vector3<double>* grad) const;

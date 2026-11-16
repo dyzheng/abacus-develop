@@ -373,3 +373,47 @@ TEST(MbisAlmTest, FixedPointSpectralRadius)
     // spectral radius <= spectral norm (sanity; allow numerical slack)
     EXPECT_LE(rho, norm2 * 1.05 + 1e-6);
 }
+
+TEST(MbisAlmTest, MbisWeightDerivativeFD)
+{
+    const Toy t = make_toy();
+    MbisConfig c = cfg();
+    c.images = 0; // direct pro -> matches the analytic direct formula
+    const MbisState st = compute_mbis(t.rho, t.grid, t.atoms, c);
+    const double h = 1e-5;
+    for (int J = 0; J < 2; ++J)
+        for (int dd = 0; dd < 3; ++dd)
+        {
+            std::vector<Atom> ap = t.atoms, am = t.atoms;
+            double* rp = (dd == 0) ? &ap[J].R.x : (dd == 1) ? &ap[J].R.y : &ap[J].R.z;
+            double* rm = (dd == 0) ? &am[J].R.x : (dd == 1) ? &am[J].R.y : &am[J].R.z;
+            *rp += h;
+            *rm -= h;
+            const MbisState wp = weights_from_params(t.rho, t.grid, ap, st.N, st.zeta,
+                                                     c.images, c.cutoff);
+            const MbisState wm = weights_from_params(t.rho, t.grid, am, st.N, st.zeta,
+                                                     c.images, c.cutoff);
+            for (std::size_t ir = 0; ir < t.grid.size(); ir += 997)
+            {
+                const int ix = static_cast<int>(ir / (24 * 24));
+                const int iy = static_cast<int>((ir / 24) % 24);
+                const int iz = static_cast<int>(ir % 24);
+                const Vec3 p = t.grid.point(ix, iy, iz);
+                const Vec3 disp = p - t.atoms[J].R;
+                const double d = norm(disp);
+                if (d < 1e-12) continue;
+                for (int A = 0; A < 2; ++A)
+                {
+                    // d w_A / dR_J^dd = (delta_AJ - w_A) zeta_J w_J (p-R_J)^dd/d
+                    const double one = (A == J) ? 1.0 : 0.0;
+                    const double ddisp = (dd == 0) ? disp.x
+                                        : (dd == 1) ? disp.y : disp.z;
+                    const double form = (one - st.w[A][ir]) * st.zeta[J]
+                                        * st.w[J][ir] * (ddisp / d);
+                    const double fd = (wp.w[A][ir] - wm.w[A][ir]) / (2.0 * h);
+                    EXPECT_NEAR(fd, form, 1e-6) << "J=" << J << " dd=" << dd
+                                                << " A=" << A << " ir=" << ir;
+                }
+            }
+        }
+}

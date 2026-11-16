@@ -655,6 +655,57 @@ namespace
 const double k_deriv_eps = 1e-8;
 } // namespace
 
+void WeightGrid::build_mbis_derivatives()
+{
+    // MBIS weights are built once from the reference density (frozen
+    // partition).  At fixed (N,zeta) the Slater pro of atom J responds only to
+    // its own center, so the normalised weight derivative is
+    //   d w_alpha / dR_J = (1_{J in alpha} - w_alpha) * zeta_J * w_J * (r-R_J)/d
+    // with (r-R_J)/d the periodic minimum-image unit vector.  This matches the
+    // module mbis_alm::constraint_force kernel dpro = zeta*pro*(x-R)/|x-R|.
+    if (static_cast<int>(mbis_zeta_.size()) != nat_ || nrxx_ <= 0)
+    {
+        ModuleBase::WARNING_QUIT("WeightGrid::build_mbis_derivatives",
+            "build_mbis(rho) must run before build_derivatives() for MBIS");
+    }
+    const std::size_t nal = constraint_atoms_.size();
+    dw_.assign(nal, std::vector<double>(static_cast<std::size_t>(nat_) * 3
+                                        * nrxx_, 0.0));
+    dwe_.clear(); // MBIS strain derivative not implemented (stress rejects it)
+    const std::vector<ModuleBase::Vector3<double>> taud
+        = atom_fractional_positions();
+    std::vector<std::vector<char>> in_alpha(nat_, std::vector<char>(nal, 0));
+    for (std::size_t a = 0; a < nal; ++a)
+        for (const int iat : constraint_atoms_[a])
+            if (iat >= 0 && iat < nat_) in_alpha[iat][a] = 1;
+    for (int ir = 0; ir < nrxx_; ++ir)
+    {
+        const ModuleBase::Vector3<double> rfrac = grid_fraction(ir);
+        for (int J = 0; J < nat_; ++J)
+        {
+            // r - R_J (Bohr), periodic minimum image.
+            const ModuleBase::Vector3<double> disp
+                = min_image_displacement(taud[J], rfrac);
+            const double d = disp.norm();
+            if (d < 1e-12) continue;
+            const double pref = mbis_zeta_[J] * w_[J][ir] / d;
+            const double dx = pref * disp.x;
+            const double dy = pref * disp.y;
+            const double dz = pref * disp.z;
+            for (std::size_t a = 0; a < nal; ++a)
+            {
+                const double one = in_alpha[J][a] ? 1.0 : 0.0;
+                const double coef = one - cw_[a][ir];
+                const std::size_t base
+                    = static_cast<std::size_t>(J * 3) * nrxx_ + ir;
+                dw_[a][base]         += coef * dx;
+                dw_[a][base + nrxx_] += coef * dy;
+                dw_[a][base + 2 * nrxx_] += coef * dz;
+            }
+        }
+    }
+}
+
 void WeightGrid::build_derivatives()
 {
     // Branch: the dipole density weight is a fixed function of the grid, not
@@ -678,11 +729,10 @@ void WeightGrid::build_derivatives()
     // loudly instead. SCF-only runs never call this (no force/stress).
     if (is_mbis())
     {
-        ModuleBase::WARNING_QUIT("WeightGrid::build_derivatives",
-            "MBIS force/stress is not wired to the production WeightGrid "
-            "derivative kernel (frozen-partition d w/dR not implemented). "
-            "SCF with constraint_weight_type=mbis is fine; relax/MD/stress "
-            "will abort instead of returning a Becke-derived (wrong) value.");
+        // Frozen-partition MBIS position derivative (force kernel input).
+        // Stress is still rejected separately (strain derivative not built).
+        build_mbis_derivatives();
+        return;
     }
     // Branch: the periodic Hirshfeld backend has its own smooth quotient
     // derivative; using the Becke minimum-image kernel here would be wrong.
