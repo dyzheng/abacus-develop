@@ -335,3 +335,84 @@ int main(int argc, char** argv)
     MPI_Finalize();
     return result;
 }
+
+namespace {
+static void fill_h2o_rho(const UnitCell& uc, const ModulePW::PW_Basis& pw,
+                         const double sigma, std::vector<double>& rho)
+{
+    const double R[9] = {5,5,5, 6.2,5,5, 3.8,5,5};
+    const double Z[3] = {8,1,1};
+    rho.assign(pw.nrxx, 0.0);
+    for (int ir = 0; ir < pw.nrxx; ++ir)
+    {
+        const int i = ir / (pw.ny * pw.nplane);
+        const int j = ir / pw.nplane - i * pw.ny;
+        const int k = ir % pw.nplane + pw.startz_current;
+        const ModuleBase::Vector3<double> rfrac(static_cast<double>(i)/pw.nx,
+                                                static_cast<double>(j)/pw.ny,
+                                                static_cast<double>(k)/pw.nz);
+        const ModuleBase::Vector3<double> rc = rfrac * uc.latvec * uc.lat0;
+        double v = 0.0;
+        for (int A = 0; A < 3; ++A)
+        {
+            const double dx = rc.x - R[3*A], dy = rc.y - R[3*A+1], dz = rc.z - R[3*A+2];
+            v += Z[A] * std::exp(-(dx*dx + dy*dy + dz*dz) / (2.0*sigma*sigma));
+        }
+        rho[ir] = v;
+    }
+}
+} // namespace
+
+TEST(WeightGridMpiTest, MbisDistributedMatchesSerial)
+{
+    PARAM.input.device = "cpu"; PARAM.input.precision = "double";
+    PARAM.input.nspin = 1; PARAM.input.nelec = 10.0; PARAM.input.basis_type = "pw";
+    GlobalV::KPAR = 1;
+    Parallel_Global::init_pools(GlobalV::NPROC, GlobalV::MY_RANK, PARAM.input.bndpar,
+        GlobalV::KPAR, GlobalV::NPROC_IN_BNDGROUP, GlobalV::RANK_IN_BPGROUP,
+        GlobalV::MY_BNDGROUP, GlobalV::NPROC_IN_POOL, GlobalV::RANK_IN_POOL, GlobalV::MY_POOL);
+    auto ucell = make_h2o_ucell();
+    const std::vector<double> radii = {1.5, 0.5, 0.5};
+    ModulePW::PW_Basis rhopw;
+    rhopw.initmpi(GlobalV::NPROC_IN_POOL, GlobalV::RANK_IN_POOL, POOL_WORLD);
+    rhopw.initgrids(1.0, ucell->latvec, 24, 16, 20);
+    rhopw.distribute_r();
+    std::vector<double> rho_local;
+    fill_h2o_rho(*ucell, rhopw, 1.5, rho_local);
+    constraint::WeightGrid wg(*ucell, &rhopw, radii, constraint::WeightType::MBIS);
+    wg.build_mbis(rho_local);
+
+    const int nat = wg.nat();
+    const int nxyz = rhopw.nx * rhopw.ny * rhopw.nz;
+    std::vector<double> ref(static_cast<std::size_t>(nat) * nxyz, 0.0);
+    if (GlobalV::MY_RANK == 0)
+    {
+        ModulePW::PW_Basis refpw;
+        refpw.initmpi(1, 0, MPI_COMM_SELF);
+        refpw.initgrids(1.0, ucell->latvec, rhopw.nx, rhopw.ny, rhopw.nz);
+        refpw.distribute_r();
+        std::vector<double> rho_full;
+        fill_h2o_rho(*ucell, refpw, 1.5, rho_full);
+        constraint::WeightGrid wg_ref(*ucell, &refpw, radii, constraint::WeightType::MBIS);
+        wg_ref.build_mbis(rho_full);
+        const auto& cw = wg_ref.constraint_weights();
+        for (int alpha = 0; alpha < nat; ++alpha)
+            for (int ir = 0; ir < nxyz; ++ir)
+                ref[static_cast<std::size_t>(alpha) * nxyz + ir] = cw[alpha][ir];
+    }
+    MPI_Bcast(ref.data(), static_cast<int>(ref.size()), MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+    const auto& cw = wg.constraint_weights();
+    const int nz = rhopw.nz;
+    double max_diff = 0.0;
+    for (int alpha = 0; alpha < nat; ++alpha)
+        for (int ir = 0; ir < rhopw.nrxx; ++ir)
+        {
+            const int ixy = ir / rhopw.nplane;
+            const int iz = rhopw.startz_current + ir % rhopw.nplane;
+            const int gi = ixy * nz + iz;
+            max_diff = std::max(max_diff,
+                std::abs(cw[alpha][ir] - ref[static_cast<std::size_t>(alpha) * nxyz + gi]));
+        }
+    EXPECT_LT(max_diff, 1e-8);
+}

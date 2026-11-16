@@ -8168,3 +8168,10 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - 验证：LiCl z00/p05 在 OMP=4,np=4 与串行/纯 MPI 结果一致（E 差 ~1e-9、q ~1e-7，OMP 浮点重排）。
   模块 gtest 串行 13/13。
 - 文件：`mbis_alm.cpp`、status 文档、本日志。
+
+## 2026-10-30 (S6.88): MBIS MPI 一致性单元测试
+
+- 新增 `WeightGridMpiTest.MbisDistributedMatchesSerial`（np=2）：分布式 `build_mbis` 的本地权重
+  与 rank0 串行参考一致（`max_diff<1e-8`）；MPI 测试目标补链 `mbis_alm.cpp`。
+- 验证 Gatherv/rank0/Scatterv 的 MPI 正确性（此前仅 e2e 手工验证 np=1/2/4）。
+- 文件：`test_mpi/{weight_grid_mpi_test.cpp,CMakeLists.txt}`、本日志。

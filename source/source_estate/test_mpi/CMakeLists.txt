@@ -21,6 +21,7 @@ AddTest(
   TARGET MODULE_ESTATE_constraint_weight_grid_mpi
   LIBS parameter ${math_libs} base device planewave cell_info
   SOURCES weight_grid_mpi_test.cpp
+    ../module_mbis_alm/mbis_alm.cpp
     ../module_constraint/weight_grid.cpp
     ../module_constraint/constraint_observe.cpp
     ../module_constraint/constraint_dipole.cpp
