@@ -1541,16 +1541,22 @@ ConfigStatus configure_from_inputs(ConstraintConfig& cfg,
         return ConfigStatus::DISABLED;
     }
 
-    // Shared phase-1/2 guard: only the CPU / double / non-double-grid path
-    // is wired.  Anything else refuses to run rather than silently
-    // producing a wrong constraint potential (the injector writes the
-    // in-place potential buffers read by the Hamiltonian builders of both
-    // basis channels).
+    // Shared guard: the grid-weight constraints need double precision and the
+    // dense grid (no USPP double grid).  GPU is supported for the PW grid
+    // path: MBIS evaluates its fixed point on the device (module_mbis_alm GPU
+    // backend) and the injected smooth potential is re-uploaded before the
+    // PW Hamiltonian is built.  LCAO / allocation kernels remain CPU-only, so
+    // refuse those device combinations loudly instead of silently producing a
+    // wrong constraint potential.
+    const bool gpu_pw_grid_ok = (PARAM.inp.device == "gpu"
+                                 && PARAM.inp.basis_type == "pw"
+                                 && !PARAM.inp.constraint_alloc_switch);
     if (PARAM.globalv.double_grid || PARAM.inp.precision == "single"
-        || PARAM.inp.device == "gpu")
+        || (PARAM.inp.device == "gpu" && !gpu_pw_grid_ok))
     {
-        error = "constraint framework requires double precision on CPU "
-                "without double_grid";
+        error = "constraint framework requires double precision without "
+                "double_grid; gpu is supported only for the PW grid-weight "
+                "path (no allocation switch)";
         return ConfigStatus::ERROR;
     }
 

@@ -69,6 +69,7 @@ struct MbisConfig
     double init_zeta = 1.5;
     std::vector<double> warm_N;    ///< optional per-atom warm-start populations
     std::vector<double> warm_zeta; ///< optional per-atom warm-start exponents
+    bool use_gpu = false;   ///< dispatch to the CUDA/HIP backend when available
 };
 
 /// MBIS state: per-atom weights on the grid, populations and Slater exponents.

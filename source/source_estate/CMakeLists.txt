@@ -64,6 +64,14 @@ list(APPEND objects
     module_constraint/alloc_pw.cpp
 )
 
+# CPU-only builds need the "GPU unavailable" definitions of the MBIS device
+# backend; CUDA/ROCm builds get the real ones from the device object library.
+if(NOT USE_CUDA AND NOT USE_ROCM)
+  list(APPEND objects
+      module_mbis_alm/mbis_alm_gpu_stub.cpp
+  )
+endif()
+
 if(ENABLE_LCAO)
   list(APPEND objects
       elecstate_lcao.cpp

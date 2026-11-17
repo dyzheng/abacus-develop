@@ -139,6 +139,17 @@ class Potential : public PotBase
         }
     }
 
+    /**
+     * @brief Re-upload the host smooth effective potential to the device.
+     *
+     * Constraint injection writes mu*w(ir) into the host veff_smooth after
+     * update_from_charge() has already copied it to the device.  On GPU the
+     * PW Hamiltonian reads the device buffer (get_veff_smooth_data), so the
+     * injected term must be pushed again before the next diagonalization.
+     * No-op on the CPU path.
+     */
+    void sync_veff_smooth_to_device();
+
     ModuleBase::matrix& get_veff_smooth()
     {
         return this->veff_smooth;

@@ -1,5 +1,7 @@
 #include "mbis_alm.h"
 
+#include "mbis_alm_gpu.h"
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -193,7 +195,14 @@ void fill_weights(const std::vector<Vec3>& pts, const Grid& grid,
         }
         P[static_cast<std::size_t>(ig)] = psum;
     }
-    st.w.assign(nat, std::vector<double>(nxyz, 0.0));
+    // Reuse an already-sized weight buffer across fixed-point iterations (the
+    // grid and atom count do not change inside compute_mbis).
+    if (static_cast<int>(st.w.size()) != nat
+        || (nat > 0 && st.w[0].size() != nxyz))
+    {
+        st.w.assign(nat, std::vector<double>(nxyz, 0.0));
+    }
+#pragma omp parallel for schedule(static)
     for (int a = 0; a < nat; ++a)
         for (std::size_t ig = 0; ig < nxyz; ++ig)
             st.w[a][ig] = (P[ig] > 1e-300) ? pro[a * nxyz + ig] / P[ig] : 0.0;
@@ -217,6 +226,17 @@ MbisState weights_from_params(const std::vector<double>& /*rho*/, const Grid& gr
 MbisState compute_mbis(const std::vector<double>& rho, const Grid& grid,
                        const std::vector<Atom>& atoms, const MbisConfig& cfg)
 {
+    // Branch: the caller asked for the device backend.  Use it only when a GPU
+    // is actually usable; on any device/runtime failure fall through to the
+    // CPU fixed point below so a bad GPU never yields a silent wrong answer.
+    if (cfg.use_gpu)
+    {
+        MbisState gpu_state;
+        if (compute_mbis_gpu(rho, grid, atoms, cfg, gpu_state))
+        {
+            return gpu_state;
+        }
+    }
     const std::vector<Vec3> pts = grid_points(grid);
     const std::size_t nxyz = pts.size();
     const int nat = static_cast<int>(atoms.size());
@@ -292,6 +312,9 @@ MbisState compute_mbis(const std::vector<double>& rho, const Grid& grid,
                 P[ig] += v;
             }
         double D = 0.0;
+        // The KL diagnostic is a pure grid reduction; parallelise over atoms so
+        // each thread owns one independent `a` slice (no shared write).
+#pragma omp parallel for schedule(static) reduction(+ : D)
         for (int a = 0; a < nat; ++a)
             for (std::size_t ig = 0; ig < nxyz; ++ig)
             {
@@ -338,11 +361,14 @@ Observables observe(const MbisState& st, const std::vector<double>& rho,
     o.N.assign(nat, 0.0);
     o.M.assign(nat, 0.0);
     const double dV = grid.dV();
+    const bool has_spin = !spin.empty();
+    // Per-atom reductions are independent; each thread owns one `a`.
+#pragma omp parallel for schedule(static)
     for (int a = 0; a < nat; ++a)
         for (std::size_t ig = 0; ig < nxyz; ++ig)
         {
             o.N[a] += st.w[a][ig] * rho[ig] * dV;
-            if (!spin.empty())
+            if (has_spin)
                 o.M[a] += st.w[a][ig] * spin[ig] * dV;
         }
     return o;
@@ -354,9 +380,17 @@ std::vector<double> constraint_potential(const MbisState& st,
 {
     std::vector<double> v(grid.size(), 0.0);
     const int nat = static_cast<int>(st.w.size());
-    for (int a = 0; a < nat; ++a)
-        for (std::size_t ig = 0; ig < grid.size(); ++ig)
-            v[ig] += coef[a] * st.w[a][ig];
+    const std::size_t nxyz = grid.size();
+    // Parallelise over grid points (the write target); the atom loop stays
+    // private so there is no false sharing between threads.
+#pragma omp parallel for schedule(static)
+    for (std::size_t ig = 0; ig < nxyz; ++ig)
+    {
+        double acc = 0.0;
+        for (int a = 0; a < nat; ++a)
+            acc += coef[a] * st.w[a][ig];
+        v[ig] = acc;
+    }
     return v;
 }
 

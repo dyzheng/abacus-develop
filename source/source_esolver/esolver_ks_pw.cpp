@@ -303,6 +303,14 @@ void ESolver_KS_PW<T, Device>::hamilt2rho_single(UnitCell& ucell, const int iste
         constraint::ConstraintLoop::instance().inject_potential(
             iter, this->pelec->pot->get_eff_v(),
             this->pelec->pot->get_veff_smooth());
+        // Branch: on a GPU run the Hamiltonian consumes the device
+        // veff_smooth buffer, which was last filled by update_from_charge()
+        // BEFORE this injection.  Re-upload the injected mu*w term so the
+        // constraint actually enters the diagonalization (CPU is a no-op).
+        if (PARAM.inp.device == "gpu")
+        {
+            this->pelec->pot->sync_veff_smooth_to_device();
+        }
     }
 
     bool skip_solve = false;

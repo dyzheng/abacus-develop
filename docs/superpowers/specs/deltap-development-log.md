@@ -8175,3 +8175,22 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   与 rank0 串行参考一致（`max_diff<1e-8`）；MPI 测试目标补链 `mbis_alm.cpp`。
 - 验证 Gatherv/rank0/Scatterv 的 MPI 正确性（此前仅 e2e 手工验证 np=1/2/4）。
 - 文件：`test_mpi/{weight_grid_mpi_test.cpp,CMakeLists.txt}`、本日志。
+
+## 2026-11-17 (S6.89): MBIS GPU 异构后端（CUDA/HIP）+ 端到端验证
+
+- 新增 `module_mbis_alm` 设备后端：`mbis_alm_gpu.h`、`cuda/mbis_alm_gpu.cu`、
+  `rocm/mbis_alm_gpu.hip.cu`、CPU stub；`MbisConfig::use_gpu` 调度，失败回退 CPU。
+- 核设计：`pro_weights_kernel`（pro 求和 + 归一化 + 最小像距离，一次写 w/P/r_min）、
+  `reduce_atom_kernel`（每原子一块、树归约、每块一次 atomicAdd）、`kl_kernel`（KL 诊断）；
+  w/r_min 常驻显存，主机每步只交换 N/ζ。
+- 接线：`WeightGrid::build_mbis`（`device=gpu` 时启用并打印后端）；
+  `constraint_io` 放行 PW 网格权重 GPU；`Potential::sync_veff_smooth_to_device`
+  在注入后重新上传 `veff_smooth`（GPU PW 哈密顿量读设备缓冲）。
+- 性能：LiCl/PW/nspin1/MBIS/images=1、192³ 网格 6 步 SCF：**179 s → 58–61 s（≈3×）**。
+- 正确性：GPU/CPU `FINAL_ETOT` 差 ~5e-13 eV；模块 gtest 在 images=0/1 下
+  N/ζ/D/w < 1e-8；既有 MBIS 13/13、constraint 8 项回归全过。CPU-only `elecstate` 编译通过。
+- 限制：LCAO/allocation/力/应力仍 CPU；ROCm 未实机；多卡 MPI 未实测。
+- 文件：`module_mbis_alm/{mbis_alm.h,mbis_alm.cpp,mbis_alm_gpu.h,mbis_alm_gpu_stub.cpp,
+  cuda/mbis_alm_gpu.cu,rocm/mbis_alm_gpu.hip.cu,test/...}`、
+  `weight_grid.cpp`、`constraint_io.cpp`、`potential_new.{h,cpp}`、`esolver_ks_pw.cpp`、
+  CMake、`2026-11-17-mbis-gpu-heterogeneous-optimization.md`、本日志。

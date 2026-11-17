@@ -17,6 +17,7 @@ AddTest(
     ../alloc_operator.cpp
     ../alloc_linalg.cpp
     ../weight_grid.cpp
+    ../../module_mbis_alm/mbis_alm.cpp
     ../constraint_dipole.cpp
     ../../../source_io/module_output/output.cpp
 )
@@ -29,6 +30,7 @@ AddTest(
     ../alloc_operator.cpp
     ../alloc_linalg.cpp
     ../weight_grid.cpp
+    ../../module_mbis_alm/mbis_alm.cpp
     ../constraint_dipole.cpp
     ../../../source_io/module_output/output.cpp
 )
@@ -75,6 +77,7 @@ AddTest(
   LIBS parameter ${math_libs} base device planewave_serial cell_info
   SOURCES weight_grid_test.cpp
     ../weight_grid.cpp
+    ../../module_mbis_alm/mbis_alm.cpp
     ../constraint_dipole.cpp
     ../../../source_io/module_output/output.cpp
 )
@@ -87,6 +90,7 @@ AddTest(
     ../constraint_observe.cpp
     ../constraint_dipole.cpp
     ../weight_grid.cpp
+    ../../module_mbis_alm/mbis_alm.cpp
     ../../../source_base/module_grid/radial.cpp
     ../../../source_base/module_grid/delley.cpp
     ../../../source_io/module_output/output.cpp
@@ -135,6 +139,7 @@ AddTest(
     ../constraint_observe.cpp
     ../constraint_dipole.cpp
     ../weight_grid.cpp
+    ../../module_mbis_alm/mbis_alm.cpp
     ../../../source_base/module_grid/radial.cpp
     ../../../source_base/module_grid/delley.cpp
     ../../../source_io/module_output/output.cpp
@@ -148,6 +153,7 @@ AddTest(
     ../constraint_io.cpp
     ../constraint_dipole.cpp
     ../weight_grid.cpp
+    ../../module_mbis_alm/mbis_alm.cpp
     ../../../source_io/module_output/output.cpp
 )
 
@@ -165,6 +171,7 @@ AddTest(
     ../constraint_dipole.cpp
     ../mu_solver.cpp
     ../weight_grid.cpp
+    ../../module_mbis_alm/mbis_alm.cpp
     ../../../source_base/module_grid/radial.cpp
     ../../../source_base/module_grid/delley.cpp
     ../../../source_io/module_output/output.cpp

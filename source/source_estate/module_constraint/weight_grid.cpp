@@ -11,6 +11,7 @@
 #include "source_base/module_grid/partition.h"
 #include "source_base/tool_quit.h"
 #include "source_estate/module_mbis_alm/mbis_alm.h"
+#include "source_estate/module_mbis_alm/mbis_alm_gpu.h"
 #include "source_estate/module_mbis_alm/pw_grid_bridge.h"
 #include "source_io/module_parameter/parameter.h"
 
@@ -1111,6 +1112,28 @@ void WeightGrid::build_mbis(const std::vector<double>& rho_total)
     cfg.init_zeta = 1.0;
     cfg.warm_N = mbis_N_;
     cfg.warm_zeta = mbis_zeta_;
+    // Branch: when the run is on the GPU device, the (pool-root) MBIS fixed
+    // point uses the CUDA/HIP backend.  Non-root ranks never reach this code;
+    // on a GPU-less node compute_mbis GPU dispatch falls back to the CPU.
+    cfg.use_gpu = (PARAM.inp.device == "gpu");
+    // Branch: report the backend actually used once per run so a silent CPU
+    // fallback (e.g. a GPU-less node with device=gpu) is visible in the log.
+    static bool mbis_gpu_reported = false;
+    if (cfg.use_gpu && !mbis_gpu_reported && (pool_np == 1 || poolrank == 0))
+    {
+        mbis_gpu_reported = true;
+        if (mbis_alm::mbis_gpu_available())
+        {
+            GlobalV::ofs_running
+                << "[constraint] MBIS fixed point on GPU (device backend)\n";
+        }
+        else
+        {
+            ModuleBase::WARNING("WeightGrid::build_mbis",
+                "device=gpu but no GPU backend/device is available; "
+                "MBIS falls back to the CPU fixed point");
+        }
+    }
     // Only the pool root runs the global (and expensive) MBIS iteration.  The
     // per-rank local slices are packed on the root and Scatterv'd, so non-root
     // ranks never hold an O(nxyz) copy of the weights.
@@ -1175,10 +1198,10 @@ void WeightGrid::build_mbis(const std::vector<double>& rho_total)
 #endif
     if (pool_np == 1)
     {
-        for (int iat = 0; iat < nat_; ++iat)
-            for (int ir = 0; ir < nrxx_; ++ir)
-                w_local[static_cast<std::size_t>(iat) * nrxx_ + ir]
-                    = w_flat[static_cast<std::size_t>(iat) * rho_basis_->nxyz + ir];
+        // Serial pool: local layout is already the global z-fastest layout
+        // (nrxx == nxyz), so hand the root's packed weights over directly
+        // instead of copying nat*nxyz doubles a second time.
+        w_local.swap(w_flat);
     }
     mbis_N_ = Nv;
     mbis_zeta_ = zv;

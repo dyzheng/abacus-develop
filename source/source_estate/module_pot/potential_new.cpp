@@ -156,6 +156,26 @@ void Potential::allocate()
     }
 }
 
+void Potential::sync_veff_smooth_to_device()
+{
+    // Branch: the CPU build keeps veff_smooth in place (d_veff_smooth aliases
+    // the host buffer), so there is nothing to copy.
+    if (!this->use_gpu_)
+    {
+        return;
+    }
+    if (PARAM.globalv.has_float_data)
+    {
+        castmem_d2s_h2d_op()(s_veff_smooth, this->veff_smooth.c,
+                             this->veff_smooth.nr * this->veff_smooth.nc);
+    }
+    if (PARAM.globalv.has_double_data)
+    {
+        syncmem_d2d_h2d_op()(d_veff_smooth, this->veff_smooth.c,
+                             this->veff_smooth.nr * this->veff_smooth.nc);
+    }
+}
+
 void Potential::update_from_charge(const Charge*const chg, const UnitCell*const ucell)
 {
     ModuleBase::TITLE("Potential", "update_from_charge");

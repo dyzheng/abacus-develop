@@ -22,6 +22,9 @@ MBIS（迭代 Slater Stockholder，**带布居约束的不动点**）已作为
 - **bcc Fe2（体心 0.50，`constraint_mbis_images 1`）**：**对称稳定** N=16/16、M=±2.85、ρ≈0.31。
 - **FeO（charge+spin，无 U）**：能量已自洽（`−ΣμQ` 修复），但 PBE 金属磁性不稳，
   需 **DFT+U** 做受控的 charge+spin 验证。
+- **GPU（2026-11-17）**：PW 网格权重路径已支持 `device=gpu`，CUDA/HIP 后端
+  加速固定点；LiCl 端到端 179 s → 61.5 s（2.9×），ETOT 一致到 5e-13 eV。
+  详见 `2026-11-17-mbis-gpu-heterogeneous-optimization.md`。
 
 ---
 
@@ -38,6 +41,7 @@ MBIS（迭代 Slater Stockholder，**带布居约束的不动点**）已作为
 | 真实 cube/根因 | `mbis-real-cube-stability.md`、`mbis-minimum-image-symmetry-fix.md`、`mbis-smooth-force-pro.md`、`mbis-d-degeneracy-fallback.md`、`mbis-fe2-test.md`、`mbis-in-basin-l-projection-test.md` | **min-image 为真正根因修复**；力光滑；D 退化 |
 | 主循环 e2e | `mbis-abacus-e2e-validation.md`、`mbis-mpi-gather.md` | 约束激活、Q 与独立一致；pool gather np=1/2/4 一致 |
 | FeO/能量 | `mbis-feo-charge-spin-validation.md`、`mbis-feo-branch-flip-analysis.md`、`mbis-energy-audit-deltaspin-comparison.md` | charge+spin 同时生效；能量记账审计与修复 |
+| **GPU 异构** | `2026-11-17-mbis-gpu-heterogeneous-optimization.md`、`2026-10-30-mbis-mpi-gpu-pw-lcao-status.md` | CUDA/HIP 后端（pro+权重/归约/KL）；PW `device=gpu` 放行 + `sync_veff_smooth_to_device`；LiCl 2.9×，ETOT 差 5e-13 eV |
 
 `lcao-mbis-saturation.md`、`2026-10-30-why-licl-ok-fe2-breaks.md` 等为**被后续更正的历史诊断**，见 §2。
 
@@ -127,6 +131,9 @@ w_A(x)   = pro_A / Σ_B pro_B ,   N_A = ∫ w_A ρ ,   ζ_A = 3 N_A / ∫ r w_A 
    ≥1，或按盒子尺寸自适应）。
 4. `compute_mbis_newton_fp` 在真实大体系可能退化（主用 Picard）。
 5. 应力/力主路径走 `module_constraint` 通用 `WeightGrid` 力核；MBIS 模块 force 仅单测（已光滑）。
+6. **GPU 后端仅覆盖 PW 网格权重的固定点**：LCAO GPU、allocation GPU、
+   力/应力 device 核尚未实现；`device=gpu` 时 LCAO/allocation 仍显式拒绝。
+   ROCm 代码为 CUDA 镜像，尚未在 AMD 实机验证。
 
 ---
 
