@@ -320,9 +320,16 @@ TEST(ConstraintIOTest, ConfigureFromInputsShared)
                                                 error),
               constraint::ConfigStatus::ERROR);
 
-    // Guard: GPU device refuses to run.
+    // Guard: GPU + allocation kernels are still CPU-only and must refuse.
     PARAM.input.device = "gpu";
+    PARAM.input.constraint_alloc_switch = true;
     PARAM.input.constraint_target_file = "not_there.json";
+    EXPECT_EQ(constraint::configure_from_inputs(cfg, specs, *ucell, radii,
+                                                error),
+              constraint::ConfigStatus::ERROR);
+    // GPU + PW/LCAO grid weights are accepted; a missing target file is then
+    // the only reason this call fails (read_target_file -> ERROR).
+    PARAM.input.constraint_alloc_switch = false;
     EXPECT_EQ(constraint::configure_from_inputs(cfg, specs, *ucell, radii,
                                                 error),
               constraint::ConfigStatus::ERROR);

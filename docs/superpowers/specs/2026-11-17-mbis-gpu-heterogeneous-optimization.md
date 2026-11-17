@@ -100,7 +100,22 @@
   `images=1` → 每次固定点约 3.8×10⁸ 次 exp），是主要开销来源，故端到端
   收益显著。
 
-### 4.3 回归
+### 4.3 LCAO GPU（第二轮）
+
+放开 `basis_type=lcao` 的 GPU 约束（注入写宿主 `v_eff`，`gint_vl_gpu` 每次
+`cal_gint` 都会把它 H2D，无需额外同步）。LiCl/LCAO/nspin1/MBIS/images=1：
+
+| 设备 | wall time | FINAL_ETOT (eV) | 外步轨迹 |
+|---|---|---|---|
+| CPU（20 线程） | 71.7 s | −643.2645362540702 | iter 20/57/87/111，μ = −1/−0.168/−0.220 |
+| GPU（3070 Ti） | 79.8 s | −643.2645362537546 | 同上，Q 差 <1e-8 |
+
+- 外步号、每次 `μ`、`Q` 轨迹一致；ETOT 差 **3×10⁻¹⁰ eV**，证明 GPU 注入的
+  约束势确实进入了 LCAO 哈密顿量（Q 从 2.0437 → 2.1032 → 2.0504 → 2.0527）。
+- 该 LCAO 小算例整体耗时几乎不变：GPU 只加速 MBIS 固定点，其余 LCAO 部分
+  （gint/DM）仍在 CPU 侧占主导；大网格 PW 的端到端收益更明显。
+
+### 4.4 回归
 
 ```
 MODULE_ESTATE_constraint_weight_grid      Passed
@@ -131,7 +146,8 @@ MODULE_ESTATE_constraint_alloc_observe    Passed
 
 - 每原子每网格点存 `r_min`，显存 ≈ `2 · nat · nxyz · 8 B`（另加 `w`）。
   超大体系（nat 数百、网格 >10⁷）需要监控显存；失败会回退 CPU。
-- 仅 PW 网格权重允许 GPU；LCAO / allocation / single / double_grid 仍拒绝。
+- PW 与 LCAO 的网格权重都已允许 GPU；allocation / single precision /
+  double_grid 仍显式拒绝。LCAO 的收益只覆盖 MBIS 固定点（其余 gint/DM 仍 CPU）。
 - 设备后端使用双精度 `exp`；未引入 `__expf` 等降精度快路径。
 - 归约核用 `atomicAdd`（每块一次），块间顺序不定，重复 GPU 运行的 ETOT
   末位有 ~1e-12 eV 抖动；与 CPU 的差异仍在 1e-12 eV 量级，非实现错误。
@@ -144,5 +160,6 @@ MODULE_ESTATE_constraint_alloc_observe    Passed
 1. 在真实 GPU 节点用多 MPI rank（每 rank 绑卡）验证 pool root 计算 + Scatterv
    的设备路径与显存行为。
 2. 视显存压力把 `r_min` 改为 `float` 或按预算切换到「重算 sqrt」的 reduce 核。
-3. 评估 LCAO GPU 的 gint/potential 设备同步后放开 LCAO 约束。
+3. ~~评估 LCAO GPU 的 gint/potential 设备同步后放开 LCAO 约束~~ ✅ 已完成并验证。
 4. 为 `constraint_force` / `build_mbis_derivatives`（力/应力）增加设备核。
+5. allocation GPU（`alloc_observe`/`alloc_pw` 的设备归约）仍未做。
