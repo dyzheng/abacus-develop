@@ -1299,15 +1299,20 @@ void WeightGrid::build_mbis(const std::vector<double>& rho_total)
             N[a] = have_warm ? cfg.warm_N[a] : Zv[a];
             zeta[a] = have_warm ? cfg.warm_zeta[a] : cfg.init_zeta;
         }
+        // Persistent workspace: upload rho/atoms/images once, then only the
+        // current N/zeta crosses the bus in each fixed-point iteration.
+        mbis_alm::MbisGpuLocalWorkspace workspace;
+        if (!workspace.init(rho_total, grid, rho_basis_->nplane,
+                            rho_basis_->startz_current, atoms, cfg))
+        {
+            ModuleBase::WARNING_QUIT("WeightGrid::build_mbis",
+                "distributed MBIS device workspace init failed");
+        }
         std::vector<std::vector<double>> w_step;
         std::vector<double> Nloc, MRloc, red(2 * nat_, 0.0);
         for (int it = 0; it < cfg.max_iter; ++it)
         {
-            if (!mbis_alm::mbis_gpu_local_step(rho_total, grid,
-                                               rho_basis_->nplane,
-                                               rho_basis_->startz_current,
-                                               atoms, cfg, N, zeta, false,
-                                               w_step, Nloc, MRloc))
+            if (!workspace.step(N, zeta, false, w_step, Nloc, MRloc))
             {
                 ModuleBase::WARNING_QUIT("WeightGrid::build_mbis",
                     "distributed MBIS device step failed");
@@ -1341,10 +1346,7 @@ void WeightGrid::build_mbis(const std::vector<double>& rho_total)
             }
         }
         // Final fill with the converged (damped) parameters.
-        if (!mbis_alm::mbis_gpu_local_step(rho_total, grid, rho_basis_->nplane,
-                                           rho_basis_->startz_current, atoms,
-                                           cfg, N, zeta, true, w_step, Nloc,
-                                           MRloc))
+        if (!workspace.step(N, zeta, true, w_step, Nloc, MRloc))
         {
             ModuleBase::WARNING_QUIT("WeightGrid::build_mbis",
                 "distributed MBIS final device step failed");

@@ -35,4 +35,32 @@ bool mbis_gpu_local_step(const std::vector<double>& /*rho_local*/,
     return false;
 }
 
+MbisGpuLocalWorkspace::MbisGpuLocalWorkspace() = default;
+MbisGpuLocalWorkspace::~MbisGpuLocalWorkspace() = default;
+
+bool MbisGpuLocalWorkspace::ready() const
+{
+    return false;
+}
+
+bool MbisGpuLocalWorkspace::init(const std::vector<double>& /*rho_local*/,
+                                 const Grid& /*grid*/,
+                                 const int /*nplane*/,
+                                 const int /*startz*/,
+                                 const std::vector<Atom>& /*atoms*/,
+                                 const MbisConfig& /*cfg*/)
+{
+    return false;
+}
+
+bool MbisGpuLocalWorkspace::step(const std::vector<double>& /*N*/,
+                                 const std::vector<double>& /*zeta*/,
+                                 const bool /*want_weights*/,
+                                 std::vector<std::vector<double>>& /*w*/,
+                                 std::vector<double>& /*Nout*/,
+                                 std::vector<double>& /*MRout*/)
+{
+    return false;
+}
+
 } // namespace mbis_alm

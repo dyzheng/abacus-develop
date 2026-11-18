@@ -67,6 +67,48 @@ bool mbis_gpu_local_step(const std::vector<double>& rho_local,
                          std::vector<double>& Nout,
                          std::vector<double>& MRout);
 
+/**
+ * @brief Persistent device workspace for the distributed MBIS fixed point.
+ *
+ * The rank-local density, atom centres and periodic-image translations do not
+ * change during one fixed-point solve.  Creating the workspace uploads them
+ * once; each step() only uploads the current (N,zeta) and launches the
+ * pro/weight/reduction kernels.  This removes the per-iteration cudaMalloc +
+ * H2D traffic from the MPI distributed loop.
+ *
+ * The class is a pimpl so the header stays free of CUDA/HIP types.  The device
+ * implementation lives in cuda|rocm/mbis_alm_gpu.*; the CPU stub always
+ * reports failure.
+ */
+class MbisGpuLocalWorkspace
+{
+  public:
+    MbisGpuLocalWorkspace();
+    ~MbisGpuLocalWorkspace();
+    MbisGpuLocalWorkspace(const MbisGpuLocalWorkspace&) = delete;
+    MbisGpuLocalWorkspace& operator=(const MbisGpuLocalWorkspace&) = delete;
+
+    bool init(const std::vector<double>& rho_local,
+              const Grid& grid,
+              const int nplane,
+              const int startz,
+              const std::vector<Atom>& atoms,
+              const MbisConfig& cfg);
+
+    bool step(const std::vector<double>& N,
+              const std::vector<double>& zeta,
+              const bool want_weights,
+              std::vector<std::vector<double>>& w,
+              std::vector<double>& Nout,
+              std::vector<double>& MRout);
+
+    bool ready() const;
+
+  private:
+    struct Impl;
+    Impl* impl_ = nullptr;
+};
+
 } // namespace mbis_alm
 
 #endif

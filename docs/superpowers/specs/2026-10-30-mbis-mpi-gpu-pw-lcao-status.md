@@ -35,7 +35,8 @@
   ETOT 一致到 5e-13 eV；模块 gtest CPU/GPU 在 `images=0/1` 下 `N,ζ,D,w` < 1e-8。
 - **LCAO**：`gint_vl_gpu` 每次 `cal_gint` 把宿主 `vr_eff` H2D，故注入写宿主 `v_eff` 即可；LiCl/LCAO/MBIS 外步轨迹与 CPU 一致（μ/Q），ETOT 差 3e-10 eV。
 - **多 rank**：`pool_np>1 && device=gpu` 时不再 rank0 gather；每 rank 用本地 z-plane
-  块和自己的 GPU，每步仅 `MPI_Allreduce` N/MR。LCAO np=2 端到端 ETOT 差 7e-13 eV；
+  块和自己的 GPU，每步仅 `MPI_Allreduce` N/MR。`MbisGpuLocalWorkspace` 持久缓存
+  rho/原子/镜像，迭代内只传 N/ζ。LCAO np=2 端到端 ETOT 差 7e-13 eV；
   `weight_grid_mpi` np=4 分布式 vs 串行权重 <1e-8。PW 的 GPU 校验令 `kpar=NPROC`，
   `poolnproc=1`，仍走 serial-pool 全网格 GPU。
 - **力/应力**：`module_constraint/cuda|rocm/constraint_mbis_gpu.*` 直算核；

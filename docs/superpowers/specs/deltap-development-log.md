@@ -8225,3 +8225,14 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   18.4 s vs 28.4 s）。
 - 文件：`mbis_alm_gpu.{h,cu,hip.cu,stub.cpp}`、`weight_grid.cpp`、
   `test_mpi/{weight_grid_mpi_test.cpp,CMakeLists.txt}`、本日志。
+
+## 2026-11-17 (S6.92): 分布式 MBIS 持久设备 workspace
+
+- `MbisGpuLocalWorkspace`（pimpl）：init 一次性上传本地 rho、原子、镜像与网格/
+  体积，step 只上传当前 `N/ζ` 并复用设备缓冲；避免每步 cudaMalloc + 常量 H2D。
+- `WeightGrid::build_mbis` 分布式分支改用持久 workspace；`mbis_gpu_local_step`
+  保留为一次性 wrapper（测试/旧调用）。
+- 验证：LCAO np=2 GPU 分布式 ETOT 与之前一致（−643.2969955462979 eV），
+  wall time 18.4 s → **16.3 s**；`weight_grid_mpi` np=4 6/6 PASS；
+  `MODULE_ESTATE_mbis_alm_gpu` 4/4 PASS。
+- 文件：`mbis_alm_gpu.{h,cu,hip.cu,stub.cpp}`、`weight_grid.cpp`、文档、本日志。

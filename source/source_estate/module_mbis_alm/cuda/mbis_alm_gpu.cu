@@ -505,18 +505,39 @@ bool compute_mbis_gpu(const std::vector<double>& rho,
     return true;
 }
 
-bool mbis_gpu_local_step(const std::vector<double>& rho_local,
-                         const Grid& grid,
-                         const int nplane,
-                         const int startz,
-                         const std::vector<Atom>& atoms,
-                         const MbisConfig& cfg,
-                         const std::vector<double>& N,
-                         const std::vector<double>& zeta,
-                         const bool want_weights,
-                         std::vector<std::vector<double>>& w,
-                         std::vector<double>& Nout,
-                         std::vector<double>& MRout)
+struct MbisGpuLocalWorkspace::Impl
+{
+    bool initialized = false;
+    int nat = 0;
+    long long nxyz = 0;
+    int nimg = 0;
+    GpuGrid g;
+    double dV = 0.0;
+    double cutoff = 0.0;
+
+    DevBuf d_rho, d_pro, d_rmin, d_P, d_Rx, d_Ry, d_Rz, d_N, d_zeta, d_Tx, d_Ty, d_Tz, d_red;
+};
+
+MbisGpuLocalWorkspace::MbisGpuLocalWorkspace() : impl_(nullptr)
+{
+}
+
+MbisGpuLocalWorkspace::~MbisGpuLocalWorkspace()
+{
+    delete impl_;
+}
+
+bool MbisGpuLocalWorkspace::ready() const
+{
+    return impl_ != nullptr && impl_->initialized;
+}
+
+bool MbisGpuLocalWorkspace::init(const std::vector<double>& rho_local,
+                                 const Grid& grid,
+                                 const int nplane,
+                                 const int startz,
+                                 const std::vector<Atom>& atoms,
+                                 const MbisConfig& cfg)
 {
     if (!mbis_gpu_available())
     {
@@ -525,8 +546,7 @@ bool mbis_gpu_local_step(const std::vector<double>& rho_local,
     const int nat = static_cast<int>(atoms.size());
     const long long nxyz
         = static_cast<long long>(grid.n[0]) * static_cast<long long>(grid.n[1]) * static_cast<long long>(nplane);
-    if (nat <= 0 || nplane <= 0 || nxyz <= 0 || rho_local.size() != static_cast<std::size_t>(nxyz)
-        || static_cast<int>(N.size()) != nat || static_cast<int>(zeta.size()) != nat)
+    if (nat <= 0 || nplane <= 0 || nxyz <= 0 || rho_local.size() != static_cast<std::size_t>(nxyz))
     {
         return false;
     }
@@ -562,7 +582,11 @@ bool mbis_gpu_local_step(const std::vector<double>& rho_local,
         Rz[a] = atoms[a].R.z;
     }
 
-    GpuGrid g;
+    Impl* fresh = new Impl();
+    fresh->nat = nat;
+    fresh->nxyz = nxyz;
+    fresh->nimg = nimg;
+    GpuGrid& g = fresh->g;
     g.n0 = grid.n[0];
     g.n1 = grid.n[1];
     g.n2 = grid.n[2];
@@ -580,89 +604,136 @@ bool mbis_gpu_local_step(const std::vector<double>& rho_local,
     g.dv20 = grid.dv[2].x;
     g.dv21 = grid.dv[2].y;
     g.dv22 = grid.dv[2].z;
-
-    const double dV = std::abs(grid.dv[0].x * (grid.dv[1].y * grid.dv[2].z - grid.dv[1].z * grid.dv[2].y)
-                               - grid.dv[0].y * (grid.dv[1].x * grid.dv[2].z - grid.dv[1].z * grid.dv[2].x)
-                               + grid.dv[0].z * (grid.dv[1].x * grid.dv[2].y - grid.dv[1].y * grid.dv[2].x));
+    fresh->dV = std::abs(g.dv00 * (g.dv11 * g.dv22 - g.dv12 * g.dv21) - g.dv01 * (g.dv10 * g.dv22 - g.dv12 * g.dv20)
+                         + g.dv02 * (g.dv10 * g.dv21 - g.dv11 * g.dv20));
+    fresh->cutoff = cfg.cutoff;
     const std::size_t nw = static_cast<std::size_t>(nat) * static_cast<std::size_t>(nxyz);
 
-    DevBuf d_rho, d_pro, d_rmin, d_P, d_Rx, d_Ry, d_Rz, d_N, d_zeta, d_Tx, d_Ty, d_Tz, d_red;
-    if (!d_rho.alloc<double>(nxyz) || !d_pro.alloc<double>(nw) || !d_rmin.alloc<double>(nw) || !d_P.alloc<double>(nxyz)
-        || !d_Rx.alloc<double>(nat) || !d_Ry.alloc<double>(nat) || !d_Rz.alloc<double>(nat) || !d_N.alloc<double>(nat)
-        || !d_zeta.alloc<double>(nat) || !d_Tx.alloc<double>(nimg) || !d_Ty.alloc<double>(nimg)
-        || !d_Tz.alloc<double>(nimg) || !d_red.alloc<double>(2 * nat))
+    if (!fresh->d_rho.alloc<double>(nxyz) || !fresh->d_pro.alloc<double>(nw) || !fresh->d_rmin.alloc<double>(nw)
+        || !fresh->d_P.alloc<double>(nxyz) || !fresh->d_Rx.alloc<double>(nat) || !fresh->d_Ry.alloc<double>(nat)
+        || !fresh->d_Rz.alloc<double>(nat) || !fresh->d_N.alloc<double>(nat) || !fresh->d_zeta.alloc<double>(nat)
+        || !fresh->d_Tx.alloc<double>(nimg) || !fresh->d_Ty.alloc<double>(nimg) || !fresh->d_Tz.alloc<double>(nimg)
+        || !fresh->d_red.alloc<double>(2 * nat))
+    {
+        delete fresh;
+        return false;
+    }
+    if (!gpu_ok(cudaMemcpy(fresh->d_rho.as<double>(), rho_local.data(), sizeof(double) * nxyz, cudaMemcpyHostToDevice))
+        || !gpu_ok(cudaMemcpy(fresh->d_Rx.as<double>(), Rx.data(), sizeof(double) * nat, cudaMemcpyHostToDevice))
+        || !gpu_ok(cudaMemcpy(fresh->d_Ry.as<double>(), Ry.data(), sizeof(double) * nat, cudaMemcpyHostToDevice))
+        || !gpu_ok(cudaMemcpy(fresh->d_Rz.as<double>(), Rz.data(), sizeof(double) * nat, cudaMemcpyHostToDevice))
+        || !gpu_ok(cudaMemcpy(fresh->d_Tx.as<double>(), Tx.data(), sizeof(double) * nimg, cudaMemcpyHostToDevice))
+        || !gpu_ok(cudaMemcpy(fresh->d_Ty.as<double>(), Ty.data(), sizeof(double) * nimg, cudaMemcpyHostToDevice))
+        || !gpu_ok(cudaMemcpy(fresh->d_Tz.as<double>(), Tz.data(), sizeof(double) * nimg, cudaMemcpyHostToDevice)))
+    {
+        delete fresh;
+        return false;
+    }
+    fresh->initialized = true;
+    delete impl_;
+    impl_ = fresh;
+    return true;
+}
+
+bool MbisGpuLocalWorkspace::step(const std::vector<double>& N,
+                                 const std::vector<double>& zeta,
+                                 const bool want_weights,
+                                 std::vector<std::vector<double>>& w,
+                                 std::vector<double>& Nout,
+                                 std::vector<double>& MRout)
+{
+    if (impl_ == nullptr || !impl_->initialized)
+    {
+        return false;
+    }
+    Impl& s = *impl_;
+    if (static_cast<int>(N.size()) != s.nat || static_cast<int>(zeta.size()) != s.nat)
+    {
+        return false;
+    }
+    if (!gpu_ok(cudaMemcpy(s.d_N.as<double>(), N.data(), sizeof(double) * s.nat, cudaMemcpyHostToDevice))
+        || !gpu_ok(cudaMemcpy(s.d_zeta.as<double>(), zeta.data(), sizeof(double) * s.nat, cudaMemcpyHostToDevice)))
     {
         return false;
     }
 
-    if (!gpu_ok(cudaMemcpy(d_rho.as<double>(), rho_local.data(), sizeof(double) * nxyz, cudaMemcpyHostToDevice))
-        || !gpu_ok(cudaMemcpy(d_Rx.as<double>(), Rx.data(), sizeof(double) * nat, cudaMemcpyHostToDevice))
-        || !gpu_ok(cudaMemcpy(d_Ry.as<double>(), Ry.data(), sizeof(double) * nat, cudaMemcpyHostToDevice))
-        || !gpu_ok(cudaMemcpy(d_Rz.as<double>(), Rz.data(), sizeof(double) * nat, cudaMemcpyHostToDevice))
-        || !gpu_ok(cudaMemcpy(d_N.as<double>(), N.data(), sizeof(double) * nat, cudaMemcpyHostToDevice))
-        || !gpu_ok(cudaMemcpy(d_zeta.as<double>(), zeta.data(), sizeof(double) * nat, cudaMemcpyHostToDevice))
-        || !gpu_ok(cudaMemcpy(d_Tx.as<double>(), Tx.data(), sizeof(double) * nimg, cudaMemcpyHostToDevice))
-        || !gpu_ok(cudaMemcpy(d_Ty.as<double>(), Ty.data(), sizeof(double) * nimg, cudaMemcpyHostToDevice))
-        || !gpu_ok(cudaMemcpy(d_Tz.as<double>(), Tz.data(), sizeof(double) * nimg, cudaMemcpyHostToDevice)))
+    const int pro_blocks = static_cast<int>((s.nxyz + kThreads - 1) / kThreads);
+    const int red_blocks = std::min(1024, static_cast<int>((s.nxyz + kThreads - 1) / kThreads));
+    pro_weights_kernel<<<pro_blocks, kThreads>>>(s.g,
+                                                 s.nxyz,
+                                                 s.nat,
+                                                 s.nimg,
+                                                 s.d_Rx.as<double>(),
+                                                 s.d_Ry.as<double>(),
+                                                 s.d_Rz.as<double>(),
+                                                 s.d_N.as<double>(),
+                                                 s.d_zeta.as<double>(),
+                                                 s.d_Tx.as<double>(),
+                                                 s.d_Ty.as<double>(),
+                                                 s.d_Tz.as<double>(),
+                                                 s.cutoff,
+                                                 s.d_pro.as<double>(),
+                                                 s.d_P.as<double>(),
+                                                 s.d_rmin.as<double>());
+    if (!gpu_ok(cudaGetLastError()) || !gpu_ok(cudaMemset(s.d_red.ptr, 0, sizeof(double) * 2 * s.nat)))
     {
         return false;
     }
-
-    const int pro_blocks = static_cast<int>((nxyz + kThreads - 1) / kThreads);
-    const int red_blocks = std::min(1024, static_cast<int>((nxyz + kThreads - 1) / kThreads));
-
-    pro_weights_kernel<<<pro_blocks, kThreads>>>(g,
-                                                 nxyz,
-                                                 nat,
-                                                 nimg,
-                                                 d_Rx.as<double>(),
-                                                 d_Ry.as<double>(),
-                                                 d_Rz.as<double>(),
-                                                 d_N.as<double>(),
-                                                 d_zeta.as<double>(),
-                                                 d_Tx.as<double>(),
-                                                 d_Ty.as<double>(),
-                                                 d_Tz.as<double>(),
-                                                 cfg.cutoff,
-                                                 d_pro.as<double>(),
-                                                 d_P.as<double>(),
-                                                 d_rmin.as<double>());
-    if (!gpu_ok(cudaGetLastError()) || !gpu_ok(cudaMemset(d_red.ptr, 0, sizeof(double) * 2 * nat)))
-    {
-        return false;
-    }
-    reduce_atom_kernel<<<dim3(red_blocks, nat), kThreads>>>(nxyz,
-                                                            d_pro.as<double>(),
-                                                            d_rmin.as<double>(),
-                                                            d_rho.as<double>(),
-                                                            dV,
-                                                            d_red.as<double>(),
-                                                            d_red.as<double>() + nat);
+    reduce_atom_kernel<<<dim3(red_blocks, s.nat), kThreads>>>(s.nxyz,
+                                                              s.d_pro.as<double>(),
+                                                              s.d_rmin.as<double>(),
+                                                              s.d_rho.as<double>(),
+                                                              s.dV,
+                                                              s.d_red.as<double>(),
+                                                              s.d_red.as<double>() + s.nat);
     if (!gpu_ok(cudaGetLastError()))
     {
         return false;
     }
-    Nout.assign(nat, 0.0);
-    MRout.assign(nat, 0.0);
-    if (!gpu_ok(cudaMemcpy(Nout.data(), d_red.ptr, sizeof(double) * nat, cudaMemcpyDeviceToHost))
-        || !gpu_ok(cudaMemcpy(MRout.data(), d_red.as<double>() + nat, sizeof(double) * nat, cudaMemcpyDeviceToHost)))
+    Nout.assign(s.nat, 0.0);
+    MRout.assign(s.nat, 0.0);
+    if (!gpu_ok(cudaMemcpy(Nout.data(), s.d_red.ptr, sizeof(double) * s.nat, cudaMemcpyDeviceToHost))
+        || !gpu_ok(
+            cudaMemcpy(MRout.data(), s.d_red.as<double>() + s.nat, sizeof(double) * s.nat, cudaMemcpyDeviceToHost)))
     {
         return false;
     }
-
     if (want_weights)
     {
+        const std::size_t nw = static_cast<std::size_t>(s.nat) * static_cast<std::size_t>(s.nxyz);
         std::vector<double> w_flat(nw, 0.0);
-        if (!gpu_ok(cudaMemcpy(w_flat.data(), d_pro.ptr, sizeof(double) * nw, cudaMemcpyDeviceToHost)))
+        if (!gpu_ok(cudaMemcpy(w_flat.data(), s.d_pro.ptr, sizeof(double) * nw, cudaMemcpyDeviceToHost)))
         {
             return false;
         }
-        w.assign(nat, std::vector<double>(static_cast<std::size_t>(nxyz), 0.0));
-        for (int a = 0; a < nat; ++a)
-            for (long long ig = 0; ig < nxyz; ++ig)
-                w[a][static_cast<std::size_t>(ig)] = w_flat[static_cast<std::size_t>(a) * nxyz + ig];
+        w.assign(s.nat, std::vector<double>(static_cast<std::size_t>(s.nxyz), 0.0));
+        for (int a = 0; a < s.nat; ++a)
+            for (long long ig = 0; ig < s.nxyz; ++ig)
+                w[a][static_cast<std::size_t>(ig)] = w_flat[static_cast<std::size_t>(a) * s.nxyz + ig];
     }
     return true;
+}
+
+// Standalone wrapper (tests / legacy callers): create a temporary workspace.
+bool mbis_gpu_local_step(const std::vector<double>& rho_local,
+                         const Grid& grid,
+                         const int nplane,
+                         const int startz,
+                         const std::vector<Atom>& atoms,
+                         const MbisConfig& cfg,
+                         const std::vector<double>& N,
+                         const std::vector<double>& zeta,
+                         const bool want_weights,
+                         std::vector<std::vector<double>>& w,
+                         std::vector<double>& Nout,
+                         std::vector<double>& MRout)
+{
+    MbisGpuLocalWorkspace workspace;
+    if (!workspace.init(rho_local, grid, nplane, startz, atoms, cfg))
+    {
+        return false;
+    }
+    return workspace.step(N, zeta, want_weights, w, Nout, MRout);
 }
 
 } // namespace mbis_alm
