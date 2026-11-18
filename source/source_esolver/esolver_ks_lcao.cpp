@@ -1468,7 +1468,8 @@ void ESolver_KS_LCAO<TK, TR>::after_scf(UnitCell& ucell, const int istep, const 
     // reads the already converged DMR/S(R) and the current density, never
     // changes the constraint potential or the SCF state.  The default-off
     // branch must not emit anything, preserving historical logs byte-for-byte.
-    if (PARAM.inp.constraint && PARAM.inp.constraint_alloc_report)
+    if (PARAM.inp.constraint && PARAM.inp.constraint_alloc_switch
+        && PARAM.inp.constraint_alloc_report)
     {
         constraint::ConstraintLoop& cloop
             = constraint::ConstraintLoop::instance();

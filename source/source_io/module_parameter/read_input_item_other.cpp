@@ -1841,6 +1841,18 @@ Manual override is allowed: if sc_acceleration_mode is explicitly set, it takes 
         this->add_item(item);
     }
     {
+        Input_Item item("constraint_mbis_cutoff");
+        item.annotation = "MBIS: radial cutoff (Bohr) for the pro-density sum";
+        item.category = "Constraint";
+        item.type = "Real";
+        item.description = "Radial cutoff (Bohr) applied to every periodic image in the MBIS Slater pro-density. The default 10 Bohr keeps the iteration tractable; charged or diffuse systems whose density extends into the vacuum may need a larger value so the MBIS partition still covers (nearly) the whole cell. Runs are warned when the sum of observed charges differs from nelec.";
+        item.default_value = "10.0";
+        item.unit = "Bohr";
+        item.availability = "constraint_weight_type = mbis";
+        read_sync_double(input.constraint_mbis_cutoff);
+        this->add_item(item);
+    }
+    {
         Input_Item item("constraint_alloc_report");
         item.annotation = "print the LCAO unified-allocation target/complement audit";
         item.category = "Constraint";

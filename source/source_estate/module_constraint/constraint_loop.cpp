@@ -1065,6 +1065,55 @@ void ConstraintLoop::observe(const int iter, const double* const* rho,
     // mixed charge+spin list is observed in one integral (A2 core).
     ConstraintObserver::observe(*wg_, rho, nspin, channels_, Q_);
     finish_observation();
+    // MBIS charged-cell audit: the hard radial pro cutoff can leave diffuse
+    // density unassigned, so the per-atom MBIS charges may sum to less than
+    // nelec.  Warn once when the constraint list covers every atom exactly
+    // once (a complete charge partition) and the deficit is significant.
+    if (wg_->is_mbis() && !mbis_charge_audit_warned_ && ucell_ != nullptr)
+    {
+        bool all_charge = !channels_.empty();
+        for (const ChannelProfile& ch : channels_)
+        {
+            all_charge = all_charge
+                         && std::abs(ch.read_up - ch.read_dn) < 1e-12;
+        }
+        std::vector<int> cover(ucell_->nat, 0);
+        for (const std::vector<int>& frag : wg_->constraint_atoms())
+        {
+            for (const int iat : frag)
+            {
+                if (iat >= 0 && iat < ucell_->nat)
+                {
+                    ++cover[iat];
+                }
+            }
+        }
+        bool complete = all_charge;
+        for (const int c : cover)
+        {
+            complete = complete && (c == 1);
+        }
+        if (complete)
+        {
+            double sum_q = 0.0;
+            for (const double q : Q_)
+            {
+                sum_q += q;
+            }
+            const double deficit = PARAM.inp.nelec - sum_q;
+            if (std::abs(deficit) > 1e-3)
+            {
+                mbis_charge_audit_warned_ = true;
+                ModuleBase::WARNING("ConstraintLoop::observe",
+                    "MBIS per-atom charges sum to " + std::to_string(sum_q)
+                    + " but nelec = " + std::to_string(PARAM.inp.nelec)
+                    + " (deficit " + std::to_string(deficit)
+                    + " e); diffuse density outside the pro cutoff is "
+                    "unassigned. Increase constraint_mbis_cutoff for charged "
+                    "or diffuse cells.");
+            }
+        }
+    }
     // Module A (M1): passive dipole observation; never feeds the loop.
     if (dipole_report_)
     {

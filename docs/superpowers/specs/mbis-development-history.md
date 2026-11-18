@@ -10,6 +10,22 @@
 > **优势论证 + 开发/测试路线**：`mbis-why-better-and-roadmap.md`。
 
 
+## 2026-11-18 固定 μ / 带电约束验证（补充）
+
+- **固定 μ ↔ 电场**：LiCl/PW 立方胞，dipole-saw 固定 `μ=-0.01` 与
+  `efield_amp=+0.005`（换算 `efield_amp=-μ/2`）比较；`FINAL_ETOT` 差
+  `9.9e-8 eV`，力差 0.002–0.005 eV/Å（场致力 ~0.125 的 2–4%）。固定 μ
+  的偶极约束**可以**作为电场使用。
+- **带电约束**：`nelec_delta=+0.5` 时 cutoff=10 漏 0.0195 e；新增
+  `constraint_mbis_cutoff`（默认 10 Bohr），cutoff=20 后首次外步
+  `total_charge=10.499987`（闭合 1.3e-5）。负电 `-0.5` 在 cutoff=10 下
+  闭合 8.6e-5、residual 单调下降。正电强约束（μ≈−0.2）会出现弥散态，
+  deficit 增至 0.15 e，需要更大 cutoff/remainder 与更稳健控制器。
+- **修复**：`constraint_alloc_report` 钩子在非 allocation 约束下会进入
+  `alloc::report_pw_alloc` 并段错误；PW/LCAO 都加 `constraint_alloc_switch`
+  守卫。MBIS 带电审计在 `ΣQ != nelec` 时警告一次。
+- 详单：`2026-11-18-fixed-mu-vs-efield-and-charged-constraint.md`。
+
 ---
 
 ## 0. 一句话现状

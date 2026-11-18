@@ -499,6 +499,7 @@ class ConstraintLoop
     int inner_steps_ = 0;
     int mbis_obs_count_ = 0;       // observe() counter for MBIS rebuild throttle
     bool mbis_constrained_built_ = false;  // frozen MBIS weights in constrained phase
+    bool mbis_charge_audit_warned_ = false; // one-shot charged-cell deficit warning
     int mbis_rebuild_period_ = 5;  // rebuild MBIS weights every K observations
     int settle_fail_ = 0;
     bool settle_armed_ = false;

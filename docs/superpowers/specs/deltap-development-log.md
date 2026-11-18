@@ -8246,3 +8246,18 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - 验证：LiCl/PW/MBIS 6 步 ETOT 不变（−643.9746485961 eV）；GPU 模块 4/4、
   CPU-only MBIS 13/13 通过。
 - 文件：`mbis_alm_gpu.{h,cu,hip.cu,stub.cpp}`、`weight_grid.cpp`、文档、本日志。
+
+## 2026-11-18 (S6.94): 固定 μ vs 电场；带电 nelec_delta 约束
+
+- 固定 μ dipole-saw（μ=-0.01）与匹配电场（efield_amp=+0.005，立方胞
+  `efield_amp=-μ/2`）LiCl/PW：FINAL_ETOT 差 9.9e-8 eV，力差 0.002-0.005
+  eV/Å。固定 μ 偶极约束可作为电场。
+- 新增 `constraint_mbis_cutoff`（默认 10 Bohr）。带电 +0.5 e：cutoff=10
+  total_charge=10.48049（漏 0.0195 e），cutoff=20 → 10.499987（漏 1.3e-5）。
+  负电 -0.5 e（cutoff=10）：total_charge=9.49991，residual 单调下降。
+  强正电约束下弥散态会使 deficit 增至 0.15 e，需更大 cutoff/remainder。
+- 修复 `constraint_alloc_report` 在非 allocation 约束下的段错误（PW/LCAO
+  加 `constraint_alloc_switch` 守卫）；新增 MBIS `ΣQ != nelec` 一次性警告。
+- 文件：`input_parameter.h`、`read_input_item_other.cpp`、`weight_grid.cpp`、
+  `constraint_loop.{h,cpp}`、`esolver_ks_pw.cpp`、`esolver_ks_lcao.cpp`、
+  `2026-11-18-fixed-mu-vs-efield-and-charged-constraint.md`、本日志。

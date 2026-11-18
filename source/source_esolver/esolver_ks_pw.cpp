@@ -1182,7 +1182,8 @@ void ESolver_KS_PW<T, Device>::after_scf(UnitCell& ucell, const int istep, const
     // S5 PW read-out: project the converged wavefunctions onto the same
     // onsite orbital shell used by the LCAO allocation target.  This is a
     // pure diagnostic and does not alter the constraint potential or SCF.
-    if (PARAM.inp.constraint && PARAM.inp.constraint_alloc_report)
+    if (PARAM.inp.constraint && PARAM.inp.constraint_alloc_switch
+        && PARAM.inp.constraint_alloc_report)
     {
         constraint::ConstraintLoop& cloop
             = constraint::ConstraintLoop::instance();

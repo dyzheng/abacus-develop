@@ -819,6 +819,7 @@ struct Input_para
     bool constraint_alloc_fd_jacobian = false;
     double constraint_alloc_fd_step = 0.005;
     int constraint_mbis_images = 0;           ///< MBIS: periodic image layers for the pro-density
+    double constraint_mbis_cutoff = 10.0;     ///< MBIS: radial cutoff (Bohr) for the pro-density sum
 
     // ==============   #Parameters (25.uncommon hardware) ==================
     int dsp_count = 4;           ///< count of DSP hardwares in one node
