@@ -149,31 +149,71 @@ void constraint_force(const WeightGrid& wg,
 
     // Local accumulation buffer (nat*3, the PW force layout iat*3+ipol).
     std::vector<double> f(static_cast<size_t>(nat) * 3, 0.0);
-    const auto& dw = wg.weight_derivatives();
-    for (int alpha = 0; alpha < nalpha; ++alpha)
+    // Branch: an MBIS GPU run has no dw_ grid; the frozen-partition
+    // derivative is contracted directly on the device (small host inputs,
+    // nat*3 result).  Fall through to the generic grid contraction otherwise.
+    bool gpu_done = false;
+    if (wg.mbis_gpu_derivatives())
     {
-        const double mua = mu[alpha];
-        if (mua == 0.0)
+        bool any_mu = false;
+        for (const double m : mu)
         {
-            continue; // zero multiplier: this constraint contributes nothing
+            any_mu = any_mu || (m != 0.0);
         }
-        // Per-constraint combined density (A5): every alpha folds rho with
-        // its own channel signs; a mixed charge+spin list needs no loop-side
-        // masking any more.
-        const bool spinlike = channels[alpha].read_dn != channels[alpha].read_up;
-        const double* dens = spinlike ? dens_spin.data() : dens_charge.data();
-        for (int J = 0; J < nat; ++J)
+        // Branch: all multipliers zero (reference phase) -> the contraction is
+        // exactly zero; skip the device upload/launch entirely.
+        if (!any_mu)
         {
-            for (int d = 0; d < 3; ++d)
+            gpu_done = true;
+        }
+        else
+        {
+            std::vector<double> dens_flat(static_cast<size_t>(nalpha) * nrxx, 0.0);
+            for (int alpha = 0; alpha < nalpha; ++alpha)
             {
-                const double* dwd = &dw[alpha][(J * 3 + d) * nrxx];
-                double acc = 0.0;
+                const bool spinlike = channels[alpha].read_dn != channels[alpha].read_up;
+                const double* dens = spinlike ? dens_spin.data() : dens_charge.data();
                 for (int ir = 0; ir < nrxx; ++ir)
                 {
-                    acc += dens[ir] * dwd[ir];
+                    dens_flat[static_cast<size_t>(alpha) * nrxx + ir] = dens[ir];
                 }
-                // F_J^d -= mu_alpha * int rho d w_alpha/d R_J^d dr
-                f[J * 3 + d] -= mua * acc * dV;
+            }
+            gpu_done = wg.mbis_force_gpu(dens_flat, mu, f);
+            if (!gpu_done)
+            {
+                ModuleBase::WARNING_QUIT("constraint_force",
+                                         "MBIS GPU force contraction failed");
+            }
+        }
+    }
+    if (!gpu_done)
+    {
+        const auto& dw = wg.weight_derivatives();
+        for (int alpha = 0; alpha < nalpha; ++alpha)
+        {
+            const double mua = mu[alpha];
+            if (mua == 0.0)
+            {
+                continue; // zero multiplier: this constraint contributes nothing
+            }
+            // Per-constraint combined density (A5): every alpha folds rho with
+            // its own channel signs; a mixed charge+spin list needs no loop-side
+            // masking any more.
+            const bool spinlike = channels[alpha].read_dn != channels[alpha].read_up;
+            const double* dens = spinlike ? dens_spin.data() : dens_charge.data();
+            for (int J = 0; J < nat; ++J)
+            {
+                for (int d = 0; d < 3; ++d)
+                {
+                    const double* dwd = &dw[alpha][(J * 3 + d) * nrxx];
+                    double acc = 0.0;
+                    for (int ir = 0; ir < nrxx; ++ir)
+                    {
+                        acc += dens[ir] * dwd[ir];
+                    }
+                    // F_J^d -= mu_alpha * int rho d w_alpha/d R_J^d dr
+                    f[J * 3 + d] -= mua * acc * dV;
+                }
             }
         }
     }
@@ -280,6 +320,64 @@ void constraint_stress(const WeightGrid& wg,
     // Local 3 x 3 accumulation.  The full (a,b) square is filled before the
     // final symmetrization so a tiny round-off asymmetry cannot survive.
     std::vector<double> s(9, 0.0);
+    // Branch: MBIS GPU run -> direct device strain contraction (no dwe_ grid),
+    // then add the volume/Jacobian diagonal term on the host.  The generic
+    // dwe_ contraction below is skipped.
+    bool gpu_done = false;
+    if (wg.mbis_gpu_derivatives())
+    {
+        bool any_mu = false;
+        for (const double m : mu)
+        {
+            any_mu = any_mu || (m != 0.0);
+        }
+        // Branch: all multipliers zero -> exact zero stress, skip the device.
+        if (!any_mu)
+        {
+            gpu_done = true;
+        }
+        else
+        {
+            std::vector<double> dens_flat(static_cast<size_t>(nalpha) * nrxx, 0.0);
+            for (int alpha = 0; alpha < nalpha; ++alpha)
+            {
+                const bool spinlike = channels[alpha].read_dn != channels[alpha].read_up;
+                const double* dens = spinlike ? dens_spin.data() : dens_charge.data();
+                for (int ir = 0; ir < nrxx; ++ir)
+                {
+                    dens_flat[static_cast<size_t>(alpha) * nrxx + ir] = dens[ir];
+                }
+            }
+            gpu_done = wg.mbis_stress_gpu(dens_flat, mu, s);
+            if (!gpu_done)
+            {
+                ModuleBase::WARNING_QUIT("constraint_stress",
+                                         "MBIS GPU stress contraction failed");
+            }
+            // Volume/Jacobian term, identical to the generic branch below.
+            for (int alpha = 0; alpha < nalpha; ++alpha)
+            {
+                const double mua = mu[alpha];
+                if (mua == 0.0)
+                {
+                    continue;
+                }
+                const bool spinlike = channels[alpha].read_dn != channels[alpha].read_up;
+                const double* dens = spinlike ? dens_spin.data() : dens_charge.data();
+                double q_weight = 0.0;
+                const std::vector<double>& w_alpha = wg.constraint_weight(alpha);
+                for (int ir = 0; ir < nrxx; ++ir)
+                {
+                    q_weight += dens[ir] * w_alpha[ir] * dV;
+                }
+                for (int a = 0; a < 3; ++a)
+                {
+                    s[a * 3 + a] -= mua * q_weight;
+                }
+            }
+        }
+    }
+    if (!gpu_done)
     for (int alpha = 0; alpha < nalpha; ++alpha)
     {
         const double mua = mu[alpha];
@@ -391,6 +489,15 @@ void constraint_force_densities(
     {
         ModuleBase::WARNING_QUIT("constraint_force_densities",
                                  "force buffer must be nat x 3");
+    }
+    // Guard: the direct MBIS device contraction consumes the multiplier and
+    // per-constraint density separately; this allocation path has folded the
+    // multiplier into rho and carries no mu, so it cannot use that kernel.
+    if (wg.mbis_gpu_derivatives())
+    {
+        ModuleBase::WARNING_QUIT("constraint_force_densities",
+                                 "MBIS direct GPU force is not available for "
+                                 "the allocation density path");
     }
 
     std::vector<double> f(static_cast<size_t>(nat) * 3, 0.0);

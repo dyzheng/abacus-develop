@@ -705,6 +705,119 @@ void WeightGrid::build_mbis_derivatives()
     }
 }
 
+namespace
+{
+// Fill the plain-pointer device description shared by the MBIS force/stress
+// contractions.  The per-atom vectors are flattened because the device backend
+// takes contiguous arrays.
+void fill_mbis_deriv_grid(const UnitCell& ucell,
+                          const ModulePW::PW_Basis* rho_basis,
+                          const int nat,
+                          const int nalpha,
+                          const int nrxx,
+                          const std::vector<std::vector<double>>& w,
+                          const std::vector<std::vector<double>>& cw,
+                          const std::vector<std::vector<int>>& constraint_atoms,
+                          const std::vector<double>& zeta,
+                          const std::vector<double>& dens,
+                          const std::vector<double>& mu,
+                          const std::vector<ModuleBase::Vector3<double>>& taud,
+                          std::vector<double>& w_flat,
+                          std::vector<double>& cw_flat,
+                          std::vector<double>& taud_flat,
+                          std::vector<int>& in_alpha,
+                          MbisDerivGrid& g)
+{
+    w_flat.resize(static_cast<std::size_t>(nat) * nrxx);
+    for (int a = 0; a < nat; ++a)
+        for (int ir = 0; ir < nrxx; ++ir)
+            w_flat[static_cast<std::size_t>(a) * nrxx + ir] = w[a][ir];
+    cw_flat.resize(static_cast<std::size_t>(nalpha) * nrxx);
+    for (int a = 0; a < nalpha; ++a)
+        for (int ir = 0; ir < nrxx; ++ir)
+            cw_flat[static_cast<std::size_t>(a) * nrxx + ir] = cw[a][ir];
+    taud_flat.resize(static_cast<std::size_t>(nat) * 3);
+    for (int a = 0; a < nat; ++a)
+    {
+        taud_flat[3 * a + 0] = taud[a].x;
+        taud_flat[3 * a + 1] = taud[a].y;
+        taud_flat[3 * a + 2] = taud[a].z;
+    }
+    in_alpha.assign(static_cast<std::size_t>(nat) * nalpha, 0);
+    for (int alpha = 0; alpha < nalpha; ++alpha)
+        for (const int iat : constraint_atoms[alpha])
+            if (iat >= 0 && iat < nat)
+                in_alpha[static_cast<std::size_t>(iat) * nalpha + alpha] = 1;
+
+    const double lat0 = ucell.lat0;
+    g.nat = nat;
+    g.nalpha = nalpha;
+    g.nrxx = nrxx;
+    g.nx = rho_basis->nx;
+    g.ny = rho_basis->ny;
+    g.nz = rho_basis->nz;
+    g.nplane = rho_basis->nplane;
+    g.startz_current = rho_basis->startz_current;
+    g.cell[0] = ucell.latvec.e11 * lat0;
+    g.cell[1] = ucell.latvec.e12 * lat0;
+    g.cell[2] = ucell.latvec.e13 * lat0;
+    g.cell[3] = ucell.latvec.e21 * lat0;
+    g.cell[4] = ucell.latvec.e22 * lat0;
+    g.cell[5] = ucell.latvec.e23 * lat0;
+    g.cell[6] = ucell.latvec.e31 * lat0;
+    g.cell[7] = ucell.latvec.e32 * lat0;
+    g.cell[8] = ucell.latvec.e33 * lat0;
+    g.taud = taud_flat.data();
+    g.w = w_flat.data();
+    g.cw = cw_flat.data();
+    g.dens = dens.data();
+    g.zeta = zeta.data();
+    g.in_alpha = in_alpha.data();
+    g.mu = mu.data();
+    g.dV = rho_basis->omega / static_cast<double>(rho_basis->nxyz);
+}
+} // namespace
+
+bool WeightGrid::mbis_force_gpu(const std::vector<double>& dens_flat,
+                                const std::vector<double>& mu,
+                                std::vector<double>& force) const
+{
+    if (!mbis_gpu_deriv_ || nat_ <= 0 || nrxx_ <= 0
+        || dens_flat.size() != static_cast<std::size_t>(nconstraint()) * nrxx_
+        || mu.size() != static_cast<std::size_t>(nconstraint()))
+    {
+        return false;
+    }
+    std::vector<double> w_flat, cw_flat, taud_flat;
+    std::vector<int> in_alpha;
+    MbisDerivGrid g;
+    fill_mbis_deriv_grid(ucell_, rho_basis_, nat_, nconstraint(), nrxx_, w_, cw_,
+                         constraint_atoms_, mbis_zeta_, dens_flat, mu,
+                         atom_fractional_positions(), w_flat, cw_flat, taud_flat,
+                         in_alpha, g);
+    return constraint::mbis_force_gpu(g, force);
+}
+
+bool WeightGrid::mbis_stress_gpu(const std::vector<double>& dens_flat,
+                                 const std::vector<double>& mu,
+                                 std::vector<double>& stress) const
+{
+    if (!mbis_gpu_deriv_ || nat_ <= 0 || nrxx_ <= 0
+        || dens_flat.size() != static_cast<std::size_t>(nconstraint()) * nrxx_
+        || mu.size() != static_cast<std::size_t>(nconstraint()))
+    {
+        return false;
+    }
+    std::vector<double> w_flat, cw_flat, taud_flat;
+    std::vector<int> in_alpha;
+    MbisDerivGrid g;
+    fill_mbis_deriv_grid(ucell_, rho_basis_, nat_, nconstraint(), nrxx_, w_, cw_,
+                         constraint_atoms_, mbis_zeta_, dens_flat, mu,
+                         atom_fractional_positions(), w_flat, cw_flat, taud_flat,
+                         in_alpha, g);
+    return constraint::mbis_stress_gpu(g, stress);
+}
+
 void WeightGrid::build_derivatives()
 {
     // Branch: the dipole density weight is a fixed function of the grid, not
@@ -728,8 +841,19 @@ void WeightGrid::build_derivatives()
     // loudly instead. SCF-only runs never call this (no force/stress).
     if (is_mbis())
     {
-        // Frozen-partition MBIS position derivative (force kernel input).
-        // Stress is still rejected separately (strain derivative not built).
+        // Branch A: device run with a usable GPU -> arm the direct contraction.
+        // The frozen-partition MBIS derivative is closed-form at each grid
+        // point, so the force/stress kernels consume w_/cw_ directly and we
+        // skip the O(nalpha*nat*3*nrxx) dw_ and O(nalpha*9*nrxx) dwe_ grids.
+        if (PARAM.inp.device == "gpu" && mbis_alm::mbis_gpu_available())
+        {
+            mbis_gpu_deriv_ = true;
+            dw_.clear();
+            dwe_.clear();
+            return;
+        }
+        // Branch B: CPU fallback -> build the generic derivative grids.
+        mbis_gpu_deriv_ = false;
         build_mbis_derivatives();
         return;
     }

@@ -5,6 +5,7 @@
 
 #include "source_basis/module_pw/pw_basis.h"
 #include "source_cell/unitcell.h"
+#include "constraint_mbis_gpu.h"
 
 namespace constraint
 {
@@ -71,7 +72,21 @@ class WeightGrid
     // 3 * N_at * N_alpha * N_g doubles (negligible next to the density).
     void build_derivatives();
 
-    bool derivatives_built() const { return !dw_.empty(); }
+    bool derivatives_built() const { return !dw_.empty() || mbis_gpu_deriv_; }
+
+    // True when the MBIS force/stress contraction runs directly on the device
+    // (build_derivatives skipped the huge dw_/dwe_ grids).
+    bool mbis_gpu_derivatives() const { return mbis_gpu_deriv_; }
+
+    /// Direct device MBIS force (nat*3) from per-constraint channel densities
+    /// (flat nalpha*nrxx) and multipliers.  Returns false when unavailable.
+    bool mbis_force_gpu(const std::vector<double>& dens_flat,
+                        const std::vector<double>& mu,
+                        std::vector<double>& force) const;
+    /// Direct device MBIS stress (9, row-major) from the same inputs.
+    bool mbis_stress_gpu(const std::vector<double>& dens_flat,
+                         const std::vector<double>& mu,
+                         std::vector<double>& stress) const;
 
     // d w_alpha / d R_J, Cartesian component d, at local grid point ir.
     double weight_derivative(const int alpha,
@@ -218,6 +233,8 @@ class WeightGrid
     void build_hirshfeld_derivatives();
     // MBIS frozen-partition position derivative (Slater pro center derivative).
     void build_mbis_derivatives();
+    // True when the direct device MBIS force/stress contraction is armed.
+    bool mbis_gpu_deriv_ = false;
     double hirshfeld_atom_density(const int iat,
                                   const ModuleBase::Vector3<double>& rfrac,
                                   ModuleBase::Vector3<double>* grad) const;

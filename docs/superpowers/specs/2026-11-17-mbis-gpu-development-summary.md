@@ -50,6 +50,10 @@ MBIS 每步固定点需要
   注入后重新上传，否则约束势在 GPU 上静默丢失。`esolver_ks_pw` 调用。
 - LCAO：`gint_vl_gpu` 每次 `cal_gint` 都把宿主 `v_eff` H2D，所以注入写宿主
   `v_eff` 即生效，不需要额外同步。
+- 力/应力：`build_derivatives` 在 MBIS+GPU 时只置标志，不物化
+  `dw_/dwe_`（192³/2 原子约 1.7 GB）；`constraint_force/stress` 用
+  `constraint_mbis_gpu` 的 device 核直接从 `w_/cw_/zeta/dens/mu` 收缩，
+  只回传 `nat*3` / `3×3`。`mu=0` 时跳过设备调用。
 
 ### 2.3 CPU 侧顺带优化
 
@@ -65,6 +69,8 @@ MBIS 每步固定点需要
 | 端到端 | LiCl/PW/nspin1/MBIS/192³/6 SCF | CPU **179 s**，GPU **~60 s**（≈3×） |
 | 端到端数值 | 同上 | `FINAL_ETOT` −643.9746485961 eV，CPU/GPU 差 **~5e-13 eV** |
 | LCAO 约束 | LiCl/LCAO/MBIS/images=1，150 步 | 外步 iter 20/57/87/111、μ/Q 与 CPU 一致；ETOT 差 **3e-10 eV**（GPU 注入的约束势确实生效） |
+| 力/应力 | 48³ MBIS，3 约束 | GPU 直算 vs CPU `dw_/dwe_` 收缩逐分量 < **1e-9**；FD 力/应力测试仍通过 |
+| 生产力路径 | LiCl/PW/MBIS，`calculation md` | `CONSTRAINT FORCE` 正常输出（reference 相为零） |
 | 回归 | MBIS 单测 | 13/13 PASS |
 | 回归 | constraint 8 项 | 全部 PASS |
 | 构建 | CPU-only `elecstate` + MBIS 单测 | 通过（stub 生效） |
@@ -84,6 +90,8 @@ MBIS 每步固定点需要
   失败会自动回退 CPU。
 - PW 与 LCAO 网格权重都可用 GPU；allocation、single precision、double_grid 仍拒绝。
   LCAO 的收益只覆盖 MBIS 固定点（gint/DM 仍 CPU 主导）。
+- 力/应力直算在 GPU 上每次重新收缩（CPU 路径可复用 dw_/dwe_）；换来的是
+  不再分配约 1.7 GB 的导数网格（192³/2 原子）。
 - 归约用 `atomicAdd`，重复运行 ETOT 末位有 ~1e-12 eV 抖动。
 - ROCm 仅代码镜像，未在 AMD 实机验证；多 MPI rank + GPU 路径未在本次实测。
 
@@ -91,8 +99,7 @@ MBIS 每步固定点需要
 
 1. ~~LCAO GPU 约束~~ ✅ 已完成：`gint_vl_gpu` 每次 `cal_gint` 自行 H2D，
    外步/μ/Q 与 CPU 一致，ETOT 差 3e-10 eV。
-2. **力/应力**：为 `WeightGrid::build_mbis_derivatives` 提供设备核
-   （`dw/dR`、`dwe/dε`），或直接在设备上完成 `constraint_force`/`constraint_stress`。
+2. ~~力/应力~~ ✅ 已完成：设备直算，跳过 `dw_/dwe_`，与 CPU 收缩 <1e-9。
 3. **allocation GPU**：`alloc_observe`/`alloc_pw` 的 `Allreduce/Allgatherv`
    与设备归约合并。
 4. **多卡**：每个 pool rank 绑卡，避免只有 pool root 用 GPU 的空转。

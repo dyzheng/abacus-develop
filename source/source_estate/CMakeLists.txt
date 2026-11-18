@@ -69,6 +69,7 @@ list(APPEND objects
 if(NOT USE_CUDA AND NOT USE_ROCM)
   list(APPEND objects
       module_mbis_alm/mbis_alm_gpu_stub.cpp
+      module_constraint/constraint_mbis_gpu_stub.cpp
   )
 endif()
 

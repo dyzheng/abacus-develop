@@ -4,6 +4,17 @@ remove_definitions(-D__CUDA)
 remove_definitions(-D__ROCM)
 remove_definitions(-D__MLALGO)
 
+# CPU-only builds need the "device unavailable" stubs: the CUDA/ROCm device
+# object library provides the real symbols, so adding the stubs there would
+# duplicate them.
+if(NOT USE_CUDA AND NOT USE_ROCM)
+  set(MBIS_STUB_SOURCES
+      ../constraint_mbis_gpu_stub.cpp
+      ../../module_mbis_alm/mbis_alm_gpu_stub.cpp)
+else()
+  set(MBIS_STUB_SOURCES "")
+endif()
+
 AddTest(
   TARGET MODULE_ESTATE_constraint_alloc_linalg
   LIBS parameter ${math_libs} base device
@@ -18,6 +29,7 @@ AddTest(
     ../alloc_linalg.cpp
     ../weight_grid.cpp
     ../../module_mbis_alm/mbis_alm.cpp
+    ${MBIS_STUB_SOURCES}
     ../constraint_dipole.cpp
     ../../../source_io/module_output/output.cpp
 )
@@ -31,6 +43,7 @@ AddTest(
     ../alloc_linalg.cpp
     ../weight_grid.cpp
     ../../module_mbis_alm/mbis_alm.cpp
+    ${MBIS_STUB_SOURCES}
     ../constraint_dipole.cpp
     ../../../source_io/module_output/output.cpp
 )
@@ -78,6 +91,7 @@ AddTest(
   SOURCES weight_grid_test.cpp
     ../weight_grid.cpp
     ../../module_mbis_alm/mbis_alm.cpp
+    ${MBIS_STUB_SOURCES}
     ../constraint_dipole.cpp
     ../../../source_io/module_output/output.cpp
 )
@@ -91,6 +105,7 @@ AddTest(
     ../constraint_dipole.cpp
     ../weight_grid.cpp
     ../../module_mbis_alm/mbis_alm.cpp
+    ${MBIS_STUB_SOURCES}
     ../../../source_base/module_grid/radial.cpp
     ../../../source_base/module_grid/delley.cpp
     ../../../source_io/module_output/output.cpp
@@ -106,6 +121,7 @@ AddTest(
     ../constraint_dipole.cpp
     ../weight_grid.cpp
     ../../module_mbis_alm/mbis_alm.cpp
+    ${MBIS_STUB_SOURCES}
     ../../../source_base/module_grid/radial.cpp
     ../../../source_base/module_grid/delley.cpp
     ../../../source_io/module_output/output.cpp
@@ -140,6 +156,7 @@ AddTest(
     ../constraint_dipole.cpp
     ../weight_grid.cpp
     ../../module_mbis_alm/mbis_alm.cpp
+    ${MBIS_STUB_SOURCES}
     ../../../source_base/module_grid/radial.cpp
     ../../../source_base/module_grid/delley.cpp
     ../../../source_io/module_output/output.cpp
@@ -154,6 +171,7 @@ AddTest(
     ../constraint_dipole.cpp
     ../weight_grid.cpp
     ../../module_mbis_alm/mbis_alm.cpp
+    ${MBIS_STUB_SOURCES}
     ../../../source_io/module_output/output.cpp
 )
 
@@ -172,6 +190,7 @@ AddTest(
     ../mu_solver.cpp
     ../weight_grid.cpp
     ../../module_mbis_alm/mbis_alm.cpp
+    ${MBIS_STUB_SOURCES}
     ../../../source_base/module_grid/radial.cpp
     ../../../source_base/module_grid/delley.cpp
     ../../../source_io/module_output/output.cpp

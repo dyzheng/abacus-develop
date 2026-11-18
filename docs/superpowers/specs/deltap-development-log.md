@@ -8194,3 +8194,19 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   cuda/mbis_alm_gpu.cu,rocm/mbis_alm_gpu.hip.cu,test/...}`、
   `weight_grid.cpp`、`constraint_io.cpp`、`potential_new.{h,cpp}`、`esolver_ks_pw.cpp`、
   CMake、`2026-11-17-mbis-gpu-heterogeneous-optimization.md`、本日志。
+
+## 2026-11-17 (S6.90): MBIS 力/应力 GPU 直算（跳过 dw_/dwe_）
+
+- 新增 `module_constraint/{constraint_mbis_gpu.h,cuda/*.cu,rocm/*.hip.cu,stub.cpp}`：
+  冻结分割导数闭式，直接从 `w_/cw_/zeta/dens/mu` 在设备上收缩出 `nat*3` 力与
+  `3×3` 应力（每块一次 atomicAdd）。
+- `WeightGrid::build_derivatives` 在 `is_mbis() && device=gpu` 时只置
+  `mbis_gpu_deriv_`，不分配 `dw_`/`dwe_`；`constraint_force/stress` 走直算分支，
+  应力补体积/Jacobian 对角项；`mu=0` 直接返回零。
+- 显存：192³、2 原子、2 约束的通用导数网格约 0.68 GB(dw)+1.02 GB(dwe)；
+  GPU 直算不再分配。
+- 验证：新增 `MbisGpuForceStressMatchesCpu`，GPU 直算 vs CPU 通用核逐分量
+  <1e-9；`MbisForceEndToEndFD`/`MbisStressEndToEndFD` 仍过；MD 生产冒烟正常输出
+  `CONSTRAINT FORCE`。
+- 文件：`module_constraint/constraint_deriv.cpp`、`weight_grid.{h,cpp}`、
+  `test/constraint_deriv_test.cpp`、CMake、本日志。

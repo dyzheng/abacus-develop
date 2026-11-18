@@ -76,6 +76,7 @@ if(USE_CUDA)
     source_hsolver/kernels/cuda/bpcg_kernel_op.cu
     source_estate/kernels/cuda/elecstate_op.cu
     source_estate/module_mbis_alm/cuda/mbis_alm_gpu.cu
+    source_estate/module_constraint/cuda/constraint_mbis_gpu.cu
 
     # source_psi/kernels/cuda/memory_op.cu
     source_base/module_device/cuda/memory_op.cu
@@ -109,6 +110,7 @@ if(USE_ROCM)
     source_hsolver/kernels/rocm/bpcg_kernel_op.hip.cu
     source_estate/kernels/rocm/elecstate_op.hip.cu
     source_estate/module_mbis_alm/rocm/mbis_alm_gpu.hip.cu
+    source_estate/module_constraint/rocm/constraint_mbis_gpu.hip.cu
 
     # source_psi/kernels/rocm/memory_op.hip.cu
     source_base/module_device/rocm/memory_op.hip.cu

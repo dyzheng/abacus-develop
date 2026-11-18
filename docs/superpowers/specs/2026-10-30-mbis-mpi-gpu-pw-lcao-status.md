@@ -34,7 +34,11 @@
 - **实测**：LiCl/PW/MBIS/images=1，192³ 网格 6 步 SCF，179 s(CPU) → 61.5 s(GPU)，
   ETOT 一致到 5e-13 eV；模块 gtest CPU/GPU 在 `images=0/1` 下 `N,ζ,D,w` < 1e-8。
 - **LCAO**：`gint_vl_gpu` 每次 `cal_gint` 把宿主 `vr_eff` H2D，故注入写宿主 `v_eff` 即可；LiCl/LCAO/MBIS 外步轨迹与 CPU 一致（μ/Q），ETOT 差 3e-10 eV。
-- **仍未做**：allocation GPU、力/应力的 device 核、ROCm 实机验证。
+- **力/应力**：新增 `module_constraint/cuda|rocm/constraint_mbis_gpu.*` 直算核；
+`build_derivatives` 在 MBIS+GPU 时不物化 `dw_/dwe_`（192³/2 原子约省 1.7 GB），
+`constraint_force/stress` 直接从 `w_/cw_/zeta/dens/mu` 收缩；gtest 与 CPU 通用核
+逐分量一致 <1e-9，FD 力/应力测试仍通过。
+- **仍未做**：allocation GPU、多卡每 rank 绑卡、ROCm 实机验证。
 
 ## 3. PW vs LCAO
 - **两者都已接线**：PW（`inject_potential` 到 PW `v_eff`）、LCAO（`inject_potential_lcao` 经 `v_eff`）。

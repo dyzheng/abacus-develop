@@ -13,6 +13,7 @@
 #include "source_estate/module_constraint/constraint_deriv.h"
 #include "source_estate/module_constraint/constraint_dipole.h"
 #include "source_estate/module_constraint/constraint_observe.h"
+#include "source_estate/module_mbis_alm/mbis_alm_gpu.h"
 
 using ModuleBase::PI;
 
@@ -1159,4 +1160,67 @@ TEST_F(ConstraintDerivTest, MbisStressEndToEndFD)
         const double fd = -mu[0] * (q_plus - q_minus) / (2.0 * eps * strain_factor * omega0);
         EXPECT_NEAR(stress(a, b), fd, 2e-6) << "MBIS stress component " << a << b;
     }
+}
+
+TEST_F(ConstraintDerivTest, MbisGpuForceStressMatchesCpu)
+{
+    if (!mbis_alm::mbis_gpu_available())
+    {
+        GTEST_SKIP() << "no GPU visible";
+    }
+    ModulePW::PW_Basis local_pw;
+    local_pw.initgrids(1.0, ucell->latvec, 48, 48, 48);
+    local_pw.distribute_r();
+    std::vector<double> rho;
+    fill_rho_basis(local_pw, 1.5, rho);
+
+    // CPU reference: generic dw_/dwe_ grids and host contraction.
+    PARAM.input.device = "cpu";
+    constraint::WeightGrid wg_cpu(*ucell, &local_pw, radii,
+                                  constraint::WeightType::MBIS);
+    wg_cpu.build_mbis(rho);
+    wg_cpu.build_derivatives();
+    ASSERT_FALSE(wg_cpu.mbis_gpu_derivatives());
+
+    // GPU direct contraction: build_derivatives skips the large grids.
+    PARAM.input.device = "gpu";
+    constraint::WeightGrid wg_gpu(*ucell, &local_pw, radii,
+                                  constraint::WeightType::MBIS);
+    wg_gpu.build_mbis(rho);
+    wg_gpu.build_derivatives();
+    PARAM.input.device = "cpu";
+    ASSERT_TRUE(wg_gpu.mbis_gpu_derivatives());
+    ASSERT_TRUE(wg_gpu.derivatives_built());
+
+    const int nalpha = wg_cpu.nconstraint();
+    std::vector<constraint::ChannelProfile> channels(
+        nalpha, constraint::build_channel_profile(constraint::ConstraintKind::Charge));
+    std::vector<double> mu(nalpha, 0.0);
+    for (int a = 0; a < nalpha; ++a)
+    {
+        mu[a] = 0.1 - 0.03 * a;
+    }
+    const double* rp[1] = {rho.data()};
+
+    ModuleBase::matrix F_cpu(ucell->nat, 3);
+    ModuleBase::matrix F_gpu(ucell->nat, 3);
+    constraint::constraint_force(wg_cpu, rp, 1, channels, mu, F_cpu);
+    constraint::constraint_force(wg_gpu, rp, 1, channels, mu, F_gpu);
+    for (int J = 0; J < ucell->nat; ++J)
+        for (int d = 0; d < 3; ++d)
+        {
+            EXPECT_NEAR(F_cpu(J, d), F_gpu(J, d), 1e-9)
+                << "force J=" << J << " d=" << d;
+        }
+
+    ModuleBase::matrix S_cpu(3, 3);
+    ModuleBase::matrix S_gpu(3, 3);
+    constraint::constraint_stress(wg_cpu, rp, 1, channels, mu, S_cpu);
+    constraint::constraint_stress(wg_gpu, rp, 1, channels, mu, S_gpu);
+    for (int a = 0; a < 3; ++a)
+        for (int b = 0; b < 3; ++b)
+        {
+            EXPECT_NEAR(S_cpu(a, b), S_gpu(a, b), 1e-9)
+                << "stress " << a << b;
+        }
 }

@@ -132,10 +132,10 @@ w_A(x)   = pro_A / Σ_B pro_B ,   N_A = ∫ w_A ρ ,   ζ_A = 3 N_A / ∫ r w_A 
    ≥1，或按盒子尺寸自适应）。
 4. `compute_mbis_newton_fp` 在真实大体系可能退化（主用 Picard）。
 5. 应力/力主路径走 `module_constraint` 通用 `WeightGrid` 力核；MBIS 模块 force 仅单测（已光滑）。
-6. **GPU 后端覆盖 PW + LCAO 网格权重的固定点**：allocation GPU、力/应力
-   device 核尚未实现；`device=gpu` 时 allocation 仍显式拒绝。LCAO 的 GPU
-   收益只覆盖 MBIS 固定点（gint/DM 部分仍 CPU 主导）。ROCm 代码为 CUDA
-   镜像，尚未在 AMD 实机验证。
+6. **GPU 后端覆盖 PW + LCAO 固定点、注入与力/应力**：力/应力在 MBIS+GPU 时
+   直接由 `w_/cw_/zeta/dens/mu` 收缩，不物化 `dw_/dwe_`。allocation GPU、
+   多卡每 rank 绑卡仍未实现；`device=gpu` 时 allocation 仍显式拒绝。ROCm 代码
+   为 CUDA 镜像，尚未在 AMD 实机验证。
 
 ---
 

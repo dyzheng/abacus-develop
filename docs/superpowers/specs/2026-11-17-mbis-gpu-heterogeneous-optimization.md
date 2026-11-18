@@ -115,7 +115,27 @@
 - 该 LCAO 小算例整体耗时几乎不变：GPU 只加速 MBIS 固定点，其余 LCAO 部分
   （gint/DM）仍在 CPU 侧占主导；大网格 PW 的端到端收益更明显。
 
-### 4.4 回归
+### 4.4 力/应力 device 直算（第三轮）
+
+MBIS 的通用力/应力核会先物化
+`dw_[nalpha][nat*3*nrxx]` 与 `dwe_[nalpha][9*nrxx]`；对 192³、2 原子、
+2 约束，这分别约 **0.68 GB + 1.02 GB**。冻结分割下导数有闭式表达，
+因此在 GPU 上直接从 `w_/cw_/zeta/dens/mu` 收缩，只回传 `nat*3` 力与
+`3×3` 应力：
+
+- 新核 `cuda|rocm/constraint_mbis_gpu.*`：`mbis_force_kernel_scaled`、
+  `mbis_stress_kernel`；每块归约后一次 `atomicAdd`。
+- `WeightGrid::build_derivatives` 在 `is_mbis() && device=gpu` 时**只置标志**，
+  不分配 `dw_/dwe_`；`constraint_force` / `constraint_stress` 走直算分支，
+  应力仍补上体积/Jacobian 对角项。
+- `mu` 全零（reference 相）时直接返回零，跳过设备上传。
+- 新增 gtest `MbisGpuForceStressMatchesCpu`：同一 MBIS 权重下，GPU 直算与
+  CPU 通用 `dw_/dwe_` 收缩逐分量一致（< **1e-9**）。
+- MD 生产路径冒烟：`calculation md` + MBIS + `device=gpu` 正常输出
+  `CONSTRAINT FORCE`（reference 相力为零，符合预期）。
+- 原有 `MbisForceEndToEndFD` / `MbisStressEndToEndFD` 仍通过。
+
+### 4.5 回归
 
 ```
 MODULE_ESTATE_constraint_weight_grid      Passed
@@ -161,5 +181,7 @@ MODULE_ESTATE_constraint_alloc_observe    Passed
    的设备路径与显存行为。
 2. 视显存压力把 `r_min` 改为 `float` 或按预算切换到「重算 sqrt」的 reduce 核。
 3. ~~评估 LCAO GPU 的 gint/potential 设备同步后放开 LCAO 约束~~ ✅ 已完成并验证。
-4. 为 `constraint_force` / `build_mbis_derivatives`（力/应力）增加设备核。
+4. ~~为 `constraint_force` / `build_mbis_derivatives`（力/应力）增加设备核~~ ✅ 已完成
+   （直算，跳过 `dw_/dwe_`）。
 5. allocation GPU（`alloc_observe`/`alloc_pw` 的设备归约）仍未做。
+6. 多卡：每个 pool rank 绑卡，避免只有 pool root 用 GPU 的空转。
