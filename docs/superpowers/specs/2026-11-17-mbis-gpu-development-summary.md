@@ -54,6 +54,9 @@ MBIS 每步固定点需要
   `dw_/dwe_`（192³/2 原子约 1.7 GB）；`constraint_force/stress` 用
   `constraint_mbis_gpu` 的 device 核直接从 `w_/cw_/zeta/dens/mu` 收缩，
   只回传 `nat*3` / `3×3`。`mu=0` 时跳过设备调用。
+- MPI 分布式：`pool_np>1 && device=gpu` 时每个 rank 只用本地 z-plane 块和
+  自己的 GPU，每步仅 `MPI_Allreduce` N/MR；`w` 留在本地，去掉 Gatherv/Scatterv。
+  PW 的 GPU 校验会令 `kpar=NPROC`（poolnproc=1），仍走 serial-pool 全网格路径。
 
 ### 2.3 CPU 侧顺带优化
 
@@ -71,6 +74,8 @@ MBIS 每步固定点需要
 | LCAO 约束 | LiCl/LCAO/MBIS/images=1，150 步 | 外步 iter 20/57/87/111、μ/Q 与 CPU 一致；ETOT 差 **3e-10 eV**（GPU 注入的约束势确实生效） |
 | 力/应力 | 48³ MBIS，3 约束 | GPU 直算 vs CPU `dw_/dwe_` 收缩逐分量 < **1e-9**；FD 力/应力测试仍通过 |
 | 生产力路径 | LiCl/PW/MBIS，`calculation md` | `CONSTRAINT FORCE` 正常输出（reference 相为零） |
+| MPI 分布式 | `weight_grid_mpi` np=4 | GPU 分布式 vs CPU 串行权重 < **1e-8**；6/6 PASS |
+| MPI 端到端 | LiCl/LCAO/MBIS np=2 | GPU 分布式 ETOT 与 CPU np=2 差 **7e-13 eV**；18.4 s vs 28.4 s |
 | 回归 | MBIS 单测 | 13/13 PASS |
 | 回归 | constraint 8 项 | 全部 PASS |
 | 构建 | CPU-only `elecstate` + MBIS 单测 | 通过（stub 生效） |
@@ -93,6 +98,8 @@ MBIS 每步固定点需要
 - 力/应力直算在 GPU 上每次重新收缩（CPU 路径可复用 dw_/dwe_）；换来的是
   不再分配约 1.7 GB 的导数网格（192³/2 原子）。
 - 归约用 `atomicAdd`，重复运行 ETOT 末位有 ~1e-12 eV 抖动。
+- 分布式循环每步重新上传 rho/R/images 等常量；后续可缓存成持久设备状态以
+  降低 PCIe/分配开销，并在真实多卡节点测量扩展性。
 - ROCm 仅代码镜像，未在 AMD 实机验证；多 MPI rank + GPU 路径未在本次实测。
 
 ## 6. 下一轮（其他部分的 GPU 异构）
@@ -102,7 +109,8 @@ MBIS 每步固定点需要
 2. ~~力/应力~~ ✅ 已完成：设备直算，跳过 `dw_/dwe_`，与 CPU 收缩 <1e-9。
 3. **allocation GPU**：`alloc_observe`/`alloc_pw` 的 `Allreduce/Allgatherv`
    与设备归约合并。
-4. **多卡**：每个 pool rank 绑卡，避免只有 pool root 用 GPU 的空转。
+4. ~~多卡~~ ⚠️ 已实现分布式固定点（LCAO/多 rank pool）；下一步减少每步常量重传
+   并在真实多卡节点测量扩展性。
 5. ROCm 实机回归。
 
 ## 7. 复现命令

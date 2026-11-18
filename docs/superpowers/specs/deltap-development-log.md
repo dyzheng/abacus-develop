@@ -8210,3 +8210,18 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   `CONSTRAINT FORCE`。
 - 文件：`module_constraint/constraint_deriv.cpp`、`weight_grid.{h,cpp}`、
   `test/constraint_deriv_test.cpp`、CMake、本日志。
+
+## 2026-11-17 (S6.91): MBIS MPI 分布式 GPU 固定点
+
+- `mbis_alm_gpu_local_step`：局部 z-plane 块（`nplane`/`startz_current`）的一次
+  固定点步（pro+权重+局部 N/MR）；`want_weights=false` 时不回传权重。
+- `WeightGrid::build_mbis`：`pool_np>1 && device=gpu` 时不再 gather 到 root；
+  每 rank 用本地块与自己的 GPU，循环内仅 `MPI_Allreduce` N/MR，最终一步产出
+  本地权重。PW 的 GPU 校验令 `kpar=NPROC`（`poolnproc=1`），仍走 serial-pool
+  全网格 GPU；LCAO 多 rank pool 走分布式。
+- 验证：`weight_grid_mpi` np=4 新增 `MbisDistributedGpuMatchesSerial`
+  （vs CPU 串行权重 <1e-8，6/6 PASS）；LiCl/LCAO/MBIS np=2 GPU 分布式
+  ETOT −643.2969955462979 eV vs CPU np=2 −643.2969955462986 eV（差 7e-13 eV，
+  18.4 s vs 28.4 s）。
+- 文件：`mbis_alm_gpu.{h,cu,hip.cu,stub.cpp}`、`weight_grid.cpp`、
+  `test_mpi/{weight_grid_mpi_test.cpp,CMakeLists.txt}`、本日志。

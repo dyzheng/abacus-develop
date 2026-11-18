@@ -24,7 +24,9 @@ MBIS（迭代 Slater Stockholder，**带布居约束的不动点**）已作为
   需 **DFT+U** 做受控的 charge+spin 验证。
 - **GPU（2026-11-17）**：PW + LCAO 网格权重路径已支持 `device=gpu`，CUDA/HIP
   后端加速固定点；LiCl PW 端到端 179 s → 61.5 s（2.9×），ETOT 一致到
-  5e-13 eV；LCAO 约束外步/μ/Q 与 CPU 一致、ETOT 差 3e-10 eV。
+  5e-13 eV；LCAO 约束外步/μ/Q 与 CPU 一致、ETOT 差 3e-10 eV。力/应力走
+  device 直算（跳过 `dw_/dwe_`，与 CPU <1e-9）；多 rank pool 分布式 GPU
+  （每 rank 本地块 + Allreduce N/MR，np=4 <1e-8，LCAO np=2 ETOT 差 7e-13 eV）。
   详见 `2026-11-17-mbis-gpu-heterogeneous-optimization.md`。
 
 ---
@@ -42,7 +44,7 @@ MBIS（迭代 Slater Stockholder，**带布居约束的不动点**）已作为
 | 真实 cube/根因 | `mbis-real-cube-stability.md`、`mbis-minimum-image-symmetry-fix.md`、`mbis-smooth-force-pro.md`、`mbis-d-degeneracy-fallback.md`、`mbis-fe2-test.md`、`mbis-in-basin-l-projection-test.md` | **min-image 为真正根因修复**；力光滑；D 退化 |
 | 主循环 e2e | `mbis-abacus-e2e-validation.md`、`mbis-mpi-gather.md` | 约束激活、Q 与独立一致；pool gather np=1/2/4 一致 |
 | FeO/能量 | `mbis-feo-charge-spin-validation.md`、`mbis-feo-branch-flip-analysis.md`、`mbis-energy-audit-deltaspin-comparison.md` | charge+spin 同时生效；能量记账审计与修复 |
-| **GPU 异构** | `2026-11-17-mbis-gpu-heterogeneous-optimization.md`、`2026-10-30-mbis-mpi-gpu-pw-lcao-status.md` | CUDA/HIP 后端（pro+权重/归约/KL）；PW+LCAO `device=gpu` 放行（PW 补注入 H2D，LCAO gint 自行 H2D）；LiCl PW 2.9×、ETOT 差 5e-13 eV；LCAO 约束 ETOT 差 3e-10 eV |
+| **GPU 异构** | `2026-11-17-mbis-gpu-heterogeneous-optimization.md`、`2026-10-30-mbis-mpi-gpu-pw-lcao-status.md` | CUDA/HIP 固定点/注入/力/应力；PW+LCAO `device=gpu`；分布式 GPU（每 rank 本地块+Allreduce）；LiCl PW 2.9×、LCAO 约束 3e-10 eV、力/应力 <1e-9、np=4 <1e-8 |
 
 `lcao-mbis-saturation.md`、`2026-10-30-why-licl-ok-fe2-breaks.md` 等为**被后续更正的历史诊断**，见 §2。
 
@@ -132,10 +134,11 @@ w_A(x)   = pro_A / Σ_B pro_B ,   N_A = ∫ w_A ρ ,   ζ_A = 3 N_A / ∫ r w_A 
    ≥1，或按盒子尺寸自适应）。
 4. `compute_mbis_newton_fp` 在真实大体系可能退化（主用 Picard）。
 5. 应力/力主路径走 `module_constraint` 通用 `WeightGrid` 力核；MBIS 模块 force 仅单测（已光滑）。
-6. **GPU 后端覆盖 PW + LCAO 固定点、注入与力/应力**：力/应力在 MBIS+GPU 时
-   直接由 `w_/cw_/zeta/dens/mu` 收缩，不物化 `dw_/dwe_`。allocation GPU、
-   多卡每 rank 绑卡仍未实现；`device=gpu` 时 allocation 仍显式拒绝。ROCm 代码
-   为 CUDA 镜像，尚未在 AMD 实机验证。
+6. **GPU 后端覆盖 PW + LCAO 固定点、注入、力/应力与多 rank 分布式**：
+   力/应力直接由 `w_/cw_/zeta/dens/mu` 收缩，不物化 `dw_/dwe_`；多 rank
+   pool 每 rank 本地块 + Allreduce N/MR。allocation GPU 仍未实现；
+   `device=gpu` 时 allocation 仍显式拒绝。分布式循环每步重传常量，
+   可进一步缓存；ROCm 代码为 CUDA 镜像，尚未在 AMD 实机验证。
 
 ---
 

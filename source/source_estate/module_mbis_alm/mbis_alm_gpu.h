@@ -40,6 +40,33 @@ bool compute_mbis_gpu(const std::vector<double>& rho,
                       const MbisConfig& cfg,
                       MbisState& out);
 
+/**
+ * @brief One distributed MBIS fixed-point step on a rank-local grid slice.
+ *
+ * The MBIS per-point weights are local; only the populations N_A and mean
+ * radii int|r-R_A| w_A rho need a global sum.  This entry computes the local
+ * weights for the given (N,zeta) and the local N/MR partial sums; the caller
+ * allreduces them, damps, and iterates.  `nplane`/`startz` describe the
+ * rank-local z-plane block of the global grid (ABACUS PW layout).
+ *
+ * @param want_weights  false -> skip the device-to-host weight copy (only the
+ *                      final call in the distributed loop needs the weights).
+ * @return false on unavailable backend / device error; the caller must abort
+ *         rather than silently continue with an inconsistent state.
+ */
+bool mbis_gpu_local_step(const std::vector<double>& rho_local,
+                         const Grid& grid,
+                         const int nplane,
+                         const int startz,
+                         const std::vector<Atom>& atoms,
+                         const MbisConfig& cfg,
+                         const std::vector<double>& N,
+                         const std::vector<double>& zeta,
+                         const bool want_weights,
+                         std::vector<std::vector<double>>& w,
+                         std::vector<double>& Nout,
+                         std::vector<double>& MRout);
+
 } // namespace mbis_alm
 
 #endif

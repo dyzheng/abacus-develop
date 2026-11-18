@@ -135,7 +135,27 @@ MBIS 的通用力/应力核会先物化
   `CONSTRAINT FORCE`（reference 相力为零，符合预期）。
 - 原有 `MbisForceEndToEndFD` / `MbisStressEndToEndFD` 仍通过。
 
-### 4.5 回归
+### 4.5 MPI 分布式 GPU 固定点（第四轮）
+
+多 rank pool 不再 gather 到 root：每个 rank 用自己的 GPU 计算本地 z-plane 块，
+每次固定点迭代只对 `N_A` 与 `∫r w_A ρ` 做 `MPI_Allreduce`（2·nat 个 double），
+`w` 直接留在本地，省掉 Gatherv/Scatterv：
+
+- `mbis_gpu_local_step`：局部网格（`nplane`/`startz_current`）的
+  pro+权重+归约设备步；`want_weights=false` 时跳过 D2H 权重回传。
+- `WeightGrid::build_mbis`：`pool_np>1 && device=gpu` 时走分布式循环，
+  `MPI_Allreduce` 后按 CPU 相同规则 damp/收敛判定；最终再算一次权重。
+- LCAO `kpar` 保持 1，pool 内多 rank 共享网格，因此走分布式路径；
+  PW 的 GPU 校验会把 `kpar` 自动设为 `NPROC`（`poolnproc=1`），仍走
+  serial-pool 全网格 GPU 路径（不冗余、也无需 gather）。
+
+| 项 | 结果 |
+|---|---|
+| `MODULE_ESTATE_constraint_weight_grid_mpi` np=4 | 新增 `MbisDistributedGpuMatchesSerial`：GPU 分布式 vs CPU 串行权重 < **1e-8**；6/6 PASS |
+| LiCl/LCAO/nspin1/MBIS np=2 | GPU 分布式 `FINAL_ETOT` −643.2969955462979 eV vs CPU np=2 −643.2969955462986 eV（差 **7e-13 eV**） |
+| 同算例 wall time | GPU 18.4 s vs CPU np=2 28.4 s |
+
+### 4.6 回归
 
 ```
 MODULE_ESTATE_constraint_weight_grid      Passed
@@ -172,8 +192,9 @@ MODULE_ESTATE_constraint_alloc_observe    Passed
 - 归约核用 `atomicAdd`（每块一次），块间顺序不定，重复 GPU 运行的 ETOT
   末位有 ~1e-12 eV 抖动；与 CPU 的差异仍在 1e-12 eV 量级，非实现错误。
 - ROCm 代码为 CUDA 的镜像，未在 AMD 硬件上实测。
-- 多 MPI rank + GPU 的 pool-root 计算路径未在本次实测（np=2 的 gamma-only
-  1 k 点算例被 ABACUS 的 k 点分发生效失败挡住，属输入限制）；单 rank 已端到端验证。
+- 多 rank 分布式路径已用 LCAO np=2 与 MPI 单测 np=4 验证；PW 因 ABACUS
+  GPU 校验自动设 `kpar=NPROC`，`poolnproc=1`，走 serial-pool 全网格 GPU 路径。
+  分布式循环每步重新上传常量（rho/R/images），后续可缓存以进一步降开销。
 
 ## 7. 下一步
 
@@ -184,4 +205,5 @@ MODULE_ESTATE_constraint_alloc_observe    Passed
 4. ~~为 `constraint_force` / `build_mbis_derivatives`（力/应力）增加设备核~~ ✅ 已完成
    （直算，跳过 `dw_/dwe_`）。
 5. allocation GPU（`alloc_observe`/`alloc_pw` 的设备归约）仍未做。
-6. 多卡：每个 pool rank 绑卡，避免只有 pool root 用 GPU 的空转。
+6. ~~多卡：每个 pool rank 绑卡~~ ⚠️ 已实现分布式 GPU 固定点（LCAO/多 rank pool）；
+   还需减少每步常量重传，并在真实多卡节点做扩展性测量。

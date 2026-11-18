@@ -18,6 +18,8 @@ constexpr double kInv8Pi = 1.0 / (8.0 * 3.14159265358979323846);
 struct GpuGrid
 {
     long long n0, n1, n2;
+    int nplane; // local z-planes per rank (== n2 on a full grid)
+    int startz; // global start z of this rank's block (0 on a full grid)
     double ox, oy, oz;
     double dv00, dv01, dv02;
     double dv10, dv11, dv12;
@@ -26,11 +28,11 @@ struct GpuGrid
 
 __device__ inline void grid_point(const GpuGrid& g, long long ig, double& x, double& y, double& z)
 {
-    const long long n12 = g.n1 * g.n2;
+    const long long n12 = g.n1 * static_cast<long long>(g.nplane);
     const long long ix = ig / n12;
     const long long rem = ig - ix * n12;
-    const long long iy = rem / g.n2;
-    const long long iz = rem - iy * g.n2;
+    const long long iy = rem / g.nplane;
+    const long long iz = rem - iy * g.nplane + g.startz;
     x = g.ox + static_cast<double>(ix) * g.dv00 + static_cast<double>(iy) * g.dv10 + static_cast<double>(iz) * g.dv20;
     y = g.oy + static_cast<double>(ix) * g.dv01 + static_cast<double>(iy) * g.dv11 + static_cast<double>(iz) * g.dv21;
     z = g.oz + static_cast<double>(ix) * g.dv02 + static_cast<double>(iy) * g.dv12 + static_cast<double>(iz) * g.dv22;
@@ -323,6 +325,8 @@ bool compute_mbis_gpu(const std::vector<double>& rho,
     g.n0 = grid.n[0];
     g.n1 = grid.n[1];
     g.n2 = grid.n[2];
+    g.nplane = grid.n[2];
+    g.startz = 0;
     g.ox = grid.origin.x;
     g.oy = grid.origin.y;
     g.oz = grid.origin.z;
@@ -498,6 +502,166 @@ bool compute_mbis_gpu(const std::vector<double>& rho,
     for (int a = 0; a < nat; ++a)
         for (long long ig = 0; ig < nxyz; ++ig)
             out.w[a][static_cast<std::size_t>(ig)] = w_flat[static_cast<std::size_t>(a) * nxyz + ig];
+    return true;
+}
+
+bool mbis_gpu_local_step(const std::vector<double>& rho_local,
+                         const Grid& grid,
+                         const int nplane,
+                         const int startz,
+                         const std::vector<Atom>& atoms,
+                         const MbisConfig& cfg,
+                         const std::vector<double>& N,
+                         const std::vector<double>& zeta,
+                         const bool want_weights,
+                         std::vector<std::vector<double>>& w,
+                         std::vector<double>& Nout,
+                         std::vector<double>& MRout)
+{
+    if (!mbis_gpu_available())
+    {
+        return false;
+    }
+    const int nat = static_cast<int>(atoms.size());
+    const long long nxyz
+        = static_cast<long long>(grid.n[0]) * static_cast<long long>(grid.n[1]) * static_cast<long long>(nplane);
+    if (nat <= 0 || nplane <= 0 || nxyz <= 0 || rho_local.size() != static_cast<std::size_t>(nxyz)
+        || static_cast<int>(N.size()) != nat || static_cast<int>(zeta.size()) != nat)
+    {
+        return false;
+    }
+
+    // Periodic image translations (global cell, same as compute_mbis_gpu).
+    const Vec3 c0 = static_cast<double>(grid.n[0]) * grid.dv[0];
+    const Vec3 c1 = static_cast<double>(grid.n[1]) * grid.dv[1];
+    const Vec3 c2 = static_cast<double>(grid.n[2]) * grid.dv[2];
+    const int R = std::max(0, cfg.images);
+    std::vector<double> Tx, Ty, Tz;
+    const std::size_t nimg_est = static_cast<std::size_t>(2 * R + 1) * static_cast<std::size_t>(2 * R + 1)
+                                 * static_cast<std::size_t>(2 * R + 1);
+    Tx.reserve(nimg_est);
+    Ty.reserve(nimg_est);
+    Tz.reserve(nimg_est);
+    for (int lx = -R; lx <= R; ++lx)
+        for (int ly = -R; ly <= R; ++ly)
+            for (int lz = -R; lz <= R; ++lz)
+            {
+                const Vec3 t
+                    = static_cast<double>(lx) * c0 + static_cast<double>(ly) * c1 + static_cast<double>(lz) * c2;
+                Tx.push_back(t.x);
+                Ty.push_back(t.y);
+                Tz.push_back(t.z);
+            }
+    const int nimg = static_cast<int>(Tx.size());
+
+    std::vector<double> Rx(nat), Ry(nat), Rz(nat);
+    for (int a = 0; a < nat; ++a)
+    {
+        Rx[a] = atoms[a].R.x;
+        Ry[a] = atoms[a].R.y;
+        Rz[a] = atoms[a].R.z;
+    }
+
+    GpuGrid g;
+    g.n0 = grid.n[0];
+    g.n1 = grid.n[1];
+    g.n2 = grid.n[2];
+    g.nplane = nplane;
+    g.startz = startz;
+    g.ox = grid.origin.x;
+    g.oy = grid.origin.y;
+    g.oz = grid.origin.z;
+    g.dv00 = grid.dv[0].x;
+    g.dv01 = grid.dv[0].y;
+    g.dv02 = grid.dv[0].z;
+    g.dv10 = grid.dv[1].x;
+    g.dv11 = grid.dv[1].y;
+    g.dv12 = grid.dv[1].z;
+    g.dv20 = grid.dv[2].x;
+    g.dv21 = grid.dv[2].y;
+    g.dv22 = grid.dv[2].z;
+
+    const double dV = std::abs(grid.dv[0].x * (grid.dv[1].y * grid.dv[2].z - grid.dv[1].z * grid.dv[2].y)
+                               - grid.dv[0].y * (grid.dv[1].x * grid.dv[2].z - grid.dv[1].z * grid.dv[2].x)
+                               + grid.dv[0].z * (grid.dv[1].x * grid.dv[2].y - grid.dv[1].y * grid.dv[2].x));
+    const std::size_t nw = static_cast<std::size_t>(nat) * static_cast<std::size_t>(nxyz);
+
+    DevBuf d_rho, d_pro, d_rmin, d_P, d_Rx, d_Ry, d_Rz, d_N, d_zeta, d_Tx, d_Ty, d_Tz, d_red;
+    if (!d_rho.alloc<double>(nxyz) || !d_pro.alloc<double>(nw) || !d_rmin.alloc<double>(nw) || !d_P.alloc<double>(nxyz)
+        || !d_Rx.alloc<double>(nat) || !d_Ry.alloc<double>(nat) || !d_Rz.alloc<double>(nat) || !d_N.alloc<double>(nat)
+        || !d_zeta.alloc<double>(nat) || !d_Tx.alloc<double>(nimg) || !d_Ty.alloc<double>(nimg)
+        || !d_Tz.alloc<double>(nimg) || !d_red.alloc<double>(2 * nat))
+    {
+        return false;
+    }
+
+    if (!gpu_ok(hipMemcpy(d_rho.as<double>(), rho_local.data(), sizeof(double) * nxyz, hipMemcpyHostToDevice))
+        || !gpu_ok(hipMemcpy(d_Rx.as<double>(), Rx.data(), sizeof(double) * nat, hipMemcpyHostToDevice))
+        || !gpu_ok(hipMemcpy(d_Ry.as<double>(), Ry.data(), sizeof(double) * nat, hipMemcpyHostToDevice))
+        || !gpu_ok(hipMemcpy(d_Rz.as<double>(), Rz.data(), sizeof(double) * nat, hipMemcpyHostToDevice))
+        || !gpu_ok(hipMemcpy(d_N.as<double>(), N.data(), sizeof(double) * nat, hipMemcpyHostToDevice))
+        || !gpu_ok(hipMemcpy(d_zeta.as<double>(), zeta.data(), sizeof(double) * nat, hipMemcpyHostToDevice))
+        || !gpu_ok(hipMemcpy(d_Tx.as<double>(), Tx.data(), sizeof(double) * nimg, hipMemcpyHostToDevice))
+        || !gpu_ok(hipMemcpy(d_Ty.as<double>(), Ty.data(), sizeof(double) * nimg, hipMemcpyHostToDevice))
+        || !gpu_ok(hipMemcpy(d_Tz.as<double>(), Tz.data(), sizeof(double) * nimg, hipMemcpyHostToDevice)))
+    {
+        return false;
+    }
+
+    const int pro_blocks = static_cast<int>((nxyz + kThreads - 1) / kThreads);
+    const int red_blocks = std::min(1024, static_cast<int>((nxyz + kThreads - 1) / kThreads));
+
+    pro_weights_kernel<<<pro_blocks, kThreads>>>(g,
+                                                 nxyz,
+                                                 nat,
+                                                 nimg,
+                                                 d_Rx.as<double>(),
+                                                 d_Ry.as<double>(),
+                                                 d_Rz.as<double>(),
+                                                 d_N.as<double>(),
+                                                 d_zeta.as<double>(),
+                                                 d_Tx.as<double>(),
+                                                 d_Ty.as<double>(),
+                                                 d_Tz.as<double>(),
+                                                 cfg.cutoff,
+                                                 d_pro.as<double>(),
+                                                 d_P.as<double>(),
+                                                 d_rmin.as<double>());
+    if (!gpu_ok(hipGetLastError()) || !gpu_ok(hipMemset(d_red.ptr, 0, sizeof(double) * 2 * nat)))
+    {
+        return false;
+    }
+    reduce_atom_kernel<<<dim3(red_blocks, nat), kThreads>>>(nxyz,
+                                                            d_pro.as<double>(),
+                                                            d_rmin.as<double>(),
+                                                            d_rho.as<double>(),
+                                                            dV,
+                                                            d_red.as<double>(),
+                                                            d_red.as<double>() + nat);
+    if (!gpu_ok(hipGetLastError()))
+    {
+        return false;
+    }
+    Nout.assign(nat, 0.0);
+    MRout.assign(nat, 0.0);
+    if (!gpu_ok(hipMemcpy(Nout.data(), d_red.ptr, sizeof(double) * nat, hipMemcpyDeviceToHost))
+        || !gpu_ok(hipMemcpy(MRout.data(), d_red.as<double>() + nat, sizeof(double) * nat, hipMemcpyDeviceToHost)))
+    {
+        return false;
+    }
+
+    if (want_weights)
+    {
+        std::vector<double> w_flat(nw, 0.0);
+        if (!gpu_ok(hipMemcpy(w_flat.data(), d_pro.ptr, sizeof(double) * nw, hipMemcpyDeviceToHost)))
+        {
+            return false;
+        }
+        w.assign(nat, std::vector<double>(static_cast<std::size_t>(nxyz), 0.0));
+        for (int a = 0; a < nat; ++a)
+            for (long long ig = 0; ig < nxyz; ++ig)
+                w[a][static_cast<std::size_t>(ig)] = w_flat[static_cast<std::size_t>(a) * nxyz + ig];
+    }
     return true;
 }
 

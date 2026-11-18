@@ -1155,9 +1155,15 @@ void WeightGrid::build_mbis(const std::vector<double>& rho_total)
     pool_np = rho_basis_->poolnproc;
     poolrank = rho_basis_->poolrank;
 #endif
+    // Device availability decides whether the multi-rank path distributes the
+    // MBIS iteration (each rank keeps its local slice and only N/MR are
+    // allreduced) instead of gathering everything to the pool root.
+    const bool mbis_gpu_ok = (PARAM.inp.device == "gpu"
+                              && mbis_alm::mbis_gpu_available());
+    const bool distributed_gpu = (pool_np > 1 && mbis_gpu_ok);
     std::vector<double> rho_full;
 #ifdef __MPI
-    if (pool_np > 1)
+    if (pool_np > 1 && !distributed_gpu)
     {
         const int nxy = rho_basis_->nxy;
         const int nz = rho_basis_->nz;
@@ -1196,6 +1202,7 @@ void WeightGrid::build_mbis(const std::vector<double>& rho_total)
     }
     else
 #endif
+    if (!distributed_gpu)
     {
         // Serial pool: local layout already equals the global z-fastest layout.
         rho_full = rho_total;
@@ -1248,8 +1255,19 @@ void WeightGrid::build_mbis(const std::vector<double>& rho_total)
         mbis_gpu_reported = true;
         if (mbis_alm::mbis_gpu_available())
         {
-            GlobalV::ofs_running
-                << "[constraint] MBIS fixed point on GPU (device backend)\n";
+            // Branch: a multi-rank pool distributes the iteration over the
+            // ranks (each rank's GPU handles its local z-plane block).
+            if (distributed_gpu)
+            {
+                GlobalV::ofs_running
+                    << "[constraint] MBIS fixed point on GPU (device backend, "
+                    << pool_np << " pool ranks)\n";
+            }
+            else
+            {
+                GlobalV::ofs_running
+                    << "[constraint] MBIS fixed point on GPU (device backend)\n";
+            }
         }
         else
         {
@@ -1266,7 +1284,81 @@ void WeightGrid::build_mbis(const std::vector<double>& rho_total)
     std::vector<double> w_flat; // root only
     const int nxy_s = rho_basis_->nxy;
     const int nz_s = rho_basis_->nz;
-    if (pool_np == 1 || poolrank == 0)
+#ifdef __MPI
+    // Branch: distributed device fixed point (multi-rank pool).  Each rank
+    // owns its local z-plane block on its own GPU; only the global population
+    // and mean-radius sums are allreduced per iteration.  This avoids the
+    // root gather/scatter entirely and uses every rank's GPU.
+    if (distributed_gpu)
+    {
+        std::vector<double> N(nat_, 0.0), zeta(nat_, 0.0);
+        const bool have_warm = (static_cast<int>(cfg.warm_N.size()) == nat_
+                                && static_cast<int>(cfg.warm_zeta.size()) == nat_);
+        for (int a = 0; a < nat_; ++a)
+        {
+            N[a] = have_warm ? cfg.warm_N[a] : Zv[a];
+            zeta[a] = have_warm ? cfg.warm_zeta[a] : cfg.init_zeta;
+        }
+        std::vector<std::vector<double>> w_step;
+        std::vector<double> Nloc, MRloc, red(2 * nat_, 0.0);
+        for (int it = 0; it < cfg.max_iter; ++it)
+        {
+            if (!mbis_alm::mbis_gpu_local_step(rho_total, grid,
+                                               rho_basis_->nplane,
+                                               rho_basis_->startz_current,
+                                               atoms, cfg, N, zeta, false,
+                                               w_step, Nloc, MRloc))
+            {
+                ModuleBase::WARNING_QUIT("WeightGrid::build_mbis",
+                    "distributed MBIS device step failed");
+            }
+            for (int a = 0; a < nat_; ++a)
+            {
+                red[a] = Nloc[a];
+                red[nat_ + a] = MRloc[a];
+            }
+            MPI_Allreduce(MPI_IN_PLACE, red.data(), 2 * nat_, MPI_DOUBLE,
+                          MPI_SUM, POOL_WORLD);
+            double res = 0.0;
+            std::vector<double> Nn(nat_), zn(nat_);
+            for (int a = 0; a < nat_; ++a)
+            {
+                const double na = red[a];
+                const double mr = red[nat_ + a];
+                Nn[a] = na;
+                zn[a] = (na > 1e-12 && mr > 1e-12) ? 3.0 * na / mr : zeta[a];
+                zn[a] = std::max(zn[a], 1e-2);
+                res = std::max(res, std::abs(na - N[a]));
+            }
+            for (int a = 0; a < nat_; ++a)
+            {
+                N[a] = (1.0 - cfg.damp) * N[a] + cfg.damp * Nn[a];
+                zeta[a] = (1.0 - cfg.damp) * zeta[a] + cfg.damp * zn[a];
+            }
+            if (res < cfg.tol)
+            {
+                break;
+            }
+        }
+        // Final fill with the converged (damped) parameters.
+        if (!mbis_alm::mbis_gpu_local_step(rho_total, grid, rho_basis_->nplane,
+                                           rho_basis_->startz_current, atoms,
+                                           cfg, N, zeta, true, w_step, Nloc,
+                                           MRloc))
+        {
+            ModuleBase::WARNING_QUIT("WeightGrid::build_mbis",
+                "distributed MBIS final device step failed");
+        }
+        for (int a = 0; a < nat_; ++a)
+            for (int ir = 0; ir < nrxx_; ++ir)
+                w_local[static_cast<std::size_t>(a) * nrxx_ + ir]
+                    = w_step[a][static_cast<std::size_t>(ir)];
+        Nv = N;
+        zv = zeta;
+    }
+#endif
+
+    if (!distributed_gpu && (pool_np == 1 || poolrank == 0))
     {
         const mbis_alm::MbisState st = mbis_alm::compute_mbis(rho_full, grid, atoms, cfg);
         w_flat.assign(static_cast<std::size_t>(nat_) * rho_basis_->nxyz, 0.0);
@@ -1278,7 +1370,7 @@ void WeightGrid::build_mbis(const std::vector<double>& rho_total)
         zv = st.zeta;
     }
 #ifdef __MPI
-    if (pool_np > 1)
+    if (pool_np > 1 && !distributed_gpu)
     {
         std::vector<int> scounts(pool_np), sdispl(pool_np);
         int acc = 0;
@@ -1320,7 +1412,7 @@ void WeightGrid::build_mbis(const std::vector<double>& rho_total)
         MPI_Bcast(zv.data(), nat_, MPI_DOUBLE, 0, POOL_WORLD);
     }
 #endif
-    if (pool_np == 1)
+    if (pool_np == 1 && !distributed_gpu)
     {
         // Serial pool: local layout is already the global z-fastest layout
         // (nrxx == nxyz), so hand the root's packed weights over directly

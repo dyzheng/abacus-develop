@@ -6,6 +6,16 @@ remove_definitions(-D__ROCM)
 remove_definitions(-D__MLALGO)
 remove_definitions(-D_OPENMP)
 
+# CPU-only builds need the device stubs; CUDA/ROCm get the real symbols from
+# the device object library (adding the stubs there would duplicate them).
+if(NOT USE_CUDA AND NOT USE_ROCM)
+  set(MBIS_MPI_STUB_SOURCES
+      ../module_mbis_alm/mbis_alm_gpu_stub.cpp
+      ../module_constraint/constraint_mbis_gpu_stub.cpp)
+else()
+  set(MBIS_MPI_STUB_SOURCES "")
+endif()
+
 AddTest(
   TARGET MODULE_ESTATE_charge_mpi_test
   LIBS parameter ${math_libs} psi base device planewave 
@@ -22,6 +32,7 @@ AddTest(
   LIBS parameter ${math_libs} base device planewave cell_info
   SOURCES weight_grid_mpi_test.cpp
     ../module_mbis_alm/mbis_alm.cpp
+    ${MBIS_MPI_STUB_SOURCES}
     ../module_constraint/weight_grid.cpp
     ../module_constraint/constraint_observe.cpp
     ../module_constraint/constraint_dipole.cpp
