@@ -993,11 +993,29 @@ void ConstraintLoop::add_back_constraint_potential(ModuleBase::matrix& veff) con
 }
 
 void ConstraintLoop::observe(const int iter, const double* const* rho,
-                             const int nspin)
+                             const int nspin, const bool scf_converged)
 {
     if (!enabled())
     {
         return;
+    }
+    // MBIS reference-phase deferral: the MBIS weights are density-dependent but
+    // only the converged reference density defines Q_ref.  Building them on
+    // every reference SCF iteration dominates the CPU cost, so wait for the
+    // converged frame (or the explicit old behaviour when the input switch is
+    // false).  The constrained phase is unaffected: its weights are frozen
+    // after the first build.
+    if (wg_ != nullptr && wg_->is_mbis() && phase_ == LoopPhase::REFERENCE)
+    {
+        mbis_constrained_built_ = false;
+        if (PARAM.inp.constraint_mbis_defer_reference && !scf_converged)
+        {
+            // Keep the bookkeeping buffers well-formed for the reference-phase
+            // energy/audit hooks (mu = 0 here, so the correction is exactly 0).
+            Q_.assign(mu_.size(), 0.0);
+            mu_eff_ = mu_;
+            return;
+        }
     }
     // M5: resolve an automatic saw plane on the first density of this cold
     // geometry.  This runs before the integral so the reference Q and every

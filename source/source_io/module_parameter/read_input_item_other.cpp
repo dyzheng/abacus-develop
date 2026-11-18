@@ -1853,6 +1853,42 @@ Manual override is allowed: if sc_acceleration_mode is explicitly set, it takes 
         this->add_item(item);
     }
     {
+        Input_Item item("constraint_mbis_tol");
+        item.annotation = "MBIS: fixed-point population tolerance";
+        item.category = "Constraint";
+        item.type = "Real";
+        item.description = "Convergence tolerance on the per-atom MBIS populations in the Picard fixed point. The default 1e-8 is conservative; 1e-6 is usually enough for constraint targets at the 1e-3 level and saves iterations.";
+        item.default_value = "1e-8";
+        item.unit = "";
+        item.availability = "constraint_weight_type = mbis";
+        read_sync_double(input.constraint_mbis_tol);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("constraint_mbis_max_iter");
+        item.annotation = "MBIS: fixed-point iteration cap";
+        item.category = "Constraint";
+        item.type = "Integer";
+        item.description = "Maximum Picard iterations for the MBIS fixed point. Warm starts typically converge in 10-50; the default 200 is a safety cap.";
+        item.default_value = "200";
+        item.unit = "";
+        item.availability = "constraint_weight_type = mbis";
+        read_sync_int(input.constraint_mbis_max_iter);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("constraint_mbis_defer_reference");
+        item.annotation = "MBIS: build weights only on the converged reference density";
+        item.category = "Constraint";
+        item.type = "Boolean";
+        item.description = "When true (default), the MBIS weights are not rebuilt on every reference-phase SCF iteration; they are built once when the reference SCF converges, which is the density that defines the reference charge. This removes O(SCF steps) MBIS builds. Set false to reproduce the historical per-iteration rebuild.";
+        item.default_value = "True";
+        item.unit = "";
+        item.availability = "constraint_weight_type = mbis";
+        read_sync_bool(input.constraint_mbis_defer_reference);
+        this->add_item(item);
+    }
+    {
         Input_Item item("constraint_alloc_report");
         item.annotation = "print the LCAO unified-allocation target/complement audit";
         item.category = "Constraint";

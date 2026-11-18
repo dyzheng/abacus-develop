@@ -1236,8 +1236,8 @@ void WeightGrid::build_mbis(const std::vector<double>& rho_total)
 
     mbis_alm::MbisConfig cfg;
     cfg.cutoff = PARAM.inp.constraint_mbis_cutoff;  // bohr; input-tunable for charged/diffuse cells
-    cfg.max_iter = 200;   // warm-started after the first call
-    cfg.tol = 1e-8;
+    cfg.max_iter = std::max(1, PARAM.inp.constraint_mbis_max_iter);
+    cfg.tol = std::max(1e-14, PARAM.inp.constraint_mbis_tol);
     cfg.damp = 0.5;
     cfg.images = PARAM.inp.constraint_mbis_images;
     cfg.init_zeta = 1.0;

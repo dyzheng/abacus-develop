@@ -820,6 +820,9 @@ struct Input_para
     double constraint_alloc_fd_step = 0.005;
     int constraint_mbis_images = 0;           ///< MBIS: periodic image layers for the pro-density
     double constraint_mbis_cutoff = 10.0;     ///< MBIS: radial cutoff (Bohr) for the pro-density sum
+    double constraint_mbis_tol = 1e-8;        ///< MBIS: fixed-point population tolerance
+    int constraint_mbis_max_iter = 200;       ///< MBIS: fixed-point iteration cap
+    bool constraint_mbis_defer_reference = true; ///< build MBIS only on the converged reference density
 
     // ==============   #Parameters (25.uncommon hardware) ==================
     int dsp_count = 4;           ///< count of DSP hardwares in one node

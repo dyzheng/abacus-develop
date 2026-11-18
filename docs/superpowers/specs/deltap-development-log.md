@@ -8271,3 +8271,17 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - MBIS `ΣQ != nelec` 审计从每次 observe 移到 `on_scf_converged`（仅收敛帧），
   避免初始原子/未收敛密度尾部的误报。
 - 文件：`constraint_loop.cpp`、`2026-11-18-fixed-mu-vs-efield-and-charged-constraint.md`、本日志。
+
+## 2026-11-18 (S6.96): MBIS reference 只构建一次 + tol/iter 可调
+
+- `constraint_mbis_defer_reference`（默认 true）：reference 相只在 SCF 收敛帧
+  构建 MBIS；中间 `Q_` 置零、`mu_eff_=mu_`，避免无权重时能量钩子崩溃。
+  `observe` 增加 `scf_converged` 参数，PW/LCAO 传入 `conv_esolver`。
+- `constraint_mbis_tol` / `constraint_mbis_max_iter` 输入接入 `WeightGrid`。
+- 实测 LiCl 15 Å OMP=1：16 步 reference 2m39s → 58s（2.75×），
+  `Q_ref`/`FINAL_ETOT` 不变（差 <1e-7 / 1e-13 eV）；tol=1e-6 再省 ~2s。
+- 03 单离子 OMP=1：cutoff10/20 各 ~1m23（旧 7m10/6m40），结果不变。
+- 单测：constraint_loop 58/58（CPU/CUDA）、deriv、mbis GPU 全过。
+- 文件：`constraint_loop.{h,cpp}`、`esolver_ks_pw/lcao.cpp`、`weight_grid.cpp`、
+  `input_parameter.h`、`read_input_item_other.cpp`、
+  `2026-11-18-mbis-reference-deferral.md`、示例 README、本日志。

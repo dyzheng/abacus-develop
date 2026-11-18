@@ -31,6 +31,17 @@
   `ΣQ != nelec` 时警告一次。
 - 详单：`2026-11-18-fixed-mu-vs-efield-and-charged-constraint.md`。
 
+## 2026-11-18 MBIS reference 只构建一次（性能）
+
+- 新增 `constraint_mbis_defer_reference`（默认 true）：reference 相只在 SCF
+  收敛帧构建一次 MBIS；中间 `Q` 不参与目标，旧实现每步重建是纯冗余。
+- `constraint_mbis_tol`（默认 1e-8）与 `constraint_mbis_max_iter`（200）可调。
+- 实测 LiCl 15 Å，OMP=1：16 步 reference 从 **2m39s → 58s**（2.75×），
+  `Q_ref`/`FINAL_ETOT` 一致；`tol=1e-6` 再省 ~2 s。
+- 03 Cl⁻ 示例 OMP=1：cutoff10/20 各 **~1m23**（旧 np=2×OMP=10 为 7m10/6m40），
+  `total_charge` 与 warning 行为不变。
+- 详单：`2026-11-18-mbis-reference-deferral.md`。
+
 ---
 
 ## 0. 一句话现状

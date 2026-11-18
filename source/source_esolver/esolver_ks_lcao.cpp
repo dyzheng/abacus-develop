@@ -1279,7 +1279,7 @@ void ESolver_KS_LCAO<TK, TR>::iter_finish(UnitCell& ucell, const int istep, int&
         else
         {
             // Branch: legacy grid-density constraints keep the Becke read-out.
-            cloop.observe(iter, this->chr.rho, PARAM.inp.nspin);
+            cloop.observe(iter, this->chr.rho, PARAM.inp.nspin, conv_esolver);
         }
         // Energy branch guard input: the plain KS total energy of this SCF
         // iteration (etot still carries the cc_escon of the PREVIOUS outer

@@ -101,7 +101,8 @@ class ConstraintLoop
     void add_back_constraint_potential(ModuleBase::matrix& veff) const;
 
     // Read the constraint charges Q from the (mixed) rho of iteration 'iter'.
-    void observe(const int iter, const double* const* rho, const int nspin);
+    void observe(const int iter, const double* const* rho, const int nspin,
+                 const bool scf_converged = false);
 
     // S3 allocation observation: n_alloc/m_alloc are per constraint and are
     // the full allocation readings Tr(DMR K_i).  Charge constraints read

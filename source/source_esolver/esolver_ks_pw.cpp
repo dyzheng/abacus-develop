@@ -1110,7 +1110,7 @@ void ESolver_KS_PW<T, Device>::iter_finish(UnitCell& ucell, const int istep, int
         // Branch B: the legacy grid mode keeps the real-space Becke reading.
         else
         {
-            cloop.observe(iter, this->chr.rho, PARAM.inp.nspin);
+            cloop.observe(iter, this->chr.rho, PARAM.inp.nspin, conv_esolver);
         }
         // Energy branch guard input: the plain KS total energy of this SCF
         // iteration (etot still carries the cc_escon of the PREVIOUS outer

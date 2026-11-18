@@ -130,3 +130,20 @@ then:
 Note: the MBIS examples can be expensive on a CPU.  For a quick check,
 reduce `ecutwfc/ecutrho` and/or `scf_nmax`, or run on a GPU build with
 `device gpu`.
+
+MBIS performance controls:
+
+    constraint_mbis_defer_reference 1   # default: build once on the converged
+                                        # reference density (not every SCF step)
+    constraint_mbis_tol      1.0e-8     # fixed-point population tolerance
+    constraint_mbis_max_iter 200        # fixed-point iteration cap
+
+With the default deferral the reference-phase MBIS is built once instead of
+once per SCF iteration.  On a 15 Angstrom LiCl reference (16 SCF steps,
+OMP=1) this cuts the run from ~2m39s to ~58s with identical Q_ref/energy.
+`SETENV` uses one OpenMP thread; for these small grids that is usually faster
+than oversubscribing many threads/ranks.  The single-anion example now runs
+in ~1.5 minutes per cutoff on one thread.
+
+The LiCl+ example uses `scf_nmax = 80`; if it stops at "budget freeze" with
+the residual just above `constraint_thr`, raise `scf_nmax` to 100 or more.
