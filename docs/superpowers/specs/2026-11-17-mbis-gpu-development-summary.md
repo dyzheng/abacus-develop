@@ -54,6 +54,8 @@ MBIS 每步固定点需要
   `dw_/dwe_`（192³/2 原子约 1.7 GB）；`constraint_force/stress` 用
   `constraint_mbis_gpu` 的 device 核直接从 `w_/cw_/zeta/dens/mu` 收缩，
   只回传 `nat*3` / `3×3`。`mu=0` 时跳过设备调用。
+- serial-pool：`compute_mbis_gpu_flat` 直接返回扁平权重，省掉
+  `MbisState::w` 的嵌套 vector 往返与一份峰值内存。
 - MPI 分布式：`pool_np>1 && device=gpu` 时每个 rank 只用本地 z-plane 块和
   自己的 GPU，每步仅 `MPI_Allreduce` N/MR；`w` 留在本地，去掉 Gatherv/Scatterv。
   `MbisGpuLocalWorkspace` 一次性上传 rho/原子/镜像，迭代内只传 `N/ζ`。

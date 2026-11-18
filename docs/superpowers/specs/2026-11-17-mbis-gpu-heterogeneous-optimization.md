@@ -157,7 +157,15 @@ MBIS 的通用力/应力核会先物化
 | LiCl/LCAO/nspin1/MBIS np=2 | GPU 分布式 `FINAL_ETOT` −643.2969955462979 eV vs CPU np=2 −643.2969955462986 eV（差 **7e-13 eV**） |
 | 同算例 wall time | GPU 16.3 s（持久 workspace）vs CPU np=2 28.4 s |
 
-### 4.6 回归
+### 4.6 serial-pool flat 输出（第六轮）
+
+`compute_mbis_gpu` 原先把设备权重拷到 `w_flat`，再转成 `MbisState::w`
+（`vector<vector>`），最后 WeightGrid 又摊平成 `w_flat` —— 多两次
+`nat*nxyz` 主机拷贝与一份峰值内存。新增 `compute_mbis_gpu_flat`，GPU 生产路径
+直接拿到扁平权重；`MbisState` 版本保留给测试/旧调用。LiCl PW 6 步结果不变
+（−643.9746485961 eV），GPU 模块测试 4/4 通过。
+
+### 4.7 回归
 
 ```
 MODULE_ESTATE_constraint_weight_grid      Passed

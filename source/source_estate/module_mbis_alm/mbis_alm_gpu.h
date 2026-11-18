@@ -40,6 +40,17 @@ bool compute_mbis_gpu(const std::vector<double>& rho,
                       const MbisConfig& cfg,
                       MbisState& out);
 
+/// Same as compute_mbis_gpu but returns the weights flat ([atom][grid]); this
+/// avoids the nested-vector copies in the WeightGrid production path.
+bool compute_mbis_gpu_flat(const std::vector<double>& rho,
+                           const Grid& grid,
+                           const std::vector<Atom>& atoms,
+                           const MbisConfig& cfg,
+                           std::vector<double>& w_flat,
+                           std::vector<double>& Nout,
+                           std::vector<double>& zeta_out,
+                           double& Dout);
+
 /**
  * @brief One distributed MBIS fixed-point step on a rank-local grid slice.
  *

@@ -1362,14 +1362,27 @@ void WeightGrid::build_mbis(const std::vector<double>& rho_total)
 
     if (!distributed_gpu && (pool_np == 1 || poolrank == 0))
     {
-        const mbis_alm::MbisState st = mbis_alm::compute_mbis(rho_full, grid, atoms, cfg);
-        w_flat.assign(static_cast<std::size_t>(nat_) * rho_basis_->nxyz, 0.0);
-        for (int iat = 0; iat < nat_; ++iat)
-            for (int ig = 0; ig < rho_basis_->nxyz; ++ig)
-                w_flat[static_cast<std::size_t>(iat) * rho_basis_->nxyz + ig]
-                    = st.w[iat][ig];
-        Nv = st.N;
-        zv = st.zeta;
+        bool got_flat = false;
+        // Branch: the device backend can hand the weights back already flat,
+        // avoiding the nested-vector (out.w) round-trip in the production path.
+        if (cfg.use_gpu && mbis_alm::mbis_gpu_available())
+        {
+            double D = 0.0;
+            got_flat = mbis_alm::compute_mbis_gpu_flat(rho_full, grid, atoms, cfg,
+                                                       w_flat, Nv, zv, D);
+        }
+        if (!got_flat)
+        {
+            const mbis_alm::MbisState st
+                = mbis_alm::compute_mbis(rho_full, grid, atoms, cfg);
+            w_flat.assign(static_cast<std::size_t>(nat_) * rho_basis_->nxyz, 0.0);
+            for (int iat = 0; iat < nat_; ++iat)
+                for (int ig = 0; ig < rho_basis_->nxyz; ++ig)
+                    w_flat[static_cast<std::size_t>(iat) * rho_basis_->nxyz + ig]
+                        = st.w[iat][ig];
+            Nv = st.N;
+            zv = st.zeta;
+        }
     }
 #ifdef __MPI
     if (pool_np > 1 && !distributed_gpu)

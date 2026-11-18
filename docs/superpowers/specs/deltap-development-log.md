@@ -8236,3 +8236,13 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
   wall time 18.4 s → **16.3 s**；`weight_grid_mpi` np=4 6/6 PASS；
   `MODULE_ESTATE_mbis_alm_gpu` 4/4 PASS。
 - 文件：`mbis_alm_gpu.{h,cu,hip.cu,stub.cpp}`、`weight_grid.cpp`、文档、本日志。
+
+## 2026-11-17 (S6.93): serial-pool MBIS 扁平权重输出
+
+- 新增 `compute_mbis_gpu_flat`：设备固定点直接返回扁平 `[atom][grid]` 权重；
+  `compute_mbis_gpu`（MbisState 版）保留给测试/旧调用。
+- `WeightGrid::build_mbis` 的 serial-pool GPU 路径改用 flat 版本，去掉
+  `MbisState::w` 的嵌套 vector 往返与一份 `nat*nxyz` 峰值内存。
+- 验证：LiCl/PW/MBIS 6 步 ETOT 不变（−643.9746485961 eV）；GPU 模块 4/4、
+  CPU-only MBIS 13/13 通过。
+- 文件：`mbis_alm_gpu.{h,cu,hip.cu,stub.cpp}`、`weight_grid.cpp`、文档、本日志。

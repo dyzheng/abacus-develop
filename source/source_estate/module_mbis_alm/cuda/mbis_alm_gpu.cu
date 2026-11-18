@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cuda_runtime.h>
+#include <utility>
 #include <vector>
 
 namespace mbis_alm
@@ -260,11 +261,18 @@ bool mbis_gpu_available()
     return count > 0;
 }
 
-bool compute_mbis_gpu(const std::vector<double>& rho,
-                      const Grid& grid,
-                      const std::vector<Atom>& atoms,
-                      const MbisConfig& cfg,
-                      MbisState& out)
+namespace
+{
+
+// Core fixed-point solver returning the flat weights (row-major [atom][grid]).
+bool compute_mbis_gpu_flat_impl(const std::vector<double>& rho,
+                                const Grid& grid,
+                                const std::vector<Atom>& atoms,
+                                const MbisConfig& cfg,
+                                std::vector<double>& w_out,
+                                std::vector<double>& Nout,
+                                std::vector<double>& zeta_out,
+                                double& Dout)
 {
     if (!mbis_gpu_available())
     {
@@ -495,9 +503,41 @@ bool compute_mbis_gpu(const std::vector<double>& rho,
         return false;
     }
 
-    out.N = N;
-    out.zeta = zeta;
-    out.D = D;
+    w_out = std::move(w_flat);
+    Nout = N;
+    zeta_out = zeta;
+    Dout = D;
+    return true;
+}
+
+} // namespace
+
+bool compute_mbis_gpu_flat(const std::vector<double>& rho,
+                           const Grid& grid,
+                           const std::vector<Atom>& atoms,
+                           const MbisConfig& cfg,
+                           std::vector<double>& w_flat,
+                           std::vector<double>& Nout,
+                           std::vector<double>& zeta_out,
+                           double& Dout)
+{
+    return compute_mbis_gpu_flat_impl(rho, grid, atoms, cfg, w_flat, Nout, zeta_out, Dout);
+}
+
+bool compute_mbis_gpu(const std::vector<double>& rho,
+                      const Grid& grid,
+                      const std::vector<Atom>& atoms,
+                      const MbisConfig& cfg,
+                      MbisState& out)
+{
+    std::vector<double> w_flat;
+    if (!compute_mbis_gpu_flat_impl(rho, grid, atoms, cfg, w_flat, out.N, out.zeta, out.D))
+    {
+        return false;
+    }
+    const long long nxyz
+        = static_cast<long long>(grid.n[0]) * static_cast<long long>(grid.n[1]) * static_cast<long long>(grid.n[2]);
+    const int nat = static_cast<int>(atoms.size());
     out.w.assign(nat, std::vector<double>(static_cast<std::size_t>(nxyz), 0.0));
     for (int a = 0; a < nat; ++a)
         for (long long ig = 0; ig < nxyz; ++ig)

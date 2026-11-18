@@ -19,6 +19,18 @@ bool compute_mbis_gpu(const std::vector<double>& /*rho*/,
     return false;
 }
 
+bool compute_mbis_gpu_flat(const std::vector<double>& /*rho*/,
+                           const Grid& /*grid*/,
+                           const std::vector<Atom>& /*atoms*/,
+                           const MbisConfig& /*cfg*/,
+                           std::vector<double>& /*w_flat*/,
+                           std::vector<double>& /*Nout*/,
+                           std::vector<double>& /*zeta_out*/,
+                           double& /*Dout*/)
+{
+    return false;
+}
+
 bool mbis_gpu_local_step(const std::vector<double>& /*rho_local*/,
                          const Grid& /*grid*/,
                          const int /*nplane*/,

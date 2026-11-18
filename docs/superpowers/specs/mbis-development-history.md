@@ -28,6 +28,7 @@ MBIS（迭代 Slater Stockholder，**带布居约束的不动点**）已作为
   device 直算（跳过 `dw_/dwe_`，与 CPU <1e-9）；多 rank pool 分布式 GPU
   （每 rank 本地块 + Allreduce N/MR，持久 workspace 缓存常量；np=4 <1e-8，
   LCAO np=2 ETOT 差 7e-13 eV）。
+  另含 serial-pool 扁平权重输出（省嵌套 vector 拷贝）。
   详见 `2026-11-17-mbis-gpu-heterogeneous-optimization.md`。
 
 ---
