@@ -21,9 +21,14 @@
   `total_charge=10.499987`（闭合 1.3e-5）。负电 `-0.5` 在 cutoff=10 下
   闭合 8.6e-5、residual 单调下降。正电强约束（μ≈−0.2）会出现弥散态，
   deficit 增至 0.15 e，需要更大 cutoff/remainder 与更稳健控制器。
+- **非弥散离子**：Li⁺ (2e) 闭合 8.4e-5；LiCl⁺ (9e) 闭合 8.2e-5，residual
+  单调降到 1.4e-3（SCF 预算）；Cl⁻ cutoff=10 漏 1.6e-3，cutoff=20 闭合
+  1.7e-7。结论：**局域离子适合约束；强弥散态不适合**，需要 remainder 或
+  更大 cutoff。
 - **修复**：`constraint_alloc_report` 钩子在非 allocation 约束下会进入
   `alloc::report_pw_alloc` 并段错误；PW/LCAO 都加 `constraint_alloc_switch`
-  守卫。MBIS 带电审计在 `ΣQ != nelec` 时警告一次。
+  守卫。MBIS 带电审计改为在 **SCF 收敛帧** 触发（避免未收敛密度误报），
+  `ΣQ != nelec` 时警告一次。
 - 详单：`2026-11-18-fixed-mu-vs-efield-and-charged-constraint.md`。
 
 ---

@@ -8261,3 +8261,13 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - 文件：`input_parameter.h`、`read_input_item_other.cpp`、`weight_grid.cpp`、
   `constraint_loop.{h,cpp}`、`esolver_ks_pw.cpp`、`esolver_ks_lcao.cpp`、
   `2026-11-18-fixed-mu-vs-efield-and-charged-constraint.md`、本日志。
+
+## 2026-11-18 (S6.95): 局域离子带电约束验证；审计移至收敛帧
+
+- 非弥散离子：Li⁺ (2e) total_charge 1.999916（漏 8.4e-5）；LiCl⁺ (9e)
+  total_charge 8.999918（漏 8.2e-5），residual 0.05→0.00138 单调下降
+  （scf_nmax 预算冻结）。Cl⁻ (8e) cutoff=10 漏 1.58e-3（警告），cutoff=20
+  闭合 1.7e-7。结论：局域离子适合约束；弥散态需 remainder/更大 cutoff。
+- MBIS `ΣQ != nelec` 审计从每次 observe 移到 `on_scf_converged`（仅收敛帧），
+  避免初始原子/未收敛密度尾部的误报。
+- 文件：`constraint_loop.cpp`、`2026-11-18-fixed-mu-vs-efield-and-charged-constraint.md`、本日志。
