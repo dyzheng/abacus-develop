@@ -1,0 +1,4 @@
+{"constraints":[
+ {"type":"charge","target":0.05,"atoms":[0]},
+ {"type":"charge","target":-0.05,"atoms":[1]}
+]}

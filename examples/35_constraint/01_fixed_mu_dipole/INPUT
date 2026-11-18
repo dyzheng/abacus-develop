@@ -1,0 +1,35 @@
+INPUT_PARAMETERS
+suffix               fixed_mu_dipole
+calculation          scf
+basis_type           pw
+gamma_only           1
+nspin                1
+nbands               8
+ecutwfc              40
+ecutrho              160
+scf_thr              1.0e-7
+scf_nmax             60
+symmetry             0
+pseudo_dir           ../../../tests/PP_ORB
+orbital_dir          ../../../tests/PP_ORB
+nelec                10
+smearing_method      gaussian
+smearing_sigma       0.002
+mixing_type          broyden
+mixing_beta          0.4
+device               cpu
+
+# Dipole-saw constraint with a fixed Lagrange multiplier (Ry / e*Bohr).
+# `fixed_mu` lives in constraint_target.json; the outer mu loop is skipped.
+constraint                   true
+constraint_type              dipole
+constraint_target_file       constraint_target.json
+constraint_target_mode       delta
+constraint_dipole_report     1
+constraint_dipole_frame      saw
+constraint_dipole_saw_pos_max 0.9
+constraint_dipole_saw_pos_dec 0.1
+constraint_branch_tol        0
+constraint_mu_max            5.0
+constraint_thr               1.0e-4
+constraint_alloc_report      0

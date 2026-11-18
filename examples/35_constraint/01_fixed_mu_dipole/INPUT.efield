@@ -1,0 +1,32 @@
+INPUT_PARAMETERS
+suffix               efield_reference
+calculation          scf
+basis_type           pw
+gamma_only           1
+nspin                1
+nbands               8
+ecutwfc              40
+ecutrho              160
+scf_thr              1.0e-7
+scf_nmax             60
+symmetry             0
+pseudo_dir           ../../../tests/PP_ORB
+orbital_dir          ../../../tests/PP_ORB
+nelec                10
+smearing_method      gaussian
+smearing_sigma       0.002
+mixing_type          broyden
+mixing_beta          0.4
+device               cpu
+
+# External saw electric field.  For this cubic cell (LATTICE_VECTORS diag(15))
+# the fixed-mu constraint with mu = -0.01 Ry corresponds to
+#     efield_amp = -mu / 2 = +0.005  (Hartree)
+# (see README.md).  Keep efield_pos_max/efield_pos_dec equal to the constraint
+# saw_pos/saw_pos_dec so the two potentials have the same shape.
+efield_flag          1
+efield_dir           2
+efield_pos_max       0.9
+efield_pos_dec       0.1
+efield_amp           0.005
+dip_cor_flag         0

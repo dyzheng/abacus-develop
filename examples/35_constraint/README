@@ -1,0 +1,132 @@
+/*******************************************************************************/
+/
+/ ABACUS constraint examples: fixed-mu dipole, charged ionic systems
+/
+/*******************************************************************************/
+
+This directory demonstrates the real-space constraint framework with:
+
+1. `01_fixed_mu_dipole`  -- a dipole-saw constraint with a fixed Lagrange
+   multiplier, and the equivalent external electric field;
+2. `02_charged_ionic`    -- a localized charged ionic system (`LiCl+`) with
+   two per-atom MBIS charge constraints;
+3. `03_charged_anion_cutoff` -- a single `Cl-` anion showing why the MBIS
+   pro-density cutoff matters for diffuse charge tails.
+
+The examples use `device cpu` in INPUT.  On a GPU build add `device gpu`
+(and keep `precision double`); MBIS then runs on the GPU backend.  Note that
+ABACUS forces `kpar = NPROC` on GPU; with a single Gamma k-point and
+`ABACUS_NPROCS > 1` this leaves some ranks without a k-point.  For the GPU
+check use `ABACUS_NPROCS=1` (or a multi-k KPT).
+
+--------------------------------------------------------------------------
+1. Fixed mu can stand in for an electric field
+--------------------------------------------------------------------------
+
+`01_fixed_mu_dipole/INPUT` uses a dipole-saw constraint with
+
+    "fixed_mu": -0.01        (Ry / e*Bohr, in constraint_target.json)
+
+A fixed-mu run skips the outer multiplier loop: the constraint potential is
+the ordinary external potential `mu * w(r)`.  For the saw frame
+`w(r) = -Lz * saw(z)`, which is exactly a saw electric field.
+
+`INPUT.efield` is the same physical system with the ABACUS electric-field
+feature.  For the cubic cell used here (`LATTICE_VECTORS = diag(15)`), the
+two potentials coincide when
+
+    efield_amp = -mu / 2        (Hartree)
+
+so `mu = -0.01` corresponds to `efield_amp = +0.005`, with
+`efield_pos_max = 0.9` and `efield_pos_dec = 0.1` matching
+`constraint_dipole_saw_pos_max/dec`.
+
+To compare:
+
+    cd 01_fixed_mu_dipole
+    bash run.sh                     # fixed-mu constraint
+    cp INPUT INPUT.constraint.keep
+    cp INPUT.efield INPUT
+    bash run.sh                     # external field
+    mv INPUT.constraint.keep INPUT  # restore the constraint input
+
+Expected (double precision):
+
+    fixed mu : FINAL_ETOT ~ -642.7326307 eV
+    efield   : FINAL_ETOT ~ -642.7326307 eV
+    difference ~ 1e-8 eV (parallel details may move the last digits)
+
+The total energies agree to numerical precision; the forces agree to
+0.002-0.005 eV/Angstrom (the two force implementations differ slightly).
+A fixed multiplier is therefore a valid field stand-in.  The mapping
+`efield_amp = -mu/2` is specific to a cubic cell with `e33 = 1`; for a
+general cell use `efield_amp = -mu * Lz * bmod / (e2 * lat0)` with
+`e2 = 2`, `Lz = latvec.e33 * lat0` and `bmod` from `Efield::prepare`.
+
+--------------------------------------------------------------------------
+2. Charged, localized ionic system: LiCl+
+--------------------------------------------------------------------------
+
+`02_charged_ionic` uses `nelec_delta = -1.0`, i.e. a total of 9 electrons
+(LiCl+).  The hole is localized on the ionic molecule, and two MBIS charge
+constraints transfer 0.05 e from Cl to Li:
+
+    Li: target +0.05,   Cl: target -0.05   (delta mode)
+
+Run:
+
+    cd 02_charged_ionic
+    bash run.sh
+
+Expected audit (final converged frame):
+
+    total_charge ~ 8.9999        nelec = 9
+    residual     ~ 6e-4 e        (CONVERGED, constraint_thr = 1e-3)
+    # The exact residual depends on the SCF budget/parallel split; if the run
+    # stops at "budget freeze", raise scf_nmax or constraint_step_max.
+
+The residual decreases monotonically every outer step.  A localized ionic
+charge (or a charged defect) is a good use case for this constraint.
+
+--------------------------------------------------------------------------
+3. Diffuse charge: why the MBIS cutoff matters
+--------------------------------------------------------------------------
+
+`03_charged_anion_cutoff` is a single Cl- anion (`nelec = 7`,
+`nelec_delta = +1`).  The extra electron is bound but has a diffuse tail.
+The input uses the default `constraint_mbis_cutoff = 10.0` Bohr:
+
+    cd 03_charged_anion_cutoff
+    bash run.sh                     # cutoff = 10
+    bash run_cut20.sh               # cutoff = 20
+
+Expected:
+
+    cutoff 10: total_charge ~ 7.998423, deficit ~ 1.58e-3 e
+               (warning.log: "MBIS per-atom charges sum to ... but nelec ...")
+    cutoff 20: total_charge ~ 7.999999819, deficit ~ 1.8e-7 e, no warning
+
+This is the practical diagnostic for charged/diffuse systems: the constraint
+enforces the MBIS partition, but density outside the pro cutoff is not
+assigned to any atom.  Increase `constraint_mbis_cutoff` until
+`sum(Q) == nelec` (the code warns once at a converged SCF frame), or use a
+scheme with an explicit remainder channel.
+
+Guidance:
+  * localized ionic charge / defects  -> constraint is appropriate;
+  * strongly diffuse states (extra electron delocalized over a large box,
+    near-continuum states) -> a local charge constraint is not the right
+    tool; enlarge the cutoff/remainder or choose another scheme.
+
+--------------------------------------------------------------------------
+Running all examples
+--------------------------------------------------------------------------
+
+Edit `../SETENV` first (`ABACUS_PATH`, `ABACUS_NPROCS`, `ABACUS_THREADS`),
+then:
+
+    bash runall.sh
+
+Note: the MBIS examples can be expensive on a CPU.  For a quick check,
+reduce `ecutwfc/ecutrho` and/or `scf_nmax`, or run on a GPU build with
+`device gpu`.

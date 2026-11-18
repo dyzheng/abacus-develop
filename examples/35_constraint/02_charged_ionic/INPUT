@@ -1,0 +1,38 @@
+INPUT_PARAMETERS
+suffix               charged_ionic
+calculation          scf
+basis_type           pw
+gamma_only           1
+nspin                1
+nbands               8
+ecutwfc              40
+ecutrho              160
+scf_thr              1.0e-6
+scf_nmax             100
+symmetry             0
+pseudo_dir           ../../../tests/PP_ORB
+orbital_dir          ../../../tests/PP_ORB
+nelec                10
+nelec_delta          -1.0      # LiCl+ : total 9 electrons (localized hole)
+smearing_method      gaussian
+smearing_sigma       0.01
+mixing_type          broyden
+mixing_beta          0.4
+device               cpu
+
+# Two per-atom MBIS charge constraints.  The targets (+0.05 / -0.05) sum to
+# zero, so the total electron count stays 9 while charge is transferred
+# between the ions.  See README.md for the localized-vs-diffuse discussion.
+constraint                 true
+constraint_type            charge
+constraint_weight_type     mbis
+constraint_target_file     constraint_target.json
+constraint_target_mode     delta
+constraint_mbis_images     1
+constraint_mbis_cutoff     10.0
+constraint_kappa_min       0.3
+constraint_step_max        0.1
+constraint_mu_max          5.0
+constraint_thr             1.0e-3
+constraint_branch_tol      0
+constraint_alloc_report    0

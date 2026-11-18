@@ -32,6 +32,7 @@ The examples are organized into several categories based on their functionality:
 - **32_bsse**: Basis set superposition error correction
 - **33_pexsi**: PEXSI solver calculations for large systems
 - **34_gpu**: GPU-accelerated calculations
+- **35_constraint**: Fixed-mu dipole constraints, charged ionic systems, and MBIS cutoff diagnostics
 
 ## Directory Structure
 

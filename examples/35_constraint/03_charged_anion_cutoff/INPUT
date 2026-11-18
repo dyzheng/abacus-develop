@@ -1,0 +1,37 @@
+INPUT_PARAMETERS
+suffix               anion_cut10
+calculation          scf
+basis_type           pw
+gamma_only           1
+nspin                1
+nbands               8
+ecutwfc              40
+ecutrho              160
+scf_thr              1.0e-7
+scf_nmax             40
+symmetry             0
+pseudo_dir           ../../../tests/PP_ORB
+orbital_dir          ../../../tests/PP_ORB
+nelec                7
+nelec_delta          1.0      # Cl- : total 8 electrons
+smearing_method      gaussian
+smearing_sigma       0.002
+mixing_type          broyden
+mixing_beta          0.4
+device               cpu
+
+# A single localized anion.  With the default 10 Bohr MBIS pro cutoff the
+# extra electron's diffuse tail leaves a small charge deficit; cut20 closes it.
+constraint                 true
+constraint_type            charge
+constraint_weight_type     mbis
+constraint_target_file     constraint_target.json
+constraint_target_mode     delta
+constraint_mbis_images     1
+constraint_mbis_cutoff     10.0
+constraint_kappa_min       0.3
+constraint_step_max        0.05
+constraint_mu_max          5.0
+constraint_thr             1.0e-3
+constraint_branch_tol      0
+constraint_alloc_report    0
