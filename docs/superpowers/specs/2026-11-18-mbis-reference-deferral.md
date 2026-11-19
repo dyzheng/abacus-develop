@@ -63,7 +63,27 @@ MBIS 电荷约束（target delta 0，`images=1`，cutoff=10）。
 - 剩余时间主要是外步各自的完整 SCF（每步约 3–4 s/迭代 × 10 步），
   不是 MBIS 重复构建。
 
-### 3.3 回归
+
+### 3.3 磁矩（spin）约束复测
+
+体系：bcc Fe2（0.50 体心），`nspin=2`，gamma-only，`ecutwfc=40`，
+`ecutrho=160`，24 bands，OMP=1，np=1；两个 spin 约束（target delta 0，
+即取 reference 磁矩），`constraint_mbis_images=1`。
+
+| 模式 | wall | `Q_ref` (atom 0) | `FINAL_ETOT` |
+|---|---:|---:|---:|
+| `defer=0`（每步重建） | **21.9s** | −3.980092681 μB | −6753.407264934619 eV |
+| `defer=1`（收敛帧一次） | **7.4s** | −3.980092681 μB | −6753.407264934619 eV |
+
+- 该 reference SCF 用了 35 步，deferral 把 35 次 MBIS 构建降到 1 次，加速
+  **2.96×**；`Q_ref` 与总能量完全一致。
+- 低 cutoff 的小 Fe2（ecut 20/80，9 步 SCF）中 MBIS 单次构建很便宜，
+  加速只有 2.0s→2.4s（~18%）；**加速比随 MBIS 单次成本和 reference
+  SCF 步数增长**。
+- spin 约束与 charge 约束走同一 `is_mbis() && phase_==REFERENCE` 分支，
+  因此“是否重建”与约束类型无关；constrained 相仍是首次构建后冻结。
+
+### 3.4 回归
 
 - `MODULE_ESTATE_constraint_loop` 58/58 PASS（CPU 与 CUDA 构建）。
 - `MODULE_ESTATE_constraint_deriv`、`MODULE_ESTATE_mbis_alm_gpu` PASS。

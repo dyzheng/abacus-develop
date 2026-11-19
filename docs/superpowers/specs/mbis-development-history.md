@@ -40,6 +40,9 @@
   `Q_ref`/`FINAL_ETOT` 一致；`tol=1e-6` 再省 ~2 s。
 - 03 Cl⁻ 示例 OMP=1：cutoff10/20 各 **~1m23**（旧 np=2×OMP=10 为 7m10/6m40），
   `total_charge` 与 warning 行为不变。
+- spin 约束同样受益：Fe2 bcc（ecut 40/160，35 步 reference）**21.9s → 7.4s**
+  （2.96×），`Q_ref`/`FINAL_ETOT` 完全一致；小 Fe2（ecut 20，9 步）因 MBIS
+  本身很便宜，仅 ~18%。deferral 与 charge/spin 类型无关。
 - 详单：`2026-11-18-mbis-reference-deferral.md`。
 
 ---

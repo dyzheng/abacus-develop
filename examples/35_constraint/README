@@ -11,7 +11,9 @@ This directory demonstrates the real-space constraint framework with:
 2. `02_charged_ionic`    -- a localized charged ionic system (`LiCl+`) with
    two per-atom MBIS charge constraints;
 3. `03_charged_anion_cutoff` -- a single `Cl-` anion showing why the MBIS
-   pro-density cutoff matters for diffuse charge tails.
+   pro-density cutoff matters for diffuse charge tails;
+4. `04_spin_fe2` -- bcc Fe2 with two MBIS spin constraints, demonstrating
+   magnetic constraints and the reference-build deferral.
 
 The examples use `device cpu` in INPUT.  On a GPU build add `device gpu`
 (and keep `precision double`); MBIS then runs on the GPU backend.  Note that
@@ -117,6 +119,30 @@ Guidance:
   * strongly diffuse states (extra electron delocalized over a large box,
     near-continuum states) -> a local charge constraint is not the right
     tool; enlarge the cutoff/remainder or choose another scheme.
+
+--------------------------------------------------------------------------
+4. Magnetic (spin) constraints: bcc Fe2
+--------------------------------------------------------------------------
+
+`04_spin_fe2` is a bcc Fe2 cell (`nspin=2`, 24 bands, gamma-only) with two
+MBIS spin constraints.  The delta targets are zero, i.e. the constraints
+keep the reference magnetic moments; this isolates the MBIS cost.
+
+    cd 04_spin_fe2
+    bash run.sh                     # default: build MBIS once at SCF convergence
+
+Expected:
+
+    c[0] kind=spin q ~ -3.980 mu_B
+    c[1] kind=spin q ~ +3.982 mu_B  (small asymmetry from the initial mag)
+    residual = 0, CONVERGED
+    FINAL_ETOT ~ -6753.4072649 eV
+
+The 40 Ry reference SCF needs ~35 iterations.  With the default
+`constraint_mbis_defer_reference 1` MBIS is built once (wall ~7 s at OMP=1);
+with `INPUT.defer_off` it is rebuilt every reference iteration (wall ~22 s).
+The final Q and energy are identical.  The speedup grows with the number of
+reference SCF steps and with the cost of one MBIS build.
 
 --------------------------------------------------------------------------
 Running all examples

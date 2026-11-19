@@ -8285,3 +8285,13 @@ A 组能力展示 8 项（约束 SCF/驻点力/relax/场能量/应力/物理链/
 - 文件：`constraint_loop.{h,cpp}`、`esolver_ks_pw/lcao.cpp`、`weight_grid.cpp`、
   `input_parameter.h`、`read_input_item_other.cpp`、
   `2026-11-18-mbis-reference-deferral.md`、示例 README、本日志。
+
+## 2026-11-18 (S6.97): spin 约束的 reference deferral 复测
+
+- Fe2 bcc（0.50，nspin2，ecut 40/160，两个 spin 约束 target delta 0）：
+  defer=0 21.9 s → defer=1 7.4 s（**2.96×**），Q_ref −3.980092681 μB 与
+  FINAL_ETOT −6753.407264934619 eV 完全一致（35 步 reference SCF）。
+- 小 Fe2（ecut 20/80，9 步）MBIS 单次构建便宜，仅 2.4→2.0 s（~18%）；
+  加速随 MBIS 成本和 reference SCF 步数增长。
+- charge/spin 共用同一 deferral 分支；constrained 相仍冻结一次。
+- 文件：`2026-11-18-mbis-reference-deferral.md`、历史/日志。

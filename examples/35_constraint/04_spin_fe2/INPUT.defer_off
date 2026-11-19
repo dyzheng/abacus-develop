@@ -1,0 +1,38 @@
+INPUT_PARAMETERS
+suffix               fe2_spin
+calculation          scf
+basis_type           pw
+gamma_only           1
+nspin                2
+nbands               24
+ecutwfc              40
+ecutrho              160
+scf_thr              1.0e-6
+scf_nmax             40
+symmetry             0
+pseudo_dir           ../../../tests/PP_ORB
+orbital_dir          ../../../tests/PP_ORB
+smearing_method      gaussian
+smearing_sigma       0.01
+mixing_type          broyden
+mixing_beta          0.4
+ks_solver            dav_subspace
+device               cpu
+
+# Two spin (magnetization) constraints.  delta target 0 means "keep the
+# reference magnetic moment", so this example isolates the MBIS cost and the
+# reference deferral rather than driving a magnetic transition.
+constraint                 true
+constraint_type            spin
+constraint_weight_type     mbis
+constraint_target_file     constraint_target.json
+constraint_target_mode     delta
+constraint_mbis_images     1
+constraint_mbis_cutoff     10.0
+constraint_kappa_min       0.3
+constraint_step_max        0.05
+constraint_mu_max          5.0
+constraint_thr             1.0e-3
+constraint_branch_tol      0
+constraint_alloc_report    0
+constraint_mbis_defer_reference 0

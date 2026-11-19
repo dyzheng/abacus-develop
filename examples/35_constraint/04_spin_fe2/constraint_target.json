@@ -1,0 +1,4 @@
+{"constraints":[
+ {"type":"spin","target":0.0,"atoms":[0]},
+ {"type":"spin","target":0.0,"atoms":[1]}
+]}
