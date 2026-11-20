@@ -394,6 +394,7 @@ dQ* = Q* - Q(ρ0)
 
 - `tools/lif_mbis_q_homotopy.py`
 - `tools/lif_mbis_fixed_mu_scan.py`
+- `tools/lif_mbis_distance_chain.py`
 - `docs/superpowers/specs/2026-11-19-mbis-scf-initial-density-direction.md`
 - `docs/superpowers/specs/2026-11-20-mbis-fixed-mu-and-small-system-summary.md`
 - `/tmp/opencode/lif_homotopy/lif_homo_free`（20 Å r2SCAN 自由 seed）
