@@ -835,6 +835,39 @@ bool parse_constraint_object(const std::string& obj,
         spec.fixed_mu = true;
     }
 
+    // Branch F2: optional "initial_mu" for the direct constrained start.
+    // Unlike fixed_mu, this is only an initial value; the outer loop still
+    // adjusts mu toward the target.
+    pos = 0;
+    if (find_key(obj, "initial_mu", pos))
+    {
+        skip_ws(obj, pos);
+        if (pos >= obj.size() || obj[pos] != ':')
+        {
+            error = "constraint c[" + std::to_string(index)
+                    + "]: expected ':' after \"initial_mu\"";
+            return false;
+        }
+        ++pos;
+        skip_ws(obj, pos);
+        if (!parse_number_or_vector(obj, pos, spec.initial_mu_vec,
+                                    spec.initial_mu_vector))
+        {
+            error = "constraint c[" + std::to_string(index)
+                    + "]: malformed number or [x,y,z] vector in \"initial_mu\"";
+            return false;
+        }
+        if (spec.initial_mu_vector
+            && !(spec.kind == ConstraintKind::Spin && nspin == 4))
+        {
+            error = "constraint c[" + std::to_string(index)
+                    + "]: vector \"initial_mu\" requires type=spin with nspin=4";
+            return false;
+        }
+        spec.initial_mu_value = spec.initial_mu_vec.z;
+        spec.initial_mu_set = true;
+    }
+
     // Branch G: dipole semantic guards.  These are independent of the cell
     // shape (the latter is checked in configure_from_inputs, which has the
     // UnitCell); refusing an unknown frame/axis here keeps a malformed file

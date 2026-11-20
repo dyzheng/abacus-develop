@@ -1889,6 +1889,18 @@ Manual override is allowed: if sc_acceleration_mode is explicitly set, it takes 
         this->add_item(item);
     }
     {
+        Input_Item item("constraint_start_constrained");
+        item.annotation = "start directly in the constrained phase with an initial mu";
+        item.category = "Constraint";
+        item.type = "Boolean";
+        item.description = "When true, skip the free mu=0 reference SCF and enter the constrained phase from the first SCF using the per-constraint `initial_mu` (target file) as the starting multiplier. Requires constraint_target_mode=absolute and constraint_branch_tol=0. This avoids the charge sloshing of a free stretched/dissociating system; the outer loop still adjusts mu to the absolute target.";
+        item.default_value = "False";
+        item.unit = "";
+        item.availability = "constraint is true and constraint_target_mode = absolute";
+        read_sync_bool(input.constraint_start_constrained);
+        this->add_item(item);
+    }
+    {
         Input_Item item("constraint_alloc_report");
         item.annotation = "print the LCAO unified-allocation target/complement audit";
         item.category = "Constraint";

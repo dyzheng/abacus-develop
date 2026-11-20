@@ -823,6 +823,7 @@ struct Input_para
     double constraint_mbis_tol = 1e-8;        ///< MBIS: fixed-point population tolerance
     int constraint_mbis_max_iter = 200;       ///< MBIS: fixed-point iteration cap
     bool constraint_mbis_defer_reference = true; ///< build MBIS only on the converged reference density
+    bool constraint_start_constrained = false; ///< skip the free reference SCF; start with mu=initial_mu
 
     // ==============   #Parameters (25.uncommon hardware) ==================
     int dsp_count = 4;           ///< count of DSP hardwares in one node

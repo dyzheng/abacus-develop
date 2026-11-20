@@ -259,6 +259,14 @@ void ESolver_KS_PW<T, Device>::before_scf(UnitCell& ucell, const int istep)
         }
         constraint::ConstraintLoop::instance().init(
             ucell, this->pw_rhod, cfg, specs, radii, PARAM.inp.nelec, istep);
+        // Direct constrained start: build the MBIS weights from the initial
+        // density so the first SCF already sees the initial constraint
+        // potential instead of waiting for the first observe().
+        if (PARAM.inp.constraint_start_constrained)
+        {
+            constraint::ConstraintLoop::instance().build_initial_mbis_weights(
+                this->chr.rho, PARAM.inp.nspin);
+        }
     }
 
     ModuleBase::timer::end("ESolver_KS_PW", "before_scf");

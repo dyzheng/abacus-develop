@@ -449,9 +449,76 @@ void ConstraintLoop::init(const UnitCell& ucell,
     params.broyden = true;
     mu_solver_ = MuSolver(params);
     mu_solver_.set_carry_jacobian(cfg_.trust_carry_jacobian);
-    phase_ = LoopPhase::REFERENCE;
-    status_ = MuStatus::RUNNING;
-    outer_steps_ = 0;
+    if (PARAM.inp.constraint_start_constrained)
+    {
+        // Direct constrained start: skip the free mu=0 reference SCF.  The
+        // target file supplies an initial mu per constraint; the outer loop
+        // still drives mu to the absolute target.  This is the stabilizer for
+        // stretched/dissociating systems whose free SCF charge-sloshes.
+        if (cfg_.target_mode != "absolute")
+        {
+            ModuleBase::WARNING_QUIT("ConstraintLoop::init",
+                "constraint_start_constrained requires "
+                "constraint_target_mode=absolute (delta needs a reference)");
+        }
+        if (cfg_.branch_tol > 0.0)
+        {
+            ModuleBase::WARNING_QUIT("ConstraintLoop::init",
+                "constraint_branch_tol > 0 is incompatible with "
+                "constraint_start_constrained (no reference SCF energy)");
+        }
+        if (allocation_mode_)
+        {
+            ModuleBase::WARNING_QUIT("ConstraintLoop::init",
+                "constraint_start_constrained is not supported together with "
+                "constraint_alloc_switch");
+        }
+        for (size_t a = 0; a < specs_.size(); ++a)
+        {
+            mu_[a] = specs_[a].initial_mu_set ? specs_[a].initial_mu_value
+                                              : 0.0;
+            mu_vec_[a] = specs_[a].initial_mu_vector
+                             ? specs_[a].initial_mu_vec
+                             : ModuleBase::Vector3<double>(0.0, 0.0, mu_[a]);
+            targets_[a] = specs_[a].target;
+        }
+        mu_eff_ = mu_;
+        phase_ = LoopPhase::CONSTRAINED;
+        status_ = MuStatus::RUNNING;
+        outer_steps_ = 0;
+    }
+    else
+    {
+        phase_ = LoopPhase::REFERENCE;
+        status_ = MuStatus::RUNNING;
+        outer_steps_ = 0;
+    }
+}
+
+void ConstraintLoop::build_initial_mbis_weights(const double* const* rho,
+                                                const int nspin)
+{
+    if (wg_ == nullptr || !wg_->is_mbis())
+    {
+        return;
+    }
+    if (rho == nullptr || nspin < 1)
+    {
+        ModuleBase::WARNING_QUIT("ConstraintLoop::build_initial_mbis_weights",
+            "initial density is not available for the MBIS direct start");
+    }
+    std::vector<double> rho_total(wg_->nrxx(), 0.0);
+    for (int is = 0; is < nspin; ++is)
+    {
+        for (int ir = 0; ir < wg_->nrxx(); ++ir)
+        {
+            rho_total[ir] += rho[is][ir];
+        }
+    }
+    wg_->build_mbis(rho_total);
+    // The first injection uses these weights and the initial mu; the first
+    // observe must not rebuild/freeze a different partition.
+    mbis_constrained_built_ = true;
 }
 
 void ConstraintLoop::build_geometry(

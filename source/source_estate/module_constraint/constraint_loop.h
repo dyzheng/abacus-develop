@@ -104,6 +104,11 @@ class ConstraintLoop
     void observe(const int iter, const double* const* rho, const int nspin,
                  const bool scf_converged = false);
 
+    /// Build the density-dependent MBIS weights from the initial density so a
+    /// direct constrained start (constraint_start_constrained) injects the
+    /// initial mu from the first SCF instead of waiting for the first observe.
+    void build_initial_mbis_weights(const double* const* rho, const int nspin);
+
     // S3 allocation observation: n_alloc/m_alloc are per constraint and are
     // the full allocation readings Tr(DMR K_i).  Charge constraints read
     // n_alloc, spin constraints read m_alloc; the remaining reference/

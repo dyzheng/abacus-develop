@@ -400,6 +400,11 @@ void ESolver_KS_LCAO<TK, TR>::before_scf(UnitCell& ucell, const int istep)
         alloc::AllocConstraintLcao::instance().reset();
         constraint::ConstraintLoop::instance().init(
             ucell, this->pw_rhod, cfg, specs, radii, PARAM.inp.nelec, istep);
+        if (PARAM.inp.constraint_start_constrained)
+        {
+            constraint::ConstraintLoop::instance().build_initial_mbis_weights(
+                this->chr.rho, PARAM.inp.nspin);
+        }
         constraint_audit_done_ = false;
     }
     else

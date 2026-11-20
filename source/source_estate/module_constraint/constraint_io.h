@@ -192,6 +192,13 @@ struct ConstraintSpec
     // the z-component mirror, exactly as for target above.
     ModuleBase::Vector3<double> fixed_mu_vec{0.0, 0.0, 0.0};
     bool fixed_mu_vector = false; // true when the file supplied a 3-vector
+    // Direct-constrained-start initial multiplier (used when
+    // constraint_start_constrained=true).  Not fixed: the outer loop still
+    // adjusts mu toward the absolute target.
+    bool initial_mu_set = false;
+    double initial_mu_value = 0.0; // Ry
+    ModuleBase::Vector3<double> initial_mu_vec{0.0, 0.0, 0.0};
+    bool initial_mu_vector = false;
     // Module B (M5): dipole-coordinate frame.  Only meaningful for
     // kind == Dipole.  The target is in e*Bohr after configure_from_inputs
     // has resolved an optional unit="V" through the cell area.

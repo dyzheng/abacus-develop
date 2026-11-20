@@ -1228,3 +1228,41 @@ TEST(ConstraintIOTest, AlmPlumbingAndGuards)
     PARAM.input.constraint_mu_schedule = "outer";
     std::remove(path.c_str());
 }
+
+TEST(ConstraintIOTest, InitialMuParsingForDirectConstrainedStart)
+{
+    auto ucell = make_h2o_ucell();
+    Set_GlobalV_Default();
+    PARAM.input.constraint = true;
+    PARAM.input.constraint_type = "charge";
+    PARAM.input.constraint_weight_type = "becke";
+    PARAM.input.constraint_target_mode = "absolute";
+    PARAM.input.constraint_mu_max = 5.0;
+    PARAM.input.constraint_thr = 1e-4;
+    const std::string path = "constraint_target_initial_mu_test.json";
+    {
+        std::ofstream ofs(path);
+        ofs << R"({"constraints": [
+            {"type":"charge","target":2.0,"atoms":[0],"initial_mu":0.12},
+            {"type":"charge","target":8.0,"atoms":[1,2],"initial_mu":-0.34}]})";
+    }
+    PARAM.input.constraint_target_file = path;
+    constraint::ConstraintConfig cfg;
+    std::vector<constraint::ConstraintSpec> specs;
+    std::vector<double> radii;
+    std::string error;
+    EXPECT_EQ(constraint::configure_from_inputs(cfg, specs, *ucell, radii,
+                                                error),
+              constraint::ConfigStatus::OK)
+        << error;
+    ASSERT_EQ(specs.size(), 2u);
+    EXPECT_TRUE(specs[0].initial_mu_set);
+    EXPECT_DOUBLE_EQ(specs[0].initial_mu_value, 0.12);
+    EXPECT_TRUE(specs[1].initial_mu_set);
+    EXPECT_DOUBLE_EQ(specs[1].initial_mu_value, -0.34);
+    // The outer loop still owns these multipliers: initial_mu must not set
+    // the fixed-mu flag.
+    EXPECT_FALSE(specs[0].fixed_mu);
+    EXPECT_FALSE(specs[1].fixed_mu);
+    std::remove(path.c_str());
+}
