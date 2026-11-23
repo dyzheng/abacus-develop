@@ -30,7 +30,7 @@ def write_input(path, suffix, args, constrained, read_dir=None, init_mu=None):
         f"nbands               {args.nbands}",
         f"ecutwfc              {args.ecutwfc}",
         f"ecutrho              {args.ecutrho}",
-        "scf_thr              1.0e-6",
+        f"scf_thr              {args.scf_thr}",
         f"scf_nmax             {args.scf_nmax}",
         "symmetry             0",
         f"pseudo_dir           {args.pseudo_dir}",
@@ -207,6 +207,7 @@ def main():
     ap.add_argument("--mu-max", type=float, default=5.0)
     ap.add_argument("--constraint-thr", type=float, default=1.0e-3)
     ap.add_argument("--scf-nmax", type=int, default=200)
+    ap.add_argument("--scf-thr", type=float, default=1.0e-6)
     ap.add_argument("--mixing-beta", type=float, default=0.2)
     ap.add_argument("--timeout", type=int, default=3600)
     ap.add_argument("--omp", type=int, default=1)
